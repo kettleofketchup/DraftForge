@@ -1,45 +1,37 @@
 {
   "name": "webui",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "build": "react-router build",
+    "dev": "react-router dev",
+    "start": "react-router-serve ./build/server/index.js",
+    "typecheck": "react-router typegen && tsc"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
-    "@fontsource/roboto": "^5.2.5",
     "@mui/icons-material": "^7.0.1",
     "@mui/material": "^7.0.1",
-    "@mui/styled-engine-sc": "^7.0.1",
-    "cors": "^2.8.5",
-    "discord.js": "^14.18.0",
-    "dotenv": "^16.4.7",
-    "express": "^5.1.0",
-    "express-session": "^1.18.1",
-    "node-fetch": "^3.3.2",
-    "passport": "^0.7.0",
-    "passport-discord": "^0.1.4",
+    "@react-router/node": "^7.4.1",
+    "@react-router/serve": "^7.4.1",
+    "isbot": "^5.1.17",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "styled-components": "^6.1.17"
+    "react-router": "^7.4.1"
   },
   "devDependencies": {
-    "@eslint/js": "^9.21.0",
     "@iconify/react": "^5.2.1",
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
-    "@vitejs/plugin-react-swc": "^3.8.0",
-    "eslint": "^9.21.0",
-    "eslint-plugin-react-hooks": "^5.1.0",
-    "eslint-plugin-react-refresh": "^0.4.19",
-    "globals": "^15.15.0",
-    "typescript": "~5.7.2",
-    "typescript-eslint": "^8.24.1",
-    "vite": "^6.2.0"
+    "@react-router/dev": "^7.4.1",
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^20",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.1",
+    "daisyui": "^5.0.12",
+    "react-router-devtools": "^1.1.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vite-tsconfig-paths": "^5.1.4"
   }
 }

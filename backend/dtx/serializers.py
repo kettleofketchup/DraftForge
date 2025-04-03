@@ -1,8 +1,8 @@
 from rest_framework import serializers
 from .models import User
 from rest_framework import serializers
-from lib.social_account import discord
-from lib.register.register import register_social_user
+from dtx.lib import discord
+from dtx.lib.register import register_social_user
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
