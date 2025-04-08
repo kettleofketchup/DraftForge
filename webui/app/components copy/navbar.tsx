@@ -17,7 +17,7 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import { styled } from '@mui/material/styles';
 
-import {LoginWithDiscordButton} from './login';
+import LoginWithDiscordButton from './login';
 
 function ResponsiveAppBar() {
 

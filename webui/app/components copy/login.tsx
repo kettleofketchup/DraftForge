@@ -1,9 +1,9 @@
-export  function LoginWithDiscordButton() {
+export default function LoginWithDiscordButton() {
     const loginUrl = "http://localhost:8000/login/discord/";
     return (
-      <a className="p-2" href={loginUrl}>
+      <a className="p-2">
     <button
-        class="flex items-center bg-white border border-gray-300 rounded-lg shadow-md px-6 py-2 text-sm font-medium text-gray-400 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+        class="flex items-center bg-white border border-gray-300 rounded-lg shadow-md px-6 py-2 text-sm font-medium text-gray-500 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
        
         <svg class="h-6 w-6 mr-2" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
             width="800px" height="800px" viewBox="0 -28.5 256 256" version="1.1" preserveAspectRatio="xMidYMid">
@@ -21,15 +21,5 @@ export  function LoginWithDiscordButton() {
     </button>
         
     </a>
-    );
-  }
-
-  export function ProfileButton() {
-    const loginUrl = "http://localhost:8000/login/discord/";
-    return (
-      <a className="p-5">
-        
-        
-      </a>
     );
   }

@@ -21,6 +21,10 @@ from rest_framework.response import Response
 from rest_framework.generics import GenericAPIView
 from rest_framework.decorators import permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAdminUser
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from rest_framework.reverse import reverse
+
 # Create your views here.
 from social_django.models import (  # fix: skip
     USER_MODEL,
@@ -123,3 +127,10 @@ class UserView(viewsets.ModelViewSet):
     queryset = CustomUser.objects.all()
 
 
+@api_view(['GET'])
+def current_user(request):
+    user = request.user
+    return Response({
+      'username' : user.username,
+      'avatar' : user.avatar,
+    })

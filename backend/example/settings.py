@@ -123,7 +123,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "example.wsgi.application"
-
+SOCIAL_AUTH_ALLOWED_REDIRECT_HOSTS  = ["dtxdota.com", "localhost:5713"]
 AUTHENTICATION_BACKENDS = (
     'social_core.backends.discord.DiscordOAuth2',
 
