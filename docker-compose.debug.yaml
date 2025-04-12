@@ -1,0 +1,20 @@
+services:
+  frontend:
+    image: ghcr.io/dtx-dota/website/frontend:latest
+    ports:
+      - "5471:5471"   # Internal Nginx in frontend container
+    volumes:
+      - ./frontend/:/app/
+    restart: always
+    command: ["npm", "run", "dev"]
+
+  backend:
+    image: ghcr.io/dtx-dota/website/frontend:latest
+    ports:
+      - "8000:8000"
+    restart: always
+    volumes:
+      - ./backend/:/app/
+      - /backend/db.sqlite3
+
+    

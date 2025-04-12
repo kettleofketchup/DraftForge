@@ -3,5 +3,6 @@
       {
         "file": "./.vscode/daisyui.md"
       }
-    ]
+    ],
+    "python.defaultInterpreterPath": ".venv/bin/python"
   }
