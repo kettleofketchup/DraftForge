@@ -14,16 +14,24 @@ services:
     restart: always
     volumes:
       - ./backend/db.sqlite3:/app/db.sqlite3
+      - ./nginx/data/ssl_prod/cert.crt:/etc/ssl/certs/cert.crt
+      - ./nginx/data/ssl_prod/cert.key:/etc/ssl/private/cert.key;
 
   nginx:
-    image: nginx:alpine
+    image: ghcr.io/dtx-dota/website/nginx:latest
     env_file: "./.env.release"
     container_name: nginx
     restart: always
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/default.template.conf:/etc/nginx/templates/default.template.conf
+      - ./nginx/data/user_conf.d:/etc/nginx/user_conf.d
+      - ./nginx/data/ssl_prod/cert.crt:/etc/letsencrypt/live/dtxdota.com/fullchain.pem
+      - ./nginx/data/ssl_prod/cert.key:/etc/letsencrypt/live/dtxdota.com/privkey.pem
     depends_on:
       - frontend
       - backend
+  certbot:
+    image: certbot/certbot

@@ -22,7 +22,8 @@ ENV VIRTUAL_ENV=/app/.venv \
 COPY --from=builder ${VIRTUAL_ENV} ${VIRTUAL_ENV}
 WORKDIR /app
 
-COPY ./backend /app/
+COPY ./backend /app/backend
+WORKDIR /app/backend
 EXPOSE 8000
 RUN ls
 RUN python manage.py migrate

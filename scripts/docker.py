@@ -92,7 +92,7 @@ def docker_backend_push(c):
 @task
 def docker_nginx_push(c):
     version, image, dockerfile, context = get_nginx()
-    docker_backend_build(c)
+    docker_nginx_build(c)
     tag_latest(c, image, version)
 
 
@@ -110,7 +110,7 @@ def docker_frontend_run(c):
 
 
 @task
-def docker_frontend_run(c):
+def docker_backend_run(c):
     version, image, dockerfile, context = get_backend()
     run_docker(c, image, version)
 
