@@ -18,8 +18,14 @@ ns.add_collection(ns_dev, "dev")
 
 @task
 def dev_debug(c):
-    cmd = f"docker-compose -f docker-compose.debug.yaml up"
+    cmd = f"docker-compose -f docker-compose.debug.yaml --ansi always up --no-attach nginx --remove-orphans"
     c.run(cmd)
+
+
+@task
+def dev_live(c):
+    cmd = f"./scripts/tmux.sh"
+    c.run(cmd, pty=True)
 
 
 @task
@@ -28,5 +34,6 @@ def dev_prod(c):
     c.run(cmd)
 
 
+ns_dev.add_task(dev_live, "live")
 ns_dev.add_task(dev_debug, "debug")
 ns_dev.add_task(dev_prod, "prod")

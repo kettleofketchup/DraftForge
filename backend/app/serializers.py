@@ -18,6 +18,7 @@ class UserSerializer(serializers.ModelSerializer):
             "is_active",
             "steamid",
             "mmr",
+            "avatarUrl",
             "email",
             "username",
             "date_joined",

@@ -12,6 +12,8 @@ import "./app.css";
 import Box from '@mui/material/Box';
 import ResponsiveAppBar from "./components/navbar"
 import Footer from "./components/footer";
+import { useEffect, useState } from "react";
+import { useUser } from "./components/user/userUser";
 
 
 export const links: Route.LinksFunction = () => [
@@ -49,12 +51,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const [inputId, setInputId] = useState<string>('');
+  const { user, loading, error, getUser } = useUser();
+
+  useEffect(() => {
+    console.log("post fetching");
+
+    getUser();
+    console.log("post fetching");
+  }, [] );
+
 
   return (
 
   <div  className="flex flex-col h-screen flex w-screen justify-between">
 
-      <ResponsiveAppBar/>
+      <ResponsiveAppBar user={user}/>
       <div id="outlet_root" className="flex-grow overflow-hidden ">
       <Outlet />
       <Footer/>

@@ -8,6 +8,8 @@ services:
       - "3000:3000"   # Internal Nginx in frontend container
     volumes:
       - ./frontend:/app
+      - /app/node_modules/.vite/
+      - /app/.react-router/
     restart: always
     command: ["npx", "react-router", "dev" , "--port", "3000", "--host", "0.0.0.0"]
 
@@ -36,10 +38,6 @@ services:
       - ./nginx/data/ssl/cert.crt:/etc/letsencrypt/live/dtxdota.com/fullchain.pem
       - ./nginx/data/ssl/cert.key:/etc/letsencrypt/live/dtxdota.com/privkey.pem
       - ./nginx/data/user_conf.d:/etc/nginx/user_conf.d
-
-
     depends_on:
       - frontend
       - backend
-  certbot:
-    image: certbot/certbot

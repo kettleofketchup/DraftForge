@@ -137,6 +137,11 @@ from .models import CustomUser
 @api_view(["GET"])
 def current_user(request):
     user = request.user
-    social_auth = user.social_auth.get()
 
-    return Response({"username": user.username, "avatarUrl": user.avatarUrl})
+    return Response(
+        {
+            "username": user.username,
+            "avatarUrl": user.avatarUrl,
+            "is_staff": user.is_staff,
+        }
+    )
