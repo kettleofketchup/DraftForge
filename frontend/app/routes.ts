@@ -5,7 +5,8 @@ export default [
     route("tournament", "routes/tournament.tsx"),
     route("about", "routes/about.tsx"),
     route("blog", "routes/blog.tsx"),
-    route("done", "routes/login.tsx")
+    route("done", "routes/login.tsx"),
+    route("users", "routes/users.tsx")
 
 
 ] satisfies RouteConfig;

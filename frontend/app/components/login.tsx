@@ -5,6 +5,7 @@ import type {User, UserProps} from './user/types'
 
 import { useUser } from './user/userUser';
 import SelectInput from 'node_modules/@mui/material/esm/Select/SelectInput';
+import { useUserStore } from '../store/useUserStore';
 interface Props {
   user: User | null;
   onLoginClick: () => void;
@@ -35,8 +36,10 @@ const UserStatus: React.FC<Props> = ({ user, onLoginClick }) => {
 export default UserStatus;
 
 
-export const ProfileButton : React.FC<UserProps> = ({ user }) => {
+export const ProfileButton : React.FC<UserProps> = () => {
   const [showPopover, setShowPopover] = useState(false);
+  const user = useUserStore((state) => state.user); // Zustand setter
+  const clearUser = useUserStore((state) => state.clearUser); // Zustand setter
 
   const handleClick = () => {
     console.log(user);
@@ -60,7 +63,7 @@ export const ProfileButton : React.FC<UserProps> = ({ user }) => {
         <ul className="dropdown-content menu w-20 h-10 z-1 p-0 rounded-box bg-base-100 shadow-sm"
         //  popover="auto" id="popover-3" style={{ positionAnchor: "--anchor-3" }  as React.CSSProperties  }
         >
-        <li><a href="/logout">Logout </a></li>
+        <li><a onClick={clearUser} href="/logout">Logout </a></li>
       </ul>
         </div>
       )}
@@ -130,9 +133,9 @@ export const LoginButton : React.FC = () => {
   )
 };
 
-
-export const LoginWithDiscordButton: React.FC<UserProps> = ({ user }) => {
-  if (user) return <ProfileButton user={user}/>
+export const LoginWithDiscordButton: React.FC<UserProps> = () => {
+  const user = useUserStore((state) => state.user);
+  if (user) return <ProfileButton/>
 
 
   return <LoginButton/>

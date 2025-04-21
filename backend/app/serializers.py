@@ -16,6 +16,7 @@ class UserSerializer(serializers.ModelSerializer):
             "username",
             "is_staff",
             "is_active",
+            "is_superuser",
             "steamid",
             "mmr",
             "avatarUrl",
