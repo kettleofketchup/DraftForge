@@ -18,7 +18,7 @@ ns.add_collection(ns_dev, "dev")
 
 @task
 def dev_debug(c):
-    cmd = f"docker-compose -f docker-compose.debug.yaml --ansi always up --no-attach nginx --remove-orphans"
+    cmd = f"docker compose -f docker-compose.debug.yaml --ansi always up --no-attach nginx --remove-orphans"
     c.run(cmd)
 
 
@@ -30,13 +30,13 @@ def dev_live(c):
 
 @task
 def dev_prod(c):
-    cmd = f"docker-compose -f docker-compose.yaml up"
+    cmd = f"docker compose -f docker-compose.yaml up"
     c.run(cmd)
 
 
 @task
 def dev_release(c):
-    cmd = f"docker-compose -f docker-compose.release.yaml up"
+    cmd = f"docker compose -f docker-compose.release.yaml up"
     c.run(cmd)
 
 
