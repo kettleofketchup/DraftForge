@@ -13,7 +13,7 @@ services:
       - "8000:8000"
     restart: always
     volumes:
-      - ./backend/db.sqlite3:/app/db.sqlite3
+      - ./backend/db.sqlite3:/app/backend/db.sqlite3
   nginx:
     image: ghcr.io/dtx-dota/website/nginx:latest
     env_file: "./.env.release"

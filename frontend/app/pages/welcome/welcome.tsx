@@ -30,7 +30,7 @@ export function Welcome() {
 
       <div className="flex justify-center h-full content-center mb-0 mt-0 overflow-hidden p-0">
         <div className='justify-self-center content-center align-middle'>
-          <a href="https://discord.gg/eXBZGjVp"
+          <a href="https://discord.gg/dtx"
             className=' justify-self-center content-center align-middle'
             target="_blank"
             aria-owns={open ? 'mouse-over-popover' : undefined}
