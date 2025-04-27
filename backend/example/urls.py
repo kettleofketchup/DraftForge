@@ -2,17 +2,16 @@ from app import views as app_views
 from django.contrib import admin
 from django.urls import include, path
 from rest_framework import routers
-from app.views import UserView, current_user
-router = routers.DefaultRouter()
-router.register(r'users', UserView, 'users')
+from app.views import UserView, current_user, UserCreateView
 
-from django.views.generic.base import RedirectView
+router = routers.DefaultRouter()
+router.register(r"users", UserView, "users")
+
 from django.views.generic.base import RedirectView
 
 
 urlpatterns = [
-    path('done/', RedirectView.as_view(url='http://localhost:5173')),
-
+    path("done/", RedirectView.as_view(url="http://localhost:5173")),
     path("", app_views.home),
     path("admin/", admin.site.urls),
     path("email-sent/", app_views.validation_sent),
@@ -24,7 +23,7 @@ urlpatterns = [
     path("country/", app_views.require_country, name="require_country"),
     path("city/", app_views.require_city, name="require_city"),
     path("", include("social_django.urls")),
-    path('api/', include(router.urls)),
-    path('api/current_user', current_user)
-
+    path("api/", include(router.urls)),
+    path("api/current_user", current_user),
+    path("api/register", UserCreateView.as_view()),
 ]

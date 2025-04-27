@@ -151,6 +151,25 @@ class UserView(viewsets.ModelViewSet):
 
 from .models import CustomUser
 
+from rest_framework import generics, permissions
+from .serializers import UserSerializer
+
+
+class IsStaff(permissions.BasePermission):
+    """
+    Allows access only to authenticated staff users.
+    """
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user and request.user.is_authenticated and request.user.is_staff
+        )
+
+
+class UserCreateView(generics.CreateAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [IsStaff]
+
 
 @api_view(["GET"])
 @permission_classes((AllowAny,))

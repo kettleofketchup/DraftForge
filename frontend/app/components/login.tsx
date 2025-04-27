@@ -135,7 +135,7 @@ export const LoginButton : React.FC = () => {
 
 export const LoginWithDiscordButton: React.FC<UserProps> = () => {
   const user = useUserStore((state) => state.user);
-  if (user) return <ProfileButton/>
+  if (user.username) return <ProfileButton/>
 
 
   return <LoginButton/>

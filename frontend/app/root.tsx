@@ -64,12 +64,12 @@ export default function App() {
 
   return (
 
-  <div  className="flex flex-col h-screen flex w-screen justify-between">
+  <div  className="flex flex-col h-screen flex w-screen h-screen justify-between">
 
       <ResponsiveAppBar />
-      <div id="outlet_root" className="flex-grow overflow-hidden ">
+      <div id="outlet_root" className="flex-grow overflow-x-hidden">
       <Outlet />
-      <Footer/>
+      {/* <Footer/> */}
 
     </div>
   </div>

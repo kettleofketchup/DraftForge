@@ -11,6 +11,7 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
+    "@headlessui/react": "^2.2.2",
     "@iconify/react": "^5.2.1",
     "@mui/icons-material": "^7.0.1",
     "@mui/material": "^7.0.1",

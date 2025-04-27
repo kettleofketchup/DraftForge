@@ -2,6 +2,7 @@
 
 export declare interface User {
     username: string;
+    nickname?: string;
     avatarUrl: string;
     is_staff: boolean;
     is_superuser: boolean;

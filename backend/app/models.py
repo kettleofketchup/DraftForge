@@ -26,6 +26,7 @@ class DiscordInfo(models.Model):
 
 class CustomUser(AbstractUser):
     steamid = models.IntegerField(null=True)
+    nickname = models.TextField(null=True)
     mmr = models.IntegerField(null=True)
     position = models.TextField(null=True)
     avatar = models.TextField(null=True)

@@ -15,10 +15,12 @@ class UserSerializer(serializers.ModelSerializer):
         fields = (
             "pk",
             "username",
+            "nickname",
             "is_staff",
             "is_active",
             "is_superuser",
             "avatar",
+            "position",
             "discordId",
             "steamid",
             "mmr",
@@ -27,3 +29,13 @@ class UserSerializer(serializers.ModelSerializer):
             "username",
             "date_joined",
         )
+
+    def create(self, validated_data):
+        fields = self.Meta.fields
+        for key in validated_data.keys():
+            if key not in fields:
+                raise KeyError(f"Invalid field: {key}")
+
+        user = CustomUser(**validated_data)  # create user with all the other fields
+        user.save()
+        return user
