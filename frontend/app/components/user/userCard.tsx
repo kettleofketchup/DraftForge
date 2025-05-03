@@ -1,9 +1,10 @@
 import React, { use, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { User } from './types';
+import type { UserClassType, UserType } from './types';
 import axios from "../api/axios"
 import { useNavigate } from "react-router";
 import { useUserStore } from '~/store/useUserStore';
+import { User } from './user';
 interface Props {
   user: User;
   edit?: boolean;
@@ -13,16 +14,16 @@ interface Props {
 export const UserCard: React.FC<Props> = ({ user, edit, saveFunc }) => {
 
   const [editMode, setEditMode] = useState(edit || false);
-  const [form, setForm] = useState<User>({ ...user });
+  const [form, setForm] = useState<User>( user ?? new User({} as UserType));
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<Partial<Record<keyof User, string>>>({});
+  const [errorMessage, setErrorMessage] = useState<Partial<Record<keyof UserType, string>>>({});
 
-const addUser    = useUserStore((state) => state.addUser ); // Zustand setter
 
-  let navigate = useNavigate();
+  const addUser = useUserStore((state) => state.addUser ); // Zustand setter
 
-  const handleChange = (field: keyof User, value: any) => {
+
+  const handleChange = (field: keyof UserClassType, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -36,8 +37,10 @@ const addUser    = useUserStore((state) => state.addUser ); // Zustand setter
             await axios.post(`/register`, form);
             addUser(form);
             setError(false);
-            setForm( {username: "Success!"} as User);
-
+            setForm( {username: "Success!"} as UserType);
+            // Close the modal
+            const modalCheckbox = document.getElementById("create_user_modal") as HTMLInputElement;
+            if (modalCheckbox) modalCheckbox.checked = false;
 
         } catch (err) {
             console.error("Failed to create user", err);
@@ -49,8 +52,6 @@ const addUser    = useUserStore((state) => state.addUser ); // Zustand setter
             setIsSaving(false);
 
         }
-
-
 
     }
     else if (saveFunc === "save") {
@@ -79,6 +80,12 @@ const addUser    = useUserStore((state) => state.addUser ); // Zustand setter
   useEffect(() => {
 
   }, [user, isSaving]);
+
+  useEffect(() => {
+    console.log("reset form", user)
+    setForm(user);
+  }, [user]);
+
 
   const avatar = () => {
     return (
@@ -132,7 +139,7 @@ const addUser    = useUserStore((state) => state.addUser ); // Zustand setter
           <label className="font-semibold">Nickname:</label>
           <input
             type="text"
-            value={form.nickname ?? ''}
+            value={form.nickname ?? user.nickname ?? '' }
             onChange={(e) => handleChange("nickname", e.target.value)}
             className={`input input-bordered w-full mt-1 ${errorMessage.nickname ? 'input-error' : ''}`}
           />
@@ -170,7 +177,7 @@ const addUser    = useUserStore((state) => state.addUser ); // Zustand setter
           <label className="font-semibold">Steam ID:</label>
           <input
             type="number"
-            value={form.steamid ?? ''}
+            value={form.steamid ?? user.steamid ?? ''}
             onChange={(e) => handleChange("steamid", parseInt(e.target.value))}
             className={`input input-bordered w-full mt-1 ${errorMessage.steamid ? 'input-error' : ''}`}
           />
@@ -179,6 +186,30 @@ const addUser    = useUserStore((state) => state.addUser ); // Zustand setter
           )}
         </div>
 
+        <div>
+          <label className="font-semibold">Discord ID:</label>
+          <input
+            type="number"
+            value={form.discordId ?? ''}
+            onChange={(e) => handleChange("discordId", parseInt(e.target.value))}
+            className={`input input-bordered w-full mt-1 ${errorMessage.discordId ? 'input-error' : ''}`}
+          />
+          {errorMessage.steamid && (
+            <p className="text-error text-sm mt-1">{errorMessage.discordId}</p>
+          )}
+        </div>
+        <div>
+          <label className="font-semibold">Discord Guild Nickname:</label>
+          <input
+            type="number"
+            value={form.guildNickname ?? ''}
+            onChange={(e) => handleChange("guildNickname", parseInt(e.target.value))}
+            className={`input input-bordered w-full mt-1 ${errorMessage.guildNickname ? 'input-error' : ''}`}
+          />
+          {errorMessage.steamid && (
+            <p className="text-error text-sm mt-1">{errorMessage.guildNickname}</p>
+          )}
+        </div>
         <button
             onClick={handleSave}
             className="btn btn-primary btn-sm mt-3"
@@ -242,9 +273,19 @@ const userDotabuff = () => {
     </>
     )
 }
+  const getKeyName = () => {
+    let result = ""
+    if (user.pk) {
+        result += user.pk.toString();
+    }
+    if (user.username) {
+        result += user.username;
+    }
+    return result
+  }
   return (
 
-    <div className='px-6 py-4 gap-6 content-center'>
+    <div key={`usercard:${getKeyName()} base`}className='px-6 py-4 gap-6 content-center'>
         <div className=" p-2 h-full card bg-base-200 shadow-md w-full
             max-w-sm hover:bg-violet-900 . focus:outline-2
             hover:shadow-xl/30

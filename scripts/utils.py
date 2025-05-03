@@ -1,7 +1,9 @@
+from pathlib import Path
+
+import toml
 from invoke.collection import Collection
 from invoke.tasks import task
-import toml
-from pathlib import Path
+
 import paths
 
 config = None

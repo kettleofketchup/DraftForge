@@ -4,37 +4,24 @@ from django.contrib.auth import login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, HttpResponseBadRequest
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
+from rest_framework import generics, permissions, status, viewsets
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.generics import GenericAPIView
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.reverse import reverse
 from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
+
+# Create your views here.
+from social_django.models import USER_MODEL  # fix: skip
+from social_django.models import AbstractUserSocialAuth, DjangoStorage
 from social_django.utils import load_strategy, psa
 
 from .decorators import render_to
-
-
-from django.shortcuts import render
-
-from rest_framework import viewsets
-from django.shortcuts import render
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.generics import GenericAPIView
-from rest_framework.decorators import permission_classes
-from rest_framework.permissions import (
-    AllowAny,
-    IsAdminUser,
-    IsAdminUser,
-    IsAuthenticated,
-)
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from rest_framework.reverse import reverse
-
-# Create your views here.
-from social_django.models import (  # fix: skip
-    USER_MODEL,
-    AbstractUserSocialAuth,
-    DjangoStorage,
-)
+from .models import CustomUser
+from .permissions import IsStaff
+from .serializers import UserSerializer
 
 
 def logout(request):
@@ -125,9 +112,9 @@ def ajax_auth(request, backend):
 
 
 from django.contrib.auth.models import User
-from .serializers import UserSerializer
 
 from .models import CustomUser
+from .serializers import UserSerializer
 
 
 @permission_classes((IsAdminUser,))
@@ -147,23 +134,6 @@ class UserView(viewsets.ModelViewSet):
 
     def patch(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
-
-
-from .models import CustomUser
-
-from rest_framework import generics, permissions
-from .serializers import UserSerializer
-
-
-class IsStaff(permissions.BasePermission):
-    """
-    Allows access only to authenticated staff users.
-    """
-
-    def has_permission(self, request, view):
-        return bool(
-            request.user and request.user.is_authenticated and request.user.is_staff
-        )
 
 
 class UserCreateView(generics.CreateAPIView):
@@ -186,3 +156,60 @@ def current_user(request):
                 "is_superuser": user.is_superuser,
             }
         )
+
+
+import requests
+from django.conf import settings
+from django.http import JsonResponse
+
+
+@api_view(["GET"])
+@permission_classes([IsStaff])
+def get_discord_members(request):
+    guild_id = (
+        settings.DISCORD_GUILD_ID
+    )  # Add your Discord server (guild) ID in settings
+    bot_token = settings.DISCORD_BOT_TOKEN  # Add your bot token in settings
+
+    url = f"{settings.DISCORD_API_BASE_URL}/guilds/{guild_id}/members"
+    headers = {"Authorization": f"Bot {bot_token}"}
+    after = None
+    limit = 1000
+    members = []
+    while True:
+        params = {"limit": limit}
+        if after:
+            params["after"] = after
+
+        try:
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            page = response.json()
+            if not page:
+                break
+            after = page[-1]["user"]["id"]
+            members.extend(page)
+            if len(page) < limit:
+                break
+        except requests.exceptions.RequestException as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({"members": members}, safe=False)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_user_guilds(request):
+    access_token = request.user.social_auth.get(provider="discord").extra_data[
+        "access_token"
+    ]
+    url = "https://discord.com/api/users/@me/guilds"
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        guilds = response.json()
+        return JsonResponse({"guilds": guilds}, safe=False)
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({"error": str(e)}, status=500)

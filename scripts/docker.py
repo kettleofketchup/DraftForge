@@ -1,10 +1,13 @@
+from pathlib import Path
+
+import toml
+from alive_progress import alive_bar
 from invoke.collection import Collection
 from invoke.tasks import task
-import toml
-from pathlib import Path
+
 import paths
+
 from .utils import get_version
-from alive_progress import alive_bar
 
 ns_docker = Collection("docker")
 ns_docker_frontend = Collection("frontend")

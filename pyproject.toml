@@ -24,6 +24,8 @@ dependencies = [
     "toml (>=0.10.2,<0.11.0)",
     "black (>=25.1.0,<26.0.0)",
     "alive-progress (>=3.2.0,<4.0.0)",
+    "discord (>=2.3.2,<3.0.0)",
+    "isort (>=6.0.1,<7.0.0)",
 
 ]
 
@@ -33,3 +35,8 @@ package-mode = false
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+
+[tool.isort]
+profile = "black"
+src_paths = ["backend", "."]

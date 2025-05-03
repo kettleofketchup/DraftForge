@@ -1,5 +1,6 @@
 from social_core.pipeline.partial import partial
-from .models import DiscordInfo, CustomUser
+
+from .models import CustomUser, DiscordInfo
 
 
 def save_discord(

@@ -13,11 +13,15 @@ https://docs.djangoproject.com/en/1.10/ref/settings/
 import contextlib
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv()
+DISCORD_API_BASE_URL = "https://discord.com/api"
 SOCIAL_AUTH_DISCORD_KEY = os.environ.get("client_id")
 SOCIAL_AUTH_DISCORD_SECRET = os.environ.get("discord_secret")
+DISCORD_BOT_TOKEN = os.environ.get("discord_token")
+DISCORD_GUILD_ID = 734185035623825559
 # SOCIAL_AUTH_LOGIN_REDIRECT_URL= "http://localhost:8000/complete/discord/"
 SOCIAL_AUTH_DJANGO_EXTRA_DATA = [
     "avatar",
@@ -74,7 +78,7 @@ MIDDLEWARE = [
     "social_django.middleware.SocialAuthExceptionMiddleware",
 ]
 
-ROOT_URLCONF = "example.urls"
+ROOT_URLCONF = "backend.urls"
 
 TEMPLATES = [
     {
@@ -123,7 +127,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "example.wsgi.application"
+WSGI_APPLICATION = "backend.wsgi.application"
 SOCIAL_AUTH_ALLOWED_REDIRECT_HOSTS = ["dtxdota.com", "localhost"]
 
 AUTHENTICATION_BACKENDS = (
@@ -233,7 +237,7 @@ ALLOWED_HOSTS = ["dtxdota.com", "localhost"]
 
 
 with contextlib.suppress(ImportError):
-    from example.local_settings import *  # noqa: F403
+    from backend.local_settings import *  # noqa: F403
 CORS_ORIGIN_WHITELIST = [
     "http://localhost:3000",
     "http://localhost:80",

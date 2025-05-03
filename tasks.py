@@ -1,8 +1,11 @@
+from pathlib import Path
+
+import toml
 from invoke.collection import Collection
 from invoke.tasks import task
-import toml
-from pathlib import Path
+
 import paths
+from backend.tasks import ns_db
 from scripts.docker import ns_docker
 
 config = None
@@ -14,6 +17,7 @@ ns_dev = Collection("dev")
 
 ns.add_collection(ns_docker, "docker")
 ns.add_collection(ns_dev, "dev")
+ns.add_collection(ns_db, "db")
 
 
 @task

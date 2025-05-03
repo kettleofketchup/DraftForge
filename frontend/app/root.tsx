@@ -57,7 +57,7 @@ export default function App() {
   const user = useUserStore((state) => state.user); // Zustand setter
 
   useEffect(() => {
-
+    console.log("User fetching");
     getUser();
   }, [] );
 

@@ -1,13 +1,13 @@
 import React, { useState, useEffect} from 'react';
 import { useClickAway } from "@uidotdev/usehooks";
 
-import type {User, UserProps} from './user/types'
+import type {UserType, UserProps} from './user/types'
 
 import { useUser } from './user/userUser';
 import SelectInput from 'node_modules/@mui/material/esm/Select/SelectInput';
 import { useUserStore } from '../store/useUserStore';
 interface Props {
-  user: User | null;
+  user: UserType | null;
   onLoginClick: () => void;
 }
 

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { fetchCurrentUser, fetchUsers } from '../api/api';
-import type { User, Users } from './types';
+import type { UserType, UsersType } from './types';
 import { useUserStore } from '../../store/useUserStore';
 
 export function useUser() {

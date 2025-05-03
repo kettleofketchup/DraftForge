@@ -1,6 +1,7 @@
-from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import DotaInfo, CustomUser, DiscordInfo
+from rest_framework import serializers
+
+from .models import CustomUser, DiscordInfo, DotaInfo
 
 
 class DotaSerializer(serializers.ModelSerializer):
@@ -39,3 +40,45 @@ class UserSerializer(serializers.ModelSerializer):
         user = CustomUser(**validated_data)  # create user with all the other fields
         user.save()
         return user
+
+
+from .models import Game, Team, Tournament
+
+
+class TeamSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Team
+        fields = (
+            "pk",
+            "name",
+            "captain",
+            "members",
+            "dropin_members",
+            "current_points",
+        )
+
+
+class TournamentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tournament
+        fields = (
+            "pk",
+            "name",
+            "date_played",
+            "users",
+            "teams",
+            "winning_team",
+            "state",
+        )
+
+
+class GameSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Game
+        fields = (
+            "pk",
+            "tournament",
+            "team1",
+            "team2",
+            "winning_team",
+        )

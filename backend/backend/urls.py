@@ -1,14 +1,20 @@
-from app import views as app_views
 from django.contrib import admin
 from django.urls import include, path
 from rest_framework import routers
-from app.views import UserView, current_user, UserCreateView
+
+from app import views as app_views
+from app.views import (
+    UserCreateView,
+    UserView,
+    current_user,
+    get_discord_members,
+    get_user_guilds,
+)
 
 router = routers.DefaultRouter()
 router.register(r"users", UserView, "users")
 
 from django.views.generic.base import RedirectView
-
 
 urlpatterns = [
     path("done/", RedirectView.as_view(url="http://localhost:5173")),
@@ -26,4 +32,6 @@ urlpatterns = [
     path("api/", include(router.urls)),
     path("api/current_user", current_user),
     path("api/register", UserCreateView.as_view()),
+    path("api/dtx_members", get_discord_members, name="dtx_members"),
+    path("api/guilds", get_user_guilds, name="guilds"),
 ]
