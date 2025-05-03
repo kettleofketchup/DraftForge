@@ -27,6 +27,12 @@ def docker_build(c, image: str, version: str, dockerfile: Path, context: Path):
         c.run(cmd)
 
 
+def docker_pull(c, image: str, version: str, dockerfile: Path, context: Path):
+    cmd = f"docker pull {image}:{version}"
+    with c.cd(paths.PROJECT_PATH):
+        c.run(cmd)
+
+
 def tag_latest(c, image: str, version: str):
     c.run(f"docker tag {image}:{version} {image}:latest")
     c.run(f"docker push {image}:{version}")
@@ -76,6 +82,24 @@ def docker_backend_build(c):
 def docker_nginx_build(c):
     version, image, dockerfile, context = get_nginx()
     docker_build(c, image, version, dockerfile, context)
+
+
+@task
+def docker_nginx_pull(c):
+    version, image, dockerfile, context = get_nginx()
+    docker_pull(c, image, version, dockerfile, context)
+
+
+@task
+def docker_backend_pull(c):
+    version, image, dockerfile, context = get_backend()
+    docker_pull(c, image, version, dockerfile, context)
+
+
+@task
+def docker_frontend_pull(c):
+    version, image, dockerfile, context = get_frontend()
+    docker_pull(c, image, version, dockerfile, context)
 
 
 @task
@@ -143,6 +167,15 @@ def docker_push_all(c):
             bar()
 
 
+@task
+def docker_pull_all(c):
+    funcs = [docker_backend_pull, docker_frontend_pull, docker_nginx_pull]
+    with alive_bar(total=3, title="Pullling Images") as bar:
+        for func in funcs:
+            func(c)
+            bar()
+
+
 ns_docker_frontend.add_task(docker_frontend_build, "build")
 ns_docker_backend.add_task(docker_backend_build, "build")
 ns_docker_nginx.add_task(docker_frontend_build, "build")
@@ -154,5 +187,8 @@ ns_docker_nginx.add_task(docker_nginx_push, "push")
 ns_docker_backend.add_task(docker_backend_run, "run")
 ns_docker_frontend.add_task(docker_frontend_run, "run")
 ns_docker_nginx.add_task(docker_nginx_run, "run")
+
+ns_docker_all.add_task(docker_pull_all, "pull")
+ns_docker_all.add_task(docker_build_all, "build")
 ns_docker_all.add_task(docker_push_all, "push")
 ns_docker_all.add_task(docker_build_all, "build")
