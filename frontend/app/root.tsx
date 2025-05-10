@@ -13,8 +13,7 @@ import Box from '@mui/material/Box';
 import ResponsiveAppBar from "./components/navbar"
 import Footer from "./components/footer";
 import { useEffect, useState } from "react";
-import { useUser } from "./components/user/userUser";
-import { useUserStore } from "./store/useUserStore";
+import { useUserStore } from "./store/userStore";
 
 
 export const links: Route.LinksFunction = () => [
@@ -53,12 +52,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const [inputId, setInputId] = useState<string>('');
-  const { userTHing, loading, error, getUser } = useUser();
   const user = useUserStore((state) => state.user); // Zustand setter
+  const getCurrentUser = useUserStore((state) => state.getCurrentUser); // Zustand setter
 
   useEffect(() => {
     console.log("User fetching");
-    getUser();
+    getCurrentUser();
   }, [] );
 
 

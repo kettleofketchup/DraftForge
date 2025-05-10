@@ -3,9 +3,8 @@ import { useClickAway } from "@uidotdev/usehooks";
 
 import type {UserType, UserProps} from './user/types'
 
-import { useUser } from './user/userUser';
 import SelectInput from 'node_modules/@mui/material/esm/Select/SelectInput';
-import { useUserStore } from '../store/useUserStore';
+import { useUserStore } from '../store/userStore';
 interface Props {
   user: UserType | null;
   onLoginClick: () => void;

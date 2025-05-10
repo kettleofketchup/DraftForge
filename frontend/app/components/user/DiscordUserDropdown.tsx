@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Combobox, ComboboxInput, ComboboxOption, ComboboxOptions } from "@headlessui/react";
 import { get_dtx_members } from "../api/api";
 import type { GuildMembers, GuildMember } from "../user/types";
-import { useUserStore } from '../../store/useUserStore';
+import { useUserStore } from '../../store/userStore';
 
 interface Props {
   onSelect: (user: GuildMember) => void;

@@ -43,11 +43,15 @@ class Tournament(models.Model):
         ("in_progress", "In Progress"),
         ("past", "Past"),
     ]
-
+    TOURNAMNET_TYPE_CHOICES = [
+        ("single_elimination", "Single Elimination"),
+        ("double_elimination", "Double Elimination"),
+        ("swiss", "Swiss Bracket"),
+    ]
     name = models.CharField(max_length=255)
     date_played = models.DateField()
     users = models.ManyToManyField(User, related_name="tournaments")
-    teams = models.ManyToManyField("Team", related_name="tournaments")
+    teams = models.ManyToManyField("Team", related_name="tournament")
     winning_team = models.ForeignKey(
         "Team",
         null=True,
@@ -56,6 +60,9 @@ class Tournament(models.Model):
         related_name="tournaments_won",
     )
     state = models.CharField(max_length=20, choices=STATE_CHOICES, default="future")
+    tournment_type = models.CharField(
+        max_length=20, choices=TOURNAMNET_TYPE_CHOICES, default="double_elimination"
+    )
 
     def __str__(self):
         return self.name
@@ -66,10 +73,12 @@ class Team(models.Model):
     captain = models.ForeignKey(
         User, related_name="teams_captained", on_delete=models.CASCADE
     )
-    members = models.ManyToManyField(User, related_name="teams_member", blank=True)
+    members = models.ManyToManyField(User, related_name="teams", blank=True)
     dropin_members = models.ManyToManyField(
         User, related_name="teams_dropin", blank=True
     )
+    left_members = models.ManyToManyField(User, related_name="teams_leftzs", blank=True)
+
     current_points = models.IntegerField(default=0)
 
     def __str__(self):
@@ -78,14 +87,13 @@ class Team(models.Model):
 
 class Game(models.Model):
     tournament = models.ForeignKey(
-        Tournament, related_name="games", on_delete=models.CASCADE
+        Tournament, related_name="tournament_games", on_delete=models.CASCADE
     )
-    team1 = models.ForeignKey(
-        Team, related_name="matches_as_team1", on_delete=models.CASCADE
+    round = models.IntegerField(default=1)
+    radiant = models.ForeignKey(
+        Team, related_name="gamesRadiant", on_delete=models.CASCADE
     )
-    team2 = models.ForeignKey(
-        Team, related_name="matches_as_team2", on_delete=models.CASCADE
-    )
+    dire = models.ForeignKey(Team, related_name="gamesDire", on_delete=models.CASCADE)
     winning_team = models.ForeignKey(
         Team, related_name="games_won", on_delete=models.CASCADE
     )
@@ -96,3 +104,5 @@ class Game(models.Model):
     @property
     def teams(self):
         return [self.team1, self.team2]
+
+    users = models.ManyToManyField(User, related_name="game_stats")

@@ -1,43 +1,12 @@
 import * as React from 'react';
-import AppBar from '@mui/material/AppBar';
-import Box from '@mui/material/Box';
-import Toolbar from '@mui/material/Toolbar';
-import Typography from '@mui/material/Typography';
-
-import Container from '@mui/material/Container';
-import Avatar from '@mui/material/Avatar';
-import Button from '@mui/material/Button';
-import dtx from "../assets/dtx.gif"
-
-const pages = ['Tournaments', 'Dota', 'Blog'];
-const settings = ['Profile', 'Account', 'Dashboard', 'Logout'];
-
-
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import { styled } from '@mui/material/styles';
-
 import {LoginWithDiscordButton } from './login';
 import type { UserProps} from  './user/types';
-import { useUser } from './user/userUser';
-import { useUserStore } from '../store/useUserStore';
+import { useUserStore } from '../store/userStore';
 
 
 
 
-const r = () => {
 
-  return (
-    <div className="hero min-h-screen bg-base-200">
-      <div className="hero-content text-center">
-        <div className="max-w-md">
-          <h1 className="text-5xl font-bold">About us</h1>
-          <p className="py-6">We are a community of gamers who love to play and compete in Dota 2. Join us for tournaments, events, and more!</p>
-        </div>
-      </div>
-    </div>
-  );
-}
 const menuItems = () => {
   const isStaff = useUserStore((state) => state.isStaff());
   return (

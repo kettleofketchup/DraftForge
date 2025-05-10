@@ -19,9 +19,9 @@ from social_django.models import AbstractUserSocialAuth, DjangoStorage
 from social_django.utils import load_strategy, psa
 
 from .decorators import render_to
-from .models import CustomUser
+from .models import CustomUser, Team, Tournament
 from .permissions import IsStaff
-from .serializers import UserSerializer
+from .serializers import TeamSerializer, TournamentSerializer, UserSerializer
 
 
 def logout(request):
@@ -131,6 +131,55 @@ class UserView(viewsets.ModelViewSet):
         "options",
         "trace",
     ]
+
+    def patch(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+
+
+@permission_classes((IsStaff,))
+class TournamentView(viewsets.ModelViewSet):
+    serializer_class = TournamentSerializer
+    queryset = Tournament.objects.all()
+    http_method_names = [
+        "get",
+        "post",
+        "put",
+        "patch",
+        "delete",
+        "head",
+        "options",
+        "trace",
+    ]
+
+    def patch(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+
+    def get_permissions(self):
+        self.permission_classes = [IsStaff]
+        if self.request.method == "GET":
+            self.permission_classes = [AllowAny]
+        return super(TournamentView, self).get_permissions()
+
+
+class TeamView(viewsets.ModelViewSet):
+    serializer_class = TeamSerializer
+    queryset = Team.objects.all()
+    http_method_names = [
+        "get",
+        "post",
+        "put",
+        "patch",
+        "delete",
+        "head",
+        "options",
+        "trace",
+    ]
+
+    def get_permissions(self):
+        self.permission_classes = [IsStaff]
+        if self.request.method == "GET":
+            self.permission_classes = [AllowAny]
+        return super(TeamView, self).get_permissions()
 
     def patch(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)

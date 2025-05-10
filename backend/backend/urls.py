@@ -4,6 +4,8 @@ from rest_framework import routers
 
 from app import views as app_views
 from app.views import (
+    TeamView,
+    TournamentView,
     UserCreateView,
     UserView,
     current_user,
@@ -13,6 +15,8 @@ from app.views import (
 
 router = routers.DefaultRouter()
 router.register(r"users", UserView, "users")
+router.register(r"tournaments", TournamentView, "tournaments")
+router.register(r"teams", TeamView, "teams")
 
 from django.views.generic.base import RedirectView
 
@@ -33,5 +37,4 @@ urlpatterns = [
     path("api/current_user", current_user),
     path("api/register", UserCreateView.as_view()),
     path("api/dtx_members", get_discord_members, name="dtx_members"),
-    path("api/guilds", get_user_guilds, name="guilds"),
 ]

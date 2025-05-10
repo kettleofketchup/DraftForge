@@ -38,7 +38,7 @@ export class User implements UserClassType {
     this.username = member.user.username;
     this.avatar = member.user.avatar ?? undefined;
     this.discordNickname = member.user.global_name ?? null;
-    this.guildNickname = member.nick ?? null;
+    this.guildNickname = member.znick ?? null;
     this.avatarUrl = this.getAvatarUrl()
 
   }

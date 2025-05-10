@@ -2,9 +2,8 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react';
 import type { GuildMember, UserType, UserClassType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
-import { useUsers } from '~/components/user/userUser';
 import axios from "~/components/api/axios"
-import { useUserStore } from '~/store/useUserStore';
+import { useUserStore } from '~/store/userStore';
 import { Combobox, ComboboxInput, ComboboxOption, ComboboxOptions } from '@headlessui/react'
 import Footer from '~/components/footer';
 import DiscordUserDropdown from "~/components/user/DiscordUserDropdown";
@@ -14,7 +13,9 @@ import { User } from '~/components/user/user';
 
 export function UsersPage() {
   const user: UserType = useUserStore((state) => state.user); // Zustand setter
-  const { users, loading, error, getUsers } = useUsers();
+  const getUsers = useUserStore((state) => state.getUsers); // Zustand setter
+  const users = useUserStore((state) => state.users); // Zustand setter
+
   const [createModal, setCreateModal] = useState<boolean>(false);
 
   const [query, setQuery] = useState('');
@@ -111,9 +112,6 @@ export function UsersPage() {
   useEffect(() => {
     getUsers();
   }, []);
-
-  useEffect(() => {}, [users]);
-  const getUser = () => selectedDiscordUser;
   const addUserBtn = () => {
     return (
       <>

@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { fetchCurrentUser, fetchUsers } from '../api/api';
 import type { UserType, UsersType } from './types';
-import { useUserStore } from '../../store/useUserStore';
+import { useUserStore } from '../../store/userStore';
 
 export function useUser() {
   const [loading, setLoading] = useState<boolean>(false);
