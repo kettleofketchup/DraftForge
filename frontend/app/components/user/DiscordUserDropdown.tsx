@@ -17,7 +17,7 @@ const DiscordUserDropdown: React.FC<Props> = ({ onSelect }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const setDiscordUsers = useUserStore((state) => state.setDiscordUsers); // Zustand setter
   const discordUsers = useUserStore((state) => state.discordUsers); // Zustand setter
-  const discordUser = useUserStore((state) => state.discordUser); // Zustand setter
+  const discordUser = useUserStore((state) => state.selectedDiscordUser); // Zustand setter
 
    const getDiscordUsers = useCallback(async () => {
 

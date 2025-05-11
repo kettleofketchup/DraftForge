@@ -1,4 +1,5 @@
 import {
+  data,
   isRouteErrorResponse,
   Links,
   Meta,
@@ -12,8 +13,9 @@ import "./app.css";
 import Box from '@mui/material/Box';
 import ResponsiveAppBar from "./components/navbar"
 import Footer from "./components/footer";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useUserStore } from "./store/userStore";
+import type { UserType } from "./components/user/types";
 
 
 export const links: Route.LinksFunction = () => [
@@ -52,13 +54,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const [inputId, setInputId] = useState<string>('');
-  const user = useUserStore((state) => state.user); // Zustand setter
+  const currentUser = useUserStore((state) => state.currentUser); // Zustand setter
   const getCurrentUser = useUserStore((state) => state.getCurrentUser); // Zustand setter
+  const setUser = useUserStore((state) => state.setUser); // Zustand setter
+  const hasHydrated = useUserStore((state) => state.hasHydrated); // Zustand setter
 
   useEffect(() => {
-    console.log("User fetching");
-    getCurrentUser();
-  }, [] );
+    console.log(hasHydrated)
+    if ( hasHydrated && currentUser.username === undefined){
+      console.log("fetching user");
+      getCurrentUser();
+    }
+
+
+  }, [hasHydrated] );
 
 
   return (
@@ -68,6 +77,7 @@ export default function App() {
       <ResponsiveAppBar />
       <div id="outlet_root" className="flex-grow overflow-x-hidden">
       <Outlet />
+
       {/* <Footer/> */}
 
     </div>

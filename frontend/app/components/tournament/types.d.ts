@@ -1,11 +1,6 @@
 
 import type { UserType, UsersType } from "../user/types";
-
-export enum STATE_CHOICES {
-  future = "Future",
-  in_progress = "In Progress",
-  past = "Past",
-}
+import { STATE_CHOICES } from "./tournament";
 
 export enum TOURNAMENT_TYPE {
   single_elimination = "Single Elimination",

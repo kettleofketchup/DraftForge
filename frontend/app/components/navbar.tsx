@@ -29,8 +29,6 @@ const menuItems = () => {
 )
 }
 const menu = () => {
-  const isStaff = useUserStore((state) => state.isStaff());
-
   return (
   <div className="navbar-center hidden lg:flex">
       <ul className="menu menu-horizontal px-1">
@@ -71,31 +69,22 @@ const dropdown = () => {
   </div>
   );
 }
-const login = () => {
 
-  return (
-  <div className="navbar-end">
-    <LoginWithDiscordButton />
-  </div>
-  );
-}
 
 export const ResponsiveAppBar: React.FC<UserProps> = () => {
-
   return (
 
     <div className=" sticky top-0 navbar bg-base-100 shadow-sm p-0">
     <div className="navbar-start">
 
     {dropdown()}
-
-
       {dtxLogo()}
     </div>
     {menu()}
 
-    {login()}
-
+    <div className="navbar-end">
+      <LoginWithDiscordButton/>
+    </div>
   </div>
   );
 }

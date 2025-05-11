@@ -1,48 +1,19 @@
-import React, { useState, useEffect} from 'react';
+import React, { useState, useEffect, useMemo} from 'react';
 import { useClickAway } from "@uidotdev/usehooks";
 
 import type {UserType, UserProps} from './user/types'
 
-import SelectInput from 'node_modules/@mui/material/esm/Select/SelectInput';
+
 import { useUserStore } from '../store/userStore';
-interface Props {
-  user: UserType | null;
-  onLoginClick: () => void;
-}
-
-const UserStatus: React.FC<Props> = ({ user, onLoginClick }) => {
-
-  if (user) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <img
-          src={user.avatarUrl}
-          alt={`${user.username}'s avatar`}
-          style={{ width: 32, height: 32, borderRadius: '50%' }}
-        />
-        <span>{user.username}</span>
-      </div>
-    );
-  }
-
-  return (
-    <button onClick={onLoginClick}>
-      Log In
-    </button>
-  );
-};
-
-export default UserStatus;
-
+import { useRouteLoaderData } from 'react-router';
+import type { User } from './user/user';
 
 export const ProfileButton : React.FC<UserProps> = () => {
   const [showPopover, setShowPopover] = useState(false);
-  const user = useUserStore((state) => state.user); // Zustand setter
+  const user = useUserStore((state) => state.currentUser); // Zustand setter
   const clearUser = useUserStore((state) => state.clearUser); // Zustand setter
 
   const handleClick = () => {
-    console.log(user);
-
     setShowPopover((prev) => !prev);
   };
   const hidePopover = () => {
@@ -132,11 +103,17 @@ export const LoginButton : React.FC = () => {
   )
 };
 
-export const LoginWithDiscordButton: React.FC<UserProps> = () => {
-  const user = useUserStore((state) => state.user);
-  if (user.username) return <ProfileButton/>
+
+export const LoginWithDiscordButton: React.FC = () => {
+  const user = useUserStore((state) => state.currentUser);
+  const getCurrentUser = useUserStore((state) => state.getCurrentUser); // Zustand setter
 
 
-  return <LoginButton/>
+
+
+  if (!user.username){
+    return  <LoginButton />
+  }
+  return  <ProfileButton/>
 
   }

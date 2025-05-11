@@ -1,19 +1,22 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import type { GuildMember, UserType, GuildMembers } from '~/components/user/types';
+import { persist, createJSONStorage,  } from 'zustand/middleware';
+import type { GuildMember, UserType, GuildMembers, UsersType } from '~/components/user/types';
 import { User } from '~/components/user/user';
-import { UsersPage } from '~/pages/users/users';
 import { get_dtx_members,fetchUsers, getGames, getTeams, getTournaments, fetchCurrentUser} from "~/components/api/api";
-import { useCallback } from 'react';
 import type { GameType, TeamType, TournamentType } from '~/components/tournament/types';
+import { createCookie } from 'react-router';
+import { useMemo } from 'react';
+import React, { memo } from 'react';
 
 interface UserState {
-    user: UserType;
-
+    currentUser: UserType;
+    selectedUser: UserType;
+    hasHydrated: boolean,
+    setHasHydrated: (hydrated: boolean) => void;
     setUser: (user: UserType) => void;
     clearUser: () => void;
     isStaff: () => boolean;
-    discordUser: GuildMember;
+    selectedDiscordUser: GuildMember;
     setDiscordUser: (discordUser:GuildMember)  => void;
     discordUsers: GuildMembers;
     setDiscordUsers: (users:GuildMembers)  => void;
@@ -21,14 +24,14 @@ interface UserState {
     setUsers: (uses: UserType[]) => void;
     addUser: (user: UserType) => void;
     clearUsers: () => void;
-    getUsers: () => Promise<void>;
     game: GameType;
     games: GameType[];
     team: TeamType;
     teams: TeamType[];
     tournament: TournamentType;
     tournaments: TournamentType[];
-
+    getUsers: () => Promise<void>;
+    resetSelection: () => void;
     setGames: (games: GameType[]) => void;
     setTeams: (teams: TeamType[]) => void;
     setTeam: (teams: TeamType) => void;
@@ -37,7 +40,6 @@ interface UserState {
     setTournament: (tournament: TournamentType) => void;
     tournamentsByUser: (user: UserType) => TournamentType[];
     getCurrentUser: () => Promise<void>;
-    updateUser: (user:UserType) => Promise<void>;
     createUser: (user:UserType) => Promise<void>;
     userAPIError: any ;
 
@@ -55,14 +57,22 @@ export const useUserStore = create<UserState>()(
       games: [] as GameType[],
       teams: [] as TeamType[],
       team: {} as TeamType,
-      user: new User({} as UserType),
-      discordUser: {} as GuildMember,
-      setDiscordUser: (discordUser) =>set({ discordUser }),
+      currentUser: new User({} as UserType),
+      selectedUser: {} as UserType,
+      resetSelection: () => {
+        set({ selectedUser: {} as UserType });
+        set({ selectedDiscordUser: {} as GuildMember });
+      },
+      selectedDiscordUser: {} as GuildMember,
+      setDiscordUser: (discordUser) =>set({ selectedDiscordUser: discordUser }),
       discordUsers: [] as GuildMembers,
       setDiscordUsers: (discordUsers: GuildMembers) => set({ discordUsers }),
-      setUser: (user) => set({ user }),
-      clearUser: () => set({ user: {} as UserType }),
-      isStaff: () => !!get().user?.is_staff,
+      setUser: (user) => {
+        console.log('User set:', user);
+
+        set({ currentUser: user })},
+      clearUser: () => set({ currentUser: {} as UserType }),
+      isStaff: () => !!get().currentUser?.is_staff,
       users: [] as UserType[],
       addUser: (user) => set({users: [...get().users, user]}),
       setUsers: (users) => set({ users }),
@@ -81,11 +91,11 @@ export const useUserStore = create<UserState>()(
       getCurrentUser: async () => {
           try {
             const response = await fetchCurrentUser();
-            set({ user: response });
+            set({ currentUser: response });
             console.log('User fetched successfully:', response);
           } catch (error) {
             console.error('Error fetching users:', error);
-            set({ user: {} as UserType });
+            set({ currentUser: {} as UserType });
           }
         },
 
@@ -124,32 +134,31 @@ export const useUserStore = create<UserState>()(
         setTeams: (teams: TeamType[]) => set({ teams }),
 
         setTeam: (team: TeamType) => set({ team }),
+      hasHydrated: false,
 
-        updateUser: async (user: UserType) => {
-          try {
-            const response = await fetchUsers();
-            set({ users: response });
-            console.log('User fetched successfully:', response);
-          } catch (error) {
-            console.error('Error fetching users:', error);
-          }
-        },
+
         createUser: async (user: UserType) => {
           try {
-            const response = await fetchUsers();
-            set({ users: response });
-            console.log('User fetched successfully:', response);
+            //set({ users: response });
+            // console.log('User fetched successfully:', response);
           } catch (error) {
             console.error('Error fetching users:', error);
           }
         },
+        setHasHydrated: (hydrated) => set({ hasHydrated: hydrated }),
+
         userAPIError: null,
         setUserAPIError: (error:any) => set({ userAPIError: error }),
         clearUserAPIError: () => set({ userAPIError: null }),
       }),
       {
-          name: 'dtx-user-storage', // key in localStorage
-          partialize: (state) => ({ user: state.user }), // optionally limit what's stored
+          name: 'dtx-storage', // key in localStorage
+          partialize: (state) => ({ currentUser: state.currentUser }), // optionally limit what's stored
+          onRehydrateStorage: () => (state) => {
+                state?.setHasHydrated(true);
+          },
+          storage: createJSONStorage(() => sessionStorage), // (optional) by default, 'localStorage' is used
+          skipHydration: false, // (optional) if you want to skip hydration
       }
     )
 );
