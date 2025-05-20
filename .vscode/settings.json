@@ -5,5 +5,12 @@
         "instruction": "Generate a daisyUI component using the daisyUI documentation. Use the daisyUI documentation as a reference."
       }
     ],
+    "[typescript]": {
+      "editor.insertSpaces": true,
+      "editor.tabSize": 2,
+      "editor.formatOnType": true,
+      "editor.formatOnPaste": true,
+      "editor.formatOnSave": true,
+    },
     "python.defaultInterpreterPath": ".venv/bin/python"
   }

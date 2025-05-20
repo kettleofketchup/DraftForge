@@ -31,7 +31,7 @@ export const CreateTournamentButton = () => {
           htmlFor="create_user_modal"
           className="btn outline outline-green-500 rounded-lg hover:bg-green-900/50 hover:shadow-xl/10 delay-10 duration-300 ease-in-out"
         >
-          Create User
+          Create Tournament
         </label>
 
         <input type="checkbox" id="create_user_modal" className="modal-toggle" onClick={openCreateModal} />

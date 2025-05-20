@@ -1,10 +1,12 @@
 import React, { use, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { TournamentType, GameType, TeamType } from '~/components/tournament/types';
+import type { UserType } from '~/components/user/types'; // Corrected import path for UserType
 import { STATE_CHOICES } from '~/components/tournament/tournament';
 import axios from "../api/axios"
 import { useNavigate } from "react-router";
 import { useUserStore } from '~/store/userStore';
+import { UsersDropdown } from '../user/UsersDropdown';
 
 interface Props {
   tournament: TournamentType;
@@ -19,7 +21,10 @@ export const TournamentCard: React.FC<Props> = ({ tournament, edit, saveFunc }) 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<Partial<Record<keyof TournamentType, string>>>({});
-  const getUsers = useUserStore((state) => state.getUsers);
+  const allUsersFromStore = useUserStore((state) => state.users); // Assuming 'users' holds all users
+  const fetchAllUsers = useUserStore((state) => state.getUsers); // Assuming 'getUsers' fetches all users
+
+  const currentUser = useUserStore((state) => state.currentUser);
 
   const TOURNAMENT_TYPE_CHOICES = [
     { value: "single_elimination", label: "Single Elimination" },
@@ -31,18 +36,30 @@ export const TournamentCard: React.FC<Props> = ({ tournament, edit, saveFunc }) 
     setForm((prev: any) => ({ ...prev, [field]: value }));
   };
 
+  const handleUserSelectionChange = (selectedUserPKs: string[]) => {
+    if (!allUsersFromStore) return;
+    const selectedUsers = allUsersFromStore.filter(user => user.pk !== undefined && selectedUserPKs.includes(user.pk.toString()));
+    handleChange("users", selectedUsers);
+  };
+
   const handleSave = async (e: FormEvent) => {
     e.stopPropagation()
     setErrorMessage({}); // clear old errors
 
+    const payload = {
+      ...form,
+      users: (form.users || []).map(user => user.pk).filter(pk => pk !== undefined), // Send only defined PKs
+    };
+
     if (saveFunc === "create") {
       setIsSaving(true);
       try {
-        await axios.post(`/tournament`, form);
+        await axios.post(`/tournament`, payload);
         setError(false);
         setForm({} as TournamentType);
         const modalCheckbox = document.getElementById("create_tournament_modal") as HTMLInputElement;
         if (modalCheckbox) modalCheckbox.checked = false;
+        fetchAllUsers(); // Refresh user list in case of changes
 
       } catch (err: any) {
         console.error("Failed to create tournament", err);
@@ -59,10 +76,10 @@ export const TournamentCard: React.FC<Props> = ({ tournament, edit, saveFunc }) 
       if (!form.pk) return;
       setIsSaving(true);
       try {
-        await axios.patch(`/users/${tournament.pk}/`, form);
+        await axios.patch(`/tournament/${tournament.pk}/`, payload); // Corrected endpoint
         setEditMode(false);
         setError(false);
-        getUsers(); // Triggers fetch and repopulates store
+        fetchAllUsers(); // Refresh user list
 
       } catch (err: any) {
         setError(true);
@@ -87,13 +104,33 @@ export const TournamentCard: React.FC<Props> = ({ tournament, edit, saveFunc }) 
     setForm(tournament);
   }, [tournament]);
 
+  useEffect(() => {
+    if (editMode && (!allUsersFromStore || allUsersFromStore.length === 0)) {
+      fetchAllUsers();
+    }
+  }, [editMode, allUsersFromStore, fetchAllUsers]);
+
+  const getHeaderName = () => {
+
+   let date = tournament.date_played
+              ? (
+        () => {
+        const [year, month, day] = tournament.date_played.split('-');
+        return `${month}-${day}`;
+        })()
+      : ''
+    return `${tournament.name || ''} - ${date || ''}`;
+  }
+
   const TournamentHeader = () => {
     return (
       <>
         {!editMode && (
           <div className="flex-1">
 
-            <h2 className="card-title text-lg">{tournament.date_played}</h2>
+            <h2 className="card-title text-lg">
+              {getHeaderName()}
+            </h2>
 
             <div className="flex gap-2 mt-1">
               {tournament.state === STATE_CHOICES.in_progress && <span className="badge badge-warning">In Progress</span>}
@@ -156,18 +193,43 @@ export const TournamentCard: React.FC<Props> = ({ tournament, edit, saveFunc }) 
           )}
         </div>
 
+        <div>
+          <label className="font-semibold" htmlFor="users-select">Players:</label>
+          <select
+            multiple
+            id="users-select"
+            value={(form.users || []).map(user => user.pk?.toString() ?? '').filter(pk => pk !== '')}
+            onChange={(e) => {
+              const selectedPKs = Array.from(e.target.selectedOptions, option => option.value);
+              handleUserSelectionChange(selectedPKs);
+            }}
+            className={`select select-bordered w-full mt-1 h-32 ${errorMessage.users ? 'select-error' : ''}`}
+          >
+            {(allUsersFromStore || []).map((user: UserType) => {
+              if (user.pk === undefined) return null;
+              return (
+                <option key={user.pk} value={user.pk.toString()}>
+                  {user.nickname || user.username}
+                </option>
+              );
+            })}
+          </select>
+          {errorMessage.users && (
+            <p className="text-error text-sm mt-1">{errorMessage.users}</p>
+          )}
+        </div>
+
         <button
           onClick={handleSave}
           className="btn btn-primary btn-sm mt-3"
           disabled={isSaving}
         >
-          {saveCallback === "create" && (isSaving ? "Saving..." : "Create User")}
+          {saveCallback === "create" && (isSaving ? "Saving..." : "Create Tournament")}
           {saveCallback === "save" && (isSaving ? "Saving..." : "Save Changes")}
         </button>
       </>
     );
   };
-
   const viewMode = () => {
     return (<>
       {tournament.date_played !== undefined && (
@@ -185,21 +247,8 @@ export const TournamentCard: React.FC<Props> = ({ tournament, edit, saveFunc }) 
           <span className="font-semibold">Style:</span> {tournament.tournament_type}
         </div>
       )}
-      {tournament.users && tournament.users.length > 0 && (
-        <div className="collapse collapse-arrow border border-base-300 bg-base-200 rounded-box">
-          <input type="checkbox" />
-          <div className="collapse-title text-md font-medium">
-            Players ({tournament.users.length})
-          </div>
-          <div className="collapse-content">
-            <ul className="list-disc list-inside ml-4">
-              {tournament.users.map((user) => (
-                <li key={user.pk || user.username}>{user.nickname || user.username}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
+
+      <UsersDropdown users={tournament.users || []}/>
     </>)
   }
 
@@ -216,9 +265,12 @@ export const TournamentCard: React.FC<Props> = ({ tournament, edit, saveFunc }) 
     }
     return result
   }
+
+  const editModeCss = () => editMode ? `px-6 py-4 gap-6 content-center` : `px-6 py-4 gap-6 content-center`;
+
   return (
 
-    <div key={`usercard:${getKeyName()} base`} className='px-6 py-4 gap-6 content-center'>
+    <div key={`usercard:${getKeyName()} base`} className={editModeCss()}>
       <div className=" p-2 h-full card bg-base-200 shadow-md w-full
             max-w-sm hover:bg-violet-900 . focus:outline-2
             hover:shadow-xl/30
@@ -227,14 +279,19 @@ export const TournamentCard: React.FC<Props> = ({ tournament, edit, saveFunc }) 
             delay-700 duration-900 ease-in-out">
         <div className="flex items-center gap-2">
           {TournamentHeader()}
-          {saveCallback !== "create" && (
 
-            <button
-              className="btn btn-sm btn-outline ml-auto"
-              onClick={() => setEditMode(!editMode)}
-            >
-              {editMode ? "Cancel" : "Edit"}
-            </button>
+          {currentUser && currentUser.is_staff && (
+            <>
+            {saveCallback !== "create" && (
+
+              <button
+                className="btn btn-sm btn-outline ml-auto"
+                onClick={() => setEditMode(!editMode)}
+              >
+                {editMode ? "Cancel" : "Edit"}
+              </button>
+            )}
+            </>
           )}
         </div>
 
