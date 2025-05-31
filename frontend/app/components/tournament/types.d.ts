@@ -1,11 +1,10 @@
-
-import type { UserType, UsersType } from "../user/types";
-import { STATE_CHOICES } from "./tournament";
+import type { UserType, UsersType } from '../user/types';
+import { STATE_CHOICES } from './tournament';
 
 export enum TOURNAMENT_TYPE {
-  single_elimination = "Single Elimination",
-  double_elimination = "Double Elimination",
-  swiss = "Swiss",
+  single_elimination = 'Single Elimination',
+  double_elimination = 'Double Elimination',
+  swiss = 'Swiss',
 }
 
 export declare interface TeamType {
@@ -22,7 +21,7 @@ export declare interface TeamType {
 }
 export declare interface GameType {
   tournament?: pk;
-  round?: number
+  round?: number;
   date_played?: string;
   users?: UserType[];
   teams?: Team[];
@@ -31,9 +30,7 @@ export declare interface GameType {
   state?: STATE_CHOICES;
   tournament_type?: TOURNAMENT_TYPE;
   games?: Game[];
-
 }
-
 
 export declare interface TournamentType {
   name?: string;
@@ -45,5 +42,4 @@ export declare interface TournamentType {
   state?: STATE_CHOICES;
   tournament_type?: TOURNAMENT_TYPE;
   games?: Game[];
-
 }

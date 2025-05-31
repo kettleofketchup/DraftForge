@@ -1,14 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { GuildMember, UserType, UserClassType } from '~/components/user/types';
+import type {
+  GuildMember,
+  UserType,
+  UserClassType,
+} from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
-import axios from "~/components/api/axios"
+import axios from '~/components/api/axios';
 import { useUserStore } from '~/store/userStore';
-import { Combobox, ComboboxInput, ComboboxOption, ComboboxOptions } from '@headlessui/react'
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxOption,
+  ComboboxOptions,
+} from '@headlessui/react';
 import Footer from '~/components/footer';
-import DiscordUserDropdown from "~/components/user/DiscordUserDropdown";
+import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
 import { User } from '~/components/user/user';
-import {CreateUserButton} from "~/components/user/createUserModal";
+import { CreateUserButton } from '~/components/user/createUserModal';
 import { SearchUserDropdown } from '~/components/user/searchUser';
 
 export function UsersPage() {
@@ -16,40 +25,40 @@ export function UsersPage() {
   const getUsers = useUserStore((state) => state.getUsers); // Zustand setter
   const users = useUserStore((state) => state.users); // Zustand setter
 
-
-
   const [createModal, setCreateModal] = useState<boolean>(false);
 
   const [query, setQuery] = useState('');
-  const [selectedDiscordUser, setSelectedDiscordUser] = useState(new User({} as UserClassType));
-  const [searchedPerson, setSearchedPerson] = useState(new User({} as UserClassType));
+  const [selectedDiscordUser, setSelectedDiscordUser] = useState(
+    new User({} as UserClassType),
+  );
+  const [searchedPerson, setSearchedPerson] = useState(
+    new User({} as UserClassType),
+  );
 
   const filteredUsers =
-  query === ''
-    ? users
-    : users.filter((person) => {
-        const q = query.toLowerCase();
-        return (
-          person.username?.toLowerCase().includes(q) ||
-          person.nickname?.toLowerCase().includes(q)
-        );
-      });
+    query === ''
+      ? users
+      : users.filter((person) => {
+          const q = query.toLowerCase();
+          return (
+            person.username?.toLowerCase().includes(q) ||
+            person.nickname?.toLowerCase().includes(q)
+          );
+        });
 
-
-    const handleSearchUserSelect = (user: User) => {
-      setSearchedPerson(new User(user));
-
-    };
+  const handleSearchUserSelect = (user: User) => {
+    setSearchedPerson(new User(user));
+  };
 
   const openCreateModal = () => {
     setCreateModal(true);
-  }
+  };
   const closeCreateModal = () => {
     setCreateModal(false);
-  }
+  };
   useEffect(() => {
-    if(!users || users.length === 0) {
-     getUsers();
+    if (!users || users.length === 0) {
+      getUsers();
     }
   }, []);
   if (!user || !user.is_staff)
@@ -61,8 +70,6 @@ export function UsersPage() {
       </div>
     );
 
-
-
   return (
     <>
       <div className="flex flex-col items-start p-4 h-full  ">
@@ -72,7 +79,9 @@ export function UsersPage() {
        grid-cols-4
          w-full "
         >
-          <div className="flex"><SearchUserDropdown/></div>
+          <div className="flex">
+            <SearchUserDropdown />
+          </div>
           <div className="flex col-start-4 align-end content-end justify-end">
             <CreateUserButton />
           </div>
@@ -85,7 +94,7 @@ export function UsersPage() {
         >
           {filteredUsers?.map((u) => (
             <div className="grid" key={u.pk}>
-              <UserCard user={u} saveFunc={'save'}/>
+              <UserCard user={u} saveFunc={'save'} />
             </div>
           ))}
         </div>

@@ -1,10 +1,9 @@
-import { useState } from 'react'
+import { useState } from 'react';
 
-import dtx from '../../assets/dtx.gif'
+import dtx from '../../assets/dtx.gif';
 
 export default function HomePage() {
-
-  const [count, setCount] = useState(0)
+  const [count, setCount] = useState(0);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
 
@@ -17,32 +16,31 @@ export default function HomePage() {
 
   return (
     <>
-
-
       <div className="flex justify-center h-full content-center mb-0 mt-0 overflow-hidden p-0">
-        <div className='justify-self-center content-center align-middle'>
-          <a href="https://discord.gg/dtx"
-            className=' justify-self-center content-center align-middle'
+        <div className="justify-self-center content-center align-middle">
+          <a
+            href="https://discord.gg/dtx"
+            className=" justify-self-center content-center align-middle"
             target="_blank"
             aria-owns={open ? 'mouse-over-popover' : undefined}
             aria-haspopup="true"
             onMouseEnter={handlePopoverOpen}
-            onMouseLeave={handlePopoverClose}>
+            onMouseLeave={handlePopoverClose}
+          >
             <div className="avatar flex ">
-              <div className="  ring-primary ring-offset-base-100  rounded-full ring ring-offset-2 shadow-xl hover:shadow-indigo-500/50
-                              ]motion-safe:md:hover:animate-pulse motion-safe:md:hover:animate-spin motion-safe:transition delay-150 duration-300 easin-in-out">
+              <div
+                className="  ring-primary ring-offset-base-100  rounded-full ring ring-offset-2 shadow-xl hover:shadow-indigo-500/50
+                              ]motion-safe:md:hover:animate-pulse motion-safe:md:hover:animate-spin motion-safe:transition delay-150 duration-300 easin-in-out"
+              >
                 <img src={dtx} />
               </div>
             </div>
           </a>
-          <span className='flex justify-center pt-8 text-center w-full'>
+          <span className="flex justify-center pt-8 text-center w-full">
             Click on the logo to join our Discord
           </span>
-
         </div>
-    </div>
-
+      </div>
     </>
-  )
-
+  );
 }

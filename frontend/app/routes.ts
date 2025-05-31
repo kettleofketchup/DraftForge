@@ -1,14 +1,13 @@
-import { type RouteConfig, index, route } from "@react-router/dev/routes";
+import { type RouteConfig, index, route } from '@react-router/dev/routes';
 
 export default [
-  index("routes/home.tsx"),
-  route("tournaments", "routes/tournaments.tsx"),
-  route("tournament/:pk", "routes/tournament.tsx"),
+  index('routes/home.tsx'),
+  route('tournaments', 'routes/tournaments.tsx'),
+  route('tournament/:pk', 'routes/tournament.tsx'),
 
-  route("about", "routes/about.tsx"),
-  route("blog", "routes/blog.tsx"),
-  route("done", "routes/login.tsx"),
-  route("users", "routes/users.tsx"),
-  route("user/:pk", "routes/user.tsx"),
-
+  route('about', 'routes/about.tsx'),
+  route('blog', 'routes/blog.tsx'),
+  route('done', 'routes/login.tsx'),
+  route('users', 'routes/users.tsx'),
+  route('user/:pk', 'routes/user.tsx'),
 ] satisfies RouteConfig;

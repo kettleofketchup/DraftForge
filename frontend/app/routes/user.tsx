@@ -1,3 +1,3 @@
-import UserPage from "~/pages/user/user";
+import UserPage from '~/pages/user/user';
 
 export default UserPage;

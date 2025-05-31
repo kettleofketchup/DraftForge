@@ -1,8 +1,9 @@
-
-
-import type { UserType, GuildMember, GuildMembers, UserClassType } from "./types";
-
-
+import type {
+  UserType,
+  GuildMember,
+  GuildMembers,
+  UserClassType,
+} from './types';
 
 export class User implements UserClassType {
   username!: string;
@@ -19,19 +20,17 @@ export class User implements UserClassType {
   discordId?: string;
   guildNickname?: string | null;
 
-  constructor ( data: UserType  ){
-      Object.assign(this, data);
-    }
-
-
+  constructor(data: UserType) {
+    Object.assign(this, data);
+  }
 
   // Mutates the current instance with values from a GuildMember
   setFromGuildMember(member: GuildMember): void {
     if (!member.user) {
-      throw new Error("Guild member is missing user info.");
+      throw new Error('Guild member is missing user info.');
     }
 
-    if (! this.nickname){
+    if (!this.nickname) {
       this.nickname = member.nick ?? member.user.global_name ?? null;
     }
     this.discordId = member.user.id;
@@ -39,15 +38,12 @@ export class User implements UserClassType {
     this.avatar = member.user.avatar ?? undefined;
     this.discordNickname = member.user.global_name ?? null;
     this.guildNickname = member.znick ?? null;
-    this.avatarUrl = this.getAvatarUrl()
-
+    this.avatarUrl = this.getAvatarUrl();
   }
   getAvatarUrl(): string {
     if (!this.avatar) {
-      throw new Error("Avatar is not set.");
+      throw new Error('Avatar is not set.');
     }
     return `https://cdn.discordapp.com/avatars/${this.discordId}/${this.avatar}.png`;
   }
-
-
 }

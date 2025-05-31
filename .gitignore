@@ -1,4 +1,4 @@
-.venv/
+.venv
 .env
 tmux*.log
 # Byte-compiled / optimized / DLL files

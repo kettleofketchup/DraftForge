@@ -23,6 +23,7 @@
     "daisyui": "^5.0.12",
     "discord-api-types": "^0.38.1",
     "isbot": "^5.1.17",
+    "prettier": "^3.5.3",
     "react": "^19.0.0",
     "react-devtools": "^1.0.5",
     "react-dom": "^19.0.0",

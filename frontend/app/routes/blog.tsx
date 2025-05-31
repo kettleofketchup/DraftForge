@@ -1,10 +1,10 @@
-import type { Route } from "./+types/home";
-import { Blog } from "../pages/blog/blog";
+import type { Route } from './+types/home';
+import { Blog } from '../pages/blog/blog';
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "DTX: Blog" },
-    { name: "description", content: "Welcome to React Router!" },
+    { title: 'DTX: Blog' },
+    { name: 'description', content: 'Welcome to React Router!' },
   ];
 }
 

@@ -1,16 +1,49 @@
 {
+  "prettier.configPath": "frontend/.prettierrc",
+
     "github.copilot.chat.codeGeneration.instructions": [
       {
-        "file": "./.vscode/daisyui.md",
+        "file": ".github/daisyui.md",
         "instruction": "Generate a daisyUI component using the daisyUI documentation. Use the daisyUI documentation as a reference."
       }
     ],
+
+
     "[typescript]": {
+
+      "editor.defaultFormatter": "esbenp.prettier-vscode",
       "editor.insertSpaces": true,
       "editor.tabSize": 2,
       "editor.formatOnType": true,
       "editor.formatOnPaste": true,
       "editor.formatOnSave": true,
     },
-    "python.defaultInterpreterPath": ".venv/bin/python"
+
+    "[python]": {
+      "diffEditor.ignoreTrimWhitespace": false,
+      "editor.defaultColorDecorators": "never",
+      "editor.formatOnType": true,
+      "editor.formatOnPaste": true,
+      "editor.tabSize": 4,
+      "editor.formatOnSave": true,
+      "editor.defaultFormatter": "ms-python.black-formatter",
+      "editor.wordBasedSuggestions": "off"
+    },
+    "python.defaultInterpreterPath": ".venv/bin/python",
+
+  "files.watcherExclude": {
+    "**/__pycache__/**": true,
+    "**/.venv/**": true,
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "env-*": true
+  },
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/node_modules": true,
+    "env*": true
   }
+}

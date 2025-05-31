@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState } from 'react';
 
-import dtx from '../../assets/dtx.gif'
+import dtx from '../../assets/dtx.gif';
 import Avatar from '@mui/material/Avatar';
 
-import { Icon } from "@iconify/react";
+import { Icon } from '@iconify/react';
 import Popover from '@mui/material/Popover';
 import Typography from '@mui/material/Typography';
 import Tab from '@mui/material/Tab';
@@ -13,8 +13,7 @@ import AppBar from '@mui/material/AppBar';
 import Placeholder from '~/components/placeholder';
 
 export function About() {
-  
-  const [count, setCount] = useState(0)
+  const [count, setCount] = useState(0);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const open = Boolean(anchorEl);
 
@@ -28,12 +27,10 @@ export function About() {
   return (
     <>
       <div className="flex justify-center h-full content-center mb-0 mt-0 overflow-hidden p-20">
-        <div className='flex'>          
-          <Placeholder/>
+        <div className="flex">
+          <Placeholder />
         </div>
       </div>
     </>
-  )
-
+  );
 }
-

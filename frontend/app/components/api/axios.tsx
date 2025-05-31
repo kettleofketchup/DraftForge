@@ -7,14 +7,14 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-    const method = config.method?.toUpperCase();
-    const needsCSRF = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method || '');
+  const method = config.method?.toUpperCase();
+  const needsCSRF = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method || '');
 
-    if (needsCSRF) {
-      config.headers['X-CSRFToken'] = getCsrfToken();
-    }
+  if (needsCSRF) {
+    config.headers['X-CSRFToken'] = getCsrfToken();
+  }
 
-    return config;
-  });
+  return config;
+});
 
 export default api;
