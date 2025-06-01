@@ -43,3 +43,7 @@ export declare interface TournamentType {
   tournament_type?: TOURNAMENT_TYPE;
   games?: Game[];
 }
+
+export type TournamentsType = TournamentType[];
+export type GamesType = GameType[];
+export type TeamsType = TeamType[];

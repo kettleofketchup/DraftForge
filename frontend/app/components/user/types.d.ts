@@ -9,6 +9,7 @@ export type GuildMember = APIGuildMember;
 export type GuildMembers = GuildMember[];
 
 export declare interface UserType {
+  [key: string]: any;
   username: string;
   avatarUrl: string;
   is_staff: boolean;

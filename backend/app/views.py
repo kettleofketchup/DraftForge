@@ -135,6 +135,14 @@ class UserView(viewsets.ModelViewSet):
     def patch(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
 
+    def delete(self, request, *args, **kwargs):
+        try:
+            user = self.get_object()
+            user.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except CustomUser.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
 
 @permission_classes((IsStaff,))
 class TournamentView(viewsets.ModelViewSet):

@@ -39,6 +39,8 @@ interface UserState {
   users: UserType[];
   setUsers: (uses: UserType[]) => void;
   addUser: (user: UserType) => void;
+  delUser: (user: UserType) => void;
+
   clearUsers: () => void;
   game: GameType;
   games: GameType[];
@@ -92,6 +94,9 @@ export const useUserStore = create<UserState>()(
       isStaff: () => !!get().currentUser?.is_staff,
       users: [] as UserType[],
       addUser: (user) => set({ users: [...get().users, user] }),
+      delUser: (user) =>
+        set({ users: get().users.filter((u) => u.pk !== user.pk) }),
+
       setUsers: (users) => set({ users }),
       clearUsers: () => set({ users: [] as UserType[] }),
 

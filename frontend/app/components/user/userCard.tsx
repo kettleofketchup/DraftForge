@@ -2,9 +2,11 @@ import React, { use, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { UserClassType, UserType } from './types';
 import axios from '../api/axios';
+import { deleteUser } from '../api/api';
 import { useNavigate } from 'react-router';
 import { useUserStore } from '~/store/userStore';
 import { User } from './user';
+import { DeleteButton } from '~/components/reusable/deleteButton';
 interface Props {
   user: User;
   edit?: boolean;
@@ -29,6 +31,7 @@ export const UserCard: React.FC<Props> = ({
   const getUsers = useUserStore((state) => state.getUsers);
 
   const addUser = useUserStore((state) => state.addUser); // Zustand setter
+  const delUser = useUserStore((state) => state.delUser); // Zustand setter
 
   const handleChange = (field: keyof UserClassType, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -43,7 +46,6 @@ export const UserCard: React.FC<Props> = ({
       try {
         await axios.post(`/register`, form);
         addUser(form);
-        setError(false);
         setForm({ username: 'Success!' } as UserType);
         // Close the modal
         const modalCheckbox = document.getElementById(
@@ -75,7 +77,30 @@ export const UserCard: React.FC<Props> = ({
       }
     }
   };
+  const handleDelete = async (e: FormEvent) => {
+    e.stopPropagation();
+    setErrorMessage({}); // clear old errors
+    setIsSaving(true);
+    try {
+      await deleteUser(user?.pk);
+      console.log('User deleted successfully');
+      setError(false);
+      setForm({ username: 'Success!' } as UserType);
+      delUser(form);
+      // Close the modal
+      const modalCheckbox = document.getElementById(
+        'create_user_modal',
+      ) as HTMLInputElement;
+      if (modalCheckbox) modalCheckbox.checked = false;
+    } catch (err) {
+      console.error('Failed to delete user', err);
+      setErrorMessage(err.response.data);
 
+      setError(true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
   const [saveCallback, setSaveCallBack] = useState(saveFunc || 'save');
 
   useEffect(() => {}, [user, isSaving]);
@@ -122,110 +147,51 @@ export const UserCard: React.FC<Props> = ({
   };
 
   const editModeView = () => {
+    const inputView = (key: string, label: string, type: string = 'text') => {
+      return (
+        <div>
+          <label className="font-semibold">{label}</label>
+          <input
+            type={type}
+            value={form[key] ?? ''}
+            onChange={(e) => handleChange(key, e.target.value)}
+            className={`input input-bordered w-full mt-1 ${errorMessage[key] ? 'input-error' : ''}`}
+          />
+          {errorMessage[key] && (
+            <p className="text-error text-sm mt-1">{errorMessage[key]}</p>
+          )}
+        </div>
+      );
+    };
     return (
       <>
-        <div>
-          <label className="font-semibold">Username:</label>
-          <input
-            type="text"
-            value={form.username ?? ''}
-            onChange={(e) => handleChange('username', e.target.value)}
-            className={`input input-bordered w-full mt-1 ${errorMessage.username ? 'input-error' : ''}`}
-          />
-          {errorMessage.username && (
-            <p className="text-error text-sm mt-1">{errorMessage.username}</p>
+        {inputView('username', 'Username: ')}
+        {inputView('nickname', 'Nickname: ')}
+        {inputView('mmr', 'MMR: ', 'number')}
+        {inputView('position', 'Position: ')}
+        {inputView('steam_id', 'Steam ID: ', 'number')}
+        {inputView('discordId', 'Discord ID: ', 'number')}
+        {inputView('guildNickname', 'Discord Guild Nickname: ')}
+        <div className="flex flex-row items-start gap-4">
+          {saveCallback === 'save' && (
+            <DeleteButton
+              onClick={handleDelete}
+              tooltipText="Delete the user"
+              className="btn-sm mt-3"
+              disabled={isSaving}
+            />
           )}
+          <button
+            onClick={handleSave}
+            className="btn btn-primary btn-sm mt-3"
+            disabled={isSaving}
+          >
+            {saveCallback === 'create' &&
+              (isSaving ? 'Saving...' : 'Create User')}
+            {saveCallback === 'save' &&
+              (isSaving ? 'Saving...' : 'Save Changes')}
+          </button>
         </div>
-        <div>
-          <label className="font-semibold">Nickname:</label>
-          <input
-            type="text"
-            value={form.nickname ?? user.nickname ?? ''}
-            onChange={(e) => handleChange('nickname', e.target.value)}
-            className={`input input-bordered w-full mt-1 ${errorMessage.nickname ? 'input-error' : ''}`}
-          />
-          {errorMessage.nickname && (
-            <p className="text-error text-sm mt-1">{errorMessage.nickname}</p>
-          )}
-        </div>
-        <div>
-          <label className="font-semibold">MMR:</label>
-          <input
-            type="number"
-            value={form.mmr ?? ''}
-            onChange={(e) => handleChange('mmr', parseInt(e.target.value))}
-            className={`input input-bordered w-full mt-1 ${errorMessage.mmr ? 'input-error' : ''}`}
-          />
-          {errorMessage.mmr && (
-            <p className="text-error text-sm mt-1">{errorMessage.mmr}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="font-semibold">Position:</label>
-          <input
-            type="text"
-            value={form.position ?? ''}
-            onChange={(e) => handleChange('position', e.target.value)}
-            className={`input input-bordered w-full mt-1 ${errorMessage.position ? 'input-error' : ''}`}
-          />
-          {errorMessage.position && (
-            <p className="text-error text-sm mt-1">{errorMessage.position}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="font-semibold">Steam ID:</label>
-          <input
-            type="number"
-            value={form.steamid ?? user.steamid ?? ''}
-            onChange={(e) => handleChange('steamid', parseInt(e.target.value))}
-            className={`input input-bordered w-full mt-1 ${errorMessage.steamid ? 'input-error' : ''}`}
-          />
-          {errorMessage.steamid && (
-            <p className="text-error text-sm mt-1">{errorMessage.steamid}</p>
-          )}
-        </div>
-
-        <div>
-          <label className="font-semibold">Discord ID:</label>
-          <input
-            type="number"
-            value={form.discordId ?? ''}
-            onChange={(e) =>
-              handleChange('discordId', parseInt(e.target.value))
-            }
-            className={`input input-bordered w-full mt-1 ${errorMessage.discordId ? 'input-error' : ''}`}
-          />
-          {errorMessage.steamid && (
-            <p className="text-error text-sm mt-1">{errorMessage.discordId}</p>
-          )}
-        </div>
-        <div>
-          <label className="font-semibold">Discord Guild Nickname:</label>
-          <input
-            type="number"
-            value={form.guildNickname ?? ''}
-            onChange={(e) =>
-              handleChange('guildNickname', parseInt(e.target.value))
-            }
-            className={`input input-bordered w-full mt-1 ${errorMessage.guildNickname ? 'input-error' : ''}`}
-          />
-          {errorMessage.steamid && (
-            <p className="text-error text-sm mt-1">
-              {errorMessage.guildNickname}
-            </p>
-          )}
-        </div>
-        <button
-          onClick={handleSave}
-          className="btn btn-primary btn-sm mt-3"
-          disabled={isSaving}
-        >
-          {saveCallback === 'create' &&
-            (isSaving ? 'Saving...' : 'Create User')}
-          {saveCallback === 'save' && (isSaving ? 'Saving...' : 'Save Changes')}
-        </button>
       </>
     );
   };
@@ -250,23 +216,16 @@ export const UserCard: React.FC<Props> = ({
     }
     return (
       <>
-        {!compact && (
-          <>
-            {user.nickname !== undefined && (
-              <div>
-                <span className="font-semibold">Nickname:</span> {user.nickname}
-              </div>
-            )}
-          </>
+        {user.nickname !== undefined && (
+          <div>
+            <span className="font-semibold">Nickname:</span> {user.nickname}
+          </div>
         )}
-        {!compact && (
-          <>
-            {user.mmr !== undefined && (
-              <div>
-                <span className="font-semibold">MMR:</span> {user.mmr}
-              </div>
-            )}
-          </>
+
+        {user.mmr !== undefined && (
+          <div>
+            <span className="font-semibold">MMR:</span> {user.mmr}
+          </div>
         )}
 
         {user.position && (
@@ -283,10 +242,10 @@ export const UserCard: React.FC<Props> = ({
     );
   };
 
-  const goToDotabuff = () => {
-    return `https://www.dotabuff.com/players/${user.steamid}`;
-  };
   const userDotabuff = () => {
+    const goToDotabuff = () => {
+      return `https://www.dotabuff.com/players/${user.steamid}`;
+    };
     if (!user.steamid) return <></>;
     return (
       <>
@@ -329,7 +288,7 @@ export const UserCard: React.FC<Props> = ({
         <div className="flex items-center gap-2">
           {avatar()}
           {userHeader()}
-          { (currentUser.is_staff || currentUser.is_superuser) && (
+          {(currentUser.is_staff || currentUser.is_superuser) && (
             <>
               {saveCallback !== 'create' && (
                 <button
