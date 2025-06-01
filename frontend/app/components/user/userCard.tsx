@@ -9,11 +9,18 @@ interface Props {
   user: User;
   edit?: boolean;
   saveFunc?: string;
+  compact?: boolean;
 }
 
-export const UserCard: React.FC<Props> = ({ user, edit, saveFunc }) => {
+export const UserCard: React.FC<Props> = ({
+  user,
+  edit,
+  saveFunc,
+  compact,
+}) => {
   const [editMode, setEditMode] = useState(edit || false);
   const [form, setForm] = useState<User>(user ?? new User({} as UserType));
+  const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<
@@ -98,15 +105,16 @@ export const UserCard: React.FC<Props> = ({ user, edit, saveFunc }) => {
         {!editMode && (
           <div className="flex-1">
             <h2 className="card-title text-lg">{user.username}</h2>
-
-            <div className="flex gap-2 mt-1">
-              {user.is_staff && (
-                <span className="badge badge-warning">Staff</span>
-              )}
-              {user.is_superuser && (
-                <span className="badge badge-error">Admin</span>
-              )}
-            </div>
+            {!compact && (
+              <div className="flex gap-2 mt-1">
+                {user.is_staff && (
+                  <span className="badge badge-warning">Staff</span>
+                )}
+                {user.is_superuser && (
+                  <span className="badge badge-error">Admin</span>
+                )}
+              </div>
+            )}
           </div>
         )}
       </>
@@ -223,19 +231,44 @@ export const UserCard: React.FC<Props> = ({ user, edit, saveFunc }) => {
   };
 
   const viewMode = () => {
+    if (compact) {
+      return (
+        <>
+          {user.mmr !== undefined && (
+            <div>
+              <span className="font-semibold">MMR:</span> {user.mmr}
+            </div>
+          )}
+
+          {user.position && (
+            <div>
+              <span className="font-semibold">Position:</span> {user.position}
+            </div>
+          )}
+        </>
+      );
+    }
     return (
       <>
-        {user.nickname !== undefined && (
-          <div>
-            <span className="font-semibold">Nickname:</span> {user.nickname}
-          </div>
+        {!compact && (
+          <>
+            {user.nickname !== undefined && (
+              <div>
+                <span className="font-semibold">Nickname:</span> {user.nickname}
+              </div>
+            )}
+          </>
+        )}
+        {!compact && (
+          <>
+            {user.mmr !== undefined && (
+              <div>
+                <span className="font-semibold">MMR:</span> {user.mmr}
+              </div>
+            )}
+          </>
         )}
 
-        {user.mmr !== undefined && (
-          <div>
-            <span className="font-semibold">MMR:</span> {user.mmr}
-          </div>
-        )}
         {user.position && (
           <div>
             <span className="font-semibold">Position:</span> {user.position}
@@ -296,16 +329,19 @@ export const UserCard: React.FC<Props> = ({ user, edit, saveFunc }) => {
         <div className="flex items-center gap-2">
           {avatar()}
           {userHeader()}
-          {saveCallback !== 'create' && (
-            <button
-              className="btn btn-sm btn-outline ml-auto"
-              onClick={() => setEditMode(!editMode)}
-            >
-              {editMode ? 'Cancel' : 'Edit'}
-            </button>
+          { (currentUser.is_staff || currentUser.is_superuser) && (
+            <>
+              {saveCallback !== 'create' && (
+                <button
+                  className="btn btn-sm btn-outline ml-auto"
+                  onClick={() => setEditMode(!editMode)}
+                >
+                  {editMode ? 'Cancel' : 'Edit'}
+                </button>
+              )}
+            </>
           )}
         </div>
-
         <div className="mt-4 space-y-2 text-sm">
           {editMode ? editModeView() : viewMode()}
         </div>

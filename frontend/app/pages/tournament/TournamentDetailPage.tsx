@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import axios from '~/components/api/axios'; // Assuming axios is configured for your API
 import type { TournamentType } from '~/components/tournament/types';
 import { TournamentCard } from '~/components/tournament/TournamentCard'; // Re-using TournamentCard for display
+import TournamentTabs from './tabs/TournamentTabs';
 
 export const TournamentDetailPage: React.FC = () => {
   const { pk } = useParams<{ pk: string }>();
@@ -70,35 +71,6 @@ export const TournamentDetailPage: React.FC = () => {
     );
   }
 
-  const tabContent1 = () => {
-    return (
-      <>
-        <div className="tab-content bg-base-100 border-base-300 p-6">
-          Tab content 1
-        </div>
-      </>
-    );
-  };
-
-  const tabContent2 = () => {
-    return (
-      <>
-        <div className="tab-content bg-base-100 border-base-300 p-6">
-          Tab content 2
-        </div>
-      </>
-    );
-  };
-  const tabContent3 = () => {
-    return (
-      <>
-        <div className="tab-content bg-base-100 border-base-300 p-6">
-          Tab content 3
-        </div>
-      </>
-    );
-  };
-
   const getDate = () => {
     let date = tournament.date_played
       ? (() => {
@@ -106,7 +78,7 @@ export const TournamentDetailPage: React.FC = () => {
           return `${month}-${day}`;
         })()
       : '';
-    return ` - ${date || ''}`;
+    return `${date || ''}`;
   };
 
   const title = () => {
@@ -116,7 +88,7 @@ export const TournamentDetailPage: React.FC = () => {
           <h1 className="text-3xl font-bold mb-4">
             {tournament.name}
             <span className="ml-4 text-base text-base-content/50 font-normal">
-              {getDate()}
+              played on {getDate()}
             </span>
           </h1>
         )}
@@ -126,32 +98,7 @@ export const TournamentDetailPage: React.FC = () => {
   return (
     <div className="container mx-auto p-4">
       {title()}
-      <div className="tabs tabs-">
-        <input
-          type="radio"
-          name="my_tabs_6"
-          className="tab"
-          aria-label="Tab 1"
-        />
-        {tabContent1()}
-
-        <input
-          type="radio"
-          name="my_tabs_6"
-          className="tab"
-          aria-label="Tab 2"
-          defaultChecked
-        />
-        {tabContent2()}
-
-        <input
-          type="radio"
-          name="my_tabs_6"
-          className="tab"
-          aria-label="Tab 3"
-        />
-        {tabContent3()}
-      </div>
+      <TournamentTabs tournament={tournament} />
     </div>
   );
 };

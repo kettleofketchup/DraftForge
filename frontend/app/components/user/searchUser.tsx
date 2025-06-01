@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import type {
   GuildMember,
@@ -17,22 +17,26 @@ import {
 import Footer from '~/components/footer';
 import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
 import { User } from '~/components/user/user';
+interface Props {
+  users: UserType[];
+  query: string;
+  setQuery: React.Dispatch<React.SetStateAction<string>>;
+}
 
-export function SearchUserDropdown() {
+export const SearchUserDropdown: React.FC<Props> = ({
+  users,
+  query,
+  setQuery,
+}) => {
   const user: UserType = useUserStore((state) => state.currentUser); // Zustand setter
   const getUsers = useUserStore((state) => state.getUsers); // Zustand setter
-  const users = useUserStore((state) => state.users); // Zustand setter
 
-  const [createModal, setCreateModal] = useState<boolean>(false);
-
-  const [query, setQuery] = useState('');
   const [selectedDiscordUser, setSelectedDiscordUser] = useState(
     new User({} as UserClassType),
   );
   const [searchedPerson, setSearchedPerson] = useState(
     new User({} as UserClassType),
   );
-
   const filteredUsers =
     query === ''
       ? users
@@ -44,7 +48,13 @@ export function SearchUserDropdown() {
           );
         });
 
-  const handleSearchUserSelect = (user: User) => {
+  const handleSearchUserSelect = (userName: string) => {
+    const user: UserType = users.find(
+      (user) =>
+        user.username.toLowerCase() === userName.toLowerCase() ||
+        user.nickname?.toLowerCase() === userName.toLowerCase(),
+    );
+
     setSearchedPerson(new User(user));
   };
 
@@ -63,7 +73,7 @@ export function SearchUserDropdown() {
             filteredUsers.length < 20 ? (
               filteredUsers.map((user) => (
                 <ComboboxOption
-                  key={user.discordId}
+                  key={user.pk}
                   value={user}
                   className={({ active }) =>
                     `cursor-pointer select-none p-2 ${
@@ -95,4 +105,4 @@ export function SearchUserDropdown() {
       )}
     </div>
   );
-}
+};

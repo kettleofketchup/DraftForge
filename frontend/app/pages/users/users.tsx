@@ -80,7 +80,7 @@ export function UsersPage() {
          w-full "
         >
           <div className="flex">
-            <SearchUserDropdown />
+            <SearchUserDropdown users={users} query={query} setQuery={setQuery} />
           </div>
           <div className="flex col-start-4 align-end content-end justify-end">
             <CreateUserButton />
