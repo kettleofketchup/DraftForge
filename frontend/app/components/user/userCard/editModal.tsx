@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, memo } from 'react';
 import type { FormEvent } from 'react';
 import type {
   GuildMember,
@@ -33,8 +33,8 @@ import { UserEditForm } from '~/components/user/userCard/editForm';
 interface Props {
   user: UserClassType;
 }
-export const UserEditModal: React.FC<Props> = ({ user }) => {
-  const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
+export const UserEditModal: React.FC<Props> = memo(({ user }) => {
+  const currentUser: UserType = useUserStore((state) => state.currentUser);
 
   const [form, setForm] = useState<UserType>({} as UserType);
 
@@ -84,6 +84,6 @@ export const UserEditModal: React.FC<Props> = ({ user }) => {
       </form>
     </Dialog>
   );
-};
+});
 
 export default UserEditModal;

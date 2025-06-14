@@ -25,6 +25,7 @@ export async function fetchUser(pk: number): Promise<UserType> {
   const response = await axios.get<UserType>(`/users/${pk}`);
   return response.data as UserType;
 }
+
 export async function deleteUser(userId: number): Promise<void> {
   await axios.delete(`/users/${userId}/`);
 }
@@ -87,6 +88,19 @@ export async function updateTournament(
     data,
   );
   return response.data;
+}
+
+export async function fetchTournament(pk: number): Promise<TournamentType> {
+  const response = await axios.get<TournamentType>(`/tournaments/${pk}`);
+  return response.data as TournamentType;
+}
+export async function fetchGame(pk: number): Promise<GameType> {
+  const response = await axios.get<GameType>(`/games/${pk}`);
+  return response.data as GameType;
+}
+export async function fetchTeam(pk: number): Promise<TeamType> {
+  const response = await axios.get<TeamType>(`/teams/${pk}`);
+  return response.data as TeamType;
 }
 
 export async function updateGame(

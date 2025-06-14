@@ -1,5 +1,3 @@
-export interface UserProps {}
-
 import type {
   APIUser as DiscordUser,
   APIGuildMember,
@@ -17,9 +15,9 @@ export declare interface UserType {
   nickname?: string | null;
   mmr?: number;
   position?: string;
-  steamid?: z;
+  steamid?: number;
   avatar?: string;
-  pk?: number;
+  pk: number;
   discordNickname?: string | null;
   discordId?: string;
   guildNickname?: string | null;
@@ -31,9 +29,9 @@ export declare interface UserType {
 export declare interface UserClassType extends UserType {
   setFromGuildMember: (member: GuildMember) => void;
   getAvatarUrl: () => string;
-  dbFetch: () => Promise<void>;
-  dbUpdate: (data: Partial<UserType>) => Promise<void>;
-  dbCreate: () => Promise<void>;
+  dbFetch: () => Promise<UserType>;
+  dbUpdate: (data: Partial<UserType>) => Promise<UserType>;
+  dbCreate: () => Promise<UserType>;
   dbDelete: () => Promise<void>;
 }
 

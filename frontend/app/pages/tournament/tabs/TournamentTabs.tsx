@@ -5,12 +5,11 @@ import { Fragment } from 'react';
 import GamesTab from './GamesTab';
 import TeamsTab from './TeamsTab';
 import PlayersTab from './PlayersTab';
+import { useUserStore } from '~/store/userStore';
 
-export default function TournamentTabs({
-  tournament,
-}: {
-  tournament: TournamentType;
-}) {
+export default function TournamentTabs() {
+  const tournament = useUserStore((state) => state.tournament);
+  const setTournament = useUserStore((state) => state.setTournament);
   const tabClass =
     () => `rounded-full px-3 py-1 bg-gray-900 text-sm/6 font-semibold text-white
                         focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white
@@ -23,18 +22,22 @@ export default function TournamentTabs({
         <TabGroup as={Fragment}>
           <TabList className="flex w-full justify-center gap-2 rounded-full p-1">
             <Tab className={tabClass()}>Games</Tab>
-            <Tab className={tabClass()}>Teams</Tab>
-            <Tab className={tabClass()}>Players</Tab>
+            <Tab className={tabClass()}>
+              Teams ({tournament?.teams?.length})
+            </Tab>
+            <Tab className={tabClass()}>
+              Players ({tournament?.users?.length})
+            </Tab>
           </TabList>
           <TabPanels className="mt-3">
             <TabPanel className={tabPanelClass()}>
-              <GamesTab tournament={tournament} />{' '}
+              <GamesTab  />
             </TabPanel>
             <TabPanel className={tabPanelClass()}>
-              <TeamsTab tournament={tournament} />{' '}
+              <TeamsTab  />
             </TabPanel>
             <TabPanel className={tabPanelClass()}>
-              <PlayersTab tournament={tournament} />{' '}
+              <PlayersTab />
             </TabPanel>
           </TabPanels>
         </TabGroup>

@@ -15,7 +15,6 @@ import {
   ComboboxOptions,
 } from '@headlessui/react';
 import Footer from '~/components/footer';
-import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
 import { User } from '~/components/user/user';
 interface Props {
   teams: TeamType[];

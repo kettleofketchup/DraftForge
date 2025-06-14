@@ -23,6 +23,8 @@ import type {
 import { createCookie } from 'react-router';
 import { useMemo } from 'react';
 import React, { memo } from 'react';
+import axios from '~/components/api/axios';
+import type { Tournament } from '~/components/tournament/tournament';
 
 interface UserState {
   currentUser: UserType;
@@ -65,10 +67,11 @@ interface UserState {
   tournamentsByUser: (user: UserType) => TournamentType[];
   getCurrentUser: () => Promise<void>;
   userAPIError: any;
-
+  tournamentPK: number | null;
   getTournaments: () => Promise<void>;
   getTeams: () => Promise<void>;
   getGames: () => Promise<void>;
+  getCurrentTournament: () => Promise<void>;
 }
 export const useUserStore = create<UserState>()(
   persist(
@@ -168,7 +171,7 @@ export const useUserStore = create<UserState>()(
           set({ currentUser: response });
           console.log('User fetched successfully:', response);
         } catch (error) {
-          console.error('Error fetching users:', error);
+          console.log('No User logged in:', error);
           set({ currentUser: {} as UserType });
         }
       },
@@ -176,7 +179,9 @@ export const useUserStore = create<UserState>()(
       setTournaments: (tournaments) => set({ tournaments }),
       setTournament: (tournament) => set({ tournament }),
       tournamentsByUser: (user) =>
-        get().tournaments.filter((tournament) => tournament.users === user.pk),
+        get().tournaments.filter(
+          (tournament) => tournament?.users === user?.pk,
+        ),
       setGames: (games) => set({ games }),
       getGames: async () => {
         try {
@@ -194,6 +199,20 @@ export const useUserStore = create<UserState>()(
           console.log('Games fetched successfully:', response);
         } catch (error) {
           console.error('Error fetching games:', error);
+        }
+      },
+      setTournamentPK: (pk: number) => set({ tournamentPK: pk }),
+      tournamentPK: null,
+      getCurrentTournament: async () => {
+        if (get().tournamentPK) {
+          try {
+            const response = await axios.get(
+              `/tournaments/${get().tournamentPK}/`,
+            );
+            set({ tournament: response.data });
+          } catch (err) {
+            console.error('Failed to fetch tournament:', err);
+          }
         }
       },
       getTournaments: async () => {
@@ -227,10 +246,16 @@ export const useUserStore = create<UserState>()(
     }),
     {
       name: 'dtx-storage', // key in localStorage
-      // partialize: (state) => ({ currentUser: state.currentUser }), // optionally limit what's stored
+      partialize: (state) => ({
+        currentUser: state.currentUser,
+        users: state.users,
+      }), // optionally limit what's stored
       onRehydrateStorage: () => (state) => {
         console.log('Rehydrating user store...');
         console.log('Current user:', state?.currentUser);
+        if (state?.currentUser.username === undefined) {
+          state?.getCurrentUser();
+        }
         state?.setHasHydrated(true);
       },
       storage: createJSONStorage(() => sessionStorage), // (optional) by default, 'localStorage' is used

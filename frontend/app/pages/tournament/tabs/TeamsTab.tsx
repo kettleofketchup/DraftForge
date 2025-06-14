@@ -1,7 +1,7 @@
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
 import { Button } from '~/components/ui/button';
 import type { GameType, TournamentType } from '~/components/tournament/types'; // Adjust the import path as necessary
-import { Plus } from 'lucide-react';
+import { Plus, Users } from 'lucide-react';
 import {
   Fragment,
   useCallback,
@@ -36,17 +36,27 @@ import { AddPlayerModal } from './addPlayer/addPlayerModal';
 import { toast } from 'sonner';
 import { TeamCard } from '~/components/team/teamCard';
 import type { TeamType } from '~/components/tournament/types';
-export default function TeamsTab({
-  tournament,
-}: {
-  tournament: TournamentType;
-}) {
+import { hasErrors } from '~/pages/tournament/hasErrors';
+import { Tournament } from '~/components/tournament/tournament';
+
+export default function TeamsTab() {
+  const tournament = useUserStore((state) => state.tournament);
+
+  const setTournament = useUserStore((state) => state.setTournament);
+
   const allUsers = useUserStore((state) => state.users); // Zustand setter
   const [tournamentUsers, setTournamentUsers] = useState(
     tournament.users as UserType[],
   );
+  const getCurrentTournament = useUserStore(
+    (state) => state.getCurrentTournament,
+  ); // Zustand setter
   const [query, setQuery] = useState('');
   const [addUserQuery, setAddUserQuery] = useState('');
+
+  useEffect(() => {
+    getCurrentTournament();
+  }, [allUsers, tournament.users]);
 
   const removeUser = async (e: FormEvent, user: UserType) => {
     e.preventDefault();
@@ -126,6 +136,7 @@ export default function TeamsTab({
 
     setQuery(''); // Reset query after adding user
   };
+
   const filteredTeams =
     query === ''
       ? tournament.teams
@@ -175,6 +186,7 @@ export default function TeamsTab({
   return (
     <>
       <div className="flex flex-col items-start p-4 h-full">
+        {hasErrors(tournament.users)}
         <div className="self-end p-5 pb-2 pt-2">
           {
             <AddPlayerModal

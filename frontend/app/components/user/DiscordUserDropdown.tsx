@@ -42,9 +42,7 @@ const DiscordUserDropdown: React.FC<Props> = ({ onSelect, discrimUsers }) => {
     }
   }, []);
   useEffect(() => {
-    console.log('test');
     getDiscordUsers();
-    console.log(discordUsers);
   }, []);
 
   const filteredUsers =

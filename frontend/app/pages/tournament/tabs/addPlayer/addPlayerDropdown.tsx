@@ -21,10 +21,15 @@ import {
   TabPanel,
   TabPanels,
 } from '@headlessui/react';
-import type { GameType, TournamentType } from '~/components/tournament/types'; // Adjust the import path as necessary
+import type {
+  GameType,
+  TournamentClassType,
+  TournamentType,
+} from '~/components/tournament/types'; // Adjust the import path as necessary
 import { Plus } from 'lucide-react';
 import {
   Fragment,
+  use,
   useCallback,
   useEffect,
   useState,
@@ -51,6 +56,7 @@ import { Input } from '~/components/ui/input';
 import { LucidePlus } from 'lucide-react';
 
 import { AddButton } from '~/components/reusable/addButton';
+import Tournament from '~/pages/tournaments/tournaments';
 interface Props {
   users: UserType[];
   addedUsers?: UserType[];
@@ -79,16 +85,17 @@ export const AddPlayerDropdown: React.FC<Props> = ({
   const [searchedPerson, setSearchedPerson] = useState(
     new User({} as UserClassType),
   );
+
   const filteredUsers =
     query === ''
       ? users.filter(
-          (person) => !addedUsers?.some((added) => added.pk === person.pk),
+          (person) => !addedUsers?.some((added) => added?.pk === person?.pk),
         )
       : users.filter(
           (person) =>
-            !addedUsers?.some((added) => added.pk === person.pk) &&
-            (person.username?.toLowerCase().includes(query.toLowerCase()) ||
-              person.nickname?.toLowerCase().includes(query.toLowerCase())),
+            !addedUsers?.some((added) => added?.pk === person?.pk) &&
+            (person?.username?.toLowerCase().includes(query.toLowerCase()) ||
+              person?.nickname?.toLowerCase().includes(query.toLowerCase())),
         );
 
   const handleSearchUserSelect = async (userName: UserType | string | null) => {
@@ -114,8 +121,8 @@ export const AddPlayerDropdown: React.FC<Props> = ({
     const user: UserType | undefined = users.find(
       (user) =>
         user &&
-        (user.username?.toLowerCase() === userName?.toLowerCase() ||
-          user.nickname?.toLowerCase() === userName?.toLowerCase()),
+        (user?.username?.toLowerCase() === userName?.toLowerCase() ||
+          user?.nickname?.toLowerCase() === userName?.toLowerCase()),
     );
 
     if (user === undefined) {
@@ -146,8 +153,8 @@ export const AddPlayerDropdown: React.FC<Props> = ({
             filteredUsers.length < 20 ? (
               filteredUsers.map((user) => (
                 <ComboboxOption
-                  key={user.pk}
-                  value={user.username}
+                  key={user?.pk}
+                  value={user?.username}
                   className={({ active }) =>
                     `cursor-pointer select-none p-2 ${
                       active ? 'bg-purple-900 text-primary-content' : ''
@@ -157,14 +164,14 @@ export const AddPlayerDropdown: React.FC<Props> = ({
                   <div className="flex items-center gap-2">
                     <img
                       src={
-                        user.avatar
-                          ? `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}`
-                          : `https://ui-avatars.com/api/?rounded=True?name=${user.username}`
+                        user?.avatar
+                          ? `https://cdn.discordapp.com/avatars/${user?.discordId}/${user?.avatar}`
+                          : `https://ui-avatars.com/api/?rounded=True?name=${user?.username}`
                       }
-                      alt={user.username}
+                      alt={user?.username}
                       className="w-8 h-8 rounded-full"
                     />
-                    <span>{user.username}</span>
+                    <span>{user?.username}</span>
                     <div className="flex-1" />
                   </div>
                 </ComboboxOption>

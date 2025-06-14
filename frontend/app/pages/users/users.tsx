@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import type {
   GuildMember,
@@ -19,11 +19,18 @@ import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
 import { User } from '~/components/user/user';
 import { UserCreateModal } from '~/components/user/userCard/createModal';
 import { SearchUserDropdown } from '~/components/user/searchUser';
+import { motion, AnimatePresence } from 'framer-motion';
 
+// Animation for each card
+const card = {
+  hidden: { opacity: 0, y: 30 },
+  show: { opacity: 1, y: 0 },
+};
 export function UsersPage() {
   const user: UserType = useUserStore((state) => state.currentUser); // Zustand setter
   const getUsers = useUserStore((state) => state.getUsers); // Zustand setter
   const users = useUserStore((state) => state.users); // Zustand setter
+  const getDiscordUsers = useUserStore((state) => state.getDiscordUsers); // Zustand setter
 
   const [createModal, setCreateModal] = useState<boolean>(false);
 
@@ -34,7 +41,9 @@ export function UsersPage() {
   const [searchedPerson, setSearchedPerson] = useState(
     new User({} as UserClassType),
   );
-
+  useEffect(() => {
+    getDiscordUsers();
+  }, []);
   const filteredUsers =
     query === ''
       ? users
@@ -46,19 +55,6 @@ export function UsersPage() {
           );
         });
 
-  const handleSearchUserSelect = (user: User) => {
-    setSearchedPerson(new User(user));
-  };
-
-  useEffect(() => {
-    if (!users || users.length === 0) {
-      getUsers();
-    }
-  }, []);
-
-  useEffect(() => {
-    console.log(`UsersPage: users updated`);
-  }, [users.length]);
   if (!user || !user.is_staff)
     return (
       <div className="flex justify-center h-full content-center mb-0 mt-0 p-0">
@@ -77,7 +73,7 @@ export function UsersPage() {
        grid-cols-4
          w-full "
         >
-          <div className="flex">
+          <div className="flex col-span-2 w-full content-center">
             <SearchUserDropdown
               users={users}
               query={query}
@@ -85,7 +81,7 @@ export function UsersPage() {
             />
           </div>
           <div className="flex col-start-4 align-end content-end justify-end">
-            <UserCreateModal />
+            <UserCreateModal query={query} setQuery={setQuery} />
           </div>
         </div>
         <div
@@ -95,13 +91,11 @@ export function UsersPage() {
          mb-0 mt-0 p-0 bg-base-900  w-full"
         >
           {filteredUsers?.map((u: UserType) => (
-            <div className="grid" key={`div-${u.pk}`}>
-              <UserCard
-                user={u as UserClassType}
-                saveFunc={'save'}
-                key={`UserCard-${u.pk}`}
-              />
-            </div>
+            <UserCard
+              user={u as UserClassType}
+              saveFunc={'save'}
+              key={`UserCard-${u.pk}`}
+            />
           ))}
         </div>
       </div>

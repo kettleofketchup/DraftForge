@@ -52,6 +52,8 @@ import { Label } from '~/components/ui/label';
 import { Input } from '~/components/ui/input';
 import { LucidePlus } from 'lucide-react';
 import { AddPlayerDropdown } from './addPlayerDropdown';
+import UserCreateModal from '~/components/user/userCard/createModal';
+import Tournament from '~/pages/tournaments/tournaments';
 interface Props {
   users: UserType[];
 
@@ -87,7 +89,7 @@ export const AddPlayerModal: React.FC<Props> = ({
     if (!allUsers || allUsers.length === 0) {
       useUserStore.getState().getUsers();
     }
-  }, [allUsers]);
+  }, [users]);
   // Find all users not already in the tournament
 
   return (
@@ -105,7 +107,7 @@ export const AddPlayerModal: React.FC<Props> = ({
                     ' hover:shadow-sm hover:shadow-green-500/50'
                   }
                 >
-                  <PlusCircle size="lg" color="white" className="pzs-2" />
+                  <PlusCircle color="white" className="zs" />
                 </Button>
               </DialogTrigger>
             </TooltipTrigger>
@@ -135,6 +137,10 @@ export const AddPlayerModal: React.FC<Props> = ({
                 addedUsers={addedUsers}
                 className=""
               />
+
+              <div className="self-end p-5 pb-2 pt-2">
+                <UserCreateModal query={query} setQuery={setQuery} />
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -146,5 +152,4 @@ export const AddPlayerModal: React.FC<Props> = ({
       </form>
     </Dialog>
   );
-  z;
 };

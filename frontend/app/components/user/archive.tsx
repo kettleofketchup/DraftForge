@@ -34,7 +34,7 @@ export const CreateUserButton = () => {
     setSelectedDiscordUser(new User(selectedDiscordUser as UserClassType));
   };
   const openCreateModal = () => setCreateModal(true);
-
+  const [query, setQuery] = useState<string>('');
   const closeCreateModal = () => setCreateModal(false);
 
   return (
@@ -56,7 +56,11 @@ export const CreateUserButton = () => {
       <div className="modal" role="dialog">
         <div className="modal-box">
           <h3 className="text-lg font-bold">Select Discord User</h3>
-          <DiscordUserDropdown onSelect={handleDiscordUserSelect} />
+          <DiscordUserDropdown
+            query={query}
+            setQuery={setQuery}
+            onSelect={handleDiscordUserSelect}
+          />
           <UserCard
             user={selectedDiscordUser}
             edit={true}

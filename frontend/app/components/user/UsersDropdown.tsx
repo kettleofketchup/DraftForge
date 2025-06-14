@@ -19,13 +19,6 @@ export const UsersDropdown: React.FC<Props> = ({ users }) => {
     new User({} as UserClassType),
   );
 
-  const handleDiscordUserSelect = (user: GuildMember) => {
-    console.log(selectedDiscordUser);
-    selectedDiscordUser.setFromGuildMember(user);
-    //This is necessary because we need a new instance of user to trigger a re-render
-    setSelectedDiscordUser(new User(selectedDiscordUser as UserClassType));
-  };
-
   const showUser = (user: UserType) => {
     let avatarUrl: string;
     if (user.avatar) {

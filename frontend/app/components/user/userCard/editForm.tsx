@@ -23,6 +23,7 @@ interface Props {
 }
 import { toast } from 'sonner';
 import { UserRoundPlusIcon } from 'lucide-react';
+import { getTournaments } from '~/components/api/api';
 export const UserToast = (title: string) => {
   const toastTitle = () => {
     return (
@@ -46,11 +47,19 @@ export const UserEditForm: React.FC<Props> = ({ user, form, setForm }) => {
   const [statusMsg, setStatusMsg] = useState<string | null>('null');
   const updateUserStore = useUserStore((state) => state.setUser); // Zustand setter
   const addUser = useUserStore((state) => state.addUser); // Zustand setter
-
+  const getUsers = useUserStore((state) => state.getUsers); // Zustand setter
+  const setUser = useUserStore((state) => state.setUser); // Zustand setter
   const handleChange = (field: keyof UserClassType, value: any) => {
     setForm((prev) => ({ ...prev, [field]: value }) as UserClassType);
   };
+  useEffect(() => {
+    setForm(user as UserType); // Initialize form with user data
 
+    if (user.username !== form.username) {
+      setForm({} as UserType); // Reset form if username changes
+      setForm(user as UserType); // Ensure form is set to the user data
+    }
+  }, [user]);
   if (!currentUser.is_staff && !currentUser.is_superuser) {
     return (
       <div className="text-error">
@@ -75,13 +84,14 @@ export const UserEditForm: React.FC<Props> = ({ user, form, setForm }) => {
 
   const handleSave = async (e: FormEvent) => {
     setErrorMessage({}); // Clear old errors
+    const newUser: User = new User(user as UserType); // Create a new User instance
     if (!user.pk) {
-      toast.promise(user.dbCreate(), {
+      toast.promise(newUser.dbCreate(), {
         loading: `Creating User ${user.username}.`,
-        success: () => {
+        success: (data: UserType) => {
           setIsSaving(true);
           setStatusMsg('User created successfully!');
-          addUser(user as UserType);
+          setUser(data);
           return `${user.username} has been Created`;
         },
         error: (err) => {
@@ -91,14 +101,16 @@ export const UserEditForm: React.FC<Props> = ({ user, form, setForm }) => {
           return <>{createErrorMessage(val)}</>;
         },
       });
+
       setIsSaving(false);
     } else {
-      toast.promise(user.dbUpdate(form as UserType), {
+      toast.promise(newUser.dbUpdate(form as UserType), {
         loading: `Updating User ${user.username}.`,
         success: (data) => {
           setIsSaving(true);
           setStatusMsg('User updated successfully!');
-          updateUserStore(user as UserType); // Update Zustand store with the current instance
+          setUser(data);
+
           return `${user.username} has been updated`;
         },
         error: (err) => {
@@ -133,7 +145,9 @@ export const UserEditForm: React.FC<Props> = ({ user, form, setForm }) => {
   };
   return (
     <>
-      {/* {inputView('username', 'Username: ')} */}
+      <div>
+        <label className="font-semibold">Username: {user.username}</label>
+      </div>
       {inputView('nickname', 'Nickname: ')}
       {inputView('mmr', 'MMR: ', 'number')}
       {inputView('position', 'Position: ')}

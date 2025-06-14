@@ -9,7 +9,7 @@ import { SearchUserDropdown } from '~/components/user/searchUser';
 import { useNavigate } from 'react-router-dom';
 import { UserCard } from '~/components/user/userCard';
 import type { User } from '~/components/user/user';
-
+import { UserCreateModal } from '~/components/user/userCard/createModal';
 export default function PlayersTab({
   tournament,
 }: {
@@ -41,7 +41,13 @@ export default function PlayersTab({
 
   return (
     <>
-      <SearchUserDropdown users={tournament.users} query={query} setQuery={setQuery} className="" />
+      <SearchUserDropdown
+        users={tournament.users}
+        query={query}
+        setQuery={setQuery}
+        className=""
+      />
+
       <div className="grid gap-2 mt-4 grid-cols-2 xl:grid-cols-3 ">
         {filteredUsers?.map((user) => (
           <UserCard user={user as User} compact={true} />

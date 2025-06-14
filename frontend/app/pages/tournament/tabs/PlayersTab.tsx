@@ -15,7 +15,7 @@ import { UsersDropdown } from '~/components/user/UsersDropdown';
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import { useNavigate } from 'react-router-dom';
 import { UserCard } from '~/components/user/userCard';
-import type { User } from '~/components/user/user';
+import { User } from '~/components/user/user';
 import { updateTournament } from '~/components/api/api';
 import axios from '~/components/api/axios';
 import {
@@ -35,24 +35,20 @@ import { LucidePlus } from 'lucide-react';
 import { AddPlayerModal } from './addPlayer/addPlayerModal';
 import { toast } from 'sonner';
 import TournamentDetailPage from '../TournamentDetailPage';
-export default function PlayersTab({
-  tournament,
-}: {
-  tournament: TournamentType;
-}) {
+import { hasErrors } from '../hasErrors';
+import { Tournament } from '~/components/tournament/tournament';
+export default function PlayersTab() {
   const allUsers = useUserStore((state) => state.users); // Zustand setter
+
+  const tournament = useUserStore((state) => state.tournament);
+  const setTournament = useUserStore((state) => state.setTournament); // Zustand settera
   const [tournamentUsers, setTournamentUsers] = useState([] as UserType[]);
   const [query, setQuery] = useState('');
   const [addUserQuery, setAddUserQuery] = useState('');
-  useEffect(() => {
-    console.log('Tournament users:', tournament.users);
-  }, [tournamentUsers, tournament.users]);
+  const getCurrentTournament = useUserStore(
+    (state) => state.getCurrentTournament,
+  ); // Zustand setter
 
-  useEffect(() => {
-    if (!allUsers || allUsers.length === 0) {
-      useUserStore.getState().getUsers();
-    }
-  }, [allUsers]);
   const removeUser = async (e: FormEvent, user: UserType) => {
     e.preventDefault();
     e.stopPropagation();
@@ -74,12 +70,12 @@ export default function PlayersTab({
 
     toast.promise(updateTournament(tournament.pk, updatedTournament), {
       loading: `Creating User ${user.username}.`,
-      success: () => {
+      success: (data) => {
         tournament.users = tournament.users?.filter(
           (u) => u.username !== user.username,
         );
         //Trigger rerender of tournament users
-        setTournamentUsers(tournament.users as UserType[]);
+        setTournament(data);
         return `${user.username} has been removed`;
       },
       error: (err: any) => {
@@ -87,6 +83,8 @@ export default function PlayersTab({
         return `${user.username} has been removed`;
       },
     });
+    await getCurrentTournament();
+
     setQuery(''); // Reset query after adding user
   };
 
@@ -99,13 +97,17 @@ export default function PlayersTab({
     }
     const updatedUsers = tournament.users?.map((u) => u.pk);
 
-    if (updatedUsers?.includes(user)) {
+    const thisUser = new User(user as UserType);
+    if (!thisUser.pk) {
+      thisUser.dbFetch();
+    }
+    if (updatedUsers?.includes(thisUser.pk)) {
       console.log();
       console.error('User in the  tournament');
       return;
     }
     const updatedTournament = {
-      user_ids: [...(updatedUsers || []), user.pk],
+      user_ids: [...(updatedUsers || []), thisUser.pk],
     };
 
     if (tournament.pk === undefined) {
@@ -118,15 +120,18 @@ export default function PlayersTab({
         updatedTournament as Partial<TournamentType>,
       ),
       {
-        loading: `Creating User ${user.username}.`,
-        success: () => {
-          tournament.users?.push(user);
+        loading: `Adding User ${thisUser.username}.`,
+        success: (data) => {
+          tournament.users?.push(thisUser);
           //Trigger rerender of tournament users
           setTournamentUsers(tournament.users as UserType[]);
-          return `${user.username} has been added`;
+          setTournament(data);
+
+          return `${thisUser.username} has been added`;
         },
         error: (err: any) => {
           console.error('Failed to update tournament', err);
+          return `${thisUser.username} could not be added`;
         },
       },
     );
@@ -143,6 +148,14 @@ export default function PlayersTab({
             person.nickname?.toLowerCase().includes(q)
           );
         });
+
+  useEffect(() => {
+    console.log('Tournament users:', tournament.users);
+    getCurrentTournament();
+  }, [tournament.users]);
+  useEffect(() => {
+    console.log('TournamentPageUsers: updated users');
+  }, [allUsers]);
 
   if (!tournament || !tournament.users || tournament.users.length === 0) {
     return (
@@ -169,6 +182,8 @@ export default function PlayersTab({
   return (
     <>
       <div className="flex flex-col items-start p-4 h-full">
+        {hasErrors(tournament.users)}
+
         <div className="self-end p-5 pb-2 pt-2">
           {
             <AddPlayerModal

@@ -34,8 +34,11 @@ import { User } from '~/components/user/user';
 import { UserEditForm } from '~/components/user/userCard/editForm';
 import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
 
-interface Props {}
-export const UserCreateModal: React.FC<Props> = (props) => {
+interface Props {
+  query?: string;
+  setQuery?: React.Dispatch<React.SetStateAction<string>>;
+}
+export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
   const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
   const users: UserType[] = useUserStore((state) => state.users); // Zustand setter
 
@@ -43,14 +46,9 @@ export const UserCreateModal: React.FC<Props> = (props) => {
     new User({} as UserClassType),
   );
   const [form, setForm] = useState<UserType>({} as UserType);
-
   const handleDiscordUserSelect = (user: GuildMember) => {
-    if (!user) {
-      console.error('No user selected');
-      return;
-    }
     setForm({} as UserType);
-
+    setSelectedDiscordUser(new User({} as UserClassType));
     selectedDiscordUser.setFromGuildMember(user);
     //This is necessary because we need a new instance of user to trigger a re-render
     setSelectedDiscordUser(new User(selectedDiscordUser as UserType));
@@ -93,6 +91,8 @@ export const UserCreateModal: React.FC<Props> = (props) => {
             </DialogDescription>
           </DialogHeader>
           <DiscordUserDropdown
+            query={query}
+            setQuery={setQuery}
             discrimUsers={users}
             onSelect={handleDiscordUserSelect}
           />

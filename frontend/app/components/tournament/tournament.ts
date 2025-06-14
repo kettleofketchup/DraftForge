@@ -15,6 +15,7 @@ import {
   createUser,
   deleteTournament,
   deleteUser,
+  fetchTournament,
   fetchUser,
   updateTournament,
   updateUser,
@@ -41,7 +42,7 @@ export class Tournament implements TournamentClassType {
       throw new Error('User primary key (pk) is not set.');
     }
     try {
-      const data = await fetchUser(this.pk);
+      const data = await fetchTournament(this.pk);
       Object.assign(this, data);
     } catch (error) {
       console.error('Error fetching user data:', error);

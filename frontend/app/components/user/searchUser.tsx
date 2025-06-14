@@ -15,7 +15,6 @@ import {
   ComboboxOptions,
 } from '@headlessui/react';
 import Footer from '~/components/footer';
-import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
 import { User } from '~/components/user/user';
 interface Props {
   users: UserType[];
@@ -69,7 +68,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
   };
 
   return (
-    <div className="justify-self-top content-self-center align-middle ">
+    <div className="justify-self-top content-self-center align-middle w-full ">
       {users && (
         <Combobox value={query} onChange={handleSearchUserSelect}>
           <ComboboxInput

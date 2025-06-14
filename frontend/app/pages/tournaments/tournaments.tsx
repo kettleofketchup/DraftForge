@@ -26,7 +26,6 @@ export default function Tournament() {
     (state) => state.tournaments,
   ); // Zustand setter
   const [query, setQuery] = useState('');
-
   const filteredTournaments =
     query === ''
       ? tournaments

@@ -2,12 +2,11 @@ import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
 import type { GameType, TournamentType } from '~/components/tournament/types'; // Adjust the import path as necessary
 
 import { Fragment } from 'react';
+import { useUserStore } from '~/store/userStore';
 
-export default function GamesTab({
-  tournament,
-}: {
-  tournament: TournamentType;
-}) {
+export default function GamesTab() {
+  const tournament = useUserStore((state) => state.tournament);
+  const setTournament = useUserStore((state) => state.setTournament);
   if (!tournament || !tournament.games || tournament.games.length === 0) {
     return (
       <div className="flex justify-center items-center h-screen">

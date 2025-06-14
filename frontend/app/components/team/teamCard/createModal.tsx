@@ -51,6 +51,8 @@ export const TeamCreateModal: React.FC<Props> = (props) => {
     setSelectedDiscordUser(new User(selectedDiscordUser as UserType));
     setForm(selectedDiscordUser as UserType);
   };
+
+  const [query, setQuery] = useState<string>('');
   if (!currentUser || (!currentUser.is_staff && !currentUser.is_superuser)) {
     return <></>;
   }
@@ -88,6 +90,8 @@ export const TeamCreateModal: React.FC<Props> = (props) => {
             </DialogDescription>
           </DialogHeader>
           <DiscordUserDropdown
+            query={query}
+            setQuery={setQuery}
             discrimUsers={users}
             onSelect={handleDiscordUserSelect}
           />

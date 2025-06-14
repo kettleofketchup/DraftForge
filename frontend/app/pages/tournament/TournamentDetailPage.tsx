@@ -4,12 +4,21 @@ import axios from '~/components/api/axios'; // Assuming axios is configured for 
 import type { TournamentType } from '~/components/tournament/types';
 import { TournamentCard } from '~/components/tournament/TournamentCard'; // Re-using TournamentCard for display
 import TournamentTabs from './tabs/TournamentTabs';
+import { useUserStore } from '~/store/userStore';
+import { Users } from 'lucide-react';
 
 export const TournamentDetailPage: React.FC = () => {
   const { pk } = useParams<{ pk: string }>();
-  const [tournament, setTournament] = useState<TournamentType | null>(null);
+
+  const tournament = useUserStore((state) => state.tournament);
+  const setTournament = useUserStore((state) => state.setTournament);
+  const allUsers = useUserStore((state) => state.users);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const getDiscordUsers = useUserStore((state) => state.getDiscordUsers);
+  useEffect(() => {
+    getDiscordUsers();
+  }, []);
 
   useEffect(() => {
     if (pk) {
@@ -98,7 +107,7 @@ export const TournamentDetailPage: React.FC = () => {
   return (
     <div className="container mx-auto p-4">
       {title()}
-      <TournamentTabs tournament={tournament} />
+      <TournamentTabs />
     </div>
   );
 };

@@ -23,7 +23,7 @@ export class User implements UserClassType {
   position?: string;
   steamid?: number;
   avatar?: string;
-  pk?: number;
+  pk: number;
   discordNickname?: string | null;
   discordId?: string;
   guildNickname?: string | null;
@@ -32,27 +32,31 @@ export class User implements UserClassType {
     Object.assign(this, data);
   }
 
-  async dbFetch(): Promise<void> {
+  async dbFetch(): Promise<UserType> {
     if (!this.pk) {
+      console.error('Error fetching user data:', error);
       throw new Error('User primary key (pk) is not set.');
     }
     try {
       const data = await fetchUser(this.pk);
       Object.assign(this, data);
+      return this as UserType;
     } catch (error) {
       console.error('Error fetching user data:', error);
       throw error;
     }
   }
 
-  async dbUpdate(data: Partial<UserType>): Promise<void> {
+  async dbUpdate(data: Partial<UserType>): Promise<UserType> {
     if (!this.pk) {
-      throw new Error('User primary key (pk) is not set.');
+      this.dbFetch();
+      if (!this.pk) throw new Error('User primary key (pk) is not set.');
     }
 
     try {
       const updatedData = await updateUser(this.pk, data);
       Object.assign(this, updatedData);
+      return updatedData;
     } catch (error) {
       console.error('Error fetching user data:', error);
       throw error;
@@ -61,23 +65,22 @@ export class User implements UserClassType {
 
   async dbDelete(): Promise<void> {
     if (!this.pk) {
-      throw new Error('User primary key (pk) is not set.');
+      this.dbFetch();
+      if (!this.pk) throw new Error('User primary key (pk) is not set.');
     }
     try {
       await deleteUser(this.pk);
       Object.assign({});
-      const delUser = useUserStore((state) => state.delUser); // Zustand setter
-
-      delUser(this as UserType);
     } catch (error) {
       console.error('Error fetching user data:', error);
       throw error;
     }
   }
-  async dbCreate(): Promise<void> {
+  async dbCreate(): Promise<UserType> {
     try {
-      await createUser(this as UserType);
-
+      const data = await createUser(this as UserType);
+      Object.assign(this, data);
+      return data;
     } catch (error) {
       console.error('Error creating user data:', error);
       throw error;
@@ -97,7 +100,6 @@ export class User implements UserClassType {
     this.avatar = member.user.avatar ?? undefined;
     this.discordNickname = member.user.global_name ?? null;
     this.guildNickname = member.nick ?? null;
-    this.avatarUrl = this.getAvatarUrl();
   }
   getAvatarUrl(): string {
     if (!this.avatar) {

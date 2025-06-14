@@ -14,7 +14,7 @@ import { Toaster } from '~/components/ui/sonner';
 import type { Route } from './+types/root';
 import './app.css';
 import Box from '@mui/material/Box';
-import ResponsiveAppBar from './components/navbar';
+import ResponsiveAppBar from './components/navbar/navbar';
 import Footer from './components/footer';
 import { useEffect, useMemo, useState } from 'react';
 import { useUserStore } from './store/userStore';
@@ -49,6 +49,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
   if (import.meta.env.DEV) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
   }
+
+  const currentUser = useUserStore((state) => state.currentUser); // Zustand setter
+  const getCurrentUser = useUserStore((state) => state.getCurrentUser); // Zustand setter
+
+  const hasHydrated = useUserStore((state) => state.hasHydrated); // Zustand setter
+
+  useEffect(() => {
+    if (hasHydrated && currentUser.username === undefined) {
+      getCurrentUser();
+    }
+  }, [hasHydrated]);
   return (
     <html lang="en" className="dark">
       <head>
@@ -63,7 +74,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <body>
         {/* Your component tree. Now you can override Material UI's styles. */}
 
-        {children}
+        <div className="flex flex-col h-screen flex w-screen h-screen justify-between">
+          <ResponsiveAppBar />
+          <div id="outlet_root" className="flex-grow overflow-x-hidden">
+            {children}
+          </div>
+        </div>
         <Toaster richColors closeButton position="top-center" />
 
         <ScrollRestoration />
@@ -74,36 +90,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const [inputId, setInputId] = useState<string>('');
-  const currentUser = useUserStore((state) => state.currentUser); // Zustand setter
-  const getCurrentUser = useUserStore((state) => state.getCurrentUser); // Zustand setter
-  const setUser = useUserStore((state) => state.setCurrentUser); // Zustand setter
-  const hasHydrated = useUserStore((state) => state.hasHydrated); // Zustand setter
-  const discordUsers = useUserStore((state) => state.discordUsers); // Zustand setter
-
-  useEffect(() => {
-    console.log('test');
-    console.log(discordUsers);
-  }, []);
-
-  useEffect(() => {
-    console.log(hasHydrated);
-    if (hasHydrated && currentUser.username === undefined) {
-      console.log('fetching user');
-
-      getCurrentUser();
-    }
-  }, [hasHydrated]);
-
   return (
-    <div className="flex flex-col h-screen flex w-screen h-screen justify-between">
-      <ResponsiveAppBar />
-      <div id="outlet_root" className="flex-grow overflow-x-hidden">
-        <Outlet />
-
-        {/* <Footer/> */}
-      </div>
-    </div>
+    <>
+      <Outlet />
+    </>
   );
 }
 
