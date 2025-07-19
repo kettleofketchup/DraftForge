@@ -1,13 +1,13 @@
-import React, { use, useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import type { FormEvent } from 'react';
-import type { UserClassType, UserType } from './types';
-import axios from '../api/axios';
-import { deleteUser } from '../api/api';
-import { useNavigate } from 'react-router';
+import React, { useEffect, useState } from 'react';
+import type { TeamType } from '~/components/tournament/types';
 import { useUserStore } from '~/store/userStore';
-import { User } from '~/components/user/user';
-import { DeleteButton } from '~/components/reusable/deleteButton';
-import UserEditModal, { TeamEditModal } from './teamCard/editModal';
+import { deleteUser } from '../api/api';
+import type { UserType } from '../user/types';
+import TeamEditModal from './teamCard/editModal';
+import { TeamTable } from './teamTable/teamTable';
+
 interface Props {
   team: TeamType;
   edit?: boolean;
@@ -16,8 +16,6 @@ interface Props {
   removeCallBack?: (e: FormEvent, user: UserType) => void;
   removeToolTip?: string;
 }
-import { Badge } from '~/components/ui/badge';
-import type { TeamType } from '~/components/tournament/types';
 export const TeamCard: React.FC<Props> = ({
   team,
   edit,
@@ -80,13 +78,21 @@ export const TeamCard: React.FC<Props> = ({
   useEffect(() => {
     console.log(`team updated ${team.name}`);
   }, [team]);
-
+  const getAverageMMR = () => {
+    if (!team.members || team.members.length === 0) return 'N/A';
+    const totalMMR = team.members.reduce((acc, member) => {
+      return acc + (member.mmr || 0);
+    }, 0);
+    return (totalMMR / team.members.length).toFixed(2);
+  }
   const teamHeader = () => {
     return (
       <>
         {!editMode && (
-          <div className="flex-1">
+          <div className="flex-1 justify-between text-center">
             <h2 className="card-title text-lg">{team.name}</h2>
+
+            <h3 className="card-title text-lg">{getAverageMMR()}</h3>
           </div>
         )}
       </>
@@ -95,27 +101,8 @@ export const TeamCard: React.FC<Props> = ({
   const showTeamMembers = () => {
     if (!team.members || team.members.length === 0) return <></>;
     return (
-      <div className="flex items-center gap-2">
-        {team.members.map((member) => (
-          <>
-            <Badge
-              key={member.pk}
-              className="badge badge-sm badge-primary"
-              title={member.username}
-            >
-              {member.username}
-            </Badge>
-            {member.mmr && (
-              <Badge
-                key={member.pk}
-                className="badge badge-sm badge-primary"
-                title={member.username}
-              >
-                {member.mmr}
-              </Badge>
-            )}
-          </>
-        ))}
+      <div className="flex items-center gap-2 w-full">
+        <TeamTable team={team} />
       </div>
     );
   };
@@ -139,40 +126,39 @@ export const TeamCard: React.FC<Props> = ({
   };
   return (
     <div
-      key={`usercard:${getKeyName()} base`}
-      className="px-6 py-4 content-center"
+      key={`teamCard:${getKeyName()} base`}
+      className="flex 002items-center [content-visibility: auto] [contain-intrinsic-size: 400px 220px] px-6 py-4 content-center justify-center
+      content-center"
     >
-      <div
-        className="justify-between p-2 h-full card bg-base-200 shadow-md w-full
+      <motion.div
+        initial={{ opacity: 0 }}
+        exit={{ opacity: 0 }}
+        whileInView={{
+          opacity: 1,
+          transition: { delay: 0.05, duration: 0.5 },
+        }}
+        whileHover={{ scale: 1.02 }}
+        whileFocus={{ scale: 1.05 }}
+        key={`usercard:${getKeyName()} basediv`}
+        className="flex-1 flex-grow
+        justify-between p-2 h-full card bg-base-200 shadow-md w-full
             max-w-sm hover:bg-violet-900 . focus:outline-2
             hover:shadow-xl/30
             focus:outline-offset-2 focus:outline-violet-500
-            focus:outline-offset-2 active:bg-violet-900
-            delay-700 duration-900 ease-in-out"
+            focus:outline-offset-2 active:bg-violet-900 min-w-fit"
       >
-        <div className="flex items-center gap-2 justify-start">
+        <div className="flex items-center gap-2 items-center justify-center flex-grow">
           {teamHeader()}
-          {(currentUser.is_staff || currentUser.is_superuser) && (
-            <TeamEditModal team={team} />
-          )}
+          {(currentUser.is_staff || currentUser.is_superuser) &&
+            saveFunc === 'save' &&
+            !compact && <TeamEditModal team={team} />}
         </div>
-        <div className="mt-2 space-y-2 text-sm">
+
+        <div className="flex mt-2 space-y-2 text-sm flex-grow">
           {viewMode()}
-          <div className="flex flex-col ">
-            <div className="flex items-center justify-start gap-6"></div>
-            <div className="flex items-center justify-end gap-6">
-              {currentUser.is_staff && saveCallback === 'save' && (
-                <DeleteButton
-                  onClick={handleDelete}
-                  tooltipText={removeToolTip}
-                  className="self-center btn-sm mt-3"
-                  disabled={isSaving}
-                />
-              )}
-            </div>
-          </div>
+          <div className="flex flex-col "></div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

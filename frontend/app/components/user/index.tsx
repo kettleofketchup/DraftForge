@@ -1,6 +1,7 @@
-import { UserCard } from './userCard';
+import { PositionEnum } from './constants';
+import type { GuildMember, UserClassType, UserType } from './types';
 import { User } from './user';
-import type { UserType, UserClassType, GuildMember } from './types';
+import { UserCard } from './userCard';
 
-export { UserCard, User };
-export type { UserType, UserClassType, GuildMember };
+export { PositionEnum, User, UserCard };
+export type { GuildMember, UserClassType, UserType };

@@ -7,7 +7,7 @@ from .models import CustomUser, DiscordInfo, DotaInfo, Game, Team, Tournament
 class DotaSerializer(serializers.ModelSerializer):
     class Meta:
         model = DotaInfo
-        fields = ("mmr", "steamid", "position")
+        fields = ("mmr", "steamid", "positions")
 
 
 class TeamTournamentSerializer(serializers.ModelSerializer):
@@ -32,7 +32,7 @@ class TournamentUserSerializer(serializers.ModelSerializer):
             "nickname",
             "avatar",
             "discordId",
-            "position",
+            "positions",
             "steamid",
             "avatarUrl",
             "mmr",
@@ -71,6 +71,8 @@ class TeamSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False,
     )
+    captain = TournamentUserSerializer(many=False, read_only=True)
+
     captain_id = serializers.PrimaryKeyRelatedField(
         source="captain",
         many=False,
@@ -144,7 +146,7 @@ class UserSerializer(serializers.ModelSerializer):
             "is_active",
             "is_superuser",
             "avatar",
-            "position",
+            "positions",
             "discordId",
             "steamid",
             "mmr",

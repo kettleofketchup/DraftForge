@@ -1,10 +1,11 @@
 import { motion } from 'framer-motion';
 import React, { memo, useEffect, useState } from 'react';
 import { Badge } from '~/components/ui/badge';
+import { PositionEnum } from '~/components/user';
+import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
 import { useUserStore } from '~/store/userStore';
-import type { UserClassType, UserType } from './types';
 import { UserRemoveButton } from './userCard/deleteButton';
 import UserEditModal from './userCard/editModal';
 interface Props {
@@ -13,17 +14,10 @@ interface Props {
   saveFunc?: string;
   compact?: boolean;
   deleteButtonType: 'tournament' | 'normal';
-
 }
 
 export const UserCard: React.FC<Props> = memo(
-  ({
-    user,
-    edit,
-    saveFunc,
-    compact,
-    deleteButtonType
-  }) => {
+  ({ user, edit, saveFunc, compact, deleteButtonType }) => {
     const [editMode, setEditMode] = useState(edit || false);
 
     const [form, setForm] = useState<UserType>(user ?? ({} as UserType));
@@ -44,7 +38,6 @@ export const UserCard: React.FC<Props> = memo(
         getUsers();
       }
     }, [user, user.mmr, user.pk, user.username, user.nickname, user.position]);
-
 
     const hasError = () => {
       if (!user.mmr) {
@@ -119,11 +112,7 @@ export const UserCard: React.FC<Props> = memo(
               </div>
             )}
 
-            {user.position && (
-              <div>
-                <span className="font-semibold">Position:</span> {user.position}
-              </div>
-            )}
+            {user.positions && positions()}
           </>
         );
       }
@@ -141,11 +130,7 @@ export const UserCard: React.FC<Props> = memo(
             </div>
           )}
 
-          {user.position && (
-            <div>
-              <span className="font-semibold">Position:</span> {user.position}
-            </div>
-          )}
+          {user.positions && positions()}
           {user.steamid && (
             <div>
               <span className="font-semibold">Steam ID:</span> {user.steamid}
@@ -188,14 +173,28 @@ export const UserCard: React.FC<Props> = memo(
       }
       return result;
     };
+    const positions = () => {
+      if (!user.positions) return null;
+      return (
+        <div className="flex gap-1 flex-wrap">
+          {Object.entries(user.positions)
+            .filter(([_, value]) => value)
+            .map(([pos]) => (
 
+              <span key={pos} className="badge badge-info p-1">
+                {PositionEnum[pos as keyof typeof PositionEnum]}
+              </span>
+            ))}
+        </div>
+      );
+    };
     const errorInfo = () => {
       return (
         <div className="flex flex-col items-end">
           {!user.mmr && (
             <span className="font-semibold text-red-500">MMR: Not added</span>
           )}
-          {!user.position && (
+          {!user.positions && (
             <span className="font-semibold text-red-500">
               Position: Not added
             </span>
@@ -242,9 +241,16 @@ export const UserCard: React.FC<Props> = memo(
               </div>
               <div className="flex items-center justify-end gap-6">
                 {errorInfo()}
-                {currentUser.is_staff && saveCallback === 'save' && deleteButtonType === 'normal' && <UserRemoveButton user={user} />}
-                {currentUser.is_staff && saveCallback === 'save' && deleteButtonType === 'tournament' && <PlayerRemoveButton user={user} />}
-
+                {currentUser.is_staff &&
+                  saveCallback === 'save' &&
+                  deleteButtonType === 'normal' && (
+                    <UserRemoveButton user={user} />
+                  )}
+                {currentUser.is_staff &&
+                  saveCallback === 'save' &&
+                  deleteButtonType === 'tournament' && (
+                    <PlayerRemoveButton user={user} />
+                  )}
               </div>
             </div>
           </div>

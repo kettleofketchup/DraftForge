@@ -1,12 +1,13 @@
-import type {
-  APIUser as DiscordUser,
-  APIGuildMember,
-} from 'discord-api-types/v10';
-
+import type { APIGuildMember } from 'discord-api-types/v10';
+import { PositionEnum } from './constants';
 export type GuildMember = APIGuildMember;
 export type GuildMembers = GuildMember[];
 
-export declare interface UserType {
+export type PositionsMap = {
+  [key in PositionEnum]?: boolean;
+};
+
+export interface UserType {
   [key: string]: any;
   username: string;
   avatarUrl: string;
@@ -14,7 +15,7 @@ export declare interface UserType {
   is_superuser: boolean;
   nickname?: string | null;
   mmr?: number;
-  position?: string;
+  positions?: PositionsMap;
   steamid?: number;
   avatar?: string;
   pk: number;
@@ -25,6 +26,18 @@ export declare interface UserType {
   setFromGuildMember?: (member: GuildMember) => void;
   getAvatarUrl?: () => string;
 }
+
+export enum PositionEnum {
+  Carry = 1,
+  Mid = 2,
+  Offlane = 3,
+  SoftSupport = 4,
+  HardSupport = 5,
+}
+
+export type PositionsMap = {
+  [key in PositionEnum]?: boolean;
+};
 
 export declare interface UserClassType extends UserType {
   setFromGuildMember: (member: GuildMember) => void;

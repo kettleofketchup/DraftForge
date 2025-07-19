@@ -1,6 +1,3 @@
-import type { UserType, UsersType } from '../user/types';
-import axios from './axios';
-import type { GuildMember, GuildMembers } from '../user/types';
 import type {
   GamesType,
   GameType,
@@ -8,8 +5,8 @@ import type {
   TeamType,
   TournamentType,
 } from '../tournament/types';
-import { useCallback } from 'react';
-import { useUserStore } from '~/store/userStore';
+import type { GuildMembers, UsersType, UserType } from '../user/types';
+import axios from './axios';
 
 export async function fetchCurrentUser(): Promise<UserType> {
   const response = await axios.get<UserType>(`/current_user`);
@@ -33,6 +30,12 @@ export async function deleteUser(userId: number): Promise<void> {
 export async function createUser(data: Partial<UserType>): Promise<UserType> {
   const response = await axios.post(`/user/register`, data);
   return response.data as UserType;
+}
+
+
+export async function createTeam(data: Partial<TeamType>): Promise<TeamType> {
+  const response = await axios.post(`/team/register`, data);
+  return response.data as TeamType;
 }
 
 ('use client');

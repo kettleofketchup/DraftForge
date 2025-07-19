@@ -1,9 +1,4 @@
-import {
-  memo,
-  useEffect,
-  useState,
-  type FormEvent
-} from 'react';
+import { memo, useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { updateTournament } from '~/components/api/api';
@@ -13,7 +8,7 @@ import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { UserType } from '~/components/user/types';
 import { hasErrors } from '~/pages/tournament/hasErrors';
 import { useUserStore } from '~/store/userStore';
-import { AddPlayerModal } from './players/addPlayerModal';
+import { AddTeamsModal } from './teams/addTeamsModal';
 
 export const TeamsTab: React.FC = memo(() => {
   const tournament = useUserStore((state) => state.tournament);
@@ -117,16 +112,16 @@ export const TeamsTab: React.FC = memo(() => {
     query === ''
       ? tournament.teams
       : tournament.teams?.filter((team) => {
-        const q = query.toLowerCase();
-        return (
-          team.name?.toLowerCase().includes(q) ||
-          team.users?.some(
-            (user: UserType) =>
-              user.username?.toLowerCase().includes(q) ||
-              user.nickname?.toLowerCase().includes(q),
-          )
-        );
-      });
+          const q = query.toLowerCase();
+          return (
+            team.name?.toLowerCase().includes(q) ||
+            team.users?.some(
+              (user: UserType) =>
+                user.username?.toLowerCase().includes(q) ||
+                user.nickname?.toLowerCase().includes(q),
+            )
+          );
+        });
 
   useEffect(() => {
     console.log('Tournament users:', tournament.users);
@@ -136,7 +131,7 @@ export const TeamsTab: React.FC = memo(() => {
       <>
         <div className="flex flex-col items-start p-4 h-full">
           <div className="self-end p-5 pb-2 pt-2">
-            <AddPlayerModal
+            <AddTeamsModal
               users={allUsers}
               query={query}
               setQuery={setQuery}
@@ -161,18 +156,10 @@ export const TeamsTab: React.FC = memo(() => {
   }, [allUsers]);
   return (
     <>
-    <div className='p-5 container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out'>
-    {hasErrors()}
+      <div className="p-5 container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out">
+        {hasErrors()}
         <div className="self-end p-5 pb-2 pt-2">
-          {
-            <AddPlayerModal
-              users={allUsers}
-              query={query}
-              setQuery={setQuery}
-              addPlayerCallback={addUserCallback}
-              addedUsers={tournament.users}
-            />
-          }
+          {<AddTeamsModal users={allUsers} />}
         </div>
         <div className="w-full">
           <SearchUserDropdown

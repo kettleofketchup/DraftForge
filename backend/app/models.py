@@ -5,7 +5,20 @@ from social_django.models import USER_MODEL  # fix: skip
 from social_django.models import AbstractUserSocialAuth, DjangoStorage
 
 User = settings.AUTH_USER_MODEL
+
+from enum import IntEnum
+
 from django.contrib.auth.models import AbstractUser
+from django.db.models import JSONField
+
+
+# Enum for Dota2 positions
+class PositionEnum(IntEnum):
+    Carry = 1
+    Mid = 2
+    Offlane = 3
+    SoftSupport = 4
+    HardSupport = 5
 
 
 class DotaInfo(models.Model):
@@ -25,7 +38,10 @@ class CustomUser(AbstractUser):
     steamid = models.IntegerField(null=True, unique=True)
     nickname = models.TextField(null=True)
     mmr = models.IntegerField(null=True)
-    position = models.TextField(null=True)
+    # Store positions as a dict of 1-5: bool, e.g. {"1": true, "2": false, ...}
+    positions = JSONField(
+        default=dict, help_text="Dota2 positions: 1-5 as keys, bool as value"
+    )
     avatar = models.TextField(null=True)
     discordId = models.TextField(null=True, unique=True)
     discordUsername = models.TextField(null=True)

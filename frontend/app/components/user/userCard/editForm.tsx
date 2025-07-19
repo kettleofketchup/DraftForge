@@ -1,9 +1,9 @@
 import type { FormEvent } from 'react';
 import React, { useEffect, useMemo, useState } from 'react';
-import type {
-  UserClassType,
-  UserType
-} from '~/components/user/types';
+
+import type { UserClassType, UserType } from '~/components/user/types';
+
+import { PositionEnum } from '~/components/user';
 
 import { useUserStore } from '~/store/userStore';
 
@@ -139,29 +139,61 @@ export const UserEditForm: React.FC<Props> = ({ user, form, setForm }) => {
   };
 
   const title = useMemo(() => {
-    var msg = "Status: ";
+    var msg = 'Status: ';
 
-
-    if (statusMsg && statusMsg !== null && statusMsg !== "null") msg = statusMsg;
+    if (statusMsg && statusMsg !== null && statusMsg !== 'null')
+      msg = statusMsg;
     else {
-      msg += "Editing ...";
+      msg += 'Editing ...';
     }
-    console.log("title", msg);
+    console.log('title', msg);
 
-    return msg
-
+    return msg;
   }, [statusMsg, user.username]);
 
   return (
     <>
-
-      <div className='font-bold text-center bg-gray-900 rounded-lg p-2 mb-4'>
+      <div className="font-bold text-center bg-gray-900 rounded-lg p-2 mb-4">
         <label>{title}</label>
       </div>
 
       {inputView('nickname', 'Nickname: ')}
       {inputView('mmr', 'MMR: ', 'number')}
-      {inputView('position', 'Position: ')}
+      {/* Position selection using checkboxes for PositionEnum */}
+      <div className="form-control mb-4">
+        <label className="label font-semibold">Positions</label>
+        <div className="flex flex-row flex-wrap gap-4">
+          {[
+            { value: PositionEnum.Carry, label: 'Carry' },
+            { value: PositionEnum.Mid, label: 'Mid' },
+            { value: PositionEnum.Offlane, label: 'Offlane' },
+            { value: PositionEnum.SoftSupport, label: 'Soft Support' },
+            { value: PositionEnum.HardSupport, label: 'Hard Support' },
+          ].map((opt) => (
+            <label
+              key={opt.value}
+              className="flex items-center gap-2 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                className="checkbox checkbox-primary"
+                checked={!!form.positions?.[opt.value]}
+                onChange={() => {
+                  setForm((prev) => {
+                    const prevPositions = prev.positions ?? {};
+                    const newPositions = {
+                      ...prevPositions,
+                      [opt.value]: !prevPositions[opt.value],
+                    };
+                    return { ...prev, positions: newPositions };
+                  });
+                }}
+              />
+              <span>{opt.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
       {inputView('steam_id', 'Steam ID: ', 'number')}
       {/* {inputView('discordId', 'Discord ID: ', 'number')} */}
       {inputView('guildNickname', 'Discord Guild Nickname: ')}
