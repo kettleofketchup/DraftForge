@@ -1,10 +1,8 @@
-import React, { useState, type FormEvent } from 'react';
-import { toast } from 'sonner';
+import React, { useState } from 'react';
 import { TeamCard } from '~/components/team/teamCard';
-import type { TeamType, TournamentType } from '~/components/tournament/types';
+import type { TeamType } from '~/components/tournament/types';
 import { Button } from '~/components/ui/button';
 
-import { createTeam, updateTeam } from '~/components/api/api';
 import {
   Dialog,
   DialogClose,
@@ -18,6 +16,7 @@ import {
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 import { createTeams } from './createTeams';
+import { CreateTeamsButton } from './createTeamsButton';
 interface Props {
   users: UserType[];
   teamSize?: number;
@@ -39,7 +38,12 @@ const TeamsView: React.FC<TeamsViewProps> = ({ teams }) => (
   >
     {teams.map((team, idx) => (
       <>
-        <TeamCard team={team} key={idx} edit={false} compact={true} />
+        <TeamCard
+          team={team}
+          key={`team-${idx}-${team.name}`}
+          edit={false}
+          compact={true}
+        />
       </>
     ))}
   </div>
@@ -59,6 +63,7 @@ const createErrorMessage = (val: Partial<Record<keyof TeamType, string>>) => {
     </div>
   );
 };
+
 export const AddTeamsModal: React.FC<Props> = ({ users, teamSize = 5 }) => {
   const getCurrentTournament = useUserStore(
     (state) => state.getCurrentTournament,
@@ -68,49 +73,7 @@ export const AddTeamsModal: React.FC<Props> = ({ users, teamSize = 5 }) => {
   const [teams, setTeams] = useState<TeamType[]>(() =>
     createTeams(users, teamSize),
   );
-  const handleSubmit = async (e: FormEvent) => {
-    // Handle the submission of teams, e.g., save to the server
-    for (const team of teams) {
-      // comb it into the form expected by the API
-
-      let submitTeam: TeamType = {
-        members_ids: team.members?.map((user) => user.pk),
-        captain_id: team.captain?.pk,
-        pk: team.pk ? team.pk : undefined,
-        name: team.name,
-        tournament_id: tournament?.pk,
-      };
-      console.log(submitTeam);
-      console.log(tournament);
-      if (submitTeam.pk) {
-        toast.promise(updateTeam(submitTeam.pk, submitTeam), {
-          loading: `Updating Team ${team.name}.`,
-          success: (data: TeamType) => {
-            setTeams((prev) => prev.map((t) => (t.pk === data.pk ? data : t)));
-            return `${submitTeam.name} has been updated`;
-          },
-          error: (err) => {
-            const val = err.response.data;
-            console.error('Failed to update team', err);
-            return <>{createErrorMessage(val)}</>;
-          },
-        });
-      } else {
-        toast.promise(createTeam(submitTeam), {
-          loading: `Creating Team ${submitTeam.name}.`,
-          success: (data: TeamType) => {
-            setTeams((prev) => prev.map((t) => (t.pk === data.pk ? data : t)));
-            return `${submitTeam.name} has been created`;
-          },
-          error: (err) => {
-            const val = err.response.data;
-            console.error('Failed to create team', err);
-            return <>{createErrorMessage(val)}</>;
-          },
-        });
-      }
-    }
-  };
+  const [open, setOpen] = useState(false);
 
   // Regenerate teams when users or teamSize changes
   React.useEffect(() => {
@@ -122,7 +85,7 @@ export const AddTeamsModal: React.FC<Props> = ({ users, teamSize = 5 }) => {
   };
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button className="btn btn-primary">Create Teams</Button>
       </DialogTrigger>
@@ -143,9 +106,12 @@ export const AddTeamsModal: React.FC<Props> = ({ users, teamSize = 5 }) => {
           <TeamsView teams={teams} />
         </div>
         <DialogFooter>
-          <Button onClick={handleSubmit} className="btn btn-primary">
-            Submit
-          </Button>
+          <CreateTeamsButton
+            tournament={tournament}
+            teams={teams}
+            dialogOpen={open}
+            setDialogOpen={setOpen}
+          />
           <DialogClose asChild>
             <Button variant="outline">Close</Button>
           </DialogClose>

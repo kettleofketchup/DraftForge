@@ -20,9 +20,12 @@ export function createTeams(users: UserType[], teamSize: number): TeamType[] {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
+  // Only use users that fit exactly into teams of teamSize
+  const usableCount = Math.floor(shuffled.length / teamSize) * teamSize;
+  const trimmed = shuffled.slice(0, usableCount);
   // Sort by MMR after shuffling for balanced assignment
-  const sorted = shuffled.sort((a, b) => (b.mmr ?? 0) - (a.mmr ?? 0));
-  const numTeams = Math.ceil(users.length / teamSize);
+  const sorted = trimmed.sort((a, b) => (b.mmr ?? 0) - (a.mmr ?? 0));
+  const numTeams = Math.floor(usableCount / teamSize);
   var teams: TeamType[] = Array.from({ length: numTeams }, (_, t) => ({
     members: [],
     captain: undefined,

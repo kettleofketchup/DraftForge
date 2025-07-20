@@ -32,7 +32,6 @@ export async function createUser(data: Partial<UserType>): Promise<UserType> {
   return response.data as UserType;
 }
 
-
 export async function createTeam(data: Partial<TeamType>): Promise<TeamType> {
   const response = await axios.post(`/team/register`, data);
   return response.data as TeamType;
@@ -120,4 +119,7 @@ export async function updateTeam(
 ): Promise<TeamType> {
   const response = await axios.patch<TeamType>(`/teams/${pk}/`, data);
   return response.data;
+}
+export async function deleteTeam(pk: number): Promise<void> {
+  await axios.delete(`/teams/${pk}/`);
 }

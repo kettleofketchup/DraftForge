@@ -100,32 +100,59 @@ class Team(models.Model):
     dropin_members = models.ManyToManyField(
         User, related_name="teams_dropin", blank=True
     )
-    left_members = models.ManyToManyField(User, related_name="teams_leftzs", blank=True)
+    left_members = models.ManyToManyField(User, related_name="teams_left", blank=True)
 
     current_points = models.IntegerField(default=0)
 
     def __str__(self):
         return self.name
 
+    @property
+    def games(self):
+        return Game.objects.filter(
+            models.Q(radiant_team=self) | models.Q(dire_team=self)
+        )
+
+
+class GameStat(models.Model):
+    user = models.ForeignKey(User, related_name="game_stats", on_delete=models.CASCADE)
+    game = models.ForeignKey("Game", related_name="stats", on_delete=models.CASCADE)
+    kills = models.IntegerField(default=0)
+    deaths = models.IntegerField(default=0)
+    assists = models.IntegerField(default=0)
+    hero_damage = models.IntegerField(default=0)
+    tower_damage = models.IntegerField(default=0)
+    gold_per_minute = models.IntegerField(default=0)
+    xp_per_minute = models.IntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.user.username} stats for {self.game}"
+
 
 class Game(models.Model):
+    users = models.ManyToManyField(User, related_name="games")
+
     tournament = models.ForeignKey(
-        Tournament, related_name="tournament_games", on_delete=models.CASCADE
+        Tournament, related_name="games", on_delete=models.CASCADE
     )
     round = models.IntegerField(default=1)
-    radiant = models.ForeignKey(
-        Team, related_name="gamesRadiant", on_delete=models.CASCADE
+
+    # steam gameid if it exists
+    gameid = models.IntegerField(null=True)
+
+    radiant_team = models.ForeignKey(
+        Team, related_name="games_as_radiant", null=True, on_delete=models.CASCADE
     )
-    dire = models.ForeignKey(Team, related_name="gamesDire", on_delete=models.CASCADE)
+    dire_team = models.ForeignKey(
+        Team, related_name="games_as_dire", null=True, on_delete=models.CASCADE
+    )
     winning_team = models.ForeignKey(
-        Team, related_name="games_won", on_delete=models.CASCADE
+        Team, related_name="games_won", null=True, on_delete=models.CASCADE
     )
 
     def __str__(self):
-        return f"{self.team1.name} vs {self.team2.name} in {self.tournament.name}"
+        return f"{self.radiant_team.name} vs {self.dire_team.name} in {self.tournament.name}"
 
     @property
     def teams(self):
-        return [self.team1, self.team2]
-
-    users = models.ManyToManyField(User, related_name="game_stats")
+        return [self.radiant_team, self.dire_team]

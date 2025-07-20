@@ -5,22 +5,21 @@ import {
   ComboboxOptions,
 } from '@headlessui/react';
 import React, { useState } from 'react';
-import type {
-  UserClassType,
-  UserType
-} from '~/components/user/types';
+import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { useUserStore } from '~/store/userStore';
 interface Props {
   users: UserType[];
   query: string;
   setQuery: React.Dispatch<React.SetStateAction<string>>;
+  defaultValue?: string;
 }
 
 export const SearchUserDropdown: React.FC<Props> = ({
   users,
   query,
   setQuery,
+  defaultValue = 'Search for users',
 }) => {
   const user: UserType = useUserStore((state) => state.currentUser); // Zustand setter
   const getUsers = useUserStore((state) => state.getUsers); // Zustand setter
@@ -44,7 +43,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
 
   const handleSearchUserSelect = (userName: UserType | string) => {
     if (typeof userName === 'object') {
-      userName = userName.username || userName.nickname || '';
+      userName = userName?.username || userName.nickname || '';
     }
     if (userName === undefined || userName === '') {
       setSearchedPerson(new User({} as UserClassType));
@@ -68,7 +67,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
         <Combobox value={query} onChange={handleSearchUserSelect}>
           <ComboboxInput
             className="input input-bordered w-full"
-            placeholder="Search DTX members..."
+            placeholder={defaultValue}
             onChange={(event) => setQuery(event.target.value)}
             onClick={(event) => console.log(event.target)}
           />

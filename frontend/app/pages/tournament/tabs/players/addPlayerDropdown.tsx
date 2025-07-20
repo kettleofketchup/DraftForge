@@ -4,15 +4,10 @@ import {
   ComboboxOption,
   ComboboxOptions,
 } from '@headlessui/react';
-import type {
-  UserClassType,
-  UserType
-} from '~/components/user/types';
+import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 
-import {
-  type FormEvent
-} from 'react';
+import { useState, type FormEvent } from 'react';
 import { useUserStore } from '~/store/userStore';
 
 interface Props {
@@ -31,6 +26,9 @@ export const AddPlayerDropdown: React.FC<Props> = ({
   removePlayerCallback,
 }) => {
   const users = useUserStore((state) => state.users); // Zustand setter
+  const [searchedPerson, setSearchedPerson] = useState(
+    new User({} as UserClassType),
+  );
 
   const filteredUsers =
     query === ''

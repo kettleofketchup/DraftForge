@@ -10,7 +10,6 @@ export const TournamentDetailPage: React.FC = () => {
   const setTournament = useUserStore((state) => state.setTournament);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-
   useEffect(() => {
     if (pk) {
       const fetchTournament = async () => {

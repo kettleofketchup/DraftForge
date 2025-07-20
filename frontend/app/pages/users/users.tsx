@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SearchUserDropdown } from '~/components/user/searchUser';
-import type {
-  UserClassType,
-  UserType
-} from '~/components/user/types';
+import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { UserCard } from '~/components/user/userCard';
 import { UserCreateModal } from '~/components/user/userCard/createModal';
@@ -21,8 +18,6 @@ export function UsersPage() {
   const getDiscordUsers = useUserStore((state) => state.getDiscordUsers); // Zustand setter
   const discordUsers = useUserStore((state) => state.discordUsers); // Zustand setter
 
-
-
   const [query, setQuery] = useState('');
   const [createModalQuery, setCreateModalQuery] = useState('');
 
@@ -36,6 +31,7 @@ export function UsersPage() {
     if (!discordUsers || discordUsers.length === 0) {
       getDiscordUsers();
     }
+    getUsers();
   }, []);
   const filteredUsers =
     query === ''
@@ -74,7 +70,10 @@ export function UsersPage() {
             />
           </div>
           <div className="flex col-start-4 align-end content-end justify-end">
-            <UserCreateModal query={createModalQuery} setQuery={setCreateModalQuery} />
+            <UserCreateModal
+              query={createModalQuery}
+              setQuery={setCreateModalQuery}
+            />
           </div>
         </div>
         <div
@@ -88,7 +87,7 @@ export function UsersPage() {
               user={u as UserClassType}
               saveFunc={'save'}
               key={`UserCard-${u.pk}`}
-              deleteButtonType='normal'
+              deleteButtonType="normal"
             />
           ))}
         </div>

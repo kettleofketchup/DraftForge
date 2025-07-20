@@ -1,28 +1,17 @@
-import React, { use, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import type {
-  GuildMember,
-  UserType,
-  UserClassType,
-} from '~/components/user/types';
+import React, { useState } from 'react';
+import type { UserClassType, UserType } from '~/components/user/types';
 
 import { useUserStore } from '~/store/userStore';
 
-import { Button } from '~/components/ui/button';
-import { Label } from '~/components/ui/label';
-import { Input } from '~/components/ui/input';
-import { User } from '~/components/user/user';
-
+import { toast } from 'sonner';
 import { DialogClose } from '~/components/ui/dialog';
-import { Toaster } from '~/components/ui/sonner';
 
 interface Props {
   user: UserClassType; // Accepts both UserClassType and UserType
   form: UserType;
   setForm: React.Dispatch<React.SetStateAction<UserType>>;
 }
-import { toast } from 'sonner';
-import { UserRoundPlusIcon } from 'lucide-react';
 
 export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
   const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
@@ -125,7 +114,7 @@ export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
       {inputView('nickname', 'Nickname: ')}
       {inputView('mmr', 'MMR: ', 'number')}
       {inputView('position', 'Position: ')}
-      {inputView('steam_id', 'Steam ID: ', 'number')}
+      {inputView('steamid', 'Steam ID: ', 'number')}
       {/* {inputView('discordId', 'Discord ID: ', 'number')} */}
       {inputView('guildNickname', 'Discord Guild Nickname: ')}
       <div className="flex flex-row items-start gap-4">

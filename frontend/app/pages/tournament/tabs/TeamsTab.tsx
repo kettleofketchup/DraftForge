@@ -2,9 +2,9 @@ import { memo, useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { updateTournament } from '~/components/api/api';
+import { SearchTeamsDropdown } from '~/components/team/searchTeams';
 import { TeamCard } from '~/components/team/teamCard';
 import type { TournamentType } from '~/components/tournament/types'; // Adjust the import path as necessary
-import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { UserType } from '~/components/user/types';
 import { hasErrors } from '~/pages/tournament/hasErrors';
 import { useUserStore } from '~/store/userStore';
@@ -111,17 +111,22 @@ export const TeamsTab: React.FC = memo(() => {
   const filteredTeams =
     query === ''
       ? tournament.teams
-      : tournament.teams?.filter((team) => {
-          const q = query.toLowerCase();
-          return (
-            team.name?.toLowerCase().includes(q) ||
-            team.users?.some(
-              (user: UserType) =>
-                user.username?.toLowerCase().includes(q) ||
-                user.nickname?.toLowerCase().includes(q),
-            )
-          );
-        });
+      : tournament.teams
+          .sort()
+          ?.filter((team) => {
+            const q = query.toLowerCase();
+            return (
+              team.name?.toLowerCase().includes(q) ||
+              team.users?.some(
+                (user: UserType) =>
+                  user.username?.toLowerCase().includes(q) ||
+                  user.nickname?.toLowerCase().includes(q),
+              )
+            );
+          })
+          .sort((a, b) => {
+            return a.name.localeCompare(b.name);
+          });
 
   useEffect(() => {
     console.log('Tournament users:', tournament.users);
@@ -131,12 +136,7 @@ export const TeamsTab: React.FC = memo(() => {
       <>
         <div className="flex flex-col items-start p-4 h-full">
           <div className="self-end p-5 pb-2 pt-2">
-            <AddTeamsModal
-              users={allUsers}
-              query={query}
-              setQuery={setQuery}
-              addPlayerCallback={addUserCallback}
-            />
+            <AddTeamsModal users={allUsers} />
           </div>
         </div>
         <div className="flex justify-center items-center h-screen">
@@ -159,25 +159,26 @@ export const TeamsTab: React.FC = memo(() => {
       <div className="p-5 container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out">
         {hasErrors()}
         <div className="self-end p-5 pb-2 pt-2">
-          {<AddTeamsModal users={allUsers} />}
+          {<AddTeamsModal users={allUsers} teamSize={5} />}
         </div>
         <div className="w-full">
-          <SearchUserDropdown
-            users={tournament.users}
+          <SearchTeamsDropdown
+            teams={tournament.teams}
             query={query}
             setQuery={setQuery}
             className="w-full"
+            defaultValue="search for users or team names"
           />
         </div>
-        <div className="w-full content-center grid gap-2 mt-4 grid-cols-2 xl:grid-cols-3 justify-center ">
+        <div className="w-full content-center grid gap-2 mt-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 justify-center ">
           {filteredTeams?.map((team) => (
             <TeamCard
               team={team}
+              compact={true}
               saveFunc={'save'}
               key={`TeamCard-${team.pk}`}
               removeCallBack={removeUser}
               removeToolTip={'Delete from tournament'}
-              compact={true}
             />
           ))}
         </div>

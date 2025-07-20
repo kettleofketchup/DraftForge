@@ -78,7 +78,9 @@ export const UserEditForm: React.FC<Props> = ({ user, form, setForm }) => {
 
   const handleSave = async (e: FormEvent) => {
     setErrorMessage({}); // Clear old errors
+
     const newUser: User = new User(user as UserType); // Create a new User instance
+
     if (!user.pk) {
       toast.promise(newUser.dbCreate(), {
         loading: `Creating User ${user.username}.`,
@@ -194,7 +196,7 @@ export const UserEditForm: React.FC<Props> = ({ user, form, setForm }) => {
           ))}
         </div>
       </div>
-      {inputView('steam_id', 'Steam ID: ', 'number')}
+      {inputView('steamid', 'Steam ID: ', 'number')}
       {/* {inputView('discordId', 'Discord ID: ', 'number')} */}
       {inputView('guildNickname', 'Discord Guild Nickname: ')}
       <div className="flex flex-row items-start gap-4">

@@ -28,6 +28,14 @@ const positions = (user: UserType) => {
   );
 };
 export const TeamTable: React.FC<TeamTableProps> = ({ team }) => {
+  const members = team.members?.sort((a, b) => {
+    if (!a.mmr && !b.mmr) return 0;
+    if (!a.mmr) return 1; // Treat undefined MMR as lower
+    if (!b.mmr) return -1; // Treat undefined MMR as lower
+    if (a.mmr >= b.mmr) return -1;
+
+    if (a.mmr < b.mmr) return 1;
+  });
   return (
     <Table>
       <TableCaption>Team Members</TableCaption>

@@ -369,9 +369,16 @@ class GameCreateView(generics.CreateAPIView):
     permission_classes = [IsStaff]
 
 
+from django.db import transaction
+
+
 class TeamCreateView(generics.CreateAPIView):
     serializer_class = TeamSerializer
     permission_classes = [IsStaff]
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        serializer.save()
 
 
 class TournamentCreateView(generics.CreateAPIView):

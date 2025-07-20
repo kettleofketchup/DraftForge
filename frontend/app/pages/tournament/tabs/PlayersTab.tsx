@@ -1,9 +1,4 @@
-import {
-  memo,
-  useEffect,
-  useState,
-  type FormEvent
-} from 'react';
+import { memo, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { updateTournament } from '~/components/api/api';
 import type { TournamentType } from '~/components/tournament/types'; // Adjust the import path as necessary
@@ -16,10 +11,7 @@ import { useUserStore } from '~/store/userStore';
 import { hasErrors } from '../hasErrors';
 import { AddPlayerModal } from './players/addPlayerModal';
 
-
 export const PlayersTab: React.FC = memo(() => {
-
-
   const allUsers = useUserStore((state) => state.users); // Zustand setter
   const [addPlayerQuery, setAddPlayerQuery] = useState('');
   const addUserQuery = useUserStore((state) => state.addUserQuery);
@@ -121,56 +113,52 @@ export const PlayersTab: React.FC = memo(() => {
     query === ''
       ? tournament.users
       : tournament.users?.filter((person) => {
-        const q = query.toLowerCase();
-        return (
-          person.username?.toLowerCase().includes(q) ||
-          person.nickname?.toLowerCase().includes(q)
-        );
-      });
+          const q = query.toLowerCase();
+          return (
+            person.username?.toLowerCase().includes(q) ||
+            person.nickname?.toLowerCase().includes(q)
+          );
+        });
 
-
-  useEffect(() => {
-    console.log('TournamentPageUsers: updated users');
-  }, [allUsers]);
-
-  if (!tournament || !tournament.users || tournament.users.length === 0) {
+  const renderNoPlayers = () => {
     return (
-      <>
-        <div className="flex flex-col items-start p-4 h-full">
-          <div className="self-end p-5 pb-2 pt-2">
-            <AddPlayerModal
-              users={allUsers}
-              query={addPlayerQuery}
-              setQuery={setAddPlayerQuery}
-              addPlayerCallback={addUserCallback}
-            />
-          </div>
+      <div className="flex justify-center items-center h-screen">
+        <div className="alert alert-info">
+          <span>No teams available for this tournament.</span>
         </div>
-        <div className="flex justify-center items-center h-screen">
-          <div className="alert alert-info">
-            <span>No teams available for this tournament.</span>
-          </div>
-        </div>
-      </>
+      </div>
     );
-  }
-
+  };
+  const renderPlayers = () => {
+    return (
+      <ScrollArea className=" h-30%  [content-visibility: auto] whitespace-nowrap p-5">
+        <div className="w-full content-center grid gap-2 mt-4 grid-cols-2 xl:grid-cols-3 justify-center [content-visibility: auto]">
+          {filteredUsers?.map((user) => (
+            <UserCard
+              user={user as UserClassType}
+              saveFunc={'save'}
+              key={`UserCard-${user.pk}`}
+              compact={true}
+              deleteButtonType="tournament"
+            />
+          ))}
+        </div>
+      </ScrollArea>
+    );
+  };
 
   return (
-    <div className='p-5 container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out'>
+    <div className="p-5 container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out">
       {hasErrors()}
 
-
       <div className="grid grid-cols-2 gap-5 items-start pt-5 ">
-
-
         <div className="flex self-center place-self-stretch">
           <SearchUserDropdown
             users={tournament.users}
             query={query}
             setQuery={setQuery}
           />
-          </div>
+        </div>
         <div className="flex pr-5 place-self-end">
           <AddPlayerModal
             users={allUsers}
@@ -182,19 +170,9 @@ export const PlayersTab: React.FC = memo(() => {
         </div>
       </div>
 
-      <ScrollArea className=" h-30%  [content-visibility: auto] whitespace-nowrap p-5">
-        <div className="w-full content-center grid gap-2 mt-4 grid-cols-2 xl:grid-cols-3 justify-center [content-visibility: auto]">
-          {filteredUsers?.map((user) => (
-            <UserCard
-              user={user as UserClassType}
-              saveFunc={'save'}
-              key={`UserCard-${user.pk}`}
-              compact={true}
-              deleteButtonType='tournament'
-            />
-          ))}
-        </div>
-      </ScrollArea>
+      {!tournament || !tournament.users || tournament.users.length === 0
+        ? renderNoPlayers()
+        : renderPlayers()}
     </div>
   );
 });

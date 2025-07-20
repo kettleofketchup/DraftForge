@@ -1,15 +1,12 @@
 import type { FormEvent } from 'react';
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip'; // Adjust path as needed
-import type {
-  UserType
-} from '~/components/user/types';
-
+import type { UserType } from '~/components/user/types';
 
 interface Props {
   users: UserType[];
@@ -32,6 +29,7 @@ import {
 } from '~/components/ui/dialog';
 import { Label } from '~/components/ui/label';
 import UserCreateModal from '~/components/user/userCard/createModal';
+import { useUserStore } from '~/store/userStore';
 import { AddPlayerDropdown } from './addPlayerDropdown';
 interface Props {
   users: UserType[];
@@ -44,14 +42,12 @@ interface Props {
 }
 
 export const AddPlayerModal: React.FC<Props> = ({
-  users,
   addedUsers,
   addPlayerCallback,
   removePlayerCallback,
   query,
   setQuery,
 }) => {
-
   // Find all users not already in the tournament
 
   return (

@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.db import transaction
 from rest_framework import serializers
 
 from .models import CustomUser, DiscordInfo, DotaInfo, Game, Team, Tournament

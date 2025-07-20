@@ -1,17 +1,25 @@
 // import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { GamesTab } from './GamesTab';
 import { PlayersTab } from './PlayersTab';
 import { TeamsTab } from './TeamsTab';
 
-
-import { useMemo } from "react";
-import { useShallow } from "zustand/react/shallow";
-import { useUserStore } from "~/store/userStore";
-
+import { useEffect, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import { useUserStore } from '~/store/userStore';
 
 export default function TournamentTabs() {
+
+    const users = useUserStore((state) => state.users); // Zustand setter
+    const getDiscordUsers = useUserStore((state) => state.getDiscordUsers); // Zustand setter
+
+    const getUsers = useUserStore((state) => state.getUsers); // Zustand setter
+    useEffect(() => {
+      getDiscordUsers();
+      getUsers();
+    }, []);
+
   const tabClass =
     () => `rounded-full px-3 py-1 bg-gray-900 text-sm/6 font-semibold text-white
                         focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white
@@ -26,7 +34,6 @@ export default function TournamentTabs() {
     }
     return tournament.users.length;
   }, [tournament.users]);
-
 
   const teamCount = useMemo(() => {
     // Assuming you have a way to get the players array, e.g., from props or context
@@ -47,20 +54,28 @@ export default function TournamentTabs() {
   return (
     <div className="flex w-full justify-center px-4 pt-2">
       <div className="w-full max-w-xxl">
-
-
-      <Tabs defaultValue="players" className="flex w-full justify-center gap-2 rounded-full p-1 align-middle">
-        <TabsList className="content-center flex w-full justify-center gap-2 rounded-full p-1 align-middle">
-          <TabsTrigger value="players">Players ({playerCount})</TabsTrigger>
-          <TabsTrigger value="teams">Teams ({teamCount})</TabsTrigger>
-          <TabsTrigger value="games">Games ({gameCount})</TabsTrigger>
-        </TabsList>
-        <TabsContent value="players"> <PlayersTab /></TabsContent>
-        <TabsContent value="teams"> <TeamsTab /></TabsContent>
-        <TabsContent value="games"> <GamesTab /></TabsContent>
+        <Tabs
+          defaultValue="players"
+          className="flex w-full justify-center gap-2 rounded-full p-1 align-middle"
+        >
+          <TabsList className="content-center flex w-full justify-center gap-2 rounded-full p-1 align-middle">
+            <TabsTrigger value="players">Players ({playerCount})</TabsTrigger>
+            <TabsTrigger value="teams">Teams ({teamCount})</TabsTrigger>
+            <TabsTrigger value="games">Games ({gameCount})</TabsTrigger>
+          </TabsList>
+          <TabsContent value="players">
+            {' '}
+            <PlayersTab />
+          </TabsContent>
+          <TabsContent value="teams">
+            {' '}
+            <TeamsTab />
+          </TabsContent>
+          <TabsContent value="games">
+            {' '}
+            <GamesTab />
+          </TabsContent>
         </Tabs>
-
-
       </div>
     </div>
   );

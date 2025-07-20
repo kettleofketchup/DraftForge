@@ -84,7 +84,7 @@ export const TeamCard: React.FC<Props> = ({
       return acc + (member.mmr || 0);
     }, 0);
     return (totalMMR / team.members.length).toFixed(2);
-  }
+  };
   const teamHeader = () => {
     return (
       <>
@@ -92,7 +92,7 @@ export const TeamCard: React.FC<Props> = ({
           <div className="flex-1 justify-between text-center">
             <h2 className="card-title text-lg">{team.name}</h2>
 
-            <h3 className="card-title text-lg">{getAverageMMR()}</h3>
+            <h3 className="card-title text-lg">Avg MMR: {getAverageMMR()}</h3>
           </div>
         )}
       </>

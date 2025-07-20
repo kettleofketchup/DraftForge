@@ -1,30 +1,25 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import type {
-  GuildMember,
-  UserType,
-  GuildMembers,
-  UsersType,
-} from '~/components/user/types';
-import { User } from '~/components/user/user';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import {
-  get_dtx_members,
+  fetchCurrentUser,
   fetchUsers,
+  get_dtx_members,
   getGames,
   getTeams,
   getTournaments,
-  fetchCurrentUser,
 } from '~/components/api/api';
+import axios from '~/components/api/axios';
 import type {
   GameType,
   TeamType,
   TournamentType,
 } from '~/components/tournament/types';
-import { createCookie } from 'react-router';
-import { useMemo } from 'react';
-import React, { memo } from 'react';
-import axios from '~/components/api/axios';
-import type { Tournament } from '~/components/tournament/tournament';
+import type {
+  GuildMember,
+  GuildMembers,
+  UserType,
+} from '~/components/user/types';
+import { User } from '~/components/user/user';
 
 interface UserState {
   currentUser: UserType;
@@ -189,10 +184,26 @@ export const useUserStore = create<UserState>()(
       },
 
       setTournaments: (tournaments) => set({ tournaments }),
-      setTournament: (tournament) => set({ tournament }),
+      setTournament: (tournament) => {
+        set({ tournament });
+        // If a tournament with the same pk exists in tournaments, update it
+        set((state) => {
+          const idx = state.tournaments.findIndex(
+            (t) => t.pk === tournament.pk,
+          );
+          if (idx !== -1) {
+            const updatedTournaments = [...state.tournaments];
+            updatedTournaments[idx] = tournament;
+            return { tournaments: updatedTournaments };
+          }
+          return {};
+        });
+      },
       tournamentsByUser: (user) =>
         get().tournaments.filter(
-          (tournament) => tournament?.users === user?.pk,
+          (tournament) =>
+            Array.isArray(tournament?.users) &&
+            tournament.users.some((u) => u.pk === user?.pk),
         ),
       setGames: (games) => set({ games }),
       getGames: async () => {
