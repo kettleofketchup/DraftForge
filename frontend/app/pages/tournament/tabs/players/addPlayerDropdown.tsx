@@ -37,7 +37,8 @@ export const AddPlayerDropdown: React.FC<Props> = ({
         )
       : users.filter(
           (person) =>
-            !addedUsers?.some((added) => added?.pk === person?.pk) &&
+          !addedUsers?.some(
+            (added) => added?.pk === person?.pk) &&
             (person?.username?.toLowerCase().includes(query.toLowerCase()) ||
               person?.nickname?.toLowerCase().includes(query.toLowerCase())),
         );

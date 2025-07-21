@@ -149,17 +149,13 @@ export const TeamsTab: React.FC = memo(() => {
   }
 
   let navigate = useNavigate();
-  useEffect(() => {
-    if (!allUsers || allUsers.length === 0) {
-      useUserStore.getState().getUsers();
-    }
-  }, [allUsers]);
+
   return (
     <>
       <div className="p-5 container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out">
         {hasErrors()}
         <div className="self-end p-5 pb-2 pt-2">
-          {<AddTeamsModal users={allUsers} teamSize={5} />}
+          {<AddTeamsModal users={tournament.users} teamSize={5} />}
         </div>
         <div className="w-full">
           <SearchTeamsDropdown

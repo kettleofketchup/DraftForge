@@ -16,8 +16,12 @@ interface Props {
   discrimUsers?: UsersType;
 }
 
-const DiscordUserDropdown: React.FC<Props> = ({ query, setQuery, onSelect, discrimUsers }) => {
-
+const DiscordUserDropdown: React.FC<Props> = ({
+  query,
+  setQuery,
+  onSelect,
+  discrimUsers,
+}) => {
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const setDiscordUsers = useUserStore((state) => state.setDiscordUsers); // Zustand setter
@@ -52,9 +56,10 @@ const DiscordUserDropdown: React.FC<Props> = ({ query, setQuery, onSelect, discr
     query === ''
       ? discordUsers
       : discordUsers.filter((person: GuildMember) => {
-          return person.user.username
-            .toLowerCase()
-            .includes(query.toLowerCase());
+          return (
+            person.user.username.toLowerCase().includes(query.toLowerCase()) ||
+            person.user.nick?.toLowerCase().includes(query.toLowerCase())
+          );
         });
 
   // Remove users that have a discordId in discrimUsers
