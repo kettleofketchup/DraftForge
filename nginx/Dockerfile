@@ -4,7 +4,7 @@ FROM jonasal/nginx-certbot:5.4.1-nginx1.27.4
 # Copy template and script
 COPY default.template.conf /etc/nginx/templates/default.template.conf
 COPY entrypoint.sh /entrypoint.sh
-RUN mkdir -p /etc/letsencrypt/live/dtxdota.com/
+RUN mkdir -p /etc/letsencrypt/live/dota.kettle.sh/
 ENV DOMAIN=localhost
 ENV FRONTEND_HOST=localhost
 ENV FRONTEND_PORT=3000

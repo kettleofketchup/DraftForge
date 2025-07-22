@@ -128,7 +128,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "backend.wsgi.application"
-SOCIAL_AUTH_ALLOWED_REDIRECT_HOSTS = ["dtxdota.com", "localhost"]
+SOCIAL_AUTH_ALLOWED_REDIRECT_HOSTS = ["dota.kettle.sh", "localhost"]
 
 AUTHENTICATION_BACKENDS = (
     "social_core.backends.discord.DiscordOAuth2",
@@ -236,7 +236,7 @@ SESSION_COOKIE_SAMESITE = None
 # https://docs.djangoproject.com/en/1.10/howto/static-files/
 
 STATIC_URL = "/static/"
-ALLOWED_HOSTS = ["dtxdota.com", "localhost"]
+ALLOWED_HOSTS = ["dota.kettle.sh", "localhost"]
 
 
 with contextlib.suppress(ImportError):
@@ -251,7 +251,13 @@ CORS_ORIGIN_WHITELIST = [
 
 CSRF_TRUSTED_ORIGINS = [
     "https://localhost",
-    "https://dtxdota.com",
-    "http://dtxdota.com",
+    "https://dota.kettle.sh",
+    "http://dota.kettle.sh",
+    "https://dota.kettle.sh",
+    "http://dota.kettle.sh",
+    "https://dtx.kettle.sh",
+    "http://dtx.kettle.sh",
+    "https://kettle.sh",
+    "http://kettle.sh",
 ]
 AUTH_USER_MODEL = "app.CustomUser"

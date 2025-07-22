@@ -25,8 +25,8 @@ services:
     volumes:
       - ./nginx/default.template.conf:/etc/nginx/templates/default.template.conf
       - ./nginx/data/user_conf.d:/etc/nginx/user_conf.d
-      - ./nginx/data/ssl_prod/cert.crt:/etc/letsencrypt/live/dtxdota.com/fullchain.pem
-      - ./nginx/data/ssl_prod/cert.key:/etc/letsencrypt/live/dtxdota.com/privkey.pem
+      - ./nginx/data/ssl_prod/cert.crt:/etc/letsencrypt/live/dota.kettle.sh/fullchain.pem
+      - ./nginx/data/ssl_prod/cert.key:/etc/letsencrypt/live/dota.kettle.sh/privkey.pem
     depends_on:
       - frontend
       - backend

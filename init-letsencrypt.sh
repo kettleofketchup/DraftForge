@@ -5,7 +5,7 @@ if ! [ -x "$(command -v docker-compose)" ]; then
   exit 1
 fi
 
-domains=(dtxdota.com www.dtxdota.com)
+domains=(dota.kettle.sh www.dota.kettle.sh)
 rsa_key_size=4096
 data_path="./nginx/data/certbot"
 email="" # Adding a valid address is strongly recommended

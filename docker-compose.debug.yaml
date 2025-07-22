@@ -34,8 +34,8 @@ services:
       - "443:443"
     volumes:
       - ./nginx/default.template.conf:/etc/nginx/templates/default.template.conf
-      - ./nginx/data/ssl/cert.crt:/etc/letsencrypt/live/dtxdota.com/fullchain.pem
-      - ./nginx/data/ssl/cert.key:/etc/letsencrypt/live/dtxdota.com/privkey.pem
+      - ./nginx/data/ssl/cert.crt:/etc/letsencrypt/live/dota.kettle.sh/fullchain.pem
+      - ./nginx/data/ssl/cert.key:/etc/letsencrypt/live/dota.kettle.sh/privkey.pem
       - ./nginx/data/user_conf.d:/etc/nginx/user_conf.d
     depends_on:
       - frontend
