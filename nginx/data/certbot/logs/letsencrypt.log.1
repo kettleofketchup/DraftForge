@@ -1,0 +1,29 @@
+2025-07-22 13:10:05,997:DEBUG:certbot._internal.main:certbot version: 4.1.1
+2025-07-22 13:10:05,998:DEBUG:certbot._internal.main:Location of certbot entry point: /home/kettle/git_repos/website/.venv/bin/certbot
+2025-07-22 13:10:05,998:DEBUG:certbot._internal.main:Arguments: ['--nginx', '--register-unsafely-without-email', '--agree-tos', '--force-renewal', '--webroot', '--webroot-path', '/home/kettle/git_repos/website/nginx/data/certbot/webroot', '--work-dir', '/home/kettle/git_repos/website/nginx/data/certbot/work', '--config-dir', '/home/kettle/git_repos/website/nginx/data/certbot/configs', '--logs-dir', '/home/kettle/git_repos/website/nginx/data/certbot/logs', '-d', 'dota.kettle.sh', '-d', 'www.dota.kettle.sh']
+2025-07-22 13:10:05,998:DEBUG:certbot._internal.main:Discovered plugins: PluginsRegistry(PluginEntryPoint#manual,PluginEntryPoint#nginx,PluginEntryPoint#null,PluginEntryPoint#standalone,PluginEntryPoint#webroot)
+2025-07-22 13:10:06,006:DEBUG:certbot._internal.log:Root logging level set at 30
+2025-07-22 13:10:06,006:DEBUG:certbot._internal.log:Exiting abnormally:
+Traceback (most recent call last):
+  File "/home/kettle/git_repos/website/.venv/bin/certbot", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/kettle/git_repos/website/.venv/lib/python3.12/site-packages/certbot/main.py", line 19, in main
+    return internal_main.main(cli_args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kettle/git_repos/website/.venv/lib/python3.12/site-packages/certbot/_internal/main.py", line 1879, in main
+    return config.func(config, plugins)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kettle/git_repos/website/.venv/lib/python3.12/site-packages/certbot/_internal/main.py", line 1566, in certonly
+    installer, auth = plug_sel.choose_configurator_plugins(config, plugins, "certonly")
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kettle/git_repos/website/.venv/lib/python3.12/site-packages/certbot/_internal/plugins/selection.py", line 209, in choose_configurator_plugins
+    req_auth, req_inst = cli_plugin_requests(config)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kettle/git_repos/website/.venv/lib/python3.12/site-packages/certbot/_internal/plugins/selection.py", line 313, in cli_plugin_requests
+    req_auth = set_configurator(req_auth, "webroot")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/kettle/git_repos/website/.venv/lib/python3.12/site-packages/certbot/_internal/plugins/selection.py", line 288, in set_configurator
+    raise errors.PluginSelectionError(msg.format(repr(previously), repr(now)))
+certbot.errors.PluginSelectionError: Too many flags setting configurators/installers/authenticators 'nginx' -> 'webroot'
+2025-07-22 13:10:06,007:ERROR:certbot._internal.log:Too many flags setting configurators/installers/authenticators 'nginx' -> 'webroot'

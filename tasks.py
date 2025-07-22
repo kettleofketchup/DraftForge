@@ -14,6 +14,8 @@ version = None
 
 ns = Collection()
 ns_dev = Collection("dev")
+ns_prod = Collection("prod")
+ns.add_collection(ns_prod, "prod")
 
 ns.add_collection(ns_docker, "docker")
 ns.add_collection(ns_dev, "dev")
@@ -56,6 +58,26 @@ def dev_migrate(c):
         for cmd in cmds:
             c.run(cmd)
 
+
+@task
+def certbot(c):
+    cmd = "certbot certonly --register-unsafely-without-email"
+    cmd += " --agree-tos --force-renewal"
+
+    cmd += f" --webroot --webroot-path {str(paths.CERTBOT_WEBROOT.absolute())}"
+    cmd += f" --work-dir {str(paths.CERTBOT_WORK.absolute())}"
+
+    cmd += f" --config-dir {str(paths.CERTBOT_CONFIGS.absolute())}"
+    cmd += f" --logs-dir {str(paths.CERTBOT_LOGS.absolute())}"
+
+    for domain in paths.domains:
+        cmd += f" -d {domain}"
+    print(cmd)
+    print()
+    c.run(cmd)
+
+
+ns_prod.add_task(certbot, "certbot")
 
 ns_dev.add_task(dev_live, "live")
 ns_dev.add_task(dev_debug, "debug")

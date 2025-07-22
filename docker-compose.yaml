@@ -28,7 +28,10 @@ services:
       - ./nginx/data/ssl/cert.key:/etc/letsencrypt/live/dota.kettle.sh/privkey.pem
       - ./nginx/default.template.conf:/etc/nginx/templates/default.template.conf
       - ./nginx/data/user_conf.d:/etc/nginx/user_conf.d
-
+      - ./nginx/certbot/webroot:/var/www/certbot
+      - ./nginx/certbot/work:/lib/letsencrypt
+      - ./nginx/certbot/configs:/etc/letsencrypt
+      - ./nginx/certbot/logs:/var/log/letsencrypt
     depends_on:
       - frontend
       - backend
