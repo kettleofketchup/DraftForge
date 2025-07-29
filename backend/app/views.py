@@ -224,6 +224,10 @@ def current_user(request):
                 "is_superuser": user.is_superuser,
             }
         )
+    else:
+        return Response(
+   
+        )
 
 
 @api_view(["GET"])

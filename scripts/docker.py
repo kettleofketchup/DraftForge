@@ -22,9 +22,11 @@ ns_docker.add_collection(ns_docker_all)
 
 
 def docker_build(c, image: str, version: str, dockerfile: Path, context: Path):
-    cmd = f"docker build -f {str(dockerfile)} " f"{str(context)} -t {image}:{version}"
+    img_str = f"{image}:{version}"
+    cmd = f"docker build -f {str(dockerfile)} " f"{str(context)} -t {img_str}"
     with c.cd(paths.PROJECT_PATH):
         c.run(cmd)
+        c.run(f"docker tag {img_str} {image}:latest")
 
 
 def docker_pull(c, image: str, version: str, dockerfile: Path, context: Path):
