@@ -21,32 +21,22 @@ class PositionEnum(IntEnum):
     HardSupport = 5
 
 
-class DotaInfo(models.Model):
-    user = models.ForeignKey(USER_MODEL, name="dota", on_delete=models.CASCADE)
-    steamid = models.IntegerField(null=True)
-    mmr = models.IntegerField(null=True)
-    position = models.TextField(null=True)
-
-
-class DiscordInfo(models.Model):
-    discordId = models.IntegerField(null=True)
-    avatarId = models.IntegerField(null=True)
-    avatarUrl = models.URLField(null=True)
-
-
 class CustomUser(AbstractUser):
-    steamid = models.IntegerField(null=True, unique=True)
-    nickname = models.TextField(null=True)
-    mmr = models.IntegerField(null=True)
+    steamid = models.IntegerField(null=True, unique=True, blank=True)
+    nickname = models.TextField(null=True, blank=True)
+    mmr = models.IntegerField(null=True, blank=True)
     # Store positions as a dict of 1-5: bool, e.g. {"1": true, "2": false, ...}
     positions = JSONField(
-        default=dict, help_text="Dota2 positions: 1-5 as keys, bool as value"
+        default=dict,
+        help_text="Dota2 positions: 1-5 as keys, bool as value",
+        blank=True,
+        null=True,
     )
-    avatar = models.TextField(null=True)
-    discordId = models.TextField(null=True, unique=True)
-    discordUsername = models.TextField(null=True)
-    discordNickname = models.TextField(null=True)
-    guildNickname = models.TextField(null=True)
+    avatar = models.TextField(null=True, blank=True)
+    discordId = models.TextField(null=True, unique=True, blank=True)
+    discordUsername = models.TextField(null=True, blank=True)
+    discordNickname = models.TextField(null=True, blank=True)
+    guildNickname = models.TextField(null=True, blank=True)
 
     @property
     def avatarUrl(self):
@@ -94,15 +84,23 @@ class Team(models.Model):
     )
     name = models.CharField(max_length=255)
     captain = models.ForeignKey(
-        User, related_name="teams_captained", on_delete=models.CASCADE
+        User,
+        related_name="teams_as_captain",
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
     )
-    members = models.ManyToManyField(User, related_name="teams", blank=True)
+    members = models.ManyToManyField(
+        User, related_name="teams_as_member", blank=True, null=True
+    )
     dropin_members = models.ManyToManyField(
-        User, related_name="teams_dropin", blank=True
+        User, related_name="teams_as_dropin", blank=True, null=True
     )
-    left_members = models.ManyToManyField(User, related_name="teams_left", blank=True)
+    left_members = models.ManyToManyField(
+        User, related_name="teams_as_left", blank=True, null=True
+    )
 
-    current_points = models.IntegerField(default=0)
+    current_points = models.IntegerField(default=0, blank=True)
 
     def __str__(self):
         return self.name
@@ -115,39 +113,51 @@ class Team(models.Model):
 
 
 class GameStat(models.Model):
-    user = models.ForeignKey(User, related_name="game_stats", on_delete=models.CASCADE)
-    game = models.ForeignKey("Game", related_name="stats", on_delete=models.CASCADE)
-    kills = models.IntegerField(default=0)
-    deaths = models.IntegerField(default=0)
-    assists = models.IntegerField(default=0)
-    hero_damage = models.IntegerField(default=0)
-    tower_damage = models.IntegerField(default=0)
-    gold_per_minute = models.IntegerField(default=0)
-    xp_per_minute = models.IntegerField(default=0)
+    user = models.ForeignKey(
+        User, related_name="game_stats", on_delete=models.CASCADE, blank=True
+    )
+    game = models.ForeignKey(
+        "Game", related_name="stats", on_delete=models.CASCADE, blank=True
+    )
+    kills = models.IntegerField(default=0, blank=True)
+    deaths = models.IntegerField(default=0, blank=True)
+    assists = models.IntegerField(default=0, blank=True)
+    hero_damage = models.IntegerField(default=0, blank=True)
+    tower_damage = models.IntegerField(default=0, blank=True)
+    gold_per_minute = models.IntegerField(default=0, blank=True)
+    xp_per_minute = models.IntegerField(default=0, blank=True)
 
     def __str__(self):
         return f"{self.user.username} stats for {self.game}"
 
 
 class Game(models.Model):
-    users = models.ManyToManyField(User, related_name="games")
+    users = models.ManyToManyField(User, related_name="games", blank=True)
 
     tournament = models.ForeignKey(
-        Tournament, related_name="games", on_delete=models.CASCADE
+        Tournament, related_name="games", on_delete=models.CASCADE, blank=True
     )
     round = models.IntegerField(default=1)
 
     # steam gameid if it exists
-    gameid = models.IntegerField(null=True)
+    gameid = models.IntegerField(null=True, blank=True)
 
     radiant_team = models.ForeignKey(
-        Team, related_name="games_as_radiant", null=True, on_delete=models.CASCADE
+        Team,
+        related_name="games_as_radiant",
+        null=True,
+        on_delete=models.CASCADE,
+        blank=True,
     )
     dire_team = models.ForeignKey(
-        Team, related_name="games_as_dire", null=True, on_delete=models.CASCADE
+        Team,
+        related_name="games_as_dire",
+        null=True,
+        on_delete=models.CASCADE,
+        blank=True,
     )
     winning_team = models.ForeignKey(
-        Team, related_name="games_won", null=True, on_delete=models.CASCADE
+        Team, related_name="games_won", null=True, on_delete=models.CASCADE, blank=True
     )
 
     def __str__(self):
@@ -156,3 +166,135 @@ class Game(models.Model):
     @property
     def teams(self):
         return [self.radiant_team, self.dire_team]
+
+
+class Draft(models.Model):
+
+    tournament = models.ForeignKey(
+        Tournament, related_name="draft", on_delete=models.CASCADE
+    )
+
+    def __str__(self):
+        return f"{self.radiant_team.name} vs {self.dire_team.name} in {self.tournament.name}"
+
+    @property
+    def teams(self):
+        if not self.tournament.teams.exists():
+            return []
+
+        return self.tournament.teams.all()
+
+    @property
+    def users(self):
+        if not self.tournament.users.exists():
+            return []
+
+        return self.tournament.users.all()
+
+    @property
+    def users_remaining(self):
+        """
+        Returns users that are not already in teams.
+        This is used to populate the draft choices.
+        """
+        if not self.tournament.users.exists():
+            return []
+
+        return (
+            self.tournament.users.exclude(teams_as_member__tournament=self.tournament)
+            .exclude(teams_as_dropin__tournament=self.tournament)
+            .exclude(teams_as_left__tournament=self.tournament)
+            .exclude(teams_as_captain__tournament=self.tournament)
+            .distinct()
+        )
+
+    @property
+    def captains(self):
+        if not self.tournament.captains.exists():
+            raise ValueError("Draft must be associated with a tournament.")
+
+        return self.tournament.captains.all()
+
+    def rebuild_teams(self):
+        """
+        Build teams based on the draft choices.
+        This method should be called after all draft rounds are completed.
+        """
+        if not self.captains:
+            raise ValueError("Draft must have captains to build teams.")
+
+        if not self.tournament:
+            raise ValueError("Draft must be associated with a tournament.")
+
+        for team in self.tournament.teams.all():
+            team.delete()
+
+        for captain in self.captains.all():
+            team = Team.objects.create(
+                name=f"{self.tournament.name} {captain.username}",
+                captain=captain,
+                tournament=self.tournament,
+            )
+            for draft_round in self.draft_rounds.all():
+                if draft_round.picker == captain:
+                    team.members.add(draft_round.choice)
+            team.save()
+
+    def go_back(self):
+        """
+        Go back to the previous draft round.
+        This method should be called when a captain wants to undo their last pick.
+        """
+        last_round = self.draft_rounds.last()
+        if last_round:
+            last_round.delete()
+            return True
+        return False
+
+
+class DraftRound(models.Model):
+    draft = models.ForeignKey(
+        Draft, related_name="draft_rounds", on_delete=models.CASCADE, 
+    )
+    captain = models.ForeignKey(
+        User, related_name="draft_rounds_captained", on_delete=models.CASCADE
+    )
+    pick_number = models.IntegerField(
+        default=1,
+        blank=True,
+        help_text="pick number starts at 1, and counts all picks",
+    )
+    pick_phase = models.IntegerField(
+        default=1,
+        blank=True,
+        help_text="pick phase is only increase after all captains have picked once",
+    )
+
+    choice = models.ForeignKey(
+        User, related_name="draftrounds_choice", on_delete=models.CASCADE
+    )
+
+    @property
+    def team(self):
+        if not self.draft:
+            raise ValueError("Draft must be associated with a draft.")
+
+        return Team.objects.filter(
+            tournament=self.draft.tournament, captain=self.captain
+        ).first()
+
+    def add_to_team(self):
+        if not self.draft:
+            raise ValueError("Draft must be associated with a draft.")
+
+        team = self.team
+        if self.choice in team.members.all():
+            raise ValueError(
+                f"{self.choice.username} is already a member of {team.name}"
+            )
+
+        team.members.add(self.choice)
+        team.save()
+
+    def __str__(self):
+        return f"{self.picker.username} picked {self.choice.username} in {self.tournament.name}"
