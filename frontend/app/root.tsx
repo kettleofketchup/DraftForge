@@ -13,7 +13,6 @@ import { Toaster } from '~/components/ui/sonner';
 
 import type { Route } from './+types/root';
 import './app.css';
-import Box from '@mui/material/Box';
 import ResponsiveAppBar from './components/navbar/navbar';
 import Footer from './components/footer';
 import { useEffect, useMemo, useState } from 'react';

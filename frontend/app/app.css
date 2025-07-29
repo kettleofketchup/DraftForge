@@ -70,8 +70,6 @@
   color: #888;
 }
 
-
-
 a {
   font-weight: 500;
   color: #646cff;
@@ -151,8 +149,6 @@ button:focus-visible {
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-
-
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -199,7 +195,7 @@ button:focus-visible {
   --sidebar-ring: oklch(0.704 0.04 256.788);
 }
 .dark {
-  --background: #242424;
+  --background: oklch(0.129 0.042 264.695);
   --foreground: oklch(0.984 0.003 247.858);
   --card: oklch(0.208 0.042 265.755);
   --card-foreground: oklch(0.984 0.003 247.858);
@@ -243,4 +239,4 @@ button:focus-visible {
   body {
     @apply bg-background text-foreground;
   }
-} */
+} 

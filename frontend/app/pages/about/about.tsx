@@ -1,15 +1,8 @@
 import { useState } from 'react';
 
-import dtx from '../../assets/dtx.gif';
-import Avatar from '@mui/material/Avatar';
 
-import { Icon } from '@iconify/react';
-import Popover from '@mui/material/Popover';
-import Typography from '@mui/material/Typography';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import Box from '@mui/material/Box';
-import AppBar from '@mui/material/AppBar';
+
+
 import Placeholder from '~/components/placeholder';
 
 export function About() {
