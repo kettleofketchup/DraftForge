@@ -99,7 +99,6 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  /* background-color: #1a1a1a; */
   cursor: pointer;
   transition: border-color 0.25s;
 }
@@ -195,7 +194,7 @@ button:focus-visible {
   --sidebar-ring: oklch(0.704 0.04 256.788);
 }
 .dark {
-  --background: oklch(0.129 0.042 264.695);
+  --background: #242424;
   --foreground: oklch(0.984 0.003 247.858);
   --card: oklch(0.208 0.042 265.755);
   --card-foreground: oklch(0.984 0.003 247.858);
@@ -239,4 +238,4 @@ button:focus-visible {
   body {
     @apply bg-background text-foreground;
   }
-} 
+}
