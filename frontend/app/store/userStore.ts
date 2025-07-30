@@ -164,20 +164,27 @@ export const useUserStore = create<UserState>()(
           get().addUser(user);
         }
         const tournaments = get().tournamentsByUser(user);
-        if (tournaments.length > 0) {
-          console.log('User has tournaments:', tournaments);
+        if (tournaments.length == 0) {
           return;
         }
-        tournaments.map((tournament) => {
-          tournament.users = tournament.users.map((u) => {
+        console.log('User tournaments', tournaments);
+        for (const tournament of tournaments) {
+          var change = false;
+          console.log('User tournament: ', tournament.pk, user);
+
+          tournament.users = tournament.users?.map((u) => {
             if (u.pk === user.pk) {
+              console.log('Updating user in tournament:', tournament.pk, user);
+              change = true;
               return user;
             }
             return u;
           });
-        });
-        for (const tournament of tournaments) {
-          get().setTournament(tournament);
+          console.log('Updating tournament with user:', tournament.users, user);
+          if (change) {
+            console.log('Setting tournament with updated user:', tournament);
+            get().setTournament(tournament);
+          }
         }
       },
       clearUser: () => set({ currentUser: {} as UserType }),
@@ -235,12 +242,19 @@ export const useUserStore = create<UserState>()(
           return {};
         });
       },
-      tournamentsByUser: (user) =>
-        get().tournaments.filter(
+      tournamentsByUser: (user) => {
+        var tourns = get().tournaments;
+        if (tourns.length === 0) {
+          if (get().tournament) tourns.push(get().tournament);
+        }
+        tourns = tourns.filter(
           (tournament) =>
             Array.isArray(tournament?.users) &&
             tournament.users.some((u) => u.pk === user?.pk),
-        ),
+        );
+
+        return tourns;
+      },
       setGames: (games) => set({ games }),
       getGames: async () => {
         try {

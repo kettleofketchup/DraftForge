@@ -28,7 +28,10 @@ const menuItems = () => {
         <a href="/about">About us</a>
       </li>
       <li>
-        <a href="/tournaments"> Tournaments</a>
+        <a href="/tournaments" className="z-auto">
+          {' '}
+          Tournaments
+        </a>
       </li>
 
       <li>
@@ -85,7 +88,7 @@ export const ResponsiveAppBar: React.FC = memo(() => {
   };
 
   return (
-    <div className=" sticky top-0 navbar bg-base-100 shadow-sm p-0">
+    <div className=" sticky z-50 top-0 navbar bg-base-100 shadow-sm p-0">
       <div className="navbar-start">
         {dropdown()}
         {dtxLogo()}

@@ -10,13 +10,12 @@ import { useShallow } from 'zustand/react/shallow';
 import { useUserStore } from '~/store/userStore';
 
 export default function TournamentTabs() {
+  const users = useUserStore((state) => state.users); // Zustand setter
 
-    const users = useUserStore((state) => state.users); // Zustand setter
-
-    const getUsers = useUserStore((state) => state.getUsers); // Zustand setter
-    useEffect(() => {
-      getUsers();
-    }, []);
+  const getUsers = useUserStore((state) => state.getUsers); // Zustand setter
+  useEffect(() => {
+    getUsers();
+  }, []);
 
   const tabClass =
     () => `rounded-full px-3 py-1 bg-gray-900 text-sm/6 font-semibold text-white
@@ -41,7 +40,6 @@ export default function TournamentTabs() {
     return tournament.teams.length;
   }, [tournament.teams]);
 
-
   const gameCount = useMemo(() => {
     // Assuming you have a way to get the players array, e.g., from props or context
     if (!tournament || !tournament.games) {
@@ -50,13 +48,13 @@ export default function TournamentTabs() {
     return tournament.games.length;
   }, [tournament.games]);
   return (
-    <div className="flex w-full justify-center px-4 pt-2">
-      <div className="w-full max-w-xxl">
+    <div className="@container flex w-full justify-center px-4 pt-2">
+      <div className=" w-full ">
         <Tabs
           defaultValue="players"
           className="flex w-full justify-center gap-2 rounded-full p-1 align-middle"
         >
-          <TabsList className="content-center flex w-full justify-center gap-2 rounded-full p-1 align-middle">
+          <TabsList className="container content-center flex w-full justify-center gap-2 rounded-full p-1 align-middle mx-auto">
             <TabsTrigger value="players">Players ({playerCount})</TabsTrigger>
             <TabsTrigger value="teams">Teams ({teamCount})</TabsTrigger>
             <TabsTrigger value="games">Games ({gameCount})</TabsTrigger>

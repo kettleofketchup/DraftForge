@@ -180,7 +180,6 @@ export const UserCard: React.FC<Props> = memo(
           {Object.entries(user.positions)
             .filter(([_, value]) => value)
             .map(([pos]) => (
-
               <span key={pos} className="badge badge-info p-1">
                 {PositionEnum[pos as keyof typeof PositionEnum]}
               </span>
@@ -202,11 +201,43 @@ export const UserCard: React.FC<Props> = memo(
         </div>
       );
     };
-
+    const topBar = () => {
+      if (compact) {
+        return (
+          <>
+            <div className="flex items-center gap-2 justify-center">
+              {userHeader()}
+              <div className="flex justify-end">
+                {(currentUser.is_staff || currentUser.is_superuser) && (
+                  <UserEditModal user={new User(user)} />
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2 py-4 justify-center">
+              {avatar()}
+            </div>
+          </>
+        );
+      } else
+        return (
+          <div className="flex items-center gap-2 justify-start">
+            {avatar()}
+            {userHeader()}
+            {(currentUser.is_staff || currentUser.is_superuser) && (
+              <UserEditModal user={new User(user)} />
+            )}
+          </div>
+        );
+    };
     return (
       <div
         key={`usercard:${getKeyName()} base`}
-        className="px-6 py-4 content-center [content-visibility: auto] [contain-intrinsic-size: 400px 220px]"
+        className="flex w-full
+        sm:gap-2 md:gap-4 
+        py-4 
+        justify-center
+        content-center
+        [content-visibility: auto] [contain-intrinsic-size: 400px 220px]"
       >
         <motion.div
           initial={{ opacity: 0 }}
@@ -225,13 +256,7 @@ export const UserCard: React.FC<Props> = memo(
             focus:outline-offset-2 focus:outline-violet-500
             focus:outline-offset-2 active:bg-violet-900"
         >
-          <div className="flex items-center gap-2 justify-start">
-            {avatar()}
-            {userHeader()}
-            {(currentUser.is_staff || currentUser.is_superuser) && (
-              <UserEditModal user={new User(user)} />
-            )}
-          </div>
+          {topBar()}
 
           <div className="mt-2 space-y-2 text-sm">
             {viewMode()}

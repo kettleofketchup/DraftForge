@@ -93,8 +93,15 @@ export const PlayersTab: React.FC = memo(() => {
   };
   const renderPlayers = () => {
     return (
-      <ScrollArea className=" h-30%  [content-visibility: auto] whitespace-nowrap p-5">
-        <div className="w-full content-center grid gap-2 mt-4 grid-cols-2 xl:grid-cols-3 justify-center [content-visibility: auto]">
+      <ScrollArea className=" h-30%  [content-visibility: auto] whitespace-nowrap mx-1 p-0 py-4">
+        <div
+          className="w-full content-center grid gap-2 mt-4 grid-cols-1 
+        sm:grid-cols-2
+        lg:grid-cols-3
+         xl:grid-cols-4
+         2xl:grid-cols-5
+         3xl:grid-cols-6 justify-center [content-visibility: auto] sm:gap-x-4 md:gap-x-6 lg:gap-x-4"
+        >
           {filteredUsers?.map((user) => (
             <UserCard
               user={user as UserClassType}
@@ -110,10 +117,10 @@ export const PlayersTab: React.FC = memo(() => {
   };
 
   return (
-    <div className="p-5 container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out">
+    <div className="py-5 px-3 mx-auto container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out">
       {hasErrors()}
 
-      <div className="grid grid-cols-2 gap-5 items-start pt-5 ">
+      <div className="grid grid-cols-2 gap-5 items-start pt-5  ">
         <div className="flex self-center place-self-stretch">
           <SearchUserDropdown
             users={tournament.users}
@@ -121,7 +128,7 @@ export const PlayersTab: React.FC = memo(() => {
             setQuery={setQuery}
           />
         </div>
-        <div className="flex pr-5 place-self-end">
+        <div className="flex px-5 place-self-end">
           <AddPlayerModal
             users={allUsers}
             query={addPlayerQuery}

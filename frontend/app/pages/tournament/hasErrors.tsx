@@ -27,12 +27,14 @@ export const hasErrors = () => {
   useEffect(() => {
     createBadUsers();
   }, []);
+  useEffect(() => {
+    createBadUsers();
+  }, [tournament.users]);
 
   return (
     <>
       {badUsers.length > 0 && (
         <div className="flex flex-col items-start justify-center align-centerzs p-4 h-full">
-
           <div className="flex flex-row gap-5 w-full ">
             <div className="text-red-500 font-bold text-center w-full pb-5">
               <span className="text-lg">⚠️</span> Some players have no MMR.

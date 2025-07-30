@@ -31,7 +31,7 @@ export function UsersPage() {
     if (!discordUsers || discordUsers.length === 0) {
       getDiscordUsers();
     }
-    
+
     getUsers();
   }, []);
   const filteredUsers =
@@ -71,8 +71,8 @@ export function UsersPage() {
         <div
           className="grid grid-flow-row-dense grid-auto-rows
         align-middle content-center justify-center
-         grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4
-         mb-0 mt-0 p-0 bg-base-900  w-full"
+         grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4
+         mb-0 mt-0 p-0 bg-base-900  w-full gap-2 md:gap-4 lg:gap-6"
         >
           {filteredUsers?.map((u: UserType) => (
             <UserCard

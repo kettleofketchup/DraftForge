@@ -134,7 +134,7 @@ export const TeamsTab: React.FC = memo(() => {
   if (!tournament || !tournament.users || tournament.users.length === 0) {
     return (
       <>
-        <div className="flex flex-col items-start p-4 h-full">
+        <div className="flex flex-col items-start p-4 h-full w-full">
           <div className="self-end p-5 pb-2 pt-2">
             <AddTeamsModal users={allUsers} />
           </div>

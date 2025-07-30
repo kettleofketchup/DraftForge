@@ -6,6 +6,7 @@ import type {
   GuildMembers,
   TeamsType,
   TeamType,
+  TournamentsType,
   TournamentType,
   UsersType,
   UserType,
@@ -60,9 +61,9 @@ export async function get_dtx_members(): Promise<GuildMembers> {
   }
 }
 
-export async function getTournaments(): Promise<UsersType> {
-  const response = await axios.get<TournamentType>(`/tournaments`);
-  return response.data as UsersType;
+export async function getTournaments(): Promise<TournamentsType> {
+  const response = await axios.get<TournamentsType>(`/tournaments`);
+  return response.data as TournamentsType;
 }
 
 export async function getTeams(): Promise<TeamsType> {
