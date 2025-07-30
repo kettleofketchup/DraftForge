@@ -1,11 +1,15 @@
 import type {
+  DraftRoundType,
+  DraftType,
   GamesType,
   GameType,
+  GuildMembers,
   TeamsType,
   TeamType,
   TournamentType,
-} from '../tournament/types';
-import type { GuildMembers, UsersType, UserType } from '../user/types';
+  UsersType,
+  UserType,
+} from '~/index';
 import axios from './axios';
 
 export async function fetchCurrentUser(): Promise<UserType> {
@@ -122,4 +126,29 @@ export async function updateTeam(
 }
 export async function deleteTeam(pk: number): Promise<void> {
   await axios.delete(`/teams/${pk}/`);
+}
+
+export async function createDraft(
+  pk: number,
+  data: Partial<DraftType>,
+): Promise<DraftType> {
+  const response = await axios.post<DraftType>(`/drafts/${pk}/`, data);
+  return response.data;
+}
+
+export async function deleteDraft(pk: number): Promise<void> {
+  await axios.delete(`/drafts/${pk}/`);
+}
+
+
+export async function createDraftRound(
+  pk: number,
+  data: Partial<DraftRoundType>,
+): Promise<DraftRoundType> {
+  const response = await axios.post<DraftRoundType>(`/draftrounds/register`, data);
+  return response.data;
+}
+
+export async function deleteDraftRound(pk: number): Promise<void> {
+  await axios.delete(`/draftrounds/${pk}/`);
 }

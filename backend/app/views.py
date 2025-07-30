@@ -22,9 +22,11 @@ from social_django.utils import load_strategy, psa
 from backend import settings
 
 from .decorators import render_to
-from .models import CustomUser, Team, Tournament
+from .models import CustomUser, Draft, DraftRound, Team, Tournament
 from .permissions import IsStaff
 from .serializers import (
+    DraftRoundSerializer,
+    DraftSerializer,
     GameSerializer,
     TeamSerializer,
     TournamentSerializer,
@@ -180,6 +182,33 @@ class TournamentView(viewsets.ModelViewSet):
         return super(TournamentView, self).get_permissions()
 
 
+@permission_classes((IsStaff,))
+class TournamentView(viewsets.ModelViewSet):
+    serializer_class = TournamentSerializer
+    queryset = Tournament.objects.all()
+    http_method_names = [
+        "get",
+        "post",
+        "put",
+        "patch",
+        "delete",
+        "head",
+        "options",
+        "trace",
+    ]
+
+    @permission_classes((IsStaff,))
+    def patch(self, request, *args, **kwargs):
+        print(request.data)
+        return self.partial_update(request, *args, **kwargs)
+
+    def get_permissions(self):
+        self.permission_classes = [IsStaff]
+        if self.request.method == "GET":
+            self.permission_classes = [AllowAny]
+        return super(TournamentView, self).get_permissions()
+
+
 class TeamView(viewsets.ModelViewSet):
     serializer_class = TeamSerializer
     queryset = Team.objects.all()
@@ -204,6 +233,60 @@ class TeamView(viewsets.ModelViewSet):
         return self.partial_update(request, *args, **kwargs)
 
 
+@permission_classes((IsStaff,))
+class DraftView(viewsets.ModelViewSet):
+    serializer_class = DraftSerializer
+    queryset = Draft.objects.all()
+    http_method_names = [
+        "get",
+        "post",
+        "put",
+        "patch",
+        "delete",
+        "head",
+        "options",
+        "trace",
+    ]
+
+    @permission_classes((IsStaff,))
+    def patch(self, request, *args, **kwargs):
+        print(request.data)
+        return self.partial_update(request, *args, **kwargs)
+
+    def get_permissions(self):
+        self.permission_classes = [IsStaff]
+        if self.request.method == "GET":
+            self.permission_classes = [AllowAny]
+        return super(DraftView, self).get_permissions()
+
+
+@permission_classes((IsStaff,))
+class DraftRoundView(viewsets.ModelViewSet):
+    serializer_class = DraftRoundSerializer
+    queryset = DraftRound.objects.all()
+    http_method_names = [
+        "get",
+        "post",
+        "put",
+        "patch",
+        "delete",
+        "head",
+        "options",
+        "trace",
+    ]
+
+    @permission_classes((IsStaff,))
+    def patch(self, request, *args, **kwargs):
+        print(request.data)
+        return self.partial_update(request, *args, **kwargs)
+
+    def get_permissions(self):
+        self.permission_classes = [IsStaff]
+        if self.request.method == "GET":
+            self.permission_classes = [AllowAny]
+        return super(DraftRoundView, self).get_permissions()
+
+
 class UserCreateView(generics.CreateAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsStaff]
@@ -225,9 +308,7 @@ def current_user(request):
             }
         )
     else:
-        return Response(
-   
-        )
+        return Response()
 
 
 @api_view(["GET"])
@@ -387,4 +468,14 @@ class TeamCreateView(generics.CreateAPIView):
 
 class TournamentCreateView(generics.CreateAPIView):
     serializer_class = TournamentSerializer
+    permission_classes = [IsStaff]
+
+
+class DraftCreateView(generics.CreateAPIView):
+    serializer_class = DraftSerializer
+    permission_classes = [IsStaff]
+
+
+class DraftRoundCreateView(generics.CreateAPIView):
+    serializer_class = DraftRoundSerializer
     permission_classes = [IsStaff]

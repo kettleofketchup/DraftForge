@@ -4,9 +4,13 @@ from rest_framework import routers
 
 from app import views as app_views
 from app.views import (
+    DraftCreateView,
+    DraftRoundCreateView,
     GameCreateView,
     TeamCreateView,
     TeamView,
+    DraftView,
+    DraftRoundView,
     TournamentCreateView,
     TournamentView,
     UserCreateView,
@@ -21,6 +25,16 @@ router = routers.DefaultRouter()
 router.register(r"users", UserView, "users")
 router.register(r"tournaments", TournamentView, "tournaments")
 router.register(r"teams", TeamView, "teams")
+router.register(
+    r"drafts",
+    DraftView,
+    "drafts",
+)
+router.register(
+    r"draftrounds",
+    DraftRoundView,
+    "draftrounds",
+)
 
 from django.views.generic.base import RedirectView
 
@@ -52,4 +66,6 @@ urlpatterns = [
         get_discord_voice_channel_activity,
         name="discord-voice-activity",
     ),
+    path("api/draft/register", DraftCreateView.as_view()),
+    path("api/draftround/register", DraftRoundCreateView.as_view()),
 ]

@@ -283,18 +283,7 @@ class DraftRound(models.Model):
             tournament=self.draft.tournament, captain=self.captain
         ).first()
 
-    def add_to_team(self):
-        if not self.draft:
-            raise ValueError("Draft must be associated with a draft.")
 
-        team = self.team
-        if self.choice in team.members.all():
-            raise ValueError(
-                f"{self.choice.username} is already a member of {team.name}"
-            )
-
-        team.members.add(self.choice)
-        team.save()
 
     def __str__(self):
         return f"{self.picker.username} picked {self.choice.username} in {self.tournament.name}"

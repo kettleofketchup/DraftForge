@@ -1,6 +1,7 @@
-import type { UserType, UsersType } from '../user/types';
-import type { TOURNAMENT_TYPE, STATE_CHOICES} from './constants';
+import type { UserType } from '../user/types';
+import type { STATE_CHOICES, TOURNAMENT_TYPE } from './constants';
 
+import type { DraftType } from '~/index';
 
 export declare interface TeamType {
   [key: string]: any;
@@ -11,7 +12,7 @@ export declare interface TeamType {
   captain?: UserType;
   dropin_members?: UserType[];
   left_members?: UserType[];
-
+  draft?: DraftType;
   tournament?: number;
   current_points?: number;
 
