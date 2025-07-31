@@ -7,7 +7,8 @@ import type { UserType } from '../user/types';
 import { useUserStore } from '../../store/userStore';
 
 import { Button } from '~/components/ui/button';
-import { fetchCurrentUser } from '../api/api';
+import { getLogger } from '~/index';
+const log = getLogger('login');
 type UserProps = {
   user: UserType;
 };
@@ -38,6 +39,8 @@ export const UserAvatarImg: React.FC<UserProps> = memo(({ user }) => {
     </>
   );
 });
+
+import { logout } from '~/components/api/api';
 export const ProfileButton: React.FC = () => {
   const currentUser = useUserStore((state) => state.currentUser); // Zustand user state
   const navigate = useNavigate();
@@ -46,7 +49,7 @@ export const ProfileButton: React.FC = () => {
   useEffect(() => {}, [currentUser.username]);
   const handleClick = () => {
     setShowPopover((prev) => !prev);
-    console.log('Show popover');
+    log.debug('Show popover');
   };
   const hidePopover = () => {
     setShowPopover(false);
@@ -56,10 +59,9 @@ export const ProfileButton: React.FC = () => {
     setShowPopover(false);
   });
   const logoutClick = async () => {
-    console.log('Logout clicked');
+    log.debug('Logout clicked');
     clearUser();
-    navigate('/api/logout');
-    fetchCurrentUser();
+    await logout();
   };
   const showPopoverOver = () => {
     return (
@@ -138,6 +140,8 @@ type props = {};
 export const LoginWithDiscordButton: React.FC<props> = () => {
   const currentUser = useUserStore((state) => state.currentUser); // Zustand user state
   const hasHydrated = useUserStore((state) => state.hasHydrated); // Zustand user state
+
+  useEffect(() => {}, [currentUser]);
 
   if (!hasHydrated) {
     return (

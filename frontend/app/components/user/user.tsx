@@ -82,7 +82,7 @@ export class User implements UserClassType {
   // Mutates the current instance with values from a GuildMember
   setFromGuildMember(member: GuildMember): void {
     if (!member) {
-      throw new Error('Guild member is not defined.');
+      console.log('Guild member is not defined.');
     }
     if (!member.user) {
       throw new Error('Guild member is missing user info.');

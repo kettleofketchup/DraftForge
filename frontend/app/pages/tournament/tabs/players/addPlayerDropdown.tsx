@@ -8,8 +8,8 @@ import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 
 import { useState, type FormEvent } from 'react';
+import { AvatarUrl } from '~/index';
 import { useUserStore } from '~/store/userStore';
-
 interface Props {
   addedUsers?: UserType[];
   query: string;
@@ -37,8 +37,7 @@ export const AddPlayerDropdown: React.FC<Props> = ({
         )
       : users.filter(
           (person) =>
-          !addedUsers?.some(
-            (added) => added?.pk === person?.pk) &&
+            !addedUsers?.some((added) => added?.pk === person?.pk) &&
             (person?.username?.toLowerCase().includes(query.toLowerCase()) ||
               person?.nickname?.toLowerCase().includes(query.toLowerCase())),
         );
@@ -108,11 +107,7 @@ export const AddPlayerDropdown: React.FC<Props> = ({
                 >
                   <div className="flex items-center gap-2">
                     <img
-                      src={
-                        user?.avatar
-                          ? `https://cdn.discordapp.com/avatars/${user?.discordId}/${user?.avatar}`
-                          : `https://ui-avatars.com/api/?rounded=True?name=${user?.username}`
-                      }
+                      src={AvatarUrl(user)}
                       alt={user?.username}
                       className="w-8 h-8 rounded-full"
                     />

@@ -15,6 +15,8 @@ interface Props {
   defaultValue?: string;
 }
 
+import { AvatarUrl } from '~/index';
+
 export const SearchUserDropdown: React.FC<Props> = ({
   users,
   query,
@@ -43,7 +45,8 @@ export const SearchUserDropdown: React.FC<Props> = ({
 
   const handleSearchUserSelect = (userName: UserType | string) => {
     if (typeof userName === 'object') {
-      userName = userName?.username || userName.nickname || '';
+      console.log(userName);
+      userName = userName?.username || userName?.nickname || '';
     }
     if (userName === undefined || userName === '') {
       setSearchedPerson(new User({} as UserClassType));
@@ -87,11 +90,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
                 >
                   <div className="flex items-center gap-2">
                     <img
-                      src={
-                        user.avatar
-                          ? `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}`
-                          : 'https://via.placeholder.com/32'
-                      }
+                      src={AvatarUrl(user)}
                       alt={user.username}
                       className="w-8 h-8 rounded-full"
                     />

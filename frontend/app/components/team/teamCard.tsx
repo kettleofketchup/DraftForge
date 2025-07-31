@@ -8,6 +8,7 @@ import type { UserType } from '../user/types';
 import TeamEditModal from './teamCard/editModal';
 import { TeamTable } from './teamTable/teamTable';
 
+
 interface Props {
   team: TeamType;
   edit?: boolean;

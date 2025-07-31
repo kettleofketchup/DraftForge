@@ -8,7 +8,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useUserStore } from '../../store/userStore';
 import { get_dtx_members } from '../api/api';
 import type { GuildMember, GuildMembers, UsersType } from '../user/types';
-
+import { AvatarUrl } from '~/index';
 interface Props {
   query?: string;
   setQuery?: React.Dispatch<React.SetStateAction<string>>;
@@ -99,18 +99,13 @@ const DiscordUserDropdown: React.FC<Props> = ({
       >
         <div className="flex items-center gap-2">
           <img
-            src={
-              user.user.avatar
-                ? `https://cdn.discordapp.com/avatars/${user.user.id}/${user.user.avatar}`
-                : `https://ui-avatars.com/api/?rounded=True?name=${user.user.username}`
-            }
+            src={AvatarUrl(user)}
             alt={user.user.username}
             className="w-8 h-8 rounded-full"
           />
 
           <span>{getNickname()}</span>
 
-       
           {isUserAlreadyAdded(user) && (
             <span className="rounded-full text-center bg-gray-900 text-sm text-red-200 p-1">
               Already Added

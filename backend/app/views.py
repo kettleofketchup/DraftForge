@@ -311,6 +311,9 @@ def current_user(request):
         return Response()
 
 
+from django.core.cache import cache
+
+
 @api_view(["GET"])
 @permission_classes([IsStaff])
 def get_discord_members(request):
@@ -324,6 +327,12 @@ def get_discord_members(request):
     after = None
     limit = 1000
     members = []
+    cache_key = f"discord_members_{guild_id}"
+    cached_members = cache.get(cache_key)
+
+    if cached_members:
+        return JsonResponse({"members": cached_members}, safe=True)
+
     while True:
         params = {"limit": limit}
         if after:
@@ -342,7 +351,8 @@ def get_discord_members(request):
         except requests.exceptions.RequestException as e:
             return JsonResponse({"error": str(e)}, status=500)
 
-    return JsonResponse({"members": members}, safe=False)
+    cache.set(cache_key, members, timeout=15)
+    return JsonResponse({"members": members}, safe=True)
 
 
 @api_view(["GET"])
@@ -353,12 +363,17 @@ def get_user_guilds(request):
     ]
     url = "https://discord.com/api/users/@me/guilds"
     headers = {"Authorization": f"Bearer {access_token}"}
+    cache_key = f"discord_guilds"
+    cached_guilds = cache.get(cache_key)
+    if cached_guilds:
+        return JsonResponse({"guilds": cached_guilds}, safe=True)
 
     try:
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         guilds = response.json()
-        return JsonResponse({"guilds": guilds}, safe=False)
+        cache.set(cache_key, guilds, timeout=5)
+        return JsonResponse({"guilds": guilds}, safe=True)
     except requests.exceptions.RequestException as e:
         return JsonResponse({"error": str(e)}, status=500)
 
@@ -379,6 +394,11 @@ def get_discord_voice_channel_activity(request):
             {"error": f"Discord API setting missing in Django settings: {e.name}"},
             status=500,
         )
+    cache_key = f"voice_activity_{guild_id}"
+
+    cached_voice_activity = cache.get(cache_key)
+    if cached_voice_activity:
+        return JsonResponse({"voice_activity": cached_voice_activity}, safe=True)
 
     headers = {"Authorization": f"Bot {bot_token}"}
 
@@ -434,7 +454,7 @@ def get_discord_voice_channel_activity(request):
                         "members": members_list,
                     }
                 )
-
+        cache.set(cache_key, active_channels_data, timeout=15)
         return JsonResponse({"active_voice_channels": active_channels_data}, safe=True)
 
     except requests.exceptions.RequestException as e:

@@ -1,13 +1,8 @@
-import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
-import type {
-  GuildMember,
-  UserType,
-  UserClassType,
-} from '~/components/user/types';
+import { useState } from 'react';
+import type { UserClassType, UserType } from '~/components/user/types';
 
 import { User } from '~/components/user/user';
-
+import { AvatarUrl } from '~/index';
 interface Props {
   users: UserType[];
 }
@@ -20,22 +15,17 @@ export const UsersDropdown: React.FC<Props> = ({ users }) => {
   );
 
   const showUser = (user: UserType) => {
-    let avatarUrl: string;
-    if (user.avatar) {
-      avatarUrl = user.avatarUrl;
-    } else {
-      avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.nickname || user.username)}`;
-    }
+ 
 
     return (
       <>
         <li
-          key={user.pk || user.username}
+          key={`userdropdown-${user.pk || user.username}`}
           className="flex items-center gap-3 py-2"
         >
           <div className="avatar">
             <div className="w-8 h-8 rounded-full">
-              <img src={avatarUrl} alt={user.nickname || user.username} />
+              <img src={AvatarUrl(user)} alt={user.nickname || user.username} />
             </div>
           </div>
           <a

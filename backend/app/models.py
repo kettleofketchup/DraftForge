@@ -102,6 +102,12 @@ class Team(models.Model):
         blank=True,
         null=True,
     )
+    draft_order = models.PositiveSmallIntegerField(
+        default=0,
+        blank=True,
+        null=True,
+        help_text="Order in which a team picks their players in the draft",
+    )
     members = models.ManyToManyField(
         User, related_name="teams_as_member", blank=True, null=True
     )
@@ -184,6 +190,9 @@ class Draft(models.Model):
 
     tournament = models.ForeignKey(
         Tournament, related_name="draft", on_delete=models.CASCADE
+    )
+    captain_order = models.JSONField(
+        default=list, help_text="List of captain pks in draft order"
     )
 
     def __str__(self):

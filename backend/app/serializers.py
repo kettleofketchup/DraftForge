@@ -171,7 +171,14 @@ class TeamSerializer(serializers.ModelSerializer):
     )
     members = TournamentUserSerializer(many=True, read_only=True)
     dropin_members = TournamentUserSerializer(many=True, read_only=True)
-
+    draft_order = serializers.IntegerField(
+        source="draft_order",
+        default=0,
+        help_text="Order in which a team picks their players in the draft",
+    )
+    current_points = serializers.IntegerField(
+        source="current_points", read_only=False, write_only=False, default=0
+    )
     member_ids = serializers.PrimaryKeyRelatedField(
         source="members",
         many=True,
@@ -227,6 +234,7 @@ class TeamSerializer(serializers.ModelSerializer):
             "tournament_id",  # Allow setting tournament by ID
             "members",
             "dropin_members",
+            "draft_order",
             "current_points",
             "tournament",
         )

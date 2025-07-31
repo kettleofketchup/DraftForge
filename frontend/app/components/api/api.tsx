@@ -12,6 +12,8 @@ import type {
   UserType,
 } from '~/index';
 import axios from './axios';
+import { getLogger } from '~/index';
+const log = getLogger('api');
 
 export async function fetchCurrentUser(): Promise<UserType> {
   const response = await axios.get<UserType>(`/current_user`);
@@ -54,7 +56,7 @@ export async function updateUser(
 export async function get_dtx_members(): Promise<GuildMembers> {
   const response = await axios.get<GuildMembers>(`/dtx_members`);
   if ('members' in response.data) {
-    console.log(response.data.members);
+    log.debug(response.data.members);
     return response.data.members as GuildMembers;
   } else {
     throw new Error("Key 'members' not found in response data");
@@ -136,6 +138,10 @@ export async function fetchDraft(pk: number): Promise<DraftType> {
 export async function fetchDraftRound(pk: number): Promise<DraftRoundType> {
   const response = await axios.get<DraftRoundType>(`/draftrounds/${pk}/`);
   return response.data;
+}
+
+export async function logout(): Promise<void> {
+  await axios.post(`/logout`);
 }
 
 export async function createDraft(

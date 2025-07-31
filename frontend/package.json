@@ -34,6 +34,7 @@
     "axios": "^1.8.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "consola": "^3.4.2",
     "daisyui": "^5.0.12",
     "date-fns": "^4.1.0",
     "discord-api-types": "^0.38.1",
