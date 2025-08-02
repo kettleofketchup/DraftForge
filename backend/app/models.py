@@ -65,11 +65,7 @@ class Tournament(models.Model):
         on_delete=models.SET_NULL,
         related_name="tournaments_won",
     )
-    captains = models.ManyToManyField(
-        CustomUser,
-        blank=True,
-        related_name="tournaments_as_captain",
-    )
+
     state = models.CharField(max_length=20, choices=STATE_CHOICES, default="future")
     tournament_type = models.CharField(
         max_length=20, choices=TOURNAMNET_TYPE_CHOICES, default="double_elimination"
@@ -79,7 +75,7 @@ class Tournament(models.Model):
         return self.name
 
     @property
-    def captains_on_teams(self):
+    def captains(self):
         """
         Returns all users who are captains in this tournament.
         This is used to populate the draft choices.

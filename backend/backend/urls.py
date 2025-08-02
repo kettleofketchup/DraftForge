@@ -6,11 +6,11 @@ from app import views as app_views
 from app.views import (
     DraftCreateView,
     DraftRoundCreateView,
+    DraftRoundView,
+    DraftView,
     GameCreateView,
     TeamCreateView,
     TeamView,
-    DraftView,
-    DraftRoundView,
     TournamentCreateView,
     TournamentView,
     UserCreateView,
@@ -37,6 +37,8 @@ router.register(
 )
 
 from django.views.generic.base import RedirectView
+
+from app.functions.tournament import create_team_from_captain
 
 urlpatterns = [
     path("done/", RedirectView.as_view(url="http://localhost:5173")),
@@ -68,4 +70,9 @@ urlpatterns = [
     ),
     path("api/draft/register", DraftCreateView.as_view()),
     path("api/draftround/register", DraftRoundCreateView.as_view()),
+    path(
+        "api/tournaments/create-team-from-captain",
+        create_team_from_captain,
+        name="create-team-from-captain",
+    ),
 ]

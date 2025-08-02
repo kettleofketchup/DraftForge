@@ -9,10 +9,12 @@ export declare interface TeamType {
   date?: string;
   members?: UserType[];
   pk?: number;
+
   captain?: UserType;
   dropin_members?: UserType[];
   left_members?: UserType[];
   draft?: DraftType;
+  draft_order?: number;
   tournament?: number;
   current_points?: number;
 

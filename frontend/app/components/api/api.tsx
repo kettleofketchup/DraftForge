@@ -13,6 +13,7 @@ import type {
 } from '~/index';
 import { getLogger } from '~/lib/logger';
 import axios from './axios';
+import type { CreateTeamFromCaptainAPI } from './types';
 const log = getLogger('api');
 
 export async function fetchCurrentUser(): Promise<UserType> {
@@ -169,4 +170,14 @@ export async function createDraftRound(
 
 export async function deleteDraftRound(pk: number): Promise<void> {
   await axios.delete(`/draftrounds/${pk}/`);
+}
+
+export async function createTeamFromCaptain(
+  data: CreateTeamFromCaptainAPI,
+): Promise<TournamentType> {
+  const response = await axios.post(
+    `/tournaments/create-team-from-captain`,
+    data,
+  );
+  return response.data as TournamentType;
 }
