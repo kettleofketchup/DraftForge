@@ -3,7 +3,8 @@ import type { TournamentType, UserType } from '~/index';
 export interface DraftType {
   [key: string]: any;
   tournament?: TournamentType;
-  rounds?: DraftRoundType[];
+  users_remaining?: UserType[];
+  draft_rounds?: DraftRoundType[];
 }
 
 export interface DraftRoundType {

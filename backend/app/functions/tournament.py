@@ -47,6 +47,7 @@ class CreateTournamentTeamRequestSerializer(serializers.Serializer):
 @permission_classes([IsStaff])
 def create_team_from_captain(request):
     serializer = CreateTournamentTeamRequestSerializer(data=request.data)
+
     if serializer.is_valid():
         tournament_pk = serializer.validated_data["tournament_pk"]
         user_pk = serializer.validated_data["user_pk"]
@@ -64,11 +65,12 @@ def create_team_from_captain(request):
         return Response({"error": "User not found"}, status=404)
 
         # Create a new team and add the user as a member (or captain)
-    if tournament.draft.exists():
-        return Response(
-            {"error": "Draft is active,delete draft before updating captains"},
-            status=201,
-        )
+    try:
+        draft = tournament.draft.get()
+        draft.delete()
+
+    except Draft.DoesNotExist:
+        pass  # No draft exists, continue
     if Team.objects.filter(tournament=tournament, captain=user).exists():
         if draft_order is 0:
             logging.debug(
@@ -124,37 +126,48 @@ def generate_draft_rounds(request):
         return Response({"error": "Tournament not found"}, status=404)
 
         # Create a new team and add the user as a member (or captain)
-    if tournament.draft.exists():
-        tournament.draft.delete()
-
+    try:
+        tournament.draft.get().delete()
+    except Draft.DoesNotExist:
+        pass  # No draft to delete
+    logging.debug(f"Creating draft for tournament {tournament.name}")
     draft = Draft.objects.create(tournament=tournament)
     draft.save()
-    max_picks = tournament.captains.count() * 5
-    pick = 0
-    phase = 0
-    order = tournament.teams.order_by("draft_order")
+    draft.build_rounds()
+    return Response(TournamentSerializer(tournament).data, status=201)
 
-    def pick(team):
 
-        draftRound = DraftRound.objects.create(
-            draft=draft,
-            captain=team.captain,
-            pick_number=pick,
-            pick_phase=phase,
-        )
-        draftRound.save()
-        pick += 1
-        if pick % 5 is 0:
-            phase += 1
+@api_view(["POST"])
+@permission_classes([IsStaff])
+def rebuild_team(request):
+    serializer = CreateDraftRounds(data=request.data)
 
-    while pick < max_picks:
-        for team in range(tournament.teams.order_by("draft_order")):
-            pick(team)
-            if pick >= max_picks:
-                break
-        for team in range(tournament.teams.order_by("draft_order").reverse()):
+    if serializer.is_valid():
+        tournament_pk = serializer.validated_data["tournament_pk"]
 
-            pick(team)
-            if pick >= max_picks:
-                break
+    else:
+        return Response(serializer.errors, status=400)
+
+    try:
+        tournament = Tournament.objects.get(pk=tournament_pk)
+
+    except Tournament.DoesNotExist:
+        return Response({"error": "Tournament not found"}, status=404)
+
+        # Create a new team and add the user as a member (or captain)
+
+    try:
+        draft = tournament.draft
+        logging.debug(f"Draft already exists for tournament {tournament.name}")
+    except Draft.DoesNotExist:
+        logging.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")
+        draft = Draft.objects.create(tournament=tournament)
+        draft.save()
+
+    if not draft.draft_rounds.exists():
+        draft.build_rounds()
+        draft.save()
+    draft.rebuild_teams()
+    draft.save()
+    tournament = Tournament.objects.get(pk=tournament_pk)
     return Response(TournamentSerializer(tournament).data, status=201)

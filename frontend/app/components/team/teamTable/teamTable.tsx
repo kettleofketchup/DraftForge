@@ -28,6 +28,7 @@ const positions = (user: UserType) => {
     </div>
   );
 };
+
 export const TeamTable: React.FC<TeamTableProps> = ({ team }) => {
   const members = team.members?.sort((a, b) => {
     if (!a.mmr && !b.mmr) return 0;

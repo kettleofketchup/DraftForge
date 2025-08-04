@@ -1,3 +1,5 @@
+import logging
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -190,14 +192,15 @@ class Game(models.Model):
 class Draft(models.Model):
 
     tournament = models.ForeignKey(
-        Tournament, related_name="draft", on_delete=models.CASCADE
-    )
-    captain_order = models.JSONField(
-        default=list, help_text="List of captain pks in draft order"
+        Tournament,
+        related_name="draft",
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
     )
 
     def __str__(self):
-        return f"{self.radiant_team.name} vs {self.dire_team.name} in {self.tournament.name}"
+        return f"Draft {self.pk} in {self.tournament.name}"
 
     @property
     def teams(self):
@@ -242,25 +245,80 @@ class Draft(models.Model):
         Build teams based on the draft choices.
         This method should be called after all draft rounds are completed.
         """
-        if not self.captains:
-            raise ValueError("Draft must have captains to build teams.")
-
+        logging.debug(f"Creating draft round for {self.tournament.name} ")
         if not self.tournament:
             raise ValueError("Draft must be associated with a tournament.")
 
+        if not self.tournament.captains:
+            raise ValueError("Draft must have captains to build teams.")
+        logging.debug(f"Creating draft round 2 for {self.tournament.name} ")
         for team in self.tournament.teams.all():
-            team.delete()
+            logging.debug(
+                f"Rebuilding team {team.name} for tournament {self.tournament.name}"
+            )
+            team.members.clear()
+            team.members.add(team.captain)
+            team.save()
 
         for captain in self.captains.all():
-            team = Team.objects.create(
-                name=f"{self.tournament.name} {captain.username}",
+
+            team = Team.objects.get(
                 captain=captain,
                 tournament=self.tournament,
             )
+
             for draft_round in self.draft_rounds.all():
-                if draft_round.picker == captain:
-                    team.members.add(draft_round.choice)
-            team.save()
+                if not draft_round.captain == captain:
+                    continue
+                logging.debug(
+                    f"Rebuild_TEAMS: Creating draft round for {team.name} for tournament {self.tournament.name}"
+                )
+                team.members.add(draft_round.choice)
+                team.save()
+
+    def build_rounds(self):
+        logging.debug(f"Building draft rounds")
+        max_picks = self.tournament.captains.count() * 5
+
+        pick = 0
+        phase = 0
+        order = self.tournament.teams.order_by("draft_order")
+
+        def pick_player(draft, team, pick, phase):
+
+            draftRound = DraftRound.objects.create(
+                draft=draft,
+                captain=team.captain,
+                pick_number=pick,
+                pick_phase=phase,
+            )
+            draftRound.save()
+
+            logging.debug(
+                f"Draft round {draftRound.pk} created for {team.name} in phase {phase}, pick {pick}"
+            )
+            pick += 1
+            if pick % 5 == 0:
+                phase += 1
+
+            return pick, phase
+
+        while pick < max_picks:
+            for team in self.tournament.teams.order_by("draft_order").all():
+                pick, phase = pick_player(self, team, pick, phase)
+                logging.debug(f" phase {phase}, pick {pick}")
+                if pick >= max_picks:
+                    break
+            for team in self.tournament.teams.order_by("draft_order").reverse():
+
+                pick, phase = pick_player(self, team, pick, phase)
+                logging.debug(f" phase {phase}, pick {pick}")
+
+                if pick >= max_picks:
+                    break
+        for round in self.draft_rounds.all():
+            logging.debug(f"Draft round {round.pk} created for {self.tournament.name}")
+        self.save()
 
     def go_back(self):
         """
@@ -295,7 +353,11 @@ class DraftRound(models.Model):
     )
 
     choice = models.ForeignKey(
-        User, related_name="draftrounds_choice", on_delete=models.CASCADE
+        User,
+        related_name="draftrounds_choice",
+        on_delete=models.CASCADE,
+        blank=True,
+        null=True,
     )
 
     @property

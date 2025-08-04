@@ -1,3 +1,5 @@
+from venv import create
+
 from django.contrib import admin
 from django.urls import include, path
 from rest_framework import routers
@@ -38,7 +40,11 @@ router.register(
 
 from django.views.generic.base import RedirectView
 
-from app.functions.tournament import create_team_from_captain
+from app.functions.tournament import (
+    create_team_from_captain,
+    generate_draft_rounds,
+    rebuild_team,
+)
 
 urlpatterns = [
     path("done/", RedirectView.as_view(url="http://localhost:5173")),
@@ -74,5 +80,15 @@ urlpatterns = [
         "api/tournaments/create-team-from-captain",
         create_team_from_captain,
         name="create-team-from-captain",
+    ),
+    path(
+        "api/tournaments/init-draft",
+        generate_draft_rounds,
+        name="init-draft",
+    ),
+    path(
+        "api/tournaments/draft-rebuild",
+        rebuild_team,
+        name="draft-rebuild",
     ),
 ]

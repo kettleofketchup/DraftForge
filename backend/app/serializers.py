@@ -1,34 +1,11 @@
+from ast import alias
+from typing import TypeAlias
+
 from django.contrib.auth.models import User
 from django.db import transaction
 from rest_framework import serializers
 
 from .models import CustomUser, Draft, DraftRound, Game, Team, Tournament
-
-
-class DraftTournamentSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = Tournament
-        fields = (
-            "pk",
-            "name",
-            "date_played",
-            "teams",
-            "users",
-            "captains" "winning_team",
-        )
-
-
-class TeamTournamentSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = Tournament
-        fields = (
-            "pk",
-            "name",
-            "date_played",
-            "winning_team",
-        )
 
 
 class TournamentUserSerializer(serializers.ModelSerializer):
@@ -45,15 +22,52 @@ class TournamentUserSerializer(serializers.ModelSerializer):
             "steamid",
             "avatarUrl",
             "mmr",
-            "steamid",
+        )
+
+
+class TournamentSerializerBase(serializers.ModelSerializer):
+    users = TournamentUserSerializer(many=True, read_only=True)
+    captains = TournamentUserSerializer(many=True, read_only=True)
+    tournament_type = serializers.CharField(read_only=False)
+
+    class Meta:
+        model = Tournament
+        fields = (
+            "pk",
+            "name",
+            "date_played",
+            "users",
+            "captains",
+            "tournament_type",
+        )
+
+
+class TeamSerializerForTournament(serializers.ModelSerializer):
+    members = TournamentUserSerializer(many=True, read_only=True)
+    dropin_members = TournamentUserSerializer(many=True, read_only=True)
+    left_members = TournamentUserSerializer(many=True, read_only=True)
+    captain = TournamentUserSerializer(many=False, read_only=True)
+    draft_order = serializers.IntegerField()
+
+    class Meta:
+        model = Team
+        fields = (
+            "pk",
+            "name",
+            "members",
+            "dropin_members",
+            "left_members",
+            "captain",
+            "draft_order",
         )
 
 
 class DraftRoundForDraftSerializer(serializers.ModelSerializer):
+
     captain = TournamentUserSerializer(many=False, read_only=True)
-    pick_phase = serializers.IntegerField(source="pick_phase")
-    pick_number = serializers.IntegerField(source="pick_number")
-    users_remaining = TournamentUserSerializer(many=True, read_only=True)
+    pick_phase = serializers.IntegerField()
+    pick_number = serializers.IntegerField()
+
     choice = TournamentUserSerializer(many=False, read_only=True)
 
     class Meta:
@@ -63,60 +77,73 @@ class DraftRoundForDraftSerializer(serializers.ModelSerializer):
             "pick_phase",
             "pick_number",
             "choice",
+        )
+
+
+class DraftSerializerForTournament(serializers.ModelSerializer):
+
+    draft_rounds = DraftRoundForDraftSerializer(
+        many=True,
+        read_only=True,
+    )
+    users_remaining = TournamentUserSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Draft
+        fields = (
+            "pk",
+            "draft_rounds",
             "users_remaining",
+        )
+
+
+class TournamentSerializerDraft(serializers.ModelSerializer):
+    teams = TeamSerializerForTournament(
+        many=True, read_only=True
+    )  # Return full team objects
+    users = TournamentUserSerializer(many=True, read_only=True)
+
+    tournament_type = serializers.CharField(read_only=False)
+    captains = TournamentUserSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Tournament
+        fields = (
+            "pk",
+            "name",
+            "date_played",
+            "users",
+            "teams",  # Include full team objects
+            "captains",
+            "tournament_type",
         )
 
 
 class DraftSerializer(serializers.ModelSerializer):
 
-    tournament = TeamTournamentSerializer(
+    tournament = TournamentSerializerDraft(
         many=False,
         read_only=True,
     )
+    users_remaining = TournamentUserSerializer(many=True, read_only=True)
 
-    tournament_id = serializers.PrimaryKeyRelatedField(
-        source="tournament",
-        many=False,
-        queryset=Tournament.objects.all(),
-        write_only=True,
-    )
     draft_rounds = DraftRoundForDraftSerializer(
         many=True,
         read_only=True,
-    )
-    draft_round_ids = serializers.PrimaryKeyRelatedField(
-        source="draft_rounds",
-        many=True,
-        queryset=DraftRound.objects.all(),
-        write_only=True,
-        required=False,
-    )
-
-    members = TournamentUserSerializer(many=True, read_only=True)
-    dropin_members = TournamentUserSerializer(many=True, read_only=True)
-
-    user_ids = serializers.PrimaryKeyRelatedField(
-        source="users",
-        many=True,
-        queryset=CustomUser.objects.all(),
-        write_only=True,
-        required=False,
     )
 
     class Meta:
         model = Draft
         fields = (
             "pk",
-            "team1",
-            "team2",
-            "winning_team",
+            "tournament",
+            "draft_rounds",
+            "users_remaining",
         )
 
 
 class DraftRoundSerializer(serializers.ModelSerializer):
-    draft = DraftSerializer(many=False, read_only=True)
-    draft_id = serializers.PrimaryKeyRelatedField(
-        source="draft",
+    draft = serializers.PrimaryKeyRelatedField(
         many=False,
         queryset=Draft.objects.all(),
         write_only=True,
@@ -130,9 +157,9 @@ class DraftRoundSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False,
     )
-    pick_phase = serializers.IntegerField(source="pick_phase")
-    pick_number = serializers.IntegerField(source="pick_number")
-    users_remaining = TournamentUserSerializer(many=True, read_only=True)
+    pick_phase = serializers.IntegerField()
+    pick_number = serializers.IntegerField()
+
     choice = TournamentUserSerializer(many=False, read_only=True)
     choice_id = serializers.PrimaryKeyRelatedField(
         source="choice",
@@ -146,19 +173,17 @@ class DraftRoundSerializer(serializers.ModelSerializer):
         model = DraftRound
         fields = (
             "draft",
-            "draft_id",
             "captain",
             "captain_id",
             "pick_phase",
             "pick_number",
             "choice",
             "choice_id",
-            "users_remaining",
         )
 
 
 class TeamSerializer(serializers.ModelSerializer):
-    tournament = TeamTournamentSerializer(
+    tournament = TournamentSerializerBase(
         many=False,
         read_only=True,
     )
@@ -233,8 +258,11 @@ class TeamSerializer(serializers.ModelSerializer):
 
 
 class TournamentSerializer(serializers.ModelSerializer):
-    teams = TeamSerializer(many=True, read_only=True)  # Return full team objects
+    teams = TeamSerializerForTournament(
+        many=True, read_only=True
+    )  # Return full team objects
     users = TournamentUserSerializer(many=True, read_only=True)
+    draft = serializers.SerializerMethodField()
 
     user_ids = serializers.PrimaryKeyRelatedField(
         source="users",
@@ -246,12 +274,27 @@ class TournamentSerializer(serializers.ModelSerializer):
     tournament_type = serializers.CharField(read_only=False)
     captains = TournamentUserSerializer(many=True, read_only=True)
 
+    def get_draft(self, obj):
+        """
+        Get the draft for this tournament if it exists
+        """
+        try:
+            # Check if draft exists and get the first (and hopefully only) one
+            if hasattr(obj, "draft") and obj.draft.exists():
+                draft = obj.draft.first()
+                return DraftSerializerForTournament(draft).data
+            return None
+        except Exception as e:
+            # If there's no draft or any error, return None
+            return None
+
     class Meta:
         model = Tournament
         fields = (
             "pk",
             "name",
             "date_played",
+            "draft",
             "users",
             "teams",  # Include full team objects
             "winning_team",

@@ -13,7 +13,7 @@ import type {
 } from '~/index';
 import { getLogger } from '~/lib/logger';
 import axios from './axios';
-import type { CreateTeamFromCaptainAPI } from './types';
+import type { CreateTeamFromCaptainAPI, InitDraftRoundsAPI, RebuildDraftRoundsAPI } from './types';
 const log = getLogger('api');
 
 export async function fetchCurrentUser(): Promise<UserType> {
@@ -141,6 +141,16 @@ export async function fetchDraftRound(pk: number): Promise<DraftRoundType> {
   return response.data;
 }
 
+export async function updateDraftRound(
+  pk: number,
+  data: Partial<DraftRoundType>,
+): Promise<DraftRoundType> {
+  const response = await axios.patch<DraftRoundType>(
+    `/draftrounds/${pk}/`,
+    data,
+  );
+  return response.data;
+}
 export async function logout(): Promise<void> {
   await axios.post(`/logout`);
 }
@@ -179,5 +189,19 @@ export async function createTeamFromCaptain(
     `/tournaments/create-team-from-captain`,
     data,
   );
+  return response.data as TournamentType;
+}
+
+export async function initDraftRounds(
+  data: InitDraftRoundsAPI,
+): Promise<TournamentType> {
+  const response = await axios.post(`/tournaments/init-draft`, data);
+  return response.data as TournamentType;
+}
+
+export async function DraftRebuild(
+  data: RebuildDraftRoundsAPI,
+): Promise<TournamentType> {
+  const response = await axios.post(`/tournaments/draft-rebuild`, data);
   return response.data as TournamentType;
 }

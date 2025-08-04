@@ -4,6 +4,9 @@ import { useShallow } from 'zustand/react/shallow';
 import axios from '~/components/api/axios'; // Assuming axios is configured for your API
 import { useUserStore } from '~/store/userStore';
 import TournamentTabs from './tabs/TournamentTabs';
+
+import { getLogger } from '~/lib/logger';
+const log = getLogger('TournamentDetailPage');
 export const TournamentDetailPage: React.FC = () => {
   const { pk } = useParams<{ pk: string }>();
   const tournament = useUserStore(useShallow((state) => state.tournament));

@@ -10,7 +10,7 @@ import {
   getTournaments,
 } from '~/components/api/api';
 import axios from '~/components/api/axios';
-import type { DraftType } from '~/components/draft/types';
+import type { DraftRoundType, DraftType } from '~/components/draft/types';
 import type {
   GameType,
   TeamType,
@@ -50,10 +50,10 @@ interface UserState {
   teams: TeamType[];
   tournament: TournamentType;
   draft: DraftType;
-
+  setDraft: (draft: DraftType) => void;
   tournaments: TournamentType[];
-  curDraftRound: number;
-  setCurDraftRound: (round: number) => void;
+  curDraftRound: DraftRoundType;
+  setCurDraftRound: (round: DraftRoundType) => void;
   curDraft: DraftType;
   setCurDraft: (draft: DraftType) => void;
 
@@ -86,6 +86,7 @@ export const useUserStore = create<UserState>()(
     (set, get) => ({
       tournament: {} as TournamentType,
       draft: get()?.tournament?.draft as DraftType,
+      setDraft: (draft: DraftType) => set({ draft }),
       tournaments: [] as TournamentType[],
       game: {} as GameType,
       games: [] as GameType[],
@@ -93,17 +94,19 @@ export const useUserStore = create<UserState>()(
       team: {} as TeamType,
       curDraft: {} as DraftType,
 
-      curDraftRound: 0,
       setCurDraft: (draft: DraftType) => set({ curDraft: draft }),
       updateCurrentDraft: async () => {
-        if (!get().curDraft.pk) {
+        if (!get().draft.pk) {
           console.debug('Current draft does not have a primary key (pk).');
           return;
         }
-        const draft = await fetchDraft(get().curDraft.pk);
+        const draft = await fetchDraft(get().draft.pk);
         set({ curDraft: draft });
       },
-      setCurDraftRound: (round: number) => set({ curDraftRound: round }),
+      curDraftRound: {} as DraftRoundType,
+
+      setCurDraftRound: (round: DraftRoundType) =>
+        set({ curDraftRound: round }),
       currentUser: new User({} as UserType),
       userQuery: '',
       addUserQuery: '',

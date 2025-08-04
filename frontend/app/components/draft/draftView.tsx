@@ -1,27 +1,27 @@
 // Holds the general draft view
 
 import { useEffect } from 'react';
-import type { TournamentType } from '~/index';
+import type { DraftRoundType, DraftType, TournamentType } from '~/index';
 import { useUserStore } from '~/store/userStore';
+import { DraftTable } from './draftTable';
 
-const DraftView: React.FC = () => {
+interface DraftViewProps {
+  curRound: DraftRoundType;
+}
+
+const DraftView: React.FC<DraftViewProps> = ({ curRound }) => {
   const tournament: TournamentType = useUserStore((state) => state.tournament);
+  const draft: DraftType = useUserStore((state) => state.draft);
 
-  useEffect(() => {}, [tournament.teams]);
-  
+  const curDraftRound: DraftRoundType = useUserStore((state) => state.curDraftRound);
+
+  useEffect(() => {}, [curDraftRound]);
+
   return (
     <div className="p-4">
       <h1 className="text-2xl font-bold mb-2">Draft View</h1>
-      {tournament ? (
-        <div>
-          <p className="text-lg">Tournament: {tournament.name}</p>
-          <p className="text-base text-neutral-content">
-            Status: {tournament.state}
-          </p>
-        </div>
-      ) : (
-        <span className="loading loading-spinner loading-md"></span>
-      )}
+
+      <DraftTable curRound={curRound} />
     </div>
   );
 };

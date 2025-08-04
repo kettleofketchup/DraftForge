@@ -11,30 +11,84 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '~/components/ui/dialog';
+import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { Badge } from '../ui/badge';
 import DraftView from './draftView';
+import { InitDraftButton } from './initDraftDialog';
+import type { DraftType, DraftRoundType } from './types';
 
+const log = getLogger('DraftModal');
 export const DraftModal: React.FC = () => {
   const tournament = useUserStore((state) => state.tournament);
   const draft = useUserStore((state) => state.draft);
-
-  const curDraftRound = useUserStore((state) => state.curDraftRound);
+  const setDraft = useUserStore((state) => state.setDraft);
+  const curRound = useUserStore((state) => state.curDraftRound);
+  const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
+  const [draftIndex, setDraftIndex] = useState<number>(0);
   const [open, setOpen] = useState(false);
   const prevRound = () => {
-    //TODO
+    if (!draft) return;
+    if (!draft.draft_rounds) return;
+    log.debug('Prev Round');
+    log.debug('Current Index', draftIndex, draft.draft_rounds.length);
+
+    if (draftIndex > 0) {
+      log.debug('Setting new round', draftIndex, draft.draft_rounds.length);
+      setDraftIndex(draftIndex - 1);
+      setCurDraftRound(draft.draft_rounds[draftIndex - 1]);
+    }
+    log.debug(curRound);
   };
   const nextRound = () => {
-    //TODO
+    if (!draft) return;
+    if (!draft.draft_rounds) return;
+    log.debug('Next Round');
+    log.debug('Current Index', draftIndex, draft.draft_rounds.length);
+
+    // Fix: Check if next index is within bounds
+    if (draftIndex < draft.draft_rounds.length - 1) {
+      log.debug('Setting new round', draftIndex + 1, draft.draft_rounds.length);
+      setCurDraftRound(draft.draft_rounds[draftIndex + 1]);
+      setDraftIndex(draftIndex + 1);
+    } else {
+      log.debug('Already at the last round');
+    }
+    log.debug('Current round after update:', curRound);
   };
+
   const totalRounds = (tournament?.teams?.length || 0) * 5;
 
-  useEffect(() => {}, [draft]);
+  useEffect(() => {
+    log.debug('Tournament draft data:', tournament?.draft);
+
+    // Only set draft data if tournament and draft exist
+    if (tournament?.draft) {
+      setDraft(tournament.draft);
+
+      // Only set current round if draft_rounds exist and has at least one round
+      if (tournament.draft.draft_rounds && tournament.draft.draft_rounds.length > 0) {
+        setDraftIndex(0);
+        setCurDraftRound(tournament.draft.draft_rounds[0]);
+        log.debug('Set initial draft round:', tournament.draft.draft_rounds[0]);
+      } else {
+        log.warn('No draft rounds available');
+        setCurDraftRound({} as DraftRoundType);
+      }
+    } else {
+      log.warn('No draft data available in tournament');
+      setDraft({} as DraftType);
+      setCurDraftRound({} as DraftRoundType);
+    }
+  }, [tournament, setDraft, setCurDraftRound]);
+
+  useEffect(() => {
+    log.debug('Current draft round state:', curRound);
+  }, [curRound]);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button className="btn btn-primary">
-          {' '}
           <ClipboardPen /> Draft
         </Button>
       </DialogTrigger>
@@ -46,12 +100,27 @@ export const DraftModal: React.FC = () => {
 
         <div className="flex flex-row items-center gap-4 mb-4">
           <Badge>
-            Round {draft?.roundNumber ?? 0}/{totalRounds}
+            Round {curRound?.pick_number ?? 0}/{totalRounds}
           </Badge>
-          <Badge>Next Round</Badge>
+          <span>
+            Current Captain:
+            {curRound?.captain?.nickname || curRound?.captain?.username || 'No captain selected'}
+          </span>
+          <InitDraftButton />
         </div>
         <div className="overflow-y-auto max-h-[70vh] pr-2">
-          <DraftView />
+          {curRound && Object.keys(curRound).length > 0 ? (
+            <DraftView curRound={curRound} />
+          ) : (
+            <div className="text-center p-4">
+              <p>No draft round data available</p>
+              <p className="text-sm text-gray-500">
+                Tournament: {tournament?.name || 'None'},
+                Draft: {draft?.pk ? 'Available' : 'None'},
+                Rounds: {draft?.draft_rounds?.length || 0}
+              </p>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <div className="flex flex-row items-center gap-4 mb-4">

@@ -134,56 +134,38 @@ export const TeamsTab: React.FC = memo(() => {
   useEffect(() => {
     log.debug('Tournament users:', tournament.users);
   }, [tournament, filteredTeams]);
-  if (!tournament || !tournament.users || tournament.users.length === 0) {
-    return (
-      <>
-        <div className="flex flex-col items-start p-4 h-full w-full">
-          <div className="self-end p-5 pb-2 pt-2">
-            <AddTeamsModal users={allUsers} />
-          </div>
-        </div>
-        <div className="flex justify-center items-center h-screen">
-          <div className="alert alert-info">
-            <span>No teams available for this tournament.</span>
-          </div>
-        </div>
-      </>
-    );
-  }
 
   let navigate = useNavigate();
 
   return (
-    <>
-      <div className="p-5 container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out">
-        {hasErrors()}
-        <div className="flex flex-row justify-center gap-2 gap-x-8 p-4 pt-2 pb-6 items-center">
-          {<AddTeamsModal users={tournament.users} teamSize={5} />}
-          <CaptainSelectionModal />
-          <DraftModal />
-        </div>
-        <div className="w-full">
-          <SearchTeamsDropdown
-            teams={tournament.teams}
-            query={query}
-            setQuery={setQuery}
-            className="w-full"
-            defaultValue="search for users or team names"
-          />
-        </div>
-        <div className="w-full content-center grid gap-2 mt-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 justify-center ">
-          {filteredTeams?.map((team) => (
-            <TeamCard
-              team={team}
-              compact={true}
-              saveFunc={'save'}
-              key={`TeamCard-${team.pk}`}
-              removeCallBack={removeUser}
-              removeToolTip={'Delete from tournament'}
-            />
-          ))}
-        </div>
+    <div className="p-5 container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out">
+      {hasErrors()}
+      <div className="flex flex-row justify-center gap-2 gap-x-8 p-4 pt-2 pb-6 items-center">
+        <AddTeamsModal users={tournament.users} teamSize={5} />
+        <CaptainSelectionModal />
+        <DraftModal />
       </div>
-    </>
+      <div className="w-full">
+        <SearchTeamsDropdown
+          teams={tournament.teams}
+          query={query}
+          setQuery={setQuery}
+          className="w-full"
+          defaultValue="search for users or team names"
+        />
+      </div>
+      <div className="w-full content-center grid gap-2 mt-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 justify-center ">
+        {filteredTeams?.map((team) => (
+          <TeamCard
+            team={team}
+            compact={true}
+            saveFunc={'save'}
+            key={`TeamCard-${team.pk}`}
+            removeCallBack={removeUser}
+            removeToolTip={'Delete from tournament'}
+          />
+        ))}
+      </div>
+    </div>
   );
 });

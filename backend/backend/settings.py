@@ -44,10 +44,13 @@ BASE_DIR_PATH = Path(BASE_DIR)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = "v*kswpdyi3+*-=q4a)7&_!xwb%@udm1vi56r690!!j6e*p3^mn"
+import logging
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
+DEBUG = False
+if "DEBUG" in os.environ and os.environ["DEBUG"].lower() == "true":
+    logging.basicConfig(level=logging.DEBUG)
+    DEBUG = True
 
 # Application definition
 
