@@ -12,7 +12,7 @@ import { PositionEnum } from '~/components/user';
 import type { UserType } from '~/components/user/types';
 import { AvatarUrl } from '~/index';
 interface TeamTableProps {
-  team: TeamType;
+  team?: TeamType;
 }
 const positions = (user: UserType) => {
   if (!user.positions) return null;
@@ -30,13 +30,22 @@ const positions = (user: UserType) => {
 };
 
 export const TeamTable: React.FC<TeamTableProps> = ({ team }) => {
-  const members = team.members?.sort((a, b) => {
+  // Early return if team is undefined or has no members
+  if (!team || !team.members || team.members.length === 0) {
+    return (
+      <div className="p-4 text-center text-gray-500">
+        <p>No team members found</p>
+      </div>
+    );
+  }
+
+  const members = team.members.sort((a, b) => {
     if (!a.mmr && !b.mmr) return 0;
     if (!a.mmr) return 1; // Treat undefined MMR as lower
     if (!b.mmr) return -1; // Treat undefined MMR as lower
     if (a.mmr >= b.mmr) return -1;
-
     if (a.mmr < b.mmr) return 1;
+    return 0; // Default case
   });
   return (
     <Table>
@@ -49,7 +58,7 @@ export const TeamTable: React.FC<TeamTableProps> = ({ team }) => {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {team.members?.map((user: UserType, idx: number) => (
+        {members.map((user: UserType, idx: number) => (
           <TableRow key={`TeamTableRow-${user.pk}`}>
             <TableCell>
               <div className="flex items-center gap-2">

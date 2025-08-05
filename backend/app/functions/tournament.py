@@ -66,8 +66,9 @@ def create_team_from_captain(request):
 
         # Create a new team and add the user as a member (or captain)
     try:
-        draft = tournament.draft.get()
-        draft.delete()
+        draft = tournament.draft.all()
+        for d in draft:
+            d.delete()
 
     except Draft.DoesNotExist:
         pass  # No draft exists, continue
@@ -157,7 +158,12 @@ def rebuild_team(request):
         # Create a new team and add the user as a member (or captain)
 
     try:
-        draft = tournament.draft
+        draft = tournament.draft.first()
+        if len (tournament.draft.all()) > 1:
+            logging.debug(
+                f"Multiple drafts found for tournament {tournament.name}, deleting all but the first"
+            )
+            tournament.draft.exclude(pk=draft.pk).delete()
         logging.debug(f"Draft already exists for tournament {tournament.name}")
     except Draft.DoesNotExist:
         logging.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")

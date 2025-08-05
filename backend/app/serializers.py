@@ -73,6 +73,7 @@ class DraftRoundForDraftSerializer(serializers.ModelSerializer):
     class Meta:
         model = DraftRound
         fields = (
+            "pk",
             "captain",
             "pick_phase",
             "pick_number",
@@ -172,6 +173,7 @@ class DraftRoundSerializer(serializers.ModelSerializer):
     class Meta:
         model = DraftRound
         fields = (
+            "pk",
             "draft",
             "captain",
             "captain_id",

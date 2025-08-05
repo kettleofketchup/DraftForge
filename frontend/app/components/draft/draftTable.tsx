@@ -10,9 +10,10 @@ import {
 } from '~/components/ui/table';
 import { PositionEnum } from '~/components/user';
 import type { UserType } from '~/components/user/types';
+import { AvatarUrl } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
-import { ChoosePlayerButton } from './choosePlayer/choosePlayerButtons';
+import { ChoosePlayerButton } from './buttons/choosePlayerButtons';
 import type { DraftRoundType } from './types';
 const log = getLogger('draftTable');
 interface DraftTableProps {
@@ -69,7 +70,7 @@ export const DraftTable: React.FC<DraftTableProps> = ({ curRound }) => {
               <div className="flex items-center gap-2">
                 <span className="avatar w-8 h-8">
                   <img
-                    src={user.avatarUrl}
+                    src={AvatarUrl(user)}
                     alt={user.username}
                     className="rounded-full"
                   />
@@ -81,7 +82,7 @@ export const DraftTable: React.FC<DraftTableProps> = ({ curRound }) => {
             <TableCell>{user.positions ? positions(user) : 'N/A'}</TableCell>
 
             <TableCell>
-              <ChoosePlayerButton user={user} curRound = {curRound} />
+              <ChoosePlayerButton user={user} />
             </TableCell>
           </TableRow>
         ))}
