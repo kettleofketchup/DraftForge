@@ -48,31 +48,31 @@ export default function TournamentTabs() {
     return tournament.games.length;
   }, [tournament.games]);
   return (
-    <div className="@container flex w-full justify-center px-4 pt-2">
-      <div className=" w-full ">
-        <Tabs
-          defaultValue="players"
-          className="flex w-full justify-center gap-2 rounded-full p-1 align-middle"
-        >
-          <TabsList className="container content-center flex w-full justify-center gap-2 rounded-full p-1 align-middle mx-auto">
-            <TabsTrigger className="w-full" value="players">Players ({playerCount})</TabsTrigger>
-            <TabsTrigger className="w-full" value="teams">Teams ({teamCount})</TabsTrigger>
-            <TabsTrigger value="games">Games ({gameCount})</TabsTrigger>
-          </TabsList>
-          <TabsContent value="players">
-            {' '}
-            <PlayersTab />
-          </TabsContent>
-          <TabsContent value="teams">
-            {' '}
-            <TeamsTab />
-          </TabsContent>
-          <TabsContent value="games">
-            {' '}
-            <GamesTab />
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
+    <Tabs
+      defaultValue="players"
+      className="flex justify-center rounded-full  align-middle gap-4 sm:-p1 sm:gap-2 sm:w-full"
+    >
+      <TabsList className="container content-center flex w-full justify-center gap-2 rounded-full ">
+        <TabsTrigger className="w-full active:p-1" value="players">
+          Players ({playerCount})
+        </TabsTrigger>
+        <TabsTrigger className="w-full" value="teams">
+          Teams ({teamCount})
+        </TabsTrigger>
+        <TabsTrigger value="games">Games ({gameCount})</TabsTrigger>
+      </TabsList>
+      <TabsContent value="players">
+        {' '}
+        <PlayersTab />
+      </TabsContent>
+      <TabsContent value="teams">
+        {' '}
+        <TeamsTab />
+      </TabsContent>
+      <TabsContent value="games">
+        {' '}
+        <GamesTab />
+      </TabsContent>
+    </Tabs>
   );
 }

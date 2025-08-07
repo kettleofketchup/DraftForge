@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,11 +16,12 @@ import type { TeamType, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { createTeamFromCaptainHook } from './createTeamFromCaptainHook';
-const log = getLogger('updateCaptainButton');
-
 import { DraftOrderButton } from './draftOrder';
+const log = getLogger('updateCaptainButton');
 export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
   const tournament = useUserStore((state) => state.tournament);
+  const isStaff = useUserStore((state) => state.isStaff);
+
   const determineIsCaptain = () => {
     return !!tournament?.captains?.some((c) => c.pk === user.pk);
   };
@@ -38,7 +40,6 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
   };
 
   const [draft_order, setDraftOrder] = useState<string>(getDraftOrder());
-
   const msg = () => (isCaptain ? `Remove` : `Add`);
 
   const getButtonVariant = () => `${isCaptain ? 'destructive' : 'default'}`;
@@ -59,8 +60,13 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
     });
   };
   const dialogBG = () => (isCaptain ? 'bg-red-900' : 'bg-green-900');
+  if (!isStaff()) return <AdminOnlyButton buttonTxt="Change Cpatain" />;
+
   return (
-    <div className="flex flex-row items-center gap-4">
+    <div
+      className="flex flex-col gap-y-2 justify-between 
+    justify-between items-center align-middle w-full md:flex-row md:gap-x-2 md:py-1"
+    >
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <Button variant={getButtonVariant()}>{msg()} Captain</Button>

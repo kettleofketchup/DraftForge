@@ -98,7 +98,7 @@ export const TournamentDetailPage: React.FC = () => {
     );
   };
   return (
-    <div className="container mx-auto p-4">
+    <div className="container px-1 sm:mx-auto sm:p-4">
       {title()}
       <TournamentTabs />
     </div>

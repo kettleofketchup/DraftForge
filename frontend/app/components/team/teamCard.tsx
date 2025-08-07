@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 import type { TeamType } from '~/components/tournament/types';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
-import { deleteUser } from '../api/api';
 import type { UserType } from '../user/types';
 import TeamEditModal from './teamCard/editModal';
 import { TeamTable } from './teamTable/teamTable';
@@ -28,15 +27,7 @@ export const TeamCard: React.FC<Props> = ({
 }) => {
   const [editMode, setEditMode] = useState(edit || false);
 
-  const [form, setForm] = useState<UserType>(team ?? ({} as TeamType));
   const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<
-    Partial<Record<keyof UserType, string>>
-  >({});
-
-  const delUser = useUserStore((state) => state.delUser); // Zustand setter
 
   useEffect(() => {
     if (team) {
@@ -44,42 +35,6 @@ export const TeamCard: React.FC<Props> = ({
     }
   }, [team]);
 
-  useEffect(() => {
-    log.debug(`TeamCard: team updated ${team.name}`);
-  }, [team]);
-  const handleDelete = async (e: FormEvent) => {
-    if (removeCallBack !== undefined) {
-      removeCallBack(e, team);
-      return;
-    }
-    e.stopPropagation();
-    setErrorMessage({}); // clear old errors
-    setIsSaving(true);
-    try {
-      await deleteUser(team?.pk);
-      log.debug('User deleted successfully');
-      setError(false);
-      setForm({ username: 'Success!' } as UserType);
-      delUser(form);
-      // Close the modal
-      const modalCheckbox = document.getElementById(
-        'create_user_modal',
-      ) as HTMLInputElement;
-      if (modalCheckbox) modalCheckbox.checked = false;
-    } catch (err) {
-      log.error('Failed to delete user', err);
-      setErrorMessage(err.response.data);
-
-      setError(true);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-  const [saveCallback, setSaveCallBack] = useState(saveFunc || 'save');
-
-  useEffect(() => {
-    log.debug(`team updated ${team.name}`);
-  }, [team]);
   const getAverageMMR = () => {
     if (!team.members || team.members.length === 0) return 'N/A';
     const totalMMR = team.members.reduce((acc, member) => {

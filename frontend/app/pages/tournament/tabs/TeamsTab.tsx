@@ -1,12 +1,8 @@
-import { memo, useEffect, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
-import { updateTournament } from '~/components/api/api';
+import { memo, useEffect, useState } from 'react';
 import { DraftModal } from '~/components/draft/draftModal';
 import { SearchTeamsDropdown } from '~/components/team/searchTeams';
 import { TeamCard } from '~/components/team/teamCard';
 import { CaptainSelectionModal } from '~/components/tournament/captains/captainSelectionModal';
-import type { TournamentType } from '~/components/tournament/types'; // Adjust the import path as necessary
 import type { UserType } from '~/components/user/types';
 import { getLogger } from '~/lib/logger';
 import { hasErrors } from '~/pages/tournament/hasErrors';
@@ -16,135 +12,61 @@ const log = getLogger('TeamsTab');
 export const TeamsTab: React.FC = memo(() => {
   const tournament = useUserStore((state) => state.tournament);
 
-  const setTournament = useUserStore((state) => state.setTournament);
-
   const allUsers = useUserStore((state) => state.users); // Zustand setter
-  const [tournamentUsers, setTournamentUsers] = useState(
-    tournament.users as UserType[],
-  );
+
   const getCurrentTournament = useUserStore(
     (state) => state.getCurrentTournament,
   ); // Zustand setter
   const [query, setQuery] = useState('');
-  const [addUserQuery, setAddUserQuery] = useState('');
 
   useEffect(() => {
     getCurrentTournament();
   }, [allUsers, tournament.users]);
 
-  const removeUser = async (e: FormEvent, user: UserType) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Implement the logic to remove the user from the tournament
-    log.debug(`Removing user: ${user.username}`);
-    const updatedUsers = tournament.users
-      ?.filter((u) => u.username !== user.username)
-      .map((u) => u.pk);
-
-    log.debug('Updated users:', updatedUsers);
-
-    const updatedTournament = {
-      user_ids: updatedUsers,
-    };
-    if (tournament.pk === undefined) {
-      log.error('Tournament primary key is missing');
-      return;
-    }
-
-    toast.promise(updateTournament(tournament.pk, updatedTournament), {
-      loading: `Creating User ${user.username}.`,
-      success: () => {
-        tournament.users = tournament.users?.filter(
-          (u) => u.username !== user.username,
-        );
-        setTournamentUsers(tournament.users as UserType[]);
-        return `${user.username} has been removed`;
-      },
-      error: (err: any) => {
-        log.error('Failed to update tournament', err);
-        return `${user.username} has been removed`;
-      },
-    });
-    setQuery(''); // Reset query after adding user
-  };
-
-  const addUserCallback = async (user: UserType) => {
-    log.debug(`Adding user: ${user.username}`);
-    // Implement the logic to remove the user from the tournament
-    if (user.pk && tournament.user_ids && user.pk in tournament.user_ids) {
-      log.error('User already exists in the tournament');
-      return;
-    }
-    const updatedUsers = tournament.users?.map((u) => u.pk);
-
-    if (updatedUsers?.includes(user)) {
-      log.debug();
-      log.error('User in the  tournament');
-      return;
-    }
-    const updatedTournament = {
-      user_ids: [...(updatedUsers || []), user.pk],
-    };
-
-    if (tournament.pk === undefined) {
-      log.error('Tournament primary key is missing');
-      return;
-    }
-    toast.promise(
-      updateTournament(
-        tournament.pk,
-        updatedTournament as Partial<TournamentType>,
-      ),
-      {
-        loading: `Creating User ${user.username}.`,
-        success: () => {
-          tournament.users?.push(user);
-          setTournamentUsers(tournament.users as UserType[]);
-          return `${user.username} has been added`;
-        },
-        error: (err: any) => {
-          log.error('Failed to update tournament', err);
-        },
-      },
-    );
-
-    setQuery(''); // Reset query after adding user
-  };
-
   const filteredTeams =
     query === ''
       ? tournament.teams
       : tournament.teams
-          .sort()
           ?.filter((team) => {
             const q = query.toLowerCase();
-            return (
-              team.name?.toLowerCase().includes(q) ||
-              team.users?.some(
-                (user: UserType) =>
-                  user.username?.toLowerCase().includes(q) ||
-                  user.nickname?.toLowerCase().includes(q),
-              )
-            );
-          })
-          .sort((a, b) => {
-            return a.name.localeCompare(b.name);
-          });
 
+            // Check if any user in the team matches the query
+
+            const userMatches = team.members?.some((user: UserType) => {
+              const usernameMatch = user.username?.toLowerCase().includes(q);
+              const nicknameMatch = user.nickname?.toLowerCase().includes(q);
+
+              return usernameMatch || nicknameMatch;
+            });
+
+            // Check if team name matches
+            const teamNameMatch = team.name?.toLowerCase().includes(q);
+
+            return userMatches || teamNameMatch;
+          })
+          .sort((a, b) => a.name.localeCompare(b.name));
   useEffect(() => {
     log.debug('Tournament users:', tournament.users);
   }, [tournament, filteredTeams]);
 
-  let navigate = useNavigate();
+  const teamButtonsView = () => {
+    return (
+      <div
+        className="flex flex-col justify-center items-center  gap-y-4 w-full flex-grow sm:flex-row
+       sm:gap-y-2 sm:gap-x-8 sm:p-4 sm:pt-2 sm:pb-6 "
+      >
+        <AddTeamsModal users={tournament.users} teamSize={5} />
+
+        <CaptainSelectionModal />
+        <DraftModal />
+      </div>
+    );
+  };
 
   return (
     <div className="p-5 container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out">
       {hasErrors()}
-      <div className="flex flex-row justify-center gap-2 gap-x-8 p-4 pt-2 pb-6 items-center">
-        <AddTeamsModal users={tournament.users} teamSize={5} />
-        <CaptainSelectionModal />
-        <DraftModal />
-      </div>
+      {teamButtonsView()}
       <div className="w-full">
         <SearchTeamsDropdown
           teams={tournament.teams}
@@ -161,8 +83,6 @@ export const TeamsTab: React.FC = memo(() => {
             compact={true}
             saveFunc={'save'}
             key={`TeamCard-${team.pk}`}
-            removeCallBack={removeUser}
-            removeToolTip={'Delete from tournament'}
           />
         ))}
       </div>

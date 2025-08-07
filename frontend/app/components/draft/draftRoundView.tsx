@@ -24,6 +24,8 @@ export const DraftRoundView: React.FC = () => {
   );
 
   useEffect(() => {}, [curDraftRound]);
+
+  useEffect(() => {}, [tournament.teams]);
   const teamView = () => {
     if (!draft || !curDraftRound) return null;
     const team = tournament.teams?.find(

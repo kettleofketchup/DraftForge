@@ -138,6 +138,7 @@ export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
               <DialogClose asChild>
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
+              
               <Button
                 type="submit"
                 className="btn btn-primary btn-sm mt-3"

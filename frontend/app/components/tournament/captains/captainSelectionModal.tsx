@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '~/components/ui/dialog';
+import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
 import { useUserStore } from '~/store/userStore';
 import { CaptainTable } from './captainTable';
 export const CaptainSelectionModal: React.FC = () => {
@@ -22,17 +23,20 @@ export const CaptainSelectionModal: React.FC = () => {
       <DialogTrigger asChild>
         <Button className="btn btn-primary">Choose Captains</Button>
       </DialogTrigger>
-      <DialogContent className=" xl:min-w-6xl l:min-w-5xl md:min-w-4xl sm:min-w-2xl min-w-l ">
+      <DialogContent className="xl:min-w-5xl l:min-w-5xl md:min-w-3xl sm:min-w-2xl  ">
         <DialogHeader>
           <DialogTitle>Choose Captains</DialogTitle>
           <DialogDescription>
             Update Captains for {tournament.name}
           </DialogDescription>
         </DialogHeader>
-
-        <div className="overflow-y-auto max-h-[70vh] pr-2">
+        <ScrollArea className="h-[70vh] w-full border rounded-md px-1 overflow-x-auto">
           <CaptainTable />
-        </div>
+          <ScrollBar orientation="vertical" />{' '}
+          {/* Optional: Add a vertical scrollbar */}
+          <ScrollBar orientation="horizontal" />{' '}
+          {/* Optional: Add a horizontal scrollbar */}
+        </ScrollArea>
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline">Close</Button>

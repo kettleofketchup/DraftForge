@@ -1,5 +1,5 @@
 import { toast } from 'sonner';
-import { initDraftRounds } from '~/components/api/api';
+import { DraftRebuild, initDraftRounds } from '~/components/api/api';
 import type { InitDraftRoundsAPI } from '~/components/api/types';
 import type { TournamentType } from '~/index';
 import { getLogger } from '~/lib/logger';
@@ -40,6 +40,19 @@ export const initDraftHook = async ({
       const val = err.response.data;
       log.error('Tournament Draft has failed to Reinitialize!', err);
       return `Failed to Reinitialize tournament draft: ${val}`;
+    },
+  });
+
+  toast.promise(DraftRebuild(data), {
+    loading: `Rebuilding teams...`,
+    success: (data) => {
+      setTournament(data);
+      return `Tournament Draft has been rebuilt!`;
+    },
+    error: (err) => {
+      const val = err.response.data;
+      log.error('Tournament Draft has failed to Rebuild!', err);
+      return `Failed to Rebuild tournament draft: ${val}`;
     },
   });
 };

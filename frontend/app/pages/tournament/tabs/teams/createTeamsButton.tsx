@@ -6,6 +6,7 @@ import {
   fetchTournament,
   updateTeam,
 } from '~/components/api/api';
+import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
 import {
   AlertDialog,
@@ -34,7 +35,7 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
   setDialogOpen,
 }) => {
   const setTournament = useUserStore((state) => state.setTournament);
-
+  const isStaff = useUserStore((state) => state.isStaff);
   const deleteTeams = async () => {
     if (!tournament.teams || tournament.teams.length === 0) {
       return;
@@ -87,10 +88,14 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
         });
       }
     }
-    tournament = await fetchTournament(tournament.pk);
-    setTournament(tournament);
+    if (tournament.pk) {
+      tournament = await fetchTournament(tournament.pk);
+      setTournament(tournament);
+    }
     setDialogOpen(false);
   };
+
+  if (!isStaff()) return <AdminOnlyButton />;
 
   return (
     <AlertDialog>

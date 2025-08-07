@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '~/components/ui/dialog';
-
+import { ScrollArea } from '~/components/ui/scroll-area';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { InitDraftButton } from './buttons/initDraftDialog';
@@ -104,7 +104,7 @@ export const DraftModal: React.FC = () => {
 
   const header = () => {
     return (
-      <div className="flex flex-row items-center gap-x-4">
+      <div className="flex items-center ">
         <DraftRoundCard
           draftRound={curRound}
           maxRounds={totalRounds}
@@ -115,7 +115,7 @@ export const DraftModal: React.FC = () => {
         draft &&
         draft.draft_rounds &&
         draft.draft_rounds[draftIndex + 1] ? (
-          <div className="hidden sm:flex sm:w-full">
+          <div className="hidden lg:flex lg:w-full">
             <DraftRoundCard
               draftRound={draft.draft_rounds[draftIndex + 1]}
               maxRounds={totalRounds}
@@ -139,16 +139,15 @@ export const DraftModal: React.FC = () => {
           <ClipboardPen /> Draft
         </Button>
       </DialogTrigger>
-      <DialogContent className=" xl:min-w-6xl l:min-w-5xl md:min-w-4xl sm:min-w-2xl min-w-l ">
-        <DialogHeader>
-          <DialogTitle>Tournament Draft</DialogTitle>
-          <DialogDescription>
-            Drafting Teams
-            {mainView()}
-          </DialogDescription>
-        </DialogHeader>
 
-        <div className="overflow-y-auto max-h-[55vh] pr-2">
+      <DialogContent className=" min-w-sm  xl:min-w-5xl l:min-w-5xl md:min-w-3xl sm:min-w-2xl ">
+        <ScrollArea className="overflow-y-auto h-screen max-h-[80vh] py-5em pr-2">
+          <DialogHeader>
+            <DialogTitle>Tournament Draft</DialogTitle>
+            <DialogDescription>Drafting Teams</DialogDescription>
+            {mainView()}
+          </DialogHeader>
+
           {curRound && Object.keys(curRound).length > 0 ? (
             <DraftRoundView />
           ) : (
@@ -161,20 +160,22 @@ export const DraftModal: React.FC = () => {
               </p>
             </div>
           )}
-        </div>
-        <DialogFooter>
-          <div className="flex flex-row items-center gap-4 mb-4">
-            <InitDraftButton />
+        </ScrollArea>
 
-            <Button className="btn btn-info" onClick={prevRound}>
-              Prev Round
-            </Button>
-            <Button className="btn btn-info" onClick={nextRound}>
-              Next Round
-            </Button>
-          </div>
+        <DialogFooter className="flex flex-col items-center gap-4 mb-4 md:flex-row">
+          <InitDraftButton />
+
+          <Button
+            className="w-40 sm:w-40 md:w-40 btn btn-info"
+            onClick={prevRound}
+          >
+            Prev Round
+          </Button>
+          <Button className="w-40 btn btn-info" onClick={nextRound}>
+            Next Round
+          </Button>
           <DialogClose asChild>
-            <Button variant="outline">Close</Button>
+            <Button className="w-40">Close</Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>

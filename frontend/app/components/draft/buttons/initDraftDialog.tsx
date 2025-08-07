@@ -35,10 +35,12 @@ export const InitDraftButton: React.FC = () => {
     initDraftHook({ tournament, setTournament });
   };
   return (
-    <div className="flex flex-row items-center gap-4">
+    <div className="flex w-full justify-center ">
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <Button variant={'destructive'}>Restart Draft</Button>
+          <Button className="w-40 sm:w-20%" variant={'destructive'}>
+            Restart Draft
+          </Button>
         </AlertDialogTrigger>
         <AlertDialogContent className={'bg-red-900 text-white'}>
           <AlertDialogHeader>

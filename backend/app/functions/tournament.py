@@ -128,7 +128,8 @@ def generate_draft_rounds(request):
 
         # Create a new team and add the user as a member (or captain)
     try:
-        tournament.draft.get().delete()
+        for draft in tournament.draft.all():
+            draft.delete()
     except Draft.DoesNotExist:
         pass  # No draft to delete
     logging.debug(f"Creating draft for tournament {tournament.name}")
@@ -159,7 +160,7 @@ def rebuild_team(request):
 
     try:
         draft = tournament.draft.first()
-        if len (tournament.draft.all()) > 1:
+        if len(tournament.draft.all()) > 1:
             logging.debug(
                 f"Multiple drafts found for tournament {tournament.name}, deleting all but the first"
             )

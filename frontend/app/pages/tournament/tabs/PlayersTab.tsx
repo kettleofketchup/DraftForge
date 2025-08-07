@@ -2,7 +2,7 @@ import { memo, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { updateTournament } from '~/components/api/api';
 import type { TournamentType } from '~/components/tournament/types'; // Adjust the import path as necessary
-import { ScrollArea } from '~/components/ui/scroll-area';
+import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
@@ -96,7 +96,7 @@ export const PlayersTab: React.FC = memo(() => {
   };
   const renderPlayers = () => {
     return (
-      <ScrollArea className=" h-30%  [content-visibility: auto] whitespace-nowrap mx-1 p-0 py-4">
+      <ScrollArea className=" h-30%  mx-1 p-0 py-4">
         <div
           className="w-full content-center grid gap-2 mt-4 grid-cols-1 
         sm:grid-cols-2
@@ -115,6 +115,7 @@ export const PlayersTab: React.FC = memo(() => {
             />
           ))}
         </div>
+        <ScrollBar id="thisScrollBar" orientation="vertical" />
       </ScrollArea>
     );
   };

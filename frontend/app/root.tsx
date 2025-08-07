@@ -29,6 +29,10 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+  }
+
   useEffect(() => {
     // Make sure to run react-scan only after hydration
     // if (import.meta.env.DEV) {
@@ -40,10 +44,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     });
     // }
   }, []);
-
-  if (import.meta.env.DEV) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-  }
 
   const currentUser = useUserStore((state) => state.currentUser); // Zustand setter
   const getCurrentUser = useUserStore((state) => state.getCurrentUser); // Zustand setter

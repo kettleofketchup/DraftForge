@@ -76,11 +76,11 @@ export const DraftOrderButton: React.FC<{
     return Math.ceil(tournament.users.length / 5);
   };
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-2 md:flex-row">
       <Label htmlFor={id}>Draft Order</Label>
 
       <Select id={id} onValueChange={handleChange} value={draft_order}>
-        <SelectTrigger className="w-[180px]">
+        <SelectTrigger className="w-[80px]">
           <SelectValue placeholder={draft_order} />
         </SelectTrigger>
 

@@ -47,32 +47,14 @@ const TeamsView: React.FC<TeamsViewProps> = ({ teams }) => (
   </div>
 );
 
-const createErrorMessage = (val: Partial<Record<keyof TeamType, string>>) => {
-  if (!val || Object.keys(val).length === 0)
-    return <h5>Error creating team:</h5>;
-
-  return (
-    <div className="text-error">
-      <ul>
-        {Object.entries(val).map(([field, message]) => (
-          <li key={field}>{message}</li>
-        ))}
-      </ul>
-    </div>
-  );
-};
-
 export const AddTeamsModal: React.FC<Props> = ({ users, teamSize = 5 }) => {
-  const getCurrentTournament = useUserStore(
-    (state) => state.getCurrentTournament,
-  );
   const tournament = useUserStore((state) => state.tournament);
 
   const [teams, setTeams] = useState<TeamType[]>(() =>
     createTeams(users, teamSize),
   );
   const [open, setOpen] = useState(false);
-
+  const isStaff = useUserStore((state) => state.isStaff); // Zustand setter
   // Regenerate teams when users or teamSize changes
   React.useEffect(() => {
     setTeams(createTeams(users, teamSize));
@@ -85,7 +67,11 @@ export const AddTeamsModal: React.FC<Props> = ({ users, teamSize = 5 }) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="btn btn-primary">Create Teams</Button>
+        <Button
+          className="btn btn-primary flex w-200px sm:w-auto "
+        >
+          Create Teams
+        </Button>
       </DialogTrigger>
       <DialogContent className=" xl:min-w-6xl l:min-w-5xl md:min-w-4xl sm:min-w-2xl min-w-l ">
         <DialogHeader>
