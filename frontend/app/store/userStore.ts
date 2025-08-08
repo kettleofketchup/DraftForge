@@ -80,12 +80,37 @@ interface UserState {
   getTeams: () => Promise<void>;
   getGames: () => Promise<void>;
   getCurrentTournament: () => Promise<void>;
+  getDraft: () => Promise<void>;
+  getCurrentDraftRound: () => Promise<void>;
+  draftIndex: number;
+  setDraftIndex: (index: number) => void;
 }
 export const useUserStore = create<UserState>()(
   persist(
     (set, get) => ({
       tournament: {} as TournamentType,
       draft: get()?.tournament?.draft as DraftType,
+      getDraft: async () => {
+        try {
+          await get().getCurrentTournament();
+          set({ draft: get().tournament.draft });
+        } catch (err) {
+          log.error('Failed to fetch draft:', err);
+        }
+      },
+      getCurrentDraftRound: async () => {
+        try {
+          await get().getCurrentTournament();
+
+          set({
+            curDraftRound: get().tournament.draft.draft_rounds[get().draftIndex],
+          });
+        } catch (err) {
+          log.error('Failed to fetch draft:', err);
+        }
+      },
+      draftIndex: 0,
+      setDraftIndex: (index: number) => set({ draftIndex: index }),
       setDraft: (draft: DraftType) => set({ draft }),
       tournaments: [] as TournamentType[],
       game: {} as GameType,
@@ -282,10 +307,10 @@ export const useUserStore = create<UserState>()(
       setTournamentPK: (pk: number) => set({ tournamentPK: pk }),
       tournamentPK: null,
       getCurrentTournament: async () => {
-        if (get().tournamentPK) {
+        if (get().tournament.pk) {
           try {
             const response = await axios.get(
-              `/tournaments/${get().tournamentPK}/`,
+              `/tournaments/${get().tournament.pk}/`,
             );
             set({ tournament: response.data });
           } catch (err) {
@@ -293,6 +318,7 @@ export const useUserStore = create<UserState>()(
           }
         }
       },
+
       getTournaments: async () => {
         try {
           const response = await getTournaments();

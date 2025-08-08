@@ -1,7 +1,4 @@
 // Holds the general draft view
-
-// Holds the general draft view
-
 import { useEffect } from 'react';
 import { UserCard } from '~/components/user/userCard';
 import type {
@@ -14,18 +11,29 @@ import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { TeamTable } from '../team/teamTable/teamTable';
 import { DraftTable } from './draftTable';
-const log = getLogger('DraftRoundView');
-export const DraftRoundView: React.FC = () => {
-  const tournament: TournamentType = useUserStore((state) => state.tournament);
-  const draft: DraftType = useUserStore((state) => state.draft);
 
+const log = getLogger('DraftRoundView');
+
+export const DraftRoundView: React.FC = () => {
   const curDraftRound: DraftRoundType = useUserStore(
     (state) => state.curDraftRound,
   );
+  const draftIndex: number = useUserStore((state) => state.draftIndex);
+  const tournament: TournamentType = useUserStore((state) => state.tournament);
+  const draft: DraftType = useUserStore((state) => state.draft);
 
-  useEffect(() => {}, [curDraftRound]);
+  useEffect(() => {
+    log.debug('Current draft round changed:', curDraftRound);
+  }, [draftIndex]);
 
-  useEffect(() => {}, [tournament.teams]);
+  useEffect(() => {
+    log.debug('Tournament teams updated:', tournament.teams);
+  }, [tournament.teams?.length]);
+
+  useEffect(() => {
+    log.debug('Tournament users updated:', tournament.draft.users_remaining);
+  }, [tournament.draft.users_remaining.length]);
+
   const teamView = () => {
     if (!draft || !curDraftRound) return null;
     const team = tournament.teams?.find(
@@ -64,7 +72,9 @@ export const DraftRoundView: React.FC = () => {
 
   return (
     <div className="p-4">
-      <h2 className="text-2xl font-bold mb-2">Draft View</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-bold">Draft View</h2>
+      </div>
 
       {teamView()}
       {playerChoiceView()}

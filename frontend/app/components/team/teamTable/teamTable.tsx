@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { TeamType } from '~/components/tournament/types';
 import {
   Table,
@@ -47,6 +48,12 @@ export const TeamTable: React.FC<TeamTableProps> = ({ team }) => {
     if (a.mmr < b.mmr) return 1;
     return 0; // Default case
   });
+
+  useEffect(() => {
+    if (team) {
+      console.debug(`TeamTable: team updated ${team.name}`);
+    }
+  }, [team.pk, team.captain?.pk, team.members?.length, team.draft_order]);
   return (
     <Table>
       <TableCaption>Team Members</TableCaption>

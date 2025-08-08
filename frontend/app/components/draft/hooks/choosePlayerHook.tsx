@@ -39,10 +39,7 @@ export const choosePlayerHook = async ({
     return;
   }
 
-  var newTournament: Partial<TournamentType> = {
-    pk: tournament.pk,
-  };
-
+ 
   log.debug(
     `Choosing player ${user.username} for captain  ${curDraftRound.captain?.username}`,
   );

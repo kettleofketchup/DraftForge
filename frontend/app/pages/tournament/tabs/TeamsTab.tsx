@@ -3,11 +3,12 @@ import { DraftModal } from '~/components/draft/draftModal';
 import { SearchTeamsDropdown } from '~/components/team/searchTeams';
 import { TeamCard } from '~/components/team/teamCard';
 import { CaptainSelectionModal } from '~/components/tournament/captains/captainSelectionModal';
+
 import type { UserType } from '~/components/user/types';
 import { getLogger } from '~/lib/logger';
 import { hasErrors } from '~/pages/tournament/hasErrors';
 import { useUserStore } from '~/store/userStore';
-import { AddTeamsModal } from './teams/addTeamsModal';
+import { RandomizeTeamsModal } from './teams/randomTeamsModal.tsx';
 const log = getLogger('TeamsTab');
 export const TeamsTab: React.FC = memo(() => {
   const tournament = useUserStore((state) => state.tournament);
@@ -21,7 +22,7 @@ export const TeamsTab: React.FC = memo(() => {
 
   useEffect(() => {
     getCurrentTournament();
-  }, [allUsers, tournament.users]);
+  }, [allUsers, tournament.users?.length]);
 
   const filteredTeams =
     query === ''
@@ -45,9 +46,14 @@ export const TeamsTab: React.FC = memo(() => {
             return userMatches || teamNameMatch;
           })
           .sort((a, b) => a.name.localeCompare(b.name));
+
   useEffect(() => {
     log.debug('Tournament users:', tournament.users);
-  }, [tournament, filteredTeams]);
+  }, [tournament.users]);
+
+  useEffect(() => {
+    log.debug('Filtered teams:', filteredTeams);
+  }, [tournament.teams?.length, filteredTeams?.length]);
 
   const teamButtonsView = () => {
     return (
@@ -55,8 +61,7 @@ export const TeamsTab: React.FC = memo(() => {
         className="flex flex-col justify-center items-center  gap-y-4 w-full flex-grow sm:flex-row
        sm:gap-y-2 sm:gap-x-8 sm:p-4 sm:pt-2 sm:pb-6 "
       >
-        <AddTeamsModal users={tournament.users} teamSize={5} />
-
+        <RandomizeTeamsModal users={tournament?.users || []} teamSize={5} />
         <CaptainSelectionModal />
         <DraftModal />
       </div>
@@ -69,11 +74,9 @@ export const TeamsTab: React.FC = memo(() => {
       {teamButtonsView()}
       <div className="w-full">
         <SearchTeamsDropdown
-          teams={tournament.teams}
+          teams={tournament?.teams || []}
           query={query}
           setQuery={setQuery}
-          className="w-full"
-          defaultValue="search for users or team names"
         />
       </div>
       <div className="w-full content-center grid gap-2 mt-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 justify-center ">

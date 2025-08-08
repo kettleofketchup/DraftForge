@@ -165,16 +165,29 @@ def rebuild_team(request):
                 f"Multiple drafts found for tournament {tournament.name}, deleting all but the first"
             )
             tournament.draft.exclude(pk=draft.pk).delete()
+            logging.debug("Draft Issues")
+            draft.save()
+
+        draft = tournament.draft.first()
+        if not draft:
+            draft = Draft.objects.create(tournament=tournament)
+            draft.build_rounds()
+            draft.save()
+
+        if not draft.draft_rounds.exists():
+            logging.debug("Draft rounds do not exist, building them now")
+            draft.build_rounds()
+
         logging.debug(f"Draft already exists for tournament {tournament.name}")
     except Draft.DoesNotExist:
         logging.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")
         draft = Draft.objects.create(tournament=tournament)
+        draft.build_rounds()
         draft.save()
 
     if not draft.draft_rounds.exists():
+        logging.debug("Draft rounds do not exist, building them now")
         draft.build_rounds()
-        draft.save()
     draft.rebuild_teams()
-    draft.save()
     tournament = Tournament.objects.get(pk=tournament_pk)
     return Response(TournamentSerializer(tournament).data, status=201)

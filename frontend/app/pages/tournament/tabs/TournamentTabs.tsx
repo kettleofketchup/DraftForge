@@ -17,11 +17,6 @@ export default function TournamentTabs() {
     getUsers();
   }, []);
 
-  const tabClass =
-    () => `rounded-full px-3 py-1 bg-gray-900 text-sm/6 font-semibold text-white
-                        focus:not-data-focus:outline-none data-focus:outline data-focus:outline-white
-                        data-hover:bg-cyan/5 data-selected:bg-purple-950 data-selected:data-hover:bg-cyan/10`;
-  const tabPanelClass = () => `rounded-xl bg-base-300  p-3"`;
   const tournament = useUserStore(useShallow((state) => state.tournament)); // Zustand setter
 
   const playerCount = useMemo(() => {

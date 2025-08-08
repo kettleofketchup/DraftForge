@@ -1,5 +1,5 @@
 import logging
-
+from django.db.utils import IntegrityError
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -258,7 +258,6 @@ class Draft(models.Model):
             )
             team.members.clear()
             team.members.add(team.captain)
-            team.save()
 
         for captain in self.captains.all():
 
@@ -278,6 +277,13 @@ class Draft(models.Model):
 
     def build_rounds(self):
         logging.debug(f"Building draft rounds")
+
+        for round in self.draft_rounds.all():
+            logging.debug(
+                f"Draft round {round.pk} already exists for {self.tournament.name}"
+            )
+            round.delete()
+
         max_picks = self.tournament.captains.count() * 5
 
         pick = 0
@@ -285,14 +291,23 @@ class Draft(models.Model):
         order = self.tournament.teams.order_by("draft_order")
 
         def pick_player(draft, team, pick, phase):
+            try:
+                draftRound = DraftRound.objects.create(
+                    draft=draft,
+                    captain=team.captain,
+                    pick_number=pick,
+                    pick_phase=phase,
+                )
+                draftRound.save()
 
-            draftRound = DraftRound.objects.create(
-                draft=draft,
-                captain=team.captain,
-                pick_number=pick,
-                pick_phase=phase,
-            )
-            draftRound.save()
+            except IntegrityError:
+                logging.error(
+                    f"IntegrityError: Draft round already exists for {team.name} in phase {phase}, pick {pick}"
+                )
+                pick += 1
+                if pick % 5 == 0:
+                    phase += 1
+                return pick, phase
 
             logging.debug(
                 f"Draft round {draftRound.pk} created for {team.name} in phase {phase}, pick {pick}"

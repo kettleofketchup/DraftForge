@@ -41,7 +41,7 @@ export const DraftTable: React.FC<DraftTableProps> = ({ curRound }) => {
     );
   };
   const members = () => {
-    const a = tournament.draft.users_remaining?.sort((a, b) => {
+    const a = tournament?.draft?.users_remaining?.sort((a, b) => {
       if (!a.mmr && !b.mmr) return 0;
       if (!a.mmr) return 1; // Treat undefined MMR as lower
       if (!b.mmr) return -1; // Treat undefined MMR as lower

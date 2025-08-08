@@ -33,7 +33,7 @@ export const TeamCard: React.FC<Props> = ({
     if (team) {
       log.debug(`UserCard: user updated ${team.name}`);
     }
-  }, [team]);
+  }, [team.pk, team.captain?.pk, team.members?.length, team.draft_order]);
 
   const getAverageMMR = () => {
     if (!team.members || team.members.length === 0) return 'N/A';

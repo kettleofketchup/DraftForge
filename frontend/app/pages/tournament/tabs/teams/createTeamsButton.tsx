@@ -6,6 +6,8 @@ import {
   fetchTournament,
   updateTeam,
 } from '~/components/api/api';
+import { UsersRound } from 'lucide-react';
+
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
 import {

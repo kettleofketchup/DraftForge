@@ -1,7 +1,14 @@
+import { UsersRound } from 'lucide-react';
 import React, { useState } from 'react';
 import { TeamCard } from '~/components/team/teamCard';
 import type { TeamType } from '~/components/tournament/types';
 import { Button } from '~/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '~/components/ui/tooltip';
 
 import {
   Dialog,
@@ -16,6 +23,7 @@ import {
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 import { createTeams } from './createTeams';
+
 import { CreateTeamsButton } from './createTeamsButton';
 interface Props {
   users: UserType[];
@@ -26,9 +34,6 @@ interface TeamsViewProps {
   teams: TeamType[];
 }
 
-interface TeamViewProps {
-  users: UserType[][];
-}
 const TeamsView: React.FC<TeamsViewProps> = ({ teams }) => (
   <div
     className="flex grid grid-flow-row-dense grid-auto-rows
@@ -47,14 +52,16 @@ const TeamsView: React.FC<TeamsViewProps> = ({ teams }) => (
   </div>
 );
 
-export const AddTeamsModal: React.FC<Props> = ({ users, teamSize = 5 }) => {
+export const RandomizeTeamsModal: React.FC<Props> = ({
+  users,
+  teamSize = 5,
+}) => {
   const tournament = useUserStore((state) => state.tournament);
 
   const [teams, setTeams] = useState<TeamType[]>(() =>
     createTeams(users, teamSize),
   );
   const [open, setOpen] = useState(false);
-  const isStaff = useUserStore((state) => state.isStaff); // Zustand setter
   // Regenerate teams when users or teamSize changes
   React.useEffect(() => {
     setTeams(createTeams(users, teamSize));
@@ -63,16 +70,28 @@ export const AddTeamsModal: React.FC<Props> = ({ users, teamSize = 5 }) => {
   const handleRegenerate = () => {
     setTeams(createTeams(users, teamSize));
   };
-
+  const dialogButton = () => {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DialogTrigger asChild>
+              <Button className="w-40 btn btn-primary flex w-200px sm:w-auto ">
+                <UsersRound className="mr-2" />
+                Create Teams
+              </Button>
+            </DialogTrigger>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Change Captains and Draft Order</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          className="btn btn-primary flex w-200px sm:w-auto "
-        >
-          Create Teams
-        </Button>
-      </DialogTrigger>
+      {dialogButton()}
       <DialogContent className=" xl:min-w-6xl l:min-w-5xl md:min-w-4xl sm:min-w-2xl min-w-l ">
         <DialogHeader>
           <DialogTitle>Auto-created Teams</DialogTitle>
