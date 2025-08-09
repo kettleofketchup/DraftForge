@@ -83,17 +83,22 @@ export const TournamentDetailPage: React.FC = () => {
     return `${date || ''}`;
   };
 
+  const tournamentName = () => {
+    if (!tournament.name) {
+      return <></>;
+    }
+    return <h1 className="text-3xl font-bold mb-4">{tournament.name}</h1>;
+  };
   const title = () => {
     return (
       <>
-        {tournament.name && (
-          <h1 className="text-3xl font-bold mb-4">
-            {tournament.name}
-            <span className="ml-4 text-base text-base-content/50 font-normal">
-              played on {getDate()}
-            </span>
-          </h1>
-        )}
+        <div className="flex flex-row items-center mb-2">
+          {tournamentName()}
+
+          <span className="ml-4 text-base text-base-content/50 font-normal">
+            played on {getDate()}
+          </span>
+        </div>
       </>
     );
   };

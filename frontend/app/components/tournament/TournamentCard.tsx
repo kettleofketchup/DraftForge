@@ -1,15 +1,16 @@
 import type { FormEvent } from 'react';
 import React, { useEffect, useState } from 'react';
 import type { TournamentType } from '~/components/tournament/types';
-import type { UserType } from '~/components/user/types'; // Corrected import path for UserType
 import { getLogger } from '~/lib/logger';
 import { STATE_CHOICES } from './constants';
 
 const log = getLogger('TournamentCard');
 
 import { useNavigate } from 'react-router';
+import { toast } from 'sonner';
 import { useUserStore } from '~/store/userStore';
-import axios from '../api/axios';
+import { createTournament, updateTournament } from '../api/api';
+import { Button } from '../ui/button';
 import { UsersDropdown } from '../user/UsersDropdown';
 
 interface Props {
@@ -31,6 +32,7 @@ export const TournamentCard: React.FC<Props> = ({
     tournament ?? ({} as TournamentType),
   );
   const [isSaving, setIsSaving] = useState(false);
+  const setTournament = useUserStore((state) => state.setTournament);
   const [error, setError] = useState(false);
   const [errorMessage, setErrorMessage] = useState<
     Partial<Record<keyof TournamentType, string>>
@@ -63,42 +65,47 @@ export const TournamentCard: React.FC<Props> = ({
     e.stopPropagation();
     setErrorMessage({}); // clear old errors
 
-    const payload = {
+    const payload: Partial<TournamentType> = {
+      pk: tournament.pk,
       ...form,
-      users: (form.users || [])
-        .map((user) => user.pk)
-        .filter((pk) => pk !== undefined), // Send only defined PKs
     };
+    log.debug('Saving tournament with payload:', payload);
+    log.debug('Save function:', saveFunc);
 
     if (saveFunc === 'create') {
-      setIsSaving(true);
-      try {
-        await axios.post(`/tournament`, payload);
-        setError(false);
-        setForm({} as TournamentType);
-      } catch (err: any) {
-        log.error('Failed to create tournament', err);
-        setErrorMessage(err.response.data);
-      } finally {
-        setIsSaving(false);
-      }
+      toast.promise(createTournament(payload), {
+        loading: `Creating Tournament for  ${tournament.pk}`,
+        success: (data: TournamentType) => {
+          log.debug('Tournament created successfully:', data);
+          setTournament(data);
+          return `${tournament.pk} has been created successfully!`;
+        },
+        error: (err) => {
+          const val = err.response.data;
+          log.error('Failed to create tournament', err);
+          return `Failed to update captains: ${val}`;
+        },
+      });
     } else if (saveFunc === 'save') {
-      if (!form.pk) return;
-      setIsSaving(true);
-      try {
-        await axios.patch(`/tournament/${tournament.pk}/`, payload); // Corrected endpoint
-        setEditMode(false);
-        setError(false);
-        fetchAllUsers(); // Refresh user list
-      } catch (err: any) {
-        setError(true);
-        setErrorMessage(err.response.data);
+      if (!tournament.pk) return;
 
-        log.error('Failed to update tournament', err);
-      } finally {
-        setIsSaving(false);
-      }
+      toast.promise(updateTournament(tournament.pk, payload), {
+        loading: `Updating Tournament for  ${tournament.pk}`,
+        success: (data: TournamentType) => {
+          log.debug('Tournament updated successfully:', data);
+          setTournament(data);
+
+          return `${tournament.pk} has been updated successfully!`;
+        },
+        error: (err) => {
+          const val = err.response.data;
+          log.error('Failed to update tournament', err);
+          return `Failed to update tournament: ${val}`;
+        },
+      });
     }
+
+    setIsSaving(true);
   };
 
   const [saveCallback, setSaveCallBack] = useState(saveFunc || 'save');
@@ -154,42 +161,6 @@ export const TournamentCard: React.FC<Props> = ({
           </div>
         )}
       </>
-    );
-  };
-  const editModeUsers = () => {
-    return (
-      <div>
-        <label className="font-semibold" htmlFor="users-select">
-          Players:
-        </label>
-        <select
-          multiple
-          id="users-select"
-          value={(form.users || [])
-            .map((user) => user.pk?.toString() ?? '')
-            .filter((pk) => pk !== '')}
-          onChange={(e) => {
-            const selectedPKs = Array.from(
-              e.target.selectedOptions,
-              (option) => option.value,
-            );
-            handleUserSelectionChange(selectedPKs);
-          }}
-          className={`select select-bordered w-full mt-1 h-32 ${errorMessage.users ? 'select-error' : ''}`}
-        >
-          {(allUsersFromStore || []).map((user: UserType) => {
-            if (user.pk === undefined) return null;
-            return (
-              <option key={user.pk} value={user.pk.toString()}>
-                {user.nickname || user.username}
-              </option>
-            );
-          })}
-        </select>
-        {errorMessage.users && (
-          <p className="text-error text-sm mt-1">{errorMessage.users}</p>
-        )}
-      </div>
     );
   };
   const editModeView = () => {
@@ -255,17 +226,17 @@ export const TournamentCard: React.FC<Props> = ({
             </p>
           )}
         </div>
-        {editModeUsers()}
 
-        <button
+        <Button
           onClick={handleSave}
+          type="submit"
           className="btn btn-primary btn-sm mt-3"
           disabled={isSaving}
         >
           {saveCallback === 'create' &&
             (isSaving ? 'Saving...' : 'Create Tournament')}
           {saveCallback === 'save' && (isSaving ? 'Saving...' : 'Save Changes')}
-        </button>
+        </Button>
       </>
     );
   };

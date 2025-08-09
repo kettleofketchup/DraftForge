@@ -114,7 +114,15 @@ export const AddPlayerDropdown: React.FC<Props> = ({
                       alt={user?.username}
                       className="w-8 h-8 rounded-full"
                     />
-                    <span>{user?.username}</span>
+                    <span>
+                      {user?.username}{' '}
+                      {user?.nickname && (
+                        <span className="text-sm text-gray-500">
+                          ({user?.nickname})
+                        </span>
+                      )}
+                    </span>
+
                     <div className="flex-1" />
                   </div>
                 </ComboboxOption>

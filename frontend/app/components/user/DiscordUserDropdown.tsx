@@ -5,6 +5,7 @@ import {
   ComboboxOptions,
 } from '@headlessui/react';
 import React, { useCallback, useEffect, useState } from 'react';
+import { Label } from '~/components/ui/label';
 import { AvatarUrl } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '../../store/userStore';
@@ -59,10 +60,20 @@ const DiscordUserDropdown: React.FC<Props> = ({
     query === ''
       ? discordUsers
       : discordUsers.filter((person: GuildMember) => {
-          return (
-            person.user.username.toLowerCase().includes(query?.toLowerCase()) ||
-            person.user.nick?.toLowerCase().includes(query?.toLowerCase())
-          );
+          if (!query) return false;
+
+          const username = person.user.username
+            .toLowerCase()
+            .includes(query?.toLowerCase());
+
+          const nickname = person.user?.nick
+            ?.toLowerCase()
+            .includes(query?.toLowerCase());
+
+          const global_name = person?.user?.global_name
+            ?.toLowerCase()
+            .includes(query?.toLowerCase());
+          return username || nickname || global_name;
         });
 
   // Remove users that have a discordId in discrimUsers
@@ -84,13 +95,63 @@ const DiscordUserDropdown: React.FC<Props> = ({
 
   const filteredUserComboOption = (user: GuildMember) => {
     const getNickname = () => {
-      if (user.nick) {
-        return user.nick;
+      if (!user || !user.nick) {
+        return <></>;
       }
-      if (user.user.global_name) {
-        return user.user.global_name;
+      return (
+        <div className="flex justify-left ">
+          <Label
+            htmlFor={`global-nick-${user.user.id}`}
+            className="justify-left text-xs text-gray-500 m-0 pl-1 w-10"
+          >
+            Nick:
+          </Label>
+          <p id={`global-nick-${user.user.id}`}>{user.nick} </p>
+        </div>
+      );
+    };
+
+    const getUsername = () => {
+      if (!user || !user.user.username) {
+        return <></>;
       }
-      return user.user.username;
+      return (
+        <div className=" justify-left flex">
+          <Label
+            htmlFor={`global-username-${user.user.id}`}
+            className=" justify-left text-xs text-gray-500 m-0 pl-1 w-20"
+          >
+            Username:
+          </Label>
+          <p id={`global-username-${user.user.id}`}>{user.user.username} </p>
+        </div>
+      );
+    };
+
+    const getGlobalName = () => {
+      if (!user || !user.user.global_name) {
+        return <></>;
+      }
+
+      return (
+        <div className="flex  justify-left ">
+          <Label
+            htmlFor={`global-name-${user.user.id}`}
+            className="justify-left text-xs text-gray-500 m-0 pl-1 w-20"
+          >
+            Global:
+          </Label>
+          <p id={`global-name-${user.user.id}`}>{user.user.global_name} </p>
+        </div>
+      );
+    };
+    const userAddedBadge = () => {
+      if (!isUserAlreadyAdded(user)) return <></>;
+      return (
+        <span className="rounded-full text-center bg-gray-900 text-sm text-red-200 p-1 ml-2">
+          Already Added
+        </span>
+      );
     };
     return (
       <ComboboxOption
@@ -103,20 +164,25 @@ const DiscordUserDropdown: React.FC<Props> = ({
         ${disabled ? 'opacity-50  bg-grey-100 hover:bg-gray-500' : ''}`
         }
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center w-full">
           <img
             src={AvatarUrl(user)}
-            alt={user.user.username}
+            alt={user.user.global_name}
             className="w-8 h-8 rounded-full"
           />
+          <div className="flex w-full flex-col ">
+            <div className="flex">
+              {getGlobalName()}
+              {userAddedBadge()}
+            </div>
 
-          <span>{getNickname()}</span>
-
-          {isUserAlreadyAdded(user) && (
-            <span className="rounded-full text-center bg-gray-900 text-sm text-red-200 p-1">
-              Already Added
-            </span>
-          )}
+            <div className={`rounded-lg flex justify-left `}>
+              {getNickname()}
+            </div>
+            <div className={`rounded-lg flex justify-left `}>
+              {getUsername()}
+            </div>
+          </div>
 
           {/* TODO add a quickadd button*/}
           {/* {!isUserAlreadyAdded(user) && (
@@ -138,7 +204,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
         <ComboboxInput
           className="input input-bordered w-full"
           placeholder="Search DTX members..."
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => setQuery?.(event.target.value)}
           autoComplete="off"
         />
         <ComboboxOptions className="border bg-base-100 shadow-lg rounded-lg max-h-60 overflow-y-auto mt-2">

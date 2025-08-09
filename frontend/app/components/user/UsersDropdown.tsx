@@ -1,22 +1,12 @@
-import { useState } from 'react';
-import type { UserClassType, UserType } from '~/components/user/types';
+import type { UserType } from '~/components/user/types';
 
-import { User } from '~/components/user/user';
 import { AvatarUrl } from '~/index';
 interface Props {
   users: UserType[];
 }
 
 export const UsersDropdown: React.FC<Props> = ({ users }) => {
-  const [createModal, setCreateModal] = useState<boolean>(false);
-
-  const [selectedDiscordUser, setSelectedDiscordUser] = useState(
-    new User({} as UserClassType),
-  );
-
   const showUser = (user: UserType) => {
- 
-
     return (
       <>
         <li

@@ -4,10 +4,9 @@ import {
   ComboboxOption,
   ComboboxOptions,
 } from '@headlessui/react';
-import React, { useState } from 'react';
+import React from 'react';
+import type { UserType } from '~/components/user/types';
 import { AvatarUrl } from '~/index';
-import type { UserClassType, UserType } from '~/components/user/types';
-import { User } from '~/components/user/user';
 import { useUserStore } from '~/store/userStore';
 
 import { getLogger } from '~/lib/logger';
@@ -20,7 +19,6 @@ interface Props {
   defaultValue?: string;
 }
 
-
 export const SearchUserDropdown: React.FC<Props> = ({
   users,
   query,
@@ -28,14 +26,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
   defaultValue = 'Search for users',
 }) => {
   const user: UserType = useUserStore((state) => state.currentUser); // Zustand setter
-  const getUsers = useUserStore((state) => state.getUsers); // Zustand setter
 
-  const [selectedDiscordUser, setSelectedDiscordUser] = useState(
-    new User({} as UserClassType),
-  );
-  const [searchedPerson, setSearchedPerson] = useState(
-    new User({} as UserClassType),
-  );
   const filteredUsers =
     query === ''
       ? users
@@ -53,7 +44,6 @@ export const SearchUserDropdown: React.FC<Props> = ({
       userName = userName?.username || userName?.nickname || '';
     }
     if (userName === undefined || userName === '') {
-      setSearchedPerson(new User({} as UserClassType));
       return;
     }
     log.debug(`Selected user: ${userName}`, userName);
@@ -64,8 +54,6 @@ export const SearchUserDropdown: React.FC<Props> = ({
         (user.username?.toLowerCase() === userName?.toLowerCase() ||
           user.nickname?.toLowerCase() === userName?.toLowerCase()),
     );
-
-    setSearchedPerson(new User(user as UserClassType));
   };
 
   return (
@@ -98,7 +86,8 @@ export const SearchUserDropdown: React.FC<Props> = ({
                       alt={user.username}
                       className="w-8 h-8 rounded-full"
                     />
-                    <span>{user.username}</span>
+                    <span>Username: {user.username}</span>
+                    Nick: {user.nickname && <span>{user.nickname}</span>}
                   </div>
                 </ComboboxOption>
               ))
