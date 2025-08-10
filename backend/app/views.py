@@ -591,7 +591,7 @@ def refresh_all_avatars(request):
     if last_run and (timezone.now() - last_run < timedelta(hours=1)):
         return Response(
             {"message": "Avatar refresh can only be run once per hour."},
-            status=status.HTTP_429_TOO_MANY_REQUESTS,
+            status=status.HTTP_200_OK,
         )
 
     updated_count = 0

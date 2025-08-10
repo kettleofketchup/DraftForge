@@ -13,7 +13,11 @@ import type {
 } from '~/index';
 import { getLogger } from '~/lib/logger';
 import axios from './axios';
-import type { CreateTeamFromCaptainAPI, InitDraftRoundsAPI, RebuildDraftRoundsAPI } from './types';
+import type {
+  CreateTeamFromCaptainAPI,
+  InitDraftRoundsAPI,
+  RebuildDraftRoundsAPI,
+} from './types';
 const log = getLogger('api');
 
 export async function fetchCurrentUser(): Promise<UserType> {
@@ -22,6 +26,7 @@ export async function fetchCurrentUser(): Promise<UserType> {
 }
 
 export async function fetchUsers(): Promise<UsersType> {
+  await refreshAvatars();
   const response = await axios.get<UsersType>(`/users`);
   return response.data;
 }
@@ -154,7 +159,9 @@ export async function updateDraftRound(
 export async function logout(): Promise<void> {
   await axios.post(`/logout`);
 }
-
+export async function refreshAvatars(): Promise<void> {
+  await axios.post(`/avatars/refresh/`);
+}
 export async function createDraft(
   pk: number,
   data: Partial<DraftType>,
