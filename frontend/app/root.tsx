@@ -56,7 +56,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     }
   }, [hasHydrated]);
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" data-theme="dark">
       <head>
         {/* {import.meta.env.DEV && (
           <script src="https://unpkg.com/react-scan/dist/auto.global.js" />
