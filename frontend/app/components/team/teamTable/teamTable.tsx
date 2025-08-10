@@ -9,26 +9,12 @@ import {
   TableHeader,
   TableRow,
 } from '~/components/ui/table';
-import { PositionEnum } from '~/components/user';
+import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { AvatarUrl } from '~/index';
 interface TeamTableProps {
   team?: TeamType;
 }
-const positions = (user: UserType) => {
-  if (!user.positions) return null;
-  return (
-    <div className="flex gap-1 flex-wrap">
-      {Object.entries(user.positions)
-        .filter(([_, value]) => value)
-        .map(([pos]) => (
-          <span key={pos} className="badge badge-info p-1">
-            {PositionEnum[pos as keyof typeof PositionEnum]}
-          </span>
-        ))}
-    </div>
-  );
-};
 
 export const TeamTable: React.FC<TeamTableProps> = ({ team }) => {
   // Early return if team is undefined or has no members
@@ -80,7 +66,9 @@ export const TeamTable: React.FC<TeamTableProps> = ({ team }) => {
               </div>
             </TableCell>
             <TableCell>{user.mmr ?? 'N/A'}</TableCell>
-            <TableCell>{user.positions ? positions(user) : 'N/A'}</TableCell>
+            <TableCell>
+              <RolePositions user={user} />{' '}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

@@ -6,7 +6,9 @@ import { useUserStore } from '~/store/userStore';
 
 import { toast } from 'sonner';
 import { DialogClose } from '~/components/ui/dialog';
+import { getLogger } from '~/lib/logger';
 
+const log = getLogger('editForm');
 interface Props {
   user: UserClassType; // Accepts both UserClassType and UserType
   form: UserType;

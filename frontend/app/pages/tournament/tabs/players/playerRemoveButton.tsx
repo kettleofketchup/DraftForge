@@ -114,7 +114,7 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
             <Trash2 className="h-4 w-4" color="red" />
           </Button>
         </TooltipTrigger>
-        <DeleteButtonTooltip tooltipText="Delete item" />
+        <DeleteButtonTooltip tooltipText="Remove User From Tournament" />
       </Tooltip>
     </TooltipProvider>
   );

@@ -1,4 +1,5 @@
 services:
+
   frontend:
     env_file: "./.env.release"
     image: ghcr.io/kettleofketchup/dtx_website/frontend:latest

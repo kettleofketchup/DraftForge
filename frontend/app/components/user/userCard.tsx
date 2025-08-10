@@ -1,12 +1,12 @@
 import { motion } from 'framer-motion';
 import React, { memo, useEffect, useState } from 'react';
 import { Badge } from '~/components/ui/badge';
-import { PositionEnum } from '~/components/user';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { AvatarUrl } from '~/index';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
 import { useUserStore } from '~/store/userStore';
+import { RolePositions } from './positions';
 import { UserRemoveButton } from './userCard/deleteButton';
 import UserEditModal from './userCard/editModal';
 interface Props {
@@ -112,8 +112,17 @@ export const UserCard: React.FC<Props> = memo(
                 <span className="font-semibold">MMR:</span> {user.mmr}
               </div>
             )}
-
-            {user.positions && positions()}
+            {user.username && (
+              <div>
+                <span className="font-semibold">Username:</span> {user.username}
+              </div>
+            )}
+            {user.nickname && (
+              <div>
+                <span className="font-semibold">Nickname:</span> {user.nickname}
+              </div>
+            )}
+            <RolePositions user={user} />
           </>
         );
       }
@@ -131,7 +140,7 @@ export const UserCard: React.FC<Props> = memo(
             </div>
           )}
 
-          {user.positions && positions()}
+          {user.positions && <RolePositions user={user} />}
           {user.steamid && (
             <div>
               <span className="font-semibold">Steam ID:</span> {user.steamid}
@@ -174,20 +183,7 @@ export const UserCard: React.FC<Props> = memo(
       }
       return result;
     };
-    const positions = () => {
-      if (!user.positions) return null;
-      return (
-        <div className="flex gap-1 flex-wrap">
-          {Object.entries(user.positions)
-            .filter(([_, value]) => value)
-            .map(([pos]) => (
-              <span key={pos} className="badge badge-info p-1">
-                {PositionEnum[pos as keyof typeof PositionEnum]}
-              </span>
-            ))}
-        </div>
-      );
-    };
+
     const errorInfo = () => {
       return (
         <div className="flex flex-col items-end">
@@ -234,8 +230,8 @@ export const UserCard: React.FC<Props> = memo(
       <div
         key={`usercard:${getKeyName()} base`}
         className="flex w-full
-        sm:gap-2 md:gap-4 
-        py-4 
+        sm:gap-2 md:gap-4
+        py-4
         justify-center
         content-center
         [content-visibility: auto] [contain-intrinsic-size: 400px 220px]"

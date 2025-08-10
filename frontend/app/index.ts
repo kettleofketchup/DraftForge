@@ -7,10 +7,10 @@ import type {
 } from '~/components/user';
 import { User } from '~/components/user';
 import { AvatarUrl } from '~/components/user/avatar';
+import { PositionEnum } from '~/components/user';
 
-export { AvatarUrl, User };
+export { AvatarUrl, User, PositionEnum };
 export type { GuildMember, GuildMembers, UserClassType, UserType, UsersType };
-
 import type {
   GameType,
   GamesType,

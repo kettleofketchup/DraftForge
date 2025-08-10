@@ -1,29 +1,25 @@
-import { useState } from 'react';
+import { AboutHero } from '~/pages/about/sections/AboutHero';
+import { FeaturesSection } from '~/pages/about/sections/FeaturesSection';
+import { MaintainerSection } from '~/pages/about/sections/MaintainerSection';
+import { PurposeSection } from '~/pages/about/sections/PurposeSection';
+import { TechnologyStack } from '~/pages/about/sections/TechnologyStack';
+import { getLogger } from '~/lib/logger';
 
-
-
-
-import Placeholder from '~/components/placeholder';
+const log = getLogger('About');
 
 export function About() {
-  const [count, setCount] = useState(0);
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-  const open = Boolean(anchorEl);
-
-  const handlePopoverOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
-  const handlePopoverClose = () => {
-    setAnchorEl(null);
-  };
+  log.info('Rendering About page');
 
   return (
-    <>
-      <div className="flex justify-center h-full content-center mb-0 mt-0 overflow-hidden p-20">
-        <div className="flex">
-          <Placeholder />
-        </div>
+    <div className="min-h-screen bg-base-100">
+      <AboutHero />
+
+      <div className="container mx-auto px-6 py-16 max-w-4xl">
+        <PurposeSection />
+        <FeaturesSection />
+        <MaintainerSection />
+        <TechnologyStack />
       </div>
-    </>
+    </div>
   );
 }

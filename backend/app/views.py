@@ -127,7 +127,7 @@ from .models import CustomUser
 from .serializers import UserSerializer
 
 
-@permission_classes((IsAdminUser,))
+@permission_classes((IsStaff,))
 class UserView(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     queryset = CustomUser.objects.all()
@@ -144,6 +144,12 @@ class UserView(viewsets.ModelViewSet):
 
     def patch(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
+
+    def get_permissions(self):
+        self.permission_classes = [IsStaff]
+        if self.request.method == "GET":
+            self.permission_classes = [AllowAny]
+        return super(UserView, self).get_permissions()
 
     @permission_classes((IsAdminUser,))
     def delete(self, request, *args, **kwargs):

@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react';
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   Tooltip,
   TooltipContent,
@@ -41,6 +41,10 @@ interface Props {
   removePlayerCallback?: (e: FormEvent, user: UserType) => Promise<void>;
 }
 
+import { AdminOnlyButton } from '~/components/reusable/adminButton';
+import { getLogger } from '~/lib/logger';
+const log = getLogger('addPlayerModal');
+
 export const AddPlayerModal: React.FC<Props> = ({
   addedUsers,
   addPlayerCallback,
@@ -49,7 +53,17 @@ export const AddPlayerModal: React.FC<Props> = ({
   setQuery,
 }) => {
   // Find all users not already in the tournament
+  const currentUser = useUserStore((state) => state.currentUser);
+  const isStaff = useUserStore((state) => state.isStaff);
 
+  if (!isStaff()) {
+    return (
+      <AdminOnlyButton
+        buttonTxt=""
+        tooltipTxt={'Only Admins can add users to the tournament'}
+      />
+    ); // Only staff can add players
+  }
   return (
     <Dialog>
       <form>

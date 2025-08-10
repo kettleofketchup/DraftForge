@@ -7,9 +7,12 @@
   overflow: scroll !important;
 }
 
-
+.tw-size-4 {
+  width: 1rem;
+  height: 1rem;
+}
 :root {
-   
+
     body[data-scroll-locked][data-scroll-locked] {
       overflow: auto !important;
     }

@@ -8,11 +8,11 @@ import {
   TableHeader,
   TableRow,
 } from '~/components/ui/table';
-import { PositionEnum } from '~/components/user';
 import type { UserType } from '~/components/user/types';
 import { AvatarUrl } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
+import { RolePositions } from '../user/positions';
 import { ChoosePlayerButton } from './buttons/choosePlayerButtons';
 import type { DraftRoundType } from './types';
 const log = getLogger('draftTable');
@@ -26,20 +26,6 @@ export const DraftTable: React.FC<DraftTableProps> = ({ curRound }) => {
 
   useEffect(() => {}, [curRound, curDraft]);
 
-  const positions = (user: UserType) => {
-    if (!user.positions) return null;
-    return (
-      <div className="flex gap-1 flex-wrap">
-        {Object.entries(user.positions)
-          .filter(([_, value]) => value)
-          .map(([pos]) => (
-            <span key={pos} className="badge badge-info p-1">
-              {PositionEnum[pos as keyof typeof PositionEnum]}
-            </span>
-          ))}
-      </div>
-    );
-  };
   const members = () => {
     const a = tournament?.draft?.users_remaining?.sort((a, b) => {
       if (!a.mmr && !b.mmr) return 0;
@@ -79,7 +65,9 @@ export const DraftTable: React.FC<DraftTableProps> = ({ curRound }) => {
               </div>
             </TableCell>
             <TableCell>{user.mmr ?? 'N/A'}</TableCell>
-            <TableCell>{user.positions ? positions(user) : 'N/A'}</TableCell>
+            <TableCell>
+              <RolePositions user={user} />
+            </TableCell>
 
             <TableCell>
               <ChoosePlayerButton user={user} />
