@@ -10,11 +10,12 @@ import {
   ScrollRestoration,
 } from 'react-router';
 import { Toaster } from '~/components/ui/sonner';
+import { getLogger } from '~/lib/logger';
 import type { Route } from './+types/root';
 import './app.css';
 import ResponsiveAppBar from './components/navbar/navbar';
 import { useUserStore } from './store/userStore';
-
+const log = getLogger('root');
 export const links: Route.LinksFunction = () => [
   { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
   {
@@ -34,13 +35,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
+    log.debug(process.env.NODE_ENV);
     // Make sure to run react-scan only after hydration
     // if (import.meta.env.DEV) {
     scan({
-      enabled: process.env.NODE_ENV === 'development',
-      trackUnnecessaryRenders: true,
-      showToolbar: true,
-      showNotificationCount: true,
+      enabled: process.env.NODE_ENV === 'dev',
+      trackUnnecessaryRenders: process.env.NODE_ENV === 'dev',
+      showToolbar: process.env.NODE_ENV === 'dev',
     });
     // }
   }, []);
