@@ -48,8 +48,10 @@ def dev_mac(c):
 
 @task
 def dev_release(c):
-    cmd = f"docker compose -f docker-compose.release.yaml up"
-    c.run(cmd)
+    cmd1 = f"docker compose -f docker-compose.release.yaml down "
+    c.run(cmd1)
+    cmd2 = f"docker compose -f docker-compose.release.yaml up -d"
+    c.run(cmd2)
 
 
 @task
