@@ -79,9 +79,9 @@ export function FeaturesSection() {
       ),
     },
     {
-      title: 'Event Scheduling',
+      title: 'Draft Assist & User Tracking',
       description:
-        'Plan and coordinate guild events, scrimmages, and tournaments with our built-in scheduling system.',
+        'Coordinate guild events, scrimmages, and tournaments with our built-in draft system.',
       colorClass: 'text-warning',
       icon: (
         <svg
@@ -115,7 +115,7 @@ export function FeaturesSection() {
             transition: {
               delay: 0,
               duration: 0.2,
-            }
+            },
           }}
         >
           <FeatureCard

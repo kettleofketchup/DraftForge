@@ -321,7 +321,7 @@ from django.core.cache import cache
 
 
 @api_view(["GET"])
-@permission_classes([IsStaff])
+@permission_classes([AllowAny])
 def get_discord_members(request):
     guild_id = (
         settings.DISCORD_GUILD_ID

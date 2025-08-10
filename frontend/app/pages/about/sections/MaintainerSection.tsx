@@ -4,14 +4,55 @@ import { Button } from '~/components/ui/button';
 import { AvatarUrl } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
+
+import {
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '~/components/ui/tooltip';
 const log = getLogger('MaintainerSection');
 
+import { Tooltip } from '@radix-ui/react-tooltip';
 import { motion } from 'framer-motion';
+import { useEffect } from 'react';
 export function MaintainerSection() {
   log.debug('Rendering MaintainerSection component');
   const users = useUserStore((state) => state.users);
-  const kettle = users.find((user) => user.username === 'kettleofketchup');
+  const getUsers = useUserStore((state) => state.getUsers);
+  const getKettle = () =>
+    users.find((user) => user.username === 'kettleofketchup');
+  useEffect(() => {
+    if (!getKettle()) {
+      getUsers();
+    }
+  }, []);
 
+  const buymeabeerContent = () => {
+    'https://buymeabeer.com/kettleofketchup';
+
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger className="" asChild>
+            <a
+              className="flex justify-center mt-4 mb-2"
+              href="https://buymeabeer.com/kettleofketchup"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button>
+                <Beer className="h-16 w-16 hover:animate-spin" /> Buy me a beer
+              </Button>
+            </a>
+          </TooltipTrigger>
+          <TooltipContent>
+            Server Costs to host the site are paid for by Hurk, the guild owner,
+            DTX's founder, & glorious overlord.
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -25,13 +66,16 @@ export function MaintainerSection() {
         <div className="card-body">
           <div className="flex items-center gap-4 mb-6">
             <div className="avatar hover:animate-spin">
-              <img src={AvatarUrl(kettle)} alt="KettleOfKetchup's avatar" />
+              <img
+                src={AvatarUrl(getKettle())}
+                alt="KettleOfKetchup's avatar"
+              />
             </div>
             <div>
               <h2 className="card-title text-2xl text-red-500">
                 KettleOfKetchup
               </h2>
-              <p className="text-base-content/70">Project Lead & Developer</p>
+              <p className="text-base-content/70">Site Owner & Developer</p>
             </div>
           </div>
 
@@ -80,16 +124,7 @@ export function MaintainerSection() {
             whileHover={{ scale: 1.05 }}
             whileFocus={{ scale: 1.05 }}
           >
-            <a
-              className="flex justify-center mt-4 mb-2"
-              href="https://buymeabeer.com/kettleofketchup"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <Button>
-                <Beer className="h-16 w-16 hover:animate-spin" /> Buy me a beer
-              </Button>
-            </a>
+            {buymeabeerContent()}
           </motion.div>
         </div>
       </div>

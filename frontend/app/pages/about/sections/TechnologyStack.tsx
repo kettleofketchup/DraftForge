@@ -15,21 +15,21 @@ export function TechnologyStack() {
     {
       name: 'React',
       description: 'Frontend Framework',
-      colorClass: 'text-accent',
+      colorClass: 'text-blue-500',
     },
     {
       name: 'Django',
       description: 'Backend API',
-      colorClass: 'text-secondary',
+      colorClass: 'text-white-500',
     },
     {
-      name: 'TypeScript',
-      description: 'Type Safety',
+      name: 'Discord OAuth',
+      description: 'Authentication & User Management',
       colorClass: 'text-success',
     },
     {
-      name: 'Tailwind CSS',
-      description: 'Styling',
+      name: 'ShadeCN',
+      description: 'UI Components',
       colorClass: 'text-warning',
     },
   ];
@@ -42,8 +42,11 @@ export function TechnologyStack() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {technologies.map((tech) => (
           <motion.div whileHover={{ scale: 1.05 }} key={tech.name}>
-            <div key={tech.name} className="card bg-base-200 shadow-sm">
-              <div className="card-body items-center text-center p-4">
+            <div
+              key={tech.name}
+              className="card bg-base-200 shadow-sm h-full align-middle"
+            >
+              <div className="card-body items-center text-center p-4 ">
                 <h4 className={`font-semibold ${tech.colorClass}`}>
                   {tech.name}
                 </h4>

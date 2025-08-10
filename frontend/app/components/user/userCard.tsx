@@ -128,6 +128,11 @@ export const UserCard: React.FC<Props> = memo(
       }
       return (
         <>
+          {user.username && (
+            <div>
+              <span className="font-semibold">Username:</span> {user.username}
+            </div>
+          )}
           {user.nickname && (
             <div>
               <span className="font-semibold">Nickname:</span> {user.nickname}
@@ -140,7 +145,7 @@ export const UserCard: React.FC<Props> = memo(
             </div>
           )}
 
-          {user.positions && <RolePositions user={user} />}
+          <RolePositions user={user} />
           {user.steamid && (
             <div>
               <span className="font-semibold">Steam ID:</span> {user.steamid}
