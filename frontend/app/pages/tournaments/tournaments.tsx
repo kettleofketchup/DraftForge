@@ -52,11 +52,10 @@ export default function Tournament() {
     const [isCardEditing, setIsCardEditing] = useState(false);
 
     const wrapperClassName = isCardEditing
-      ? 'grid col-span-2' // Spanning classes
-      : 'grid col-span-1'; // Default class for the wrapper, assuming "grid" was intentional for item styling
+      ? ' col-span-2' // Spanning classes
+      : ' col-span-1'; // Default class for the wrapper, assuming "grid" was intentional for item styling
 
-    const cssClassNames =
-      wrapperClassName + 'flex px-0 py-4 gap-6 content-center h-full';
+    const cssClassNames = wrapperClassName + 'flex gap-4 content-center h-full';
 
     return (
       <div className={cssClassNames} key={tournamentData.pk}>

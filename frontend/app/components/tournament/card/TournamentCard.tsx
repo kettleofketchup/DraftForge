@@ -6,6 +6,7 @@ import { STATE_CHOICES } from '../constants';
 
 const log = getLogger('TournamentCard');
 
+import { motion } from 'framer-motion';
 import { Edit } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -51,15 +52,6 @@ export const TournamentCard: React.FC<Props> = ({
 
   const handleChange = (field: keyof TournamentType, value: any) => {
     setForm((prev: any) => ({ ...prev, [field]: value }));
-  };
-
-  const handleUserSelectionChange = (selectedUserPKs: string[]) => {
-    if (!allUsersFromStore) return;
-    const selectedUsers = allUsersFromStore.filter(
-      (user) =>
-        user.pk !== undefined && selectedUserPKs.includes(user.pk.toString()),
-    );
-    handleChange('users', selectedUsers);
   };
 
   const handleSave = async (e: FormEvent) => {
@@ -122,15 +114,18 @@ export const TournamentCard: React.FC<Props> = ({
           return `${month}-${day}`;
         })()
       : '';
-    return `${tournament.name || ''} - ${date || ''}`;
+    return `${tournament.name || ''}`;
   };
 
   const TournamentHeader = () => {
     if (editMode) return null;
     if (!tournament || !tournament.name) return null;
     return (
-      <div className="flex w-40">
-        <h2 className="w-full card-title text-lg">{getHeaderName()}</h2>
+      <div className="flex flex-col w-40 items-top ">
+        <h2 className="w-full card-title text-lg">Tournament</h2>
+        <h2 className="w-full card-subtitle text-lg text-center ">
+          {getHeaderName()}
+        </h2>
       </div>
     );
   };
@@ -251,11 +246,6 @@ export const TournamentCard: React.FC<Props> = ({
     return result;
   };
 
-  const editModeCss = () =>
-    editMode
-      ? `px-6 py-4 gap-6 content-center w-full`
-      : `px-6 py-4 gap-6 content-center w-full`;
-
   const editBtn = () => {
     if (!currentUser || !currentUser.is_staff) return null;
     if (saveCallback === 'create') {
@@ -278,7 +268,7 @@ export const TournamentCard: React.FC<Props> = ({
         {editBtn()}
         <Button
           variant={'secondary'}
-          className="w-20outline-green-500"
+          className="w-20 outline-green-500"
           onClick={() => navigate(`/tournament/${tournament.pk}`)}
         >
           View
@@ -287,9 +277,15 @@ export const TournamentCard: React.FC<Props> = ({
     );
   };
   return (
-    <div
-      key={`usercard:${getKeyName()} base`}
-      className={`${editModeCss()} h-full`}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.2 }}
+      key={`Tournamentcard:${getKeyName()} base`}
+      className={
+        'flex items-center justify-center p-4 gap-6 content-center w-full h-full'
+      }
+      whileHover={{ scale: 1.02 }}
     >
       <div
         className="w-full h-full card bg-base-200 shadow-md w-full
@@ -299,7 +295,7 @@ export const TournamentCard: React.FC<Props> = ({
             focus:outline-offset-2 active:bg-violet-900
             delay-700 duration-900 ease-in-out"
       >
-        <div className="flex flex-row items-center gap-2">
+        <div className="flex flex-row items-center align-start gap-2">
           {TournamentHeader()}
           {headerButtons()}
         </div>
@@ -307,10 +303,10 @@ export const TournamentCard: React.FC<Props> = ({
         <div className="mt-4 space-y-2 text-sm">
           {editMode ? editModeView() : viewMode()}
         </div>
-        <div className="flex flex-row mt-2 justify-end">
+        <div className="flex flex-row mt-5 justify-end h-full items-end">
           <TournamentRemoveButton tournament={tournament} />
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
