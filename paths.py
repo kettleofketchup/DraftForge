@@ -2,6 +2,7 @@ from pathlib import Path
 
 domains = ["dota.kettle.sh", "www.dota.kettle.sh"]
 
+
 PROJECT_PATH: Path = Path(__file__).parent.absolute()
 FRONTEND_PATH: Path = PROJECT_PATH / "frontend"
 BACKEND_PATH: Path = PROJECT_PATH / "backend"

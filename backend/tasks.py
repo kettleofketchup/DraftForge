@@ -1,6 +1,9 @@
 from pathlib import Path
 
-import toml
+try:
+    import toml
+except ImportError:
+    toml = None
 from invoke.collection import Collection
 from invoke.tasks import task
 

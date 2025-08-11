@@ -1,13 +1,16 @@
 from pathlib import Path
 
-import toml
+try:
+    import toml
+except ImportError:
+    toml = None
 from alive_progress import alive_bar
 from invoke.collection import Collection
 from invoke.tasks import task
 
 import paths
 
-from .utils import get_version
+from .utils import get_version, crun
 
 ns_docker = Collection("docker")
 ns_docker_frontend = Collection("frontend")
@@ -24,28 +27,26 @@ ns_docker.add_collection(ns_docker_all)
 def docker_build(c, image: str, version: str, dockerfile: Path, context: Path):
     img_str = f"{image}:{version}"
     cmd = f"docker build -f {str(dockerfile)} " f"{str(context)} -t {img_str}"
-    with c.cd(paths.PROJECT_PATH):
-        c.run(cmd)
-        c.run(f"docker tag {img_str} {image}:latest")
+    crun(c, cmd)
+
+    crun(c, f"docker tag {img_str} {image}:latest")
 
 
 def docker_pull(c, image: str, version: str, dockerfile: Path, context: Path):
     cmd = f"docker pull {image}:{version}"
     cmd2 = f"docker pull {image}:latest"
-
-    with c.cd(paths.PROJECT_PATH):
-        c.run(cmd)
-        c.run(cmd2)
+    crun(c, cmd)
+    crun(c, cmd2)
 
 
 def tag_latest(c, image: str, version: str):
-    c.run(f"docker tag {image}:{version} {image}:latest")
-    c.run(f"docker push {image}:{version}")
-    c.run(f"docker push {image}:latest")
+    crun(c, f"docker tag {image}:{version} {image}:latest")
+    crun(c, f"docker push {image}:{version}")
+    crun(c, f"docker push {image}:latest")
 
 
 def run_docker(c, image: str, version: str):
-    c.run(f"docker run -it {image}:{version}", pty=True)
+    crun(c, f"docker run -it {image}:{version}", pty=True)
 
 
 # returns version, tag, dockerFilePath, Docker Context Path

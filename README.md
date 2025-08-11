@@ -46,6 +46,12 @@ Refer to your `paths.py` for tag and path variables to use in your scripts or CI
 
 and Update the pyproject.toml version as that will match the tag versions
 ---
+
+# Update Version in docker compose 
+
+when you want to update the version for pyproject and docker ocmpose, run the following
+
+
 ---
 
 ## Publishing Docker Images to GitHub Container Registry

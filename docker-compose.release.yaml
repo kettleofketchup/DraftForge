@@ -2,21 +2,21 @@ services:
 
   frontend:
     env_file: "./.env.release"
-    image: ghcr.io/kettleofketchup/dtx_website/frontend:latest
+    image: ghcr.io/kettleofketchup/dtx_website/frontend:${VERSION}
     ports:
       - "3000:3000"   # Internal Nginx in frontend container
     restart: always
 
   backend:
     env_file: "./.env.release"
-    image: ghcr.io/kettleofketchup/dtx_website/backend:latest
+    image: ghcr.io/kettleofketchup/dtx_website/backend:${VERSION}
     ports:
       - "8000:8000"
     restart: always
     volumes:
       - ./backend/db.sqlite3:/app/backend/db.sqlite3
   nginx:
-    image: ghcr.io/kettleofketchup/dtx_website/nginx:latest
+    image: ghcr.io/kettleofketchup/dtx_website/nginx:${VERSION}
     env_file: "./.env.release"
     container_name: nginx
     restart: always

@@ -1,6 +1,9 @@
 from pathlib import Path
 
-import toml
+try:
+    import toml
+except ImportError:
+    toml = None
 from invoke.collection import Collection
 from invoke.tasks import task
 
@@ -8,6 +11,14 @@ import paths
 
 config = None
 version = None
+
+
+def crun(c, *args, **kwargs):
+
+    with c.cd(paths.PROJECT_PATH):
+        if "pty" not in kwargs:
+            print(f"Running: {' '.join(args)}")
+        return c.run(*args, **kwargs)
 
 
 def get_pyproject():
