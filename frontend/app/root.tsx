@@ -30,10 +30,6 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  if (import.meta.env.DEV) {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-  }
-
   useEffect(() => {
     log.debug(process.env.NODE_ENV);
     // Make sure to run react-scan only after hydration

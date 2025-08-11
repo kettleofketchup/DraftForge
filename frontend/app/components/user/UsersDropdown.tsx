@@ -8,24 +8,22 @@ interface Props {
 export const UsersDropdown: React.FC<Props> = ({ users }) => {
   const showUser = (user: UserType) => {
     return (
-      <>
-        <li
-          key={`userdropdown-${user.pk || user.username}`}
-          className="flex items-center gap-3 py-2"
-        >
-          <div className="avatar">
-            <div className="w-8 h-8 rounded-full">
-              <img src={AvatarUrl(user)} alt={user.nickname || user.username} />
-            </div>
+      <li
+        key={`userdropdown-${user.pk || user.username}`}
+        className="flex items-center gap-3 py-2"
+      >
+        <div className="avatar">
+          <div className="w-8 h-8 rounded-full">
+            <img src={AvatarUrl(user)} alt={user.nickname || user.username} />
           </div>
-          <a
-            href={`/users/${user.pk ?? user.username}`}
-            className="link link-primary"
-          >
-            {user.nickname || user.username}
-          </a>
-        </li>
-      </>
+        </div>
+        <a
+          href={`/users/${user.pk ?? user.username}`}
+          className="link link-primary"
+        >
+          {user.nickname || user.username}
+        </a>
+      </li>
     );
   };
   return (
