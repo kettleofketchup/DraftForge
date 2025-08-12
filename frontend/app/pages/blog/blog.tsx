@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import Placeholder from '~/components/placeholder';
+import Placeholder from '~/components/ui/placeholder';
 export function Blog() {
   const [count, setCount] = useState(0);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);

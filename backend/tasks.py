@@ -15,13 +15,16 @@ version = None
 
 
 ns_db = Collection("db")
+apps = ["steam", "app"]
 
 
 @task
 def db_makemigrations(c):
     with c.cd(paths.BACKEND_PATH.absolute()):
-        cmd = f"python manage.py makemigrations app"
-        c.run(cmd, pty=True)
+        for app in apps:
+            cmd = f"python manage.py makemigrations {app}"
+            c.run(cmd, pty=True)
+
         cmd = f"python manage.py makemigrations"
         c.run(cmd, pty=True)
 
@@ -29,8 +32,10 @@ def db_makemigrations(c):
 @task(pre=[db_makemigrations])
 def db_migrate(c):
     with c.cd(paths.BACKEND_PATH.absolute()):
-        cmd = f"python manage.py migrate app"
-        c.run(cmd, pty=True)
+        for app in apps:
+            cmd = f"python manage.py migrate {app}"
+            c.run(cmd, pty=True)
+
         cmd = f"python manage.py migrate"
         c.run(cmd, pty=True)
 

@@ -55,17 +55,18 @@ if "DEBUG" in os.environ and os.environ["DEBUG"].lower() == "true":
 # Application definition
 
 INSTALLED_APPS = [
-    "rest_framework",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "social_django",
-    "corsheaders",
     "app",
+    "social_django",
+    "rest_framework",
     "django_jinja",
+    "corsheaders",
+    "steam",
 ]
 
 MIDDLEWARE = [

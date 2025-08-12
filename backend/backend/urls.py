@@ -92,4 +92,5 @@ urlpatterns = [
         name="draft-rebuild",
     ),
     path("api/avatars/refresh/", app_views.refresh_all_avatars, name="refresh-avatars"),
+    path("api/steam/", include("steam.urls")),
 ]

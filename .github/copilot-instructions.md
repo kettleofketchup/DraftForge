@@ -1,3 +1,4 @@
+to run python, you have to source .venv/bin/activate
 # Project Goal
 Website that provides a way to help manage DTX, a Dota2 gaming organization.
 
@@ -66,3 +67,22 @@ Website that provides a way to help manage DTX, a Dota2 gaming organization.
 - Frontend: Use `log.info` for general information messages
 - Frontend: Use `log.warn` for warnings that do not require immediate attention
 - Frontend: Use `log.error` for error messages that require attention
+
+
+
+
+# Steam API
+
+
+Python: SteamAPI callers in python to parse steamapi for dota games. This will be stored in a Django cache to ensure rate limiting and the typescript will only ever call the Django endpoints
+
+typescript: some library with that has the steamapi types to parse steamapi json from the backend.
+
+Other use cases involving steam api include:
+- searching for a steamid from a username
+- searching for games involving a users in the dtx dota guild
+- searching for live stats of active dota games involving people
+
+Type script/frontend side only get steamapi data from the python. Only python does the calling.
+
+With this information what libraries handle a lot of this info. Please provide with last update and last 6 month commit history for the project
