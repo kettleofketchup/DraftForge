@@ -24,6 +24,7 @@ import { InitDraftButton } from './buttons/initDraftDialog';
 import { DraftRoundCard } from './draftRoundCard';
 import { DraftRoundView } from './draftRoundView';
 import { refreshDraftHook } from './hooks/refreshDraftHook';
+import { refreshTournamentHook } from './hooks/refreshTournamentHook';
 import { useDraftLive } from './hooks/useDraftLive';
 import type { DraftRoundType, DraftType } from './types';
 const log = getLogger('DraftModal');
@@ -45,6 +46,7 @@ export const DraftModal: React.FC = () => {
     onUpdate: () => {
       log.debug('Live update received - draft data refreshed');
       refreshDraftHook({ draft, setDraft });
+      refreshTournamentHook({ tournament, setTournament });
     },
   });
 

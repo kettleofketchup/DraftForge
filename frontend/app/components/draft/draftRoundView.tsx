@@ -31,8 +31,8 @@ export const DraftRoundView: React.FC = () => {
   }, [tournament.teams?.length]);
 
   useEffect(() => {
-    log.debug('Tournament users updated:', tournament.draft.users_remaining);
-  }, [tournament.draft.users_remaining.length]);
+    log.debug('Tournament users updated:', tournament?.draft?.users_remaining);
+  }, [tournament.draft?.users_remaining?.length]);
 
   const teamView = () => {
     if (!draft || !curDraftRound) return null;

@@ -1,4 +1,3 @@
-import { toast } from 'sonner';
 import { fetchTournament } from '~/components/api/api';
 import type { TournamentType } from '~/index';
 import { getLogger } from '~/lib/logger';
@@ -25,20 +24,11 @@ export const refreshTournamentHook = async ({
     return;
   }
 
-  const data = {
-    tournament_pk: tournament.pk,
-  };
-
-  toast.promise(fetchTournament(tournament.pk), {
-    loading: `Refreshing Tournament ...`,
-    success: (data) => {
-      setTournament(data);
-      return `Tournament has been refreshed!`;
-    },
-    error: (err) => {
-      const val = err.response.data;
-      log.error('Tournament  has failed to refresh!', err);
-      return `Failed to refresh tournament : ${val}`;
-    },
-  });
+  try {
+    log.debug('tournament has been refreshed');
+    const data = await fetchTournament(tournament.pk);
+    setTournament(data);
+  } catch (error) {
+    log.error('Tournament  has failed to refresh!', error);
+  }
 };
