@@ -1,4 +1,3 @@
-import { toast } from 'sonner';
 import { fetchDraft } from '~/components/api/api';
 import type { DraftType } from '~/index';
 import { getLogger } from '~/lib/logger';
@@ -20,17 +19,11 @@ export const refreshDraftHook = async ({ draft, setDraft }: hookParams) => {
     return;
   }
   log.debug('refreshing draft', draft.pk);
-
-  toast.promise(fetchDraft(draft.pk), {
-    loading: `Refreshing draft rounds...`,
-    success: (data) => {
-      setDraft(data);
-      return `Tournament Draft has been refresh!`;
-    },
-    error: (err) => {
-      const val = err.response.data;
-      log.error('Tournament Draft has failed to Reinitialize!', err);
-      return `Failed to Reinitialize tournament draft: ${val}`;
-    },
-  });
+  try {
+    const data: DraftType = await fetchDraft(draft.pk);
+    setDraft(data);
+    log.debug('Updated Draft information');
+  } catch (error) {
+    log.error(error);
+  }
 };

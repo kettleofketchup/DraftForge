@@ -23,6 +23,7 @@ import { useUserStore } from '~/store/userStore';
 import { InitDraftButton } from './buttons/initDraftDialog';
 import { DraftRoundCard } from './draftRoundCard';
 import { DraftRoundView } from './draftRoundView';
+import { refreshDraftHook } from './hooks/refreshDraftHook';
 import { useDraftLive } from './hooks/useDraftLive';
 import type { DraftRoundType, DraftType } from './types';
 const log = getLogger('DraftModal');
@@ -43,6 +44,7 @@ export const DraftModal: React.FC = () => {
     interval: 3000, // Poll every 3 seconds when modal is open
     onUpdate: () => {
       log.debug('Live update received - draft data refreshed');
+      refreshDraftHook({ draft, setDraft });
     },
   });
 
@@ -58,7 +60,6 @@ export const DraftModal: React.FC = () => {
       setCurDraftRound(draft.draft_rounds[draftIndex - 1]);
     }
     log.debug(draftIndex);
-
   };
   const nextRound = async () => {
     if (!draft) return;
@@ -74,8 +75,7 @@ export const DraftModal: React.FC = () => {
       log.debug('Already at the last round');
     }
     log.debug('Current round after update:', curDraftRound);
-
-  }; //localhost/api/tournaments/init-draft
+  };
 
   const totalRounds = (tournament?.teams?.length || 0) * 5;
 

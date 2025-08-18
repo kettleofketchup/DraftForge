@@ -121,7 +121,7 @@ export const TournamentCard: React.FC<Props> = ({
     if (editMode) return null;
     if (!tournament || !tournament.name) return null;
     return (
-      <div className="flex flex-col w-40 items-top ">
+      <div className="flex flex-col w-40em items-top ">
         <h2 className="w-full card-title text-lg">Tournament</h2>
         <h2 className="w-full card-subtitle text-lg text-center ">
           {getHeaderName()}
