@@ -1,16 +1,9 @@
 {
   "prettier.configPath": "frontend/.prettierrc",
 
-    "github.copilot.chat.codeGeneration.instructions": [
-      {
-        "file": ".github/daisyui.md",
-        "instruction": "Generate a daisyUI component using the daisyUI documentation. Use the daisyUI documentation as a reference."
-      }
-    ],
-
     "eslint.options": {
         "overrideConfigFile": "eslint.config.js"
-        
+
     },
     "eslint.workingDirectories": [
       {
@@ -34,7 +27,7 @@
       "editor.formatOnType": true,
       "editor.formatOnPaste": true,
       "editor.formatOnSave": true,
-      
+
     },
     "[typescript]": {
 
@@ -58,9 +51,13 @@
       "editor.formatOnSave": true,
       "editor.defaultFormatter": "ms-python.black-formatter",
       "editor.wordBasedSuggestions": "off"
+
     },
     "python.defaultInterpreterPath": ".venv/bin/python",
-
+    "python.terminal.activateEnvironment": true,
+    "terminal.integrated.env.linux": {
+      "PATH": "${workspaceFolder}/.venv/bin:${env:PATH}"
+    },
   "files.watcherExclude": {
     "**/__pycache__/**": true,
     "**/.venv/**": true,

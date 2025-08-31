@@ -7,13 +7,12 @@ except ImportError:
 from alive_progress import alive_bar
 from invoke.collection import Collection
 from invoke.tasks import task
+
+import paths
 from backend.tasks import db_migrate
 from scripts.docker import docker_pull_all
 
-
-import paths
-
-from .utils import get_version, crun
+from .utils import crun, get_version
 
 ns_update = Collection("update")
 
@@ -35,13 +34,18 @@ def npm(c):
         c.run("npm install")
 
 
+from scripts.utils import hasWANConnection
+
+
 @task
 def all(c):
+
     git(c)
-    python(c)
-    npm(c)
     db_migrate(c)
-    docker_pull_all(c)
+    if hasWANConnection():
+        npm(c)
+        python(c)
+        docker_pull_all(c)
 
 
 ns_update.add_task(git, name="git")

@@ -11,6 +11,7 @@ from app.views import (
     DraftRoundView,
     DraftView,
     GameCreateView,
+    GameView,
     TeamCreateView,
     TeamView,
     TournamentCreateView,
@@ -21,12 +22,12 @@ from app.views import (
     get_discord_members,
     get_discord_voice_channel_activity,
     get_user_guilds,
-    GameView,
 )
 
 router = routers.DefaultRouter()
 router.register(r"users", UserView, "users")
 router.register(r"tournaments", TournamentView, "tournaments")
+
 router.register(r"teams", TeamView, "teams")
 router.register(
     r"drafts",
@@ -95,4 +96,5 @@ urlpatterns = [
     ),
     path("api/avatars/refresh/", app_views.refresh_all_avatars, name="refresh-avatars"),
     path("api/steam/", include("steam.urls")),
+    path("api/bracket/", include("bracket.urls")),
 ]

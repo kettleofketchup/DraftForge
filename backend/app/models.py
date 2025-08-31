@@ -150,16 +150,18 @@ class CustomUser(AbstractUser):
         return f"https://cdn.discordapp.com/embed/avatars/0.png"  # Fallback
 
 
+TOURNAMNET_TYPE_CHOICES = [
+    ("single_elimination", "Single Elimination"),
+    ("double_elimination", "Double Elimination"),
+    ("swiss", "Swiss Bracket"),
+]
+
+
 class Tournament(models.Model):
     STATE_CHOICES = [
         ("future", "Future"),
         ("in_progress", "In Progress"),
         ("past", "Past"),
-    ]
-    TOURNAMNET_TYPE_CHOICES = [
-        ("single_elimination", "Single Elimination"),
-        ("double_elimination", "Double Elimination"),
-        ("swiss", "Swiss Bracket"),
     ]
     name = models.CharField(max_length=255)
     date_played = models.DateField()

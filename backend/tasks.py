@@ -15,7 +15,7 @@ version = None
 
 
 ns_db = Collection("db")
-apps = ["steam", "app"]
+apps = ["steam", "app", "bracket"]
 
 
 @task

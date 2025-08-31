@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     "django_jinja",
     "corsheaders",
     "steam",
+    "bracket",
 ]
 
 MIDDLEWARE = [

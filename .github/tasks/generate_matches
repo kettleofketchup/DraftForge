@@ -1,0 +1,1 @@
+Create a helper function in backend/app/models for bracket to generate match slots. generate a double elimination bracket that will go through the teams and create a double elimination bracket. Create a text based diagram to illustrate what the double elimination diagram looks like and double check the code will generate the diagram

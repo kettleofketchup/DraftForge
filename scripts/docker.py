@@ -10,7 +10,7 @@ from invoke.tasks import task
 
 import paths
 
-from .utils import get_version, crun
+from .utils import crun, get_version
 
 ns_docker = Collection("docker")
 ns_docker_frontend = Collection("frontend")
@@ -33,6 +33,7 @@ def docker_build(c, image: str, version: str, dockerfile: Path, context: Path):
 
 
 def docker_pull(c, image: str, version: str, dockerfile: Path, context: Path):
+
     cmd = f"docker pull {image}:{version}"
     cmd2 = f"docker pull {image}:latest"
     crun(c, cmd)
@@ -175,6 +176,7 @@ def docker_push_all(c):
 
 @task
 def docker_pull_all(c):
+
     funcs = [docker_backend_pull, docker_frontend_pull, docker_nginx_pull]
     with alive_bar(total=3, title="Pullling Images") as bar:
         for func in funcs:

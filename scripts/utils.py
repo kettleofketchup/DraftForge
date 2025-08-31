@@ -4,6 +4,8 @@ try:
     import toml
 except ImportError:
     toml = None
+import urllib.request
+
 from invoke.collection import Collection
 from invoke.tasks import task
 
@@ -11,6 +13,14 @@ import paths
 
 config = None
 version = None
+
+
+def hasWANConnection(url="http://www.google.com", timeout=5) -> bool:
+    try:
+        urllib.request.urlopen(url, timeout=timeout)
+        return True
+    except:
+        return False
 
 
 def crun(c, *args, **kwargs):

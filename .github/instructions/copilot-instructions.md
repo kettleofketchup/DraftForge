@@ -86,5 +86,3 @@ Other use cases involving steam api include:
 Type script/frontend side only get steamapi data from the python. Only python does the calling.
 
 With this information what libraries handle a lot of this info. Please provide with last update and last 6 month commit history for the project
-
-
