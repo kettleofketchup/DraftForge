@@ -71,7 +71,7 @@ export const DraftRoundView: React.FC = () => {
     );
   };
 
-  if (draft.latest_round !== curDraftRound.pk && !curDraftRound.choice) {
+  if (draft?.latest_round !== curDraftRound?.pk && !curDraftRound.choice) {
     return (
       <div className="mb-4">
         <h3 className="text-xl font-bold">

@@ -55,7 +55,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
       if (liveView) {
         let newDraft: DraftRoundType =
           draft?.draft_rounds?.find(
-            (round) => round.pk === draft.latest_round,
+            (round) => round.pk === draft?.latest_round,
           ) || ({} as DraftRoundType);
         setCurDraftRound(newDraft);
         let number = draft?.draft_rounds?.findIndex(
