@@ -69,6 +69,7 @@ class DraftRoundForDraftSerializer(serializers.ModelSerializer):
     pick_number = serializers.IntegerField()
 
     choice = TournamentUserSerializer(many=False, read_only=True)
+    team = TeamSerializerForTournament(many=False, read_only=True)
 
     class Meta:
         model = DraftRound
@@ -78,6 +79,7 @@ class DraftRoundForDraftSerializer(serializers.ModelSerializer):
             "pick_phase",
             "pick_number",
             "choice",
+            "team",
         )
 
 
@@ -181,6 +183,7 @@ class DraftRoundSerializer(serializers.ModelSerializer):
     )
     pick_phase = serializers.IntegerField()
     pick_number = serializers.IntegerField()
+    team = TeamSerializerForTournament(many=False, read_only=True)
 
     choice = TournamentUserSerializer(many=False, read_only=True)
     choice_id = serializers.PrimaryKeyRelatedField(
@@ -202,6 +205,7 @@ class DraftRoundSerializer(serializers.ModelSerializer):
             "pick_number",
             "choice",
             "choice_id",
+            "team",
         )
 
 

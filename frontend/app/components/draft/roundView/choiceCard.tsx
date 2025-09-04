@@ -1,20 +1,19 @@
 import { useEffect } from 'react';
 import type { UserClassType } from '~/index';
 import { getLogger } from '~/lib/logger';
-import { useUserStore } from '~/store/userStore';
-import { UserCard } from '../user';
+import { UserCard } from '../../user';
+import type { DraftRoundType } from '../types';
 import { DraftTable } from './draftTable';
-import type { DraftRoundType } from './types';
-const log = getLogger('draftTable');
+const log = getLogger('choiceCard');
 interface PlayerChoiceViewProps {
   curRound: DraftRoundType;
 }
 export const PlayerChoiceView: React.FC<PlayerChoiceViewProps> = ({
   curRound,
 }) => {
-  const tournament = useUserStore((state) => state.tournament);
-  const curDraft = useUserStore((state) => state.curDraft);
-  useEffect(() => {}, [curRound.choice]);
+  useEffect(() => {
+    log.debug('Current choice updated:', curRound?.choice);
+  }, [curRound?.choice]);
 
   if (!curRound || !curRound?.choice) return <DraftTable curRound={curRound} />;
 

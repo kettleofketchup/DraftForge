@@ -4,7 +4,6 @@ import type { PickPlayerForRoundAPI } from '~/components/api/types';
 import type { UserType } from '~/components/user/types';
 import type { DraftRoundType, DraftType, TournamentType } from '~/index';
 import { getLogger } from '~/lib/logger';
-import { refreshTournamentHook } from './refreshTournamentHook';
 const log = getLogger('PickPlayerHook');
 
 type hookParams = {
@@ -46,10 +45,25 @@ export const choosePlayerHook = async ({
     user_pk: player.pk,
   };
 
+  const getDraft = (tournament: TournamentType) => {
+    return tournament.draft as DraftType;
+  };
+  const getDraftRound = (draft: DraftType, roundPk: number) => {
+    return draft.draft_rounds?.find((round) => round.pk === roundPk);
+  };
   toast.promise(PickPlayerForRound(dataRoundUpdate), {
     loading: `Choosing ${player.username} for ${curDraftRound.captain?.username} in round ${curDraftRound.pick_number}`,
     success: (data) => {
+      let newRound: DraftRoundType = data.draft.draft_rounds?.find(
+        (round: DraftRoundType) => round.pk === curDraftRound.pk,
+      );
+
+      log.debug('newRound', newRound);
+      log.debug('draft', data.draft);
       setTournament(data);
+      setDraft(data.draft);
+      setCurDraftRound(newRound);
+
       return `${curDraftRound?.pick_number} has been updated successfully!`;
     },
     error: (err) => {
@@ -57,12 +71,5 @@ export const choosePlayerHook = async ({
       log.error('Failed to update captains tournament', err);
       return `Failed to update captains: ${val}`;
     },
-  });
-  refreshTournamentHook({
-    tournament: tournament,
-    setTournament: setTournament,
-    setDraft: setDraft,
-    curDraftRound: curDraftRound,
-    setCurDraftRound: setCurDraftRound,
   });
 };

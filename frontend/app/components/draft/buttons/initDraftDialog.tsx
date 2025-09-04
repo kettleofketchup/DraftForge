@@ -29,6 +29,10 @@ export const InitDraftButton: React.FC = () => {
   const setTournament = useUserStore((state) => state.setTournament);
   const setDraftIndex = useUserStore((state) => state.setDraftIndex);
   useEffect(() => {}, [tournament.draft]);
+  const draft = useUserStore((state) => state.draft);
+  const setDraft = useUserStore((state) => state.setDraft);
+  const curDraftRound = useUserStore((state) => state.curDraftRound);
+  const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
   const isStaff = useUserStore((state) => state.isStaff);
   const handleChange = async (e: FormEvent) => {
     log.debug('handleChange', e);
@@ -42,12 +46,19 @@ export const InitDraftButton: React.FC = () => {
       return;
     }
 
-    initDraftHook({ tournament, setTournament });
+    initDraftHook({
+      tournament,
+      setTournament,
+      setDraft,
+      curDraftRound,
+      setCurDraftRound,
+      setDraftIndex,
+    });
     setDraftIndex(0);
   };
   if (!isStaff()) {
     return (
-      <div className="justify-start flex w-full">
+      <div className="justify-start self-start flex w-full">
         <AdminOnlyButton tooltipTxt="Must be an admin to make changes to the draft" />
       </div>
     );
@@ -67,6 +78,8 @@ export const InitDraftButton: React.FC = () => {
                 }}
                 whileHover={{ scale: 1.1 }}
                 whileFocus={{ scale: 1.05 }}
+                className="flex place-self-start"
+                id="RestartDraftButtonMotion"
               >
                 <Button className="w-40 sm:w-20%" variant={'destructive'}>
                   <OctagonAlert className="mr-2 " />
@@ -83,7 +96,7 @@ export const InitDraftButton: React.FC = () => {
     );
   };
   return (
-    <div className="flex w-full justify-start ">
+    <>
       <AlertDialog>
         {dialogTriggerButton()}
         <AlertDialogContent className={'bg-red-900 text-white'}>
@@ -104,6 +117,6 @@ export const InitDraftButton: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   );
 };

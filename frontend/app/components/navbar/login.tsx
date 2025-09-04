@@ -140,9 +140,13 @@ type props = {};
 export const LoginWithDiscordButton: React.FC<props> = () => {
   const currentUser = useUserStore((state) => state.currentUser); // Zustand user state
   const hasHydrated = useUserStore((state) => state.hasHydrated); // Zustand user state
-
+  const getCurrentUser = useUserStore((state) => state.getCurrentUser); // Zustand setter
   useEffect(() => {}, [currentUser]);
-
+  useEffect(() => {
+    if (hasHydrated && currentUser.username === undefined) {
+      getCurrentUser();
+    }
+  }, [hasHydrated]);
   if (!hasHydrated) {
     return (
       <div className="p-3 m-0 btn-circle avatar flex p-0 ">

@@ -47,11 +47,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const hasHydrated = useUserStore((state) => state.hasHydrated); // Zustand setter
 
-  useEffect(() => {
-    if (hasHydrated && currentUser.username === undefined) {
-      getCurrentUser();
-    }
-  }, [hasHydrated]);
   return (
     <html lang="en" className="dark" data-theme="dark">
       <head>

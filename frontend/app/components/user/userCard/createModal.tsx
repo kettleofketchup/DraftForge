@@ -40,6 +40,7 @@ interface Props {
   query?: string;
   setQuery?: React.Dispatch<React.SetStateAction<string>>;
 }
+
 export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
   const currentUser: UserType = useUserStore((state) => state.currentUser);
   const users: UserType[] = useUserStore(useShallow((state) => state.users));

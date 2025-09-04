@@ -314,13 +314,6 @@ class Draft(models.Model):
         blank=True,
         null=True,
     )
-    latest_round = models.ForeignKey(
-        "DraftRound",
-        related_name="current_round",
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-    )
 
     def __str__(self):
         return f"Draft {self.pk} in {self.tournament.name}"
@@ -363,19 +356,24 @@ class Draft(models.Model):
 
         return self.tournament.captains.all()
 
-    def update_latest_round(self):
+    @property
+    def latest_round(self):
         """
         Returns the latest draft round.
         """
         if not self.draft_rounds.exists():
-            return
+            log.error("No draft rounds exist")
+            return 
 
-        self.latest_round = (
+        latest_round = (
             self.draft_rounds.order_by("pick_number")
             .exclude(choice__isnull=False)
             .first()
         )
-        self.save()
+        if not latest_round:
+            latest_round = self.draft_rounds.order_by("pick_number").last()
+
+        return latest_round.pk
 
     def rebuild_teams(self):
         """
@@ -534,7 +532,6 @@ class DraftRound(models.Model):
             self.choice = user
             self.team.members.add(user)
             self.team.save()
-            self.draft.update_latest_round()
             self.save()
         else:
             raise ValueError("User is not available for drafting.")

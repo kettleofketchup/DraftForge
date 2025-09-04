@@ -1,18 +1,26 @@
 import { toast } from 'sonner';
-import { DraftRebuild, initDraftRounds } from '~/components/api/api';
+import { initDraftRounds } from '~/components/api/api';
 import type { InitDraftRoundsAPI } from '~/components/api/types';
-import type { TournamentType } from '~/index';
+import type { DraftRoundType, DraftType, TournamentType } from '~/index';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('InitDraft');
 
 type hookParams = {
   tournament: TournamentType;
   setTournament: (tournament: TournamentType) => void;
+  setDraft: (draft: DraftType) => void;
+  curDraftRound: DraftRoundType;
+  setCurDraftRound: (draftRound: DraftRoundType) => void;
+  setDraftIndex: (index: number) => void;
 };
 
 export const initDraftHook = async ({
   tournament,
   setTournament,
+  setDraft,
+  curDraftRound,
+  setCurDraftRound,
+  setDraftIndex,
 }: hookParams) => {
   log.debug('Initialization draft', { tournament });
 
@@ -33,26 +41,17 @@ export const initDraftHook = async ({
   toast.promise(initDraftRounds(data), {
     loading: `Initializing draft rounds...`,
     success: (data) => {
+      log.debug('DraftRebuild sucess, data:', data);
       setTournament(data);
+      setDraft(data.draft);
+      setCurDraftRound(data?.draft?.draft_rounds[0] as DraftRoundType);
+      setDraftIndex(0);
       return `Tournament Draft has been initialized!`;
     },
     error: (err) => {
       const val = err.response.data;
       log.error('Tournament Draft has failed to Reinitialize!', err);
       return `Failed to Reinitialize tournament draft: ${val}`;
-    },
-  });
-
-  toast.promise(DraftRebuild(data), {
-    loading: `Rebuilding teams...`,
-    success: (data) => {
-      setTournament(data);
-      return `Tournament Draft has been rebuilt!`;
-    },
-    error: (err) => {
-      const val = err.response.data;
-      log.error('Tournament Draft has failed to Rebuild!', err);
-      return `Failed to Rebuild tournament draft: ${val}`;
     },
   });
 };

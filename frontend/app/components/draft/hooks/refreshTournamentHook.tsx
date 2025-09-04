@@ -36,11 +36,12 @@ export const refreshTournamentHook = async ({
     setTournament(data);
     if (setDraft) setDraft(data.draft);
     if (setCurDraftRound)
-      setCurDraftRound(
-        tournament.draft?.draft_rounds?.find(
-          (round: DraftRoundType) => round?.pk === curDraftRound?.pk,
-        ) || ({} as DraftRoundType),
-      );
+      (log.debug('curDraftRound', { curDraftRound, tournament }),
+        setCurDraftRound(
+          data.draft?.draft_rounds?.find(
+            (round: DraftRoundType) => round?.pk === curDraftRound?.pk,
+          ) || ({} as DraftRoundType),
+        ));
   } catch (error) {
     log.error('Tournament  has failed to refresh!', error);
   }

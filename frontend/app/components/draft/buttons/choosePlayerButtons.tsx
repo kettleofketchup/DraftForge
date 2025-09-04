@@ -42,6 +42,8 @@ export const ChoosePlayerButton: React.FC<{
       setTournament,
       player: user,
       curDraftRound,
+      setCurDraftRound,
+      setDraft,
     });
     refreshDraftHook({ draft, setDraft });
 

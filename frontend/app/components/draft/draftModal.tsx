@@ -21,11 +21,14 @@ import {
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { InitDraftButton } from './buttons/initDraftDialog';
-import { DraftRoundCard } from './draftRoundCard';
+import { LatestRoundButton } from './buttons/latestButton';
+import { NextRoundButton } from './buttons/nextButton';
+import { PrevRoundButton } from './buttons/prevButton';
 import { DraftRoundView } from './draftRoundView';
 import { refreshDraftHook } from './hooks/refreshDraftHook';
 import { refreshTournamentHook } from './hooks/refreshTournamentHook';
 import { useDraftLive } from './hooks/useDraftLive';
+import { LiveView } from './liveVIew';
 import type { DraftRoundType, DraftType } from './types';
 const log = getLogger('DraftModal');
 type DraftModalParams = {
@@ -45,83 +48,93 @@ export const DraftModal: React.FC<DraftModalParams> = ({
   const [open, setOpen] = useState(false);
 
   // Enable live updates when modal is open and draft exists
+
+  const setDraftRoundToLatest = () => {
+    const newDraft: DraftRoundType =
+      draft?.draft_rounds?.find((round) => round.pk === draft?.latest_round) ||
+      ({} as DraftRoundType);
+
+    setCurDraftRound(newDraft);
+
+    const i = draft?.draft_rounds?.findIndex(
+      (round) => round.pk === newDraft.pk,
+    );
+    if (i) setDraftIndex(i);
+    log.debug('Set draft round to latest:', { newDraft, i });
+    log.debug('Current round after update:', curDraftRound);
+  };
   const { isPolling, forceRefresh } = useDraftLive({
-    enabled: open && !!tournament?.draft?.pk,
+    enabled: open && !!tournament?.draft?.pk && liveView,
     interval: 3000, // Poll every 3 seconds when modal is open
     onUpdate: () => {
-      log.debug('Live update received - draft data refreshed');
       if (!liveView) return;
       if (liveView) {
+        log.debug('Live view is enabled, refreshing draft and tournament');
         refreshDraftHook({ draft, setDraft });
         refreshTournamentHook({ tournament, setTournament });
-
-        let newDraft: DraftRoundType =
-          draft?.draft_rounds?.find(
-            (round) => round.pk === draft?.latest_round,
-          ) || ({} as DraftRoundType);
-        setCurDraftRound(newDraft);
-        let number = draft?.draft_rounds?.findIndex(
-          (round) => round.pk === newDraft.pk,
-        );
-        if (number) setDraftIndex(number);
+        setDraftRoundToLatest();
       }
     },
   });
+
+  const goToLatestRound = async () => {
+    if (!draft) return;
+    if (!draft.draft_rounds) return;
+
+    const newDraft: DraftRoundType =
+      draft?.draft_rounds?.find((round) => round.pk === draft?.latest_round) ||
+      ({} as DraftRoundType);
+
+    setCurDraftRound(newDraft);
+
+    const i = draft?.draft_rounds?.findIndex(
+      (round) => round.pk === newDraft.pk,
+    );
+
+    if (i == -1) {
+      setCurDraftRound(draft?.draft_rounds[-1]);
+    }
+    if (i !== undefined && i !== draftIndex) {
+      log.debug('Setting draft index to latest round index:', i);
+      setDraftIndex(i);
+    }
+
+    log.debug('Set draft round to latest:', { newDraft, i });
+    log.debug('Current round after update:', curDraftRound);
+  };
 
   const prevRound = async () => {
     if (!draft) return;
     if (!draft.draft_rounds) return;
     log.debug('Prev Round');
     log.debug('Current Index', draftIndex, draft.draft_rounds.length);
+    const i = draftIndex;
 
-    if (draftIndex > 0) {
+    if (i > 0) {
       log.debug('Setting new round', draftIndex, draft.draft_rounds.length);
-      setDraftIndex(draftIndex - 1);
-      setCurDraftRound(draft.draft_rounds[draftIndex - 1]);
+      setDraftIndex(i - 1);
+      setCurDraftRound(draft.draft_rounds[i - 1]);
     }
-    log.debug(draftIndex);
   };
+
   const nextRound = async () => {
     if (!draft) return;
     if (!draft.draft_rounds) return;
+    const i = draftIndex;
     log.debug('Next Round');
     log.debug('Current Index', draftIndex, draft.draft_rounds.length);
-
     // Fix: Check if next index is within bounds
-    if (draftIndex < draft.draft_rounds.length - 1) {
-      log.debug('Setting new round', draftIndex + 1, draft.draft_rounds.length);
-      setDraftIndex(draftIndex + 1);
+    if (i < draft.draft_rounds.length - 1) {
+      log.debug('Setting new round', i + 1, draft.draft_rounds.length);
+      setDraftIndex(i + 1);
+      setCurDraftRound(draft?.draft_rounds?.[i + 1] || ({} as DraftRoundType));
     } else {
       log.debug('Already at the last round');
     }
     log.debug('Current round after update:', curDraftRound);
-    setCurDraftRound(
-      draft?.draft_rounds?.[draftIndex] || ({} as DraftRoundType),
-    );
   };
 
-  const totalRounds = (tournament?.teams?.length || 0) * 4;
-
   useEffect(() => {
-    if (!draft || !draft.draft_rounds) return;
-    log.debug('Setting current draft round based on index:', draftIndex);
-    // Ensure we don't go out of bounds
-    if (draftIndex < 0 || draftIndex >= draft.draft_rounds.length) {
-      log.warn(
-        `Draft index ${draftIndex} is out of bounds for available rounds: ${draft.draft_rounds.length}`,
-      );
-      return;
-    }
-    log.debug(
-      `Setting current draft round to index ${draftIndex} with data:`,
-      draft.draft_rounds[draftIndex],
-    );
-    setCurDraftRound(
-      draft?.draft_rounds?.[draftIndex] || ({} as DraftRoundType),
-    );
-  }, [draftIndex]);
-
-  const initialize = () => {
     log.debug('Tournament Modal Initialized draft data:', tournament?.draft);
 
     if (tournament?.draft) {
@@ -146,10 +159,6 @@ export const DraftModal: React.FC<DraftModalParams> = ({
       setDraft({} as DraftType);
       setCurDraftRound({} as DraftRoundType);
     }
-  };
-
-  useEffect(() => {
-    initialize();
   }, []);
 
   // Log modal state changes for debugging live updates
@@ -161,65 +170,15 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     }
   }, [open]);
 
-  const noDraftView = () => {
-    return (
-      <>
-        <h1> No Draft Information Available</h1>
-        <p> Start the draft with the init draft button below</p>
-      </>
-    );
-  };
-
   const header = () => {
     return (
       <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="text-lg font-semibold">Draft Progress</h3>
-            {tournament?.draft?.pk && (
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    isPolling ? 'bg-success animate-pulse' : 'bg-warning'
-                  }`}
-                />
-                <span className="text-xs text-base-content/70">
-                  {isPolling ? 'Live updates' : 'Manual refresh only'}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center">
-          <DraftRoundCard
-            draftRound={
-              draft?.draft_rounds?.[draftIndex] || ({} as DraftRoundType)
-            }
-            maxRounds={totalRounds}
-            isCur={true}
-          />
-
-          {draftIndex < totalRounds - 1 &&
-          draft &&
-          draft.draft_rounds &&
-          draft.draft_rounds[draftIndex + 1] ? (
-            <div className="hidden lg:flex lg:w-full lg:pl-8">
-              <DraftRoundCard
-                draftRound={draft.draft_rounds[draftIndex + 1]}
-                maxRounds={totalRounds}
-                isCur={false}
-              />
-            </div>
-          ) : (
-            <></>
-          )}
-        </div>
+        <LiveView isPolling={isPolling} />
       </div>
     );
   };
+
   const mainView = () => {
-    if (!draft || !draft.draft_rounds) return <>{noDraftView()}</>;
     return (
       <>
         {header()}
@@ -251,12 +210,22 @@ export const DraftModal: React.FC<DraftModalParams> = ({
       </TooltipProvider>
     );
   };
+
+  const choiceButtons = () => {
+    return (
+      <div className="w-full flex  gap-4 align-center justify-center ">
+        <PrevRoundButton goToPrevRound={prevRound} />
+        <LatestRoundButton goToLatestRound={goToLatestRound} />
+        <NextRoundButton goToNextRound={nextRound} />
+      </div>
+    );
+  };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {draftDialogButton()}
 
-      <DialogContent className=" min-w-sm  xl:min-w-5xl l:min-w-5xl md:min-w-3xl sm:min-w-2xl ">
-        <ScrollArea className="overflow-y-auto h-screen max-h-[80vh] py-5em pr-2">
+      <DialogContent className=" min-w-full  sm:md:min-w-[90%] ">
+        <ScrollArea className="overflow-y-auto overflow-x-auto h-screen max-h-[80vh] py-5em pr-2">
           <DialogHeader>
             <DialogTitle>Tournament Draft</DialogTitle>
             <DialogDescription>Drafting Teams</DialogDescription>
@@ -264,21 +233,18 @@ export const DraftModal: React.FC<DraftModalParams> = ({
           </DialogHeader>
         </ScrollArea>
 
-        <DialogFooter className="flex flex-col items-center gap-4 mb-4 md:flex-row">
-          <InitDraftButton />
-
-          <Button
-            className="w-40 sm:w-40 md:w-40 btn btn-info"
-            onClick={prevRound}
-          >
-            Prev Round
-          </Button>
-          <Button className="w-40 btn btn-info" onClick={nextRound}>
-            Next Round
-          </Button>
-
+        <DialogFooter
+          id="DraftFootStarter"
+          className="w-full  flex flex-col rounded-full items-center gap-4 mb-4 md:flex-row align-center sm:shadow-md sm:shadow-black/10 /50 sm:p-6 sm:m-0"
+        >
+          <div className="flex w-full justify-center md:justify-start">
+            <InitDraftButton />
+          </div>
+          {choiceButtons()}
           <DialogClose asChild>
-            <Button className="w-40">Close</Button>
+            <div className="flex w-full justify-center md:justify-end">
+              <Button>Close</Button>
+            </div>
           </DialogClose>
         </DialogFooter>
       </DialogContent>

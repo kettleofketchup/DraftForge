@@ -32,6 +32,8 @@ from app.serializers import (
 )
 from backend import settings
 
+log = logging.getLogger(__name__)
+
 
 class PickPlayerForRound(serializers.Serializer):
     draft_round_pk = serializers.IntegerField(required=True)
@@ -70,10 +72,8 @@ def pick_player_for_round(request):
     except Tournament.DoesNotExist:
         return Response({"error": "Tournament not found"}, status=404)
 
-    draft_round.draft.update_latest_round()
     draft_round.draft.save()
-    
-    
+
     return Response(TournamentSerializer(tournament).data, status=201)
 
 
@@ -178,10 +178,10 @@ def generate_draft_rounds(request):
         pass  # No draft to delete
     logging.debug(f"Creating draft for tournament {tournament.name}")
     draft = Draft.objects.create(tournament=tournament)
-    draft.save()
     draft.build_rounds()
-    draft.update_latest_round()
-
+    draft.save()
+    draft.rebuild_teams()
+    draft.save()
     return Response(TournamentSerializer(tournament).data, status=201)
 
 
@@ -234,6 +234,11 @@ def rebuild_team(request):
     if not draft.draft_rounds.exists():
         logging.debug("Draft rounds do not exist, building them now")
         draft.build_rounds()
+
     draft.rebuild_teams()
+    draft.save()
+
     tournament = Tournament.objects.get(pk=tournament_pk)
-    return Response(TournamentSerializer(tournament).data, status=201)
+    data = TournamentSerializer(tournament).data
+    log.debug(data)
+    return Response(data, status=201)
