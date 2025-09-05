@@ -5,10 +5,31 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from rest_framework import serializers
 
-from .models import CustomUser, Draft, DraftRound, Game, Team, Tournament
+from .models import (
+    CustomUser,
+    Draft,
+    DraftRound,
+    Game,
+    PositionsModel,
+    Team,
+    Tournament,
+)
+
+
+class PositionsSerializer(serializers.ModelSerializer):
+    carry = serializers.IntegerField()
+    mid = serializers.IntegerField()
+    offlane = serializers.IntegerField()
+    soft_support = serializers.IntegerField()
+    hard_support = serializers.IntegerField()
+
+    class Meta:
+        model = PositionsModel
+        fields = ["carry", "mid", "offlane", "soft_support", "hard_support"]
 
 
 class TournamentUserSerializer(serializers.ModelSerializer):
+    positions = PositionsSerializer(many=False, read_only=True)
 
     class Meta:
         model = CustomUser
@@ -22,6 +43,7 @@ class TournamentUserSerializer(serializers.ModelSerializer):
             "steamid",
             "avatarUrl",
             "mmr",
+            "positions",
         )
 
 
@@ -336,6 +358,7 @@ class TournamentSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     teams = TeamSerializer(many=True, read_only=True)  # Associated teams
+    positions = PositionsSerializer(many=False, read_only=False)
 
     class Meta:
         model = CustomUser
@@ -347,7 +370,6 @@ class UserSerializer(serializers.ModelSerializer):
             "is_active",
             "is_superuser",
             "avatar",
-            "positions",
             "discordId",
             "steamid",
             "mmr",
@@ -356,6 +378,7 @@ class UserSerializer(serializers.ModelSerializer):
             "username",
             "date_joined",
             "teams",  # Include associated teams
+            "positions",
         )
 
     def create(self, validated_data):

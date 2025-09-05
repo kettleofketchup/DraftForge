@@ -1,6 +1,5 @@
 import { memo } from 'react';
 import type { UserType } from '~/index';
-import { PositionEnum } from '~/index';
 import { Badge } from '../../ui/badge';
 import {
   CarrySVG,
@@ -36,19 +35,25 @@ export const CarryBadge: React.FC<BadgeProps> = memo(({ user }) => {
   const shouldShowBadge = useBadgeGuard(user);
 
   if (!shouldShowBadge) return null;
-  if (!user.positions?.[PositionEnum.Carry]) return null;
+  if (!user.positions?.carry) return null;
   return (
-    <Badge className="badge-primary bg-red-900 text-white">
+    <div className="relative inline-block">
       <CarrySVG />
       Carry
-    </Badge>
+      <Badge
+        className="absolute -top-1 -right-1 h-2 w-2 rounded-full p-0"
+        variant="destructive"
+      >
+        {user.positions.carry}
+      </Badge>
+    </div>
   );
 });
 
 export const MidBadge: React.FC<{ user: UserType }> = ({ user }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
-  if (!user.positions?.[PositionEnum.Mid]) return null;
+  if (!user.positions?.mid) return null;
   return (
     <Badge className="badge-primary bg-cyan-900 text-white">
       <MidSVG />
@@ -61,7 +66,7 @@ export const OfflaneBadge: React.FC<{ user: UserType }> = ({ user }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
 
-  if (!user.positions?.[PositionEnum.Offlane]) return null;
+  if (!user.positions?.offlane) return null;
   return (
     <Badge className="badge-primary badge-primary bg-green-900 text-white">
       <OfflaneSVG />
@@ -73,7 +78,7 @@ export const OfflaneBadge: React.FC<{ user: UserType }> = ({ user }) => {
 export const SoftSupportBadge: React.FC<{ user: UserType }> = ({ user }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
-  if (!user.positions?.[PositionEnum.SoftSupport]) return null;
+  if (!user.positions?.soft_support) return null;
   return (
     <Badge className="badge-primary bg-purple-900 text-white">
       <SoftSupportSVG />
@@ -85,7 +90,7 @@ export const SoftSupportBadge: React.FC<{ user: UserType }> = ({ user }) => {
 export const HardSupportBadge: React.FC<{ user: UserType }> = ({ user }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
-  if (!user.positions?.[PositionEnum.HardSupport]) return null;
+  if (!user.positions?.hard_support) return null;
   return (
     <Badge className="badge-primary bg-blue-900 text-white">
       <HardSupportSVG />

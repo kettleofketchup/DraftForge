@@ -7,6 +7,22 @@ export type PositionsMap = {
   [key in PositionEnum]?: boolean;
 };
 
+/**
+ * Represents a player's ranks across all Dota 2 positions.
+ */
+export interface PositionsType {
+  /** Rank of the carry position */
+  carry: number;
+  /** Rank of the mid position */
+  mid: number;
+  /** Rank of the offlane position */
+  offlane: number;
+  /** Rank of the soft support position */
+  soft_support: number;
+  /** Rank of the hard support position */
+  hard_support: number;
+}
+
 export interface UserType {
   [key: string]: any;
   username: string;
@@ -15,7 +31,7 @@ export interface UserType {
   is_superuser: boolean;
   nickname?: string | null;
   mmr?: number;
-  positions?: PositionsMap;
+  positions?: PositionsType;
   steamid?: number;
   avatar?: string;
   pk: number;

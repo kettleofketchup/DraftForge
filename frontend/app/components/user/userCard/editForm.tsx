@@ -1,17 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
-
 import type { UserClassType, UserType } from '~/components/user/types';
 
-import { PositionEnum, User } from '~/components/user';
+import { User } from '~/components/user';
 
 import { useUserStore } from '~/store/userStore';
 
 import { UserRoundPlusIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { DialogClose } from '~/components/ui/dialog';
+import { Label } from '~/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
 import { getLogger } from '~/lib/logger';
 import { handleSave } from './handleSaveHook';
-
 const log = getLogger('editForm');
 
 interface Props {
@@ -93,7 +99,93 @@ export const UserEditForm: React.FC<Props> = ({
       </div>
     );
   };
+  const positionChoices = () => {
+    return (
+      <SelectContent>
+        <SelectItem value="0">0: Don't show this role </SelectItem>
+        <SelectItem value="1">1: Favorite</SelectItem>
+        <SelectItem value="2">2: Can play</SelectItem>
+        <SelectItem value="3">3: If the team needs</SelectItem>
+        <SelectItem value="4">4: I would rather not but I guess</SelectItem>
+        <SelectItem value="5">5: Least Favorite </SelectItem>
+      </SelectContent>
+    );
+  };
 
+  const positionSelection = () => {
+    return (
+      <div className="form-control mt-5 align-center text-center mb-5 shadow-md p-4 rounded-lg bg-gray-800 hover:shadow-lg hover:shadow-gray-500/50 p-4 rounded-lg">
+        <label className="label font-bold">Positions</label>
+        <div className="flex flex-col md:flex-row md:cols-2 xl:cols-3 flex-wrap w-full items-center align-middle w-full gap-6 justify-center mt-2 ">
+          <div className="flex flex-col align-center items-center justify-center gap-2  ">
+            <Label className="carry-select font-semibold">Carry</Label>
+            <Select>
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={form.positions?.carry.toString()}
+                  id="carry-select"
+                  className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
+                />
+              </SelectTrigger>
+              {positionChoices()}
+            </Select>
+          </div>
+          <div className="flex flex-col align-center items-center justify-center gap-2  ">
+            <Label className="offlane-select font-semibold">Mid</Label>
+            <Select>
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={form.positions?.mid.toString()}
+                  id="mid-select"
+                  className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
+                />
+              </SelectTrigger>
+              {positionChoices()}
+            </Select>
+          </div>
+          <div className="flex flex-col align-center items-center justify-center gap-2  ">
+            <Label className="mid-select font-semibold">Offlane</Label>
+            <Select>
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={form.positions?.offlane.toString()}
+                  id="offlane-select"
+                  className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
+                />
+              </SelectTrigger>
+              {positionChoices()}
+            </Select>
+          </div>
+          <div className="flex flex-col align-center items-center justify-center gap-2  ">
+            <Label className="mid-select font-semibold">Soft Support</Label>
+            <Select>
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={form.positions?.soft_support.toString()}
+                  id="soft-support-select"
+                  className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
+                />
+              </SelectTrigger>
+              {positionChoices()}
+            </Select>
+          </div>
+          <div className="flex flex-col align-center items-center justify-center gap-2  ">
+            <Label className="mid-select font-semibold">Hard Support</Label>
+            <Select>
+              <SelectTrigger>
+                <SelectValue
+                  placeholder={form.positions?.hard_support.toString()}
+                  id="hard-support-select"
+                  className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
+                />
+              </SelectTrigger>
+              {positionChoices()}
+            </Select>
+          </div>
+        </div>
+      </div>
+    );
+  };
   const title = useMemo(() => {
     var msg = 'Status: ';
 
@@ -116,40 +208,7 @@ export const UserEditForm: React.FC<Props> = ({
       {inputView('nickname', 'Nickname: ')}
       {inputView('mmr', 'MMR: ', 'number')}
       {/* Position selection using checkboxes for PositionEnum */}
-      <div className="form-control mb-4">
-        <label className="label font-semibold">Positions</label>
-        <div className="flex flex-row flex-wrap gap-4">
-          {[
-            { value: PositionEnum.Carry, label: 'Carry' },
-            { value: PositionEnum.Mid, label: 'Mid' },
-            { value: PositionEnum.Offlane, label: 'Offlane' },
-            { value: PositionEnum.SoftSupport, label: 'Soft Support' },
-            { value: PositionEnum.HardSupport, label: 'Hard Support' },
-          ].map((opt) => (
-            <label
-              key={opt.value}
-              className="flex items-center gap-2 cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                className="checkbox checkbox-primary"
-                checked={!!form.positions?.[opt.value]}
-                onChange={() => {
-                  setForm((prev) => {
-                    const prevPositions = prev.positions ?? {};
-                    const newPositions = {
-                      ...prevPositions,
-                      [opt.value]: !prevPositions[opt.value],
-                    };
-                    return { ...prev, positions: newPositions };
-                  });
-                }}
-              />
-              <span>{opt.label}</span>
-            </label>
-          ))}
-        </div>
-      </div>
+      {positionSelection()}
       {inputView('steamid', 'Steam ID: ', 'number')}
       {/* {inputView('discordId', 'Discord ID: ', 'number')} */}
       {inputView('guildNickname', 'Discord Guild Nickname: ')}

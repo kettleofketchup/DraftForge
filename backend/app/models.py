@@ -1,4 +1,5 @@
 import logging
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 import requests
 from django.conf import settings
@@ -18,6 +19,28 @@ from django.db.models import JSONField
 log = logging.getLogger(__name__)
 
 
+class PositionsModel(models.Model):
+    carry = models.IntegerField(
+        default=0,
+        help_text="Rank of the carry position from 0 (No play) to 5 (best)",
+    )
+    mid = models.IntegerField(
+        default=0, help_text="Rank of the mid position from 0 (No play) to 5 (best)"
+    )
+    offlane = models.IntegerField(
+        default=0,
+        help_text="Rank of the offlane position from 0 (No play) to 5 (best)",
+    )
+    soft_support = models.IntegerField(
+        default=0,
+        help_text="Rank of the soft support position from 0 (No play) to 5 (best)",
+    )
+    hard_support = models.IntegerField(
+        default=0,
+        help_text="Rank of the hard support position from 0 (No play) to 5 (best)",
+    )
+
+
 # Enum for Dota2 positions
 class PositionEnum(IntEnum):
     Carry = 1
@@ -32,11 +55,11 @@ class CustomUser(AbstractUser):
     nickname = models.TextField(null=True, blank=True)
     mmr = models.IntegerField(null=True, blank=True)
     # Store positions as a dict of 1-5: bool, e.g. {"1": true, "2": false, ...}
-    positions = JSONField(
-        default=dict,
-        help_text="Dota2 positions: 1-5 as keys, bool as value",
-        blank=True,
-        null=True,
+    positions = models.ForeignKey(
+        PositionsModel,
+        on_delete=models.CASCADE,
+        help_text="Positions field",
+        null=False,
     )
     avatar = models.TextField(null=True, blank=True)
     discordId = models.TextField(null=True, unique=True, blank=True)
@@ -363,7 +386,7 @@ class Draft(models.Model):
         """
         if not self.draft_rounds.exists():
             log.error("No draft rounds exist")
-            return 
+            return
 
         latest_round = (
             self.draft_rounds.order_by("pick_number")
