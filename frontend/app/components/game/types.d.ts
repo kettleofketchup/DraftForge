@@ -1,16 +1,17 @@
-import { TeamType } from '../tournament/types';
-export declare interface GameType {
-  [key: string]: any;
-  pk?: number;
-  tournament?: number;
-  round?: number;
-  date_played?: string;
-  radiant_team?: TeamType;
-  radiant_team_id?: number; // For write
-  dire_team?: TeamType;
-  dire_team_id?: number; // For Write
-  winning_team?: TeamType;
-  winning_team_id?: number; // for write
-  gameid?: number; //SteamId for the game if it exists
-}
+import { z } from 'zod';
+import { TeamSchema } from '../tournament/types';
+export const GameSchema = z.object({
+  pk: z.number().nullable(),
+  tournament: z.number().nullable(),
+  round: z.number().nullable(),
+  date_played: z.string().nullable(),
+  radiant_team: TeamSchema.nullable(),
+  radiant_team_id: z.number().nullable(),
+  dire_team: TeamSchema.nullable(),
+  dire_team_id: z.number().nullable(),
+  winning_team: TeamSchema.nullable(),
+  winning_team_id: z.number().nullable(),
+  gameid: z.number().nullable(),
+});
+export type GameType = z.infer<typeof GameSchema>;
 export type GamesType = GameType[];

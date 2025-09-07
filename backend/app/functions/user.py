@@ -1,79 +1,100 @@
-# import json
-# import logging
+import json
+import logging
 
-# import requests
-# from django.contrib.auth import login
-# from django.contrib.auth import logout as auth_logout
-# from django.contrib.auth.decorators import login_required
-# from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
-# from django.shortcuts import redirect, render
-# from rest_framework import generics, permissions, serializers, status, viewsets
-# from rest_framework.decorators import api_view, permission_classes
-# from rest_framework.generics import GenericAPIView
-# from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
-# from rest_framework.response import Response
-# from rest_framework.reverse import reverse
-# from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
+import requests
+from django.contrib.auth import login
+from django.contrib.auth import logout as auth_logout
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
+from django.shortcuts import redirect, render
+from rest_framework import generics, permissions, serializers, status, viewsets
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.generics import GenericAPIView
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.reverse import reverse
+from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
 
-# # Create your views here.
-# from social_django.models import USER_MODEL  # fix: skip
-# from social_django.models import AbstractUserSocialAuth, DjangoStorage
-# from social_django.utils import load_strategy, psa
+# Create your views here.
+from social_django.models import USER_MODEL  # fix: skip
+from social_django.models import AbstractUserSocialAuth, DjangoStorage
+from social_django.utils import load_strategy, psa
 
-# from app.models import CustomUser, Draft, DraftRound, Team, Tournament
-# from app.permissions import IsStaff
-# from app.serializers import (
-#     DraftRoundSerializer,
-#     DraftSerializer,
-#     GameSerializer,
-#     TeamSerializer,
-#     TournamentSerializer,
-#     UserSerializer,
-# )
-# from backend import settings
+from app.models import CustomUser, Draft, DraftRound, PositionsModel, Team, Tournament
+from app.permissions import IsStaff
+from app.serializers import (
+    DraftRoundSerializer,
+    DraftSerializer,
+    GameSerializer,
+    PositionsSerializer,
+    TeamSerializer,
+    TournamentSerializer,
+    UserSerializer,
+)
+from backend import settings
 
-# log = logging.getLogger(__name__)
-
-
-# class PickPlayerForRound(serializers.Serializer):
-#     positions = serializers.JSONField(required=True)
+log = logging.getLogger(__name__)
 
 
-# @api_view(["update"])
-# @permission_classes([IsStaff])
-# def modify_positions(request):
-#     user = request.user
-#     if user.is_anonymous or not user.is_staff:
-#         return Response({"error": "Unauthorized"}, status=401)
+# This allows a user to update only for certain fields
+class ProfileUserSerializer(serializers.ModelSerializer):
+    positions = PositionsSerializer(many=False, read_only=True)
+    nickname = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    steamid = serializers.CharField(required=False, allow_blank=True, max_length=100)
 
-#     serializer = PickPlayerForRound(data=request.data)
+    class Meta:
+        model = CustomUser
+        fields = (
+            "nickname",
+            "positions",
+            "steamid",
+        )
 
-#     if serializer.is_valid():
-#         positions = serializer.validated_data["positions    "]
 
-#     else:
-#         return Response(serializer.errors, status=400)
+class ProfileUpdateSerializer(serializers.Serializer):
 
-#     try:
-#         draft_round = DraftRound.objects.get(pk=draft_round_pk)
-#     except DraftRound.DoesNotExist:
-#         return Response({"error": "Draft round not found"}, status=404)
-#     try:
-#         user = CustomUser.objects.get(pk=user_pk)
-#     except CustomUser.DoesNotExist:
-#         return Response({"error": "User not found"}, status=404)
-#     try:
-#         draft_round.pick_player(user)
-#     except Exception as e:
-#         logging.error(
-#             f"Error picking player for draft round {draft_round_pk}: {str(e)}"
-#         )
-#         return Response({"error": f"Failed to pick player. {str(e)}"}, status=500)
-#     try:
-#         tournament = draft_round.draft.tournament
-#     except Tournament.DoesNotExist:
-#         return Response({"error": "Tournament not found"}, status=404)
+    positions = PositionsSerializer(many=False, required=False)
+    nickname = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    steamid = serializers.CharField(required=False, allow_blank=True, max_length=100)
 
-#     draft_round.draft.save()
 
-#     return Response(TournamentSerializer(tournament).data, status=201)
+@api_view(["post"])
+@permission_classes([IsAuthenticated])
+def profile_update(request):
+    user = request.user
+    if user.is_anonymous or not user.is_authenticated:
+        return Response({"error": "Unauthorized"}, status=401)
+
+    serializer = ProfileUpdateSerializer(data=request.data)
+    log.debug(request.data)
+    if serializer.is_valid():
+        positions = serializer.validated_data.get("positions", None)
+        steamid = serializer.validated_data.get("steamid", None)
+        nickname = serializer.validated_data.get("nickname", None)
+
+    else:
+        return Response(serializer.errors, status=400)
+    log.debug(serializer.validated_data)
+
+    try:
+        posObj = PositionsModel.objects.get(pk=user.positions.pk)
+
+    except PositionsModel.DoesNotExist:
+        return Response({"error": "Positions not found"}, status=404)
+
+    if positions is not None:
+        # Update the existing position object's fields
+        for field, value in positions.items():
+            setattr(posObj, field, value)
+        user.positions = posObj
+    if steamid is not None:
+        user.steamid = steamid
+    if nickname is not None:
+        user.nickname = nickname
+    log.debug(f"{positions}, {steamid}, {nickname}")
+    with transaction.atomic():
+        posObj.save()
+        user.save()
+
+    return Response(UserSerializer(user).data, status=201)

@@ -228,3 +228,10 @@ export async function PickPlayerForRound(
   const response = await axios.post(`/tournaments/pick_player`, data);
   return response.data as TournamentType;
 }
+
+export async function UpdateProfile(
+  data: Partial<UserType>,
+): Promise<UserType> {
+  const response = await axios.post(`/profile_update`, data);
+  return response.data as UserType;
+}

@@ -46,9 +46,10 @@ from django.views.generic.base import RedirectView
 from app.functions.tournament import (
     create_team_from_captain,
     generate_draft_rounds,
-    rebuild_team,
     pick_player_for_round,
+    rebuild_team,
 )
+from app.functions.user import profile_update
 
 urlpatterns = [
     path("done/", RedirectView.as_view(url="http://localhost:5173")),
@@ -101,6 +102,7 @@ urlpatterns = [
         name="pick_player",
     ),
     path("api/avatars/refresh/", app_views.refresh_all_avatars, name="refresh-avatars"),
+    path("api/profile_update", profile_update, name="profile_update"),
     path("api/steam/", include("steam.urls")),
     path("api/bracket/", include("bracket.urls")),
 ]

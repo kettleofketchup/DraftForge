@@ -19,6 +19,7 @@ from .models import (
 
 
 class PositionsSerializer(serializers.ModelSerializer):
+    pk = serializers.IntegerField(required=False)
     carry = serializers.IntegerField()
     mid = serializers.IntegerField()
     offlane = serializers.IntegerField()
@@ -27,7 +28,7 @@ class PositionsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PositionsModel
-        fields = ["carry", "mid", "offlane", "soft_support", "hard_support"]
+        fields = ["pk", "carry", "mid", "offlane", "soft_support", "hard_support"]
 
 
 class TournamentUserSerializer(serializers.ModelSerializer):

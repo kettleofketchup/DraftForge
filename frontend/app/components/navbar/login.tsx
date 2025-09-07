@@ -1,10 +1,17 @@
 import { useClickAway } from '@uidotdev/usehooks';
+import { LogOutIcon, UserPenIcon } from 'lucide-react';
 import React, { memo, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-
-import type { UserType } from '../user/types';
-
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '~/components/ui/dropdown-menu';
 import { useUserStore } from '../../store/userStore';
+import type { UserType } from '../user/types';
 
 import { Button } from '~/components/ui/button';
 import { getLogger } from '~/lib/logger';
@@ -63,31 +70,11 @@ export const ProfileButton: React.FC = () => {
     clearUser();
     await logout();
   };
-  const showPopoverOver = () => {
-    return (
-      <>
-        {showPopover && (
-          <div className="">
-            <ul
-              className="dropdown-content menu w-20 h-10 z-1 p-0 rounded-box bg-base-100 shadow-sm"
-              //  popover="auto" id="popover-3" style={{ positionAnchor: "--anchor-3" }  as React.CSSProperties  }
-            >
-              <li>
-                <Button ref={ref} onClick={logoutClick}>
-                  Logout
-                </Button>
-              </li>
-            </ul>
-          </div>
-        )}
-      </>
-    );
-  };
 
   return (
     <>
-      <div className="flex justify p-3">
-        <div className="dropdown dropdown-end">
+      <DropdownMenu>
+        <DropdownMenuTrigger>
           <div
             className=" m-0 btn-circle avatar flex p-0 "
             popoverTarget="popover-3"
@@ -99,9 +86,25 @@ export const ProfileButton: React.FC = () => {
               <UserAvatarImg user={currentUser} />
             </AvatarContainer>
           </div>
-        </div>
-      </div>
-      {showPopoverOver()}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuLabel>
+            <a href="/profile">
+              <Button>
+                <UserPenIcon />
+                Profile
+              </Button>
+            </a>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem>
+            <Button className="" onClick={logoutClick} variant={'destructive'}>
+              <LogOutIcon />
+              Logout
+            </Button>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </>
   );
 };
