@@ -27,13 +27,13 @@ type PositionFormProps = {
 };
 export const PositionForm = ({ form }: PositionFormProps) => {
   return (
-    <div className="bg-gray-00 hover:shadow-lg hover:shadow-gray-800/50 p-4 rounded-lg">
-      <div className="flex-1 sm:row-span w-full">
+    <div className="items-center content-center justify-center flex-cols hover:shadow-lg hover:shadow-gray-800/50 p-4 rounded-lg w-full">
+      <div className="flex sm:row-span w-full">
         <h2 className="text-2xl font-bold mb-4 text-center justify-center w-full">
           Edit Positions
         </h2>
       </div>
-      <div className="grid grid-flow-col grid-rows-3 gap-4 w-full align-center items-center justify-center h-auto">
+      <div className=" sm:grid sm:grid-flow-col grid-rows-1 sm:grid-rows-3 gap-4 w-full align-center items-center justify-center h-auto">
         <FormField
           control={form.control}
           name="positions.carry"
