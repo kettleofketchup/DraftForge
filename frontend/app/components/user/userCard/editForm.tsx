@@ -148,7 +148,7 @@ export const UserEditForm: React.FC<Props> = ({
             >
               <SelectTrigger>
                 <SelectValue
-                  placeholder={form.positions?.carry.toString()}
+                  placeholder={form.positions?.carry?.toString()}
                   id="carry-select"
                   className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
                 />
@@ -165,7 +165,7 @@ export const UserEditForm: React.FC<Props> = ({
             >
               <SelectTrigger>
                 <SelectValue
-                  placeholder={form.positions?.mid.toString()}
+                  placeholder={form.positions?.mid?.toString()}
                   id="mid-select"
                   className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
                 />
@@ -182,7 +182,7 @@ export const UserEditForm: React.FC<Props> = ({
             >
               <SelectTrigger>
                 <SelectValue
-                  placeholder={form.positions?.offlane.toString()}
+                  placeholder={form.positions?.offlane?.toString()}
                   id="offlane-select"
                   className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
                 />
@@ -199,7 +199,7 @@ export const UserEditForm: React.FC<Props> = ({
             >
               <SelectTrigger>
                 <SelectValue
-                  placeholder={form.positions?.soft_support.toString()}
+                  placeholder={form.positions?.soft_support?.toString()}
                   id="soft-support-select"
                   className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
                 />
@@ -216,7 +216,7 @@ export const UserEditForm: React.FC<Props> = ({
             >
               <SelectTrigger>
                 <SelectValue
-                  placeholder={form.positions?.hard_support.toString()}
+                  placeholder={form.positions?.hard_support?.toString()}
                   id="hard-support-select"
                   className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
                 />
@@ -277,7 +277,6 @@ export const UserEditForm: React.FC<Props> = ({
             {user && user.pk && (isSaving ? 'Saving...' : 'Save Changes')}
             {user && !user.pk && (isSaving ? 'Saving...' : 'Create User')}
           </button>
-
         </DialogClose>
       </div>
     </>
