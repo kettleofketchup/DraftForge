@@ -1,6 +1,8 @@
-import type { GuildMember, UserType } from '~/index';
+import type { GuildMember, UserClassType, UserType } from '~/index';
 
-export const AvatarUrl = (user: UserType | GuildMember | undefined): string => {
+export const AvatarUrl = (
+  user: UserType | GuildMember | UserClassType | undefined,
+): string => {
   var genUrl = `https://ui-avatars.com/api/?rounded=True&background=random`;
   var discordUrl = `https://cdn.discordapp.com/avatars/`;
   let avatarUrl;
@@ -24,5 +26,5 @@ export const AvatarUrl = (user: UserType | GuildMember | undefined): string => {
     )}`;
   }
 
-  return user.avatarUrl;
+  return user.avatarUrl || '';
 };

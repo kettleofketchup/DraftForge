@@ -24,6 +24,8 @@ import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 import { createTeams } from './createTeams';
 
+import { ScrollArea } from '@radix-ui/react-scroll-area';
+import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { CreateTeamsButton } from './createTeamsButton';
 interface Props {
   users: UserType[];
@@ -92,22 +94,24 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {dialogButton()}
-      <DialogContent className=" xl:min-w-6xl l:min-w-5xl md:min-w-4xl sm:min-w-2xl min-w-l ">
-        <DialogHeader>
-          <DialogTitle>Auto-created Teams</DialogTitle>
-          <DialogDescription>
-            Teams are generated based on user MMR. You can regenerate to
-            reshuffle.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-row items-center gap-4 mb-4">
-          <Button className="btn btn-info" onClick={handleRegenerate}>
-            Regenerate Teams
-          </Button>
-        </div>
-        <div className="overflow-y-auto max-h-[70vh] pr-2">
-          <TeamsView teams={teams} key={`teams-${tournament.pk}`} />
-        </div>
+      <DialogContent className={`${DIALOG_CSS}`}>
+        <ScrollArea className={`${SCROLLAREA_CSS}`}>
+          <DialogHeader>
+            <DialogTitle>Auto-created Teams</DialogTitle>
+            <DialogDescription>
+              Teams are generated based on user MMR. You can regenerate to
+              reshuffle.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-row items-center gap-4 mb-4">
+            <Button className="btn btn-info" onClick={handleRegenerate}>
+              Regenerate Teams
+            </Button>
+          </div>
+          <div className="overflow-y-auto max-h-[70vh] pr-2">
+            <TeamsView teams={teams} key={`teams-${tournament.pk}`} />
+          </div>
+        </ScrollArea>
         <DialogFooter>
           <CreateTeamsButton
             tournament={tournament}

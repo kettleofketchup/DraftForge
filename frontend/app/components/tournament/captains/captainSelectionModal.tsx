@@ -1,5 +1,6 @@
 import { Crown } from 'lucide-react';
 import React, { useState } from 'react';
+import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -47,20 +48,21 @@ export const CaptainSelectionModal: React.FC = () => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {dialogButton()}
-      <DialogContent className="xl:min-w-5xl l:min-w-5xl md:min-w-3xl sm:min-w-2xl  ">
+      <DialogContent className={`${DIALOG_CSS}`}>
         <DialogHeader>
           <DialogTitle>Choose Captains</DialogTitle>
           <DialogDescription>
             Update Captains for {tournament.name}
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="h-[70vh] w-full border rounded-md px-1 overflow-x-auto">
+        <ScrollArea className={`${SCROLLAREA_CSS}`}>
           <CaptainTable />
-          <ScrollBar orientation="vertical" />{' '}
           {/* Optional: Add a vertical scrollbar */}
-          <ScrollBar orientation="horizontal" />{' '}
           {/* Optional: Add a horizontal scrollbar */}
+          <ScrollBar orientation="vertical"  />
+          <ScrollBar orientation="horizontal" />
         </ScrollArea>
+
         <DialogFooter>
           <DialogClose asChild>
             <Button variant="outline">Close</Button>

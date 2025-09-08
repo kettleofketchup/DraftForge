@@ -5,11 +5,13 @@ import { User } from '~/components/user';
 
 import { useUserStore } from '~/store/userStore';
 
+import { ScrollArea } from '@radix-ui/react-scroll-area';
 import { UserRoundPlusIcon } from 'lucide-react';
 import { toast } from 'sonner';
-import { DialogClose } from '~/components/ui/dialog';
+import { SCROLLAREA_CSS_SMALL } from '~/components/reusable/modal';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
+import { ScrollBar } from '~/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -18,7 +20,6 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { getLogger } from '~/lib/logger';
-import { handleSave } from './handleSaveHook';
 const log = getLogger('editForm');
 
 interface Props {
@@ -102,7 +103,7 @@ export const UserEditForm: React.FC<Props> = ({
 
   const inputView = (key: string, label: string, type: string = 'text') => {
     return (
-      <div>
+      <div className="w-full">
         <Label className="font-semibold">{label}</Label>
         <Input
           type={type}
@@ -150,7 +151,7 @@ export const UserEditForm: React.FC<Props> = ({
                 <SelectValue
                   placeholder={form.positions?.carry?.toString()}
                   id="carry-select"
-                  className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
+                  className={`select select-bordered w-full mt-1 `}
                 />
               </SelectTrigger>
               {positionChoices()}
@@ -167,7 +168,7 @@ export const UserEditForm: React.FC<Props> = ({
                 <SelectValue
                   placeholder={form.positions?.mid?.toString()}
                   id="mid-select"
-                  className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
+                  className={`select select-bordered w-full mt-1`}
                 />
               </SelectTrigger>
               {positionChoices()}
@@ -184,7 +185,7 @@ export const UserEditForm: React.FC<Props> = ({
                 <SelectValue
                   placeholder={form.positions?.offlane?.toString()}
                   id="offlane-select"
-                  className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
+                  className={`select select-bordered w-full mt-1 `}
                 />
               </SelectTrigger>
               {positionChoices()}
@@ -201,7 +202,7 @@ export const UserEditForm: React.FC<Props> = ({
                 <SelectValue
                   placeholder={form.positions?.soft_support?.toString()}
                   id="soft-support-select"
-                  className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
+                  className={`select select-bordered w-full mt-1 `}
                 />
               </SelectTrigger>
               {positionChoices()}
@@ -218,7 +219,7 @@ export const UserEditForm: React.FC<Props> = ({
                 <SelectValue
                   placeholder={form.positions?.hard_support?.toString()}
                   id="hard-support-select"
-                  className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
+                  className={`select select-bordered w-full mt-1 `}
                 />
               </SelectTrigger>
               {positionChoices()}
@@ -243,42 +244,19 @@ export const UserEditForm: React.FC<Props> = ({
 
   return (
     <>
-      <div className="font-bold text-center bg-gray-900 rounded-lg p-2 mb-4">
-        <label>{title()}</label>
-      </div>
-
-      {inputView('nickname', 'Nickname: ')}
-      {inputView('mmr', 'MMR: ', 'number')}
-      {/* Position selection using checkboxes for PositionEnum */}
-      {positionSelection()}
-      {inputView('steamid', 'Steam ID: ', 'number')}
-      {/* {inputView('discordId', 'Discord ID: ', 'number')} */}
-      {inputView('guildNickname', 'Discord Guild Nickname: ')}
-      <div className="flex flex-row items-start gap-4">
-        <DialogClose asChild>
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              handleSave(e, {
-                user,
-                form,
-                setForm,
-                setErrorMessage,
-                setIsSaving,
-                setStatusMsg,
-                setUser,
-                setDiscordUser,
-              });
-            }}
-            className="btn btn-primary btn-sm mt-3"
-            type="submit"
-            disabled={isSaving}
-          >
-            {user && user.pk && (isSaving ? 'Saving...' : 'Save Changes')}
-            {user && !user.pk && (isSaving ? 'Saving...' : 'Create User')}
-          </button>
-        </DialogClose>
-      </div>
+      <ScrollArea className={`${SCROLLAREA_CSS_SMALL}`}>
+        <div className="flex flex-col justify-center align-center items-center w-full gap-4">
+          {inputView('nickname', 'Nickname: ')}
+          {inputView('mmr', 'MMR: ', 'number')}
+          {/* Position selection using checkboxes for PositionEnum */}
+          {positionSelection()}
+          {inputView('steamid', 'Steam ID: ', 'number')}
+          {/* {inputView('discordId', 'Discord ID: ', 'number')} */}
+          {inputView('guildNickname', 'Discord Guild Nickname: ')}
+        </div>
+        <ScrollBar orientation="vertical" />
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
     </>
   );
 };

@@ -23,7 +23,9 @@ import {
   DialogTrigger,
 } from '~/components/ui/dialog';
 
+import { DIALOG_CSS_SMALL } from '~/components/reusable/modal';
 import { UserEditForm } from '~/components/user/userCard/editForm';
+import { handleSave } from './handleSaveHook';
 
 interface Props {
   user: UserClassType;
@@ -33,16 +35,14 @@ interface DialogProps {
   form: UserType;
   setForm: React.Dispatch<React.SetStateAction<UserType>>;
 }
-import { handleSave } from './handleSaveHook';
 export const UserEditModalDialog: React.FC<DialogProps> = memo(
   ({ user, form, setForm }) => {
-
-  const [errorMessage, setErrorMessage] = useState<
-  Partial<Record<keyof UserType, string>>
-  >({});
-  const [isSaving, setIsSaving] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<string | null>(null);
-  const setUser = useUserStore((state) => state.setUser);
+    const [errorMessage, setErrorMessage] = useState<
+      Partial<Record<keyof UserType, string>>
+    >({});
+    const [isSaving, setIsSaving] = useState(false);
+    const [statusMsg, setStatusMsg] = useState<string | null>(null);
+    const setUser = useUserStore((state) => state.setUser);
 
     const onSubmit = (e: React.FormEvent) => {
       e.preventDefault();
@@ -55,26 +55,54 @@ export const UserEditModalDialog: React.FC<DialogProps> = memo(
         setIsSaving,
         setStatusMsg,
         setUser,
-  
       });
-      setForm({} as UserType); // Reset form after 
-      
-    }
+      setForm({} as UserType); // Reset form after
+    };
     return (
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className={`${DIALOG_CSS_SMALL}`}>
         <DialogHeader>
           <DialogTitle>Edit User:</DialogTitle>
           <DialogDescription>
             Please fill in the details below to edit the user.
           </DialogDescription>
         </DialogHeader>
+        
         <form onSubmit={onSubmit}>
           <UserEditForm user={user} form={form} setForm={setForm} />
         </form>
         <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
+          <div className="flex flex-row justify-center align-center items-center w-full gap-4">
+            <DialogClose asChild>
+              <Button
+                type="submit"
+                className="bg-green-950 hover:bg-green-800 text-white hover:shadow-sm hover:shadow-green-500/50"
+                disabled={isSaving}
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleSave(e, {
+                    user: user,
+                    form,
+                    setForm,
+                    setErrorMessage,
+                    setIsSaving,
+                    setStatusMsg,
+                    setUser,
+                  });
+                }}
+              >
+                {user && user.pk
+                  ? isSaving
+                    ? 'Saving...'
+                    : 'Save Changes'
+                  : isSaving
+                    ? 'Saving...'
+                    : 'Create User'}
+              </Button>
+            </DialogClose>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+          </div>
         </DialogFooter>
       </DialogContent>
     );

@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '~/components/ui/dialog';
-import { ScrollArea } from '~/components/ui/scroll-area';
+import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
 import {
   Tooltip,
   TooltipContent,
@@ -20,6 +20,7 @@ import {
 } from '~/components/ui/tooltip';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
+import { DIALOG_CSS, SCROLLAREA_CSS } from '../reusable/modal';
 import { InitDraftButton } from './buttons/initDraftDialog';
 import { LatestRoundButton } from './buttons/latestButton';
 import { NextRoundButton } from './buttons/nextButton';
@@ -224,13 +225,15 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     <Dialog open={open} onOpenChange={setOpen}>
       {draftDialogButton()}
 
-      <DialogContent className=" min-w-full  sm:md:min-w-[90%] ">
-        <ScrollArea className="overflow-y-auto overflow-x-auto h-screen max-h-[80vh] py-5em pr-2">
+      <DialogContent className={DIALOG_CSS}>
+        <ScrollArea className={SCROLLAREA_CSS}>
           <DialogHeader>
             <DialogTitle>Tournament Draft</DialogTitle>
             <DialogDescription>Drafting Teams</DialogDescription>
             {mainView()}
           </DialogHeader>
+          <ScrollBar orientation="vertical" />
+          <ScrollBar orientation="horizontal" />
         </ScrollArea>
 
         <DialogFooter

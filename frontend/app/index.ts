@@ -8,8 +8,8 @@ import type {
 import { PositionEnum, User } from '~/components/user';
 import { AvatarUrl } from '~/components/user/avatar';
 import type { GameType, GamesType } from './components/game/types';
+import type { TeamType } from './components/team';
 import type {
-  TeamType,
   TeamsType,
   TournamentClassType,
   TournamentType,

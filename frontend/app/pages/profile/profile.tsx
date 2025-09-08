@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { UpdateProfile } from '~/components/api/api';
 import { Button } from '~/components/ui/button';
 import { Form } from '~/components/ui/form';
-import { UserSchema } from '~/components/user/user';
+import { UserSchema } from '~/components/user/schemas';
 import { PositionForm } from './forms/position';
 export const ProfilePage: React.FC = () => {
   const currentUser = useUserStore((state) => state.currentUser);

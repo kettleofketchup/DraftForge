@@ -15,6 +15,8 @@ const log = getLogger('editForm');
 import type { UserType } from '~/components/user/types';
 
 import { createTournament, updateTournament } from '~/components/api/api';
+import { SCROLLAREA_CSS } from '~/components/reusable/modal';
+import { ScrollArea } from '~/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -24,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import { Input } from '~/components/ui/input';
 interface Props {
   tourn: TournamentClassType; // Accepts both UserClassType and TournamentType
   form: TournamentClassType;
@@ -168,9 +171,9 @@ export const TournamentEditForm: React.FC<Props> = ({
   };
   const inputView = (key: string, label: string, type: string = 'text') => {
     return (
-      <div>
-        <label className="font-semibold">{label}</label>
-        <input
+      <div className="w-full">
+        <Label className="font-semibold">{label}</Label>
+        <Input
           type={type}
           placeholder={tourn[key] ?? ''}
           value={form[key] ?? ''}
@@ -188,22 +191,24 @@ export const TournamentEditForm: React.FC<Props> = ({
   };
 
   return (
-    <>
-      {inputView('name', 'Name: ')}
-      {tournamentTypeInput()}
-      {inputView('date_played', 'Date Played')}
-      <div className="flex flex-row items-start gap-4">
-        <DialogClose asChild>
-          <button
-            onClick={handleSave}
-            className="btn btn-primary btn-sm mt-3"
-            disabled={isSaving}
-          >
-            {tourn && tourn.pk && (isSaving ? 'Saving...' : 'Save Changes')}
-            {tourn && !tourn.pk && (isSaving ? 'Saving...' : 'Create tourn')}
-          </button>
-        </DialogClose>
+    <ScrollArea className={`${SCROLLAREA_CSS}`}>
+      <div className="flex flex-col justify-center align-center items-center w-full gap-4 ">
+        {inputView('name', 'Name: ')}
+        {tournamentTypeInput()}
+        {inputView('date_played', 'Date Played')}
+        <div className="flex flex-row items-start gap-4">
+          <DialogClose asChild>
+            <button
+              onClick={handleSave}
+              className="btn btn-primary btn-sm mt-3"
+              disabled={isSaving}
+            >
+              {tourn && tourn.pk && (isSaving ? 'Saving...' : 'Save Changes')}
+              {tourn && !tourn.pk && (isSaving ? 'Saving...' : 'Create tourn')}
+            </button>
+          </DialogClose>
+        </div>
       </div>
-    </>
+    </ScrollArea>
   );
 };

@@ -30,6 +30,7 @@ import {
 import { User } from '~/components/user/user';
 
 import { useShallow } from 'zustand/react/shallow';
+import { DIALOG_CSS_SMALL } from '~/components/reusable/modal';
 import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
 import { UserEditForm } from '~/components/user/userCard/editForm';
 import { getLogger } from '~/lib/logger';
@@ -115,7 +116,7 @@ export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
           </Tooltip>
         </TooltipProvider>
 
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className={`${DIALOG_CSS_SMALL}`}>
           <DialogHeader>
             <DialogTitle>Create User</DialogTitle>
             <DialogDescription>
@@ -123,51 +124,58 @@ export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onSubmit}>
-            <DiscordUserDropdown
-              query={query}
-              setQuery={setQuery}
-              discrimUsers={users}
-              onSelect={handleDiscordUserSelect}
-            />
+            <div className="w-full mb-2">
+              <DiscordUserDropdown
+                query={query}
+                setQuery={setQuery}
+                discrimUsers={users}
+                onSelect={handleDiscordUserSelect}
+              />
+            </div>
+
             <UserEditForm
               user={selectedDiscordUser}
               form={form}
               setForm={setForm}
               setDiscordUser={setSelectedDiscordUser}
             />
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
-              </DialogClose>
-              
-              <Button
-                type="submit"
-                className="btn btn-primary btn-sm mt-3"
-                disabled={isSaving}
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleSave(e, {
-                    user: selectedDiscordUser,
-                    form,
-                    setForm,
-                    setErrorMessage,
-                    setIsSaving,
-                    setStatusMsg,
-                    setUser,
-                    setDiscordUser: setSelectedDiscordUser,
-                  });
-                }}
-              >
-                {selectedDiscordUser && selectedDiscordUser.pk
-                  ? isSaving
-                    ? 'Saving...'
-                    : 'Save Changes'
-                  : isSaving
-                    ? 'Saving...'
-                    : 'Create User'}
-              </Button>
-            </DialogFooter>
           </form>
+
+          <DialogFooter>
+            <div className="flex flex-row  gap-x-4 sm:gap-x-8 justify-center align-center items-center w-full">
+              <DialogClose asChild>
+                <Button
+                  type="submit"
+                  className="bg-green-950 hover:bg-green-800 text-white hover:shadow-sm hover:shadow-green-500/50"
+                  disabled={isSaving}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleSave(e, {
+                      user: selectedDiscordUser,
+                      form,
+                      setForm,
+                      setErrorMessage,
+                      setIsSaving,
+                      setStatusMsg,
+                      setUser,
+                      setDiscordUser: setSelectedDiscordUser,
+                    });
+                  }}
+                >
+                  {selectedDiscordUser && selectedDiscordUser.pk
+                    ? isSaving
+                      ? 'Saving...'
+                      : 'Save Changes'
+                    : isSaving
+                      ? 'Saving...'
+                      : 'Create User'}
+                </Button>
+              </DialogClose>
+              <DialogClose asChild>
+                <Button className="justify-right">Cancel</Button>
+              </DialogClose>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </form>
     </Dialog>

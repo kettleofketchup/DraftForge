@@ -6,25 +6,10 @@ import {
 } from '~/components/api/api';
 import type { GuildMember, UserClassType, UserType } from '~/index';
 
-import { z } from 'zod';
 import { getLogger } from '~/lib/logger';
 import type { PositionsType } from './types';
 const log = getLogger('user');
-export const UserSchema = z.object({
-  positions: z.object({
-    carry: z.number().min(0, { message: 'Carry position must be selected.' }),
-    mid: z.number().min(0, { message: 'Mid position must be selected.' }),
-    offlane: z
-      .number()
-      .min(0, { message: 'Offlane position must be selected.' }),
-    soft_support: z
-      .number()
-      .min(0, { message: 'Soft Support position must be selected.' }),
-    hard_support: z
-      .number()
-      .min(0, { message: 'Hard Support position must be selected.' }),
-  }),
-});
+
 export class User implements UserClassType {
   username!: string;
   avatarUrl!: string;
@@ -43,12 +28,12 @@ export class User implements UserClassType {
 
   constructor(data: UserType) {
     Object.assign(this, data);
-    this.pk = data.pk;
+    this.pk = data.pk || 0;
   }
 
   async dbFetch(): Promise<UserType> {
     if (!this.pk) {
-      log.error('Error fetching user data:', error);
+      log.error('Error fetching user data:');
       throw new Error('User primary key (pk) is not set.');
     }
     try {

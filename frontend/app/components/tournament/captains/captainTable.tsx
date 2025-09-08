@@ -10,6 +10,7 @@ import {
 } from '~/components/ui/table';
 import { PositionEnum } from '~/components/user';
 import { AvatarUrl } from '~/components/user/avatar';
+import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 import { UpdateCaptainButton } from './UpdateCaptainButton';
@@ -33,15 +34,16 @@ export const CaptainTable: React.FC<TournamentUsersTable> = () => {
     );
   };
   const members = () => {
-    const a = tournament.users?.sort((a, b) => {
+    if (!tournament.users) return [];
+    const sortedUsers = [...tournament.users].sort((a, b) => {
       if (!a.mmr && !b.mmr) return 0;
       if (!a.mmr) return 1; // Treat undefined MMR as lower
       if (!b.mmr) return -1; // Treat undefined MMR as lower
-      if (a.mmr >= b.mmr) return -1;
-
+      if (a.mmr > b.mmr) return -1;
       if (a.mmr < b.mmr) return 1;
+      return 0;
     });
-    return a || [];
+    return sortedUsers;
   };
 
   return (
@@ -71,7 +73,9 @@ export const CaptainTable: React.FC<TournamentUsersTable> = () => {
               </div>
             </TableCell>
             <TableCell>{user.mmr ?? 'N/A'}</TableCell>
-            <TableCell>{user.positions ? positions(user) : 'N/A'}</TableCell>
+            <TableCell>
+              <RolePositions user={user as UserType} />
+            </TableCell>
 
             <TableCell>
               <UpdateCaptainButton user={user} />

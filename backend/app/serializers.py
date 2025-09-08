@@ -420,7 +420,8 @@ class UserSerializer(serializers.ModelSerializer):
 
             else:
                 log.debug(validated_data)
-                user = CustomUser(**validated_data)
+                positions = PositionsModel.objects.create()
+                user = CustomUser(positions=positions, **validated_data)
 
             user.save()
             return user

@@ -26,7 +26,7 @@ export const DraftRoundView: React.FC = () => {
 
   useEffect(() => {
     log.debug('Tournament users updated:', tournament?.draft?.users_remaining);
-  }, [tournament.draft?.users_remaining?.length]);
+  }, [tournament?.draft?.users_remaining?.length]);
 
   useEffect(() => {
     log.debug('Draft updated:', draft);

@@ -1,5 +1,7 @@
+import { ScrollArea } from '@radix-ui/react-scroll-area';
 import { PlusCircleIcon } from 'lucide-react';
 import { useState } from 'react';
+import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -17,9 +19,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip'; // Adjust path as needed
-import type {
-  UserType
-} from '~/components/user/types';
+import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
 import type { TournamentClassType } from '../types';
 import { TournamentEditForm } from './editForm';
@@ -63,19 +63,20 @@ export const TournamentCreateModal: React.FC<Props> = (props) => {
           </Tooltip>
         </TooltipProvider>
 
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Create Tournament</DialogTitle>
-            <DialogDescription>
-              Please fill in the details below to create a new tournament.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className={`${DIALOG_CSS}`}>
+            <DialogHeader>
+              <DialogTitle>Create Tournament</DialogTitle>
+              <DialogDescription>
+                Please fill in the details below to create a new tournament.
+              </DialogDescription>
+            </DialogHeader>
 
-          <TournamentEditForm
-            tourn={{} as TournamentClassType}
-            form={form}
-            setForm={setForm}
-          />
+            <TournamentEditForm
+              tourn={{} as TournamentClassType}
+              form={form}
+              setForm={setForm}
+            />
+
           <DialogFooter>
             <DialogClose asChild>
               <Button variant="outline">Cancel</Button>

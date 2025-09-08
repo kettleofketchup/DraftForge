@@ -27,7 +27,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '~/components/ui/dialog';
-import { Label } from '~/components/ui/label';
 import UserCreateModal from '~/components/user/userCard/createModal';
 import { useUserStore } from '~/store/userStore';
 import { AddPlayerDropdown } from './addPlayerDropdown';
@@ -89,7 +88,9 @@ export const AddPlayerModal: React.FC<Props> = ({
           </Tooltip>
         </TooltipProvider>
 
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent
+          className={`'min-w-[98vw] h-[70vh] max-h-[75vh] sm:min-w-[20vw] sm:h-[25em] sm:h-max-[30em]'`}
+        >
           <DialogHeader>
             <DialogTitle>Add Users to Tournament </DialogTitle>
             <DialogDescription>
@@ -97,9 +98,8 @@ export const AddPlayerModal: React.FC<Props> = ({
               or username.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4">
-            <div className="grid gap-3">
-              <Label htmlFor="name-1">Name</Label>
+          <div className="flex flex-col justify-start align-start items-start content-start w-full gap-4 mb-4">
+            <div className="justify-self-start self-start w-full">
               <AddPlayerDropdown
                 query={query}
                 setQuery={setQuery}
@@ -107,16 +107,15 @@ export const AddPlayerModal: React.FC<Props> = ({
                 removePlayerCallback={removePlayerCallback}
                 addedUsers={addedUsers}
               />
-
-              <div className="self-end p-5 pb-2 pt-2">
-                <UserCreateModal query={query} setQuery={setQuery} />
-              </div>
             </div>
           </div>
           <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DialogClose>
+            <div className="flex flex-row  gap-x-4 sm:gap-x-8 justify-center align-center items-center w-full">
+              <UserCreateModal query={query} setQuery={setQuery} />
+              <DialogClose asChild>
+                <Button variant="outline">Cancel</Button>
+              </DialogClose>
+            </div>
           </DialogFooter>
         </DialogContent>
       </form>

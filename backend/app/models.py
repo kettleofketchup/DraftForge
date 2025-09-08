@@ -59,7 +59,7 @@ class CustomUser(AbstractUser):
         PositionsModel,
         on_delete=models.CASCADE,
         help_text="Positions field",
-        null=True,
+        null=False,
         blank=True,
     )
     avatar = models.TextField(null=True, blank=True)
@@ -234,7 +234,7 @@ class Team(models.Model):
     captain = models.ForeignKey(
         User,
         related_name="teams_as_captain",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         blank=True,
         null=True,
     )
