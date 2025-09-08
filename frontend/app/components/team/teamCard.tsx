@@ -84,8 +84,14 @@ export const TeamCard: React.FC<Props> = ({
   return (
     <div
       key={`teamCard:${getKeyName()} base`}
-      className="flex 002items-center [content-visibility: auto] [contain-intrinsic-size: 400px 220px] px-6 py-4 content-center justify-center
-      content-center"
+      className="flex flex-grow flex-col items-center px-6 py-4 content-center justify-center w-full   justify-between p-2 h-full card bg-base-200 shadow-md w-full
+             hover:bg-violet-900  focus:outline-2
+            hover:shadow-xl/30
+            focus:outline-offset-2 focus:outline-violet-500
+            focus:outline-offset-2 active:bg-violet-900 
+            [content-visibility: auto] [contain-intrinsic-size: 400px 220px] 
+            
+            "
     >
       <motion.div
         initial={{ opacity: 0 }}
@@ -97,12 +103,7 @@ export const TeamCard: React.FC<Props> = ({
         whileHover={{ scale: 1.02 }}
         whileFocus={{ scale: 1.05 }}
         key={`usercard:${getKeyName()} basediv`}
-        className="flex-1 flex-grow
-        justify-between p-2 h-full card bg-base-200 shadow-md w-full
-            max-w-sm hover:bg-violet-900 . focus:outline-2
-            hover:shadow-xl/30
-            focus:outline-offset-2 focus:outline-violet-500
-            focus:outline-offset-2 active:bg-violet-900 min-w-fit"
+        className=""
       >
         <div className="flex items-center gap-2 items-center justify-center flex-grow">
           {teamHeader()}

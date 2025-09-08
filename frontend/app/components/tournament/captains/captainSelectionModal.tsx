@@ -1,5 +1,6 @@
 import { Crown } from 'lucide-react';
 import React, { useState } from 'react';
+import { TEAMS_BUTTONS_WIDTH } from '~/components/constants';
 import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { Button } from '~/components/ui/button';
 import {
@@ -32,7 +33,9 @@ export const CaptainSelectionModal: React.FC = () => {
         <Tooltip>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
-              <Button className="btn btn-primary">
+              <Button
+                className={`w-[${TEAMS_BUTTONS_WIDTH}] bg-yellow-400 hover:bg-yellow-200 text-black`}
+              >
                 <Crown className="mr-2" />
                 Pick Captains
               </Button>
@@ -59,7 +62,7 @@ export const CaptainSelectionModal: React.FC = () => {
           <CaptainTable />
           {/* Optional: Add a vertical scrollbar */}
           {/* Optional: Add a horizontal scrollbar */}
-          <ScrollBar orientation="vertical"  />
+          <ScrollBar orientation="vertical" />
           <ScrollBar orientation="horizontal" />
         </ScrollArea>
 

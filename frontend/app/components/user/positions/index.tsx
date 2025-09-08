@@ -105,7 +105,8 @@ export const SoftSupportBadge: React.FC<{ user: UserType }> = ({ user }) => {
             {user.positions.soft_support}
           </Badge>
           <SoftSupportSVG />
-          SoftSupport
+          <span className="hidden 2xl:inline">SoftSupport</span>
+          <span className="inline 2xl:hidden">SoftSup</span>
         </Badge>
       </div>
     </div>
@@ -124,7 +125,8 @@ export const HardSupportBadge: React.FC<{ user: UserType }> = ({ user }) => {
             {user.positions.hard_support}
           </Badge>
           <HardSupportSVG />
-          HardSupport
+          <span className="hidden 2xl:inline">HardSupport</span>
+          <span className="inline 2xl:hidden">HardSup</span>
         </Badge>
       </div>
     </div>
@@ -134,7 +136,7 @@ export const RolePositions: React.FC<{ user: UserType }> = ({ user }) => {
   if (!user.positions) return null;
 
   return (
-    <div className="flex gap-1 flex-wrap">
+    <div className="flex flex-col md:flex-row gap-1 flex-wrap">
       {[
         { component: CarryBadge, value: user?.positions?.carry },
         { component: MidBadge, value: user?.positions?.mid },

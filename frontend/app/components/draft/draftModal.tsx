@@ -31,6 +31,7 @@ import { refreshTournamentHook } from './hooks/refreshTournamentHook';
 import { useDraftLive } from './hooks/useDraftLive';
 import { LiveView } from './liveVIew';
 import type { DraftRoundType, DraftType } from './types';
+import { TEAMS_BUTTONS_WIDTH } from '../constants';
 const log = getLogger('DraftModal');
 type DraftModalParams = {
   liveView?: boolean;
@@ -194,7 +195,9 @@ export const DraftModal: React.FC<DraftModalParams> = ({
         <Tooltip>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
-              <Button className="btn btn-primary">
+              <Button
+                className={`w-[${TEAMS_BUTTONS_WIDTH}] ${liveView ? 'bg-green-800 hover:bg-green-600' : 'bg-sky-800 hover:bg-sky-600'} text-white`}
+              >
                 {liveView ? <EyeIcon /> : <ClipboardPen />}
                 {liveView ? 'Live Draft' : 'Begin Draft'}
               </Button>

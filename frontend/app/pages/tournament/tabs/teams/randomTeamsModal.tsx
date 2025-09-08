@@ -25,6 +25,7 @@ import { useUserStore } from '~/store/userStore';
 import { createTeams } from './createTeams';
 
 import { ScrollArea } from '@radix-ui/react-scroll-area';
+import { TEAMS_BUTTONS_WIDTH } from '~/components/constants';
 import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { CreateTeamsButton } from './createTeamsButton';
 interface Props {
@@ -78,7 +79,9 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
         <Tooltip>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
-              <Button className="w-40 btn btn-primary flex w-200px sm:w-auto ">
+              <Button
+                className={`w-[${TEAMS_BUTTONS_WIDTH}] btn btn-primary flex w-200px sm:w-auto`}
+              >
                 <UsersRound className="mr-2" />
                 Create Teams
               </Button>

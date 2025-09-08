@@ -62,7 +62,17 @@ export const TeamTable: React.FC<TeamTableProps> = ({ team }) => {
                     className="rounded-full"
                   />
                 </span>
-                <span>{user.nickname || user.username}</span>
+                <span className="hidden 3xl:inline">
+                  {user.nickname || user.username}
+                </span>
+                <span
+                  className="inline 3xl:hidden"
+                  title={user.nickname || user.username}
+                >
+                  {(user.nickname || user.username).length > 10
+                    ? `${(user.nickname || user.username).substring(0, 12)}...`
+                    : user.nickname || user.username}
+                </span>
               </div>
             </TableCell>
             <TableCell>{user.mmr ?? 'N/A'}</TableCell>

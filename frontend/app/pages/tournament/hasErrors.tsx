@@ -37,8 +37,8 @@ export const hasErrors = () => {
   return (
     <>
       {badUsers.length > 0 && (
-        <div className="flex flex-col items-start justify-center align-centerzs p-4 h-full">
-          <div className="flex flex-row gap-5 w-full ">
+        <div className="flex flex-col  items-start justify-center align-centerzs p-4 h-full bg-red-950 rounded-lg shadow-md w-full mb-4 content-center">
+          <div className="flex flex-col sm:flex-row gap-5 w-full ">
             <div className="text-red-500 font-bold text-center w-full pb-5">
               <span className="text-lg">⚠️</span> Some players have no MMR.
             </div>
@@ -50,7 +50,7 @@ export const hasErrors = () => {
        grid-cols-4
          w-full "
           >
-            <div className="grid grid-cols-4 gap-5 w-full items-center justify-center">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 w-full items-center justify-center content-center align-center">
               {badUsers.map((user: UserType) => (
                 <div className="bg-red-500 p-2 rounded-lg" key={user.pk}>
                   <span key={user.pk} className="text-white-500">
@@ -58,15 +58,18 @@ export const hasErrors = () => {
                       <>
                         <div
                           key={user.pk}
-                          className="text-white-500 text-center underline font-bold "
+                          className="text-white-500 text-center underline  underline-offset-2 font-bold "
                         >
                           {user.nickname || user.username}
                         </div>
-                        has no MMR.
+
+                        <div className="flex w-full justify-center text-center">
+                          <pre>Has no MMR.</pre>
+                        </div>
                       </>
                     )}
                   </span>
-                  <div className="">
+                  <div className="flex self-center content-center align-middle justify-center mt-2">
                     <UserEditModal
                       user={user as UserClassType}
                       key={`UserEditModal-${user.pk}`}

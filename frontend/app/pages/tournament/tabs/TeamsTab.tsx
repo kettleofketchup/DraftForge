@@ -5,6 +5,7 @@ import { TeamCard } from '~/components/team/teamCard';
 import { CaptainSelectionModal } from '~/components/tournament/captains/captainSelectionModal';
 
 import type { UserType } from '~/components/user/types';
+import type { TeamType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { hasErrors } from '~/pages/tournament/hasErrors';
 import { useUserStore } from '~/store/userStore';
@@ -60,12 +61,12 @@ export const TeamsTab: React.FC = memo(() => {
   const teamButtonsView = () => {
     return (
       <div
-        className="flex flex-col justify-center items-center  gap-y-4 w-full flex-grow sm:flex-row
+        className="flex flex-col justify-center items-center gap-y-4 w-full flex-grow sm:flex-row
        sm:gap-y-2 sm:gap-x-8 sm:p-4 sm:pt-2 sm:pb-6 "
       >
         <RandomizeTeamsModal users={tournament?.users || []} teamSize={5} />
         <CaptainSelectionModal />
-        {isStaff(currentUser) && <DraftModal />}
+        {isStaff() && <DraftModal />}
         <DraftModal liveView={true} />
       </div>
     );
@@ -82,8 +83,11 @@ export const TeamsTab: React.FC = memo(() => {
           setQuery={setQuery}
         />
       </div>
-      <div className="w-full content-center grid gap-2 mt-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 justify-center ">
-        {filteredTeams?.map((team) => (
+      <div
+        className="flex w-full  grid gap-4 md:gap-6 mt-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3
+       justify-center content-center "
+      >
+        {filteredTeams?.map((team: TeamType) => (
           <TeamCard
             team={team}
             compact={true}
