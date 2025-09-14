@@ -88,17 +88,19 @@ export const ResponsiveAppBar: React.FC = memo(() => {
   };
 
   return (
-    <div className=" sticky z-50 top-0 navbar bg-base-100 shadow-sm p-0">
-      <div className="navbar-start">
-        {dropdown()}
-        {dtxLogo()}
-      </div>
-      {menu()}
+    <React.Suspense>
+      <div className=" sticky z-50 top-0 navbar bg-base-100 shadow-sm p-0">
+        <div className="navbar-start">
+          {dropdown()}
+          {dtxLogo()}
+        </div>
+        {menu()}
 
-      <div className="navbar-end">
-        <LoginWithDiscordButton />
+        <div className="navbar-end">
+          <LoginWithDiscordButton />
+        </div>
       </div>
-    </div>
+    </React.Suspense>
   );
 });
 export default ResponsiveAppBar;

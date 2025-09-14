@@ -98,7 +98,12 @@ export const ProfilePage: React.FC = () => {
               <PositionForm form={form} />
 
               <div className="flex justify-center align-center self-center">
-                <Button type="submit">Submit</Button>
+                <Button
+                  type="submit"
+                  onClick={() => onSubmit(form.getValues())}
+                >
+                  Submit
+                </Button>
               </div>
             </form>
           </Form>

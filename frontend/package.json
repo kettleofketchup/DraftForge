@@ -6,7 +6,13 @@
     "build": "react-router build",
     "dev": "react-router dev --port 3000",
     "start": "react-router-serve ./build/server/index.js",
-    "typecheck": "react-router typegen && tsc"
+    "typecheck": "react-router typegen && tsc",
+    "test:e2e": "cypress run",
+    "test:e2e:open": "cypress open --e2e",
+    "test:e2e:headed": "cypress run --headed",
+    "test:component": "cypress run --component",
+    "test:component:open": "cypress open --component ",
+    "cypress:install": "cypress install"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.7",
@@ -68,6 +74,8 @@
     "@types/react-dom": "^19.1.7",
     "@typescript-eslint/eslint-plugin": "^8.39.0",
     "@typescript-eslint/parser": "^8.39.0",
+    "cypress": "^15.2.0",
+    "cypress-runner-themes": "^1.0.3",
     "eslint": "^9.32.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
