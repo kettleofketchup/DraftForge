@@ -26,11 +26,17 @@ export const TeamTable: React.FC<TeamTableProps> = ({ team }) => {
     );
   }
 
-  const members = team.members.sort((a, b) => {
+  const members = team.members.sort((a: UserType, b: UserType) => {
     if (!a.mmr && !b.mmr) return 0;
     if (!a.mmr) return 1; // Treat undefined MMR as lower
     if (!b.mmr) return -1; // Treat undefined MMR as lower
+    if (a.mmr === b.mmr) {
+      if (a.username && b.username) {
+        return a.username.localeCompare(b.username);
+      }
+    }
     if (a.mmr >= b.mmr) return -1;
+
     if (a.mmr < b.mmr) return 1;
     return 0; // Default case
   });

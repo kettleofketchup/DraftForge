@@ -14,7 +14,6 @@ import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { RolePositions } from '../../user/positions';
 import { ChoosePlayerButton } from '../buttons/choosePlayerButtons';
-import { Spinner } from '../helpers/spinner';
 import type { DraftRoundType } from '../types';
 const log = getLogger('draftTable');
 interface DraftTableProps {
@@ -26,19 +25,26 @@ export const DraftTable: React.FC<DraftTableProps> = ({ curRound }) => {
   useEffect(() => {}, [curRound?.choice, curDraft.users_remaining]);
 
   const members = () => {
-    const a = tournament?.draft?.users_remaining?.sort((a, b) => {
-      if (!a.mmr && !b.mmr) return 0;
-      if (!a.mmr) return 1; // Treat undefined MMR as lower
-      if (!b.mmr) return -1; // Treat undefined MMR as lower
-      if (a.mmr >= b.mmr) return -1;
+    const a = tournament?.draft?.users_remaining?.sort(
+      (a: UserType, b: UserType) => {
+        if (!a.mmr && !b.mmr) return 0;
+        if (!a.mmr) return 1; // Treat undefined MMR as lower
+        if (!b.mmr) return -1; // Treat undefined MMR as lower
+        if (a.mmr === b.mmr) {
+          if (a.username && b.username) {
+            return a.username.localeCompare(b.username);
+          }
+        }
+        if (a.mmr >= b.mmr) return -1;
 
-      if (a.mmr < b.mmr) return 1;
-    });
+        if (a.mmr < b.mmr) return 1;
+      },
+    );
     return a || [];
   };
 
   return (
-    <Suspense fallback={<Spinner />}>
+    <Suspense>
       <Table>
         <TableCaption>Tournament Users</TableCaption>
         <TableHeader>
