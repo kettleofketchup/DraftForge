@@ -140,6 +140,27 @@ def dev_release(c):
 
 
 @task
+def dev_release(c):
+    import os
+    import sys
+
+    # Read VERSION from .env.release and set it as environment variable
+    with c.cd(paths.PROJECT_PATH):
+
+        load_dotenv(paths.RELEASE_ENV_FILE)
+        db_migrate(c, paths.RELEASE_ENV_FILE)
+        docker_pull_all(c)
+
+        version = get_version_from_env(paths.RELEASE_ENV_FILE.resolve())
+        print(f"launching release version {version}")
+        cmd1 = f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} -f {paths.DOCKER_COMPOSE_RELEASE_PATH.resolve()} down "
+        cmd2 = f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} -f {paths.DOCKER_COMPOSE_RELEASE_PATH.resolve()} up -d"
+
+        c.run(cmd1)
+        c.run(cmd2)
+
+
+@task
 def certbot(c):
     cmd = "certbot certonly --register-unsafely-without-email"
     cmd += " --agree-tos --force-renewal"
