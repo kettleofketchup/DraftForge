@@ -19,7 +19,7 @@ export const addPlayerHook = async ({ team, player }: hookParams) => {
     return;
   }
 
-  const getMembers = () => team.members?.map((user) => user.pk);
+  const getMembers = () => team.members?.map((user: UserType) => user.pk);
 
   if (getMembers()?.includes(player.pk)) {
     log.error('Player is already in the team');

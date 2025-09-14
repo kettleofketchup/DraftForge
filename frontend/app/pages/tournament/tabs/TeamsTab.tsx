@@ -66,8 +66,7 @@ export const TeamsTab: React.FC = memo(() => {
       >
         <RandomizeTeamsModal users={tournament?.users || []} teamSize={5} />
         <CaptainSelectionModal />
-        {isStaff() && <DraftModal />}
-        <DraftModal liveView={true} />
+        <DraftModal />
       </div>
     );
   };

@@ -47,7 +47,7 @@ export const TeamTable: React.FC<TeamTableProps> = ({ team }) => {
         <TableRow>
           <TableHead>Member</TableHead>
           <TableHead>MMR</TableHead>
-          <TableHead>Positions</TableHead>
+          <TableHead className="hidden md:table-cell">Positions</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -76,7 +76,7 @@ export const TeamTable: React.FC<TeamTableProps> = ({ team }) => {
               </div>
             </TableCell>
             <TableCell>{user.mmr ?? 'N/A'}</TableCell>
-            <TableCell>
+            <TableCell className="hidden md:table-cell">
               <RolePositions user={user} />{' '}
             </TableCell>
           </TableRow>

@@ -4,7 +4,7 @@ export interface ModalProps {
 }
 
 export const DIALOG_CSS =
-  'min-w-full sm:md:min-w-[95%] sm:h-[95vh] sm:max-h-[95vh]';
+  'min-w-full  xl:min-w-[98%] sm:h-[95vh] sm:max-h-[95vh]';
 
 export const SCROLLAREA_CSS =
   'overflow-y-auto overflow-x-auto h-screen max-h-[75vh] py-5em pr-2';

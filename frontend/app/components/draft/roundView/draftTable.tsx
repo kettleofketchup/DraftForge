@@ -14,8 +14,8 @@ import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { RolePositions } from '../../user/positions';
 import { ChoosePlayerButton } from '../buttons/choosePlayerButtons';
-import type { DraftRoundType } from '../types';
 import { Spinner } from '../helpers/spinner';
+import type { DraftRoundType } from '../types';
 const log = getLogger('draftTable');
 interface DraftTableProps {
   curRound: DraftRoundType;
@@ -45,7 +45,7 @@ export const DraftTable: React.FC<DraftTableProps> = ({ curRound }) => {
           <TableRow>
             <TableHead>Member</TableHead>
             <TableHead>MMR</TableHead>
-            <TableHead>Positions</TableHead>
+            <TableHead className="hidden md:table-cell">Positions</TableHead>
             <TableHead>Choose?</TableHead>
           </TableRow>
         </TableHeader>
@@ -65,7 +65,7 @@ export const DraftTable: React.FC<DraftTableProps> = ({ curRound }) => {
                 </div>
               </TableCell>
               <TableCell>{user.mmr ?? 'N/A'}</TableCell>
-              <TableCell>
+              <TableCell className="hidden md:table-cell">
                 <RolePositions user={user} />
               </TableCell>
 

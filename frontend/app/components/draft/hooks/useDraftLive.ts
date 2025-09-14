@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { getLogger } from '~/lib/logger';
+import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('useDraftLive');
@@ -29,7 +30,7 @@ export const useDraftLive = ({
   const tournament = useUserStore((state) => state.tournament);
   const draft = useUserStore((state) => state.draft);
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
-
+  const liveReload = useTournamentStore((state) => state.liveReload);
   // Keep onUpdate ref current
   useEffect(() => {
     onUpdateRef.current = onUpdate;

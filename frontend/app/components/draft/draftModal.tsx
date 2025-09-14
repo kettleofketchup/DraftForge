@@ -1,5 +1,5 @@
 import { ClipboardPen, EyeIcon } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -21,25 +21,22 @@ import {
 import { getLogger } from '~/lib/logger';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
+import { TEAMS_BUTTONS_WIDTH } from '../constants';
 import { DIALOG_CSS, SCROLLAREA_CSS } from '../reusable/modal';
 import { InitDraftButton } from './buttons/initDraftDialog';
 import { LatestRoundButton } from './buttons/latestButton';
 import { NextRoundButton } from './buttons/nextButton';
 import { PrevRoundButton } from './buttons/prevButton';
+import { ShareDraftButton } from './buttons/shareDraftButton';
 import { DraftRoundView } from './draftRoundView';
 import { refreshDraftHook } from './hooks/refreshDraftHook';
 import { refreshTournamentHook } from './hooks/refreshTournamentHook';
 import { useDraftLive } from './hooks/useDraftLive';
-import { LiveView } from './liveVIew';
+import { LiveView } from './liveView';
 import type { DraftRoundType, DraftType } from './types';
-import { TEAMS_BUTTONS_WIDTH } from '../constants';
 const log = getLogger('DraftModal');
-type DraftModalParams = {
-  liveView?: boolean;
-};
-export const DraftModal: React.FC<DraftModalParams> = ({
-  liveView = false,
-}) => {
+type DraftModalParams = {};
+export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const tournament = useUserStore((state) => state.tournament);
   const setTournament = useUserStore((state) => state.setTournament);
   const draft = useUserStore((state) => state.draft);
@@ -49,8 +46,9 @@ export const DraftModal: React.FC<DraftModalParams> = ({
   const draftIndex = useUserStore((state) => state.draftIndex);
   const setDraftIndex = useUserStore((state) => state.setDraftIndex);
   const live = useTournamentStore((state) => state.live);
+  const liveReload = useTournamentStore((state) => state.liveReload);
   const [open, setOpen] = useState(live);
-
+  const isStaff = useUserStore((state) => state.isStaff);
   useEffect(() => {
     if (live) {
       setOpen(true);
@@ -74,19 +72,27 @@ export const DraftModal: React.FC<DraftModalParams> = ({
     log.debug('Set draft round to latest:', { newDraft, i });
     log.debug('Current round after update:', curDraftRound);
   };
-  const { isPolling, forceRefresh } = useDraftLive({
-    enabled: open && !!tournament?.draft?.pk && liveView,
-    interval: 3000, // Poll every 3 seconds when modal is open
-    onUpdate: () => {
-      if (!liveView) return;
-      if (liveView) {
-        log.debug('Live view is enabled, refreshing draft and tournament');
-        refreshDraftHook({ draft, setDraft });
-        refreshTournamentHook({ tournament, setTournament });
-        setDraftRoundToLatest();
-      }
-    },
-  });
+  const onUpdate = useCallback(() => {
+    console.log(liveReload);
+    if (!liveReload) return;
+    if (liveReload) {
+      log.debug('Live view is enabled, refreshing draft and tournament');
+      refreshDraftHook({ draft, setDraft });
+      refreshTournamentHook({ tournament, setTournament });
+      setDraftRoundToLatest();
+    }
+  }, [liveReload, draft, setDraft, tournament, setTournament]);
+
+  const draftLiveOptions = useMemo(
+    () => ({
+      enabled: open && !!tournament?.draft?.pk && liveReload,
+      interval: 3000, // Poll every 3 seconds when modal is open
+      onUpdate,
+    }),
+    [open, tournament?.draft?.pk, liveReload, onUpdate],
+  );
+
+  const { isPolling, forceRefresh } = useDraftLive(draftLiveOptions);
 
   const goToLatestRound = async () => {
     if (!draft) return;
@@ -185,7 +191,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({
   const header = () => {
     return (
       <div className="flex flex-col gap-2">
-        <LiveView isPolling={isPolling} />
+        <LiveView isPolling={liveReload} />
       </div>
     );
   };
@@ -206,16 +212,16 @@ export const DraftModal: React.FC<DraftModalParams> = ({
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
               <Button
-                className={`w-[${TEAMS_BUTTONS_WIDTH}] ${liveView ? 'bg-green-800 hover:bg-green-600' : 'bg-sky-800 hover:bg-sky-600'} text-white`}
+                className={`w-[${TEAMS_BUTTONS_WIDTH}] ${!isStaff() ? 'bg-green-800 hover:bg-green-600' : 'bg-sky-800 hover:bg-sky-600'} text-white`}
               >
-                {liveView ? <EyeIcon /> : <ClipboardPen />}
-                {liveView ? 'Live Draft' : 'Begin Draft'}
+                {!isStaff() ? <EyeIcon /> : <ClipboardPen />}
+                {!isStaff() ? 'Live Draft' : 'Start Draft'}
               </Button>
             </DialogTrigger>
           </TooltipTrigger>
           <TooltipContent>
             <p>
-              {liveView
+              {!isStaff()
                 ? 'Watch The live draft in progress'
                 : 'Administer the Draft'}
             </p>
@@ -257,11 +263,13 @@ export const DraftModal: React.FC<DraftModalParams> = ({
             <InitDraftButton />
           </div>
           {choiceButtons()}
-          <DialogClose asChild>
-            <div className="flex w-full justify-center md:justify-end">
-              <Button>Close</Button>
-            </div>
-          </DialogClose>
+          <div className="flex w-full justify-center md:justify-end gap-2">
+            <ShareDraftButton />
+
+            <DialogClose asChild>
+              <Button onClick={() => setOpen(false)}>Close</Button>
+            </DialogClose>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

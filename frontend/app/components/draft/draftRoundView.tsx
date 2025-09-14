@@ -32,6 +32,12 @@ export const DraftRoundView: React.FC = () => {
     log.debug('Draft updated:', draft);
   }, [draft?.pk]);
   useEffect(() => {}, [curDraftRound?.pk]);
+  const latestRound = () =>
+    draft?.draft_rounds?.find(
+      (round: DraftRoundType) => round.pk === draft?.latest_round,
+    );
+  log.debug('Latest round:', latestRound());
+  log.debug('Current round:', curDraftRound);
   const noDraftView = () => {
     return (
       <>
@@ -54,9 +60,11 @@ export const DraftRoundView: React.FC = () => {
         <CaptainCards />
 
         <div className="mb-4">
-          <h3 className="text-xl font-bold">
-            Not Current Round {curDraftRound?.pk} vs ({draft.latest_round})
-          </h3>
+          <h3 className="text-xl font-bold">Not Current Round</h3>
+          <h4>
+            Current Pick Number: {curDraftRound?.pick_number} vs{' '}
+            {latestRound()?.pick_number}
+          </h4>
           <p className="text-gray-500">This is not the current draft round.</p>
         </div>
       </>
