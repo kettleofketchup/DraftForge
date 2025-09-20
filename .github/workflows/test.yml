@@ -10,51 +10,70 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      docker:
+        image: docker:dind
+        options: --privileged
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 'latest'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: '2.2.0'
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Cache Poetry dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+        restore-keys: |
+          poetry-${{ runner.os }}-
+
+    - name: Install Python dependencies
+      run: |
+        poetry install --no-interaction --no-ansi
+
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm install
+
+    - name: Install Cypress binary
+      run: |
+        cd frontend
+        npx cypress install
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ghcr.io
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Pull pre-built Docker images
+    - name: Run headless tests
       run: |
-        docker pull ghcr.io/kettleofketchup/dtx_website/frontend:latest || echo "Frontend image not found, will build locally"
-        docker pull ghcr.io/kettleofketchup/dtx_website/backend:latest || echo "Backend image not found, will build locally"
-        docker pull ghcr.io/kettleofketchup/dtx_website/nginx:latest || echo "Nginx image not found, will build locally"
-
-    - name: Start test environment
-      run: |
-        docker compose --project-directory . -f docker/docker-compose.test.yaml up -d
-
-        # Wait for services to be ready
-        echo "Waiting for backend to be ready..."
-        timeout 120 bash -c 'until curl -f http://localhost:8000/api/health/ 2>/dev/null; do sleep 2; done' || echo "Backend health check timeout"
-
-        echo "Waiting for frontend to be ready..."
-        timeout 120 bash -c 'until curl -f http://localhost:3000 2>/dev/null; do sleep 2; done' || echo "Frontend health check timeout"
-
-        # Show running containers for debugging
-        docker compose --project-directory . -f docker/docker-compose.test.yaml ps
-
-    - name: Run Cypress tests in frontend container
-      run: |
-        # Install Cypress if not already in the container
-        docker compose --project-directory . -f docker/docker-compose.test.yaml exec -T frontend npx cypress install
-
-        # Run the headless e2e tests
-        docker compose --project-directory . -f docker/docker-compose.test.yaml exec -T frontend npm run test:e2e:headless
+        poetry run inv test.headless
       env:
+        DOCKER_BUILDKIT: 1
+        COMPOSE_DOCKER_CLI_BUILD: 1
         # Suppress D-Bus errors in CI environment
         DBUS_SESSION_BUS_ADDRESS: ""
+        # Set terminal for tput
         TERM: xterm-256color
+        # Cypress CI optimizations
         CI: true
         ELECTRON_ENABLE_LOGGING: false
 
