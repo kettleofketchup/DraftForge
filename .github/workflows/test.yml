@@ -32,8 +32,9 @@ jobs:
         cache-dependency-path: frontend/package-lock.json
 
     - name: Install Poetry
-      uses: snok/install-poetry@v2
+      uses: snok/install-poetry@v1
       with:
+        version: '2.2.0'
         virtualenvs-create: true
         virtualenvs-in-project: true
 
