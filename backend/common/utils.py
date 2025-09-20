@@ -32,21 +32,14 @@ def _is_ip_allowed(ip_str, allowed_ranges):
 def isTestEnvironment(request=None):
 
     if not settings.TEST:
-        log.debug("test: settings.test")
         return False
     if settings.RELEASE:
-
-        log.debug(f"test: settings.release: {settings.RELEASE}")
-
         return False
     if not settings.DEBUG:
-        log.debug(f"test: settings.debug: {settings.DEBUG}")
         return False
     if settings.NODE_ENV == "prod":
-        log.debug("test: settings.prod")
         return False
     if settings.NODE_ENV == "release":
-        log.debug("test: settings.node_env")
         return False
 
     # Allow requests from localhost and common Docker container IP ranges
@@ -67,10 +60,8 @@ def isTestEnvironment(request=None):
     if request:
         remote_addr = request.META.get("REMOTE_ADDR")
         if remote_addr and not _is_ip_allowed(remote_addr, allowed_ips):
-            log.debug(f"test: request.remote_addr: {remote_addr} not in allowed ranges")
             return False
 
-    log.debug(f"test_environ: True")
     return True
 
 

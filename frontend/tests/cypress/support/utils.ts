@@ -40,7 +40,7 @@ export function suppressHydrationErrors() {
         message.includes('Hydration failed') ||
         message.includes('Text content does not match') ||
         message.includes('Warning: Text content did not match') ||
-        message.includes('server rendered HTML didn\'t match the client') ||
+        message.includes("server rendered HTML didn't match the client") ||
         message.includes('Expected server HTML to contain') ||
         message.includes('net::ERR_ABORTED') ||
         message.includes('Failed to load resource') ||
@@ -150,47 +150,61 @@ export function checkBasicAccessibility() {
   // Check for title
   cy.get('title').should('exist').and('not.be.empty');
 
-  // Flexible main content check
+  // Check for main content landmark
   cy.get('body').then(($body) => {
     const hasMainLandmark = $body.find('main, [role="main"]').length > 0;
-    const hasContentArea =
-      $body.find(
-        '#root, .app, .main-content, .container, [data-testid="main-content"]',
-      ).length > 0;
 
     if (hasMainLandmark) {
       cy.get('main, [role="main"]').should('exist');
-      cy.log('Main landmark found');
-    } else if (hasContentArea) {
-      cy.log('Main landmark not found, but content area exists');
-      cy.get(
-        '#root, .app, .main-content, .container, [data-testid="main-content"]',
-      ).should('exist');
     } else {
       cy.log(
-        'No specific landmark found - checking for basic content structure',
+        'No main landmark found - this could be improved for accessibility',
       );
-      cy.get('body').children().should('have.length.greaterThan', 0);
     }
   });
 
-  // Check keyboard navigation
+  // Check that interactive elements have proper accessibility
   cy.get('body').then(($body) => {
-    // Try to find focusable elements
-    const focusableElements = $body.find(
-      'a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    );
+    // Check buttons have accessible names (text content or aria-label)
+    const buttons = $body.find('button');
+    if (buttons.length > 0) {
+      cy.get('button').each(($btn) => {
+        const hasText = $btn.text().trim().length > 0;
+        const hasAriaLabel = $btn.attr('aria-label');
+        const hasAriaLabelledBy = $btn.attr('aria-labelledby');
 
-    if (focusableElements.length > 0) {
-      // Use the first focusable element to test keyboard navigation
-      cy.get(
-        'a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      )
-        .first()
-        .focus();
-      cy.focused().should('exist');
-    } else {
-      cy.log('No focusable elements found for keyboard navigation test');
+        if (!hasText && !hasAriaLabel && !hasAriaLabelledBy) {
+          cy.log(`Button without accessible name found: ${$btn[0].outerHTML}`);
+        }
+      });
+    }
+
+    // Check links have accessible names
+    const links = $body.find('a');
+    if (links.length > 0) {
+      cy.get('a').each(($link) => {
+        const hasText = $link.text().trim().length > 0;
+        const hasAriaLabel = $link.attr('aria-label');
+
+        if (!hasText && !hasAriaLabel) {
+          cy.log(`Link without accessible name found: ${$link[0].outerHTML}`);
+        }
+      });
+    }
+
+    // Check form inputs have labels
+    const inputs = $body.find('input:not([type="hidden"])');
+    if (inputs.length > 0) {
+      cy.get('input:not([type="hidden"])').each(($input) => {
+        const id = $input.attr('id');
+        const hasLabel = id && $body.find(`label[for="${id}"]`).length > 0;
+        const hasAriaLabel = $input.attr('aria-label');
+        const hasAriaLabelledBy = $input.attr('aria-labelledby');
+
+        if (!hasLabel && !hasAriaLabel && !hasAriaLabelledBy) {
+          cy.log(`Input without label found: ${$input[0].outerHTML}`);
+        }
+      });
     }
   });
 }

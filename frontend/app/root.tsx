@@ -31,9 +31,14 @@ export const meta: Route.MetaFunction = () => [
 // ✅ Dev-only scripts injected client-side only, never during SSR
 export function DevScripts() {
   useEffect(() => {
-    log.debug('DevScripts loaded', import.meta.env);
+    log.debug(
+      'DevScripts loaded',
+      import.meta.env,
+      'process.env',
+      process.env.NODE_ENV,
+    );
 
-    if (process.env.NODE_ENV === 'dev' || import.meta.env.DEV) {
+    if (process.env.NODE_ENV === 'dev') {
       import('react-scan').then((module) => {
         module.scan({
           enabled: import.meta.env.DEV === true,

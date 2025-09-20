@@ -6,7 +6,11 @@ import { LoginWithDiscordButton } from './login';
 
 const dtxLogo = () => {
   return (
-    <a className="p-4" href="/">
+    <a
+      className="p-4"
+      href="/"
+      aria-label="DTX Homepage"
+    >
       <div className="avatar avatar-placeholder">
         <div className="bg-blue-950 shadow text-neutral-content w-12 rounded-full">
           <span>DTX</span>
@@ -29,11 +33,9 @@ const menuItems = () => {
       </li>
       <li>
         <a href="/tournaments" className="z-auto">
-          {' '}
           Tournaments
         </a>
       </li>
-
       <li>
         <a href="/users">Users</a>
       </li>
@@ -48,18 +50,25 @@ const menuItems = () => {
   );
 };
 export const ResponsiveAppBar: React.FC = memo(() => {
-  const currentUser = useUserStore((state) => state.currentUser); // Zustand setter
+  const currentUser = useUserStore((state) => state.currentUser);
 
   const dropdown = () => {
     return (
       <div className="dropdown">
-        <div tabIndex={0} role="button" className="btn btn-ghost lg:hidden">
+        <button
+          tabIndex={0}
+          className="btn btn-ghost lg:hidden"
+          aria-label="Open mobile menu"
+          aria-haspopup="true"
+          aria-expanded="false"
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             className="h-5 w-5"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -68,10 +77,12 @@ export const ResponsiveAppBar: React.FC = memo(() => {
               d="M4 6h16M4 12h8m-8 6h16"
             />
           </svg>
-        </div>
+        </button>
         <ul
           tabIndex={0}
           className="menu menu-sm dropdown-content bg-base-100 rounded-box z-1 mt-3 w-52 p-2 shadow"
+          role="menu"
+          aria-label="Mobile navigation menu"
         >
           {menuItems()}
         </ul>
@@ -82,24 +93,36 @@ export const ResponsiveAppBar: React.FC = memo(() => {
   const menu = () => {
     return (
       <div className="navbar-center hidden lg:flex">
-        <ul className="menu menu-horizontal px-1">{menuItems()}</ul>
+        <ul
+          className="menu menu-horizontal px-1"
+          role="menubar"
+          aria-label="Main navigation"
+        >
+          {menuItems()}
+        </ul>
       </div>
     );
   };
 
   return (
     <React.Suspense>
-      <div className=" sticky z-50 top-0 navbar bg-base-100 shadow-sm p-0">
-        <div className="navbar-start">
-          {dropdown()}
-          {dtxLogo()}
-        </div>
-        {menu()}
+      <header>
+        <nav
+          className="sticky z-50 top-0 navbar bg-base-100 shadow-sm p-0"
+          role="navigation"
+          aria-label="Main navigation"
+        >
+          <div className="navbar-start">
+            {dropdown()}
+            {dtxLogo()}
+          </div>
+          {menu()}
 
-        <div className="navbar-end">
-          <LoginWithDiscordButton />
-        </div>
-      </div>
+          <div className="navbar-end">
+            <LoginWithDiscordButton />
+          </div>
+        </nav>
+      </header>
     </React.Suspense>
   );
 });

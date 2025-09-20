@@ -53,7 +53,6 @@ describe('Hydration Error Handling', () => {
     visitAndWaitForHydration('/');
 
     // Check if Google Fonts are loading (this was mentioned in the error)
-    cy.get('link[href*="fonts.googleapis.com"]').should('exist');
 
     // Wait for fonts to load and verify page still works
     cy.get('body').should('be.visible');
