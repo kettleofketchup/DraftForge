@@ -24,9 +24,19 @@ ns_docker.add_collection(ns_docker_backend)
 ns_docker.add_collection(ns_docker_all)
 
 
-def docker_build(c, image: str, version: str, dockerfile: Path, context: Path):
+def docker_build(
+    c,
+    image: str,
+    version: str,
+    dockerfile: Path,
+    context: Path,
+    target: str = "runtime",
+):
     img_str = f"{image}:{version}"
-    cmd = f"docker build -f {str(dockerfile)} " f"{str(context)} -t {img_str}"
+    cmd = (
+        f"docker build -f {str(dockerfile)} "
+        f"{str(context)} -t {img_str} --target {target}"
+    )
     crun(c, cmd)
 
     crun(c, f"docker tag {img_str} {image}:latest")
@@ -60,10 +70,28 @@ def get_frontend():
     )
 
 
+def get_frontend_dev():
+    return (
+        get_version(),
+        paths.FRONTEND_DEV_TAG,
+        paths.FRONTEND_DOCKERFILE_PATH,
+        paths.FRONTEND_PATH,
+    )
+
+
 def get_backend():
     return (
         get_version(),
         paths.BACKEND_TAG,
+        paths.BACKEND_DOCKERFILE_PATH,
+        paths.PROJECT_PATH,
+    )
+
+
+def get_backend_dev():
+    return (
+        get_version(),
+        paths.BACKEND_DEV_TAG,
         paths.BACKEND_DOCKERFILE_PATH,
         paths.PROJECT_PATH,
     )
@@ -76,13 +104,17 @@ def get_nginx():
 @task
 def docker_frontend_build(c):
     version, image, dockerfile, context = get_frontend()
-    docker_build(c, image, version, dockerfile, context)
+    docker_build(c, image, version, dockerfile, context, "runtime")
+    version, image, dockerfile, context = get_frontend_dev()
+    docker_build(c, image, version, dockerfile, context, "runtime-dev")
 
 
 @task
 def docker_backend_build(c):
     version, image, dockerfile, context = get_backend()
     docker_build(c, image, version, dockerfile, context)
+    version, image, dockerfile, context = get_backend_dev()
+    docker_build(c, image, version, dockerfile, context, "runtime-dev")
 
 
 @task
@@ -101,25 +133,33 @@ def docker_nginx_pull(c):
 def docker_backend_pull(c):
     version, image, dockerfile, context = get_backend()
     docker_pull(c, image, version, dockerfile, context)
+    version, image, dockerfile, context = get_backend_dev()
+    docker_pull(c, image, version, dockerfile, context)
 
 
 @task
 def docker_frontend_pull(c):
     version, image, dockerfile, context = get_frontend()
     docker_pull(c, image, version, dockerfile, context)
+    version, image, dockerfile, context = get_frontend_dev()
+    docker_pull(c, image, version, dockerfile, context)
 
 
 @task
 def docker_frontend_push(c):
-    version, image, dockerfile, context = get_frontend()
     docker_frontend_build(c)
+    version, image, dockerfile, context = get_frontend()
+    tag_latest(c, image, version)
+    version, image, dockerfile, context = get_frontend_dev()
     tag_latest(c, image, version)
 
 
 @task
 def docker_backend_push(c):
-    version, image, dockerfile, context = get_backend()
     docker_backend_build(c)
+    version, image, dockerfile, context = get_backend()
+    tag_latest(c, image, version)
+    version, image, dockerfile, context = get_backend_dev()
     tag_latest(c, image, version)
 
 

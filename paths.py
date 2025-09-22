@@ -24,6 +24,13 @@ REGISTRY: str = "ghcr.io/kettleofketchup/dtx_website"
 BACKEND_TAG: str = f"{REGISTRY}/backend"
 FRONTEND_TAG: str = f"{REGISTRY}/frontend"
 NGINX_TAG: str = f"{REGISTRY}/nginx"
+BACKEND_TAG: str = f"{REGISTRY}/backend"
+FRONTEND_TAG: str = f"{REGISTRY}/frontend"
+NGINX_target: str = f"{REGISTRY}/nginx"
+
+BACKEND_DEV_TAG: str = f"{REGISTRY}/backend-dev"
+FRONTEND_DEV_TAG: str = f"{REGISTRY}/frontend-dev"
+FRONTEND_DEV_TARGET: str = f"runtime-dev"
 
 TEST_ENV_FILE: Path = DOCKER_PATH / ".env.test"
 DEBUG_ENV_FILE: Path = DOCKER_PATH / ".env.dev"

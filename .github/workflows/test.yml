@@ -38,6 +38,25 @@ jobs:
         virtualenvs-create: true
         virtualenvs-in-project: true
 
+    # ✅ Cache Poetry's virtualenv (your existing step)
+    - name: Cache Poetry dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+        restore-keys: |
+          poetry-${{ runner.os }}-
+
+
+    # ✅ Cache pip wheel downloads
+    - name: Cache pip
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: pip-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+        restore-keys: |
+          pip-${{ runner.os }}-
+
     - name: Cache Poetry dependencies
       uses: actions/cache@v3
       with:
@@ -47,18 +66,35 @@ jobs:
           poetry-${{ runner.os }}-
 
     - name: Install Python dependencies
-      run: |
-        poetry install --no-interaction --no-ansi
+      run: poetry install --no-interaction --no-ansi
+
+    # ✅ Cache node_modules directly
+    - name: Cache node_modules
+      uses: actions/cache@v3
+      with:
+        path: frontend/node_modules
+        key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+        restore-keys: |
+          npm-${{ runner.os }}-
 
     - name: Install frontend dependencies
-      run: |
-        cd frontend
-        npm install
+      working-directory: frontend
+      run: npm ci --ignore-scripts
 
-    - name: Install Cypress binary
-      run: |
-        cd frontend
-        npx cypress install
+    # ✅ Cache Cypress binary
+    - name: Cache Cypress binary
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/Cypress
+        key: cypress-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+        restore-keys: |
+          cypress-${{ runner.os }}-
+
+    - name: Install Cypress binary (cached)
+      working-directory: frontend
+      run: npx cypress install
+      env:
+        CYPRESS_INSTALL_BINARY: 0
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3

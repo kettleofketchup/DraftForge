@@ -1,22 +1,19 @@
 services:
   frontend:
     container_name: frontend
-    image: ghcr.io/kettleofketchup/dtx_website/frontend:latest
+    image: ghcr.io/kettleofketchup/dtx_website/frontend-dev:latest
     env_file: "./docker/.env.dev"
 
     ports:
       - "3000:3000"   # Internal Nginx in frontend container
     volumes:
-      - ./frontend:/app
-      - /app/node_modules/.vite/
-      - /app/.react-router/
+      - ./frontend/:/app
     restart: always
-    command: ["npx", "react-router", "dev" , "--port", "3000", "--host", "0.0.0.0"]
 
   backend:
     container_name: backend
     env_file: "./docker/.env.dev"
-    image: ghcr.io/kettleofketchup/dtx_website/backend:latest
+    image: ghcr.io/kettleofketchup/dtx_website/backend-dev:latest
     ports:
       - "8000:8000"
     restart: always
