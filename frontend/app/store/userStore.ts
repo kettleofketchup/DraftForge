@@ -8,6 +8,7 @@ import {
   getGames,
   getTeams,
   getTournaments,
+  getTournamentsBasic,
 } from '~/components/api/api';
 import axios from '~/components/api/axios';
 import type { DraftRoundType, DraftType } from '~/components/draft/types';
@@ -73,6 +74,8 @@ interface UserState {
   userAPIError: any;
   tournamentPK: number | null;
   getTournaments: () => Promise<void>;
+  getTournamentsBasic: () => Promise<void>;
+
   getTeams: () => Promise<void>;
   getGames: () => Promise<void>;
   getCurrentTournament: () => Promise<void>;
@@ -326,6 +329,15 @@ export const useUserStore = create<UserState>()(
         }
       },
 
+      getTournamentsBasic: async () => {
+        try {
+          const response = await getTournamentsBasic();
+          set({ tournaments: response as TournamentType[] });
+          log.debug('TournamentsBasic fetched successfully:', response);
+        } catch (error) {
+          log.error('Error fetching tournaments:', error);
+        }
+      },
       setTeams: (teams: TeamType[]) => set({ teams }),
 
       setTeam: (team: TeamType) => set({ team }),

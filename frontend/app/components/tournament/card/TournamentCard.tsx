@@ -87,8 +87,6 @@ export const TournamentCard: React.FC<Props> = ({
 
   const [saveCallback, setSaveCallBack] = useState(saveFunc || 'save');
 
-  useEffect(() => {}, [tournament, isSaving]);
-
   useEffect(() => {
     log.debug('reset form', tournament);
     setForm(tournament);
@@ -100,12 +98,6 @@ export const TournamentCard: React.FC<Props> = ({
       onEditModeChange(editMode);
     }
   }, [editMode, onEditModeChange]);
-
-  useEffect(() => {
-    if (editMode && (!allUsersFromStore || allUsersFromStore.length === 0)) {
-      fetchAllUsers();
-    }
-  }, [editMode, allUsersFromStore, fetchAllUsers]);
 
   const getHeaderName = () => {
     let date = tournament.date_played
@@ -281,7 +273,6 @@ export const TournamentCard: React.FC<Props> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.2 }}
-
       key={`Tournamentcard:${getKeyName()} base`}
       className={
         'flex items-center justify-center p-4 gap-6 content-center w-full h-full'

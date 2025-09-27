@@ -7,7 +7,16 @@ from rest_framework import routers
 
 log = logging.getLogger(__name__)
 
+from django.views.generic.base import RedirectView
+
 from app import views as app_views
+from app.functions.tournament import (
+    create_team_from_captain,
+    generate_draft_rounds,
+    pick_player_for_round,
+    rebuild_team,
+)
+from app.functions.user import profile_update
 from app.views import (
     DraftCreateView,
     DraftRoundCreateView,
@@ -18,11 +27,13 @@ from app.views import (
     TeamCreateView,
     TeamView,
     TournamentCreateView,
+    TournamentsBasicView,
     TournamentView,
     UserCreateView,
     UserView,
     current_user,
 )
+from common.utils import isTestEnvironment
 
 router = routers.DefaultRouter()
 router.register(r"users", UserView, "users")
@@ -41,17 +52,7 @@ router.register(
 )
 router.register(r"games", GameView, "games")
 
-from django.views.generic.base import RedirectView
-
-from app.functions.tournament import (
-    create_team_from_captain,
-    generate_draft_rounds,
-    pick_player_for_round,
-    rebuild_team,
-)
-from app.functions.user import profile_update
-from common.utils import isTestEnvironment
-
+router.register(r"tournaments-basic", TournamentsBasicView, "tournaments-basic")
 urlpatterns = [
     path("done/", RedirectView.as_view(url="http://localhost:5173")),
     path("", app_views.home),

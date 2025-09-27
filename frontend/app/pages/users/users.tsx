@@ -15,7 +15,6 @@ export function UsersPage() {
   const user: UserType = useUserStore((state) => state.currentUser); // Zustand setter
   const getUsers = useUserStore((state) => state.getUsers); // Zustand setter
   const users = useUserStore((state) => state.users); // Zustand setter
-  const getDiscordUsers = useUserStore((state) => state.getDiscordUsers); // Zustand setter
   const discordUsers = useUserStore((state) => state.discordUsers); // Zustand setter
 
   const [query, setQuery] = useState('');
@@ -28,10 +27,6 @@ export function UsersPage() {
     new User({} as UserClassType),
   );
   useEffect(() => {
-    if (!discordUsers || discordUsers.length === 0) {
-      getDiscordUsers();
-    }
-
     getUsers();
   }, []);
   const filteredUsers =

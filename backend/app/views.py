@@ -1,10 +1,13 @@
 import json
+import logging
 from datetime import timedelta
 
 import requests
+from cacheops import cached_as
 from django.contrib.auth import login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -32,8 +35,11 @@ from .serializers import (
     GameSerializer,
     TeamSerializer,
     TournamentSerializer,
+    TournamentsSerializer,
     UserSerializer,
 )
+
+log = logging.getLogger(__name__)
 from .utils.avatar_utils import refresh_user_avatar
 
 
@@ -125,6 +131,7 @@ def ajax_auth(request, backend):
 
 
 from django.contrib.auth.models import User
+from django.db import transaction
 
 from .models import CustomUser
 from .serializers import UserSerializer
@@ -144,6 +151,31 @@ class UserView(viewsets.ModelViewSet):
         "options",
         "trace",
     ]
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f"user_list:{request.get_full_path()}"
+
+        @cached_as(CustomUser.objects.all(), extra=cache_key, timeout=60 * 60)
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+    def retrieve(self, request, *args, **kwargs):
+        pk = kwargs["pk"]
+        cache_key = f"user_detail:{pk}"
+
+        @cached_as(CustomUser.objects.filter(pk=pk), extra=cache_key, timeout=60 * 60)
+        def get_data():
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
 
     def patch(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
@@ -179,6 +211,31 @@ class TournamentView(viewsets.ModelViewSet):
         "trace",
     ]
 
+    def list(self, request, *args, **kwargs):
+        cache_key = f"tournament_list:{request.get_full_path()}"
+
+        @cached_as(Tournament.objects.all(), extra=cache_key, timeout=60 * 10)
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+    def retrieve(self, request, *args, **kwargs):
+        pk = kwargs["pk"]
+        cache_key = f"tournament_detail:{pk}"
+
+        @cached_as(Tournament.objects.filter(pk=pk), extra=cache_key, timeout=60 * 10)
+        def get_data():
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
     @permission_classes((IsStaff,))
     def patch(self, request, *args, **kwargs):
         print(request.data)
@@ -192,32 +249,6 @@ class TournamentView(viewsets.ModelViewSet):
 
 
 @permission_classes((IsStaff,))
-class TournamentView(viewsets.ModelViewSet):
-    serializer_class = TournamentSerializer
-    queryset = Tournament.objects.all()
-    http_method_names = [
-        "get",
-        "post",
-        "put",
-        "patch",
-        "delete",
-        "head",
-        "options",
-        "trace",
-    ]
-
-    @permission_classes((IsStaff,))
-    def patch(self, request, *args, **kwargs):
-        print(request.data)
-        return self.partial_update(request, *args, **kwargs)
-
-    def get_permissions(self):
-        self.permission_classes = [IsStaff]
-        if self.request.method == "GET":
-            self.permission_classes = [AllowAny]
-        return super(TournamentView, self).get_permissions()
-
-
 class TeamView(viewsets.ModelViewSet):
     serializer_class = TeamSerializer
     queryset = Team.objects.all()
@@ -231,6 +262,31 @@ class TeamView(viewsets.ModelViewSet):
         "options",
         "trace",
     ]
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f"team_list:{request.get_full_path()}"
+
+        @cached_as(Team.objects.all(), extra=cache_key, timeout=60 * 60)
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+    def retrieve(self, request, *args, **kwargs):
+        pk = kwargs["pk"]
+        cache_key = f"team_detail:{pk}"
+
+        @cached_as(Team.objects.filter(pk=pk), extra=cache_key, timeout=60 * 60)
+        def get_data():
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
 
     def get_permissions(self):
         self.permission_classes = [IsStaff]
@@ -256,6 +312,31 @@ class DraftView(viewsets.ModelViewSet):
         "options",
         "trace",
     ]
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f"draft_list:{request.get_full_path()}"
+
+        @cached_as(Draft.objects.all(), extra=cache_key, timeout=60 * 60)
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+    def retrieve(self, request, *args, **kwargs):
+        pk = kwargs["pk"]
+        cache_key = f"draft_detail:{pk}"
+
+        @cached_as(Draft.objects.filter(pk=pk), extra=cache_key, timeout=60 * 60)
+        def get_data():
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
 
     @permission_classes((IsStaff,))
     def patch(self, request, *args, **kwargs):
@@ -283,6 +364,31 @@ class DraftRoundView(viewsets.ModelViewSet):
         "options",
         "trace",
     ]
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f"draftround_list:{request.get_full_path()}"
+
+        @cached_as(DraftRound.objects.all(), extra=cache_key, timeout=60 * 10)
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+    def retrieve(self, request, *args, **kwargs):
+        pk = kwargs["pk"]
+        cache_key = f"draftround_detail:{pk}"
+
+        @cached_as(DraftRound.objects.filter(pk=pk), extra=cache_key, timeout=60 * 10)
+        def get_data():
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
 
     @permission_classes((IsStaff,))
     def patch(self, request, *args, **kwargs):
@@ -338,6 +444,31 @@ class GameView(viewsets.ModelViewSet):
         "trace",
     ]
 
+    def list(self, request, *args, **kwargs):
+        cache_key = f"game_list:{request.get_full_path()}"
+
+        @cached_as(Game.objects.all(), extra=cache_key, timeout=60 * 10)
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+    def retrieve(self, request, *args, **kwargs):
+        pk = kwargs["pk"]
+        cache_key = f"game_detail:{pk}"
+
+        @cached_as(Game.objects.filter(pk=pk), extra=cache_key, timeout=60 * 10)
+        def get_data():
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
     @permission_classes((IsStaff,))
     def patch(self, request, *args, **kwargs):
         print(request.data)
@@ -350,7 +481,44 @@ class GameView(viewsets.ModelViewSet):
         return super(GameView, self).get_permissions()
 
 
-from django.db import transaction
+class GameView(viewsets.ModelViewSet):
+    serializer_class = GameSerializer
+    queryset = Game.objects.all()
+    http_method_names = [
+        "get",
+        "post",
+        "put",
+        "patch",
+        "delete",
+        "head",
+        "options",
+        "trace",
+    ]
+
+
+# for tournaments page
+@permission_classes((AllowAny,))
+class TournamentsBasicView(viewsets.ModelViewSet):
+    """Read-only cached view for basic tournament data"""
+
+    serializer_class = TournamentsSerializer
+    queryset = Tournament.objects.all()
+
+    http_method_names = [
+        "get",
+    ]
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f"tournaments_list:{request.get_full_path()}"
+
+        @cached_as(Tournament.objects.all(), extra=cache_key, timeout=60 * 10)
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
 
 
 class TeamCreateView(generics.CreateAPIView):

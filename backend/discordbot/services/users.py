@@ -116,8 +116,12 @@ def get_discord_members_api():
         return JsonResponse({"error": str(e)}, status=500)
 
 
+from cacheops import cached, cached_view
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
+@cached(timeout=15)
 def get_discord_members(request):
     return get_discord_members_api()
 

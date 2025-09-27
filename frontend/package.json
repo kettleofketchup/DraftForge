@@ -11,7 +11,6 @@
     "test:e2e:open": "cypress open --e2e",
     "test:e2e:headed": "cypress run --headed",
     "test:e2e:headless": "cypress run --headless",
-
     "test:component": "cypress run --component",
     "test:component:open": "cypress open --component ",
     "cypress:install": "cypress install"

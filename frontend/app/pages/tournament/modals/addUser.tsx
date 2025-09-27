@@ -1,7 +1,6 @@
-import type { TournamentType } from '~/components/tournament/types'; // Adjust the import path as necessary
-
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import type { TournamentType } from '~/components/tournament/types'; // Adjust the import path as necessary
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { User } from '~/components/user/user';
 import { UserCard } from '~/components/user/userCard';
@@ -35,12 +34,11 @@ export default function PlayersTab({
   let navigate = useNavigate();
 
   return (
-    <>
+    <Suspense fallback={<div>Loading...</div>}>
       <SearchUserDropdown
         users={tournament.users}
         query={query}
         setQuery={setQuery}
-        className=""
       />
 
       <div className="grid gap-2 mt-4 grid-cols-2 xl:grid-cols-3 ">
@@ -48,6 +46,6 @@ export default function PlayersTab({
           <UserCard user={user as User} compact={true} />
         ))}
       </div>
-    </>
+    </Suspense>
   );
 }

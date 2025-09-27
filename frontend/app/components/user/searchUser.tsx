@@ -61,6 +61,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
       {users && (
         <Combobox value={query} onChange={handleSearchUserSelect}>
           <ComboboxInput
+            id="search-user-combobox"
             className="input input-bordered w-full"
             placeholder={defaultValue}
             onChange={(event) => setQuery(event.target.value)}

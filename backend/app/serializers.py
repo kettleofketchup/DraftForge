@@ -87,6 +87,24 @@ class TeamSerializerForTournament(serializers.ModelSerializer):
         )
 
 
+# For tournaments page
+class TournamentsSerializer(serializers.ModelSerializer):
+    captains = TournamentUserSerializer(many=True, read_only=True)
+    winner = TeamSerializerForTournament(many=False, read_only=True)
+
+    class Meta:
+        model = Tournament
+        fields = (
+            "pk",
+            "name",
+            "date_played",
+            "tournament_type",
+            "state",
+            "captains",
+            "winner",
+        )
+
+
 class DraftRoundForDraftSerializer(serializers.ModelSerializer):
 
     captain = TournamentUserSerializer(many=False, read_only=True)

@@ -70,6 +70,10 @@ export async function get_dtx_members(): Promise<GuildMembers> {
   }
 }
 
+export async function getTournamentsBasic(): Promise<TournamentsType> {
+  const response = await axios.get<TournamentsType>(`/tournaments-basic`);
+  return response.data as TournamentsType;
+}
 export async function getTournaments(): Promise<TournamentsType> {
   const response = await axios.get<TournamentsType>(`/tournaments`);
   return response.data as TournamentsType;

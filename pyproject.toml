@@ -1,6 +1,6 @@
 [project]
 name = "website"
-version = "0.4.4"
+version = "0.4.5"
 description = ""
 authors = [
     {name = "kettleofketchup@gmail.com",email = "kettleofketchup@gmail.com"}
@@ -30,6 +30,8 @@ dependencies = [
     "semver (>=3.0.4,<4.0.0)",
     "poetry (>=2.2.0,<3.0.0)",
     "rich (>=14.1.0,<15.0.0)",
+    "django-cacheops (>=7.2,<8.0)",
+    "django-redis (>=6.0.0,<7.0.0)",
 ]
 
 

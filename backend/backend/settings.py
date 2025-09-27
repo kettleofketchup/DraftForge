@@ -90,6 +90,7 @@ INSTALLED_APPS = [
     "steam",
     "bracket",
     "discordbot",
+    "cacheops",  # Added for django-cacheops
 ]
 
 
@@ -215,6 +216,37 @@ DATABASES = {
         },
     }
 }
+
+# Cacheops/Redis cache configuration
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://redis:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+    }
+}
+
+CACHEOPS_REDIS = {
+    "host": "redis",
+    "port": 6379,
+    "db": 1,
+    "socket_timeout": 3,
+}
+
+# Enable caching for tournament-related models
+CACHEOPS = {
+    "app.tournament": {"ops": "all", "timeout": 60 * 60},
+    "app.team": {"ops": "all", "timeout": 60 * 60},
+    "app.customuser": {"ops": "all", "timeout": 60 * 60},
+    "app.draft": {"ops": "all", "timeout": 60 * 60},
+    "app.game": {"ops": "all", "timeout": 60 * 60},
+    "app.draftround": {"ops": "all", "timeout": 60 * 60},
+    # Add more as needed
+}
+
+CACHEOPS_DEGRADE_ON_FAILURE = True
 
 
 # Password validation

@@ -14,7 +14,9 @@ export default function Tournament() {
   const tournament: TournamentType = useUserStore((state) => state.tournament); // Zustand setter
   const getGames = useUserStore((state) => state.getGames); // Zustand setter
   const getTeams = useUserStore((state) => state.getTeams); // Zustand setter
-  const getTournaments = useUserStore((state) => state.getTournaments); // Zustand setter
+  const getTournamentsBasic = useUserStore(
+    (state) => state.getTournamentsBasic,
+  ); // Zustand setter
   const setTournaments = useUserStore((state) => state.setTournaments); // Zustand setter
   const setGames = useUserStore((state) => state.setGames); // Zustand setter
   const setTeams = useUserStore((state) => state.setTeams); // Zustand setter
@@ -35,7 +37,7 @@ export default function Tournament() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getTournaments();
+    getTournamentsBasic();
     setLoading(false);
   }, []);
 
