@@ -256,7 +256,6 @@ class TournamentView(viewsets.ModelViewSet):
         def get_data():
             log.debug("get_tournament: fetching data")
             instance = self.get_object()
-            log.debug("users_remaining:" + str(len(instance.draft.users_remaining)))
 
             serializer = self.get_serializer(instance)
             return serializer.data
