@@ -43,7 +43,7 @@ services:
 
   cypress:
     container_name: cypress
-    image: cypress/included:latest
+    image:  ghcr.io/kettleofketchup/dtx_website/cypress:latest
     working_dir: /app
     network_mode: "host"
 

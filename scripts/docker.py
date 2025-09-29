@@ -70,6 +70,15 @@ def get_frontend():
     )
 
 
+def get_cypress():
+    return (
+        get_version(),
+        paths.CYPRESS_TAG,
+        paths.CYPRESS_DOCKERFILE_PATH,
+        paths.FRONTEND_PATH,
+    )
+
+
 def get_frontend_dev():
     return (
         get_version(),
@@ -106,7 +115,9 @@ def docker_frontend_build(c):
     version, image, dockerfile, context = get_frontend()
     docker_build(c, image, version, dockerfile, context, "runtime")
     version, image, dockerfile, context = get_frontend_dev()
-    docker_build(c, image, version, dockerfile, context, "runtime-dev")
+    docker_build(c, image, version, dockerfile, context, "runtime")
+    version, image, dockerfile, context = get_cypress()
+    docker_build(c, image, version, dockerfile, context, "runtime")
 
 
 @task
@@ -143,6 +154,8 @@ def docker_frontend_pull(c):
     docker_pull(c, image, version, dockerfile, context)
     version, image, dockerfile, context = get_frontend_dev()
     docker_pull(c, image, version, dockerfile, context)
+    version, image, dockerfile, context = get_cypress()
+    docker_pull(c, image, version, dockerfile, context)
 
 
 @task
@@ -151,6 +164,8 @@ def docker_frontend_push(c):
     version, image, dockerfile, context = get_frontend()
     tag_latest(c, image, version)
     version, image, dockerfile, context = get_frontend_dev()
+    tag_latest(c, image, version)
+    version, image, dockerfile, context = get_cypress()
     tag_latest(c, image, version)
 
 

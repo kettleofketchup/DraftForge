@@ -1,0 +1,19 @@
+# Custom Cypress Docker image with project dependencies
+FROM cypress/included:latest as runtime
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files first for better layer caching
+COPY package.json package-lock.json ./
+
+# Install project dependencies including dev dependencies
+# This will install cypress-runner-themes, @cypress/react, and other dev deps
+RUN npm ci --include=dev
+
+# Copy the rest of the application
+COPY . .
+
+# Set environment variables for Cypress
+ENV CYPRESS_CACHE_FOLDER=/root/.cache/Cypress
+ENV CI=true

@@ -5,3 +5,5 @@ README.md
 Dockerfile
 .dockerignore
 .git
+cypress/videos/
+cypress/screenshots/
