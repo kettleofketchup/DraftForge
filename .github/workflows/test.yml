@@ -30,8 +30,78 @@ jobs:
       run:  docker compose --project-directory $PWD -f docker/docker-compose.test.yaml pull
     - name: start containers
       run:  docker compose --project-directory $PWD -f docker/docker-compose.test.yaml up -d
+    
+    - name: Wait for backend container to be ready
+      run: |
+        echo "Waiting for backend container to be ready..."
+        max_attempts=20
+        attempt=1
+        
+        while [ $attempt -le $max_attempts ]; do
+          echo "Attempt $attempt/$max_attempts: Checking backend container status..."
+          
+          if docker compose --project-directory $PWD -f docker/docker-compose.test.yaml ps backend | grep -q "running"; then
+            echo "Backend container is running. Testing responsiveness..."
+            if docker compose --project-directory $PWD -f docker/docker-compose.test.yaml exec -T backend echo "Backend ready" > /dev/null 2>&1; then
+              echo "Backend container is ready!"
+              break
+            fi
+          fi
+          
+          if [ $attempt -eq $max_attempts ]; then
+            echo "ERROR: Backend container failed to become ready"
+            docker compose --project-directory $PWD -f docker/docker-compose.test.yaml ps backend || true
+            docker compose --project-directory $PWD -f docker/docker-compose.test.yaml logs backend || true
+            exit 1
+          fi
+          
+          sleep 5
+          attempt=$((attempt + 1))
+        done
+    
     - name: populate database
       run: docker compose --project-directory $PWD -f docker/docker-compose.test.yaml exec -T backend poetry run inv db.populate.all
+    
+    - name: Wait for frontend container to be ready
+      run: |
+        echo "Waiting for frontend container to be ready..."
+        max_attempts=30
+        attempt=1
+        
+        while [ $attempt -le $max_attempts ]; do
+          echo "Attempt $attempt/$max_attempts: Checking frontend container status..."
+          
+          # Check if container is running (not restarting)
+          if docker compose --project-directory $PWD -f docker/docker-compose.test.yaml ps frontend | grep -q "running"; then
+            echo "Frontend container is running. Checking if it's responding..."
+            
+            # Try to execute a simple command to verify container is responsive
+            if docker compose --project-directory $PWD -f docker/docker-compose.test.yaml exec -T frontend echo "Container is responsive" > /dev/null 2>&1; then
+              echo "Frontend container is ready!"
+              break
+            else
+              echo "Container is running but not responsive yet..."
+            fi
+          else
+            echo "Frontend container is not running yet..."
+            # Show container status for debugging
+            docker compose --project-directory $PWD -f docker/docker-compose.test.yaml ps frontend || true
+          fi
+          
+          if [ $attempt -eq $max_attempts ]; then
+            echo "ERROR: Frontend container failed to become ready after $max_attempts attempts"
+            echo "Final container status:"
+            docker compose --project-directory $PWD -f docker/docker-compose.test.yaml ps frontend || true
+            echo "Container logs:"
+            docker compose --project-directory $PWD -f docker/docker-compose.test.yaml logs frontend || true
+            exit 1
+          fi
+          
+          echo "Waiting 10 seconds before next attempt..."
+          sleep 10
+          attempt=$((attempt + 1))
+        done
+    
     - name: Run Cypress tests
       working-directory: frontend
       run: docker compose --project-directory $PWD/../ -f ../docker/docker-compose.test.yaml exec -T frontend npm run test:e2e:headless
