@@ -7,7 +7,11 @@ on:
     branches: [ main ]
 
 jobs:
+
   test:
+    permissions:
+      contents: read
+      packages: write   # 👈 required for ghcr.io
     runs-on: ubuntu-latest
     services:
       docker:
@@ -99,6 +103,19 @@ jobs:
         # Cypress CI optimizations
         CI: true
         ELECTRON_ENABLE_LOGGING: false
+
+
+    - name: docker push
+      if: success()  # Only run this step if the tests pass
+      run: |
+        poetry run inv docker.all.push
+
+    - name: upload Cypress videos and screenshots
+      if: failure()  # Always run this step, even if the tests fail
+      uses: actions/upload-artifact@v3
+      with:
+        name: cypress-artifacts
+        path: frontend/cypress/screenshots
 
     - name: Clean up Docker containers
       if: always()
