@@ -40,6 +40,7 @@ def setup(c):
 
     load_dotenv(paths.TEST_ENV_FILE)
     update_for_test(c)
+    docker_pull_all(c)
     docker_build_all(c)
     populate_all(c)
     dev_test(c)
