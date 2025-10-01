@@ -101,7 +101,11 @@ export const TournamentDetailPage: React.FC = () => {
     if (!tournament.name) {
       return <></>;
     }
-    return <h1 className="text-3xl font-bold mb-4">{tournament.name}</h1>;
+    return (
+      <h1 className="text-3xl font-bold mb-4" data-testid="tournamentTitle">
+        {tournament.name}
+      </h1>
+    );
   };
   const title = () => {
     return (
@@ -117,7 +121,10 @@ export const TournamentDetailPage: React.FC = () => {
     );
   };
   return (
-    <div className="container px-1 sm:mx-auto sm:p-4">
+    <div
+      className="container px-1 sm:mx-auto sm:p-4"
+      data-testid="tournamentDetailPage"
+    >
       {title()}
       <TournamentTabs />
     </div>

@@ -81,6 +81,8 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
             <DialogTrigger asChild>
               <Button
                 className={`w-[${TEAMS_BUTTONS_WIDTH}] btn btn-primary flex w-200px sm:w-auto`}
+                data-testid="createTeamsBtn"
+                aria-label="Open create teams modal"
               >
                 <UsersRound className="mr-2" />
                 Create Teams
@@ -107,7 +109,12 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-row items-center gap-4 mb-4">
-            <Button className="btn btn-info" onClick={handleRegenerate}>
+            <Button
+              className="btn btn-info"
+              onClick={handleRegenerate}
+              data-testid="regenerateTeamsBtn"
+              aria-label="Regenerate teams with new randomization"
+            >
               Regenerate Teams
             </Button>
           </div>
@@ -123,7 +130,9 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
             setDialogOpen={setOpen}
           />
           <DialogClose asChild>
-            <Button variant="outline">Close</Button>
+            <Button variant="outline" data-testid="closeTeamsModalBtn">
+              Close
+            </Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>

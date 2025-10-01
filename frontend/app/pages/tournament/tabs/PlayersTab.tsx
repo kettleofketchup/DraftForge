@@ -106,6 +106,7 @@ export const PlayersTab: React.FC = memo(() => {
               user={user as UserClassType}
               saveFunc={'save'}
               key={`UserCard-${user.pk}`}
+              data-testid={`option-${user.username}`}
               compact={true}
               deleteButtonType="tournament"
             />
@@ -127,6 +128,7 @@ export const PlayersTab: React.FC = memo(() => {
             users={tournament?.users || []}
             query={query}
             setQuery={setQuery}
+            data-testid="playerSearchDropdown"
           />
         </div>
         <div className="flex px-5 place-self-end">

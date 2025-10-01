@@ -6,7 +6,6 @@ import {
   fetchTournament,
   updateTeam,
 } from '~/components/api/api';
-import { UsersRound } from 'lucide-react';
 
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
@@ -102,7 +101,11 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button className="btn btn-success bg-green-900 text-white">
+        <Button
+          className="btn btn-success bg-green-900 text-white"
+          data-testid="submitTeamsBtn"
+          aria-label="Submit and create teams"
+        >
           Submit this
         </Button>
       </AlertDialogTrigger>
@@ -115,8 +118,15 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={handleSubmit}>Continue</AlertDialogAction>
+          <AlertDialogCancel data-testid="cancelTeamsCreationBtn">
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleSubmit}
+            data-testid="confirmTeamsCreationBtn"
+          >
+            Continue
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

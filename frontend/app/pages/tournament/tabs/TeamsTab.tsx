@@ -76,6 +76,7 @@ export const TeamsTab: React.FC = memo(() => {
           teams={tournament?.teams || []}
           query={query}
           setQuery={setQuery}
+          data-testid="teamsSearchDropdown"
         />
       </div>
       <div

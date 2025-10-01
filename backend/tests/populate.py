@@ -79,6 +79,9 @@ def populate_users(force=False):
     # assert CustomUser.objects.count() == sample_size + 1
 
 
+from pydantic import BaseModel
+
+
 def populate_tournaments(force=False):
     """
     Creates 5 tournaments with 20, 30, 25, 35, 40 random users respectively.

@@ -77,6 +77,8 @@ export const AddPlayerModal: React.FC<Props> = ({
                     'bg-green-950 hover:bg-green-800 text-white' +
                     ' hover:shadow-sm hover:shadow-green-500/50'
                   }
+                  data-testid="tournamentAddPlayerBtn"
+                  aria-label="Add player to tournament"
                 >
                   <PlusCircle color="white" className="zs" />
                 </Button>
@@ -113,7 +115,9 @@ export const AddPlayerModal: React.FC<Props> = ({
             <div className="flex flex-row  gap-x-4 sm:gap-x-8 justify-center align-center items-center w-full">
               <UserCreateModal query={query} setQuery={setQuery} />
               <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
+                <Button variant="outline" data-testid="addPlayerCancelBtn">
+                  Cancel
+                </Button>
               </DialogClose>
             </div>
           </DialogFooter>

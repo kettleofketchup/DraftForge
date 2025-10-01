@@ -93,6 +93,8 @@ export const AddPlayerDropdown: React.FC<Props> = ({
             className="input input-bordered w-full"
             placeholder="Search DTX members..."
             onChange={(event) => setQuery(event.target.value)}
+            data-testid="playerSearchInput"
+            aria-label="Search for players to add"
           />
           <ComboboxOptions className="border bg-base-500 shadow-lg rounded-lg max-h-60 overflow-y-auto mt-2">
             {filteredUsers &&
@@ -107,6 +109,7 @@ export const AddPlayerDropdown: React.FC<Props> = ({
                       active ? 'bg-purple-900 text-primary-content' : ''
                     }`
                   }
+                  data-testid={`playerOption-${user?.username}`}
                 >
                   <div className="flex items-center gap-2">
                     <img

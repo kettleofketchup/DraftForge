@@ -16,3 +16,4 @@ export const description = 'Created by Cypress end-to-end test';
 export const thisName = `Cypress Tournament ${dateYYYYMMDD}`;
 export const editedName = `Cypress Tournament Edited ${date2YYYYMMDD}`;
 export const springChampionship = `Spring Championship`;
+export const playername = 'kettleofketchup';

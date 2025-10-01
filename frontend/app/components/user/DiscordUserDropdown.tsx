@@ -49,6 +49,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
     } finally {
     }
   }, []);
+
   useEffect(() => {
     if (discordUsers.length > 0) {
       return;
@@ -56,6 +57,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
     getDiscordUsers();
   }, []);
 
+  useEffect(() => {}, [discordUsers.length]);
   const filteredUsers =
     query === ''
       ? discordUsers
@@ -156,6 +158,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
     return (
       <ComboboxOption
         key={user.user.id}
+        data-testid={`combobox-option-${user.user.username}`}
         value={user}
         disabled={isUserAlreadyAdded(user)}
         className={({ focus, disabled }) =>

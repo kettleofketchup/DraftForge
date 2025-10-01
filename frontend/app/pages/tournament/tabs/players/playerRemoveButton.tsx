@@ -110,6 +110,7 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
             disabled={disabled}
             aria-label="Delete"
             className="bg-red-950 hover:bg-red-600 text-white"
+            data-testid={`removePlayerBtn-${user.username}`}
           >
             <Trash2 className="h-4 w-4" color="red" />
           </Button>

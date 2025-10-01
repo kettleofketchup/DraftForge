@@ -34,7 +34,7 @@ export const GamesTab: React.FC = memo(() => {
     <div className="py-5 px-3 mx-auto container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out">
       <div className="grid grid-cols-2 gap-5 items-start pt-5  ">
         <div className="flex px-5 place-self-end">
-          <GameCreateModal />
+          <GameCreateModal data-testid="gameCreateModalBtn" />
         </div>
       </div>
 

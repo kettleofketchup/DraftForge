@@ -184,11 +184,11 @@ export const UserCard: React.FC<Props> = memo(
     };
     const getKeyName = () => {
       let result = '';
-      if (user.pk) {
-        result += user.pk.toString();
-      }
       if (user.username) {
         result += user.username;
+      }
+      if (user.pk) {
+        result += user.pk.toString();
       }
       return result;
     };
@@ -238,6 +238,7 @@ export const UserCard: React.FC<Props> = memo(
     return (
       <div
         key={`usercard:${getKeyName()} base`}
+        data-testid={`usercard-${user.username}`}
         className="flex w-full
         sm:gap-2 md:gap-4
         py-4

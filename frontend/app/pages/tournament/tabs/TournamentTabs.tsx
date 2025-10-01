@@ -51,24 +51,33 @@ export default function TournamentTabs() {
       onValueChange={setActiveTab}
       className="flex justify-center rounded-full  align-middle gap-4 sm:-p1 sm:gap-2 sm:w-full"
     >
-      <TabsList className="container content-center flex w-full justify-center gap-2 rounded-full ">
-        <TabsTrigger className="w-full active:p-1" value="players">
+      <TabsList
+        className="container content-center flex w-full justify-center gap-2 rounded-full "
+        data-testid="tournamentTabsList"
+      >
+        <TabsTrigger
+          className="w-full active:p-1"
+          value="players"
+          data-testid="playersTab"
+        >
           Players ({playerCount})
         </TabsTrigger>
-        <TabsTrigger className="w-full" value="teams">
+        <TabsTrigger className="w-full" value="teams" data-testid="teamsTab">
           Teams ({teamCount})
         </TabsTrigger>
-        <TabsTrigger value="games">Games ({gameCount})</TabsTrigger>
+        <TabsTrigger value="games" data-testid="gamesTab">
+          Games ({gameCount})
+        </TabsTrigger>
       </TabsList>
-      <TabsContent value="players">
+      <TabsContent value="players" data-testid="playersTabContent">
         {' '}
         <PlayersTab />
       </TabsContent>
-      <TabsContent value="teams">
+      <TabsContent value="teams" data-testid="teamsTabContent">
         {' '}
         <TeamsTab />
       </TabsContent>
-      <TabsContent value="games">
+      <TabsContent value="games" data-testid="gamesTabContent">
         {' '}
         <GamesTab />
       </TabsContent>
