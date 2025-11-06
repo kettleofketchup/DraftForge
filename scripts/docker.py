@@ -115,7 +115,7 @@ def docker_frontend_build(c):
     version, image, dockerfile, context = get_frontend()
     docker_build(c, image, version, dockerfile, context, "runtime")
     version, image, dockerfile, context = get_frontend_dev()
-    docker_build(c, image, version, dockerfile, context, "runtime")
+    docker_build(c, image, version, dockerfile, context, "runtime-dev")
     # version, image, dockerfile, context = get_cypress()
     # docker_build(c, image, version, dockerfile, context, "runtime")
 
