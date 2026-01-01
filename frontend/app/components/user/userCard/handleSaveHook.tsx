@@ -50,7 +50,7 @@ export const handleSave = async (
   }: HandleSaveParams,
 ) => {
   setErrorMessage({}); // Clear old errors
-  const newUser: User = new User(user as UserType); // Create a new User instance
+  const newUser: User = new User(form as UserType); // Create a new User instance
   const resetForm = () => {
     log.debug('resetting form');
     if (setDiscordUser) {
