@@ -84,7 +84,6 @@ export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
       setIsSaving,
       setStatusMsg,
       setUser,
-      setDiscordUser: setSelectedDiscordUser,
     });
     setForm({} as UserType); // Reset form after submission
     setSelectedDiscordUser(new User({} as UserClassType));
@@ -137,7 +136,6 @@ export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
               user={selectedDiscordUser}
               form={form}
               setForm={setForm}
-              setDiscordUser={setSelectedDiscordUser}
             />
           </form>
 

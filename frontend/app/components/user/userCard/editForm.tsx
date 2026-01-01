@@ -41,21 +41,14 @@ export const UserToast = (title: string) => {
     description: 'Sunday, December 03, 2023 at 9:00 AM',
   });
 };
-export const UserEditForm: React.FC<Props> = ({
-  user,
-  form,
-  setForm,
-  setDiscordUser,
-}) => {
+export const UserEditForm: React.FC<Props> = ({ user, form, setForm }) => {
   const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
   const [errorMessage, setErrorMessage] = useState<
     Partial<Record<keyof UserType, string>>
   >({});
   const isStaff = useUserStore((state) => state.isStaff);
 
-  const [isSaving, setIsSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>('null');
-  const setUser = useUserStore((state) => state.setUser); // Zustand setter
 
   const handleChange = (field: string, value: any) => {
     log.debug('User form field changed:', field, value);
