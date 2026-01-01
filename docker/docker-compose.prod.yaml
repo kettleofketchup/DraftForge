@@ -1,12 +1,12 @@
 services:
   frontend:
     env_file: "./docker/.env.prod"
-    image: ghcr.io/kettleofketchup/dtx_website/frontend:latest
+    image: ghcr.io/kettleofketchup/dota_tournament/frontend:latest
     restart: always
 
   backend:
     env_file: "./docker/.env.prod"
-    image: ghcr.io/kettleofketchup/dtx_website/backend:latest
+    image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
     restart: always
     volumes:
       - ./backend/db.sqlite3:/app/backend/prod.db.sqlite3
@@ -19,7 +19,7 @@ services:
       - ./backend/.redis_data:/data
     restart: always
   nginx:
-    image: ghcr.io/kettleofketchup/dtx_website/nginx:latest
+    image: ghcr.io/kettleofketchup/dota_tournament/nginx:latest
     container_name: nginx
     restart: always
     env_file: "./docker/.env.prod"

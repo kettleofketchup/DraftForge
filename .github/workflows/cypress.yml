@@ -1,14 +1,12 @@
-name: Test
+name: Cypress
 
 on:
   push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
 
-  test:
+  cypress:
 
     runs-on: ubuntu-latest
     services:
