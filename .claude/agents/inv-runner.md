@@ -208,6 +208,6 @@ Tasks use different environment files based on context:
 ## Notes
 
 - Version is pulled from `pyproject.toml`
-- Docker images are pushed to GitHub Container Registry (`ghcr.io/kettleofketchup/dtx_website/`)
+- Docker images are pushed to GitHub Container Registry (`ghcr.io/kettleofketchup/dota_tournament/`)
 - Database migrations run with `DISABLE_CACHE=true` to avoid Redis dependency
 - Apps with migrations: `steam`, `app`, `bracket`, `discordbot`

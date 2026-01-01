@@ -17,7 +17,7 @@ The project provides multiple Docker Compose configurations for different enviro
 
 ```yaml
 frontend:
-  image: ghcr.io/kettleofketchup/dtx_website/frontend:latest
+  image: ghcr.io/kettleofketchup/dota_tournament/frontend:latest
   # Development: mounts ./frontend/ for hot reload
   volumes:
     - ./frontend/:/app
@@ -30,7 +30,7 @@ frontend:
 
 ```yaml
 backend:
-  image: ghcr.io/kettleofketchup/dtx_website/backend:latest
+  image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
   depends_on:
     - redis
   volumes:
@@ -55,7 +55,7 @@ Persistent data storage for cache across restarts.
 
 ```yaml
 nginx:
-  image: ghcr.io/kettleofketchup/dtx_website/nginx:latest
+  image: ghcr.io/kettleofketchup/dota_tournament/nginx:latest
   ports:
     - "80:80"
     - "443:443"
@@ -78,7 +78,7 @@ nginx:
 All images are hosted on GitHub Container Registry:
 
 ```
-ghcr.io/kettleofketchup/dtx_website/
+ghcr.io/kettleofketchup/dota_tournament/
 ├── frontend:latest
 ├── frontend-dev:latest
 ├── backend:latest

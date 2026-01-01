@@ -50,7 +50,7 @@ Use this agent when:
 
 ```yaml
 frontend:
-  image: ghcr.io/kettleofketchup/dtx_website/frontend-dev:latest
+  image: ghcr.io/kettleofketchup/dota_tournament/frontend-dev:latest
   volumes:
     - ./frontend/:/app              # Hot reload
     - /app/node_modules/.vite/      # Exclude vite cache
@@ -67,7 +67,7 @@ docker logs frontend
 
 ```yaml
 backend:
-  image: ghcr.io/kettleofketchup/dtx_website/backend-dev:latest
+  image: ghcr.io/kettleofketchup/dota_tournament/backend-dev:latest
   depends_on:
     - redis
   volumes:
@@ -99,7 +99,7 @@ docker exec redis redis-cli ping
 
 ```yaml
 nginx:
-  image: ghcr.io/kettleofketchup/dtx_website/nginx:latest
+  image: ghcr.io/kettleofketchup/dota_tournament/nginx:latest
   ports:
     - "80:80"
     - "443:443"
@@ -184,7 +184,7 @@ sudo chown -R $USER:$USER ./nginx/data/
 
 ```bash
 # List images
-docker images | grep dtx_website
+docker images | grep dota_tournament
 
 # Remove old images
 docker image prune -f
@@ -268,7 +268,7 @@ Certificates stored in `nginx/data/certbot/configs/`.
 
 All images hosted at:
 ```
-ghcr.io/kettleofketchup/dtx_website/
+ghcr.io/kettleofketchup/dota_tournament/
 ├── frontend:latest
 ├── frontend-dev:latest
 ├── backend:latest
