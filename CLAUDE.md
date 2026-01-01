@@ -182,11 +182,29 @@ npm run dev
 **Backend**: `python manage.py test`
 **Frontend E2E**: Cypress tests in `frontend/tests/cypress/`
 
+## Documentation
+
+Project documentation uses MkDocs Material:
+
+```bash
+source .venv/bin/activate
+
+# Serve docs locally
+mkdocs serve
+
+# Build static site
+mkdocs build
+```
+
+Docs available at http://127.0.0.1:8000
+
 ## Agents Available
 
 - `python-backend` - Django/Python backend expertise
 - `typescript-frontend` - React/TypeScript frontend expertise
-- `inv-runner` - Python Invoke task runner expertise
+- `inv-runner` - Python Invoke task runner (consults with docs and docker agents)
+- `mkdocs-documentation` - MkDocs Material documentation management
+- `docker-ops` - Docker setup, troubleshooting, and verification
 
 ## Skills Available
 

@@ -2,6 +2,43 @@
 
 Expert agent for running Python Invoke tasks in the DTX website project.
 
+## When to Use This Agent
+
+Use this agent when:
+
+- **Running repo commands** - Any invoke task execution
+- **Updating invoke tasks** - Modifying `tasks.py` or `scripts/*.py`
+- **Adding new tasks** - Creating new automation commands
+- **Docker command updates** - Changes to docker-related invoke tasks
+- **Workflow automation** - Creating or modifying development workflows
+
+## Agent Collaboration
+
+!!! important "Keep Documentation in Sync"
+    When modifying invoke tasks, **always consult the `mkdocs-documentation` agent** to update:
+
+    - `docs/development/invoke-tasks.md` - Task reference
+    - `docs/getting-started/quick-start.md` - Common commands
+    - `CLAUDE.md` - Quick reference section
+
+!!! important "Docker Changes"
+    When modifying docker-related tasks, **consult the `docker-ops` agent** to ensure:
+
+    - Docker Compose files are updated if needed
+    - Environment files are consistent
+    - Image tags and versions are correct
+
+## Task File Locations
+
+| File | Purpose |
+|------|---------|
+| `tasks.py` | Main task definitions, dev commands |
+| `scripts/docker.py` | Docker build/push/pull tasks |
+| `scripts/tests.py` | Test setup and Cypress tasks |
+| `scripts/update.py` | Dependency update tasks |
+| `scripts/version.py` | Version management tasks |
+| `backend/tasks.py` | Database migration tasks |
+
 ## Prerequisites
 
 **IMPORTANT**: Always source the virtual environment before running invoke commands:
