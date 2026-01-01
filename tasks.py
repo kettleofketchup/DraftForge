@@ -15,6 +15,7 @@ from scripts.sync_version import (
     update_pyproject_version,
 )
 from scripts.tests import dev_test, ns_test
+from scripts.docs import ns_docs
 from scripts.update import ns_update
 from scripts.utils import crun, get_version
 from scripts.version import ns_version
@@ -37,6 +38,7 @@ ns.add_collection(ns_db, "db")
 ns.add_collection(ns_update, "update")
 ns.add_collection(ns_version, "version")
 ns.add_collection(ns_test, "test")
+ns.add_collection(ns_docs, "docs")
 from dotenv import load_dotenv
 
 
