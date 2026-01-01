@@ -60,6 +60,7 @@ Run `inv --list` to see all available tasks. The project uses these namespaces:
 | `update.*` | Dependency and repo updates |
 | `version.*` | Version management |
 | `prod.*` | Production commands |
+| `docs.*` | Documentation build commands |
 
 ## Development Commands (`inv dev.*`)
 
@@ -159,6 +160,13 @@ inv version.tag               # Git tag current version and bump patch
 
 ```bash
 inv prod.certbot    # Run certbot for SSL certificate renewal
+```
+
+## Docs Commands (`inv docs.*`)
+
+```bash
+inv docs.serve    # Start MkDocs dev server with hot reload (port 8000)
+inv docs.build    # Build static documentation site to site/
 ```
 
 ## Common Workflows
