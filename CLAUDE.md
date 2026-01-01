@@ -2,6 +2,16 @@
 
 Website for managing DTX, a Dota2 gaming organization.
 
+## First Things First
+
+**IMPORTANT**: Always source the virtual environment before running Python or Invoke commands:
+
+```bash
+source .venv/bin/activate
+```
+
+This project uses Python Invoke for task automation. All repo operations should use `inv` commands.
+
 ## Project Structure
 
 ```
@@ -23,17 +33,27 @@ website/
 
 ### Development (Docker)
 ```bash
-docker compose -f docker/docker-compose.debug.yaml up
+source .venv/bin/activate
+inv dev.debug
 ```
 
 ### Production
 ```bash
-docker compose -f docker/docker-compose.prod.yaml up
+source .venv/bin/activate
+inv dev.prod
 ```
 
 ### Testing
 ```bash
-docker compose -f docker/docker-compose.test.yaml up
+source .venv/bin/activate
+inv dev.test
+```
+
+### Full Test Setup (with Cypress)
+```bash
+source .venv/bin/activate
+inv test.setup
+inv test.open  # or inv test.headless
 ```
 
 ## Docker Compose Architecture
@@ -83,6 +103,8 @@ docker compose -f docker/docker-compose.test.yaml up
 ## Building & Pushing Images
 
 ```bash
+source .venv/bin/activate
+
 # Build all
 inv docker.all.build
 
@@ -96,6 +118,39 @@ inv docker.nginx.build
 ```
 
 Version is pulled from `pyproject.toml`.
+
+## Common Invoke Commands
+
+```bash
+source .venv/bin/activate
+
+# Development
+inv dev.debug          # Start dev environment
+inv dev.live           # Start with tmux
+
+# Database
+inv db.migrate         # Run migrations
+inv db.populate.all    # Reset and populate test DB
+
+# Docker
+inv docker.all.build   # Build all images
+inv docker.all.push    # Push all images
+inv docker.all.pull    # Pull all images
+
+# Updates
+inv update.all         # Update everything (git, deps, images)
+
+# Version
+inv version.set 1.2.3  # Set version
+inv version.tag        # Tag and bump version
+
+# Tests
+inv test.setup         # Full test setup
+inv test.open          # Cypress interactive
+inv test.headless      # Cypress headless
+```
+
+Run `inv --list` for all available tasks.
 
 ## Backend Development
 
@@ -131,6 +186,7 @@ npm run dev
 
 - `python-backend` - Django/Python backend expertise
 - `typescript-frontend` - React/TypeScript frontend expertise
+- `inv-runner` - Python Invoke task runner expertise
 
 ## Skills Available
 
