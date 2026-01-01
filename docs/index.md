@@ -1,4 +1,4 @@
-# DTX Website Documentation
+# Dota Tournament Website Documentation
 
 Welcome to the DTX Website documentation. This site helps manage DTX, a Dota2 gaming organization.
 
