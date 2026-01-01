@@ -10,12 +10,33 @@ COPY package-lock.json /app/
 FROM base AS deps
 RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
 
-# ---- Dev/Test ----
-FROM deps AS deps-dev
-ENV CYPRESS_CACHE_FOLDER=/root/.cache/Cypress
+# ---- Build Deps (includes dev deps for building, but no Cypress) ----
+FROM base AS deps-build
+RUN --mount=type=cache,target=/root/.npm npm ci
 
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --include=dev --ignore-scripts
+# ---- Source for build ----
+FROM deps-build AS source
+COPY . /app/
+
+# ---- Builder ----
+FROM source AS builder
+RUN npm run build
+
+# ---- Runtime (production) ----
+FROM deps AS runtime
+LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/dota_tournament"
+WORKDIR /app
+ENV PROD=false
+ENV NODE_ENV="dev"
+ENV RELEASE=false
+ENV TEST=false
+EXPOSE 3000
+COPY --from=builder /app/build /app/build
+CMD ["npm", "run", "start"]
+
+# ---- Dev/Test Deps (with Cypress) ----
+FROM deps-build AS deps-dev
+ENV CYPRESS_CACHE_FOLDER=/root/.cache/Cypress
 
 # Install Cypress binaries and copy to permanent location
 RUN --mount=type=cache,target=/tmp/cypress-cache \
@@ -26,33 +47,9 @@ RUN --mount=type=cache,target=/tmp/cypress-cache \
 # Verify Cypress installation
 RUN npx cypress --version
 
-# ---- Source  ----
-    # Intermediate stage to cache source and source for faster rebuilds
-FROM deps-dev AS source
-COPY . /app/
-
-# ---- Builder ----
-    # Only should re run if source changes
-FROM source AS builder
-RUN npm run build
-
-# ---- Runtime (production) ----
-FROM deps AS runtime
-LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/dtx_website"
-WORKDIR /app
-ENV PROD=false
-ENV NODE_ENV="dev"
-ENV RELEASE=false
-ENV TEST=false
-EXPOSE 3000
-COPY --from=builder /app/build /app/build
-CMD ["npm", "run", "start"]
-
-
-
 # ---- Runtime (dev) ----
 FROM deps-dev AS runtime-dev
-LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/dtx_website"
+LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/dota_tournament"
 WORKDIR /app
 ENV PROD=false
 ENV NODE_ENV="dev"

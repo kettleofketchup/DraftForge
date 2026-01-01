@@ -1,5 +1,6 @@
 # ---- Builder (production deps only) ----
 FROM python:3.12-bookworm AS poetry
+LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/dota_tournament"
 WORKDIR /app
 
 RUN pip install poetry==2.1.2
@@ -37,7 +38,7 @@ COPY ./backend /app/backend
 
 # ---- Runtime (production) ----
 FROM source AS runtime
-LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/dtx_website"
+LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/dota_tournament"
 
 WORKDIR /app
 EXPOSE 8000
@@ -45,7 +46,7 @@ ENTRYPOINT ["python", "backend/manage.py", "runserver", "0.0.0.0:8000"]
 
 # ---- Runtime for dev/test ----
 FROM source-dev AS runtime-dev
-LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/dtx_website"
+LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/dota_tournament"
 WORKDIR /app
 EXPOSE 8000
 ENTRYPOINT ["python", "backend/manage.py", "runserver", "0.0.0.0:8000"]

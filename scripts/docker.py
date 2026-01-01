@@ -114,10 +114,9 @@ def get_nginx():
 def docker_frontend_build(c):
     version, image, dockerfile, context = get_frontend()
     docker_build(c, image, version, dockerfile, context, "runtime")
-    version, image, dockerfile, context = get_frontend_dev()
-    docker_build(c, image, version, dockerfile, context, "runtime-dev")
-    # version, image, dockerfile, context = get_cypress()
-    # docker_build(c, image, version, dockerfile, context, "runtime")
+    # frontend-dev removed - only needed for local Cypress testing
+    # version, image, dockerfile, context = get_frontend_dev()
+    # docker_build(c, image, version, dockerfile, context, "runtime-dev")
 
 
 @task
@@ -152,9 +151,8 @@ def docker_backend_pull(c):
 def docker_frontend_pull(c):
     version, image, dockerfile, context = get_frontend()
     docker_pull(c, image, version, dockerfile, context)
-    version, image, dockerfile, context = get_frontend_dev()
-    docker_pull(c, image, version, dockerfile, context)
-    # version, image, dockerfile, context = get_cypress()
+    # frontend-dev removed - only needed for local Cypress testing
+    # version, image, dockerfile, context = get_frontend_dev()
     # docker_pull(c, image, version, dockerfile, context)
 
 
@@ -163,9 +161,8 @@ def docker_frontend_push(c):
     docker_frontend_build(c)
     version, image, dockerfile, context = get_frontend()
     tag_latest(c, image, version)
-    version, image, dockerfile, context = get_frontend_dev()
-    tag_latest(c, image, version)
-    # version, image, dockerfile, context = get_cypress()
+    # frontend-dev removed - only needed for local Cypress testing
+    # version, image, dockerfile, context = get_frontend_dev()
     # tag_latest(c, image, version)
 
 
@@ -231,9 +228,8 @@ def docker_push_all(c):
 
 @task
 def docker_pull_all(c):
-
     funcs = [docker_backend_pull, docker_frontend_pull, docker_nginx_pull]
-    with alive_bar(total=3, title="Pullling Images") as bar:
+    with alive_bar(total=3, title="Pulling Images") as bar:
         for func in funcs:
             func(c)
             bar()

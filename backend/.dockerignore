@@ -2,3 +2,8 @@
 *.pyc
 __pycache__/
 .pytest_cache/
+
+# Secrets - never include in Docker image
+.env
+.env.*
+!.env.example

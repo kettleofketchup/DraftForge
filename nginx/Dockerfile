@@ -1,5 +1,5 @@
 FROM jonasal/nginx-certbot:5.4.1-nginx1.27.4 AS runtime
-LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/dtx_website"
+LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/dota_tournament"
 
 RUN mkdir -p /etc/letsencrypt/live/dota.kettle.sh/
 ENV DOMAIN=localhost
