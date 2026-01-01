@@ -137,6 +137,10 @@ inv docker.all.build   # Build all images
 inv docker.all.push    # Push all images
 inv docker.all.pull    # Pull all images
 
+# Docs
+inv docs.serve         # Start MkDocs dev server
+inv docs.build         # Build static docs site
+
 # Updates
 inv update.all         # Update everything (git, deps, images)
 
