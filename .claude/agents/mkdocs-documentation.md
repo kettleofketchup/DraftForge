@@ -115,13 +115,21 @@ def hello():
 source .venv/bin/activate
 
 # Serve locally with hot reload
-mkdocs serve
+inv docs.serve
 
 # Build static site
-mkdocs build
+inv docs.build
 ```
 
 Site available at http://127.0.0.1:8000
+
+## GitHub Pages Deployment
+
+Docs auto-deploy to GitHub Pages on push to `main` when changes are made to:
+- `docs/**`
+- `mkdocs.yml`
+
+**URL:** https://kettleofketchup.github.io/dota_tournament/
 
 ## Agent Collaboration
 
