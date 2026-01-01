@@ -5,5 +5,5 @@ export const getUserCard = (cy: cyType, username: string) => {
 };
 
 export const getUserRemoveButton = (cy: cyType, username: string) => {
-  return cy.get(`[data-testid="removeUserBtn-${username}"]`);
+  return cy.get(`[data-testid="removePlayerBtn-${username}"]`);
 };
