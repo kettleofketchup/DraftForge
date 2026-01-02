@@ -133,9 +133,17 @@ class CustomUser(AbstractUser):
         if not self.discordId:
             return False
 
+        # Skip if Discord bot token is not configured (e.g., in CI)
+        discord_bot_token = getattr(settings, "DISCORD_BOT_TOKEN", None)
+        if not discord_bot_token:
+            logging.debug(
+                f"Skipping avatar fetch for {self.username}: DISCORD_BOT_TOKEN not configured"
+            )
+            return False
+
         try:
             headers = {
-                "Authorization": f"Bot {settings.DISCORD_BOT_TOKEN}",
+                "Authorization": f"Bot {discord_bot_token}",
             }
             response = requests.get(
                 f"{settings.DISCORD_API_BASE_URL}/users/{self.discordId}",

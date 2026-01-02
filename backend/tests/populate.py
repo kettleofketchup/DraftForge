@@ -2,9 +2,157 @@ import random
 from datetime import date, timedelta
 
 import pytest
+from django.conf import settings
 from django.db import transaction
 
 from app.models import CustomUser, PositionsModel
+
+# Dota 2 themed usernames for mock data
+MOCK_USERNAMES = [
+    "phantom_lancer",
+    "anti_mage",
+    "crystal_maiden",
+    "shadow_fiend",
+    "invoker",
+    "pudge_master",
+    "drow_ranger",
+    "juggernaut",
+    "faceless_void",
+    "earthshaker",
+    "lion_finger",
+    "witch_doctor",
+    "vengeful_spirit",
+    "tidehunter",
+    "sand_king",
+    "axe_dunker",
+    "sven_carry",
+    "tiny_toss",
+    "kunkka_boat",
+    "omniknight",
+    "chen_micro",
+    "enchantress",
+    "natures_prophet",
+    "treant_protector",
+    "io_wisp",
+    "slark_escape",
+    "lifestealer",
+    "lycanthrope",
+    "broodmother",
+    "spectre",
+    "phantom_assassin",
+    "templar_assassin",
+    "nyx_assassin",
+    "bounty_hunter",
+    "clinkz",
+    "weaver_time",
+    "ember_spirit",
+    "storm_spirit",
+    "earth_spirit",
+    "void_spirit",
+    "dark_willow",
+    "grimstroke",
+    "snapfire",
+    "hoodwink",
+    "dawnbreaker",
+    "marci_punch",
+    "primal_beast",
+    "muerta_ghost",
+    "ringmaster",
+    "techies_boom",
+    "meepo_micro",
+    "arc_warden",
+    "morphling",
+    "terrorblade",
+    "naga_siren",
+    "medusa_stone",
+    "gyrocopter",
+    "luna_glaives",
+    "chaos_knight",
+    "alchemist",
+    "wraith_king",
+    "dragon_knight",
+    "huskar_spear",
+    "night_stalker",
+    "doom_bringer",
+    "beastmaster",
+    "brewmaster",
+    "magnus_skewer",
+    "centaur_warrunner",
+    "timbersaw",
+    "bristleback",
+    "tusk_punch",
+    "elder_titan",
+    "legion_commander",
+    "phoenix_egg",
+    "winter_wyvern",
+    "oracle_fate",
+    "shadow_demon",
+    "outworld_destroyer",
+    "puck_phase",
+    "queen_pain",
+    "death_prophet",
+    "leshrac",
+    "lina_fire",
+    "pugna_ward",
+    "necrophos",
+    "bane_nightmare",
+    "razor_static",
+    "viper_poison",
+    "venomancer",
+    "windranger",
+    "mirana_arrow",
+    "silencer",
+    "skywrath",
+    "disruptor",
+    "keeper_light",
+    "rubick_steal",
+    "jakiro_heads",
+    "ancient_apparition",
+    "dazzle",
+    "warlock_golem",
+    "visage_birds",
+    "undying_zombie",
+    "abaddon_shield",
+    "lich_chain",
+]
+
+
+def generate_mock_discord_members(count=100):
+    """
+    Generate mock Discord member data for testing when Discord API is unavailable.
+    Returns data in the same format as get_discord_members_data().
+    """
+    members = []
+    used_usernames = set()
+
+    for i in range(count):
+        # Pick a unique username
+        if i < len(MOCK_USERNAMES):
+            username = MOCK_USERNAMES[i]
+        else:
+            username = f"player_{i}"
+
+        if username in used_usernames:
+            username = f"{username}_{i}"
+        used_usernames.add(username)
+
+        # Generate a fake Discord ID (snowflake format - 18 digit number)
+        discord_id = str(100000000000000000 + i)
+
+        member = {
+            "user": {
+                "id": discord_id,
+                "username": username,
+                "avatar": None,  # No avatar for mock users
+                "discriminator": "0",
+                "global_name": username.replace("_", " ").title(),
+            },
+            "nick": None,
+            "joined_at": "2024-01-01T00:00:00.000000+00:00",
+        }
+        members.append(member)
+
+    return members
 
 
 def create_user(user_data):
@@ -43,6 +191,7 @@ def populate_users(force=False):
     Populates the database with Discord users.
     - Grabs a random number of discord users (40-100).
     - Creates CustomUser objects for them.
+    - Falls back to mock data if Discord API is unavailable (e.g., in CI).
 
     Args:
         force (bool): If True, populate users even if there are already more than 100 users.
@@ -57,10 +206,23 @@ def populate_users(force=False):
         )
         return
 
-    from discordbot.services.users import get_discord_members_data
+    # Try to get real Discord users, fall back to mock data if unavailable
+    discord_users = None
+    discord_bot_token = getattr(settings, "DISCORD_BOT_TOKEN", None)
 
-    # Get discord users
-    discord_users = get_discord_members_data()
+    if discord_bot_token:
+        try:
+            from discordbot.services.users import get_discord_members_data
+
+            discord_users = get_discord_members_data()
+            print(f"Fetched {len(discord_users)} users from Discord API")
+        except Exception as e:
+            print(f"Discord API unavailable: {e}")
+            print("Falling back to mock data...")
+
+    if not discord_users:
+        print("Using mock Discord member data for testing")
+        discord_users = generate_mock_discord_members(100)
 
     # Get a random sample of users
     sample_size = random.randint(40, min(100, len(discord_users)))
@@ -69,14 +231,13 @@ def populate_users(force=False):
     # Create users
     users_created = 0
 
-    print(
-        f"Created {users_created} new users. Total users in database: {CustomUser.objects.count()}"
-    )
     for user in users_to_create:
         create_user(user)
         users_created += 1
-    # Note: Removing the assert as it may fail when some users already exist
-    # assert CustomUser.objects.count() == sample_size + 1
+
+    print(
+        f"Created {users_created} new users. Total users in database: {CustomUser.objects.count()}"
+    )
 
 
 from pydantic import BaseModel
