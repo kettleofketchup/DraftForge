@@ -1,9 +1,10 @@
 from functools import wraps
 
-from common.utils import common_context
 from django.conf import settings
 from django.shortcuts import render
 from social_django.utils import load_strategy
+
+from common.utils import common_context
 
 
 def render_to(template):

@@ -66,7 +66,7 @@ export const UserEditModalDialog: React.FC<DialogProps> = memo(
             Please fill in the details below to edit the user.
           </DialogDescription>
         </DialogHeader>
-        
+
         <form onSubmit={onSubmit}>
           <UserEditForm user={user} form={form} setForm={setForm} />
         </form>

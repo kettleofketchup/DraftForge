@@ -47,7 +47,7 @@ Refer to your `paths.py` for tag and path variables to use in your scripts or CI
 and Update the pyproject.toml version as that will match the tag versions
 ---
 
-# Update Version in docker compose 
+# Update Version in docker compose
 
 when you want to update the version for pyproject and docker ocmpose, run the following
 
@@ -117,7 +117,3 @@ Currently, two official plugins are available:
 # Github action locally
 
 act -W .github/workflows/test.yml -s GITHUB_TOKEN=<YOUR_H_TOKEN>
-
-
-
-

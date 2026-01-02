@@ -4,36 +4,100 @@ The DTX Website follows a modern full-stack architecture with clear separation o
 
 ## High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         Nginx                                │
-│                    (Reverse Proxy)                           │
-│                   Ports: 80, 443                             │
-└─────────────────┬───────────────────────┬───────────────────┘
-                  │                       │
-                  ▼                       ▼
-┌─────────────────────────┐   ┌─────────────────────────────┐
-│       Frontend          │   │         Backend             │
-│   React + TypeScript    │   │   Django REST Framework     │
-│      Port: 3000         │   │        Port: 8000           │
-└─────────────────────────┘   └──────────────┬──────────────┘
-                                             │
-                                             ▼
-                              ┌─────────────────────────────┐
-                              │          Redis              │
-                              │     (Cache Layer)           │
-                              │        Port: 6379           │
-                              └─────────────────────────────┘
+```mermaid
+flowchart TD
+    Client([Client Browser])
+
+    Client --> Nginx
+
+    subgraph Docker["Docker Environment"]
+        Nginx[Nginx<br/>:80, :443]
+
+        Nginx -->|/api/*| Backend
+        Nginx -->|/*| Frontend
+
+        Frontend[Frontend<br/>React + TypeScript<br/>:3000]
+        Backend[Backend<br/>Django REST<br/>:8000]
+
+        Backend --> Redis[(Redis<br/>Cache<br/>:6379)]
+        Backend --> SQLite[(SQLite<br/>Database)]
+    end
 ```
 
 ## Request Flow
 
-1. **Client Request** → Nginx receives on port 80/443
-2. **Routing**:
-    - `/api/*` → Backend (Django)
-    - `/*` → Frontend (React)
-3. **Backend** → Queries Redis cache, then database
-4. **Response** → Returns through Nginx to client
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant N as Nginx
+    participant F as Frontend
+    participant B as Backend
+    participant R as Redis
+    participant DB as SQLite
+
+    C->>N: HTTPS Request
+
+    alt Static/SPA Route (/*)
+        N->>F: Proxy Request
+        F-->>N: React SPA
+        N-->>C: HTML/JS/CSS
+    else API Route (/api/*)
+        N->>B: Proxy Request
+        B->>R: Check Cache
+        alt Cache Hit
+            R-->>B: Cached Data
+        else Cache Miss
+            B->>DB: Query
+            DB-->>B: Result
+            B->>R: Store in Cache
+        end
+        B-->>N: JSON Response
+        N-->>C: API Response
+    end
+```
+
+## Data Flow
+
+```mermaid
+flowchart LR
+    subgraph Frontend["Frontend (React)"]
+        UI[UI Components]
+        Zustand[(Zustand Store)]
+        Zod{Zod Validation}
+
+        UI --> Zustand
+        Zustand --> UI
+    end
+
+    subgraph Backend["Backend (Django)"]
+        DRF[DRF ViewSets]
+        Serializers[Serializers]
+        Models[Models]
+        Cacheops[django-cacheops]
+    end
+
+    subgraph Data["Data Layer"]
+        Redis[(Redis Cache)]
+        SQLite[(SQLite DB)]
+    end
+
+    subgraph External["External APIs"]
+        Discord[Discord OAuth]
+        Steam[Steam API]
+    end
+
+    UI -->|fetch /api/*| DRF
+    DRF --> Serializers
+    Serializers --> Models
+    Models --> Cacheops
+    Cacheops --> Redis
+    Cacheops --> SQLite
+    DRF -->|JSON| Zod
+    Zod -->|Validated Data| Zustand
+
+    DRF <--> Discord
+    DRF <--> Steam
+```
 
 ## Service Responsibilities
 

@@ -1,5 +1,51 @@
 # Docker Architecture
 
+## Overview
+
+```mermaid
+flowchart TB
+    subgraph External["External Access"]
+        Internet([Internet])
+    end
+
+    subgraph Ports["Exposed Ports"]
+        P80[":80"]
+        P443[":443"]
+    end
+
+    Internet --> P80 & P443
+
+    subgraph Docker["Docker Compose Environment"]
+        subgraph Services["Services"]
+            Nginx[Nginx<br/>Reverse Proxy]
+            Frontend[Frontend<br/>React + Vite]
+            Backend[Backend<br/>Django REST]
+            Redis[(Redis<br/>Cache)]
+        end
+
+        P80 & P443 --> Nginx
+        Nginx -->|"/*"| Frontend
+        Nginx -->|"/api/*"| Backend
+        Backend --> Redis
+    end
+
+    subgraph Volumes["Persistent Volumes"]
+        SSL[("SSL Certs<br/>nginx/data/ssl/")]
+        DB[("SQLite<br/>backend/db.sqlite3")]
+        RedisData[("Redis Data<br/>backend/.redis_data")]
+    end
+
+    Nginx -.-> SSL
+    Backend -.-> DB
+    Redis -.-> RedisData
+
+    subgraph Registry["GitHub Container Registry"]
+        FImg["frontend:latest"]
+        BImg["backend:latest"]
+        NImg["nginx:latest"]
+    end
+```
+
 ## Docker Compose Configurations
 
 The project provides multiple Docker Compose configurations for different environments:

@@ -3,8 +3,7 @@ from django.core.mail import send_mail
 from django.urls import reverse
 
 
-def send_validation(strategy, backend, code,
- partial_token):
+def send_validation(strategy, backend, code, partial_token):
     url = "{}?verification_code={}&partial_token={}".format(  # fix: skip
         reverse("social:complete", args=(backend.name,)),  # fix: skip
         code.code,

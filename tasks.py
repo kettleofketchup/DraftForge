@@ -8,6 +8,7 @@ from invoke.tasks import task
 import paths
 from backend.tasks import ns_db
 from scripts.docker import docker_pull_all, ns_docker
+from scripts.docs import ns_docs
 from scripts.sync_version import (
     get_version_from_env,
     get_version_from_pyproject,
@@ -15,7 +16,6 @@ from scripts.sync_version import (
     update_pyproject_version,
 )
 from scripts.tests import dev_test, ns_test
-from scripts.docs import ns_docs
 from scripts.update import ns_update
 from scripts.utils import crun, get_version
 from scripts.version import ns_version

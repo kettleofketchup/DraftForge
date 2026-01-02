@@ -88,9 +88,9 @@ export const TeamCard: React.FC<Props> = ({
              hover:bg-violet-900  focus:outline-2
             hover:shadow-xl/30
             focus:outline-offset-2 focus:outline-violet-500
-            focus:outline-offset-2 active:bg-violet-900 
-            [content-visibility: auto] [contain-intrinsic-size: 400px 220px] 
-            
+            focus:outline-offset-2 active:bg-violet-900
+            [content-visibility: auto] [contain-intrinsic-size: 400px 220px]
+
             "
     >
       <motion.div

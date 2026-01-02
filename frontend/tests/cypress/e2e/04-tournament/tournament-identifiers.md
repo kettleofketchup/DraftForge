@@ -9,7 +9,7 @@ This document lists all the test identifiers added to tournament components for 
 ## Tournament Tabs
 - `tournamentTabsList` - Container for all tab triggers
 - `playersTab` - Players tab trigger
-- `teamsTab` - Teams tab trigger  
+- `teamsTab` - Teams tab trigger
 - `gamesTab` - Games tab trigger
 - `playersTabContent` - Players tab content area
 - `teamsTabContent` - Teams tab content area
@@ -83,6 +83,6 @@ These allow you to target specific users:
 // Remove specific player by username
 cy.get('[data-testid="removePlayerBtn-kettleofketchup"]').click();
 
-// Select specific player option by username  
+// Select specific player option by username
 cy.get('[data-testid="playerOption-johnsmith"]').click();
 ```

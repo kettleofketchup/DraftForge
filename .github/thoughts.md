@@ -1,11 +1,11 @@
 
 
 ## Tournament Brackets
-bracket has 
+bracket has
 - tournament
 - rounds
 - type
-- 
+-
 
 BracketSlot
 - Game
@@ -13,7 +13,7 @@ BracketSlot
 - Next Game?
 
 
-What about winners bracket? 
+What about winners bracket?
 - is it a lower bracke
 - 2 brackets under tournaments
 

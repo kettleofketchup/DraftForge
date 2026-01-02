@@ -1,4 +1,4 @@
-# Database 
+# Database
 
 # Using UV
 

@@ -26,7 +26,7 @@ interface Props {}
 export const GameCreateModal: React.FC<Props> = (props) => {
   const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
   const users: UserType[] = useUserStore((state) => state.users); // Zustand setter
-  
+
   if (!currentUser || (!currentUser.is_staff && !currentUser.is_superuser)) {
     return <></>;
   }

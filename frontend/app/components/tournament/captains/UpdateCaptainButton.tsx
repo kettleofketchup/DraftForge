@@ -64,7 +64,7 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
 
   return (
     <div
-      className="flex flex-col gap-y-2 justify-between 
+      className="flex flex-col gap-y-2 justify-between
     justify-between items-center align-middle w-full md:flex-row md:gap-x-2 md:py-1"
     >
       <AlertDialog>

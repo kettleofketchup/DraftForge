@@ -17,7 +17,7 @@ export const CaptainCards: React.FC<CaptainCardsProps> = ({}) => {
 
   useEffect(() => {
     log.debug('index changed:');
-    
+
   }, [draftIndex]);
   return (
     <div className="flex flex-col gap-2">
