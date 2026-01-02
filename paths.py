@@ -51,6 +51,6 @@ DOCKER_COMPOSE_DEBUG_PATH: Path = DOCKER_PATH / "docker-compose.debug.yaml"
 DOCKER_COMPOSE_TEST_PATH: Path = DOCKER_PATH / "docker-compose.test.yaml"
 DOCKER_COMPOSE_RELEASE_PATH: Path = DOCKER_PATH / "docker-compose.release.yaml"
 
-DOCKER_COMPOSE_PROD_PATH: Path = DOCKER_PATH / "docker-compose.yaml"
+DOCKER_COMPOSE_PROD_PATH: Path = DOCKER_PATH / "docker-compose.prod.yaml"
 
 DOCKER_COMPOSE_DEBUG_M1_PATH: Path = DOCKER_PATH / "docker-compose.debug.m1.yaml"
