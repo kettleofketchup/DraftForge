@@ -30,8 +30,10 @@ install(suppress=[invoke])
 
 ns = Collection()
 ns_dev = Collection("dev")
+ns_test = Collection("test")
 ns_prod = Collection("prod")
 ns.add_collection(ns_prod, "prod")
+ns.add_collection(ns_test, "test")
 ns.add_collection(ns_docker, "docker")
 ns.add_collection(ns_dev, "dev")
 ns.add_collection(ns_db, "db")
@@ -58,6 +60,78 @@ def docker_compose_up(c, compose_file: Path):
             f"-f {compose_file.resolve()} up --remove-orphans"
         )
         c.run(cmd)
+
+
+def docker_compose_logs(c, compose_file: Path):
+    with c.cd(paths.PROJECT_PATH):
+        cmd = (
+            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {compose_file.resolve()} logs -f"
+        )
+        c.run(cmd)
+
+
+def docker_compose_ps(c, compose_file: Path):
+    with c.cd(paths.PROJECT_PATH):
+        cmd = (
+            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {compose_file.resolve()} ps"
+        )
+        c.run(cmd)
+
+
+def docker_compose_restart(c, compose_file: Path):
+    with c.cd(paths.PROJECT_PATH):
+        cmd = (
+            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {compose_file.resolve()} restart"
+        )
+        c.run(cmd)
+
+
+def docker_compose_stop(c, compose_file: Path):
+    with c.cd(paths.PROJECT_PATH):
+        cmd = (
+            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {compose_file.resolve()} stop"
+        )
+        c.run(cmd)
+
+
+def docker_compose_build(c, compose_file: Path):
+    with c.cd(paths.PROJECT_PATH):
+        cmd = (
+            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {compose_file.resolve()} build"
+        )
+        c.run(cmd)
+
+
+def docker_compose_pull(c, compose_file: Path):
+    with c.cd(paths.PROJECT_PATH):
+        cmd = (
+            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {compose_file.resolve()} pull"
+        )
+        c.run(cmd)
+
+
+def docker_compose_top(c, compose_file: Path):
+    with c.cd(paths.PROJECT_PATH):
+        cmd = (
+            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {compose_file.resolve()} top"
+        )
+        c.run(cmd)
+
+
+def docker_compose_exec(c, compose_file: Path, service: str, cmd_str: str):
+    with c.cd(paths.PROJECT_PATH):
+        cmd = (
+            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {compose_file.resolve()} exec {service} {cmd_str}"
+        )
+        c.run(cmd, pty=True)
 
 
 from backend.tasks import db_migrate
@@ -178,3 +252,197 @@ ns_dev.add_task(dev_mac, "mac")
 
 ns_dev.add_task(dev_prod, "prod")
 ns_dev.add_task(dev_release, "release")
+
+
+# =============================================================================
+# Environment Tasks: dev, test, prod
+# =============================================================================
+
+
+# Dev environment tasks (uses docker-compose.debug.yaml)
+@task
+def dev_up(c):
+    docker_compose_up(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+
+
+@task
+def dev_down(c):
+    docker_compose_down(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+
+
+@task
+def dev_logs(c):
+    docker_compose_logs(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+
+
+@task
+def dev_ps(c):
+    docker_compose_ps(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+
+
+@task
+def dev_restart(c):
+    docker_compose_restart(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+
+
+@task
+def dev_stop(c):
+    docker_compose_stop(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+
+
+@task
+def dev_build(c):
+    docker_compose_build(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+
+
+@task
+def dev_pull(c):
+    docker_compose_pull(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+
+
+@task
+def dev_top(c):
+    docker_compose_top(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+
+
+@task
+def dev_exec(c, service, cmd):
+    docker_compose_exec(c, paths.DOCKER_COMPOSE_DEBUG_PATH, service, cmd)
+
+
+ns_dev.add_task(dev_up, "up")
+ns_dev.add_task(dev_down, "down")
+ns_dev.add_task(dev_logs, "logs")
+ns_dev.add_task(dev_ps, "ps")
+ns_dev.add_task(dev_restart, "restart")
+ns_dev.add_task(dev_stop, "stop")
+ns_dev.add_task(dev_build, "build")
+ns_dev.add_task(dev_pull, "pull")
+ns_dev.add_task(dev_top, "top")
+ns_dev.add_task(dev_exec, "exec")
+
+
+# Test environment tasks (uses docker-compose.test.yaml)
+@task
+def test_up(c):
+    docker_compose_up(c, paths.DOCKER_COMPOSE_TEST_PATH)
+
+
+@task
+def test_down(c):
+    docker_compose_down(c, paths.DOCKER_COMPOSE_TEST_PATH)
+
+
+@task
+def test_logs(c):
+    docker_compose_logs(c, paths.DOCKER_COMPOSE_TEST_PATH)
+
+
+@task
+def test_ps(c):
+    docker_compose_ps(c, paths.DOCKER_COMPOSE_TEST_PATH)
+
+
+@task
+def test_restart(c):
+    docker_compose_restart(c, paths.DOCKER_COMPOSE_TEST_PATH)
+
+
+@task
+def test_stop(c):
+    docker_compose_stop(c, paths.DOCKER_COMPOSE_TEST_PATH)
+
+
+@task
+def test_build(c):
+    docker_compose_build(c, paths.DOCKER_COMPOSE_TEST_PATH)
+
+
+@task
+def test_pull(c):
+    docker_compose_pull(c, paths.DOCKER_COMPOSE_TEST_PATH)
+
+
+@task
+def test_top(c):
+    docker_compose_top(c, paths.DOCKER_COMPOSE_TEST_PATH)
+
+
+@task
+def test_exec(c, service, cmd):
+    docker_compose_exec(c, paths.DOCKER_COMPOSE_TEST_PATH, service, cmd)
+
+
+ns_test.add_task(test_up, "up")
+ns_test.add_task(test_down, "down")
+ns_test.add_task(test_logs, "logs")
+ns_test.add_task(test_ps, "ps")
+ns_test.add_task(test_restart, "restart")
+ns_test.add_task(test_stop, "stop")
+ns_test.add_task(test_build, "build")
+ns_test.add_task(test_pull, "pull")
+ns_test.add_task(test_top, "top")
+ns_test.add_task(test_exec, "exec")
+
+
+# Prod environment tasks (uses docker-compose.prod.yaml)
+@task
+def prod_up(c):
+    docker_compose_up(c, paths.DOCKER_COMPOSE_PROD_PATH)
+
+
+@task
+def prod_down(c):
+    docker_compose_down(c, paths.DOCKER_COMPOSE_PROD_PATH)
+
+
+@task
+def prod_logs(c):
+    docker_compose_logs(c, paths.DOCKER_COMPOSE_PROD_PATH)
+
+
+@task
+def prod_ps(c):
+    docker_compose_ps(c, paths.DOCKER_COMPOSE_PROD_PATH)
+
+
+@task
+def prod_restart(c):
+    docker_compose_restart(c, paths.DOCKER_COMPOSE_PROD_PATH)
+
+
+@task
+def prod_stop(c):
+    docker_compose_stop(c, paths.DOCKER_COMPOSE_PROD_PATH)
+
+
+@task
+def prod_build(c):
+    docker_compose_build(c, paths.DOCKER_COMPOSE_PROD_PATH)
+
+
+@task
+def prod_pull(c):
+    docker_compose_pull(c, paths.DOCKER_COMPOSE_PROD_PATH)
+
+
+@task
+def prod_top(c):
+    docker_compose_top(c, paths.DOCKER_COMPOSE_PROD_PATH)
+
+
+@task
+def prod_exec(c, service, cmd):
+    docker_compose_exec(c, paths.DOCKER_COMPOSE_PROD_PATH, service, cmd)
+
+
+ns_prod.add_task(prod_up, "up")
+ns_prod.add_task(prod_down, "down")
+ns_prod.add_task(prod_logs, "logs")
+ns_prod.add_task(prod_ps, "ps")
+ns_prod.add_task(prod_restart, "restart")
+ns_prod.add_task(prod_stop, "stop")
+ns_prod.add_task(prod_build, "build")
+ns_prod.add_task(prod_pull, "pull")
+ns_prod.add_task(prod_top, "top")
+ns_prod.add_task(prod_exec, "exec")
