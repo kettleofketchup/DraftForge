@@ -41,15 +41,15 @@ Use this agent when:
 
 ## Prerequisites
 
-**IMPORTANT**: Always source the virtual environment before running invoke commands:
+**IMPORTANT**: Use `poetry run inv` to run invoke commands (no need to source venv):
 
 ```bash
-source .venv/bin/activate
+poetry run inv <command>
 ```
 
 ## Available Task Namespaces
 
-Run `inv --list` to see all available tasks. The project uses these namespaces:
+Run `poetry run inv --list` to see all available tasks. The project uses these namespaces:
 
 | Namespace | Description |
 |-----------|-------------|
@@ -62,147 +62,142 @@ Run `inv --list` to see all available tasks. The project uses these namespaces:
 | `prod.*` | Production commands |
 | `docs.*` | Documentation build commands |
 
-## Development Commands (`inv dev.*`)
+## Development Commands (`poetry run inv dev.*`)
 
 ```bash
 # Start development environment with hot reload
-inv dev.debug
+poetry run inv dev.debug
 
 # Start with tmux (multiple panes)
-inv dev.live
+poetry run inv dev.live
 
 # Run production images locally
-inv dev.prod
+poetry run inv dev.prod
 
 # Run release images
-inv dev.release
+poetry run inv dev.release
 
 # macOS M1 specific
-inv dev.mac
+poetry run inv dev.mac
 
 # Run test environment
-inv dev.test
+poetry run inv dev.test
 ```
 
-## Docker Commands (`inv docker.*`)
+## Docker Commands (`poetry run inv docker.*`)
 
 ### Build Images
 ```bash
-inv docker.all.build      # Build all images
-inv docker.backend.build  # Build backend only
-inv docker.frontend.build # Build frontend only
-inv docker.nginx.build    # Build nginx only
+poetry run inv docker.all.build      # Build all images
+poetry run inv docker.backend.build  # Build backend only
+poetry run inv docker.frontend.build # Build frontend only
+poetry run inv docker.nginx.build    # Build nginx only
 ```
 
 ### Push Images
 ```bash
-inv docker.all.push       # Push all images
-inv docker.backend.push   # Push backend only
-inv docker.frontend.push  # Push frontend only
-inv docker.nginx.push     # Push nginx only
+poetry run inv docker.all.push       # Push all images
+poetry run inv docker.backend.push   # Push backend only
+poetry run inv docker.frontend.push  # Push frontend only
+poetry run inv docker.nginx.push     # Push nginx only
 ```
 
 ### Pull Images
 ```bash
-inv docker.all.pull       # Pull all images
-inv docker.backend.pull   # Pull backend
-inv docker.frontend.pull  # Pull frontend
+poetry run inv docker.all.pull       # Pull all images
+poetry run inv docker.backend.pull   # Pull backend
+poetry run inv docker.frontend.pull  # Pull frontend
 ```
 
 ### Run Images
 ```bash
-inv docker.backend.run    # Run backend container
-inv docker.frontend.run   # Run frontend container
-inv docker.nginx.run      # Run nginx container
+poetry run inv docker.backend.run    # Run backend container
+poetry run inv docker.frontend.run   # Run frontend container
+poetry run inv docker.nginx.run      # Run nginx container
 ```
 
-## Database Commands (`inv db.*`)
+## Database Commands (`poetry run inv db.*`)
 
 ```bash
-inv db.migrate              # Run migrations (default: debug env)
-inv db.makemigrations       # Create migrations
+poetry run inv db.migrate              # Run migrations (default: debug env)
+poetry run inv db.makemigrations       # Create migrations
 
 # Populate test data
-inv db.populate.users       # Populate users from Discord
-inv db.populate.tournaments # Populate tournaments with random users
-inv db.populate.all         # Reset test DB and populate everything
+poetry run inv db.populate.users       # Populate users from Discord
+poetry run inv db.populate.tournaments # Populate tournaments with random users
+poetry run inv db.populate.all         # Reset test DB and populate everything
 ```
 
-## Test Commands (`inv test.*`)
+## Test Commands (`poetry run inv test.*`)
 
 ```bash
-inv test.setup      # Full setup: update deps, build images, populate, start
-inv test.open       # Open Cypress interactive mode (runs setup first)
-inv test.headless   # Run Cypress headless (runs setup first)
+poetry run inv test.setup      # Full setup: update deps, build images, populate, start
+poetry run inv test.open       # Open Cypress interactive mode (runs setup first)
+poetry run inv test.headless   # Run Cypress headless (runs setup first)
 ```
 
-## Update Commands (`inv update.*`)
+## Update Commands (`poetry run inv update.*`)
 
 ```bash
-inv update.all      # Pull git, migrate, npm install, poetry install, pull images
-inv update.git      # Git pull only
-inv update.python   # Poetry install only
-inv update.npm      # npm install only
-inv update.all_test # Update for test environment
+poetry run inv update.all      # Pull git, migrate, npm install, poetry install, pull images
+poetry run inv update.git      # Git pull only
+poetry run inv update.python   # Poetry install only
+poetry run inv update.npm      # npm install only
+poetry run inv update.all_test # Update for test environment
 ```
 
-## Version Commands (`inv version.*`)
+## Version Commands (`poetry run inv version.*`)
 
 ```bash
-inv version.set <version>     # Set version across all files
-inv version.from-env          # Sync version from .env.release to pyproject.toml
-inv version.from-pyproject    # Sync version from pyproject.toml to env files
-inv version.build             # Build Docker images with version sync
-inv version.tag               # Git tag current version and bump patch
+poetry run inv version.set <version>     # Set version across all files
+poetry run inv version.from-env          # Sync version from .env.release to pyproject.toml
+poetry run inv version.from-pyproject    # Sync version from pyproject.toml to env files
+poetry run inv version.build             # Build Docker images with version sync
+poetry run inv version.tag               # Git tag current version and bump patch
 ```
 
-## Production Commands (`inv prod.*`)
+## Production Commands (`poetry run inv prod.*`)
 
 ```bash
-inv prod.certbot    # Run certbot for SSL certificate renewal
+poetry run inv prod.certbot    # Run certbot for SSL certificate renewal
 ```
 
-## Docs Commands (`inv docs.*`)
+## Docs Commands (`poetry run inv docs.*`)
 
 ```bash
-inv docs.serve    # Start MkDocs dev server with hot reload (port 8000)
-inv docs.build    # Build static documentation site to site/
+poetry run inv docs.serve    # Start MkDocs dev server with hot reload (port 8000)
+poetry run inv docs.build    # Build static documentation site to site/
 ```
 
 ## Common Workflows
 
 ### Start Development
 ```bash
-source .venv/bin/activate
-inv dev.debug
+poetry run inv dev.debug
 ```
 
 ### Prepare for Testing
 ```bash
-source .venv/bin/activate
-inv test.setup
-inv test.open  # or inv test.headless
+poetry run inv test.setup
+poetry run inv test.open  # or poetry run inv test.headless
 ```
 
 ### Release New Version
 ```bash
-source .venv/bin/activate
-inv version.set 1.2.3
-inv docker.all.build
-inv docker.all.push
-inv version.tag
+poetry run inv version.set 1.2.3
+poetry run inv docker.all.build
+poetry run inv docker.all.push
+poetry run inv version.tag
 ```
 
 ### Update Everything
 ```bash
-source .venv/bin/activate
-inv update.all
+poetry run inv update.all
 ```
 
 ### Reset Test Database
 ```bash
-source .venv/bin/activate
-inv db.populate.all
+poetry run inv db.populate.all
 ```
 
 ## Environment Files
