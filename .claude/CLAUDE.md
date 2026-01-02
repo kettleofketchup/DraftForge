@@ -128,11 +128,31 @@ source .venv/bin/activate
 inv dev.debug          # Start dev environment
 inv dev.live           # Start with tmux
 
+# Environment Management (dev, test, prod)
+inv dev.up             # Start dev environment
+inv dev.down           # Stop dev environment
+inv dev.logs           # Follow dev logs
+inv dev.ps             # List dev containers
+inv dev.restart        # Restart dev services
+inv dev.stop           # Stop without removing
+inv dev.build          # Build dev images
+inv dev.pull           # Pull dev images
+inv dev.top            # Show running processes
+inv dev.exec <svc> <cmd>  # Execute command in container
+
+inv test.up            # Start test environment
+inv test.down          # Stop test environment
+# ... (same commands as dev)
+
+inv prod.up            # Start prod environment
+inv prod.down          # Stop prod environment
+# ... (same commands as dev)
+
 # Database
 inv db.migrate         # Run migrations
 inv db.populate.all    # Reset and populate test DB
 
-# Docker
+# Docker Images
 inv docker.all.build   # Build all images
 inv docker.all.push    # Push all images
 inv docker.all.pull    # Pull all images
