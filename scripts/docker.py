@@ -114,9 +114,9 @@ def get_nginx():
 def docker_frontend_build(c):
     version, image, dockerfile, context = get_frontend()
     docker_build(c, image, version, dockerfile, context, "runtime")
-    # frontend-dev removed - only needed for local Cypress testing
-    # version, image, dockerfile, context = get_frontend_dev()
-    # docker_build(c, image, version, dockerfile, context, "runtime-dev")
+    # frontend-dev needed for Cypress tests in CI
+    version, image, dockerfile, context = get_frontend_dev()
+    docker_build(c, image, version, dockerfile, context, "runtime-dev")
 
 
 @task
@@ -151,9 +151,9 @@ def docker_backend_pull(c):
 def docker_frontend_pull(c):
     version, image, dockerfile, context = get_frontend()
     docker_pull(c, image, version, dockerfile, context)
-    # frontend-dev removed - only needed for local Cypress testing
-    # version, image, dockerfile, context = get_frontend_dev()
-    # docker_pull(c, image, version, dockerfile, context)
+    # frontend-dev needed for Cypress tests in CI
+    version, image, dockerfile, context = get_frontend_dev()
+    docker_pull(c, image, version, dockerfile, context)
 
 
 @task
@@ -161,9 +161,9 @@ def docker_frontend_push(c):
     docker_frontend_build(c)
     version, image, dockerfile, context = get_frontend()
     tag_latest(c, image, version)
-    # frontend-dev removed - only needed for local Cypress testing
-    # version, image, dockerfile, context = get_frontend_dev()
-    # tag_latest(c, image, version)
+    # frontend-dev needed for Cypress tests in CI
+    version, image, dockerfile, context = get_frontend_dev()
+    tag_latest(c, image, version)
 
 
 @task
