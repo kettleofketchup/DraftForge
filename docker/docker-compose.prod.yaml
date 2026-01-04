@@ -36,6 +36,7 @@ services:
       - ./nginx/data/certbot/work/:/lib/letsencrypt/
       - ./nginx/data/certbot/configs/:/etc/letsencrypt/
       - ./nginx/data/certbot/logs/:/var/log/letsencrypt/
+
       - ./nginx/data/ssl/cert.crt:/etc/letsencrypt/live/dota.kettle.sh/fullchain.pem
       - ./nginx/data/ssl/cert.key:/etc/letsencrypt/live/dota.kettle.sh/privkey.pem
     depends_on:

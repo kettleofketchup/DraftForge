@@ -33,7 +33,7 @@ services:
       - ./nginx/default.template.conf:/etc/nginx/templates/default.template.conf
       - ./nginx/data/user_conf.d:/etc/nginx/user_conf.d
       - ./nginx/data/certbot/configs/live/dota.kettle.sh/fullchain.pem:/etc/letsencrypt/live/dota.kettle.sh/fullchain.pem
-      - ./nginx/data/certbot/configs/live/dota.kettle.sh/privkey.pem:/etc/letsencrypt/live/dota.kettle.sh/privkey.pem
+      - ./nginx/data/certbot/configs/live:/etc/letsencrypt/live
       - ./nginx/data/certbot/webroot/:/var/www/certbot/
       - ./nginx/data/certbot/work/:/lib/letsencrypt/
       - ./nginx/data/certbot/configs/:/etc/letsencrypt/
