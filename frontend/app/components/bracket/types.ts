@@ -36,9 +36,10 @@ export interface BracketState {
   isVirtual: boolean;                  // Not yet persisted to backend
 }
 
-// React Flow node data
+// React Flow node data - index signature required for @xyflow/react Node<T> compatibility
 export interface MatchNodeData extends BracketMatch {
   // Additional display properties can go here
+  [key: string]: unknown;
 }
 
 export interface EmptySlotData {
