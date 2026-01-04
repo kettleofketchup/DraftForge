@@ -45,7 +45,6 @@
       "Bash(inv dev.ps:*)",
       "Bash(inv test:*)",
       "Bash(inv prod.ps)",
-      "Bash(gh pr create --title \"feat: add docker compose commands for dev/test/prod environments\" --body \"$\\(cat <<''EOF''\n## Summary\n\n- Add consistent docker compose commands \\(`up`, `down`, `logs`, `ps`, `restart`, `stop`, `build`, `pull`, `top`, `exec`\\) across all environments\n- Create new `test` namespace alongside existing `dev` and `prod`\n- Fix `DOCKER_COMPOSE_PROD_PATH` to point to correct file \\(`docker-compose.prod.yaml`\\)\n- Update documentation in CLAUDE.md\n\n## Usage\n\n```bash\ninv dev.up       # Start dev environment\ninv dev.down     # Stop dev environment\ninv dev.logs     # Follow logs\ninv test.up      # Start test environment\ninv prod.ps      # List prod containers\ninv dev.exec backend bash  # Shell into container\n```\n\n## Test plan\n\n- [x] Verified `inv dev.ps` returns container list\n- [x] Verified `inv test.ps` works \\(empty when not running\\)\n- [x] Verified `inv prod.ps` works \\(empty when not running\\)\n- [x] Verified `inv --list` shows all new commands\nEOF\n\\)\")",
       "Bash(inv dev.top:*)",
       "Bash(inv prod.top:*)",
       "Bash(inv dev.down:*)",
@@ -65,7 +64,6 @@
       "Bash(tree:*)",
       "Bash(claude mcp list:*)",
       "WebFetch(domain:docs.claude.com)",
-      "Bash(gh pr create --title \"feat: add zod-form-validation skill for React Hook Form patterns\" --body \"$\\(cat <<''EOF''\n## Summary\n\n- Add `zod-form-validation` skill with comprehensive documentation for Zod schema validation and React Hook Form integration\n- Update `typescript-frontend` agent to preload the skill when working on frontend forms\n- Provide progressive disclosure with reference files for detailed patterns\n\n## Skill Structure\n\n```\n.claude/skills/zod-form-validation/\n├── SKILL.md                      # Main skill \\(quick reference, conventions\\)\n└── references/\n    ├── zod-schemas.md            # Zod schema patterns\n    ├── react-hook-form.md        # React Hook Form integration\n    └── form-fields.md            # Shadcn form field components\n```\n\n## Key Features\n\n- **Form Setup Pattern**: React Hook Form + ZodResolver integration\n- **Schema Patterns**: Validation, composition, refinements, error handling\n- **Field Components**: Input, Select, Checkbox, Date picker patterns\n- **Migration Guide**: Convert legacy `useState` forms to RHF + Zod\n- **DTX Conventions**: Schema locations, type extraction, toast handling\n\n## Test Plan\n\n- [x] Skill created with proper YAML frontmatter\n- [x] Reference files under 200 lines each \\(progressive disclosure\\)\n- [x] TypeScript frontend agent updated with `skills:` field\n- [x] Pre-commit hooks pass\nEOF\n\\)\")",
       "Bash(gh pr edit:*)"
     ]
   },
