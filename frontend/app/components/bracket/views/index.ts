@@ -1,0 +1,1 @@
+export { SwissBracketView } from './SwissBracketView';
