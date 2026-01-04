@@ -212,3 +212,43 @@ def sync_league_matches(league_id, full_sync=False):
         "failed_count": failed_count,
         "new_last_match_id": new_last_match_id,
     }
+
+
+def retry_failed_matches(league_id):
+    """
+    Attempt to re-process matches in failed_match_ids.
+    Clears successful ones from the list.
+
+    Args:
+        league_id: Dota 2 league ID
+
+    Returns:
+        dict: {retried_count, still_failed_count}
+    """
+    try:
+        state = LeagueSyncState.objects.get(league_id=league_id)
+    except LeagueSyncState.DoesNotExist:
+        return {"retried_count": 0, "still_failed_count": 0}
+
+    failed_ids = list(state.failed_match_ids)
+    still_failed = []
+    retried_count = 0
+
+    for match_id in failed_ids:
+        match = process_match(match_id, league_id=league_id)
+        if match:
+            retried_count += 1
+        else:
+            still_failed.append(match_id)
+
+    state.failed_match_ids = still_failed
+    state.save()
+
+    log.info(
+        f"Retry complete for league {league_id}: {retried_count} succeeded, {len(still_failed)} still failed"
+    )
+
+    return {
+        "retried_count": retried_count,
+        "still_failed_count": len(still_failed),
+    }
