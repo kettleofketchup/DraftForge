@@ -16,6 +16,13 @@ class Match(models.Model):
 class PlayerMatchStats(models.Model):
     match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name="players")
     steam_id = models.BigIntegerField()
+    user = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="match_stats",
+    )
     player_slot = models.IntegerField()
     hero_id = models.IntegerField()
     kills = models.IntegerField()
