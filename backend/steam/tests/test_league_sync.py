@@ -7,6 +7,7 @@ from steam.functions.league_sync import (
     link_user_to_stats,
     process_match,
     relink_all_users,
+    retry_failed_matches,
     sync_league_matches,
 )
 from steam.models import LeagueSyncState, Match, PlayerMatchStats
@@ -236,3 +237,27 @@ class SyncLeagueMatchesTest(TestCase):
 
         state = LeagueSyncState.objects.get(league_id=17929)
         self.assertIn(7000000301, state.failed_match_ids)
+
+
+class RetryFailedMatchesTest(TestCase):
+    @patch("steam.functions.league_sync.process_match")
+    def test_retry_clears_successful(self, mock_process):
+        LeagueSyncState.objects.create(
+            league_id=17929,
+            failed_match_ids=[7000000400, 7000000401, 7000000402],
+        )
+
+        # First two succeed, third fails
+        mock_process.side_effect = [
+            MagicMock(match_id=7000000400),
+            MagicMock(match_id=7000000401),
+            None,
+        ]
+
+        result = retry_failed_matches(17929)
+
+        self.assertEqual(result["retried_count"], 2)
+        self.assertEqual(result["still_failed_count"], 1)
+
+        state = LeagueSyncState.objects.get(league_id=17929)
+        self.assertEqual(state.failed_match_ids, [7000000402])
