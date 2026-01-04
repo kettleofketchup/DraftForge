@@ -12,6 +12,7 @@ services:
     restart: always
     volumes:
       - ./backend/prod.db.sqlite3:/app/backend/prod.db.sqlite3
+      - ./backend/.env:/app/backend/.env
     depends_on:
       - redis
   redis:

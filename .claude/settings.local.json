@@ -64,7 +64,25 @@
       "Bash(tree:*)",
       "Bash(claude mcp list:*)",
       "WebFetch(domain:docs.claude.com)",
-      "Bash(gh pr edit:*)"
+      "Bash(gh pr edit:*)",
+      "WebFetch(domain:reactflow.dev)",
+      "Bash(DISABLE_CACHE=true python manage.py:*)",
+      "Bash(poetry install:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(DJANGO_SETTINGS_MODULE=config.settings python -m pytest:*)",
+      "Bash(DISABLE_CACHE=true python:*)",
+      "Bash(git rev-list:*)",
+      "Bash(node test_bracket.js:*)",
+      "Bash(gh pr create:*)",
+      "Bash(node test_nextmatch.js:*)",
+      "Bash(node verify_bracket_math.js:*)",
+      "Bash(DJANGO_SETTINGS_MODULE=website.settings DISABLE_CACHE=true python:*)",
+      "Bash(PYTHONPATH=/home/kettle/git_repos/website/.worktrees/tournament-bracket/backend DJANGO_SETTINGS_MODULE=website.settings DISABLE_CACHE=true python:*)",
+      "WebFetch(domain:steamapi.xpaw.me)",
+      "WebFetch(domain:wiki.teamfortress.com)",
+      "WebFetch(domain:dev.dota2.com)",
+      "WebFetch(domain:docs.opendota.com)",
+      "WebFetch(domain:rdrr.io)"
     ]
   },
   "hooks": {
