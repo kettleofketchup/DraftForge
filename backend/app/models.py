@@ -338,6 +338,46 @@ class Game(models.Model):
     )
     round = models.IntegerField(default=1)
 
+    # Bracket positioning fields
+    bracket_type = models.CharField(
+        max_length=20,
+        choices=[
+            ("winners", "Winners Bracket"),
+            ("losers", "Losers Bracket"),
+            ("grand_finals", "Grand Finals"),
+        ],
+        default="winners",
+    )
+    position = models.IntegerField(
+        default=0, help_text="Position within round (0-indexed)"
+    )
+
+    # Match flow - which game winner advances to
+    next_game = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="source_games",
+    )
+    next_game_slot = models.CharField(
+        max_length=10,
+        choices=[("radiant", "Radiant"), ("dire", "Dire")],
+        null=True,
+        blank=True,
+    )
+
+    # Match status
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ("pending", "Pending"),
+            ("live", "Live"),
+            ("completed", "Completed"),
+        ],
+        default="pending",
+    )
+
     # steam gameid if it exists
     gameid = models.IntegerField(null=True, blank=True)
 
