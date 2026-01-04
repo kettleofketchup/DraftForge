@@ -365,16 +365,17 @@ def populate_tournaments(force=False):
 def populate_steam_matches(force=False):
     """
     Generate and save mock Steam matches for test tournaments.
+    Also creates bracket Game objects linked to the Steam matches.
     Uses actual team rosters to ensure Steam IDs match.
 
     Args:
-        force: If True, delete existing mock matches first
+        force: If True, delete existing mock matches and games first
     """
-    from app.models import Tournament
+    from app.models import Game, Tournament
     from steam.mocks.mock_match_generator import generate_mock_matches_for_tournament
     from steam.models import Match, PlayerMatchStats
 
-    print("Populating Steam matches...")
+    print("Populating Steam matches and bracket games...")
 
     # Find a tournament with at least 4 teams
     tournament = (
@@ -387,16 +388,25 @@ def populate_steam_matches(force=False):
         print("No tournament with 4+ teams found. Run populate_tournaments first.")
         return
 
+    teams = list(tournament.teams.all()[:4])
+    if len(teams) < 4:
+        print(f"Tournament needs 4 teams, has {len(teams)}")
+        return
+
     # Check for existing mock matches (IDs starting with 9000000000)
-    existing = Match.objects.filter(match_id__gte=9000000000, match_id__lt=9100000000)
-    if existing.exists():
+    existing_matches = Match.objects.filter(
+        match_id__gte=9000000000, match_id__lt=9100000000
+    )
+    existing_games = Game.objects.filter(tournament=tournament)
+
+    if existing_matches.exists() or existing_games.exists():
         if force:
-            print(f"Deleting {existing.count()} existing mock matches")
-            existing.delete()
+            print(f"Deleting {existing_matches.count()} existing mock matches")
+            print(f"Deleting {existing_games.count()} existing games")
+            existing_matches.delete()
+            existing_games.delete()
         else:
-            print(
-                f"Mock matches already exist ({existing.count()}). Use force=True to regenerate."
-            )
+            print(f"Mock data already exists. Use force=True to regenerate.")
             return
 
     # Generate mock matches
@@ -406,11 +416,45 @@ def populate_steam_matches(force=False):
         print(f"Failed to generate matches: {e}")
         return
 
-    # Save to database
+    # Define bracket structure for 4-team double elimination
+    # Matches are generated in this order:
+    # 0: Winners R1 Match 1 (Team0 vs Team1)
+    # 1: Winners R1 Match 2 (Team2 vs Team3)
+    # 2: Losers R1 (Loser0 vs Loser1)
+    # 3: Winners Final (Winner0 vs Winner1)
+    # 4: Losers Final (LR1Winner vs WFLoser)
+    # 5: Grand Final
+    # 6: Grand Final Reset (optional)
+
+    bracket_structure = [
+        {"round": 1, "bracket_type": "winners", "position": 0},  # Match 0
+        {"round": 1, "bracket_type": "winners", "position": 1},  # Match 1
+        {"round": 1, "bracket_type": "losers", "position": 0},  # Match 2
+        {
+            "round": 2,
+            "bracket_type": "winners",
+            "position": 0,
+        },  # Match 3 (Winners Final)
+        {"round": 2, "bracket_type": "losers", "position": 0},  # Match 4 (Losers Final)
+        {"round": 1, "bracket_type": "grand_finals", "position": 0},  # Match 5 (GF)
+        {
+            "round": 2,
+            "bracket_type": "grand_finals",
+            "position": 0,
+        },  # Match 6 (GF Reset)
+    ]
+
+    # Track winners/losers for team assignment
+    match_results = []  # Will store (radiant_team, dire_team, winner, loser)
+
+    # Save matches and create games
     saved_count = 0
-    for match_data in mock_matches:
+    games = []
+
+    for idx, match_data in enumerate(mock_matches):
         result = match_data["result"]
 
+        # Save Steam Match
         match, created = Match.objects.update_or_create(
             match_id=result["match_id"],
             defaults={
@@ -423,12 +467,10 @@ def populate_steam_matches(force=False):
             },
         )
 
+        # Save PlayerMatchStats
         for player_data in result["players"]:
-            # Convert 32-bit account_id back to 64-bit steam_id
             steam_id = player_data["account_id"] + 76561197960265728
-
-            # Try to link to user via Steam ID
-            user = CustomUser.objects.filter(steamid=str(steam_id)).first()
+            user = CustomUser.objects.filter(steamid=steam_id).first()
 
             PlayerMatchStats.objects.update_or_create(
                 match=match,
@@ -450,11 +492,89 @@ def populate_steam_matches(force=False):
                 },
             )
 
+        # Determine teams for this game based on bracket position
+        bracket_info = bracket_structure[idx]
+        radiant_win = result["radiant_win"]
+
+        if idx == 0:  # Winners R1 Match 1
+            radiant_team, dire_team = teams[0], teams[1]
+        elif idx == 1:  # Winners R1 Match 2
+            radiant_team, dire_team = teams[2], teams[3]
+        elif idx == 2:  # Losers R1
+            radiant_team = match_results[0][3]  # Loser of match 0
+            dire_team = match_results[1][3]  # Loser of match 1
+        elif idx == 3:  # Winners Final
+            radiant_team = match_results[0][2]  # Winner of match 0
+            dire_team = match_results[1][2]  # Winner of match 1
+        elif idx == 4:  # Losers Final
+            radiant_team = match_results[2][2]  # Winner of Losers R1
+            dire_team = match_results[3][3]  # Loser of Winners Final
+        elif idx == 5:  # Grand Final
+            radiant_team = match_results[3][2]  # Winner of Winners Final
+            dire_team = match_results[4][2]  # Winner of Losers Final
+        elif idx == 6:  # Grand Final Reset
+            radiant_team = match_results[3][2]  # Winner of Winners Final
+            dire_team = match_results[4][2]  # Winner of Losers Final
+
+        winner = radiant_team if radiant_win else dire_team
+        loser = dire_team if radiant_win else radiant_team
+        match_results.append((radiant_team, dire_team, winner, loser))
+
+        # Create Game object (bracket slot)
+        game = Game.objects.create(
+            tournament=tournament,
+            round=bracket_info["round"],
+            bracket_type=bracket_info["bracket_type"],
+            position=bracket_info["position"],
+            radiant_team=radiant_team,
+            dire_team=dire_team,
+            winning_team=winner,
+            gameid=result["match_id"],
+            status="completed",
+        )
+        games.append(game)
         saved_count += 1
-        print(f"Saved match {result['match_id']}")
+        print(f"Saved match {result['match_id']} -> Game {game.pk}")
+
+    # Set up next_game links for bracket flow
+    if len(games) >= 6:
+        # Winners R1 → Winners Final
+        games[0].next_game = games[3]
+        games[0].next_game_slot = "radiant"
+        games[0].save()
+
+        games[1].next_game = games[3]
+        games[1].next_game_slot = "dire"
+        games[1].save()
+
+        # Winners R1 losers → Losers R1
+        # (losers flow handled implicitly by team assignment)
+
+        # Losers R1 → Losers Final
+        games[2].next_game = games[4]
+        games[2].next_game_slot = "radiant"
+        games[2].save()
+
+        # Winners Final winner → Grand Final
+        games[3].next_game = games[5]
+        games[3].next_game_slot = "radiant"
+        games[3].save()
+
+        # Winners Final loser → Losers Final
+        # (handled by team assignment)
+
+        # Losers Final → Grand Final
+        games[4].next_game = games[5]
+        games[4].next_game_slot = "dire"
+        games[4].save()
+
+        # Grand Final → Grand Final Reset (if exists)
+        if len(games) >= 7:
+            games[5].next_game = games[6]
+            games[5].save()
 
     print(
-        f"Populated {saved_count} mock Steam matches for tournament '{tournament.name}'"
+        f"Populated {saved_count} mock Steam matches and Games for tournament '{tournament.name}'"
     )
 
 
