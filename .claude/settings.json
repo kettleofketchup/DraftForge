@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "ai-ml-tools@claudekit-skills": true
+  }
+}
