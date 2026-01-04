@@ -1,3 +1,7 @@
+---
+skills: zod-form-validation
+---
+
 # TypeScript Frontend Agent
 
 Expert agent for React/TypeScript frontend development in the DTX website project.
@@ -108,6 +112,38 @@ toast.promise(apiCall(data), {
 
 ### GET (Reads)
 Fetch quietly with UI loading states (spinners, skeletons). No toasts for reads.
+
+## Forms (React Hook Form + Zod)
+
+**IMPORTANT**: All forms must use React Hook Form with ZodResolver. See the `zod-form-validation` skill for complete patterns.
+
+### Quick Setup
+
+```tsx
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '~/components/ui/form';
+
+const form = useForm<z.infer<typeof MySchema>>({
+  resolver: zodResolver(MySchema),
+  defaultValues: { /* ... */ },
+});
+```
+
+### Schema Location
+
+Define schemas in `~/components/<feature>/schemas.ts`:
+- `UserSchema` in `~/components/user/schemas.ts`
+- `TeamSchema` in `~/components/team/schemas.ts`
+
+### Reference Implementation
+
+See `~/pages/profile/profile.tsx` for the canonical form implementation.
+
+### Migrating Legacy Forms
+
+Legacy forms use manual `useState`. When modifying forms, migrate to the React Hook Form + Zod pattern per the `zod-form-validation` skill.
 
 ## Logging
 
