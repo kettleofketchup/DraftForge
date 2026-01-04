@@ -6,6 +6,7 @@ from django.utils import timezone
 from app.models import CustomUser, Game, Team, Tournament
 from steam.functions.game_linking import (
     _get_game_player_steam_ids,
+    auto_link_matches_for_tournament,
     check_match_for_games,
     confirm_suggestion,
     dismiss_suggestion,
@@ -398,3 +399,168 @@ class ConfirmDismissSuggestionTest(TestCase):
         """Test dismissing non-existent suggestion."""
         result = dismiss_suggestion(99999)
         self.assertFalse(result)
+
+
+class AutoLinkMatchesForTournamentTest(TestCase):
+    def setUp(self):
+        # Create users with steamids
+        self.users = []
+        for i in range(10):
+            user = CustomUser.objects.create_user(
+                username=f"auto_player{i}",
+                steamid=76561198000000101 + i,
+            )
+            self.users.append(user)
+
+        # Create tournament with date
+        today = date.today()
+        self.tournament = Tournament.objects.create(
+            name="Auto Link Tournament", date_played=today
+        )
+
+        # Create teams
+        self.team1 = Team.objects.create(name="Auto Team 1", tournament=self.tournament)
+        self.team1.members.add(*self.users[:5])
+
+        self.team2 = Team.objects.create(name="Auto Team 2", tournament=self.tournament)
+        self.team2.members.add(*self.users[5:])
+
+        # Create multiple unlinked games
+        self.game1 = Game.objects.create(
+            tournament=self.tournament,
+            radiant_team=self.team1,
+            dire_team=self.team2,
+            round=1,
+        )
+        self.game2 = Game.objects.create(
+            tournament=self.tournament,
+            radiant_team=self.team1,
+            dire_team=self.team2,
+            round=2,
+        )
+
+        # Create match with all 10 players (for game1)
+        self.match1 = Match.objects.create(
+            match_id=999101,
+            radiant_win=True,
+            duration=2400,
+            start_time=int(timezone.now().timestamp()),
+            game_mode=22,
+            lobby_type=1,
+            league_id=17929,
+        )
+        for i, user in enumerate(self.users):
+            PlayerMatchStats.objects.create(
+                match=self.match1,
+                steam_id=user.steamid,
+                hero_id=i + 1,
+                kills=5,
+                deaths=2,
+                assists=10,
+                gold_per_min=500,
+                xp_per_min=600,
+                last_hits=200,
+                denies=20,
+                hero_damage=15000,
+                tower_damage=3000,
+                hero_healing=1000,
+                player_slot=i,
+            )
+
+        # Create match with partial overlap (for game2 suggestions)
+        self.match2 = Match.objects.create(
+            match_id=999102,
+            radiant_win=False,
+            duration=2500,
+            start_time=int(timezone.now().timestamp()),
+            game_mode=22,
+            lobby_type=1,
+            league_id=17929,
+        )
+        # Only add first 5 players
+        for i, user in enumerate(self.users[:5]):
+            PlayerMatchStats.objects.create(
+                match=self.match2,
+                steam_id=user.steamid,
+                hero_id=i + 1,
+                kills=3,
+                deaths=4,
+                assists=8,
+                gold_per_min=400,
+                xp_per_min=500,
+                last_hits=150,
+                denies=15,
+                hero_damage=12000,
+                tower_damage=2000,
+                hero_healing=800,
+                player_slot=i,
+            )
+
+    def test_auto_link_perfect_match(self):
+        """Test auto-linking when all 10 players match."""
+        # Delete game2 so we only have one unlinked game
+        self.game2.delete()
+
+        result = auto_link_matches_for_tournament(self.tournament.id)
+
+        self.assertEqual(result["auto_linked_count"], 1)
+
+        self.game1.refresh_from_db()
+        self.assertEqual(self.game1.gameid, 999101)
+
+    def test_creates_suggestions_for_partial_match(self):
+        """Test creating suggestions for partial player overlap."""
+        # Delete match1 (the perfect match) so only partial matches exist
+        self.match1.delete()
+
+        result = auto_link_matches_for_tournament(self.tournament.id)
+
+        # Should have suggestions for partial matches (match2 has 5/10 players)
+        self.assertGreater(result["suggestions_created_count"], 0)
+
+        # Verify that a suggestion was created with 50% confidence
+        suggestion = GameMatchSuggestion.objects.filter(
+            game=self.game1, match=self.match2
+        ).first()
+        self.assertIsNotNone(suggestion)
+        self.assertEqual(suggestion.confidence_score, 0.5)
+        self.assertFalse(suggestion.auto_linked)
+
+    def test_tournament_not_found(self):
+        """Test with non-existent tournament."""
+        result = auto_link_matches_for_tournament(99999)
+
+        self.assertEqual(result["auto_linked_count"], 0)
+        self.assertEqual(result["suggestions_created_count"], 0)
+
+    def test_skips_already_linked_games(self):
+        """Test that already linked games are skipped."""
+        self.game1.gameid = 888001
+        self.game1.save()
+
+        result = auto_link_matches_for_tournament(self.tournament.id)
+
+        # game1 should not be re-linked
+        self.game1.refresh_from_db()
+        self.assertEqual(self.game1.gameid, 888001)
+
+    def test_skips_existing_suggestions(self):
+        """Test that existing suggestions are not duplicated."""
+        # Create existing suggestion
+        GameMatchSuggestion.objects.create(
+            game=self.game2,
+            match=self.match2,
+            tournament=self.tournament,
+            confidence_score=0.5,
+            player_overlap=5,
+        )
+
+        result = auto_link_matches_for_tournament(self.tournament.id)
+
+        # Should not create duplicate
+        self.assertEqual(
+            GameMatchSuggestion.objects.filter(
+                game=self.game2, match=self.match2
+            ).count(),
+            1,
+        )

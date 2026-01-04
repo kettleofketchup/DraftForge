@@ -170,3 +170,85 @@ def dismiss_suggestion(suggestion_id):
         return True
     except GameMatchSuggestion.DoesNotExist:
         return False
+
+
+def auto_link_matches_for_tournament(tournament_id):
+    """
+    Scan all games in tournament, find matching Steam matches.
+    Auto-link exact matches (10/10 players + correct date),
+    store suggestions for partial matches.
+
+    Returns: dict with {auto_linked_count, suggestions_created_count}
+    """
+    try:
+        tournament = Tournament.objects.get(id=tournament_id)
+    except Tournament.DoesNotExist:
+        return {"auto_linked_count": 0, "suggestions_created_count": 0}
+
+    auto_linked_count = 0
+    suggestions_created_count = 0
+
+    # Get all unlinked games in this tournament
+    unlinked_games = Game.objects.filter(
+        tournament=tournament, gameid__isnull=True
+    ).select_related("radiant_team", "dire_team")
+
+    for game in unlinked_games:
+        # Get steam_ids from game's teams
+        game_steam_ids = _get_game_player_steam_ids(game)
+
+        if not game_steam_ids:
+            continue
+
+        # Find matches that have player overlap
+        candidate_matches = (
+            Match.objects.filter(players__steam_id__in=game_steam_ids)
+            .distinct()
+            .prefetch_related("players")
+        )
+
+        for match in candidate_matches:
+            match_steam_ids = set(match.players.values_list("steam_id", flat=True))
+            overlap = len(match_steam_ids & game_steam_ids)
+
+            if overlap == 0:
+                continue
+
+            confidence = overlap / 10.0
+
+            # Check if suggestion already exists
+            if GameMatchSuggestion.objects.filter(game=game, match=match).exists():
+                continue
+
+            if confidence == 1.0:
+                # Perfect match - auto-link
+                game.gameid = match.match_id
+                game.save(update_fields=["gameid"])
+
+                GameMatchSuggestion.objects.create(
+                    game=game,
+                    match=match,
+                    tournament=tournament,
+                    confidence_score=confidence,
+                    player_overlap=overlap,
+                    auto_linked=True,
+                )
+                auto_linked_count += 1
+                log.info(f"Auto-linked game {game.id} to match {match.match_id}")
+                break  # Game is now linked, move to next game
+            else:
+                # Partial match - create suggestion
+                GameMatchSuggestion.objects.create(
+                    game=game,
+                    match=match,
+                    tournament=tournament,
+                    confidence_score=confidence,
+                    player_overlap=overlap,
+                    auto_linked=False,
+                )
+                suggestions_created_count += 1
+
+    return {
+        "auto_linked_count": auto_linked_count,
+        "suggestions_created_count": suggestions_created_count,
+    }
