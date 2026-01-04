@@ -15,11 +15,11 @@ Process matches from Steam Web API for Dota 2 league 17929, store in database, a
 3. Link players to `CustomUser` records via steamid
 4. Provide incremental sync with failure tracking
 5. Enable player-based match lookup for tournament bracket integration
+6. Auto-link tournament games to Steam matches based on player/captain overlap and date
 
 ## Non-Goals (Future Plans)
 
 - Tournament bracket designer frontend
-- UI for linking steam matches to tournament `Game` records
 - Scheduled/automated sync (cron job)
 
 ---
@@ -64,6 +64,36 @@ Add league reference for filtering.
 class Match(models.Model):
     # ... existing fields ...
     league_id = models.IntegerField(null=True, blank=True, db_index=True)
+```
+
+### New: `GameMatchSuggestion`
+
+Links tournament games to potential Steam matches with confidence scoring.
+
+```python
+class GameMatchSuggestion(models.Model):
+    game = models.ForeignKey(
+        'app.Game',
+        on_delete=models.CASCADE,
+        related_name='match_suggestions'
+    )
+    match = models.ForeignKey(
+        Match,
+        on_delete=models.CASCADE,
+        related_name='game_suggestions'
+    )
+    tournament = models.ForeignKey(
+        'app.Tournament',
+        on_delete=models.CASCADE,
+        related_name='match_suggestions'
+    )
+    confidence_score = models.FloatField()  # 0.0 to 1.0
+    player_overlap = models.IntegerField()  # Number of matched players
+    auto_linked = models.BooleanField(default=False)  # True if auto-linked
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('game', 'match')
 ```
 
 ---
@@ -175,6 +205,48 @@ Returns: List of Match objects ranked by likelihood (player overlap %)
 
 ---
 
+## Game-Match Auto-Linking
+
+Located in `steam/functions/game_linking.py`:
+
+### Auto-Link Strategy
+
+- **High confidence only**: Auto-link when all 10 players match AND match date falls within tournament date range
+- **Partial matches**: Store as `GameMatchSuggestion` for manual review
+- **Triggers**: Runs during sync (for new matches) AND via manual endpoint
+
+### `auto_link_matches_for_tournament(tournament_id)`
+
+Scan all games in tournament, find matching Steam matches. Auto-link exact matches (10/10 players + correct date), store suggestions for partial matches.
+
+Returns: `{auto_linked_count, suggestions_created_count}`
+
+### `check_match_for_games(match)`
+
+Called during sync. Check if new match corresponds to any unlinked tournament games. Auto-link or create suggestion based on confidence.
+
+### `get_suggestions_for_tournament(tournament_id)`
+
+Retrieve all `GameMatchSuggestion` records for a tournament, ordered by confidence score descending.
+
+Returns: QuerySet of GameMatchSuggestion with game and match prefetched
+
+### `get_suggestions_for_game(game_id)`
+
+Get all match suggestions for a specific tournament game, ordered by confidence score descending. Includes match details for frontend display.
+
+Returns: QuerySet of GameMatchSuggestion with match and player stats prefetched
+
+### `confirm_suggestion(suggestion_id)`
+
+Staff confirms a suggestion - sets `Game.gameid` to the match ID and marks suggestion as `auto_linked=True`.
+
+### `dismiss_suggestion(suggestion_id)`
+
+Staff dismisses a suggestion - deletes the `GameMatchSuggestion` record.
+
+---
+
 ## REST API Endpoints
 
 ### Request Serializers
@@ -196,6 +268,9 @@ class RelinkUsersSerializer(serializers.Serializer):
         child=serializers.IntegerField(),
         required=False  # If empty, relink all
     )
+
+class AutoLinkRequestSerializer(serializers.Serializer):
+    tournament_id = serializers.IntegerField(required=True)
 ```
 
 ### Endpoint Functions
@@ -210,6 +285,11 @@ Located in `steam/functions/api.py`:
 | `/api/steam/find-by-players/` | POST | AllowAny | Find matches by player steam IDs |
 | `/api/steam/live/` | GET | AllowAny | Get live league games |
 | `/api/steam/sync-status/` | GET | AllowAny | Get current sync state |
+| `/api/steam/auto-link/` | POST | IsStaff | Trigger auto-linking for a tournament |
+| `/api/steam/suggestions/tournament/<id>/` | GET | AllowAny | Get match suggestions for tournament |
+| `/api/steam/suggestions/game/<id>/` | GET | AllowAny | Get match suggestions for a specific game |
+| `/api/steam/suggestions/<id>/confirm/` | POST | IsStaff | Confirm a suggestion (link game to match) |
+| `/api/steam/suggestions/<id>/dismiss/` | POST | IsStaff | Dismiss a suggestion |
 
 ---
 
@@ -235,6 +315,13 @@ urlpatterns = [
     path("find-by-players/", steam_api.find_matches_by_players, name="steam_find_by_players"),
     path("live/", steam_api.get_live_games, name="steam_live_games"),
     path("sync-status/", steam_api.get_sync_status, name="steam_sync_status"),
+
+    # Game-Match Auto-Linking
+    path("auto-link/", steam_api.auto_link_tournament, name="steam_auto_link"),
+    path("suggestions/tournament/<int:tournament_id>/", steam_api.get_tournament_suggestions, name="steam_tournament_suggestions"),
+    path("suggestions/game/<int:game_id>/", steam_api.get_game_suggestions, name="steam_game_suggestions"),
+    path("suggestions/<int:suggestion_id>/confirm/", steam_api.confirm_suggestion, name="steam_confirm_suggestion"),
+    path("suggestions/<int:suggestion_id>/dismiss/", steam_api.dismiss_suggestion, name="steam_dismiss_suggestion"),
 ]
 ```
 
@@ -244,7 +331,7 @@ urlpatterns = [
 
 ```
 backend/steam/
-├── models.py              # Add LeagueSyncState, update Match & PlayerMatchStats
+├── models.py              # Add LeagueSyncState, GameMatchSuggestion, update Match & PlayerMatchStats
 ├── serializers.py         # Add request/response serializers
 ├── views.py               # Existing MatchDetailView
 ├── urls.py                # Updated with new routes
@@ -253,6 +340,7 @@ backend/steam/
 │   ├── match.py           # Existing update_match_details
 │   ├── league_sync.py     # NEW: sync_league_matches, process_match, etc.
 │   ├── match_utils.py     # UPDATE: player matching utilities
+│   ├── game_linking.py    # NEW: auto-linking, suggestions, confirm/dismiss
 │   └── api.py             # NEW: API endpoint functions
 └── utils/
     ├── steam_api_caller.py    # UPDATE: add get_match_history, get_live_league_games
