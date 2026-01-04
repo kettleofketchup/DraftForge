@@ -78,3 +78,58 @@ class LeagueSyncStateModelTest(TestCase):
         LeagueSyncState.objects.create(league_id=17929)
         with self.assertRaises(Exception):
             LeagueSyncState.objects.create(league_id=17929)
+
+
+class MatchLeagueIdTest(TestCase):
+    def test_match_with_league_id(self):
+        match = Match.objects.create(
+            match_id=7000000002,
+            radiant_win=True,
+            duration=2400,
+            start_time=1704067200,
+            game_mode=22,
+            lobby_type=1,
+            league_id=17929,
+        )
+        self.assertEqual(match.league_id, 17929)
+
+    def test_match_without_league_id(self):
+        match = Match.objects.create(
+            match_id=7000000003,
+            radiant_win=False,
+            duration=1800,
+            start_time=1704067200,
+            game_mode=22,
+            lobby_type=1,
+        )
+        self.assertIsNone(match.league_id)
+
+    def test_filter_by_league(self):
+        Match.objects.create(
+            match_id=7000000004,
+            radiant_win=True,
+            duration=2400,
+            start_time=1704067200,
+            game_mode=22,
+            lobby_type=1,
+            league_id=17929,
+        )
+        Match.objects.create(
+            match_id=7000000005,
+            radiant_win=True,
+            duration=2400,
+            start_time=1704067200,
+            game_mode=22,
+            lobby_type=1,
+            league_id=12345,
+        )
+        Match.objects.create(
+            match_id=7000000006,
+            radiant_win=True,
+            duration=2400,
+            start_time=1704067200,
+            game_mode=22,
+            lobby_type=1,
+        )
+        league_matches = Match.objects.filter(league_id=17929)
+        self.assertEqual(league_matches.count(), 1)

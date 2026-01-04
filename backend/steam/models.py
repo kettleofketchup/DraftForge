@@ -8,6 +8,7 @@ class Match(models.Model):
     start_time = models.IntegerField()
     game_mode = models.IntegerField()
     lobby_type = models.IntegerField()
+    league_id = models.IntegerField(null=True, blank=True, db_index=True)
 
     def __str__(self):
         return str(self.match_id)
