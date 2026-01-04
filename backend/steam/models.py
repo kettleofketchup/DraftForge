@@ -53,3 +53,31 @@ class LeagueSyncState(models.Model):
 
     def __str__(self):
         return f"League {self.league_id} sync state"
+
+
+class GameMatchSuggestion(models.Model):
+    game = models.ForeignKey(
+        "app.Game",
+        on_delete=models.CASCADE,
+        related_name="match_suggestions",
+    )
+    match = models.ForeignKey(
+        Match,
+        on_delete=models.CASCADE,
+        related_name="game_suggestions",
+    )
+    tournament = models.ForeignKey(
+        "app.Tournament",
+        on_delete=models.CASCADE,
+        related_name="match_suggestions",
+    )
+    confidence_score = models.FloatField()
+    player_overlap = models.IntegerField()
+    auto_linked = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("game", "match")
+
+    def __str__(self):
+        return f"Game {self.game_id} -> Match {self.match_id} ({self.confidence_score:.0%})"

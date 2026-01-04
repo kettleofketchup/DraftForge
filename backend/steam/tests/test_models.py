@@ -1,7 +1,7 @@
 from django.test import TestCase
 
-from app.models import CustomUser
-from steam.models import LeagueSyncState, Match, PlayerMatchStats
+from app.models import CustomUser, Game, Team, Tournament
+from steam.models import GameMatchSuggestion, LeagueSyncState, Match, PlayerMatchStats
 
 
 class PlayerMatchStatsUserLinkTest(TestCase):
@@ -133,3 +133,68 @@ class MatchLeagueIdTest(TestCase):
         )
         league_matches = Match.objects.filter(league_id=17929)
         self.assertEqual(league_matches.count(), 1)
+
+
+class GameMatchSuggestionModelTest(TestCase):
+    def setUp(self):
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament",
+            date_played="2026-01-04",
+        )
+        self.team1 = Team.objects.create(name="Team A", tournament=self.tournament)
+        self.team2 = Team.objects.create(name="Team B", tournament=self.tournament)
+        self.game = Game.objects.create(
+            tournament=self.tournament,
+            round=1,
+            radiant_team=self.team1,
+            dire_team=self.team2,
+        )
+        self.match = Match.objects.create(
+            match_id=7000000010,
+            radiant_win=True,
+            duration=2400,
+            start_time=1704067200,
+            game_mode=22,
+            lobby_type=1,
+            league_id=17929,
+        )
+
+    def test_create_suggestion(self):
+        suggestion = GameMatchSuggestion.objects.create(
+            game=self.game,
+            match=self.match,
+            tournament=self.tournament,
+            confidence_score=0.85,
+            player_overlap=8,
+        )
+        self.assertEqual(suggestion.confidence_score, 0.85)
+        self.assertEqual(suggestion.player_overlap, 8)
+        self.assertFalse(suggestion.auto_linked)
+
+    def test_unique_game_match_pair(self):
+        GameMatchSuggestion.objects.create(
+            game=self.game,
+            match=self.match,
+            tournament=self.tournament,
+            confidence_score=0.85,
+            player_overlap=8,
+        )
+        with self.assertRaises(Exception):
+            GameMatchSuggestion.objects.create(
+                game=self.game,
+                match=self.match,
+                tournament=self.tournament,
+                confidence_score=0.90,
+                player_overlap=9,
+            )
+
+    def test_suggestions_by_tournament(self):
+        GameMatchSuggestion.objects.create(
+            game=self.game,
+            match=self.match,
+            tournament=self.tournament,
+            confidence_score=0.85,
+            player_overlap=8,
+        )
+        suggestions = GameMatchSuggestion.objects.filter(tournament=self.tournament)
+        self.assertEqual(suggestions.count(), 1)
