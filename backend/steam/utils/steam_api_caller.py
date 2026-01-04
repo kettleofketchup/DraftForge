@@ -32,3 +32,22 @@ class SteamAPI:
         return self._request(
             "IDOTA2Match_570", "GetMatchDetails", 1, {"match_id": match_id}
         )
+
+    def get_match_history(
+        self, league_id, start_at_match_id=None, matches_requested=100
+    ):
+        """
+        Fetch match history for a league.
+        Use start_at_match_id for pagination (fetches matches BEFORE this ID).
+        """
+        params = {"league_id": league_id, "matches_requested": matches_requested}
+        if start_at_match_id:
+            params["start_at_match_id"] = start_at_match_id
+        return self._request("IDOTA2Match_570", "GetMatchHistory", 1, params)
+
+    def get_live_league_games(self, league_id=None):
+        """Fetch currently live games. Optionally filter by league."""
+        params = {}
+        if league_id:
+            params["league_id"] = league_id
+        return self._request("IDOTA2Match_570", "GetLiveLeagueGames", 1, params)
