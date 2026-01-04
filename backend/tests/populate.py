@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 import pytest
 from django.conf import settings
-from django.db import transaction
+from django.db import models, transaction
 
 from app.models import CustomUser, PositionsModel
 
@@ -328,3 +328,106 @@ def populate_tournaments(force=False):
     print(
         f"Created {tournaments_created} new tournaments. Total tournaments in database: {Tournament.objects.count()}"
     )
+
+
+def populate_steam_matches(force=False):
+    """
+    Generate and save mock Steam matches for test tournaments.
+    Uses actual team rosters to ensure Steam IDs match.
+
+    Args:
+        force: If True, delete existing mock matches first
+    """
+    from app.models import Tournament
+    from steam.mocks.mock_match_generator import generate_mock_matches_for_tournament
+    from steam.models import Match, PlayerMatchStats
+
+    print("Populating Steam matches...")
+
+    # Find a tournament with at least 4 teams
+    tournament = (
+        Tournament.objects.annotate(team_count=models.Count("teams"))
+        .filter(team_count__gte=4)
+        .first()
+    )
+
+    if not tournament:
+        print("No tournament with 4+ teams found. Run populate_tournaments first.")
+        return
+
+    # Check for existing mock matches (IDs starting with 9000000000)
+    existing = Match.objects.filter(match_id__gte=9000000000, match_id__lt=9100000000)
+    if existing.exists():
+        if force:
+            print(f"Deleting {existing.count()} existing mock matches")
+            existing.delete()
+        else:
+            print(
+                f"Mock matches already exist ({existing.count()}). Use force=True to regenerate."
+            )
+            return
+
+    # Generate mock matches
+    try:
+        mock_matches = generate_mock_matches_for_tournament(tournament)
+    except ValueError as e:
+        print(f"Failed to generate matches: {e}")
+        return
+
+    # Save to database
+    saved_count = 0
+    for match_data in mock_matches:
+        result = match_data["result"]
+
+        match, created = Match.objects.update_or_create(
+            match_id=result["match_id"],
+            defaults={
+                "radiant_win": result["radiant_win"],
+                "duration": result["duration"],
+                "start_time": result["start_time"],
+                "game_mode": result["game_mode"],
+                "lobby_type": result["lobby_type"],
+                "league_id": 17929,  # DTX league
+            },
+        )
+
+        for player_data in result["players"]:
+            # Convert 32-bit account_id back to 64-bit steam_id
+            steam_id = player_data["account_id"] + 76561197960265728
+
+            # Try to link to user via Steam ID
+            user = CustomUser.objects.filter(steamid=str(steam_id)).first()
+
+            PlayerMatchStats.objects.update_or_create(
+                match=match,
+                steam_id=steam_id,
+                defaults={
+                    "user": user,
+                    "player_slot": player_data["player_slot"],
+                    "hero_id": player_data["hero_id"],
+                    "kills": player_data["kills"],
+                    "deaths": player_data["deaths"],
+                    "assists": player_data["assists"],
+                    "gold_per_min": player_data["gold_per_min"],
+                    "xp_per_min": player_data["xp_per_min"],
+                    "last_hits": player_data["last_hits"],
+                    "denies": player_data["denies"],
+                    "hero_damage": player_data["hero_damage"],
+                    "tower_damage": player_data["tower_damage"],
+                    "hero_healing": player_data["hero_healing"],
+                },
+            )
+
+        saved_count += 1
+        print(f"Saved match {result['match_id']}")
+
+    print(
+        f"Populated {saved_count} mock Steam matches for tournament '{tournament.name}'"
+    )
+
+
+def populate_all(force=False):
+    """Run all population functions."""
+    populate_users(force)
+    populate_tournaments(force)
+    populate_steam_matches(force)
