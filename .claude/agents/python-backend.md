@@ -1,3 +1,7 @@
+---
+skills: django-redis-caching
+---
+
 # Python Backend Agent
 
 Expert agent for Django/Python backend development in the DTX website project.
@@ -65,6 +69,31 @@ python manage.py runserver
 ```bash
 poetry add <module_name>
 ```
+
+## Redis Caching
+
+**IMPORTANT**: All cached data must be properly invalidated when related models change. See the `django-redis-caching` skill for complete patterns.
+
+### Quick Reference
+
+```python
+from cacheops import cached_as, invalidate_obj, invalidate_model
+
+# View caching
+@cached_as(Model1, Model2, extra=cache_key, timeout=60 * 60)
+def get_data():
+    return queryset.values()
+
+# After mutations, invalidate related caches
+invalidate_obj(instance)       # Specific instance
+invalidate_model(RelatedModel) # Entire model
+```
+
+### Key Invalidation Rules
+
+- DraftRound changes → invalidate Tournament, Draft, Team
+- Team changes → invalidate Tournament (if scoped)
+- Game changes → invalidate Tournament, Team
 
 ## Steam API Integration
 
