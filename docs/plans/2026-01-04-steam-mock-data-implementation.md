@@ -1,13 +1,29 @@
+# Steam Mock Data Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Create mock Steam API match data that uses actual test user Steam IDs for testing bracket integration.
+
+**Architecture:** Mock data generator creates realistic Steam API responses using tournament team rosters, allowing end-to-end testing without hitting the real Steam API.
+
+**Tech Stack:** Django, Python
+
+---
+
+## Task 1: Create Mock Match Generator
+
+**Files:**
+- Create: `backend/steam/mocks/mock_match_generator.py`
+
+**Step 1: Create the mock match generator**
+
+```python
 """
 Mock Steam API match data generator.
 
-Generates realistic match data matching the official Steam Web API structure
-from GetMatchHistoryBySequenceNum endpoint. Uses actual tournament team rosters,
+Generates realistic match data using actual tournament team rosters,
 ensuring player Steam IDs match the test users.
-
-Reference: https://api.steampowered.com/IDOTA2Match_570/GetMatchHistoryBySequenceNum/v1/
 """
-
 import random
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
@@ -17,137 +33,12 @@ if TYPE_CHECKING:
 
 # Hero IDs (popular competitive heroes)
 HERO_IDS = [
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,  # Strength
-    11,
-    12,
-    13,
-    14,
-    15,
-    16,
-    17,
-    18,
-    19,
-    20,  # Agility
-    21,
-    22,
-    23,
-    25,
-    26,
-    27,
-    28,
-    29,
-    30,
-    31,  # Intelligence
-    35,
-    37,
-    39,
-    41,
-    43,
-    44,
-    45,
-    46,
-    47,
-    48,  # More heroes
-    49,
-    50,
-    51,
-    55,
-    60,
-    64,
-    67,
-    70,
-    72,
-    74,
-    75,
-    76,
-    77,
-    78,
-    79,
-    80,
-    81,
-    82,
-    83,
-    84,
-    85,
-    86,
-    87,
-    88,
-    89,
-    90,
-    91,
-    93,
-    94,
-    95,
-    96,
-    97,
-    98,
-    99,
-    102,
-    104,
-    106,
-    110,
-    114,
-    123,
-    128,
-    135,
-    136,
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10,  # Strength
+    11, 12, 13, 14, 15, 16, 17, 18, 19, 20,  # Agility
+    21, 22, 23, 25, 26, 27, 28, 29, 30, 31,  # Intelligence
+    74, 75, 76, 77, 78, 79, 80, 81, 82, 83,  # More heroes
+    86, 87, 88, 89, 90, 91, 93, 94, 95, 96,
 ]
-
-# Common item IDs for mock data
-ITEM_IDS = [
-    1,
-    11,
-    16,
-    20,
-    34,
-    36,
-    41,
-    43,
-    48,
-    50,  # Basic items
-    63,
-    65,
-    73,
-    100,
-    102,
-    108,
-    110,
-    114,
-    116,
-    125,  # Mid-tier
-    127,
-    135,
-    147,
-    149,
-    158,
-    168,
-    176,
-    188,
-    204,
-    206,  # Late-game
-    218,
-    225,
-    247,
-    254,
-    263,
-    534,
-    604,
-    610,
-    1097,
-    1107,  # Advanced
-]
-
-# Neutral items by tier
-NEUTRAL_ITEMS = [359, 1158, 1168, 1577, 1583, 1586, 1589, 1604, 1643, 1721]
 
 # Stats ranges by position (pos 1-5)
 POSITION_STATS = {
@@ -215,19 +106,16 @@ POSITION_STATS = {
 
 
 def generate_player_stats(
-    user, position: int, is_winner: bool, player_slot: int, duration: int
+    user, position: int, is_winner: bool, player_slot: int
 ) -> dict:
     """
     Generate realistic player stats based on position and win/loss.
-
-    Matches the official Steam Web API GetMatchHistoryBySequenceNum player format.
 
     Args:
         user: CustomUser instance with steamid
         position: 0-4 representing pos 1-5
         is_winner: Whether player's team won
         player_slot: 0-4 for Radiant, 128-132 for Dire
-        duration: Match duration in seconds (affects gold/xp totals)
 
     Returns:
         Dict matching Steam API player response format
@@ -246,82 +134,20 @@ def generate_player_stats(
     # Convert 64-bit Steam ID to 32-bit account_id
     account_id = user.steamid - 76561197960265728
 
-    # Team number: 0 for Radiant, 1 for Dire
-    team_number = 0 if player_slot < 128 else 1
-    team_slot = player_slot if team_number == 0 else player_slot - 128
-
-    # Generate core stats
-    kills = rand_stat("kills")
-    deaths = rand_stat("deaths")
-    assists = rand_stat("assists")
-    gpm = rand_stat("gold_per_min")
-    xpm = rand_stat("xp_per_min")
-    last_hits = rand_stat("last_hits")
-    denies = rand_stat("denies")
-    hero_damage = rand_stat("hero_damage")
-    tower_damage = rand_stat("tower_damage")
-    hero_healing = rand_stat("hero_healing")
-
-    # Calculate derived stats based on GPM/XPM and duration
-    minutes = duration / 60
-    net_worth = int(gpm * minutes * random.uniform(0.9, 1.1))
-    gold = random.randint(500, 5000)  # Gold on hand
-    gold_spent = net_worth - gold
-
-    # Level based on XPM (max 30)
-    level = min(30, max(15, int(xpm * minutes / 1500)))
-
-    # Generate items (6 inventory slots)
-    items = random.sample(ITEM_IDS, min(6, len(ITEM_IDS)))
-    while len(items) < 6:
-        items.append(0)
-
-    # Aghanim's based on position/role
-    has_scepter = random.random() < (0.6 if position <= 2 else 0.3)
-    has_shard = random.random() < (0.7 if position <= 2 else 0.5)
-    has_moonshard = (
-        random.random() < (0.3 if position == 0 else 0.1) if level >= 25 else False
-    )
-
     return {
         "account_id": account_id,
         "player_slot": player_slot,
-        "team_number": team_number,
-        "team_slot": team_slot,
         "hero_id": random.choice(HERO_IDS),
-        "hero_variant": random.randint(1, 3),
-        "item_0": items[0],
-        "item_1": items[1],
-        "item_2": items[2],
-        "item_3": items[3],
-        "item_4": items[4],
-        "item_5": items[5],
-        "backpack_0": 0,
-        "backpack_1": 0,
-        "backpack_2": 0,
-        "item_neutral": random.choice(NEUTRAL_ITEMS),
-        "item_neutral2": random.choice(NEUTRAL_ITEMS),
-        "kills": kills,
-        "deaths": deaths,
-        "assists": assists,
-        "leaver_status": 0,
-        "last_hits": last_hits,
-        "denies": denies,
-        "gold_per_min": gpm,
-        "xp_per_min": xpm,
-        "level": level,
-        "net_worth": net_worth,
-        "aghanims_scepter": 1 if has_scepter else 0,
-        "aghanims_shard": 1 if has_shard else 0,
-        "moonshard": 1 if has_moonshard else 0,
-        "hero_damage": hero_damage,
-        "tower_damage": tower_damage,
-        "hero_healing": hero_healing,
-        "gold": gold,
-        "gold_spent": gold_spent,
-        "scaled_hero_damage": int(hero_damage * 0.4),
-        "scaled_tower_damage": int(tower_damage * 0.4),
-        "scaled_hero_healing": int(hero_healing * 0.6),
+        "kills": rand_stat("kills"),
+        "deaths": rand_stat("deaths"),
+        "assists": rand_stat("assists"),
+        "gold_per_min": rand_stat("gold_per_min"),
+        "xp_per_min": rand_stat("xp_per_min"),
+        "last_hits": rand_stat("last_hits"),
+        "denies": rand_stat("denies"),
+        "hero_damage": rand_stat("hero_damage"),
+        "tower_damage": rand_stat("tower_damage"),
+        "hero_healing": rand_stat("hero_healing"),
     }
 
 
@@ -329,27 +155,21 @@ def generate_mock_match(
     radiant_team: "Team",
     dire_team: "Team",
     match_id: int,
-    match_seq_num: int,
     start_time: int,
     radiant_win: bool = None,
-    league_id: int = None,
 ) -> dict:
     """
     Generate a mock Steam API match response.
-
-    Matches the official Steam Web API GetMatchHistoryBySequenceNum format.
 
     Args:
         radiant_team: Team model instance for Radiant side
         dire_team: Team model instance for Dire side
         match_id: Unique match ID
-        match_seq_num: Unique match sequence number
         start_time: Unix timestamp for match start
         radiant_win: If None, randomly determined
-        league_id: Optional league ID
 
     Returns:
-        Dict matching Steam API GetMatchHistoryBySequenceNum response format
+        Dict matching Steam API GetMatchDetails response format
     """
     if radiant_win is None:
         radiant_win = random.choice([True, False])
@@ -368,7 +188,6 @@ def generate_mock_match(
                 position=i,
                 is_winner=radiant_win,
                 player_slot=i,
-                duration=duration,
             )
         )
 
@@ -381,35 +200,26 @@ def generate_mock_match(
                 position=i,
                 is_winner=not radiant_win,
                 player_slot=128 + i,
-                duration=duration,
             )
         )
 
-    match_data = {
-        "match_id": match_id,
-        "match_seq_num": match_seq_num,
-        "radiant_win": radiant_win,
-        "duration": duration,
-        "start_time": start_time,
-        "game_mode": 2,  # Captain's Mode
-        "lobby_type": 1,  # Practice (1) or Tournament (2)
-        "human_players": 10,
-        "players": players,
+    return {
+        "result": {
+            "match_id": match_id,
+            "radiant_win": radiant_win,
+            "duration": duration,
+            "start_time": start_time,
+            "game_mode": 2,  # Captain's Mode
+            "lobby_type": 1,  # Practice
+            "players": players,
+        }
     }
-
-    if league_id:
-        match_data["league_id"] = league_id
-
-    # Return in the format expected by process_match (wrapped in result)
-    return {"result": match_data}
 
 
 def generate_double_elim_bracket_matches(
     teams: list["Team"],
     base_match_id: int = 9000000001,
-    base_match_seq_num: int = 7000000001,
     base_time: int = None,
-    league_id: int = None,
 ) -> list[dict]:
     """
     Generate mock matches for a 4-team double elimination bracket.
@@ -425,9 +235,7 @@ def generate_double_elim_bracket_matches(
     Args:
         teams: List of 4 Team instances
         base_match_id: Starting match ID
-        base_match_seq_num: Starting match sequence number
         base_time: Starting timestamp (defaults to now)
-        league_id: Optional league ID to associate with matches
 
     Returns:
         List of mock match dicts in bracket order
@@ -440,7 +248,6 @@ def generate_double_elim_bracket_matches(
 
     matches = []
     match_id = base_match_id
-    match_seq_num = base_match_seq_num
     current_time = base_time
 
     # Time between matches (1 hour)
@@ -452,15 +259,12 @@ def generate_double_elim_bracket_matches(
         radiant_team=teams[0],
         dire_team=teams[1],
         match_id=match_id,
-        match_seq_num=match_seq_num,
         start_time=current_time,
-        league_id=league_id,
     )
     matches.append(match1)
     w1_winner = teams[0] if match1["result"]["radiant_win"] else teams[1]
     w1_loser = teams[1] if match1["result"]["radiant_win"] else teams[0]
     match_id += 1
-    match_seq_num += 1
     current_time += match_interval
 
     # Match 2: Team 2 vs Team 3
@@ -468,15 +272,12 @@ def generate_double_elim_bracket_matches(
         radiant_team=teams[2],
         dire_team=teams[3],
         match_id=match_id,
-        match_seq_num=match_seq_num,
         start_time=current_time,
-        league_id=league_id,
     )
     matches.append(match2)
     w2_winner = teams[2] if match2["result"]["radiant_win"] else teams[3]
     w2_loser = teams[3] if match2["result"]["radiant_win"] else teams[2]
     match_id += 1
-    match_seq_num += 1
     current_time += match_interval
 
     # Losers Round 1: Loser1 vs Loser2
@@ -484,14 +285,11 @@ def generate_double_elim_bracket_matches(
         radiant_team=w1_loser,
         dire_team=w2_loser,
         match_id=match_id,
-        match_seq_num=match_seq_num,
         start_time=current_time,
-        league_id=league_id,
     )
     matches.append(match3)
     l1_winner = w1_loser if match3["result"]["radiant_win"] else w2_loser
     match_id += 1
-    match_seq_num += 1
     current_time += match_interval
 
     # Winners Final: Winner1 vs Winner2
@@ -499,15 +297,12 @@ def generate_double_elim_bracket_matches(
         radiant_team=w1_winner,
         dire_team=w2_winner,
         match_id=match_id,
-        match_seq_num=match_seq_num,
         start_time=current_time,
-        league_id=league_id,
     )
     matches.append(match4)
     wf_winner = w1_winner if match4["result"]["radiant_win"] else w2_winner
     wf_loser = w2_winner if match4["result"]["radiant_win"] else w1_winner
     match_id += 1
-    match_seq_num += 1
     current_time += match_interval
 
     # Losers Final: L1 Winner vs WF Loser
@@ -515,14 +310,11 @@ def generate_double_elim_bracket_matches(
         radiant_team=l1_winner,
         dire_team=wf_loser,
         match_id=match_id,
-        match_seq_num=match_seq_num,
         start_time=current_time,
-        league_id=league_id,
     )
     matches.append(match5)
     lf_winner = l1_winner if match5["result"]["radiant_win"] else wf_loser
     match_id += 1
-    match_seq_num += 1
     current_time += match_interval
 
     # Grand Final: Winners Final Winner vs Losers Final Winner
@@ -530,40 +322,31 @@ def generate_double_elim_bracket_matches(
         radiant_team=wf_winner,
         dire_team=lf_winner,
         match_id=match_id,
-        match_seq_num=match_seq_num,
         start_time=current_time,
-        league_id=league_id,
     )
     matches.append(match6)
 
     # Grand Final Reset (if losers bracket winner wins)
     if not match6["result"]["radiant_win"]:
         match_id += 1
-        match_seq_num += 1
         current_time += match_interval
         match7 = generate_mock_match(
             radiant_team=wf_winner,
             dire_team=lf_winner,
             match_id=match_id,
-            match_seq_num=match_seq_num,
             start_time=current_time,
-            league_id=league_id,
         )
         matches.append(match7)
 
     return matches
 
 
-def generate_mock_matches_for_tournament(
-    tournament: "Tournament",
-    league_id: int = None,
-) -> list[dict]:
+def generate_mock_matches_for_tournament(tournament: "Tournament") -> list[dict]:
     """
     Generate mock Steam matches for a tournament's bracket.
 
     Args:
         tournament: Tournament instance with teams
-        league_id: Optional league ID to associate with matches
 
     Returns:
         List of mock match dicts ready to be saved
@@ -575,78 +358,216 @@ def generate_mock_matches_for_tournament(
 
     # Use tournament date as base time
     if tournament.date_played:
-        # Convert date to datetime if needed
-        if hasattr(tournament.date_played, "timestamp"):
-            base_time = int(tournament.date_played.timestamp())
-        else:
-            # date object - convert to datetime
-            from datetime import time
-
-            dt = datetime.combine(tournament.date_played, time(12, 0, 0))
-            base_time = int(dt.timestamp())
+        base_time = int(tournament.date_played.timestamp())
     else:
         base_time = int(datetime.now().timestamp())
 
     return generate_double_elim_bracket_matches(
         teams=teams,
         base_match_id=9000000001,
-        base_match_seq_num=7000000001,
         base_time=base_time,
-        league_id=league_id,
     )
+```
 
+**Step 2: Commit**
 
-def generate_mock_match_history_response(matches: list[dict]) -> dict:
+```bash
+git add backend/steam/mocks/mock_match_generator.py
+git commit -m "feat(steam): add mock match data generator"
+```
+
+---
+
+## Task 2: Update Test Population
+
+**Files:**
+- Modify: `backend/tests/populate.py`
+
+**Step 1: Add populate_steam_matches function**
+
+Add at the end of the file:
+
+```python
+def populate_steam_matches(force=False):
     """
-    Generate a mock GetMatchHistory API response from a list of matches.
-
-    This is useful for testing the league sync flow where GetMatchHistory
-    is called first to get the list of matches.
+    Generate and save mock Steam matches for test tournaments.
+    Uses actual team rosters to ensure Steam IDs match.
 
     Args:
-        matches: List of match dicts (from generate_mock_match or similar)
-
-    Returns:
-        Dict matching Steam API GetMatchHistory response format
+        force: If True, delete existing mock matches first
     """
-    history_matches = []
+    from steam.mocks.mock_match_generator import generate_mock_matches_for_tournament
+    from steam.models import Match, PlayerMatchStats
 
-    for match_data in matches:
-        result = match_data.get("result", match_data)
-        players = []
+    log.info("Populating Steam matches...")
 
-        for player in result.get("players", []):
-            players.append(
-                {
-                    "account_id": player["account_id"],
-                    "player_slot": player["player_slot"],
-                    "team_number": player.get(
-                        "team_number", 0 if player["player_slot"] < 128 else 1
-                    ),
-                    "team_slot": player.get("team_slot", player["player_slot"] % 128),
-                    "hero_id": player["hero_id"],
-                    "hero_variant": player.get("hero_variant", 1),
-                }
-            )
+    # Find a tournament with at least 4 teams
+    tournament = Tournament.objects.annotate(
+        team_count=models.Count('teams')
+    ).filter(team_count__gte=4).first()
 
-        history_matches.append(
-            {
-                "match_id": result["match_id"],
-                "match_seq_num": result.get("match_seq_num", result["match_id"]),
+    if not tournament:
+        log.warning("No tournament with 4+ teams found. Run populate_tournaments first.")
+        return
+
+    # Check for existing mock matches (IDs starting with 9000000000)
+    existing = Match.objects.filter(match_id__gte=9000000000, match_id__lt=9100000000)
+    if existing.exists():
+        if force:
+            log.info(f"Deleting {existing.count()} existing mock matches")
+            existing.delete()
+        else:
+            log.info(f"Mock matches already exist ({existing.count()}). Use force=True to regenerate.")
+            return
+
+    # Generate mock matches
+    try:
+        mock_matches = generate_mock_matches_for_tournament(tournament)
+    except ValueError as e:
+        log.error(f"Failed to generate matches: {e}")
+        return
+
+    # Save to database
+    saved_count = 0
+    for match_data in mock_matches:
+        result = match_data["result"]
+
+        match, created = Match.objects.update_or_create(
+            match_id=result["match_id"],
+            defaults={
+                "radiant_win": result["radiant_win"],
+                "duration": result["duration"],
                 "start_time": result["start_time"],
-                "lobby_type": result.get("lobby_type", 1),
-                "radiant_team_id": 0,  # Would need team info
-                "dire_team_id": 0,
-                "players": players,
-            }
+                "game_mode": result["game_mode"],
+                "lobby_type": result["lobby_type"],
+                "league_id": 17929,  # DTX league
+            },
         )
 
-    return {
-        "result": {
-            "status": 1,
-            "num_results": len(history_matches),
-            "total_results": len(history_matches),
-            "results_remaining": 0,
-            "matches": history_matches,
-        }
-    }
+        for player_data in result["players"]:
+            # Convert 32-bit account_id back to 64-bit steam_id
+            steam_id = player_data["account_id"] + 76561197960265728
+
+            PlayerMatchStats.objects.update_or_create(
+                match=match,
+                steam_id=steam_id,
+                defaults={
+                    "player_slot": player_data["player_slot"],
+                    "hero_id": player_data["hero_id"],
+                    "kills": player_data["kills"],
+                    "deaths": player_data["deaths"],
+                    "assists": player_data["assists"],
+                    "gold_per_min": player_data["gold_per_min"],
+                    "xp_per_min": player_data["xp_per_min"],
+                    "last_hits": player_data["last_hits"],
+                    "denies": player_data["denies"],
+                    "hero_damage": player_data["hero_damage"],
+                    "tower_damage": player_data["tower_damage"],
+                    "hero_healing": player_data["hero_healing"],
+                },
+            )
+
+        saved_count += 1
+        log.debug(f"Saved match {result['match_id']}")
+
+    log.info(f"Populated {saved_count} mock Steam matches for tournament '{tournament.name}'")
+
+
+def populate_all(force=False):
+    """Run all population functions."""
+    populate_users(force)
+    populate_tournaments(force)
+    populate_steam_matches(force)
+```
+
+**Step 2: Add missing import**
+
+Add `from django.db import models` at top if not present.
+
+**Step 3: Commit**
+
+```bash
+git add backend/tests/populate.py
+git commit -m "feat(tests): add Steam match population to test data"
+```
+
+---
+
+## Task 3: Add Invoke Task
+
+**Files:**
+- Modify: `backend/tasks.py`
+
+**Step 1: Add db_populate_mock_steam task**
+
+Find the database tasks section and add:
+
+```python
+@task
+def db_populate_steam(c, force=False):
+    """Populate mock Steam matches for testing."""
+    force_flag = "--force" if force else ""
+    c.run(f'DISABLE_CACHE=true python manage.py shell -c "from tests.populate import populate_steam_matches; populate_steam_matches({force})"')
+```
+
+**Step 2: Update populate_all if it exists**
+
+If there's an existing `db_populate_all` task, ensure it calls the Steam population.
+
+**Step 3: Commit**
+
+```bash
+git add backend/tasks.py
+git commit -m "feat(tasks): add Steam mock data population task"
+```
+
+---
+
+## Task 4: Test the Implementation
+
+**Step 1: Run population**
+
+```bash
+cd backend
+source ../.venv/bin/activate
+DISABLE_CACHE=true python manage.py shell -c "
+from tests.populate import populate_users, populate_tournaments, populate_steam_matches
+populate_users(force=True)
+populate_tournaments(force=True)
+populate_steam_matches(force=True)
+"
+```
+
+**Step 2: Verify data**
+
+```bash
+DISABLE_CACHE=true python manage.py shell -c "
+from steam.models import Match, PlayerMatchStats
+from app.models import CustomUser
+
+matches = Match.objects.filter(match_id__gte=9000000000)
+print(f'Mock matches: {matches.count()}')
+
+for m in matches:
+    print(f'Match {m.match_id}: {m.players.count()} players, radiant_win={m.radiant_win}')
+
+# Check user linking
+linked = PlayerMatchStats.objects.filter(match__match_id__gte=9000000000, user__isnull=False).count()
+total = PlayerMatchStats.objects.filter(match__match_id__gte=9000000000).count()
+print(f'Linked players: {linked}/{total}')
+"
+```
+
+**Step 3: Commit any fixes if needed**
+
+---
+
+## Verification Checklist
+
+After implementation, verify:
+
+- [ ] `populate_steam_matches()` creates 6-7 matches for a 4-team tournament
+- [ ] All player Steam IDs match the users in the tournament teams
+- [ ] Match data follows realistic stats patterns
+- [ ] `PlayerMatchStats.user` links correctly to `CustomUser` records
+- [ ] Running `inv db.populate.steam` works from command line
