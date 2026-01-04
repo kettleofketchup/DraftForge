@@ -96,6 +96,23 @@ def db_populate_tournaments(c, path: Path = paths.TEST_ENV_FILE, force: bool = F
 
 
 @task
+def db_populate_steam(
+    c, path: Path = paths.TEST_ENV_FILE, full_sync: bool = False, relink: bool = True
+):
+    """Populate the database with Steam match data from the real Steam API."""
+    load_dotenv(path)
+
+    with c.cd(paths.BACKEND_PATH.absolute()):
+        flags = ""
+        if full_sync:
+            flags += " --full-sync"
+        if relink:
+            flags += " --relink-users"
+        cmd = f"DISABLE_CACHE=true python manage.py populate_steam_matches{flags}"
+        c.run(cmd, pty=True)
+
+
+@task
 def populate_all(c):
     paths.TEST_DB_PATH.unlink(missing_ok=True)
 
@@ -110,6 +127,7 @@ ns_db.add_task(db_migrate, "migrate")
 ns_db.add_task(db_makemigrations, "makemigrations")
 ns_db_populate.add_task(db_populate_users, "users")
 ns_db_populate.add_task(db_populate_tournaments, "tournaments")
+ns_db_populate.add_task(db_populate_steam, "steam")
 ns_db_populate.add_task(populate_all, "all")
 
 
