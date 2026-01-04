@@ -7,8 +7,9 @@ from steam.functions.league_sync import (
     link_user_to_stats,
     process_match,
     relink_all_users,
+    sync_league_matches,
 )
-from steam.models import Match, PlayerMatchStats
+from steam.models import LeagueSyncState, Match, PlayerMatchStats
 
 
 class UserLinkingTest(TestCase):
@@ -164,3 +165,74 @@ class ProcessMatchTest(TestCase):
         match = process_match(7000000031, league_id=17929)
 
         self.assertIsNone(match)
+
+
+class SyncLeagueMatchesTest(TestCase):
+    @patch("steam.functions.league_sync.SteamAPI")
+    @patch("steam.functions.league_sync.process_match")
+    def test_incremental_sync(self, mock_process, mock_api_class):
+        # Setup existing sync state
+        LeagueSyncState.objects.create(
+            league_id=17929,
+            last_match_id=7000000100,
+        )
+
+        mock_api = MagicMock()
+        mock_api.get_match_history.return_value = {
+            "result": {
+                "status": 1,
+                "matches": [
+                    {"match_id": 7000000101},
+                    {"match_id": 7000000102},
+                ],
+            }
+        }
+        mock_api_class.return_value = mock_api
+        mock_process.return_value = MagicMock(match_id=7000000101)
+
+        result = sync_league_matches(17929, full_sync=False)
+
+        self.assertEqual(result["synced_count"], 2)
+        mock_process.assert_called()
+
+    @patch("steam.functions.league_sync.SteamAPI")
+    @patch("steam.functions.league_sync.process_match")
+    def test_full_sync(self, mock_process, mock_api_class):
+        mock_api = MagicMock()
+        # Simulate pagination: first call returns matches, second returns empty
+        mock_api.get_match_history.side_effect = [
+            {"result": {"status": 1, "matches": [{"match_id": 7000000200}]}},
+            {"result": {"status": 1, "matches": []}},
+        ]
+        mock_api_class.return_value = mock_api
+        mock_process.return_value = MagicMock(match_id=7000000200)
+
+        result = sync_league_matches(17929, full_sync=True)
+
+        self.assertIn("synced_count", result)
+
+    @patch("steam.functions.league_sync.SteamAPI")
+    @patch("steam.functions.league_sync.process_match")
+    def test_sync_tracks_failures(self, mock_process, mock_api_class):
+        mock_api = MagicMock()
+        # Simulate pagination: first call returns matches, second returns empty
+        mock_api.get_match_history.side_effect = [
+            {
+                "result": {
+                    "status": 1,
+                    "matches": [{"match_id": 7000000300}, {"match_id": 7000000301}],
+                }
+            },
+            {"result": {"status": 1, "matches": []}},
+        ]
+        mock_api_class.return_value = mock_api
+        # First succeeds, second fails
+        mock_process.side_effect = [MagicMock(match_id=7000000300), None]
+
+        result = sync_league_matches(17929, full_sync=True)
+
+        self.assertEqual(result["synced_count"], 1)
+        self.assertEqual(result["failed_count"], 1)
+
+        state = LeagueSyncState.objects.get(league_id=17929)
+        self.assertIn(7000000301, state.failed_match_ids)

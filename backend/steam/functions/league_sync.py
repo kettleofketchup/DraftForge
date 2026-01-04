@@ -1,7 +1,9 @@
 import logging
 
+from django.utils import timezone
+
 from app.models import CustomUser
-from steam.models import Match, PlayerMatchStats
+from steam.models import LeagueSyncState, Match, PlayerMatchStats
 from steam.utils.retry import retry_with_backoff
 from steam.utils.steam_api_caller import SteamAPI
 
@@ -114,3 +116,99 @@ def process_match(match_id, league_id=None):
         link_user_to_stats(stats)
 
     return match
+
+
+def sync_league_matches(league_id, full_sync=False):
+    """
+    Main sync entry point. Fetches matches from Steam API and stores them.
+
+    Args:
+        league_id: Dota 2 league ID
+        full_sync: If True, fetch ALL matches. If False, only new matches.
+
+    Returns:
+        dict: {synced_count, failed_count, new_last_match_id}
+    """
+    state, _ = LeagueSyncState.objects.get_or_create(
+        league_id=league_id, defaults={"failed_match_ids": []}
+    )
+
+    if state.is_syncing:
+        log.warning(f"Sync already in progress for league {league_id}")
+        return {
+            "error": "Sync already in progress",
+            "synced_count": 0,
+            "failed_count": 0,
+        }
+
+    state.is_syncing = True
+    state.save()
+
+    api = SteamAPI()
+    synced_count = 0
+    failed_count = 0
+    failed_ids = list(state.failed_match_ids)
+    start_at_match_id = None if full_sync else state.last_match_id
+    new_last_match_id = state.last_match_id
+
+    try:
+        while True:
+            result = api.get_match_history(
+                league_id=league_id,
+                start_at_match_id=start_at_match_id,
+                matches_requested=100,
+            )
+
+            if not result or "result" not in result:
+                log.error(f"Failed to fetch match history for league {league_id}")
+                break
+
+            matches = result["result"].get("matches", [])
+            if not matches:
+                break
+
+            for match_data in matches:
+                match_id = match_data["match_id"]
+
+                # Skip if we've already processed this in incremental sync
+                if (
+                    not full_sync
+                    and state.last_match_id
+                    and match_id <= state.last_match_id
+                ):
+                    continue
+
+                match = process_match(match_id, league_id=league_id)
+
+                if match:
+                    synced_count += 1
+                    if new_last_match_id is None or match_id > new_last_match_id:
+                        new_last_match_id = match_id
+                else:
+                    failed_count += 1
+                    if match_id not in failed_ids:
+                        failed_ids.append(match_id)
+
+            # Pagination: use the last match_id to get older matches
+            start_at_match_id = matches[-1]["match_id"]
+
+            # For incremental sync, stop after first batch if we hit known matches
+            if not full_sync:
+                break
+
+    finally:
+        state.is_syncing = False
+        state.last_sync_at = timezone.now()
+        state.last_match_id = new_last_match_id
+        state.failed_match_ids = failed_ids
+        state.save()
+
+    log.info(
+        f"Sync complete for league {league_id}: {synced_count} synced, {failed_count} failed"
+    )
+
+    return {
+        "synced_count": synced_count,
+        "failed_count": failed_count,
+        "new_last_match_id": new_last_match_id,
+    }
