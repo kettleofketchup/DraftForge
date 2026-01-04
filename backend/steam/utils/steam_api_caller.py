@@ -51,3 +51,23 @@ class SteamAPI:
         if league_id:
             params["league_id"] = league_id
         return self._request("IDOTA2Match_570", "GetLiveLeagueGames", 1, params)
+
+    def get_match_history_by_seq_num(self, start_at_match_seq_num, matches_requested=1):
+        """
+        Get detailed match information using match sequence number.
+        This is more reliable than GetMatchDetails for getting full player stats.
+
+        Args:
+            start_at_match_seq_num: The match sequence number to start from
+            matches_requested: Number of matches to fetch (default 1)
+
+        Returns:
+            API response with detailed match data including player stats
+        """
+        params = {
+            "start_at_match_seq_num": start_at_match_seq_num,
+            "matches_requested": matches_requested,
+        }
+        return self._request(
+            "IDOTA2Match_570", "GetMatchHistoryBySequenceNum", 1, params
+        )

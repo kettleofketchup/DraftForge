@@ -5,7 +5,7 @@ import pytest
 from django.conf import settings
 from django.db import models, transaction
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser, PositionsModel, Team
 
 # Dota 2 themed usernames for mock data
 MOCK_USERNAMES = [
@@ -172,10 +172,8 @@ def create_user(user_data):
         positions.soft_support = random.randint(0, 5)
         positions.hard_support = random.randint(0, 5)
         positions.save()
-        if random.randint(0, 1):
-            user.steamid = str(
-                random.randint(76561197960265728, 76561197960265728 + 1000000)
-            )
+        # All mock users get a Steam ID for testing
+        user.steamid = random.randint(76561197960265728, 76561197960265728 + 1000000)
 
         user.positions = positions
         user.save()
@@ -313,15 +311,49 @@ def populate_tournaments(force=False):
             )
 
             # Get random users for this tournament
+            # Need users with Steam IDs for match generation
+            users_with_steam = list(
+                CustomUser.objects.filter(steamid__isnull=False).exclude(steamid=0)
+            )
             all_users = list(CustomUser.objects.all())
+
+            # Prioritize users with Steam IDs for team membership
             selected_users = random.sample(all_users, min(user_count, len(all_users)))
 
             # Add users to tournament
             tournament.users.set(selected_users)
+
+            # Create teams (4 teams of 5 for bracket testing)
+            team_names = ["Team Alpha", "Team Beta", "Team Gamma", "Team Delta"]
+            team_size = 5
+
+            # Get users with Steam IDs for team membership
+            users_for_teams = users_with_steam[
+                :20
+            ]  # Need 20 users (4 teams * 5 players)
+
+            if len(users_for_teams) >= 20:
+                for team_idx, team_name in enumerate(team_names):
+                    team_members = users_for_teams[
+                        team_idx * team_size : (team_idx + 1) * team_size
+                    ]
+                    captain = team_members[0] if team_members else None
+
+                    team = Team.objects.create(
+                        tournament=tournament,
+                        name=team_name,
+                        captain=captain,
+                        draft_order=team_idx + 1,
+                    )
+                    team.members.set(team_members)
+                    team.save()
+
             tournament.save()
 
+            team_count = tournament.teams.count()
             print(
-                f"Created tournament '{tournament_name}' with {len(selected_users)} users (type: {tournament_type}, state: {state})"
+                f"Created tournament '{tournament_name}' with {len(selected_users)} users, "
+                f"{team_count} teams (type: {tournament_type}, state: {state})"
             )
             tournaments_created += 1
 
