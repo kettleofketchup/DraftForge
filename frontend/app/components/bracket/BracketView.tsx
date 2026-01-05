@@ -333,7 +333,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       const maxX = Math.max(...allMatchNodes.map(n => n.position.x + NODE_WIDTH), 0);
       const dividerWidth = 5000; // Very wide to span entire viewport
 
-      // Create divider node between winners and losers
+      // Create divider node between winners and losers (behind other nodes)
       const dividerNode: Node<DividerNodeData> = {
         id: 'divider-winners-losers',
         type: 'divider',
@@ -341,6 +341,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         data: { width: dividerWidth, label: 'Losers Bracket' },
         selectable: false,
         draggable: false,
+        zIndex: -1, // Render behind other nodes
       };
 
       // Combine all nodes including divider
