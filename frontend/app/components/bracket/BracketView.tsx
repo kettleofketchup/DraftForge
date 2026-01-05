@@ -18,6 +18,7 @@ import { useUserStore } from '~/store/userStore';
 import { useElkLayout, type MatchNode as MatchNodeType } from './hooks/useElkLayout';
 import { MatchNode } from './nodes/MatchNode';
 import { EmptySlotNode } from './nodes/EmptySlotNode';
+import { DividerNode, type DividerNodeData } from './nodes/DividerNode';
 import { BracketEdge } from './edges/BracketEdge';
 import { BracketToolbar } from './controls/BracketToolbar';
 import { MatchStatsModal } from './modals/MatchStatsModal';
@@ -27,6 +28,7 @@ import type { BracketMatch, MatchNodeData } from './types';
 const nodeTypes = {
   match: MatchNode,
   emptySlot: EmptySlotNode,
+  divider: DividerNode,
 };
 
 const edgeTypes = {
@@ -177,11 +179,38 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         nodeHeight: NODE_HEIGHT,
       });
 
+      // Align nodes by round - ensure same round = same X position
+      const alignNodesByRound = (nodes: MatchNodeType[]): MatchNodeType[] => {
+        // Group by round
+        const roundGroups = new Map<number, MatchNodeType[]>();
+        nodes.forEach(node => {
+          const round = (node.data as MatchNodeData).round;
+          if (!roundGroups.has(round)) roundGroups.set(round, []);
+          roundGroups.get(round)!.push(node);
+        });
+
+        // For each round, use the minimum X position
+        roundGroups.forEach((roundNodes) => {
+          const minX = Math.min(...roundNodes.map(n => n.position.x));
+          roundNodes.forEach(node => {
+            node.position.x = minX;
+          });
+        });
+
+        return nodes;
+      };
+
+      // Apply round alignment to winners
+      alignNodesByRound(winners.nodes);
+
       // Layout losers bracket
       const losers = await getLayoutedElements(losersNodes, losersEdges, {
         nodeWidth: NODE_WIDTH,
         nodeHeight: NODE_HEIGHT,
       });
+
+      // Apply round alignment to losers
+      alignNodesByRound(losers.nodes);
 
       // Calculate offset for losers bracket
       const winnersMaxY = Math.max(...winners.nodes.map(n => n.position.y + NODE_HEIGHT), 0);
@@ -209,13 +238,29 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         data: { ...match } as MatchNodeData,
       }));
 
-      // Combine all nodes
-      const allNodes = [...winners.nodes, ...offsetLosers, ...grandFinalsNodes];
+      // Calculate bracket bounds for divider
+      const allMatchNodes = [...winners.nodes, ...offsetLosers, ...grandFinalsNodes];
+      const minX = Math.min(...allMatchNodes.map(n => n.position.x), 0);
+      const maxX = Math.max(...allMatchNodes.map(n => n.position.x + NODE_WIDTH), 0);
+      const dividerWidth = maxX - minX + 100; // Extra padding
+
+      // Create divider node between winners and losers
+      const dividerNode: Node<DividerNodeData> = {
+        id: 'divider-winners-losers',
+        type: 'divider',
+        position: { x: minX - 50, y: winnersMaxY + BRACKET_SECTION_GAP / 2 - 10 },
+        data: { width: dividerWidth, label: 'Losers Bracket' },
+        selectable: false,
+        draggable: false,
+      };
+
+      // Combine all nodes including divider
+      const allNodes = [...winners.nodes, ...offsetLosers, ...grandFinalsNodes, dividerNode];
 
       // Create visible edges (only for completed matches with winners)
       const visibleEdges = createAdvancementEdges(matches);
 
-      setNodes(allNodes);
+      setNodes(allNodes as MatchNodeType[]);
       setEdges(visibleEdges);
       layoutCompleteRef.current = true;
     };
