@@ -51,13 +51,17 @@ def relink_all_users():
     return linked_count
 
 
-def process_match(match_id, league_id=None):
+def process_match(match_id, league_id=None, match_seq_num=None):
     """
     Fetch single match details from Steam API, store in DB, link users.
+
+    Uses GetMatchHistoryBySequenceNum when match_seq_num is provided (more reliable),
+    falls back to GetMatchDetails otherwise.
 
     Args:
         match_id: Steam match ID
         league_id: Optional league ID to associate with match
+        match_seq_num: Optional match sequence number for more reliable fetching
 
     Returns:
         Match instance or None on failure
@@ -65,7 +69,24 @@ def process_match(match_id, league_id=None):
     api = SteamAPI()
 
     def fetch():
-        return api.get_match_details(match_id)
+        if match_seq_num:
+            # Use GetMatchHistoryBySequenceNum - more reliable for detailed stats
+            result = api.get_match_history_by_seq_num(
+                match_seq_num, matches_requested=1
+            )
+            if result and "result" in result:
+                matches = result["result"].get("matches", [])
+                # Find the specific match by match_id
+                for match in matches:
+                    if match.get("match_id") == match_id:
+                        return {"result": match}
+                # If exact match not found, return first match if match_id matches
+                if matches and matches[0].get("match_id") == match_id:
+                    return {"result": matches[0]}
+            return None
+        else:
+            # Fall back to GetMatchDetails
+            return api.get_match_details(match_id)
 
     success, result = retry_with_backoff(fetch, max_retries=3, base_delay=1.0)
 
@@ -169,6 +190,7 @@ def sync_league_matches(league_id, full_sync=False):
 
             for match_data in matches:
                 match_id = match_data["match_id"]
+                match_seq_num = match_data.get("match_seq_num")
 
                 # Skip if we've already processed this in incremental sync
                 if (
@@ -178,7 +200,9 @@ def sync_league_matches(league_id, full_sync=False):
                 ):
                     continue
 
-                match = process_match(match_id, league_id=league_id)
+                match = process_match(
+                    match_id, league_id=league_id, match_seq_num=match_seq_num
+                )
 
                 if match:
                     synced_count += 1

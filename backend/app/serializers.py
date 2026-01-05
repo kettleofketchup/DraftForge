@@ -496,3 +496,48 @@ class GameSerializer(serializers.ModelSerializer):
             "winning_team",
             "winning_team_id",
         )
+
+
+class BracketGameSerializer(serializers.ModelSerializer):
+    """Serializer for bracket view with full team details."""
+
+    radiant_team = TeamSerializerForTournament(read_only=True)
+    dire_team = TeamSerializerForTournament(read_only=True)
+    winning_team = TeamSerializerForTournament(read_only=True)
+
+    class Meta:
+        model = Game
+        fields = (
+            "pk",
+            "round",
+            "position",
+            "bracket_type",
+            "elimination_type",
+            "radiant_team",
+            "dire_team",
+            "winning_team",
+            "status",
+            "next_game",
+            "next_game_slot",
+            "loser_next_game",
+            "loser_next_game_slot",
+            "swiss_record_wins",
+            "swiss_record_losses",
+            "gameid",
+        )
+
+
+class BracketSaveSerializer(serializers.Serializer):
+    """Serializer for saving bracket structure."""
+
+    matches = serializers.ListField(
+        child=serializers.DictField(), help_text="List of match objects to save"
+    )
+
+
+class BracketGenerateSerializer(serializers.Serializer):
+    """Serializer for generating bracket."""
+
+    seeding_method = serializers.ChoiceField(
+        choices=["random", "mmr_total", "captain_mmr"], default="mmr_total"
+    )

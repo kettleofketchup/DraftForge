@@ -113,6 +113,17 @@ def db_populate_steam(
 
 
 @task
+def db_populate_steam_mock(c, path: Path = paths.TEST_ENV_FILE, force: bool = False):
+    """Populate mock Steam matches for testing."""
+    load_dotenv(path)
+
+    with c.cd(paths.BACKEND_PATH.absolute()):
+        force_arg = "True" if force else "False"
+        cmd = f'DISABLE_CACHE=true python manage.py shell -c "from tests.populate import populate_steam_matches; populate_steam_matches({force_arg})"'
+        c.run(cmd, pty=True)
+
+
+@task
 def populate_all(c):
     paths.TEST_DB_PATH.unlink(missing_ok=True)
 
@@ -121,6 +132,7 @@ def populate_all(c):
     db_migrate(c, paths.TEST_ENV_FILE)
     db_populate_users(c, paths.TEST_ENV_FILE)
     db_populate_tournaments(c, paths.TEST_ENV_FILE)
+    db_populate_steam_mock(c, paths.TEST_ENV_FILE)
 
 
 ns_db.add_task(db_migrate, "migrate")
@@ -128,6 +140,7 @@ ns_db.add_task(db_makemigrations, "makemigrations")
 ns_db_populate.add_task(db_populate_users, "users")
 ns_db_populate.add_task(db_populate_tournaments, "tournaments")
 ns_db_populate.add_task(db_populate_steam, "steam")
+ns_db_populate.add_task(db_populate_steam_mock, "steam-mock")
 ns_db_populate.add_task(populate_all, "all")
 
 
