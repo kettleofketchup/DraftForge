@@ -12,6 +12,7 @@ import {
   Panel,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import './bracket-styles.css';
 
 import { useBracketStore } from '~/store/bracketStore';
 import { useUserStore } from '~/store/userStore';
@@ -42,8 +43,8 @@ interface BracketViewProps {
 // Layout constants
 const BRACKET_SECTION_GAP = 180;
 const NODE_WIDTH = 220;
-const NODE_HEIGHT = 100;
-const NODE_VERTICAL_GAP = 20; // Minimum gap between nodes
+const NODE_HEIGHT = 120; // Increased for better spacing
+const NODE_VERTICAL_GAP = 30; // Minimum gap between nodes
 const ROUND_HORIZONTAL_GAP = 180; // Gap between rounds
 
 /**
@@ -297,28 +298,19 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         position: { x: node.position.x, y: node.position.y + losersOffset },
       }));
 
-      // Position grand finals - centered vertically between winners final and losers final
+      // Position grand finals - in the winners section, aligned with winners final
       const winnersMaxX = Math.max(...layoutedWinners.map(n => n.position.x), 0);
       const losersMaxX = Math.max(...offsetLosers.map(n => n.position.x), 0);
       const grandFinalsX = Math.max(winnersMaxX, losersMaxX) + ROUND_HORIZONTAL_GAP;
 
-      // Find the winners final and losers final for vertical centering
+      // Find the winners final for vertical alignment
       const winnersFinal = layoutedWinners.find(n => {
         const match = winnersMatches.find(m => m.id === n.id);
         return match && match.nextMatchId?.startsWith('gf-');
       });
-      const losersFinal = offsetLosers.find(n => {
-        const match = losersMatches.find(m => m.id === n.id);
-        return match && match.nextMatchId?.startsWith('gf-');
-      });
 
-      let grandFinalsY = losersOffset / 2;
-      if (winnersFinal && losersFinal) {
-        // Center between winners final and losers final
-        const winnersY = winnersFinal.position.y + NODE_HEIGHT / 2;
-        const losersY = losersFinal.position.y + NODE_HEIGHT / 2;
-        grandFinalsY = (winnersY + losersY) / 2 - NODE_HEIGHT / 2;
-      }
+      // Position grand finals aligned with winners final (in winners section, above divider)
+      let grandFinalsY = winnersFinal ? winnersFinal.position.y : 0;
 
       const grandFinalsNodes: MatchNodeType[] = grandFinalsMatches.map((match, i) => ({
         id: match.id,
@@ -341,11 +333,16 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         data: { width: dividerWidth, label: 'Losers Bracket' },
         selectable: false,
         draggable: false,
-        zIndex: -1, // Render behind other nodes
+        className: 'divider-node',
       };
 
-      // Combine all nodes including divider
-      const allNodes = [...layoutedWinners, ...offsetLosers, ...grandFinalsNodes, dividerNode];
+      // Combine all nodes - divider first so it renders behind
+      const allNodes = [
+        dividerNode,
+        ...layoutedWinners,
+        ...offsetLosers,
+        ...grandFinalsNodes,
+      ];
 
       // Create visible edges (only for completed matches with winners)
       const visibleEdges = createAdvancementEdges(matches);
