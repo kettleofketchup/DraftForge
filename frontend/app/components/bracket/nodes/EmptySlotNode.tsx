@@ -6,7 +6,7 @@ import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import type { EmptySlotData } from '../types';
 
-export const EmptySlotNode = memo(({ data }: NodeProps<EmptySlotData>) => {
+export const EmptySlotNode = memo(({ data }: NodeProps & { data: EmptySlotData }) => {
   const isStaff = useUserStore((state) => state.isStaff());
 
   return (

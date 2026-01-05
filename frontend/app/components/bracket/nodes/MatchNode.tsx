@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { type NodeProps, Position, type Node } from '@xyflow/react';
+import { type NodeProps, Position } from '@xyflow/react';
 import {
   BaseNode,
   BaseNodeHeader,
@@ -20,17 +20,41 @@ const statusConfig = {
   completed: { label: 'Final', className: 'bg-green-500/20 text-green-500' },
 };
 
-// Node type for match nodes in the bracket
-type MatchNodeType = Node<MatchNodeData, 'match'>;
+// Bracket type visual styling
+const bracketTypeStyles = {
+  winners: {
+    bg: 'bg-background',
+    border: 'border-border',
+    headerBg: '',
+  },
+  losers: {
+    bg: 'bg-amber-950/20',
+    border: 'border-amber-700/50',
+    headerBg: 'bg-amber-900/20',
+  },
+  grand_finals: {
+    bg: 'bg-purple-950/20',
+    border: 'border-purple-700/50',
+    headerBg: 'bg-purple-900/20',
+  },
+  swiss: {
+    bg: 'bg-blue-950/20',
+    border: 'border-blue-700/50',
+    headerBg: 'bg-blue-900/20',
+  },
+};
 
-export const MatchNode = memo(({ data, selected }: NodeProps<MatchNodeType>) => {
+export const MatchNode = memo(({ data, selected }: NodeProps & { data: MatchNodeData }) => {
   const status = statusConfig[data.status];
   const roundLabel = getRoundLabel(data.bracketType, data.round);
+  const bracketStyle = bracketTypeStyles[data.bracketType] || bracketTypeStyles.winners;
 
   return (
     <BaseNode
       className={cn(
         'w-52 cursor-pointer transition-all',
+        bracketStyle.bg,
+        bracketStyle.border,
         selected && 'ring-2 ring-primary'
       )}
     >
@@ -38,7 +62,7 @@ export const MatchNode = memo(({ data, selected }: NodeProps<MatchNodeType>) => 
       <BaseHandle type="target" position={Position.Left} />
 
       {/* Header with round label and status */}
-      <BaseNodeHeader className="border-b pb-2">
+      <BaseNodeHeader className={cn('border-b pb-2', bracketStyle.headerBg)}>
         <BaseNodeHeaderTitle className="text-xs text-muted-foreground">
           {roundLabel}
         </BaseNodeHeaderTitle>

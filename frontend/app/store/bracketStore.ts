@@ -10,22 +10,74 @@ import { getLogger } from '~/lib/logger';
 const log = getLogger('bracketStore');
 
 /**
+ * Generate a consistent string ID for bracket matches
+ * Format: {bracketType}-{round}-{position} e.g., "winners-1-0"
+ */
+function generateMatchId(bracketType: string, round: number, position: number): string {
+  // Use short prefixes for cleaner IDs
+  const typePrefix: Record<string, string> = {
+    winners: 'w',
+    losers: 'l',
+    grand_finals: 'gf',
+    swiss: 'sw',
+  };
+
+  return `${typePrefix[bracketType] || bracketType}-${round}-${position}`;
+}
+
+/**
  * Converts API response match (snake_case) to frontend match (camelCase)
  */
-function mapApiMatchToMatch(apiMatch: ApiBracketMatch): BracketMatch {
+function mapApiMatchToMatch(apiMatch: ApiBracketMatch, allMatches: ApiBracketMatch[]): BracketMatch {
+  // Generate consistent string ID from bracket structure
+  const id = generateMatchId(apiMatch.bracket_type, apiMatch.round, apiMatch.position);
+
+  // Determine winner by comparing winning_team with radiant/dire teams
+  let winner: 'radiant' | 'dire' | undefined;
+  if (apiMatch.winning_team && apiMatch.radiant_team && apiMatch.dire_team) {
+    if (apiMatch.winning_team.pk === apiMatch.radiant_team.pk) {
+      winner = 'radiant';
+    } else if (apiMatch.winning_team.pk === apiMatch.dire_team.pk) {
+      winner = 'dire';
+    }
+  }
+
+  // Find the next match by pk and generate its string ID
+  let nextMatchId: string | undefined;
+  if (apiMatch.next_game) {
+    const nextMatch = allMatches.find(m => m.pk === apiMatch.next_game);
+    if (nextMatch) {
+      nextMatchId = generateMatchId(nextMatch.bracket_type, nextMatch.round, nextMatch.position);
+    }
+  }
+
+  // Find the loser's next match
+  let loserNextMatchId: string | undefined;
+  if (apiMatch.loser_next_game) {
+    const loserNextMatch = allMatches.find(m => m.pk === apiMatch.loser_next_game);
+    if (loserNextMatch) {
+      loserNextMatchId = generateMatchId(loserNextMatch.bracket_type, loserNextMatch.round, loserNextMatch.position);
+    }
+  }
+
   return {
-    id: apiMatch.id,
+    id,
     gameId: apiMatch.pk,
     round: apiMatch.round,
     position: apiMatch.position,
     bracketType: apiMatch.bracket_type,
+    eliminationType: apiMatch.elimination_type || 'double',
     radiantTeam: apiMatch.radiant_team,
     direTeam: apiMatch.dire_team,
-    winner: apiMatch.winning_team ? 'radiant' : undefined, // simplified - actual logic may vary
+    winner,
     status: apiMatch.status,
     steamMatchId: apiMatch.gameid,
-    nextMatchId: apiMatch.next_game?.toString(),
+    nextMatchId,
     nextMatchSlot: apiMatch.next_game_slot,
+    loserNextMatchId,
+    loserNextMatchSlot: apiMatch.loser_next_game_slot,
+    swissRecordWins: apiMatch.swiss_record_wins,
+    swissRecordLosses: apiMatch.swiss_record_losses,
   };
 }
 
@@ -165,7 +217,8 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
       const data = BracketResponseSchema.parse(response.data);
 
       if (data.matches.length > 0) {
-        const mappedMatches = data.matches.map(mapApiMatchToMatch);
+        // Pass all matches to mapper so it can resolve next_game references
+        const mappedMatches = data.matches.map(m => mapApiMatchToMatch(m, data.matches));
         set({
           matches: mappedMatches,
           isDirty: false,

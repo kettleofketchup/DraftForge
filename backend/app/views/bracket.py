@@ -27,7 +27,9 @@ def get_bracket(request, tournament_id):
 
     games = (
         Game.objects.filter(tournament=tournament)
-        .select_related("radiant_team", "dire_team", "winning_team", "next_game")
+        .select_related(
+            "radiant_team", "dire_team", "winning_team", "next_game", "loser_next_game"
+        )
         .order_by("bracket_type", "round", "position")
     )
 
@@ -116,7 +118,7 @@ def advance_winner(request, game_id):
     game.status = "completed"
     game.save()
 
-    # Advance to next game if exists
+    # Advance winner to next game if exists
     if game.next_game and game.next_game_slot:
         next_game = game.next_game
         if game.next_game_slot == "radiant":
@@ -124,5 +126,19 @@ def advance_winner(request, game_id):
         else:
             next_game.dire_team = game.winning_team
         next_game.save()
+
+    # Advance loser if elimination_type is 'double' and loser path exists
+    if (
+        game.elimination_type == "double"
+        and game.loser_next_game
+        and game.loser_next_game_slot
+    ):
+        losing_team = game.dire_team if winner_slot == "radiant" else game.radiant_team
+        loser_game = game.loser_next_game
+        if game.loser_next_game_slot == "radiant":
+            loser_game.radiant_team = losing_team
+        else:
+            loser_game.dire_team = losing_team
+        loser_game.save()
 
     return Response(BracketGameSerializer(game).data)
