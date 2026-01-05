@@ -137,9 +137,10 @@ function TeamSlot({ team, score, isWinner, isCompleted }: TeamSlotProps) {
       {/* Captain username */}
       <span
         className={cn(
-          'flex-1 text-sm truncate',
+          'flex-1 text-sm truncate max-w-[120px]',
           isWinner && isCompleted && 'font-semibold'
         )}
+        title={displayName}
       >
         {displayName}
       </span>
