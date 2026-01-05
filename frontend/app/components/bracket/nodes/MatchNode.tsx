@@ -113,9 +113,10 @@ function TeamSlot({ team, score, isWinner, isCompleted }: TeamSlotProps) {
     );
   }
 
-  // Get avatar URL from captain - supports both avatarUrl and avatar fields
-  const avatarUrl = team.captain?.avatarUrl ?? team.captain?.avatar;
-  const teamName = team.name ?? 'Unknown Team';
+  // Use captain's username and avatar
+  const captain = team.captain;
+  const displayName = captain?.username ?? team.name ?? 'Unknown';
+  const avatarUrl = captain?.avatarUrl ?? captain?.avatar;
 
   return (
     <div
@@ -125,22 +126,22 @@ function TeamSlot({ team, score, isWinner, isCompleted }: TeamSlotProps) {
         !isWinner && isCompleted && 'opacity-50'
       )}
     >
-      {/* Team avatar */}
+      {/* Captain avatar */}
       <Avatar className="h-6 w-6">
         <AvatarImage src={avatarUrl ?? undefined} />
         <AvatarFallback className="text-xs">
-          {teamName.substring(0, 2).toUpperCase()}
+          {displayName.substring(0, 2).toUpperCase()}
         </AvatarFallback>
       </Avatar>
 
-      {/* Team name */}
+      {/* Captain username */}
       <span
         className={cn(
           'flex-1 text-sm truncate',
           isWinner && isCompleted && 'font-semibold'
         )}
       >
-        {teamName}
+        {displayName}
       </span>
 
       {/* Score (if completed) */}
