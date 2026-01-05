@@ -301,7 +301,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       // Position grand finals - in the winners section, aligned with winners final
       const winnersMaxX = Math.max(...layoutedWinners.map(n => n.position.x), 0);
       const losersMaxX = Math.max(...offsetLosers.map(n => n.position.x), 0);
-      const grandFinalsX = Math.max(winnersMaxX, losersMaxX) + ROUND_HORIZONTAL_GAP;
+      const grandFinalsX = Math.max(winnersMaxX, losersMaxX) + ROUND_HORIZONTAL_GAP * 1.5; // Extra space for grand finals
 
       // Find the winners final for vertical alignment
       const winnersFinal = layoutedWinners.find(n => {
