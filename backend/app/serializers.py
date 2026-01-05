@@ -512,12 +512,17 @@ class BracketGameSerializer(serializers.ModelSerializer):
             "round",
             "position",
             "bracket_type",
+            "elimination_type",
             "radiant_team",
             "dire_team",
             "winning_team",
             "status",
             "next_game",
             "next_game_slot",
+            "loser_next_game",
+            "loser_next_game_slot",
+            "swiss_record_wins",
+            "swiss_record_losses",
             "gameid",
         )
 

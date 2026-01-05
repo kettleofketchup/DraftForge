@@ -2,22 +2,24 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ReactFlow,
   Background,
-  Controls,
   useNodesState,
   useEdgesState,
   type Node,
-  type OnNodesChange,
+  type Edge,
+  ReactFlowProvider,
+  Panel,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { useBracketStore } from '~/store/bracketStore';
 import { useUserStore } from '~/store/userStore';
-import { useElkLayout, layoutDoubleElimination } from './hooks/useElkLayout';
+import { useElkLayout, type MatchNode as MatchNodeType } from './hooks/useElkLayout';
 import { MatchNode } from './nodes/MatchNode';
 import { EmptySlotNode } from './nodes/EmptySlotNode';
 import { BracketEdge } from './edges/BracketEdge';
 import { BracketToolbar } from './controls/BracketToolbar';
 import { MatchStatsModal } from './modals/MatchStatsModal';
+import type { BracketMatch, MatchNodeData } from './types';
 
 // Register node/edge types outside component to prevent re-renders
 const nodeTypes = {
@@ -33,7 +35,77 @@ interface BracketViewProps {
   tournamentId: number;
 }
 
-export function BracketView({ tournamentId }: BracketViewProps) {
+// Layout constants
+const BRACKET_SECTION_GAP = 180;
+const NODE_WIDTH = 220;
+const NODE_HEIGHT = 100;
+
+/**
+ * Create edges only when winner is set and winning team appears in target match
+ */
+function createAdvancementEdges(matches: BracketMatch[]): Edge[] {
+  const matchMap = new Map(matches.map(m => [m.id, m]));
+
+  return matches
+    .filter(m => {
+      // Must have a next match and a winner
+      if (!m.nextMatchId || !m.winner) return false;
+      return true;
+    })
+    .map(match => {
+      const targetMatch = matchMap.get(match.nextMatchId!);
+      if (!targetMatch) return null;
+
+      // Get the winning team
+      const winningTeam = match.winner === 'radiant' ? match.radiantTeam : match.direTeam;
+      if (!winningTeam?.pk) return null;
+
+      // Check if winning team is actually in the target match
+      const winnerInTarget =
+        targetMatch.radiantTeam?.pk === winningTeam.pk ||
+        targetMatch.direTeam?.pk === winningTeam.pk;
+
+      if (!winnerInTarget) return null;
+
+      return {
+        id: `${match.id}-${match.nextMatchId}`,
+        source: match.id,
+        target: match.nextMatchId!,
+        type: 'bracket',
+        data: { isWinnerPath: true },
+      };
+    })
+    .filter((e): e is Edge => e !== null);
+}
+
+/**
+ * Convert matches to ReactFlow nodes
+ */
+function matchesToNodes(matches: BracketMatch[]): MatchNodeType[] {
+  return matches.map((match) => ({
+    id: match.id,
+    type: 'match' as const,
+    position: { x: 0, y: 0 },
+    data: { ...match } as MatchNodeData,
+  }));
+}
+
+/**
+ * Create structural edges for ELK layout calculation
+ */
+function createStructuralEdges(matches: BracketMatch[]): Edge[] {
+  return matches
+    .filter(m => m.nextMatchId)
+    .map(match => ({
+      id: `struct-${match.id}-${match.nextMatchId}`,
+      source: match.id,
+      target: match.nextMatchId!,
+      type: 'bracket',
+      hidden: true,
+    }));
+}
+
+function BracketFlowInner({ tournamentId }: BracketViewProps) {
   const isStaff = useUserStore((state) => state.isStaff());
   const tournament = useUserStore((state) => state.tournament);
 
@@ -42,17 +114,16 @@ export function BracketView({ tournamentId }: BracketViewProps) {
     isDirty,
     isVirtual,
     isLoading,
-    setNodes: setStoreNodes,
-    setEdges: setStoreEdges,
     loadBracket,
     startPolling,
     stopPolling,
   } = useBracketStore();
 
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-
   const { getLayoutedElements } = useElkLayout();
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<MatchNodeType>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [dividerY, setDividerY] = useState<number>(0);
 
   // Selected match for stats modal
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
@@ -74,37 +145,78 @@ export function BracketView({ tournamentId }: BracketViewProps) {
     return () => stopPolling();
   }, [isDirty, tournamentId, startPolling, stopPolling]);
 
-  // Re-layout when matches change
+  // Layout matches using ELK when matches change
   useEffect(() => {
-    async function layout() {
-      if (matches.length === 0) return;
-
-      try {
-        const { nodes: layoutedNodes, edges: layoutedEdges } =
-          await layoutDoubleElimination(matches, getLayoutedElements);
-
-        setNodes(layoutedNodes);
-        setEdges(layoutedEdges);
-        setStoreNodes(layoutedNodes);
-        setStoreEdges(layoutedEdges);
-      } catch (error) {
-        console.error('Failed to layout bracket:', error);
-      }
+    if (matches.length === 0) {
+      setNodes([]);
+      setEdges([]);
+      return;
     }
-    layout();
-  }, [matches, getLayoutedElements, setNodes, setEdges, setStoreNodes, setStoreEdges]);
 
-  // Handle node drag (staff only)
-  const handleNodesChange: OnNodesChange = useCallback(
-    (changes) => {
-      if (!isStaff) {
-        // Filter out position changes for non-staff
-        changes = changes.filter((c) => c.type !== 'position');
-      }
-      onNodesChange(changes);
-    },
-    [isStaff, onNodesChange]
-  );
+    const layoutBracket = async () => {
+      // Separate matches by bracket type
+      const winnersMatches = matches.filter(m => m.bracketType === 'winners');
+      const losersMatches = matches.filter(m => m.bracketType === 'losers');
+      const grandFinalsMatches = matches.filter(m => m.bracketType === 'grand_finals');
+
+      // Create nodes
+      const winnersNodes = matchesToNodes(winnersMatches);
+      const losersNodes = matchesToNodes(losersMatches);
+
+      // Create structural edges for layout
+      const winnersEdges = createStructuralEdges(winnersMatches);
+      const losersEdges = createStructuralEdges(losersMatches);
+
+      // Layout winners bracket
+      const winners = await getLayoutedElements(winnersNodes, winnersEdges, {
+        nodeWidth: NODE_WIDTH,
+        nodeHeight: NODE_HEIGHT,
+      });
+
+      // Layout losers bracket
+      const losers = await getLayoutedElements(losersNodes, losersEdges, {
+        nodeWidth: NODE_WIDTH,
+        nodeHeight: NODE_HEIGHT,
+      });
+
+      // Calculate offset for losers bracket
+      const winnersMaxY = Math.max(...winners.nodes.map(n => n.position.y + NODE_HEIGHT), 0);
+      const losersOffset = winnersMaxY + BRACKET_SECTION_GAP;
+
+      // Set divider position
+      setDividerY(winnersMaxY + BRACKET_SECTION_GAP / 2);
+
+      // Apply offset to losers nodes
+      const offsetLosers: MatchNodeType[] = losers.nodes.map(node => ({
+        ...node,
+        position: { x: node.position.x, y: node.position.y + losersOffset },
+      }));
+
+      // Position grand finals
+      const winnersMaxX = Math.max(...winners.nodes.map(n => n.position.x), 0);
+      const losersMaxX = Math.max(...offsetLosers.map(n => n.position.x), 0);
+      const grandFinalsX = Math.max(winnersMaxX, losersMaxX) + 300;
+      const grandFinalsY = losersOffset / 2;
+
+      const grandFinalsNodes: MatchNodeType[] = grandFinalsMatches.map((match, i) => ({
+        id: match.id,
+        type: 'match' as const,
+        position: { x: grandFinalsX, y: grandFinalsY + i * (NODE_HEIGHT + 30) },
+        data: { ...match } as MatchNodeData,
+      }));
+
+      // Combine all nodes
+      const allNodes = [...winners.nodes, ...offsetLosers, ...grandFinalsNodes];
+
+      // Create visible edges (only for completed matches with winners)
+      const visibleEdges = createAdvancementEdges(matches);
+
+      setNodes(allNodes);
+      setEdges(visibleEdges);
+    };
+
+    layoutBracket();
+  }, [matches, getLayoutedElements, setNodes, setEdges]);
 
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedMatchId(node.id);
@@ -121,7 +233,7 @@ export function BracketView({ tournamentId }: BracketViewProps) {
   const teams = tournament?.teams ?? [];
 
   return (
-    <div className="h-[600px] w-full">
+    <div className="w-full space-y-4">
       {/* Staff toolbar */}
       {isStaff && (
         <BracketToolbar
@@ -135,7 +247,7 @@ export function BracketView({ tournamentId }: BracketViewProps) {
 
       {/* Dirty indicator */}
       {isDirty && (
-        <div className="bg-yellow-500/10 text-yellow-500 text-sm px-3 py-1 rounded mb-2">
+        <div className="bg-yellow-500/10 text-yellow-500 text-sm px-3 py-1 rounded">
           Unsaved changes
         </div>
       )}
@@ -155,25 +267,35 @@ export function BracketView({ tournamentId }: BracketViewProps) {
         </div>
       )}
 
-      {/* React Flow canvas */}
+      {/* Single ReactFlow instance for entire bracket */}
       {matches.length > 0 && (
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          onNodesChange={handleNodesChange}
-          onEdgesChange={onEdgesChange}
-          onNodeClick={handleNodeClick}
-          fitView
-          fitViewOptions={{ padding: 0.2 }}
-          nodesDraggable={isStaff}
-          nodesConnectable={false}
-          elementsSelectable={true}
-        >
-          <Background />
-          <Controls />
-        </ReactFlow>
+        <div className="h-[700px] border rounded-lg overflow-hidden bg-background">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={handleNodeClick}
+            fitView
+            fitViewOptions={{ padding: 0.2 }}
+            nodesDraggable={isStaff}
+            nodesConnectable={false}
+            elementsSelectable={true}
+            panOnDrag={true}
+            zoomOnScroll={true}
+            minZoom={0.3}
+            maxZoom={1.5}
+          >
+            <Background gap={20} size={1} />
+
+            {/* Bracket section label - Winners */}
+            <Panel position="top-left" className="bg-background/80 px-3 py-1 rounded text-sm font-medium text-foreground">
+              Winners Bracket
+            </Panel>
+          </ReactFlow>
+        </div>
       )}
 
       {/* Match stats modal */}
@@ -183,5 +305,13 @@ export function BracketView({ tournamentId }: BracketViewProps) {
         onClose={() => setSelectedMatchId(null)}
       />
     </div>
+  );
+}
+
+export function BracketView({ tournamentId }: BracketViewProps) {
+  return (
+    <ReactFlowProvider>
+      <BracketFlowInner tournamentId={tournamentId} />
+    </ReactFlowProvider>
   );
 }
