@@ -238,17 +238,17 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         data: { ...match } as MatchNodeData,
       }));
 
-      // Calculate bracket bounds for divider
+      // Calculate bracket bounds for divider - extend far beyond visible area
       const allMatchNodes = [...winners.nodes, ...offsetLosers, ...grandFinalsNodes];
       const minX = Math.min(...allMatchNodes.map(n => n.position.x), 0);
       const maxX = Math.max(...allMatchNodes.map(n => n.position.x + NODE_WIDTH), 0);
-      const dividerWidth = maxX - minX + 100; // Extra padding
+      const dividerWidth = 5000; // Very wide to span entire viewport
 
       // Create divider node between winners and losers
       const dividerNode: Node<DividerNodeData> = {
         id: 'divider-winners-losers',
         type: 'divider',
-        position: { x: minX - 50, y: winnersMaxY + BRACKET_SECTION_GAP / 2 - 10 },
+        position: { x: -2000, y: winnersMaxY + BRACKET_SECTION_GAP / 2 - 10 },
         data: { width: dividerWidth, label: 'Losers Bracket' },
         selectable: false,
         draggable: false,
@@ -273,10 +273,13 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
     if (nodes.length > 0 && layoutCompleteRef.current) {
       // Small delay to ensure ReactFlow has rendered
       const timer = setTimeout(() => {
-        // Calculate bounds of all nodes
-        const minX = Math.min(...nodes.map(n => n.position.x));
-        const minY = Math.min(...nodes.map(n => n.position.y));
-        const maxY = Math.max(...nodes.map(n => n.position.y + NODE_HEIGHT));
+        // Calculate bounds of match nodes only (exclude divider)
+        const matchNodes = nodes.filter(n => n.type === 'match');
+        if (matchNodes.length === 0) return;
+
+        const minX = Math.min(...matchNodes.map(n => n.position.x));
+        const minY = Math.min(...matchNodes.map(n => n.position.y));
+        const maxY = Math.max(...matchNodes.map(n => n.position.y + NODE_HEIGHT));
 
         // Calculate container height (700px) and content height
         const containerHeight = 700;
