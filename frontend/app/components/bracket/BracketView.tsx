@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   ReactFlow,
   Background,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   type Node,
   type Edge,
+  type ReactFlowInstance,
   ReactFlowProvider,
   Panel,
 } from '@xyflow/react';
@@ -120,10 +122,12 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   } = useBracketStore();
 
   const { getLayoutedElements } = useElkLayout();
+  const { setViewport, getViewport } = useReactFlow();
 
   const [nodes, setNodes, onNodesChange] = useNodesState<MatchNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [dividerY, setDividerY] = useState<number>(0);
+  const layoutCompleteRef = useRef(false);
 
   // Selected match for stats modal
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
@@ -213,10 +217,44 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
 
       setNodes(allNodes);
       setEdges(visibleEdges);
+      layoutCompleteRef.current = true;
     };
 
     layoutBracket();
   }, [matches, getLayoutedElements, setNodes, setEdges]);
+
+  // Left-align viewport after layout is complete
+  useEffect(() => {
+    if (nodes.length > 0 && layoutCompleteRef.current) {
+      // Small delay to ensure ReactFlow has rendered
+      const timer = setTimeout(() => {
+        // Calculate bounds of all nodes
+        const minX = Math.min(...nodes.map(n => n.position.x));
+        const minY = Math.min(...nodes.map(n => n.position.y));
+        const maxY = Math.max(...nodes.map(n => n.position.y + NODE_HEIGHT));
+
+        // Calculate container height (700px) and content height
+        const containerHeight = 700;
+        const contentHeight = maxY - minY + NODE_HEIGHT;
+
+        // Choose zoom level - fit vertically if needed, max 1.0
+        const verticalZoom = containerHeight / (contentHeight + 100);
+        const zoom = Math.min(0.9, Math.max(0.4, verticalZoom));
+
+        // Position: left-aligned with small padding, vertically centered
+        const xOffset = 40; // Left padding
+        const yOffset = (containerHeight - contentHeight * zoom) / 2;
+
+        setViewport({
+          x: xOffset - minX * zoom,
+          y: yOffset - minY * zoom,
+          zoom,
+        });
+      }, 50);
+
+      return () => clearTimeout(timer);
+    }
+  }, [nodes, setViewport]);
 
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedMatchId(node.id);
@@ -278,8 +316,6 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={handleNodeClick}
-            fitView
-            fitViewOptions={{ padding: 0.2 }}
             nodesDraggable={isStaff}
             nodesConnectable={false}
             elementsSelectable={true}
@@ -287,6 +323,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
             zoomOnScroll={true}
             minZoom={0.3}
             maxZoom={1.5}
+            defaultViewport={{ x: 40, y: 50, zoom: 0.8 }}
           >
             <Background gap={20} size={1} />
 
