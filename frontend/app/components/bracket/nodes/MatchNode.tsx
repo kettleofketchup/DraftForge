@@ -28,9 +28,9 @@ const bracketTypeStyles = {
     headerBg: '',
   },
   losers: {
-    bg: 'bg-amber-950/20',
-    border: 'border-amber-700/50',
-    headerBg: 'bg-amber-900/20',
+    bg: 'bg-red-950/30',
+    border: 'border-red-800/60',
+    headerBg: 'bg-red-900/30',
   },
   grand_finals: {
     bg: 'bg-purple-950/20',
