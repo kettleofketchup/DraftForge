@@ -43,6 +43,8 @@ interface BracketViewProps {
 const BRACKET_SECTION_GAP = 180;
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 100;
+const NODE_VERTICAL_GAP = 20; // Minimum gap between nodes
+const ROUND_HORIZONTAL_GAP = 180; // Gap between rounds
 
 /**
  * Create edges only when winner is set and winning team appears in target match
@@ -173,15 +175,21 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       const winnersEdges = createStructuralEdges(winnersMatches);
       const losersEdges = createStructuralEdges(losersMatches);
 
-      // Layout winners bracket
-      const winners = await getLayoutedElements(winnersNodes, winnersEdges, {
-        nodeWidth: NODE_WIDTH,
-        nodeHeight: NODE_HEIGHT,
-      });
+      /**
+       * Custom bracket layout with collision detection
+       * Places nodes by round, vertically centered to their targets
+       */
+      const layoutBracketNodes = (
+        nodes: MatchNodeType[],
+        matchList: BracketMatch[]
+      ): MatchNodeType[] => {
+        if (nodes.length === 0) return nodes;
 
-      // Align nodes by round - ensure same round = same X position
-      const alignNodesByRound = (nodes: MatchNodeType[]): MatchNodeType[] => {
-        // Group by round
+        // Create lookup maps
+        const nodeById = new Map(nodes.map(n => [n.id, n]));
+        const matchById = new Map(matchList.map(m => [m.id, m]));
+
+        // Group nodes by round
         const roundGroups = new Map<number, MatchNodeType[]>();
         nodes.forEach(node => {
           const round = (node.data as MatchNodeData).round;
@@ -189,47 +197,128 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
           roundGroups.get(round)!.push(node);
         });
 
-        // For each round, use the minimum X position
-        roundGroups.forEach((roundNodes) => {
-          const minX = Math.min(...roundNodes.map(n => n.position.x));
-          roundNodes.forEach(node => {
-            node.position.x = minX;
-          });
+        // Sort rounds
+        const rounds = Array.from(roundGroups.keys()).sort((a, b) => a - b);
+
+        // Position round 1 nodes first (they have no source)
+        const round1Nodes = roundGroups.get(rounds[0]) || [];
+        round1Nodes.sort((a, b) => (a.data as MatchNodeData).position - (b.data as MatchNodeData).position);
+
+        round1Nodes.forEach((node, i) => {
+          node.position.x = 0;
+          node.position.y = i * (NODE_HEIGHT + NODE_VERTICAL_GAP);
         });
 
+        // Position subsequent rounds - center between source nodes
+        for (let i = 1; i < rounds.length; i++) {
+          const round = rounds[i];
+          const roundNodes = roundGroups.get(round) || [];
+          const xPos = i * (NODE_WIDTH + ROUND_HORIZONTAL_GAP);
+
+          roundNodes.sort((a, b) => (a.data as MatchNodeData).position - (b.data as MatchNodeData).position);
+
+          roundNodes.forEach(node => {
+            node.position.x = xPos;
+
+            // Find source nodes that feed into this node
+            const sourceNodes: MatchNodeType[] = [];
+            matchList.forEach(match => {
+              if (match.nextMatchId === node.id) {
+                const sourceNode = nodeById.get(match.id);
+                if (sourceNode) sourceNodes.push(sourceNode);
+              }
+            });
+
+            if (sourceNodes.length > 0) {
+              // Center between source nodes
+              const sourceYs = sourceNodes.map(n => n.position.y + NODE_HEIGHT / 2);
+              const avgY = sourceYs.reduce((a, b) => a + b, 0) / sourceYs.length;
+              node.position.y = avgY - NODE_HEIGHT / 2;
+            }
+          });
+        }
+
+        // Collision detection - resolve overlaps
+        const resolveCollisions = (nodes: MatchNodeType[], maxIterations = 10) => {
+          for (let iter = 0; iter < maxIterations; iter++) {
+            let hasCollision = false;
+
+            // Group by round for collision detection within same column
+            const byRound = new Map<number, MatchNodeType[]>();
+            nodes.forEach(n => {
+              const round = (n.data as MatchNodeData).round;
+              if (!byRound.has(round)) byRound.set(round, []);
+              byRound.get(round)!.push(n);
+            });
+
+            byRound.forEach(roundNodes => {
+              // Sort by Y position
+              roundNodes.sort((a, b) => a.position.y - b.position.y);
+
+              for (let i = 0; i < roundNodes.length - 1; i++) {
+                const nodeA = roundNodes[i];
+                const nodeB = roundNodes[i + 1];
+
+                const gap = nodeB.position.y - (nodeA.position.y + NODE_HEIGHT);
+                if (gap < NODE_VERTICAL_GAP) {
+                  // Collision detected - push apart
+                  const overlap = NODE_VERTICAL_GAP - gap;
+                  nodeA.position.y -= overlap / 2;
+                  nodeB.position.y += overlap / 2;
+                  hasCollision = true;
+                }
+              }
+            });
+
+            if (!hasCollision) break;
+          }
+        };
+
+        resolveCollisions(nodes);
         return nodes;
       };
 
-      // Apply round alignment to winners
-      alignNodesByRound(winners.nodes);
+      // Layout winners bracket with custom algorithm
+      const layoutedWinners = layoutBracketNodes(winnersNodes, winnersMatches);
 
-      // Layout losers bracket
-      const losers = await getLayoutedElements(losersNodes, losersEdges, {
-        nodeWidth: NODE_WIDTH,
-        nodeHeight: NODE_HEIGHT,
-      });
-
-      // Apply round alignment to losers
-      alignNodesByRound(losers.nodes);
+      // Layout losers bracket with custom algorithm
+      const layoutedLosers = layoutBracketNodes(losersNodes, losersMatches);
 
       // Calculate offset for losers bracket
-      const winnersMaxY = Math.max(...winners.nodes.map(n => n.position.y + NODE_HEIGHT), 0);
+      const winnersMaxY = Math.max(...layoutedWinners.map(n => n.position.y + NODE_HEIGHT), 0);
       const losersOffset = winnersMaxY + BRACKET_SECTION_GAP;
 
       // Set divider position
       setDividerY(winnersMaxY + BRACKET_SECTION_GAP / 2);
 
       // Apply offset to losers nodes
-      const offsetLosers: MatchNodeType[] = losers.nodes.map(node => ({
+      const offsetLosers: MatchNodeType[] = layoutedLosers.map(node => ({
         ...node,
         position: { x: node.position.x, y: node.position.y + losersOffset },
       }));
 
-      // Position grand finals
-      const winnersMaxX = Math.max(...winners.nodes.map(n => n.position.x), 0);
+      // Position grand finals - centered vertically between winners final and losers final
+      const winnersMaxX = Math.max(...layoutedWinners.map(n => n.position.x), 0);
       const losersMaxX = Math.max(...offsetLosers.map(n => n.position.x), 0);
-      const grandFinalsX = Math.max(winnersMaxX, losersMaxX) + 300;
-      const grandFinalsY = losersOffset / 2;
+      const grandFinalsX = Math.max(winnersMaxX, losersMaxX) + ROUND_HORIZONTAL_GAP;
+
+      // Find the winners final and losers final for vertical centering
+      const winnersFinal = layoutedWinners.find(n => {
+        const match = winnersMatches.find(m => m.id === n.id);
+        return match && match.nextMatchId?.startsWith('gf-');
+      });
+      const losersFinal = offsetLosers.find(n => {
+        const match = losersMatches.find(m => m.id === n.id);
+        return match && match.nextMatchId?.startsWith('gf-');
+      });
+
+      let grandFinalsY = losersOffset / 2;
+      if (winnersFinal && losersFinal) {
+        // Center between winners final and losers final
+        const winnersY = winnersFinal.position.y + NODE_HEIGHT / 2;
+        const losersY = losersFinal.position.y + NODE_HEIGHT / 2;
+        grandFinalsY = (winnersY + losersY) / 2 - NODE_HEIGHT / 2;
+      }
 
       const grandFinalsNodes: MatchNodeType[] = grandFinalsMatches.map((match, i) => ({
         id: match.id,
@@ -239,7 +328,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       }));
 
       // Calculate bracket bounds for divider - extend far beyond visible area
-      const allMatchNodes = [...winners.nodes, ...offsetLosers, ...grandFinalsNodes];
+      const allMatchNodes = [...layoutedWinners, ...offsetLosers, ...grandFinalsNodes];
       const minX = Math.min(...allMatchNodes.map(n => n.position.x), 0);
       const maxX = Math.max(...allMatchNodes.map(n => n.position.x + NODE_WIDTH), 0);
       const dividerWidth = 5000; // Very wide to span entire viewport
@@ -255,7 +344,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       };
 
       // Combine all nodes including divider
-      const allNodes = [...winners.nodes, ...offsetLosers, ...grandFinalsNodes, dividerNode];
+      const allNodes = [...layoutedWinners, ...offsetLosers, ...grandFinalsNodes, dividerNode];
 
       // Create visible edges (only for completed matches with winners)
       const visibleEdges = createAdvancementEdges(matches);
