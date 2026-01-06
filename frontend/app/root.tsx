@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import {
   isRouteErrorResponse,
@@ -52,6 +53,16 @@ export function DevScripts() {
   return null;
 }
 
+// Create a client outside component to avoid recreation on renders
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      retry: 1,
+    },
+  },
+});
+
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark" data-theme="dark">
@@ -60,13 +71,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <div className="flex flex-col w-screen h-screen justify-between">
-          <ResponsiveAppBar />
-          <div id="outlet_root" className="flex-grow overflow-x-hidden">
-            {children}
+        <QueryClientProvider client={queryClient}>
+          <div className="flex flex-col w-screen h-screen justify-between">
+            <ResponsiveAppBar />
+            <div id="outlet_root" className="flex-grow overflow-x-hidden">
+              {children}
+            </div>
           </div>
-        </div>
-        <Toaster richColors closeButton position="top-center" />
+          <Toaster richColors closeButton position="top-center" />
+        </QueryClientProvider>
 
         <ScrollRestoration />
         <Scripts />
