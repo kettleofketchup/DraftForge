@@ -121,8 +121,14 @@ describe('Match Stats Modal - UI Integration', () => {
     // Click on Games tab
     cy.contains('Games').click();
 
+    // Games tab defaults to Bracket View - verify it's visible
+    cy.contains('Bracket View').should('be.visible');
+
+    // Switch to List View to see "No games available" message
+    cy.contains('List View').click();
+
     // Games tab content should be visible
-    cy.get('body').should('contain.text', 'No games available');
+    cy.get('body').should('contain.text', 'No games available for this tournament');
   });
 });
 
