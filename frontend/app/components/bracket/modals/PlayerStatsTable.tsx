@@ -12,18 +12,26 @@ import {
 import { cn } from '~/lib/utils';
 import type { PlayerMatchStats } from '~/lib/dota/schemas';
 
+interface TeamTotals {
+  kills: number;
+  deaths: number;
+  assists: number;
+}
+
 interface PlayerStatsTableProps {
   players: PlayerMatchStats[];
-  team: 'Radiant' | 'Dire';
+  team: 'radiant' | 'dire';
   isWinner: boolean;
+  teamTotals?: TeamTotals;
 }
 
 export function PlayerStatsTable({
   players,
   team,
   isWinner,
+  teamTotals,
 }: PlayerStatsTableProps) {
-  const totals = players.reduce(
+  const totals = teamTotals ?? players.reduce(
     (acc, p) => ({
       kills: acc.kills + p.kills,
       deaths: acc.deaths + p.deaths,
@@ -31,6 +39,8 @@ export function PlayerStatsTable({
     }),
     { kills: 0, deaths: 0, assists: 0 }
   );
+
+  const teamLabel = team === 'radiant' ? 'RADIANT' : 'DIRE';
 
   return (
     <div className="space-y-2">
@@ -45,10 +55,10 @@ export function PlayerStatsTable({
           <span
             className={cn(
               'font-semibold uppercase',
-              team === 'Radiant' ? 'text-green-400' : 'text-red-400'
+              team === 'radiant' ? 'text-green-400' : 'text-red-400'
             )}
           >
-            {team}
+            {teamLabel}
           </span>
           {isWinner && (
             <span className="text-xs bg-green-600 px-1.5 py-0.5 rounded">
@@ -78,7 +88,7 @@ export function PlayerStatsTable({
         </TableHeader>
         <TableBody>
           {players.map((player) => (
-            <TableRow key={player.steam_id} className="text-sm">
+            <TableRow key={player.player_slot} className="text-sm">
               <TableCell className="p-1">
                 <img
                   src={getHeroIcon(player.hero_id)}

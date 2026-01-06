@@ -1,0 +1,24 @@
+/* Bracket-specific styles for ReactFlow */
+
+/* Ensure divider node renders behind other nodes */
+.react-flow__node.divider-node {
+  z-index: 0 !important;
+  pointer-events: none;
+}
+
+/* Ensure match nodes render above divider */
+.react-flow__node[data-id^="w-"],
+.react-flow__node[data-id^="l-"],
+.react-flow__node[data-id^="gf-"] {
+  z-index: 10 !important;
+}
+
+/* Alternative: target by node type */
+.react-flow__node-match {
+  z-index: 10 !important;
+}
+
+.react-flow__node-divider {
+  z-index: 0 !important;
+  pointer-events: none;
+}

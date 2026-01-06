@@ -12,7 +12,7 @@ import { useUserStore } from '~/store/userStore';
 import { Button } from '../../ui/button';
 import { updateGameHook } from '../hooks/updateGameHook';
 import { GameRemoveButton } from './deleteButton';
-import { MatchStatsModal } from '~/components/bracket/modals';
+import { DotaMatchStatsModal } from '~/components/bracket/modals';
 interface Props {
   game: GameType;
   edit?: boolean;
@@ -216,7 +216,7 @@ export const GameCard: React.FC<Props> = ({
       </div>
 
       {/* Match Stats Modal */}
-      <MatchStatsModal
+      <DotaMatchStatsModal
         open={showStatsModal}
         onClose={() => setShowStatsModal(false)}
         matchId={game.gameid}

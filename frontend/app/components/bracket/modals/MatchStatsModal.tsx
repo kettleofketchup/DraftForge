@@ -1,109 +1,154 @@
-// frontend/app/components/bracket/modals/MatchStatsModal.tsx
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '~/components/ui/dialog';
-import { Skeleton } from '~/components/ui/skeleton';
-import { useMatchStats } from '~/hooks/useMatchStats';
-import {
-  splitPlayersByTeam,
-  formatDuration,
-  formatMatchDate,
-} from '~/lib/dota/utils';
-import { PlayerStatsTable } from './PlayerStatsTable';
+import { Button } from '~/components/ui/button';
+import { Badge } from '~/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
+import { useUserStore } from '~/store/userStore';
+import { useBracketStore } from '~/store/bracketStore';
+import type { BracketMatch } from '../types';
 import { cn } from '~/lib/utils';
 
 interface MatchStatsModalProps {
-  open: boolean;
+  match: BracketMatch | null;
+  isOpen: boolean;
   onClose: () => void;
-  matchId: number | null;
 }
 
-export function MatchStatsModal({
-  open,
-  onClose,
-  matchId,
-}: MatchStatsModalProps) {
+export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps) {
+  const isStaff = useUserStore((state) => state.isStaff());
+  const { setMatchWinner, advanceWinner } = useBracketStore();
+
+  if (!match) return null;
+
+  const handleSetWinner = (winner: 'radiant' | 'dire') => {
+    setMatchWinner(match.id, winner);
+    advanceWinner(match.id);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
-        {matchId ? (
-          <MatchStatsContent matchId={matchId} />
-        ) : (
-          <MatchStatsSkeleton />
-        )}
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Match Details</DialogTitle>
+          <DialogDescription>
+            {match.bracketType === 'grand_finals'
+              ? 'Grand Finals'
+              : `${match.bracketType === 'winners' ? 'Winners' : 'Losers'} Round ${match.round}`}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Teams display */}
+          <div className="grid grid-cols-3 gap-4 items-center py-4">
+            {/* Radiant team */}
+            <TeamCard
+              team={match.radiantTeam}
+              score={match.radiantScore}
+              isWinner={match.winner === 'radiant'}
+              label="Radiant"
+            />
+
+            {/* VS divider */}
+            <div className="text-center">
+              <span className="text-2xl font-bold text-muted-foreground">VS</span>
+              {match.status === 'completed' && (
+                <Badge className="block mt-2" variant="outline">
+                  Final
+                </Badge>
+              )}
+              {match.status === 'live' && (
+                <Badge className="block mt-2 bg-red-500">LIVE</Badge>
+              )}
+            </div>
+
+            {/* Dire team */}
+            <TeamCard
+              team={match.direTeam}
+              score={match.direScore}
+              isWinner={match.winner === 'dire'}
+              label="Dire"
+            />
+          </div>
+
+          {/* Staff controls */}
+          {isStaff && match.status !== 'completed' && match.radiantTeam && match.direTeam && (
+            <div className="border-t pt-4">
+              <p className="text-sm text-muted-foreground mb-2">Set Winner:</p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => handleSetWinner('radiant')}
+                >
+                  {match.radiantTeam.name} Wins
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => handleSetWinner('dire')}
+                >
+                  {match.direTeam.name} Wins
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Steam match link stub */}
+          {match.steamMatchId && (
+            <div className="border-t pt-4">
+              <p className="text-sm text-muted-foreground">
+                Steam Match ID: {match.steamMatchId}
+              </p>
+              {/* TODO: Link to steam match details when implemented */}
+            </div>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-function MatchStatsContent({ matchId }: { matchId: number }) {
-  const { data: match, isLoading, error } = useMatchStats(matchId);
+interface TeamCardProps {
+  team?: { name: string; captain?: { avatarUrl?: string } };
+  score?: number;
+  isWinner: boolean;
+  label: string;
+}
 
-  if (isLoading) {
-    return <MatchStatsSkeleton />;
-  }
-
-  if (error || !match) {
+function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
+  if (!team) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
-        Failed to load match data
+      <div className="text-center p-4 rounded-lg bg-muted/50">
+        <div className="h-12 w-12 rounded-full bg-muted mx-auto mb-2" />
+        <p className="text-sm text-muted-foreground">TBD</p>
       </div>
     );
   }
 
-  const { radiant, dire } = splitPlayersByTeam(match.players);
-
   return (
-    <>
-      <DialogHeader>
-        <DialogTitle className="flex items-center justify-between">
-          <span>Match {match.match_id}</span>
-          <span className="text-sm font-normal text-muted-foreground">
-            {formatDuration(match.duration)} •{' '}
-            {formatMatchDate(match.start_time)}
-          </span>
-        </DialogTitle>
-      </DialogHeader>
-
-      {/* Result Banner */}
-      <div
-        className={cn(
-          'text-center py-3 rounded-md font-semibold text-lg',
-          match.radiant_win
-            ? 'bg-green-900/40 text-green-300'
-            : 'bg-red-900/40 text-red-300'
-        )}
-      >
-        {match.radiant_win ? 'Radiant Victory' : 'Dire Victory'}
-      </div>
-
-      {/* Team Tables */}
-      <div className="space-y-6">
-        <PlayerStatsTable
-          players={radiant}
-          team="Radiant"
-          isWinner={match.radiant_win}
-        />
-        <PlayerStatsTable
-          players={dire}
-          team="Dire"
-          isWinner={!match.radiant_win}
-        />
-      </div>
-    </>
-  );
-}
-
-function MatchStatsSkeleton() {
-  return (
-    <div className="space-y-4">
-      <Skeleton className="h-8 w-48" />
-      <Skeleton className="h-12 w-full" />
-      <Skeleton className="h-48 w-full" />
-      <Skeleton className="h-48 w-full" />
+    <div
+      className={cn(
+        'text-center p-4 rounded-lg',
+        isWinner ? 'bg-green-500/10 ring-2 ring-green-500' : 'bg-muted/50'
+      )}
+    >
+      <Avatar className="h-12 w-12 mx-auto mb-2">
+        <AvatarImage src={team.captain?.avatarUrl} />
+        <AvatarFallback>{team.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+      </Avatar>
+      <p className={cn('font-medium', isWinner && 'text-green-500')}>{team.name}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      {score !== undefined && (
+        <p className={cn('text-2xl font-bold mt-1', isWinner && 'text-green-500')}>
+          {score}
+        </p>
+      )}
+      {isWinner && <span className="text-green-500">Winner</span>}
     </div>
   );
 }

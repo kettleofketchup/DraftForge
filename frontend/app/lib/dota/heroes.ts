@@ -19,8 +19,13 @@ export function getHero(heroId: number): DotaHero | undefined {
   return heroes[heroId];
 }
 
+const STEAM_CDN_BASE = 'https://cdn.cloudflare.steamstatic.com';
+
 export function getHeroIcon(heroId: number): string {
-  return heroes[heroId]?.icon ?? '/placeholder-hero.png';
+  const icon = heroes[heroId]?.icon;
+  if (!icon) return '/placeholder-hero.png';
+  // dotaconstants icons are relative paths like /apps/dota2/images/...
+  return `${STEAM_CDN_BASE}${icon}`;
 }
 
 export function getHeroName(heroId: number): string {
