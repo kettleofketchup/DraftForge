@@ -43,12 +43,17 @@ export function PlayerStatsTable({
   const teamLabel = team === 'radiant' ? 'RADIANT' : 'DIRE';
 
   return (
-    <div className="space-y-2">
+    <div
+      className={cn(
+        'rounded-lg overflow-hidden',
+        team === 'radiant' ? 'bg-green-950/60' : 'bg-red-950/60'
+      )}
+    >
       {/* Team Header */}
       <div
         className={cn(
-          'flex items-center justify-between px-3 py-2 rounded',
-          isWinner ? 'bg-green-900/30' : 'bg-red-900/30'
+          'flex items-center justify-between px-3 py-2',
+          team === 'radiant' ? 'bg-green-900/50' : 'bg-red-900/50'
         )}
       >
         <div className="flex items-center gap-2">
