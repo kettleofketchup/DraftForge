@@ -1,4 +1,5 @@
 // frontend/app/components/bracket/modals/DotaMatchStatsModal.tsx
+import { ScrollArea } from '@radix-ui/react-scroll-area';
 import {
   Dialog,
   DialogContent,
@@ -7,6 +8,7 @@ import {
   DialogDescription,
 } from '~/components/ui/dialog';
 import { Skeleton } from '~/components/ui/skeleton';
+import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { useMatchStats } from '~/hooks/useMatchStats';
 import {
   splitPlayersByTeam,
@@ -29,20 +31,20 @@ export function DotaMatchStatsModal({
 }: DotaMatchStatsModalProps) {
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="sr-only">
-            Match Statistics
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            Detailed statistics for this Dota 2 match
-          </DialogDescription>
-        </DialogHeader>
-        {matchId ? (
-          <MatchStatsContent matchId={matchId} />
-        ) : (
-          <MatchStatsSkeleton />
-        )}
+      <DialogContent className={DIALOG_CSS}>
+        <ScrollArea className={SCROLLAREA_CSS}>
+          <DialogHeader>
+            <DialogTitle className="sr-only">Match Statistics</DialogTitle>
+            <DialogDescription className="sr-only">
+              Detailed statistics for this Dota 2 match
+            </DialogDescription>
+          </DialogHeader>
+          {matchId ? (
+            <MatchStatsContent matchId={matchId} />
+          ) : (
+            <MatchStatsSkeleton />
+          )}
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );
