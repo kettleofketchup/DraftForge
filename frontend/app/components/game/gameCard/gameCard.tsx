@@ -5,13 +5,14 @@ import { getLogger } from '~/lib/logger';
 const log = getLogger('GameCard');
 
 import { motion } from 'framer-motion';
-import { Edit } from 'lucide-react';
+import { Edit, BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { refreshTournamentHook } from '~/components/draft/hooks/refreshTournamentHook';
 import { useUserStore } from '~/store/userStore';
 import { Button } from '../../ui/button';
 import { updateGameHook } from '../hooks/updateGameHook';
 import { GameRemoveButton } from './deleteButton';
+import { MatchStatsModal } from '~/components/bracket/modals';
 interface Props {
   game: GameType;
   edit?: boolean;
@@ -31,6 +32,7 @@ export const GameCard: React.FC<Props> = ({
   const [isSaving, setIsSaving] = useState(false);
   const setTournament = useUserStore((state) => state.setTournament);
   const [error, setError] = useState(false);
+  const [showStatsModal, setShowStatsModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState<
     Partial<Record<keyof GameType, string>>
   >({});
@@ -163,14 +165,21 @@ export const GameCard: React.FC<Props> = ({
     );
   };
 
-  // TODO make the below be a button be a modal that appears with an indepth view with stats
   const headerButtons = () => {
     return (
       <div className="flex self-start flex flex-col w-full align-top  items-end justify-end gap-2 lg:flex-row lg:justify-end lg:items-top ">
         {editBtn()}
-        <Button variant={'secondary'} className="w-20 outline-green-500">
-          View-TODO
-        </Button>
+        {game.gameid && (
+          <Button
+            variant={'secondary'}
+            className="w-24 outline-green-500"
+            onClick={() => setShowStatsModal(true)}
+            data-testid="view-stats-btn"
+          >
+            <BarChart3 className="w-4 h-4 mr-1" />
+            Stats
+          </Button>
+        )}
       </div>
     );
   };
@@ -205,6 +214,13 @@ export const GameCard: React.FC<Props> = ({
           <GameRemoveButton game={game} />
         </div>
       </div>
+
+      {/* Match Stats Modal */}
+      <MatchStatsModal
+        open={showStatsModal}
+        onClose={() => setShowStatsModal(false)}
+        matchId={game.gameid}
+      />
     </motion.div>
   );
 };
