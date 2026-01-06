@@ -1,5 +1,6 @@
 // frontend/app/components/bracket/modals/DotaMatchStatsModal.tsx
 import { ScrollArea } from '@radix-ui/react-scroll-area';
+import { ExternalLink } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -7,6 +8,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '~/components/ui/dialog';
+import { Button } from '~/components/ui/button';
 import { Skeleton } from '~/components/ui/skeleton';
 import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { useMatchStats } from '~/hooks/useMatchStats';
@@ -63,12 +65,45 @@ function MatchStatsContent({ matchId }: { matchId: number }) {
 
   return (
     <div className="space-y-4">
-      {/* Match header */}
-      <div className="text-center">
-        <h2 className="text-lg font-semibold">Match {match.match_id}</h2>
-        <p className="text-sm text-muted-foreground">
-          {formatDuration(match.duration)} • {formatMatchDate(match.start_time)}
-        </p>
+      {/* Match header with external links */}
+      <div className="flex items-start justify-between">
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+          >
+            <a
+              href={`https://www.dotabuff.com/matches/${match.match_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Dotabuff
+              <ExternalLink className="w-3 h-3 ml-1" />
+            </a>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            asChild
+          >
+            <a
+              href={`https://www.opendota.com/matches/${match.match_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              OpenDota
+              <ExternalLink className="w-3 h-3 ml-1" />
+            </a>
+          </Button>
+        </div>
+        <div className="text-center flex-1">
+          <h2 className="text-lg font-semibold">Match {match.match_id}</h2>
+          <p className="text-sm text-muted-foreground">
+            {formatDuration(match.duration)} • {formatMatchDate(match.start_time)}
+          </p>
+        </div>
+        <div className="w-[140px]" /> {/* Spacer for balance */}
       </div>
 
       {/* Match result */}
