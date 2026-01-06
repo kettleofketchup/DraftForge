@@ -1,5 +1,5 @@
 // frontend/app/lib/dota/heroes.ts
-import heroesData from 'dotaconstants/build/heroes.json';
+import { heroes as heroesData } from 'dotaconstants';
 
 export interface DotaHero {
   id: number;
@@ -10,7 +10,10 @@ export interface DotaHero {
   primary_attr: 'str' | 'agi' | 'int' | 'all';
 }
 
-export const heroes: Record<string, DotaHero> = heroesData;
+export const heroes: Record<string, DotaHero> = heroesData as Record<
+  string,
+  DotaHero
+>;
 
 export function getHero(heroId: number): DotaHero | undefined {
   return heroes[heroId];
