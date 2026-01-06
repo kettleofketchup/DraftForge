@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,8 +9,10 @@ import {
 import { Button } from '~/components/ui/button';
 import { Badge } from '~/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
+import { BarChart3 } from 'lucide-react';
 import { useUserStore } from '~/store/userStore';
 import { useBracketStore } from '~/store/bracketStore';
+import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import type { BracketMatch } from '../types';
 import { cn } from '~/lib/utils';
 
@@ -22,8 +25,12 @@ interface MatchStatsModalProps {
 export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps) {
   const isStaff = useUserStore((state) => state.isStaff());
   const { setMatchWinner, advanceWinner } = useBracketStore();
+  const [showStatsModal, setShowStatsModal] = useState(false);
 
   if (!match) return null;
+
+  const isGameComplete = match.status === 'completed';
+  const hasMatchId = !!match.steamMatchId;
 
   const handleSetWinner = (winner: 'radiant' | 'dire') => {
     setMatchWinner(match.id, winner);
@@ -98,16 +105,34 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
             </div>
           )}
 
-          {/* Steam match link stub */}
-          {match.steamMatchId && (
+          {/* Steam match info and Stats button */}
+          {hasMatchId && (
             <div className="border-t pt-4">
-              <p className="text-sm text-muted-foreground">
-                Steam Match ID: {match.steamMatchId}
-              </p>
-              {/* TODO: Link to steam match details when implemented */}
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Steam Match ID: {match.steamMatchId}
+                </p>
+                {isGameComplete && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowStatsModal(true)}
+                  >
+                    <BarChart3 className="w-4 h-4 mr-1" />
+                    View Stats
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </div>
+
+        {/* Detailed Match Stats Modal */}
+        <DotaMatchStatsModal
+          open={showStatsModal}
+          onClose={() => setShowStatsModal(false)}
+          matchId={match.steamMatchId}
+        />
       </DialogContent>
     </Dialog>
   );

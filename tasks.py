@@ -30,7 +30,6 @@ install(suppress=[invoke])
 
 ns = Collection()
 ns_dev = Collection("dev")
-ns_test = Collection("test")
 ns_prod = Collection("prod")
 ns.add_collection(ns_prod, "prod")
 ns.add_collection(ns_test, "test")
@@ -39,7 +38,6 @@ ns.add_collection(ns_dev, "dev")
 ns.add_collection(ns_db, "db")
 ns.add_collection(ns_update, "update")
 ns.add_collection(ns_version, "version")
-ns.add_collection(ns_test, "test")
 ns.add_collection(ns_docs, "docs")
 from dotenv import load_dotenv
 
@@ -323,52 +321,55 @@ ns_dev.add_task(dev_exec, "exec")
 
 
 # Test environment tasks (uses docker-compose.test.yaml)
-@task
+# Note: ns_test is imported from scripts.tests which already has cypress tasks
+
+
+@task(name="test-up")
 def test_up(c):
     docker_compose_up(c, paths.DOCKER_COMPOSE_TEST_PATH)
 
 
-@task
+@task(name="test-down")
 def test_down(c):
     docker_compose_down(c, paths.DOCKER_COMPOSE_TEST_PATH)
 
 
-@task
+@task(name="test-logs")
 def test_logs(c):
     docker_compose_logs(c, paths.DOCKER_COMPOSE_TEST_PATH)
 
 
-@task
+@task(name="test-ps")
 def test_ps(c):
     docker_compose_ps(c, paths.DOCKER_COMPOSE_TEST_PATH)
 
 
-@task
+@task(name="test-restart")
 def test_restart(c):
     docker_compose_restart(c, paths.DOCKER_COMPOSE_TEST_PATH)
 
 
-@task
+@task(name="test-stop")
 def test_stop(c):
     docker_compose_stop(c, paths.DOCKER_COMPOSE_TEST_PATH)
 
 
-@task
+@task(name="test-build")
 def test_build(c):
     docker_compose_build(c, paths.DOCKER_COMPOSE_TEST_PATH)
 
 
-@task
+@task(name="test-pull")
 def test_pull(c):
     docker_compose_pull(c, paths.DOCKER_COMPOSE_TEST_PATH)
 
 
-@task
+@task(name="test-top")
 def test_top(c):
     docker_compose_top(c, paths.DOCKER_COMPOSE_TEST_PATH)
 
 
-@task
+@task(name="test-exec")
 def test_exec(c, service, cmd):
     docker_compose_exec(c, paths.DOCKER_COMPOSE_TEST_PATH, service, cmd)
 

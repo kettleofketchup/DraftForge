@@ -4,8 +4,13 @@ from . import views
 from .functions import api as steam_api
 
 urlpatterns = [
-    # Existing match detail view
+    # Match endpoints
     path("match/<int:match_id>/", views.MatchDetailView.as_view(), name="match_detail"),
+    path(
+        "matches/<int:match_id>/",
+        views.MatchRetrieveView.as_view(),
+        name="match-detail",
+    ),
     # Sync operations (Staff only)
     path("sync/", steam_api.sync_league, name="steam_sync"),
     path("retry-failed/", steam_api.retry_failed, name="steam_retry_failed"),

@@ -5,9 +5,28 @@ from .models import Match, PlayerMatchStats
 
 
 class PlayerMatchStatsSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(
+        source="user.username", read_only=True, default=None
+    )
+
     class Meta:
         model = PlayerMatchStats
-        exclude = ["match"]  # Exclude the direct link to the match to avoid redundancy
+        fields = [
+            "steam_id",
+            "username",
+            "player_slot",
+            "hero_id",
+            "kills",
+            "deaths",
+            "assists",
+            "gold_per_min",
+            "xp_per_min",
+            "last_hits",
+            "denies",
+            "hero_damage",
+            "tower_damage",
+            "hero_healing",
+        ]
 
 
 class MatchSerializer(serializers.ModelSerializer):
@@ -16,6 +35,22 @@ class MatchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Match
         fields = "__all__"
+
+
+class MatchDetailSerializer(serializers.ModelSerializer):
+    players = PlayerMatchStatsSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Match
+        fields = [
+            "match_id",
+            "radiant_win",
+            "duration",
+            "start_time",
+            "game_mode",
+            "lobby_type",
+            "players",
+        ]
 
 
 # =============================================================================

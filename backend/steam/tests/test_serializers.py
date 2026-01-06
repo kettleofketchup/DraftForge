@@ -1,16 +1,88 @@
 from django.test import TestCase
 
+from app.models import CustomUser
 from steam.constants import LEAGUE_ID
+from steam.models import Match, PlayerMatchStats
 from steam.serializers import (
     AutoLinkRequestSerializer,
     AutoLinkResultSerializer,
     FindMatchesByPlayersSerializer,
+    MatchDetailSerializer,
+    PlayerMatchStatsSerializer,
     RelinkUsersSerializer,
     RetryFailedRequestSerializer,
     SyncLeagueRequestSerializer,
     SyncResultSerializer,
     SyncStatusSerializer,
 )
+
+
+class PlayerMatchStatsSerializerTest(TestCase):
+    def test_serializes_player_with_username(self):
+        user = CustomUser.objects.create(username="TestPlayer")
+        match = Match.objects.create(
+            match_id=12345,
+            radiant_win=True,
+            duration=1800,
+            start_time=1704067200,
+            game_mode=22,
+            lobby_type=7,
+        )
+        stats = PlayerMatchStats.objects.create(
+            match=match,
+            steam_id=76561198000000001,
+            user=user,
+            player_slot=0,
+            hero_id=1,
+            kills=10,
+            deaths=2,
+            assists=15,
+            gold_per_min=600,
+            xp_per_min=700,
+            last_hits=200,
+            denies=10,
+            hero_damage=25000,
+            tower_damage=3000,
+            hero_healing=500,
+        )
+        serializer = PlayerMatchStatsSerializer(stats)
+        data = serializer.data
+        self.assertEqual(data["username"], "TestPlayer")
+        self.assertEqual(data["hero_id"], 1)
+        self.assertEqual(data["kills"], 10)
+
+
+class MatchDetailSerializerTest(TestCase):
+    def test_serializes_match_with_players(self):
+        match = Match.objects.create(
+            match_id=12345,
+            radiant_win=True,
+            duration=1800,
+            start_time=1704067200,
+            game_mode=22,
+            lobby_type=7,
+        )
+        PlayerMatchStats.objects.create(
+            match=match,
+            steam_id=76561198000000001,
+            player_slot=0,
+            hero_id=1,
+            kills=10,
+            deaths=2,
+            assists=15,
+            gold_per_min=600,
+            xp_per_min=700,
+            last_hits=200,
+            denies=10,
+            hero_damage=25000,
+            tower_damage=3000,
+            hero_healing=500,
+        )
+        serializer = MatchDetailSerializer(match)
+        data = serializer.data
+        self.assertEqual(data["match_id"], 12345)
+        self.assertTrue(data["radiant_win"])
+        self.assertEqual(len(data["players"]), 1)
 
 
 class SyncLeagueRequestSerializerTest(TestCase):

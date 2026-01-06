@@ -7,7 +7,7 @@ from rest_framework.test import APIClient
 
 from app.models import CustomUser
 from steam.constants import LEAGUE_ID
-from steam.models import GameMatchSuggestion, LeagueSyncState, Match
+from steam.models import GameMatchSuggestion, LeagueSyncState, Match, PlayerMatchStats
 
 
 class SyncLeagueEndpointTest(TestCase):
@@ -461,3 +461,43 @@ class SuggestionEndpointsTest(TestCase):
         response = self.client.post(reverse("steam_dismiss_suggestion", args=[1]))
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class MatchDetailViewTest(TestCase):
+    def setUp(self):
+        self.match = Match.objects.create(
+            match_id=99999,
+            radiant_win=True,
+            duration=1800,
+            start_time=1704067200,
+            game_mode=22,
+            lobby_type=7,
+        )
+        PlayerMatchStats.objects.create(
+            match=self.match,
+            steam_id=76561198000000001,
+            player_slot=0,
+            hero_id=1,
+            kills=5,
+            deaths=3,
+            assists=10,
+            gold_per_min=500,
+            xp_per_min=600,
+            last_hits=150,
+            denies=5,
+            hero_damage=20000,
+            tower_damage=2000,
+            hero_healing=0,
+        )
+
+    def test_get_match_detail(self):
+        response = self.client.get("/api/steam/matches/99999/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["match_id"], 99999)
+        self.assertEqual(len(data["players"]), 1)
+        self.assertEqual(data["players"][0]["hero_id"], 1)
+
+    def test_get_match_not_found(self):
+        response = self.client.get("/api/steam/matches/1/")
+        self.assertEqual(response.status_code, 404)
