@@ -92,8 +92,20 @@ export function PlayerStatsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {players.map((player) => (
-            <TableRow key={player.player_slot} className="text-sm">
+          {players.map((player, index) => (
+            <TableRow
+              key={player.player_slot}
+              className={cn(
+                'text-sm',
+                team === 'radiant'
+                  ? index % 2 === 0
+                    ? 'bg-green-950/40'
+                    : 'bg-green-900/30'
+                  : index % 2 === 0
+                    ? 'bg-red-950/40'
+                    : 'bg-red-900/30'
+              )}
+            >
               <TableCell className="p-1">
                 <img
                   src={getHeroIcon(player.hero_id)}
