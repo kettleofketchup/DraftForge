@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "bash",
+      "args": ["-c", "DISPLAY=:0 npx chrome-devtools-mcp@latest --acceptInsecureCerts"],
+      "env": {
+        "DISPLAY": ":0"
+      }
+    }
+  }
+}

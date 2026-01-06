@@ -345,7 +345,6 @@ class Game(models.Model):
             ("winners", "Winners Bracket"),
             ("losers", "Losers Bracket"),
             ("grand_finals", "Grand Finals"),
-            ("swiss", "Swiss"),
         ],
         default="winners",
     )
@@ -366,42 +365,6 @@ class Game(models.Model):
         choices=[("radiant", "Radiant"), ("dire", "Dire")],
         null=True,
         blank=True,
-    )
-
-    # Elimination type - determines what happens to loser
-    elimination_type = models.CharField(
-        max_length=10,
-        choices=[
-            ("single", "Single Elimination"),
-            ("double", "Double Elimination"),
-            ("swiss", "Swiss"),
-        ],
-        default="double",
-        help_text="single=loser out, double=loser drops to losers bracket, swiss=record-based",
-    )
-
-    # Match flow for losers (when elimination_type='double')
-    loser_next_game = models.ForeignKey(
-        "self",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="loser_source_games",
-        help_text="Game where loser advances to (for double elim rounds)",
-    )
-    loser_next_game_slot = models.CharField(
-        max_length=10,
-        choices=[("radiant", "Radiant"), ("dire", "Dire")],
-        null=True,
-        blank=True,
-    )
-
-    # Swiss format tracking
-    swiss_record_wins = models.IntegerField(
-        default=0, help_text="Team's wins entering this match (Swiss format)"
-    )
-    swiss_record_losses = models.IntegerField(
-        default=0, help_text="Team's losses entering this match (Swiss format)"
     )
 
     # Match status
