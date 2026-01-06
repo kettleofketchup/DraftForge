@@ -1,1 +1,2 @@
-export { HeroIconRow } from './HeroIconRow';
+export { MatchNode } from './MatchNode';
+export { EmptySlotNode } from './EmptySlotNode';

@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 
 from django.views.generic.base import RedirectView
 
-from app import views as app_views
+from app import views_main as app_views
 from app.functions.tournament import (
     create_team_from_captain,
     generate_draft_rounds,
