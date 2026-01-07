@@ -73,3 +73,38 @@ def get_lowest_mmr_team(teams: list) -> tuple:
         return winner, tie_data
 
     return tied[0], None
+
+
+def build_shuffle_rounds(draft) -> None:
+    """
+    Create all rounds for shuffle draft, assign first captain.
+
+    Args:
+        draft: Draft model instance
+    """
+    from app.models import DraftRound
+
+    teams = list(draft.tournament.teams.all())
+    num_teams = len(teams)
+    total_picks = num_teams * 4
+
+    # Create all rounds with null captains
+    rounds = [
+        DraftRound(
+            draft=draft,
+            captain=None,
+            pick_number=i,
+            pick_phase=(i - 1) // num_teams + 1,
+        )
+        for i in range(1, total_picks + 1)
+    ]
+    DraftRound.objects.bulk_create(rounds)
+
+    # Assign first captain based on lowest captain MMR
+    first_team, tie_data = get_lowest_mmr_team(teams)
+    first_round = draft.draft_rounds.order_by("pick_number").first()
+    first_round.captain = first_team.captain
+    if tie_data:
+        first_round.was_tie = True
+        first_round.tie_roll_data = tie_data
+    first_round.save()
