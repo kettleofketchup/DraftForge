@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import {
+import type {
   LeaderboardResponse,
   LeagueStats,
   SortField,
