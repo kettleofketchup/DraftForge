@@ -842,6 +842,75 @@ class Draft(models.Model):
 
         return remaining[0], roll_rounds
 
+    def create_next_shuffle_round(self):
+        """
+        Calculate which team picks next based on lowest total MMR.
+        Creates a new DraftRound for the next pick.
+
+        Returns:
+            dict with keys:
+            - round: The created DraftRound
+            - team_mmr: The MMR of the team that will pick
+            - tie_resolution: Dict with tie info if a tie occurred, else None
+        """
+        teams = list(self.tournament.teams.all())
+
+        if not teams:
+            raise ValueError("No teams in tournament")
+
+        # Calculate current total MMR for each team
+        team_mmrs = []
+        for team in teams:
+            total = team.captain.mmr or 0
+            for member in team.members.exclude(id=team.captain_id):
+                total += member.mmr or 0
+            team_mmrs.append({"team": team, "mmr": total})
+
+        # Find lowest MMR
+        min_mmr = min(t["mmr"] for t in team_mmrs)
+        tied_teams_data = [t for t in team_mmrs if t["mmr"] == min_mmr]
+
+        # Handle tie with random rolls
+        tie_resolution = None
+        if len(tied_teams_data) > 1:
+            tied_teams = [t["team"] for t in tied_teams_data]
+            winner, roll_rounds = self.roll_until_winner(tied_teams)
+            tie_resolution = {
+                "tied_teams": [
+                    {"id": t["team"].id, "name": t["team"].name, "mmr": t["mmr"]}
+                    for t in tied_teams_data
+                ],
+                "roll_rounds": roll_rounds,
+                "winner_id": winner.id,
+            }
+            next_team = winner
+            next_mmr = next(
+                t["mmr"] for t in tied_teams_data if t["team"].id == winner.id
+            )
+        else:
+            next_team = tied_teams_data[0]["team"]
+            next_mmr = tied_teams_data[0]["mmr"]
+
+        # Create the DraftRound
+        pick_number = self.draft_rounds.count() + 1
+        num_teams = len(teams)
+        phase = (pick_number - 1) // num_teams + 1
+
+        draft_round = DraftRound.objects.create(
+            draft=self,
+            captain=next_team.captain,
+            pick_number=pick_number,
+            pick_phase=phase,
+            was_tie=bool(tie_resolution),
+            tie_roll_data=tie_resolution,
+        )
+
+        return {
+            "round": draft_round,
+            "team_mmr": next_mmr,
+            "tie_resolution": tie_resolution,
+        }
+
 
 class DraftRound(models.Model):
     draft = models.ForeignKey(
