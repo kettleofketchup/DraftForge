@@ -76,14 +76,35 @@ def pick_player_for_round(request):
     except Tournament.DoesNotExist:
         return Response({"error": "Tournament not found"}, status=404)
 
-    draft_round.draft.save()
+    draft = draft_round.draft
+    draft.save()
     draft_round.save()
+
+    # Build response data
+    response_data = TournamentSerializer(tournament).data
+
+    # For shuffle draft, create next round dynamically
+    if draft.draft_style == "shuffle" and draft.users_remaining.exists():
+        try:
+            next_pick_data = draft.create_next_shuffle_round()
+            response_data["next_pick"] = {
+                "captain_id": next_pick_data["round"].captain.pk,
+                "team_id": next_pick_data["round"].team.pk,
+                "team_name": next_pick_data["round"].team.name,
+                "team_mmr": next_pick_data["team_mmr"],
+            }
+            if next_pick_data.get("tie_resolution"):
+                response_data["tie_resolution"] = next_pick_data["tie_resolution"]
+        except Exception as e:
+            logging.error(f"Error creating next shuffle round: {str(e)}")
+            # Don't fail the whole request if next round creation fails
+            response_data["next_pick_error"] = str(e)
 
     invalidate_model(Tournament)
     invalidate_model(Draft)
     invalidate_model(Team)
 
-    return Response(TournamentSerializer(tournament).data, status=201)
+    return Response(response_data, status=201)
 
 
 class CreateTournamentTeamRequestSerializer(serializers.Serializer):
