@@ -53,6 +53,55 @@ For E2E testing, the following endpoints are available:
 | POST | `/api/games/` | Create game |
 | GET | `/api/games/{id}/` | Get game |
 
+## Drafts
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/drafts/` | List drafts |
+| GET | `/api/drafts/{id}/` | Get draft details |
+| PUT | `/api/drafts/{id}/` | Update draft (e.g., change style) |
+
+### Draft Pick
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/tournaments/{id}/draft/pick/` | Make a draft pick |
+
+**Request Body:**
+```json
+{
+  "player_id": 123
+}
+```
+
+**Response (Shuffle Draft with tie):**
+```json
+{
+  "success": true,
+  "tournament": { ... },
+  "next_pick": {
+    "captain_id": 5,
+    "team_id": 2,
+    "team_name": "Team Beta",
+    "team_mmr": 15400
+  },
+  "tie_resolution": {
+    "tied_teams": [
+      {"id": 1, "name": "Team Alpha", "mmr": 15400},
+      {"id": 2, "name": "Team Beta", "mmr": 15400}
+    ],
+    "roll_rounds": [
+      [{"team_id": 1, "roll": 4}, {"team_id": 2, "roll": 6}]
+    ],
+    "winner_id": 2
+  }
+}
+```
+
+!!! note "Shuffle Draft"
+    The `next_pick` and `tie_resolution` fields only appear for shuffle draft style.
+    For snake/normal drafts, pick order is predetermined.
+
 ## Response Format
 
 All responses follow this format:
