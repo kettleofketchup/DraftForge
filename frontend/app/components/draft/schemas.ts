@@ -19,7 +19,7 @@ export const DraftSchema = z.object({
   users_remaining: z.array(UserSchema).nullable(),
   draft_rounds: z.array(DraftRoundSchema).nullable(),
   latest_round: z.number().nullable(),
-  draft_style: z.enum(['snake', 'normal']).default('snake'),
+  draft_style: z.enum(['snake', 'normal', 'shuffle']).default('snake'),
   snake_first_pick_mmr: z.number().default(0),
   snake_last_pick_mmr: z.number().default(0),
   normal_first_pick_mmr: z.number().default(0),

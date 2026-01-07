@@ -4,6 +4,7 @@ import type { PickPlayerForRoundAPI } from '~/components/api/types';
 import type { UserType } from '~/components/user/types';
 import type { DraftRoundType, DraftType, TournamentType } from '~/index';
 import { getLogger } from '~/lib/logger';
+import type { TieResolution } from '../types';
 const log = getLogger('PickPlayerHook');
 
 type hookParams = {
@@ -13,6 +14,7 @@ type hookParams = {
   curDraftRound: DraftRoundType;
   setDraft: (draft: DraftType) => void;
   setCurDraftRound: (draftRound: DraftRoundType) => void;
+  onTieResolution?: (tieResolution: TieResolution) => void;
 };
 
 export const choosePlayerHook = async ({
@@ -22,6 +24,7 @@ export const choosePlayerHook = async ({
   curDraftRound,
   setDraft,
   setCurDraftRound,
+  onTieResolution,
 }: hookParams) => {
   if (!tournament || !tournament.pk) {
     log.error('No tournament found');
@@ -63,6 +66,15 @@ export const choosePlayerHook = async ({
       setTournament(data);
       setDraft(data.draft);
       setCurDraftRound(newRound);
+
+      // Show tie overlay for shuffle draft
+      if (
+        data.draft?.draft_style === 'shuffle' &&
+        data.tie_resolution &&
+        onTieResolution
+      ) {
+        onTieResolution(data.tie_resolution);
+      }
 
       return `${curDraftRound?.pick_number} has been updated successfully!`;
     },
