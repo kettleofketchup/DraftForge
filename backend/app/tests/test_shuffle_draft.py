@@ -1,6 +1,7 @@
 """Tests for shuffle draft logic."""
 
 from datetime import date
+from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -58,3 +59,52 @@ class GetTeamTotalMmrTest(TestCase):
 
         # 5000 + 4000 + 0 = 9000
         self.assertEqual(result, 9000)
+
+
+class RollUntilWinnerTest(TestCase):
+    """Test roll_until_winner function."""
+
+    def setUp(self):
+        """Create test teams."""
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament", date_played=date.today()
+        )
+        self.captain1 = CustomUser.objects.create_user(
+            username="cap1", password="test", mmr=5000
+        )
+        self.captain2 = CustomUser.objects.create_user(
+            username="cap2", password="test", mmr=5000
+        )
+        self.team1 = Team.objects.create(
+            name="Team 1", captain=self.captain1, tournament=self.tournament
+        )
+        self.team2 = Team.objects.create(
+            name="Team 2", captain=self.captain2, tournament=self.tournament
+        )
+
+    @patch("app.functions.shuffle_draft.random.randint")
+    def test_returns_winner_on_first_roll(self, mock_randint):
+        """First team wins if they roll higher."""
+        from app.functions.shuffle_draft import roll_until_winner
+
+        mock_randint.side_effect = [6, 3]  # Team1 rolls 6, Team2 rolls 3
+
+        winner, roll_rounds = roll_until_winner([self.team1, self.team2])
+
+        self.assertEqual(winner.pk, self.team1.pk)
+        self.assertEqual(len(roll_rounds), 1)
+        self.assertEqual(roll_rounds[0][0]["roll"], 6)
+        self.assertEqual(roll_rounds[0][1]["roll"], 3)
+
+    @patch("app.functions.shuffle_draft.random.randint")
+    def test_rerolls_on_tie(self, mock_randint):
+        """Re-rolls when teams tie."""
+        from app.functions.shuffle_draft import roll_until_winner
+
+        # First round: tie (4, 4), Second round: team2 wins (2, 5)
+        mock_randint.side_effect = [4, 4, 2, 5]
+
+        winner, roll_rounds = roll_until_winner([self.team1, self.team2])
+
+        self.assertEqual(winner.pk, self.team2.pk)
+        self.assertEqual(len(roll_rounds), 2)
