@@ -61,6 +61,65 @@ class LeagueSyncState(models.Model):
         return f"League {self.league_id} sync state"
 
 
+class LeaguePlayerStats(models.Model):
+    """Aggregated player statistics for a specific league."""
+
+    user = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.CASCADE,
+        related_name="league_stats",
+    )
+    league_id = models.IntegerField(db_index=True)
+
+    # Core stats
+    games_played = models.IntegerField(default=0)
+    wins = models.IntegerField(default=0)
+    losses = models.IntegerField(default=0)
+
+    # Aggregated performance (totals for averaging)
+    total_kills = models.IntegerField(default=0)
+    total_deaths = models.IntegerField(default=0)
+    total_assists = models.IntegerField(default=0)
+    total_gpm = models.IntegerField(default=0)
+    total_xpm = models.IntegerField(default=0)
+
+    # Cached calculations (updated on each match)
+    win_rate = models.FloatField(default=0.0)
+    avg_kills = models.FloatField(default=0.0)
+    avg_deaths = models.FloatField(default=0.0)
+    avg_assists = models.FloatField(default=0.0)
+    avg_gpm = models.FloatField(default=0.0)
+    avg_xpm = models.FloatField(default=0.0)
+
+    # MMR adjustment calculated from performance
+    mmr_adjustment = models.IntegerField(default=0)
+
+    last_updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("user", "league_id")
+
+    def __str__(self):
+        return f"{self.user.username} - League {self.league_id} ({self.games_played} games)"
+
+    def recalculate_averages(self):
+        """Recalculate cached average fields from totals."""
+        if self.games_played > 0:
+            self.win_rate = self.wins / self.games_played
+            self.avg_kills = self.total_kills / self.games_played
+            self.avg_deaths = self.total_deaths / self.games_played
+            self.avg_assists = self.total_assists / self.games_played
+            self.avg_gpm = self.total_gpm / self.games_played
+            self.avg_xpm = self.total_xpm / self.games_played
+        else:
+            self.win_rate = 0.0
+            self.avg_kills = 0.0
+            self.avg_deaths = 0.0
+            self.avg_assists = 0.0
+            self.avg_gpm = 0.0
+            self.avg_xpm = 0.0
+
+
 class GameMatchSuggestion(models.Model):
     game = models.ForeignKey(
         "app.Game",
