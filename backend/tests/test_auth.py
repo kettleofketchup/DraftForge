@@ -197,3 +197,84 @@ def login_user(request):
     )  # attaches user to request + session middleware
 
     return return_tokens(user)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def login_as_user(request):
+    """
+    TEST ONLY: Login as any user by primary key.
+
+    This endpoint only works when TEST_MODE environment is set.
+    Used by Cypress tests to login as specific users (e.g., captains).
+
+    Request body:
+        user_pk: int - Primary key of user to login as
+
+    Returns:
+        200: Success with user data
+        400: Missing user_pk
+        404: Not in test mode or user not found
+    """
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    user_pk = request.data.get("user_pk")
+    if not user_pk:
+        return Response(
+            {"error": "user_pk is required"}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        user = CustomUser.objects.get(pk=user_pk)
+    except CustomUser.DoesNotExist:
+        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+
+    from app.serializers import UserSerializer
+
+    return Response({"success": True, "user": UserSerializer(user).data})
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_tournament_by_key(request, key: str):
+    """
+    TEST ONLY: Get tournament by test config key.
+
+    This endpoint only works when TEST_MODE environment is set.
+    Used by Cypress tests to get tournament data by config key.
+
+    Path params:
+        key: str - Test tournament config key (e.g., 'draft_captain_turn')
+
+    Returns:
+        200: Tournament data
+        404: Not in test mode or tournament not found
+    """
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from app.models import Tournament
+    from app.serializers import TournamentSerializer
+    from tests.helpers.tournament_config import TEST_KEY_TO_NAME
+
+    tournament_name = TEST_KEY_TO_NAME.get(key)
+    if not tournament_name:
+        return Response(
+            {"error": f"Unknown tournament key: {key}"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    try:
+        tournament = Tournament.objects.get(name=tournament_name)
+    except Tournament.DoesNotExist:
+        return Response(
+            {
+                "error": f"Tournament '{tournament_name}' not found. Run populate_test_tournaments() first."
+            },
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    return Response(TournamentSerializer(tournament).data)

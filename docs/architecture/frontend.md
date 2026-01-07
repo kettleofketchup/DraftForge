@@ -109,3 +109,39 @@ const log = getLogger('ComponentName')
 log.debug('Details', { data })
 log.error('Failed', error)
 ```
+
+## Draft System Components
+
+### Notification Components
+
+The draft system includes notification components to alert captains when it's their turn:
+
+| Component | Location | Description |
+|-----------|----------|-------------|
+| `FloatingDraftIndicator` | `components/draft/` | Fixed bottom-right notification with link to tournament |
+| `DraftNotificationBadge` | `components/draft/` | Pulsing red dot on user avatar |
+| `TurnIndicator` | `components/draft/roundView/` | Shows whose turn in draft modal |
+
+### useActiveDraft Hook
+
+Polls for active draft turns:
+
+```typescript
+import { useActiveDraft } from '~/hooks/useActiveDraft'
+
+const { activeDraft, hasActiveTurn, loading, refresh } = useActiveDraft()
+
+if (hasActiveTurn) {
+  // Show notification, activeDraft has tournament info
+}
+```
+
+### Auto-Open Draft Modal
+
+Navigate to tournament with `?draft=open` to auto-open the draft modal:
+
+```
+/tournament/123?draft=open
+```
+
+The `FloatingDraftIndicator` uses this pattern when clicked.

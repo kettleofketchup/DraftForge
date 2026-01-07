@@ -71,7 +71,38 @@ def cypress_headless(c):
         c.run(cmd)
 
 
+@task
+def cypress_spec(c, spec=""):
+    """Run Cypress tests for a specific spec pattern.
+
+    Usage:
+        inv test.spec --spec drafts     # Runs 07-draft/*.cy.ts
+        inv test.spec --spec tournament # Runs 04-tournament/*.cy.ts
+        inv test.spec --spec 01         # Runs 01-*.cy.ts
+    """
+    # Flush Redis cache before running tests
+    flush_test_redis(c)
+
+    with c.cd(paths.FRONTEND_PATH):
+        if spec:
+            # Map common names to spec patterns
+            spec_patterns = {
+                "drafts": "tests/cypress/e2e/07-draft/**/*.cy.ts",
+                "draft": "tests/cypress/e2e/07-draft/**/*.cy.ts",
+                "tournament": "tests/cypress/e2e/04-tournament/**/*.cy.ts",
+                "tournaments": "tests/cypress/e2e/03-tournaments/**/*.cy.ts",
+                "navigation": "tests/cypress/e2e/01-*.cy.ts",
+                "mobile": "tests/cypress/e2e/06-mobile/**/*.cy.ts",
+            }
+            pattern = spec_patterns.get(spec, f"tests/cypress/e2e/**/*{spec}*.cy.ts")
+            cmd = f'npx cypress run --spec "{pattern}"'
+        else:
+            cmd = "npm run test:e2e:headless"
+        c.run(cmd)
+
+
 ns_test.add_task(cypress_headless, "headless")
+ns_test.add_task(cypress_spec, "spec")
 
 
 ns_test.add_task(cypress_open, "open")
