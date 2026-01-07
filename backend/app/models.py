@@ -56,8 +56,9 @@ class PositionEnum(IntEnum):
 
 # Enum for Dota2 positions
 class DraftStyles(StrEnum):
-    snake = ("snake",)
-    normal = ("normal",)
+    snake = "snake"
+    normal = "normal"
+    shuffle = "shuffle"
 
 
 class CustomUser(AbstractUser):
@@ -457,13 +458,14 @@ class Draft(models.Model):
     DRAFT_STYLE_CHOICES = [
         ("snake", "Snake"),
         ("normal", "Normal"),
+        ("shuffle", "Shuffle"),
     ]
 
     draft_style = models.CharField(
         max_length=10,
         choices=DRAFT_STYLE_CHOICES,
         default="snake",
-        help_text="Draft style: snake or normal",
+        help_text="Draft style: snake, normal, or shuffle",
     )
 
     def __str__(self):
