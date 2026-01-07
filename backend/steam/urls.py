@@ -2,6 +2,7 @@ from django.urls import path
 
 from . import views
 from .functions import api as steam_api
+from .views import LeaderboardView, LeagueStatsView, MyLeagueStatsView
 
 urlpatterns = [
     # Match endpoints
@@ -41,4 +42,8 @@ urlpatterns = [
         steam_api.dismiss_match_suggestion,
         name="steam_dismiss_suggestion",
     ),
+    # Leaderboard and League Stats endpoints
+    path("leaderboard/", LeaderboardView.as_view(), name="leaderboard"),
+    path("league-stats/me/", MyLeagueStatsView.as_view(), name="my-league-stats"),
+    path("league-stats/<int:user_id>/", LeagueStatsView.as_view(), name="league-stats"),
 ]
