@@ -64,6 +64,7 @@ class CustomUser(AbstractUser):
     steamid = models.IntegerField(null=True, unique=True, blank=True)
     nickname = models.TextField(null=True, blank=True)
     mmr = models.IntegerField(null=True, blank=True)
+    league_mmr = models.IntegerField(null=True, blank=True)
     # Store positions as a dict of 1-5: bool, e.g. {"1": true, "2": false, ...}
     positions = models.ForeignKey(
         PositionsModel,
