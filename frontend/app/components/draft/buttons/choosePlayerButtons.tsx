@@ -1,4 +1,4 @@
-import { useEffect, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import {
   AlertDialog,
@@ -17,6 +17,8 @@ import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { choosePlayerHook } from '../hooks/choosePlayerHook';
 import { refreshDraftHook } from '../hooks/refreshDraftHook';
+import { TieResolutionOverlay } from '../TieResolutionOverlay';
+import type { TieResolution } from '../types';
 const log = getLogger('pickPlayerButton');
 
 export const ChoosePlayerButton: React.FC<{
@@ -32,6 +34,11 @@ export const ChoosePlayerButton: React.FC<{
 
   const setDraft = useUserStore((state) => state.setDraft);
 
+  const [tieResolution, setTieResolution] = useState<TieResolution | null>(
+    null,
+  );
+  const [showTieOverlay, setShowTieOverlay] = useState(false);
+
   useEffect(() => {}, [tournament.draft, tournament.teams]);
 
   const handleChange = async (e: FormEvent) => {
@@ -46,6 +53,10 @@ export const ChoosePlayerButton: React.FC<{
       curDraftRound,
       setCurDraftRound,
       setDraft,
+      onTieResolution: (resolution) => {
+        setTieResolution(resolution);
+        setShowTieOverlay(true);
+      },
     });
     refreshDraftHook({ draft, setDraft });
 
@@ -63,26 +74,39 @@ export const ChoosePlayerButton: React.FC<{
     );
   }
   return (
-    <div className="flex flex-row items-center gap-4">
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button>Pick</Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent className={`bg-green-900`}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Choose player {user.username}</AlertDialogTitle>
-            <AlertDialogDescription className="text-base-700">
-              This Chooses Player {user.username}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleChange}>
-              Confirm Pick
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+    <>
+      <div className="flex flex-row items-center gap-4">
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button>Pick</Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent className={`bg-green-900`}>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Choose player {user.username}
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-base-700">
+                This Chooses Player {user.username}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleChange}>
+                Confirm Pick
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+      {showTieOverlay && tieResolution && (
+        <TieResolutionOverlay
+          tieResolution={tieResolution}
+          onDismiss={() => {
+            setShowTieOverlay(false);
+            setTieResolution(null);
+          }}
+        />
+      )}
+    </>
   );
 };
