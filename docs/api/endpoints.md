@@ -10,14 +10,27 @@ Authentication is handled via Discord OAuth through django-social-auth.
 
 For E2E testing, the following endpoints are available:
 
-| Endpoint | Description |
-|----------|-------------|
-| `/api/test/login/user/` | Login as regular user |
-| `/api/test/login/staff/` | Login as staff user |
-| `/api/test/login/admin/` | Login as admin user |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/tests/login-user/` | POST | Login as regular user |
+| `/api/tests/login-staff/` | POST | Login as staff user |
+| `/api/tests/login-admin/` | POST | Login as admin user |
+| `/api/tests/login-as/` | POST | Login as any user by PK |
+| `/api/tests/tournament-by-key/{key}/` | GET | Get tournament by test config key |
 
 !!! warning "Test Only"
     These endpoints are only available in test/development environments.
+
+#### Login As User
+
+```bash
+POST /api/tests/login-as/
+Content-Type: application/json
+
+{"user_pk": 123}
+```
+
+Returns user details and sets session cookies.
 
 ## Users
 
@@ -52,6 +65,53 @@ For E2E testing, the following endpoints are available:
 | GET | `/api/games/` | List games |
 | POST | `/api/games/` | Create game |
 | GET | `/api/games/{id}/` | Get game |
+
+## Drafts
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/drafts/` | List drafts |
+| GET | `/api/drafts/{id}/` | Get draft details |
+| POST | `/api/tournaments/init-draft` | Initialize draft for tournament |
+| POST | `/api/tournaments/pick_player` | Pick player for draft round |
+| GET | `/api/active-draft-for-user/` | Get active draft turn for current user |
+
+### Pick Player
+
+Allows staff or the current round's captain to pick a player:
+
+```bash
+POST /api/tournaments/pick_player
+Content-Type: application/json
+
+{
+  "draft_round_pk": 123,
+  "user_pk": 456
+}
+```
+
+!!! note "Captain Permissions"
+    Captains can pick players during their turn. Staff can pick for any captain.
+
+### Active Draft for User
+
+Returns the user's active draft turn if they are a captain with a pending pick:
+
+```bash
+GET /api/active-draft-for-user/
+```
+
+Response:
+```json
+{
+  "has_active_turn": true,
+  "tournament_pk": 1,
+  "tournament_name": "Spring Championship",
+  "draft_pk": 5,
+  "draft_round_pk": 42,
+  "pick_number": 3
+}
+```
 
 ## Response Format
 
