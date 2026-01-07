@@ -840,6 +840,17 @@ class DraftRound(models.Model):
         null=True,
     )
 
+    # Tie tracking fields for shuffle draft mode
+    was_tie = models.BooleanField(
+        default=False,
+        help_text="Whether this round was determined by a tie-breaker roll",
+    )
+    tie_roll_data = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Stores tie resolution: {tied_teams, roll_rounds, winner_id}",
+    )
+
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         # Invalidate tournament cache when draft picks are made
