@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
-from app.models import CustomUser, Team, Tournament
+from app.models import CustomUser, Draft, DraftRound, Team, Tournament
 
 
 class GetTeamTotalMmrTest(TestCase):
@@ -172,3 +172,77 @@ class GetLowestMmrTeamTest(TestCase):
         self.assertIsNotNone(tie_data)
         self.assertEqual(len(tie_data["tied_teams"]), 2)
         mock_roll.assert_called_once()
+
+
+class BuildShuffleRoundsTest(TestCase):
+    """Test build_shuffle_rounds function."""
+
+    def setUp(self):
+        """Create tournament with 4 teams."""
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament", date_played=date.today()
+        )
+
+        # Create 4 captains with different MMRs
+        self.captains = []
+        for i, mmr in enumerate([5000, 4000, 6000, 4500]):
+            captain = CustomUser.objects.create_user(
+                username=f"cap{i}", password="test", mmr=mmr
+            )
+            self.captains.append(captain)
+
+        # Create 4 teams
+        self.teams = []
+        for i, captain in enumerate(self.captains):
+            team = Team.objects.create(
+                name=f"Team {i}", captain=captain, tournament=self.tournament
+            )
+            team.members.add(captain)
+            self.teams.append(team)
+
+        # Create draft
+        self.draft = Draft.objects.create(
+            tournament=self.tournament, draft_style="shuffle"
+        )
+
+    def test_creates_all_rounds_upfront(self):
+        """Creates num_teams * 4 rounds."""
+        from app.functions.shuffle_draft import build_shuffle_rounds
+
+        build_shuffle_rounds(self.draft)
+
+        # 4 teams * 4 picks each = 16 rounds
+        self.assertEqual(self.draft.draft_rounds.count(), 16)
+
+    def test_first_round_has_captain_assigned(self):
+        """First round captain is lowest MMR team."""
+        from app.functions.shuffle_draft import build_shuffle_rounds
+
+        build_shuffle_rounds(self.draft)
+
+        first_round = self.draft.draft_rounds.order_by("pick_number").first()
+        # Captain with 4000 MMR should pick first
+        self.assertEqual(first_round.captain.pk, self.captains[1].pk)
+
+    def test_remaining_rounds_have_null_captain(self):
+        """Rounds 2-16 have null captain."""
+        from app.functions.shuffle_draft import build_shuffle_rounds
+
+        build_shuffle_rounds(self.draft)
+
+        rounds = self.draft.draft_rounds.order_by("pick_number")[1:]
+        for draft_round in rounds:
+            self.assertIsNone(draft_round.captain)
+
+    def test_pick_phases_assigned_correctly(self):
+        """Pick phases are 1-4 based on round number."""
+        from app.functions.shuffle_draft import build_shuffle_rounds
+
+        build_shuffle_rounds(self.draft)
+
+        rounds = list(self.draft.draft_rounds.order_by("pick_number"))
+        # Rounds 1-4 = phase 1, 5-8 = phase 2, etc.
+        self.assertEqual(rounds[0].pick_phase, 1)
+        self.assertEqual(rounds[3].pick_phase, 1)
+        self.assertEqual(rounds[4].pick_phase, 2)
+        self.assertEqual(rounds[15].pick_phase, 4)

@@ -954,7 +954,11 @@ class DraftRound(models.Model):
         on_delete=models.CASCADE,
     )
     captain = models.ForeignKey(
-        User, related_name="draft_rounds_captained", on_delete=models.CASCADE
+        User,
+        related_name="draft_rounds_captained",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
     )
     pick_number = models.IntegerField(
         default=1,
