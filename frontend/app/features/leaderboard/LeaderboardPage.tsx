@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "~/components/ui/button";
 import { useLeaderboard } from "./queries";
 import { LeaderboardTable } from "./LeaderboardTable";
-import { SortField, SortOrder } from "./types";
+import type { SortField, SortOrder } from "./types";
 
 export function LeaderboardPage() {
   const [page, setPage] = useState(1);

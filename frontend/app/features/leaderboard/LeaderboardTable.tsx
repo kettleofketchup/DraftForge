@@ -8,7 +8,7 @@ import {
 } from "~/components/ui/table";
 import { UserPopover } from "~/components/user/UserPopover";
 import { cn } from "~/lib/utils";
-import { LeaderboardEntry, SortField, SortOrder } from "./types";
+import type { LeaderboardEntry, SortField, SortOrder } from "./types";
 
 interface LeaderboardTableProps {
   entries: LeaderboardEntry[];
