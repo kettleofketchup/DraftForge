@@ -747,6 +747,40 @@ class Draft(models.Model):
             logging.error("No teams found for tournament")
             return
 
+        # For shuffle draft, only create the first round
+        if self.draft_style == "shuffle":
+            # Calculate captain MMRs to determine first pick
+            team_mmrs = [(t, t.captain.mmr or 0) for t in teams]
+            min_mmr = min(mmr for _, mmr in team_mmrs)
+            tied_teams = [t for t, mmr in team_mmrs if mmr == min_mmr]
+
+            tie_resolution = None
+            if len(tied_teams) > 1:
+                winner, roll_rounds = self.roll_until_winner(tied_teams)
+                tie_resolution = {
+                    "tied_teams": [
+                        {"id": t.id, "name": t.name, "mmr": t.captain.mmr or 0}
+                        for t in tied_teams
+                    ],
+                    "roll_rounds": roll_rounds,
+                    "winner_id": winner.id,
+                }
+                first_team = winner
+            else:
+                first_team = tied_teams[0]
+
+            DraftRound.objects.create(
+                draft=self,
+                captain=first_team.captain,
+                pick_number=1,
+                pick_phase=1,
+                was_tie=bool(tie_resolution),
+                tie_roll_data=tie_resolution,
+            )
+            logging.debug(f"Created first shuffle draft round for {first_team.name}")
+            self.save()
+            return
+
         num_teams = len(teams)
         picks_per_team = 4  # Each team picks 4 players after captain
         total_picks = num_teams * picks_per_team
