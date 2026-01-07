@@ -45,14 +45,30 @@ from cacheops import invalidate_model
 
 
 @api_view(["POST"])
-@permission_classes([IsStaff])
+@permission_classes([IsAuthenticated])
 def pick_player_for_round(request):
+    """
+    Pick a player for a draft round.
+
+    Authorization: Staff can pick for any round. Captains can only pick
+    for their own round (when they are the captain for that round).
+
+    Request body:
+        draft_round_pk: int - Primary key of the draft round
+        user_pk: int - Primary key of the user to pick
+
+    Returns:
+        201: Success with updated tournament data
+        400: Validation error
+        403: Not authorized (not staff and not captain for this round)
+        404: Draft round or user not found
+        500: Error during pick
+    """
     serializer = PickPlayerForRound(data=request.data)
 
     if serializer.is_valid():
         draft_round_pk = serializer.validated_data["draft_round_pk"]
         user_pk = serializer.validated_data["user_pk"]
-
     else:
         return Response(serializer.errors, status=400)
 
@@ -60,10 +76,26 @@ def pick_player_for_round(request):
         draft_round = DraftRound.objects.get(pk=draft_round_pk)
     except DraftRound.DoesNotExist:
         return Response({"error": "Draft round not found"}, status=404)
+
+    # Authorization check: staff OR captain for this round
+    is_staff = request.user.is_staff
+    is_captain_for_round = draft_round.captain == request.user
+
+    if not (is_staff or is_captain_for_round):
+        log.warning(
+            f"User {request.user.username} attempted to pick for round {draft_round_pk} "
+            f"but is not staff or captain (captain is {draft_round.captain.username})"
+        )
+        return Response(
+            {"error": "Only staff or the captain for this round can make picks"},
+            status=403,
+        )
+
     try:
         user = CustomUser.objects.get(pk=user_pk)
     except CustomUser.DoesNotExist:
         return Response({"error": "User not found"}, status=404)
+
     try:
         draft_round.pick_player(user)
     except Exception as e:
@@ -71,6 +103,7 @@ def pick_player_for_round(request):
             f"Error picking player for draft round {draft_round_pk}: {str(e)}"
         )
         return Response({"error": f"Failed to pick player. {str(e)}"}, status=500)
+
     try:
         tournament = draft_round.draft.tournament
     except Tournament.DoesNotExist:
@@ -279,3 +312,47 @@ def get_draft_style_mmrs(request):
 
     data = get_data(request)
     return Response(data, 201)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_active_draft_for_user(request):
+    """
+    Get active draft information if the user is a captain with a pending pick.
+
+    This endpoint is used to determine if the current user should see
+    draft notifications (flashing icon, floating indicator, auto-open modal).
+
+    Returns:
+        200: {
+            "has_active_turn": true/false,
+            "tournament_pk": int (if active),
+            "tournament_name": str (if active),
+            "draft_round_pk": int (if active),
+            "pick_number": int (if active)
+        }
+    """
+    # Find draft rounds where user is captain and choice is null (pending pick)
+    pending_round = (
+        DraftRound.objects.filter(
+            captain=request.user,
+            choice__isnull=True,
+            draft__tournament__state="in_progress",
+        )
+        .select_related("draft__tournament")
+        .order_by("pick_number")
+        .first()
+    )
+
+    if pending_round:
+        return Response(
+            {
+                "has_active_turn": True,
+                "tournament_pk": pending_round.draft.tournament.pk,
+                "tournament_name": pending_round.draft.tournament.name,
+                "draft_round_pk": pending_round.pk,
+                "pick_number": pending_round.pick_number,
+            }
+        )
+
+    return Response({"has_active_turn": False})

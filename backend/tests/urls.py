@@ -2,7 +2,13 @@ from django.urls import path
 
 from common.utils import isTestEnvironment
 
-from .test_auth import login_admin, login_staff, login_user
+from .test_auth import (
+    get_tournament_by_key,
+    login_admin,
+    login_as_user,
+    login_staff,
+    login_user,
+)
 from .test_steam import create_test_match
 
 urlpatterns = [
@@ -20,6 +26,16 @@ urlpatterns = [
         "login-user/",
         login_user,
         name="login-user",
+    ),
+    path(
+        "login-as/",
+        login_as_user,
+        name="login-as-user",
+    ),
+    path(
+        "tournament-by-key/<str:key>/",
+        get_tournament_by_key,
+        name="tournament-by-key",
     ),
     path(
         "create-match/",

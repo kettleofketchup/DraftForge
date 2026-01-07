@@ -1,5 +1,6 @@
 import { ClipboardPen, EyeIcon } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -51,6 +52,19 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const liveReload = useTournamentStore((state) => state.liveReload);
   const [open, setOpen] = useState(live);
   const isStaff = useUserStore((state) => state.isStaff);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-open modal when ?draft=open is in URL
+  useEffect(() => {
+    const draftParam = searchParams.get('draft');
+    if (draftParam === 'open') {
+      setOpen(true);
+      // Remove the param after opening to avoid re-opening on navigation
+      searchParams.delete('draft');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   useEffect(() => {
     if (live) {
       setOpen(true);

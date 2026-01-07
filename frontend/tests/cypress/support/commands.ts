@@ -28,6 +28,18 @@ declare namespace Cypress {
     loginUser(): void;
 
     /**
+     * Custom command to login as a specific user by primary key (TEST ONLY)
+     * @example cy.loginAsUser(123)
+     */
+    loginAsUser(userPk: number): Chainable<Cypress.Response<{ user_id: number; username: string }>>;
+
+    /**
+     * Custom command to get tournament details by test config key (TEST ONLY)
+     * @example cy.getTournamentByKey('captain_draft_test')
+     */
+    getTournamentByKey(key: string): Chainable<Cypress.Response<{ pk: number; name: string }>>;
+
+    /**
      * Custom command to logout
      * @example cy.logout()
      */
@@ -129,6 +141,40 @@ Cypress.Commands.add('loginUser', () => {
         response.headers.cookiesessionid as string,
       );
     }
+  });
+});
+
+// Login as specific user by primary key (TEST ONLY)
+Cypress.Commands.add('loginAsUser', (userPk: number) => {
+  return cy.request({
+    method: 'POST',
+    url: `${Cypress.env('apiUrl')}/tests/login-as/`,
+    body: { user_pk: userPk },
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  }).then((response) => {
+    if (response.headers.cookiescsrftoken) {
+      window.cookieStore.set(
+        'csrftoken',
+        response.headers.cookiescsrftoken as string,
+      );
+    }
+    if (response.headers.cookiesessionid) {
+      window.cookieStore.set(
+        'sessionid',
+        response.headers.cookiesessionid as string,
+      );
+    }
+    return response;
+  });
+});
+
+// Get tournament by test config key (TEST ONLY)
+Cypress.Commands.add('getTournamentByKey', (key: string) => {
+  return cy.request({
+    method: 'GET',
+    url: `${Cypress.env('apiUrl')}/tests/tournament-by-key/${key}/`,
   });
 });
 

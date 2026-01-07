@@ -6,6 +6,7 @@ import { useUserStore } from '~/store/userStore';
 import { CaptainCards } from './roundView/captainCards';
 import { PlayerChoiceView } from './roundView/choiceCard';
 import { CurrentTeamView } from './roundView/currentTeam';
+import { TurnIndicator } from './roundView/TurnIndicator';
 const log = getLogger('DraftRoundView');
 
 export const DraftRoundView: React.FC = () => {
@@ -82,6 +83,7 @@ export const DraftRoundView: React.FC = () => {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold">Draft View</h2>
         </div>
+        <TurnIndicator />
         <CurrentTeamView />
         <PlayerChoiceView />
       </div>

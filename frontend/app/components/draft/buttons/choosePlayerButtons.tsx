@@ -23,6 +23,7 @@ export const ChoosePlayerButton: React.FC<{
   user: UserType;
 }> = ({ user }) => {
   const tournament = useUserStore((state) => state.tournament);
+  const currentUser = useUserStore((state) => state.currentUser);
 
   const setTournament = useUserStore((state) => state.setTournament);
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
@@ -31,6 +32,11 @@ export const ChoosePlayerButton: React.FC<{
   const isStaff = useUserStore((state) => state.isStaff);
 
   const setDraft = useUserStore((state) => state.setDraft);
+
+  // Check if current user is the captain for this round
+  const isCaptainForRound = currentUser?.pk === curDraftRound?.captain?.pk;
+  const canPick = isStaff() || isCaptainForRound;
+  const pickAlreadyMade = !!curDraftRound?.choice;
 
   useEffect(() => {}, [tournament.draft, tournament.teams]);
 
@@ -55,15 +61,31 @@ export const ChoosePlayerButton: React.FC<{
       draft: draft,
     });
   };
-  if (!isStaff()) {
+
+  // If pick already made for this round, show disabled button
+  if (pickAlreadyMade) {
+    return (
+      <Button disabled variant="outline">
+        Pick made
+      </Button>
+    );
+  }
+
+  // If user can't pick (not staff and not captain for this round)
+  if (!canPick) {
+    const captainName = curDraftRound?.captain?.username || 'captain';
     return (
       <>
-        <AdminOnlyButton buttonTxt="Only Staff Can Pick" />
+        <AdminOnlyButton buttonTxt={`Waiting for ${captainName}`} />
       </>
     );
   }
+
   return (
-    <div className="flex flex-row items-center gap-4">
+    <div
+      className="flex flex-row items-center gap-4"
+      data-testid="available-player"
+    >
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <Button>Pick</Button>
