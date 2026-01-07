@@ -53,6 +53,78 @@ For E2E testing, the following endpoints are available:
 | POST | `/api/games/` | Create game |
 | GET | `/api/games/{id}/` | Get game |
 
+## Steam / League Stats
+
+Endpoints for Steam integration and league statistics.
+
+### Leaderboard
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/steam/leaderboard/` | Paginated league leaderboard |
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | int | 1 | Page number |
+| `page_size` | int | 20 | Results per page |
+| `sort_by` | string | `league_mmr` | Sort field: `league_mmr`, `games_played`, `win_rate`, `avg_kda` |
+| `order` | string | `desc` | Sort order: `asc`, `desc` |
+
+**Response:**
+
+```json
+{
+  "count": 50,
+  "next": "/api/steam/leaderboard/?page=2",
+  "previous": null,
+  "results": [
+    {
+      "user_id": 1,
+      "username": "player1",
+      "avatar": "https://...",
+      "league_mmr": 3250,
+      "mmr_adjustment": 150,
+      "games_played": 25,
+      "wins": 15,
+      "losses": 10,
+      "win_rate": 0.6,
+      "avg_kda": 3.5,
+      "avg_gpm": 450
+    }
+  ]
+}
+```
+
+### League Stats
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/steam/league-stats/{user_id}/` | Get user's league stats | No |
+| GET | `/api/steam/league-stats/me/` | Get current user's stats | Yes |
+
+**Response:**
+
+```json
+{
+  "user_id": 1,
+  "username": "player1",
+  "league_id": 1,
+  "games_played": 25,
+  "wins": 15,
+  "losses": 10,
+  "win_rate": 0.6,
+  "avg_kills": 8.5,
+  "avg_deaths": 4.2,
+  "avg_assists": 12.3,
+  "avg_kda": 3.5,
+  "avg_gpm": 450,
+  "avg_xpm": 520,
+  "league_mmr": 3250
+}
+```
+
 ## Response Format
 
 All responses follow this format:

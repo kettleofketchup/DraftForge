@@ -20,13 +20,18 @@ flowchart TB
             Nginx[Nginx<br/>Reverse Proxy]
             Frontend[Frontend<br/>React + Vite]
             Backend[Backend<br/>Django REST]
-            Redis[(Redis<br/>Cache)]
+            Redis[(Redis<br/>Cache + Broker)]
+            CeleryWorker[Celery Worker<br/>Task Processor]
+            CeleryBeat[Celery Beat<br/>Scheduler]
         end
 
         P80 & P443 --> Nginx
         Nginx -->|"/*"| Frontend
         Nginx -->|"/api/*"| Backend
         Backend --> Redis
+        CeleryWorker --> Redis
+        CeleryBeat --> Redis
+        CeleryBeat -.->|schedules| CeleryWorker
     end
 
     subgraph Volumes["Persistent Volumes"]
@@ -109,6 +114,32 @@ nginx:
     - ./nginx/default.template.conf:/etc/nginx/templates/
     - ./nginx/data/ssl/:/etc/letsencrypt/live/dota.kettle.sh/
 ```
+
+### Celery Worker Service
+
+```yaml
+celery-worker:
+  image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
+  command: celery -A config worker -l info
+  depends_on:
+    - redis
+    - backend
+```
+
+Processes background tasks from the Redis queue. Uses the same image as the backend service.
+
+### Celery Beat Service
+
+```yaml
+celery-beat:
+  image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
+  command: celery -A config beat -l info
+  depends_on:
+    - redis
+    - celery-worker
+```
+
+Scheduler that triggers periodic tasks (e.g., league match sync every 60 seconds).
 
 ## Environment Files
 
