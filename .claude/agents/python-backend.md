@@ -1,5 +1,4 @@
 ---
-skills: django-redis-caching
 ---
 
 # Python Backend Agent

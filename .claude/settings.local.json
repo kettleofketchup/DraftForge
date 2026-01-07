@@ -110,7 +110,13 @@
       "Bash(git merge:*)",
       "WebFetch(domain:www.opendota.com)",
       "Bash(gh pr view:*)",
-      "Bash(DISPLAY=:0 npx cypress run:*)"
+      "Bash(DISPLAY=:0 npx cypress run:*)",
+      "Bash(inv test:*)",
+      "mcp__chrome-devtools__wait_for",
+      "Bash(inv test.restart:*)",
+      "mcp__chrome-devtools__get_console_message",
+      "Skill(skill-creator)",
+      "Bash(wc:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

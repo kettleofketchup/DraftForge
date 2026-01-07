@@ -13,6 +13,12 @@ ns_test.add_collection(ns_dbtest, "db")
 import paths
 
 
+def flush_test_redis(c):
+    """Flush Redis cache in test environment to ensure fresh data."""
+    print("Flushing Redis cache...")
+    c.run("docker exec test-redis redis-cli FLUSHALL", warn=True)
+
+
 @task
 def dev_test(c):
 
@@ -47,6 +53,8 @@ def setup(c):
 
 @task(pre=[setup])
 def cypress_open(c):
+    # Flush Redis cache before running tests to ensure fresh bracket data
+    flush_test_redis(c)
 
     with c.cd(paths.FRONTEND_PATH):
         cmd = " npm run test:e2e:open"
@@ -55,6 +63,8 @@ def cypress_open(c):
 
 @task(pre=[setup])
 def cypress_headless(c):
+    # Flush Redis cache before running tests to ensure fresh bracket data
+    flush_test_redis(c)
 
     with c.cd(paths.FRONTEND_PATH):
         cmd = " npm run test:e2e:headless"

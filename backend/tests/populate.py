@@ -365,8 +365,10 @@ def populate_tournaments(force=False):
 def populate_steam_matches(force=False):
     """
     Generate and save mock Steam matches for test tournaments.
-    Also creates bracket Game objects linked to the Steam matches.
-    Uses actual team rosters to ensure Steam IDs match.
+    Creates bracket Game objects with different completion states:
+    - Tournament 1 (Spring Championship): All games completed with Steam matches
+    - Tournament 2 (Summer League): 2 games completed, 2 pending
+    - Tournament 3 (Autumn Cup): All games pending (no completed games)
 
     Args:
         force: If True, delete existing mock matches and games first
@@ -377,27 +379,24 @@ def populate_steam_matches(force=False):
 
     print("Populating Steam matches and bracket games...")
 
-    # Find a tournament with at least 4 teams
-    tournament = (
+    # Find tournaments with at least 4 teams
+    tournaments = list(
         Tournament.objects.annotate(team_count=models.Count("teams"))
         .filter(team_count__gte=4)
-        .first()
+        .order_by("pk")[:3]
     )
 
-    if not tournament:
-        print("No tournament with 4+ teams found. Run populate_tournaments first.")
-        return
-
-    teams = list(tournament.teams.all()[:4])
-    if len(teams) < 4:
-        print(f"Tournament needs 4 teams, has {len(teams)}")
+    if len(tournaments) < 3:
+        print(
+            f"Need 3 tournaments with 4+ teams, found {len(tournaments)}. Run populate_tournaments first."
+        )
         return
 
     # Check for existing mock matches (IDs starting with 9000000000)
     existing_matches = Match.objects.filter(
         match_id__gte=9000000000, match_id__lt=9100000000
     )
-    existing_games = Game.objects.filter(tournament=tournament)
+    existing_games = Game.objects.filter(tournament__in=tournaments)
 
     if existing_matches.exists() or existing_games.exists():
         if force:
@@ -409,173 +408,247 @@ def populate_steam_matches(force=False):
             print(f"Mock data already exists. Use force=True to regenerate.")
             return
 
-    # Generate mock matches
-    try:
-        mock_matches = generate_mock_matches_for_tournament(tournament)
-    except ValueError as e:
-        print(f"Failed to generate matches: {e}")
-        return
-
     # Define bracket structure for 4-team double elimination
-    # Matches are generated in this order:
-    # 0: Winners R1 Match 1 (Team0 vs Team1)
-    # 1: Winners R1 Match 2 (Team2 vs Team3)
-    # 2: Losers R1 (Loser0 vs Loser1)
-    # 3: Winners Final (Winner0 vs Winner1)
-    # 4: Losers Final (LR1Winner vs WFLoser)
-    # 5: Grand Final
-    # 6: Grand Final Reset (optional)
-
     bracket_structure = [
-        {"round": 1, "bracket_type": "winners", "position": 0},  # Match 0
-        {"round": 1, "bracket_type": "winners", "position": 1},  # Match 1
-        {"round": 1, "bracket_type": "losers", "position": 0},  # Match 2
+        {
+            "round": 1,
+            "bracket_type": "winners",
+            "position": 0,
+        },  # Match 0: Winners R1 M1
+        {
+            "round": 1,
+            "bracket_type": "winners",
+            "position": 1,
+        },  # Match 1: Winners R1 M2
+        {"round": 1, "bracket_type": "losers", "position": 0},  # Match 2: Losers R1
         {
             "round": 2,
             "bracket_type": "winners",
             "position": 0,
-        },  # Match 3 (Winners Final)
-        {"round": 2, "bracket_type": "losers", "position": 0},  # Match 4 (Losers Final)
-        {"round": 1, "bracket_type": "grand_finals", "position": 0},  # Match 5 (GF)
+        },  # Match 3: Winners Final
+        {"round": 2, "bracket_type": "losers", "position": 0},  # Match 4: Losers Final
         {
-            "round": 2,
+            "round": 1,
             "bracket_type": "grand_finals",
             "position": 0,
-        },  # Match 6 (GF Reset)
+        },  # Match 5: Grand Final
     ]
 
-    # Track winners/losers for team assignment
-    match_results = []  # Will store (radiant_team, dire_team, winner, loser)
+    # Tournament scenarios:
+    # T1: All 6 games completed (indexes 0-5)
+    # T2: 2 games completed (indexes 0-1), 4 pending (indexes 2-5)
+    # T3: 0 games completed (all 6 pending)
+    tournament_configs = [
+        {
+            "tournament": tournaments[0],
+            "completed_count": 6,
+            "match_id_base": 9000000001,
+        },
+        {
+            "tournament": tournaments[1],
+            "completed_count": 2,
+            "match_id_base": 9000000101,
+        },
+        {
+            "tournament": tournaments[2],
+            "completed_count": 0,
+            "match_id_base": 9000000201,
+        },
+    ]
 
-    # Save matches and create games
-    saved_count = 0
-    games = []
+    for config in tournament_configs:
+        tournament = config["tournament"]
+        completed_count = config["completed_count"]
+        match_id_base = config["match_id_base"]
 
-    for idx, match_data in enumerate(mock_matches):
-        result = match_data["result"]
-
-        # Save Steam Match
-        match, created = Match.objects.update_or_create(
-            match_id=result["match_id"],
-            defaults={
-                "radiant_win": result["radiant_win"],
-                "duration": result["duration"],
-                "start_time": result["start_time"],
-                "game_mode": result["game_mode"],
-                "lobby_type": result["lobby_type"],
-                "league_id": 17929,  # DTX league
-            },
-        )
-
-        # Save PlayerMatchStats
-        for player_data in result["players"]:
-            steam_id = player_data["account_id"] + 76561197960265728
-            user = CustomUser.objects.filter(steamid=steam_id).first()
-
-            PlayerMatchStats.objects.update_or_create(
-                match=match,
-                steam_id=steam_id,
-                defaults={
-                    "user": user,
-                    "player_slot": player_data["player_slot"],
-                    "hero_id": player_data["hero_id"],
-                    "kills": player_data["kills"],
-                    "deaths": player_data["deaths"],
-                    "assists": player_data["assists"],
-                    "gold_per_min": player_data["gold_per_min"],
-                    "xp_per_min": player_data["xp_per_min"],
-                    "last_hits": player_data["last_hits"],
-                    "denies": player_data["denies"],
-                    "hero_damage": player_data["hero_damage"],
-                    "tower_damage": player_data["tower_damage"],
-                    "hero_healing": player_data["hero_healing"],
-                },
+        teams = list(tournament.teams.all()[:4])
+        if len(teams) < 4:
+            print(
+                f"Tournament '{tournament.name}' needs 4 teams, has {len(teams)}, skipping..."
             )
+            continue
 
-        # Determine teams for this game based on bracket position
-        bracket_info = bracket_structure[idx]
-        radiant_win = result["radiant_win"]
+        # Generate mock matches only if we need completed games
+        mock_matches = []
+        if completed_count > 0:
+            try:
+                mock_matches = generate_mock_matches_for_tournament(tournament)
+            except ValueError as e:
+                print(f"Failed to generate matches for {tournament.name}: {e}")
+                continue
 
-        if idx == 0:  # Winners R1 Match 1
-            radiant_team, dire_team = teams[0], teams[1]
-        elif idx == 1:  # Winners R1 Match 2
-            radiant_team, dire_team = teams[2], teams[3]
-        elif idx == 2:  # Losers R1
-            radiant_team = match_results[0][3]  # Loser of match 0
-            dire_team = match_results[1][3]  # Loser of match 1
-        elif idx == 3:  # Winners Final
-            radiant_team = match_results[0][2]  # Winner of match 0
-            dire_team = match_results[1][2]  # Winner of match 1
-        elif idx == 4:  # Losers Final
-            radiant_team = match_results[2][2]  # Winner of Losers R1
-            dire_team = match_results[3][3]  # Loser of Winners Final
-        elif idx == 5:  # Grand Final
-            radiant_team = match_results[3][2]  # Winner of Winners Final
-            dire_team = match_results[4][2]  # Winner of Losers Final
-        elif idx == 6:  # Grand Final Reset
-            radiant_team = match_results[3][2]  # Winner of Winners Final
-            dire_team = match_results[4][2]  # Winner of Losers Final
+        games = []
+        match_results = []  # (radiant_team, dire_team, winner, loser)
 
-        winner = radiant_team if radiant_win else dire_team
-        loser = dire_team if radiant_win else radiant_team
-        match_results.append((radiant_team, dire_team, winner, loser))
+        for idx, bracket_info in enumerate(bracket_structure):
+            is_completed = idx < completed_count
 
-        # Create Game object (bracket slot)
-        game = Game.objects.create(
-            tournament=tournament,
-            round=bracket_info["round"],
-            bracket_type=bracket_info["bracket_type"],
-            position=bracket_info["position"],
-            radiant_team=radiant_team,
-            dire_team=dire_team,
-            winning_team=winner,
-            gameid=result["match_id"],
-            status="completed",
+            # Determine teams based on bracket position
+            # Only assign teams to later rounds if their source games are COMPLETED
+            if idx == 0:  # Winners R1 Match 1
+                radiant_team, dire_team = teams[0], teams[1]
+            elif idx == 1:  # Winners R1 Match 2
+                radiant_team, dire_team = teams[2], teams[3]
+            elif idx == 2:  # Losers R1 - needs games 0 and 1 completed
+                if completed_count >= 2 and len(match_results) >= 2:
+                    radiant_team = match_results[0][3]  # Loser of match 0
+                    dire_team = match_results[1][3]  # Loser of match 1
+                else:
+                    radiant_team, dire_team = None, None
+            elif idx == 3:  # Winners Final - needs games 0 and 1 completed
+                if completed_count >= 2 and len(match_results) >= 2:
+                    radiant_team = match_results[0][2]  # Winner of match 0
+                    dire_team = match_results[1][2]  # Winner of match 1
+                else:
+                    radiant_team, dire_team = None, None
+            elif idx == 4:  # Losers Final - needs games 2 and 3 completed
+                if completed_count >= 4 and len(match_results) >= 4:
+                    radiant_team = match_results[2][2]  # Winner of Losers R1
+                    dire_team = match_results[3][3]  # Loser of Winners Final
+                else:
+                    radiant_team, dire_team = None, None
+            elif idx == 5:  # Grand Final - needs games 3 and 4 completed
+                if completed_count >= 5 and len(match_results) >= 5:
+                    radiant_team = match_results[3][2]  # Winner of Winners Final
+                    dire_team = match_results[4][2]  # Winner of Losers Final
+                else:
+                    radiant_team, dire_team = None, None
+
+            # Handle completed games with Steam match data
+            winner = None
+            gameid = None
+
+            if is_completed and idx < len(mock_matches):
+                result = mock_matches[idx]["result"]
+                gameid = match_id_base + idx
+                radiant_win = result["radiant_win"]
+
+                # Save Steam Match
+                match, _ = Match.objects.update_or_create(
+                    match_id=gameid,
+                    defaults={
+                        "radiant_win": radiant_win,
+                        "duration": result["duration"],
+                        "start_time": result["start_time"],
+                        "game_mode": result["game_mode"],
+                        "lobby_type": result["lobby_type"],
+                        "league_id": 17929,
+                    },
+                )
+
+                # Save PlayerMatchStats
+                for player_data in result["players"]:
+                    steam_id = player_data["account_id"] + 76561197960265728
+                    user = CustomUser.objects.filter(steamid=steam_id).first()
+
+                    PlayerMatchStats.objects.update_or_create(
+                        match=match,
+                        steam_id=steam_id,
+                        defaults={
+                            "user": user,
+                            "player_slot": player_data["player_slot"],
+                            "hero_id": player_data["hero_id"],
+                            "kills": player_data["kills"],
+                            "deaths": player_data["deaths"],
+                            "assists": player_data["assists"],
+                            "gold_per_min": player_data["gold_per_min"],
+                            "xp_per_min": player_data["xp_per_min"],
+                            "last_hits": player_data["last_hits"],
+                            "denies": player_data["denies"],
+                            "hero_damage": player_data["hero_damage"],
+                            "tower_damage": player_data["tower_damage"],
+                            "hero_healing": player_data["hero_healing"],
+                        },
+                    )
+
+                winner = radiant_team if radiant_win else dire_team
+                loser = dire_team if radiant_win else radiant_team
+                match_results.append((radiant_team, dire_team, winner, loser))
+            # For pending games, no need to track placeholder results
+            # Teams for later rounds will be determined when games are actually completed
+
+            # Create Game object
+            game = Game.objects.create(
+                tournament=tournament,
+                round=bracket_info["round"],
+                bracket_type=bracket_info["bracket_type"],
+                position=bracket_info["position"],
+                elimination_type="double",  # All our test brackets are double elim
+                radiant_team=radiant_team,
+                dire_team=dire_team,
+                winning_team=winner if is_completed else None,
+                gameid=gameid,
+                status="completed" if is_completed else "pending",
+            )
+            games.append(game)
+
+        # Set up next_game links for bracket flow
+        if len(games) >= 6:
+            games[0].next_game = games[3]
+            games[0].next_game_slot = "radiant"
+            games[0].save()
+
+            games[1].next_game = games[3]
+            games[1].next_game_slot = "dire"
+            games[1].save()
+
+            games[2].next_game = games[4]
+            games[2].next_game_slot = "radiant"
+            games[2].save()
+
+            games[3].next_game = games[5]
+            games[3].next_game_slot = "radiant"
+            games[3].save()
+
+            games[4].next_game = games[5]
+            games[4].next_game_slot = "dire"
+            games[4].save()
+
+            # Set up loser_next_game links for double elimination
+            # Winners R1 M1 loser -> Losers R1 as radiant
+            games[0].loser_next_game = games[2]
+            games[0].loser_next_game_slot = "radiant"
+            games[0].save()
+
+            # Winners R1 M2 loser -> Losers R1 as dire
+            games[1].loser_next_game = games[2]
+            games[1].loser_next_game_slot = "dire"
+            games[1].save()
+
+            # Winners Final loser -> Losers Final as dire
+            games[3].loser_next_game = games[4]
+            games[3].loser_next_game_slot = "dire"
+            games[3].save()
+
+        completed_games = len([g for g in games if g.status == "completed"])
+        pending_games = len([g for g in games if g.status == "pending"])
+        print(
+            f"Tournament '{tournament.name}': {completed_games} completed, {pending_games} pending games"
         )
-        games.append(game)
-        saved_count += 1
-        print(f"Saved match {result['match_id']} -> Game {game.pk}")
 
-    # Set up next_game links for bracket flow
-    if len(games) >= 6:
-        # Winners R1 → Winners Final
-        games[0].next_game = games[3]
-        games[0].next_game_slot = "radiant"
-        games[0].save()
+    # Flush Redis cache to ensure bracket data is fresh
+    _flush_redis_cache()
 
-        games[1].next_game = games[3]
-        games[1].next_game_slot = "dire"
-        games[1].save()
 
-        # Winners R1 losers → Losers R1
-        # (losers flow handled implicitly by team assignment)
+def _flush_redis_cache():
+    """Flush Redis cache to ensure fresh data after population."""
+    try:
+        import redis
+        from django.conf import settings
 
-        # Losers R1 → Losers Final
-        games[2].next_game = games[4]
-        games[2].next_game_slot = "radiant"
-        games[2].save()
-
-        # Winners Final winner → Grand Final
-        games[3].next_game = games[5]
-        games[3].next_game_slot = "radiant"
-        games[3].save()
-
-        # Winners Final loser → Losers Final
-        # (handled by team assignment)
-
-        # Losers Final → Grand Final
-        games[4].next_game = games[5]
-        games[4].next_game_slot = "dire"
-        games[4].save()
-
-        # Grand Final → Grand Final Reset (if exists)
-        if len(games) >= 7:
-            games[5].next_game = games[6]
-            games[5].save()
-
-    print(
-        f"Populated {saved_count} mock Steam matches and Games for tournament '{tournament.name}'"
-    )
+        redis_url = getattr(settings, "CACHEOPS_REDIS", None)
+        if redis_url:
+            # Parse redis URL or use dict config
+            if isinstance(redis_url, str):
+                client = redis.from_url(redis_url)
+            else:
+                client = redis.Redis(**redis_url)
+            client.flushall()
+            print("Redis cache flushed successfully")
+        else:
+            print("No CACHEOPS_REDIS configured, skipping cache flush")
+    except Exception as e:
+        print(f"Warning: Failed to flush Redis cache: {e}")
 
 
 def populate_all(force=False):
