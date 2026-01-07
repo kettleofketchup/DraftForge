@@ -83,6 +83,21 @@ Aggregated player statistics per league:
 - `total_gpm`, `total_xpm` - Cumulative economy stats
 - Computed properties: `win_rate`, `avg_kda`, `avg_gpm`, `avg_xpm`
 
+### Draft
+Draft configuration for tournaments:
+
+- `tournament` - Associated tournament
+- `draft_style` - Style: `snake`, `normal`, or `shuffle`
+
+### DraftRound
+Individual picks in a draft:
+
+- `captain` - Captain making the pick
+- `choice` - Player selected
+- `pick_number` - Sequential pick number
+- `was_tie` - Whether tie-breaking occurred (shuffle only)
+- `tie_roll_data` - JSON with tie resolution details
+
 ## API Endpoints
 
 All API endpoints are prefixed with `/api/`.

@@ -313,6 +313,8 @@ class TeamSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False,
     )
+    total_mmr = serializers.SerializerMethodField()
+
     tournament_id = serializers.PrimaryKeyRelatedField(
         source="tournament",
         many=False,
@@ -321,6 +323,16 @@ class TeamSerializer(serializers.ModelSerializer):
         read_only=False,
         required=False,
     )
+
+    def get_total_mmr(self, obj):
+        """Sum of captain MMR + all member MMRs (excluding captain from members to avoid double-counting)."""
+        total = 0
+        if obj.captain and obj.captain.mmr:
+            total += obj.captain.mmr
+        for member in obj.members.all():
+            if member.mmr and member.pk != getattr(obj.captain, "pk", None):
+                total += member.mmr
+        return total
 
     class Meta:
         model = Team
@@ -339,6 +351,7 @@ class TeamSerializer(serializers.ModelSerializer):
             "draft_order",
             "current_points",
             "tournament",
+            "total_mmr",
         )
 
 

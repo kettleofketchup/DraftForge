@@ -61,6 +61,8 @@ nav:
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quick-start.md
+  - Features:
+      - Draft System: features/draft.md
   - Architecture:
       - Overview: architecture/overview.md
       - Docker Setup: architecture/docker.md

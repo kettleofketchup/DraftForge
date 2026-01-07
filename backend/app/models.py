@@ -56,8 +56,9 @@ class PositionEnum(IntEnum):
 
 # Enum for Dota2 positions
 class DraftStyles(StrEnum):
-    snake = ("snake",)
-    normal = ("normal",)
+    snake = "snake"
+    normal = "normal"
+    shuffle = "shuffle"
 
 
 class CustomUser(AbstractUser):
@@ -458,13 +459,14 @@ class Draft(models.Model):
     DRAFT_STYLE_CHOICES = [
         ("snake", "Snake"),
         ("normal", "Normal"),
+        ("shuffle", "Shuffle"),
     ]
 
     draft_style = models.CharField(
         max_length=10,
         choices=DRAFT_STYLE_CHOICES,
         default="snake",
-        help_text="Draft style: snake or normal",
+        help_text="Draft style: snake, normal, or shuffle",
     )
 
     def __str__(self):
@@ -746,6 +748,40 @@ class Draft(models.Model):
             logging.error("No teams found for tournament")
             return
 
+        # For shuffle draft, only create the first round
+        if self.draft_style == "shuffle":
+            # Calculate captain MMRs to determine first pick
+            team_mmrs = [(t, t.captain.mmr or 0) for t in teams]
+            min_mmr = min(mmr for _, mmr in team_mmrs)
+            tied_teams = [t for t, mmr in team_mmrs if mmr == min_mmr]
+
+            tie_resolution = None
+            if len(tied_teams) > 1:
+                winner, roll_rounds = self.roll_until_winner(tied_teams)
+                tie_resolution = {
+                    "tied_teams": [
+                        {"id": t.id, "name": t.name, "mmr": t.captain.mmr or 0}
+                        for t in tied_teams
+                    ],
+                    "roll_rounds": roll_rounds,
+                    "winner_id": winner.id,
+                }
+                first_team = winner
+            else:
+                first_team = tied_teams[0]
+
+            DraftRound.objects.create(
+                draft=self,
+                captain=first_team.captain,
+                pick_number=1,
+                pick_phase=1,
+                was_tie=bool(tie_resolution),
+                tie_roll_data=tie_resolution,
+            )
+            logging.debug(f"Created first shuffle draft round for {first_team.name}")
+            self.save()
+            return
+
         num_teams = len(teams)
         picks_per_team = 4  # Each team picks 4 players after captain
         total_picks = num_teams * picks_per_team
@@ -812,6 +848,104 @@ class Draft(models.Model):
             return True
         return False
 
+    def roll_until_winner(self, tied_teams):
+        """
+        Roll dice until exactly one winner emerges.
+
+        Args:
+            tied_teams: List of Team objects that are tied
+
+        Returns:
+            tuple: (winner_team, roll_rounds) where roll_rounds is a list of
+                   lists containing {team_id, roll} dicts for each round
+        """
+        import random
+
+        roll_rounds = []
+        remaining = list(tied_teams)
+
+        while len(remaining) > 1:
+            rolls = [{"team_id": t.id, "roll": random.randint(1, 6)} for t in remaining]
+            roll_rounds.append(rolls)
+
+            max_roll = max(r["roll"] for r in rolls)
+            remaining = [
+                t
+                for t in remaining
+                if next(r["roll"] for r in rolls if r["team_id"] == t.id) == max_roll
+            ]
+
+        return remaining[0], roll_rounds
+
+    def create_next_shuffle_round(self):
+        """
+        Calculate which team picks next based on lowest total MMR.
+        Creates a new DraftRound for the next pick.
+
+        Returns:
+            dict with keys:
+            - round: The created DraftRound
+            - team_mmr: The MMR of the team that will pick
+            - tie_resolution: Dict with tie info if a tie occurred, else None
+        """
+        teams = list(self.tournament.teams.all())
+
+        if not teams:
+            raise ValueError("No teams in tournament")
+
+        # Calculate current total MMR for each team
+        team_mmrs = []
+        for team in teams:
+            total = team.captain.mmr or 0
+            for member in team.members.exclude(id=team.captain_id):
+                total += member.mmr or 0
+            team_mmrs.append({"team": team, "mmr": total})
+
+        # Find lowest MMR
+        min_mmr = min(t["mmr"] for t in team_mmrs)
+        tied_teams_data = [t for t in team_mmrs if t["mmr"] == min_mmr]
+
+        # Handle tie with random rolls
+        tie_resolution = None
+        if len(tied_teams_data) > 1:
+            tied_teams = [t["team"] for t in tied_teams_data]
+            winner, roll_rounds = self.roll_until_winner(tied_teams)
+            tie_resolution = {
+                "tied_teams": [
+                    {"id": t["team"].id, "name": t["team"].name, "mmr": t["mmr"]}
+                    for t in tied_teams_data
+                ],
+                "roll_rounds": roll_rounds,
+                "winner_id": winner.id,
+            }
+            next_team = winner
+            next_mmr = next(
+                t["mmr"] for t in tied_teams_data if t["team"].id == winner.id
+            )
+        else:
+            next_team = tied_teams_data[0]["team"]
+            next_mmr = tied_teams_data[0]["mmr"]
+
+        # Create the DraftRound
+        pick_number = self.draft_rounds.count() + 1
+        num_teams = len(teams)
+        phase = (pick_number - 1) // num_teams + 1
+
+        draft_round = DraftRound.objects.create(
+            draft=self,
+            captain=next_team.captain,
+            pick_number=pick_number,
+            pick_phase=phase,
+            was_tie=bool(tie_resolution),
+            tie_roll_data=tie_resolution,
+        )
+
+        return {
+            "round": draft_round,
+            "team_mmr": next_mmr,
+            "tie_resolution": tie_resolution,
+        }
+
 
 class DraftRound(models.Model):
     draft = models.ForeignKey(
@@ -839,6 +973,17 @@ class DraftRound(models.Model):
         on_delete=models.CASCADE,
         blank=True,
         null=True,
+    )
+
+    # Tie tracking fields for shuffle draft mode
+    was_tie = models.BooleanField(
+        default=False,
+        help_text="Whether this round was determined by a tie-breaker roll",
+    )
+    tie_roll_data = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Stores tie resolution: {tied_teams, roll_rounds, winner_id}",
     )
 
     def save(self, *args, **kwargs):
