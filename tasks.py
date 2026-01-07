@@ -42,7 +42,16 @@ ns.add_collection(ns_docs, "docs")
 from dotenv import load_dotenv
 
 
+def docker_stop_all(c):
+    """Stop and remove all Docker containers."""
+    result = c.run("docker ps -aq", hide=True, warn=True)
+    if result.stdout.strip():
+        c.run("docker stop $(docker ps -aq)", warn=True)
+        c.run("docker rm $(docker ps -aq)", warn=True)
+
+
 def docker_compose_down(c, compose_file: Path):
+    docker_stop_all(c)
     with c.cd(paths.PROJECT_PATH):
         cmd = (
             f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
@@ -88,6 +97,7 @@ def docker_compose_restart(c, compose_file: Path):
 
 
 def docker_compose_stop(c, compose_file: Path):
+    docker_stop_all(c)
     with c.cd(paths.PROJECT_PATH):
         cmd = (
             f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
