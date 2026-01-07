@@ -108,3 +108,67 @@ class RollUntilWinnerTest(TestCase):
 
         self.assertEqual(winner.pk, self.team2.pk)
         self.assertEqual(len(roll_rounds), 2)
+
+
+class GetLowestMmrTeamTest(TestCase):
+    """Test get_lowest_mmr_team function."""
+
+    def setUp(self):
+        """Create test teams with different MMRs."""
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament", date_played=date.today()
+        )
+
+        self.captain1 = CustomUser.objects.create_user(
+            username="cap1", password="test", mmr=5000
+        )
+        self.captain2 = CustomUser.objects.create_user(
+            username="cap2", password="test", mmr=4000
+        )
+        self.captain3 = CustomUser.objects.create_user(
+            username="cap3", password="test", mmr=6000
+        )
+
+        self.team1 = Team.objects.create(
+            name="Team 1", captain=self.captain1, tournament=self.tournament
+        )
+        self.team1.members.add(self.captain1)
+
+        self.team2 = Team.objects.create(
+            name="Team 2", captain=self.captain2, tournament=self.tournament
+        )
+        self.team2.members.add(self.captain2)
+
+        self.team3 = Team.objects.create(
+            name="Team 3", captain=self.captain3, tournament=self.tournament
+        )
+        self.team3.members.add(self.captain3)
+
+    def test_returns_lowest_mmr_team(self):
+        """Returns team with lowest total MMR."""
+        from app.functions.shuffle_draft import get_lowest_mmr_team
+
+        teams = [self.team1, self.team2, self.team3]
+        winner, tie_data = get_lowest_mmr_team(teams)
+
+        self.assertEqual(winner.pk, self.team2.pk)  # 4000 MMR
+        self.assertIsNone(tie_data)
+
+    @patch("app.functions.shuffle_draft.roll_until_winner")
+    def test_handles_tie_with_roll(self, mock_roll):
+        """Calls roll_until_winner when teams tie."""
+        from app.functions.shuffle_draft import get_lowest_mmr_team
+
+        # Make team1 and team2 have same MMR
+        self.captain1.mmr = 4000
+        self.captain1.save()
+
+        mock_roll.return_value = (self.team1, [[{"team_id": self.team1.id, "roll": 5}]])
+
+        teams = [self.team1, self.team2, self.team3]
+        winner, tie_data = get_lowest_mmr_team(teams)
+
+        self.assertEqual(winner.pk, self.team1.pk)
+        self.assertIsNotNone(tie_data)
+        self.assertEqual(len(tie_data["tied_teams"]), 2)
+        mock_roll.assert_called_once()

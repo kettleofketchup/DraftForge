@@ -45,3 +45,31 @@ def roll_until_winner(teams: list) -> tuple:
         ]
 
     return remaining[0], roll_rounds
+
+
+def get_lowest_mmr_team(teams: list) -> tuple:
+    """
+    Find team with lowest total MMR.
+
+    Args:
+        teams: List of Team model instances
+
+    Returns:
+        Tuple of (winner_team, tie_resolution_data or None)
+    """
+    team_mmrs = [(team, get_team_total_mmr(team)) for team in teams]
+    min_mmr = min(mmr for _, mmr in team_mmrs)
+    tied = [t for t, mmr in team_mmrs if mmr == min_mmr]
+
+    if len(tied) > 1:
+        winner, roll_rounds = roll_until_winner(tied)
+        tie_data = {
+            "tied_teams": [
+                {"id": t.id, "name": t.name, "mmr": get_team_total_mmr(t)} for t in tied
+            ],
+            "roll_rounds": roll_rounds,
+            "winner_id": winner.id,
+        }
+        return winner, tie_data
+
+    return tied[0], None
