@@ -813,6 +813,35 @@ class Draft(models.Model):
             return True
         return False
 
+    def roll_until_winner(self, tied_teams):
+        """
+        Roll dice until exactly one winner emerges.
+
+        Args:
+            tied_teams: List of Team objects that are tied
+
+        Returns:
+            tuple: (winner_team, roll_rounds) where roll_rounds is a list of
+                   lists containing {team_id, roll} dicts for each round
+        """
+        import random
+
+        roll_rounds = []
+        remaining = list(tied_teams)
+
+        while len(remaining) > 1:
+            rolls = [{"team_id": t.id, "roll": random.randint(1, 6)} for t in remaining]
+            roll_rounds.append(rolls)
+
+            max_roll = max(r["roll"] for r in rolls)
+            remaining = [
+                t
+                for t in remaining
+                if next(r["roll"] for r in rolls if r["team_id"] == t.id) == max_roll
+            ]
+
+        return remaining[0], roll_rounds
+
 
 class DraftRound(models.Model):
     draft = models.ForeignKey(
