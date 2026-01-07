@@ -23,7 +23,7 @@ export const BracketMatchSchema = z.object({
   dire_team: z.any().optional(),       // TeamType from API
   winning_team: z.any().optional(),    // TeamType from API
   status: MatchStatusSchema,
-  gameid: z.number().optional(),       // Steam match ID
+  gameid: z.number().nullable(),        // Steam match ID (null for pending games)
   next_game: z.number().nullable().optional(),    // FK to next game for winner
   next_game_slot: z.enum(['radiant', 'dire']).nullable().optional(),
   loser_next_game: z.number().nullable().optional(),    // FK to next game for loser

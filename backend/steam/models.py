@@ -1,4 +1,10 @@
+import logging
+
 from django.db import models
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+logger = logging.getLogger(__name__)
 
 
 class Match(models.Model):
@@ -81,3 +87,44 @@ class GameMatchSuggestion(models.Model):
 
     def __str__(self):
         return f"Game {self.game_id} -> Match {self.match_id} ({self.confidence_score:.0%})"
+
+
+@receiver(post_save, sender=Match)
+def invalidate_game_cache_on_match_save(sender, instance, **kwargs):
+    """
+    Invalidate Game cache when a Steam Match is created or updated.
+    This ensures bracket data stays fresh when match details change.
+    """
+    try:
+        from cacheops import invalidate_model, invalidate_obj
+
+        # Import Game here to avoid circular imports
+        from app.models import Game
+
+        # Find any Game objects linked to this match via gameid
+        linked_games = Game.objects.filter(gameid=instance.match_id)
+        for game in linked_games:
+            invalidate_obj(game)
+            logger.debug(
+                f"Invalidated cache for Game {game.pk} linked to Match {instance.match_id}"
+            )
+
+        # Also invalidate the tournament cache if games were found
+        if linked_games.exists():
+            from app.models import Tournament
+
+            tournament_ids = linked_games.values_list(
+                "tournament_id", flat=True
+            ).distinct()
+            for tournament_id in tournament_ids:
+                try:
+                    tournament = Tournament.objects.get(pk=tournament_id)
+                    invalidate_obj(tournament)
+                    logger.debug(f"Invalidated cache for Tournament {tournament_id}")
+                except Tournament.DoesNotExist:
+                    pass
+    except ImportError:
+        # cacheops not installed or not configured
+        pass
+    except Exception as e:
+        logger.warning(f"Failed to invalidate cache for Match {instance.match_id}: {e}")

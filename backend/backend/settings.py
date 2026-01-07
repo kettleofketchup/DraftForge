@@ -254,7 +254,9 @@ if not env_bool("DISABLE_CACHE"):
         "app.draft": {"ops": "all", "timeout": 60 * 60},
         "app.game": {"ops": "all", "timeout": 60 * 60},
         "app.draftround": {"ops": "all", "timeout": 60 * 60},
-        # Add more as needed
+        # Steam match data - cached with shorter timeout for freshness
+        "steam.match": {"ops": "all", "timeout": 30 * 60},
+        "steam.playermatchstats": {"ops": "all", "timeout": 30 * 60},
     }
 else:
     # Disable all caching
