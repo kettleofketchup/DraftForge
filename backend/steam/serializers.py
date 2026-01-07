@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from .constants import LEAGUE_ID
-from .models import Match, PlayerMatchStats
+from .models import LeaguePlayerStats, Match, PlayerMatchStats
 
 
 class PlayerMatchStatsSerializer(serializers.ModelSerializer):
@@ -147,3 +147,71 @@ class GameMatchSuggestionSerializer(serializers.Serializer):
     player_overlap = serializers.IntegerField()
     auto_linked = serializers.BooleanField()
     created_at = serializers.DateTimeField()
+
+
+# =============================================================================
+# League Stats Serializers
+# =============================================================================
+
+
+class LeaguePlayerStatsSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    avatar = serializers.CharField(source="user.avatar", read_only=True)
+    base_mmr = serializers.IntegerField(source="user.mmr", read_only=True)
+    league_mmr = serializers.IntegerField(source="user.league_mmr", read_only=True)
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+
+    class Meta:
+        model = LeaguePlayerStats
+        fields = [
+            "user_id",
+            "username",
+            "avatar",
+            "base_mmr",
+            "league_mmr",
+            "league_id",
+            "games_played",
+            "wins",
+            "losses",
+            "win_rate",
+            "avg_kills",
+            "avg_deaths",
+            "avg_assists",
+            "avg_gpm",
+            "avg_xpm",
+            "mmr_adjustment",
+            "last_updated",
+        ]
+
+
+class LeaderboardSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    avatar = serializers.CharField(source="user.avatar", read_only=True)
+    base_mmr = serializers.IntegerField(source="user.mmr", read_only=True)
+    league_mmr = serializers.IntegerField(source="user.league_mmr", read_only=True)
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+    avg_kda = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LeaguePlayerStats
+        fields = [
+            "user_id",
+            "username",
+            "avatar",
+            "base_mmr",
+            "league_mmr",
+            "mmr_adjustment",
+            "games_played",
+            "win_rate",
+            "avg_kills",
+            "avg_deaths",
+            "avg_assists",
+            "avg_kda",
+            "avg_gpm",
+            "avg_xpm",
+        ]
+
+    def get_avg_kda(self, obj):
+        if obj.avg_deaths == 0:
+            return obj.avg_kills + obj.avg_assists
+        return round((obj.avg_kills + obj.avg_assists) / obj.avg_deaths, 2)
