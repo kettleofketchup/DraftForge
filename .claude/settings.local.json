@@ -117,7 +117,20 @@
       "mcp__chrome-devtools__get_console_message",
       "Skill(skill-creator)",
       "Bash(wc:*)",
-      "Bash(gh pr list:*)"
+      "Bash(gh pr list:*)",
+      "Bash(gh pr close:*)",
+      "Bash(inv dev.sync-users:*)",
+      "Bash(inv dev.sync-tournaments:*)",
+      "Bash(inv dev.sync-all:*)",
+      "Bash(inv dev.up:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(PYTHONPATH=backend python -c:*)",
+      "Bash(timeout 60 python:*)",
+      "Bash(timeout 60 DISABLE_CACHE=true python manage.py test:*)",
+      "Bash(timeout 120 DISABLE_CACHE=true python manage.py test:*)",
+      "Bash(inv test.run:*)",
+      "mcp__chrome-devtools__select_page",
+      "Bash(gh pr:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

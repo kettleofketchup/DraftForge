@@ -70,7 +70,7 @@ class TestTournamentConfig(BaseModel):
         default="not_started",
         description="Draft progress: not_started=no draft, in_progress=some picks, completed=all picks",
     )
-    draft_style: Literal["snake", "normal"] = Field(default="snake")
+    draft_style: Literal["snake", "normal", "shuffle"] = Field(default="snake")
     picks_completed: int = Field(
         default=0,
         description="Number of draft picks already made (0 = first captain's turn)",
@@ -298,6 +298,30 @@ TEST_TOURNAMENTS: List[TestTournamentConfig] = [
         draft_state="completed",
         picks_completed=16,
         bracket_games_completed=6,
+    ),
+    TestTournamentConfig(
+        key="shuffle_draft_not_started",
+        name="Shuffle Draft Not Started",
+        description="Tournament with shuffle draft style ready to start. Tests shuffle draft initialization.",
+        draft_state="not_started",
+        draft_style="shuffle",
+    ),
+    TestTournamentConfig(
+        key="shuffle_draft_in_progress",
+        name="Shuffle Draft In Progress",
+        description="Active shuffle draft with 2 picks made. Tests MMR-based pick order and tie resolution.",
+        draft_state="in_progress",
+        draft_style="shuffle",
+        picks_completed=2,
+    ),
+    TestTournamentConfig(
+        key="shuffle_draft_captain_turn",
+        name="Shuffle Draft Captain Turn",
+        description="Shuffle draft where test user is captain with pending pick. Tests captain auth with shuffle.",
+        draft_state="in_progress",
+        draft_style="shuffle",
+        picks_completed=0,
+        first_captain_is_test_user=True,
     ),
 ]
 
