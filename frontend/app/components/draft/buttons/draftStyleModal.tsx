@@ -41,7 +41,7 @@ export const DraftStyleModal: React.FC = () => {
 
   const setDraft = useUserStore((state) => state.setDraft);
   const [open, setOpen] = useState(false);
-  const [selectedStyle, setSelectedStyle] = useState<'snake' | 'normal'>(
+  const [selectedStyle, setSelectedStyle] = useState<'snake' | 'normal' | 'shuffle'>(
     draft?.draft_style || 'snake',
   );
 
@@ -60,7 +60,7 @@ export const DraftStyleModal: React.FC = () => {
 
   useEffect(() => {}, [draftPredictedMMRs]);
 
-  const handleStyleChange = async (newStyle: 'snake' | 'normal') => {
+  const handleStyleChange = async (newStyle: 'snake' | 'normal' | 'shuffle') => {
     if (!draft) return;
 
     try {
@@ -72,7 +72,7 @@ export const DraftStyleModal: React.FC = () => {
       const updatedDraft: DraftType = {
         ...draft,
         pk: draft.pk,
-        draft_style: newStyle as 'snake' | 'normal',
+        draft_style: newStyle as 'snake' | 'normal' | 'shuffle',
       };
 
       await updateDraftStyleHook({
@@ -145,7 +145,7 @@ export const DraftStyleModal: React.FC = () => {
         onClick={() => handleStyleChange(selectedStyle)}
         disabled={selectedStyle === draft.draft_style}
       >
-        Apply {selectedStyle === 'snake' ? 'Snake' : 'Normal'} Draft
+        Apply {selectedStyle === 'snake' ? 'Snake' : selectedStyle === 'normal' ? 'Normal' : 'Shuffle'} Draft
       </Button>
     );
   };
@@ -182,6 +182,14 @@ export const DraftStyleModal: React.FC = () => {
                     <span className="font-medium">Normal Draft</span>
                     <span className="text-xs text-muted-foreground">
                       1st, 2nd, 3rd, 4th, 1st, 2nd, 3rd, 4th...
+                    </span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="shuffle">
+                  <div className="flex flex-col">
+                    <span className="font-medium">Shuffle Draft</span>
+                    <span className="text-xs text-muted-foreground">
+                      Lowest MMR team picks first, recalculated each round
                     </span>
                   </div>
                 </SelectItem>
@@ -270,6 +278,20 @@ export const DraftStyleModal: React.FC = () => {
                 )}{' '}
                 MMR
               </div>
+            </div>
+
+            {/* Shuffle Draft Stats */}
+            <div className="rounded-lg border p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-purple-600">Shuffle Draft</h4>
+                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                  Dynamic balance
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Pick order adjusts after each selection to favor the lowest MMR team.
+                Cannot predict final balance - depends on captain choices.
+              </p>
             </div>
 
             {/* Recommendation */}

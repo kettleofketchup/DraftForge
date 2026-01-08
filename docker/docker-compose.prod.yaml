@@ -42,3 +42,21 @@ services:
     depends_on:
       - frontend
       - backend
+
+  celery-worker:
+    image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
+    command: celery -A config worker -l info
+    env_file: "./docker/.env.prod"
+    depends_on:
+      - redis
+      - backend
+    restart: always
+
+  celery-beat:
+    image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
+    command: celery -A config beat -l info
+    env_file: "./docker/.env.prod"
+    depends_on:
+      - redis
+      - celery-worker
+    restart: always

@@ -32,6 +32,24 @@ inv test.headless
 
 Runs all tests in headless mode (CI/CD).
 
+### Run Specific Test Specs
+
+```bash
+inv test.spec --spec drafts      # Run draft tests only
+inv test.spec --spec tournament  # Run tournament tests
+inv test.spec --spec navigation  # Run navigation tests
+```
+
+Available spec shortcuts:
+
+| Shortcut | Pattern |
+|----------|---------|
+| `drafts` | `tests/cypress/e2e/07-draft/**/*.cy.ts` |
+| `tournament` | `tests/cypress/e2e/04-tournament/**/*.cy.ts` |
+| `tournaments` | `tests/cypress/e2e/03-tournaments/**/*.cy.ts` |
+| `navigation` | `tests/cypress/e2e/01-*.cy.ts` |
+| `mobile` | `tests/cypress/e2e/06-mobile/**/*.cy.ts` |
+
 ## Test Location
 
 ```
@@ -46,9 +64,33 @@ frontend/tests/cypress/
 Custom Cypress commands for authentication:
 
 ```typescript
-cy.loginUser()   // Regular user
-cy.loginStaff()  // Staff user
-cy.loginAdmin()  # Admin user
+cy.loginUser()           // Regular user
+cy.loginStaff()          // Staff user
+cy.loginAdmin()          // Admin user
+cy.loginAsUser(userPk)   // Login as specific user by PK
+```
+
+### Login As User
+
+For testing captain-specific flows, use `loginAsUser` to login as any user:
+
+```typescript
+// Login as captain to test draft picks
+cy.loginAsUser(captainPk).then(() => {
+  cy.visit(`/tournament/${tournamentPk}?draft=open`)
+  // Draft modal auto-opens, captain can pick
+})
+```
+
+### Get Tournament by Key
+
+For tests that need specific tournament configurations:
+
+```typescript
+cy.getTournamentByKey('captain_draft_test').then((response) => {
+  const tournamentPk = response.body.pk
+  cy.visit(`/tournament/${tournamentPk}`)
+})
 ```
 
 ## API Testing Pattern

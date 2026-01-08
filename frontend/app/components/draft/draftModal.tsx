@@ -1,5 +1,6 @@
 import { ClipboardPen, EyeIcon } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -48,9 +49,22 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const draftIndex = useUserStore((state) => state.draftIndex);
   const setDraftIndex = useUserStore((state) => state.setDraftIndex);
   const live = useTournamentStore((state) => state.live);
-  const liveReload = useTournamentStore((state) => state.liveReload);
+  const autoAdvance = useTournamentStore((state) => state.autoAdvance);
   const [open, setOpen] = useState(live);
   const isStaff = useUserStore((state) => state.isStaff);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Auto-open modal when ?draft=open is in URL
+  useEffect(() => {
+    const draftParam = searchParams.get('draft');
+    if (draftParam === 'open') {
+      setOpen(true);
+      // Remove the param after opening to avoid re-opening on navigation
+      searchParams.delete('draft');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
   useEffect(() => {
     if (live) {
       setOpen(true);
@@ -75,22 +89,22 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     log.debug('Current round after update:', curDraftRound);
   };
   const onUpdate = useCallback(() => {
-    if (!liveReload) return;
-    if (liveReload) {
-      log.debug('Live view is enabled, refreshing draft and tournament');
+    if (!autoAdvance) return;
+    if (autoAdvance) {
+      log.debug('Auto advance is enabled, refreshing draft and tournament');
       refreshDraftHook({ draft, setDraft });
       refreshTournamentHook({ tournament, setTournament });
       setDraftRoundToLatest();
     }
-  }, [liveReload, draft, setDraft, tournament, setTournament]);
+  }, [autoAdvance, draft, setDraft, tournament, setTournament]);
 
   const draftLiveOptions = useMemo(
     () => ({
-      enabled: open && !!tournament?.draft?.pk && liveReload,
+      enabled: open && !!tournament?.draft?.pk && autoAdvance,
       interval: 3000, // Poll every 3 seconds when modal is open
       onUpdate,
     }),
-    [open, tournament?.draft?.pk, liveReload, onUpdate],
+    [open, tournament?.draft?.pk, autoAdvance, onUpdate],
   );
 
   const { isPolling, forceRefresh } = useDraftLive(draftLiveOptions);
@@ -192,7 +206,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const header = () => {
     return (
       <div className="flex flex-col gap-2">
-        <LiveView isPolling={liveReload} />
+        <LiveView isPolling={autoAdvance} />
         <DraftBalanceDisplay />
       </div>
     );

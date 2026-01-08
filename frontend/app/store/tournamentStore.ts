@@ -6,9 +6,9 @@ export interface TournamentState {
   setLive: (live: boolean) => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  liveReload: boolean;
-  setLiveReload: (liveReload: boolean) => void;
-  toggleLiveReload: () => void;
+  autoAdvance: boolean;
+  setAutoAdvance: (autoAdvance: boolean) => void;
+  toggleAutoAdvance: () => void;
   draftPredictedMMRs: DraftStyleMMRsAPIReturn;
   setDraftPredictedMMRs: (data: DraftStyleMMRsAPIReturn) => void;
   updateDraftPredictedMMRs: (draft_pk: number) => Promise<void>;
@@ -19,9 +19,9 @@ export const useTournamentStore = create<TournamentState>((set, get) => ({
   setLive: (live: boolean) => set({ live }),
   activeTab: 'players',
   setActiveTab: (tab: string) => set({ activeTab: tab }),
-  liveReload: false,
-  toggleLiveReload: () => get().setLiveReload(!get().liveReload),
-  setLiveReload: (liveReload: boolean) => set({ liveReload }),
+  autoAdvance: false,
+  toggleAutoAdvance: () => get().setAutoAdvance(!get().autoAdvance),
+  setAutoAdvance: (autoAdvance: boolean) => set({ autoAdvance }),
   draftPredictedMMRs: {} as DraftStyleMMRsAPIReturn,
   updateDraftPredictedMMRs: async (pk: number) => {
     try {

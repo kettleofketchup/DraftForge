@@ -2,6 +2,7 @@ import { useClickAway } from '@uidotdev/usehooks';
 import { LogOutIcon, UserPenIcon } from 'lucide-react';
 import React, { memo, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { DraftNotificationBadge } from '~/components/draft/DraftNotificationBadge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,7 +77,7 @@ export const ProfileButton: React.FC = () => {
       <DropdownMenu>
         <DropdownMenuTrigger>
           <div
-            className=" m-0 btn-circle avatar flex p-0 "
+            className=" m-0 btn-circle avatar flex p-0 relative"
             popoverTarget="popover-3"
             style={{ anchorName: '--anchor-3' } as React.CSSProperties}
             onClick={handleClick}
@@ -85,6 +86,7 @@ export const ProfileButton: React.FC = () => {
             <AvatarContainer>
               <UserAvatarImg user={currentUser} />
             </AvatarContainer>
+            <DraftNotificationBadge />
           </div>
         </DropdownMenuTrigger>
         <DropdownMenuContent>

@@ -344,3 +344,16 @@ CSRF_TRUSTED_ORIGINS = [
     "http://kettle.sh",
 ]
 AUTH_USER_MODEL = "app.CustomUser"
+
+# Celery Configuration
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/1")
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://redis:6379/1")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "UTC"
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 300  # 5 minutes
+
+# League Stats Configuration
+LEAGUE_MMR_MIN_GAMES = int(os.environ.get("LEAGUE_MMR_MIN_GAMES", "5"))
