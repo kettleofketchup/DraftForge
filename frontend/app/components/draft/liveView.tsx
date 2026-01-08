@@ -12,13 +12,13 @@ interface LiveViewProps {
 
 export const LiveView: React.FC<LiveViewProps> = ({ isPolling }) => {
   const tournament = useUserStore((state) => state.tournament);
-  const toggleLiveReload = useTournamentStore(
-    (state) => state.toggleLiveReload,
+  const toggleAutoAdvance = useTournamentStore(
+    (state) => state.toggleAutoAdvance,
   );
-  const liveReload = useTournamentStore((state) => state.liveReload);
-  useEffect(() => {}, [isPolling, liveReload]);
-  const liveReloadButtonClick = () => {
-    toggleLiveReload();
+  const autoAdvance = useTournamentStore((state) => state.autoAdvance);
+  useEffect(() => {}, [isPolling, autoAdvance]);
+  const autoAdvanceButtonClick = () => {
+    toggleAutoAdvance();
   };
   return (
     <div className="flex flex-col gap-2">
@@ -42,7 +42,7 @@ export const LiveView: React.FC<LiveViewProps> = ({ isPolling }) => {
         <motion.div
           initial={{ scale: 1 }}
           animate={{
-            scale: liveReload ? 1 : 1,
+            scale: autoAdvance ? 1 : 1,
           }}
           whileTap={{
             opacity: 0,
@@ -50,12 +50,12 @@ export const LiveView: React.FC<LiveViewProps> = ({ isPolling }) => {
           }}
         >
           <Button
-            onClick={liveReloadButtonClick}
+            onClick={autoAdvanceButtonClick}
             variant={'outline'}
             className="rounded-full"
           >
-            {liveReload ? <ToggleLeft /> : <ToggleRight />}
-            {isPolling ? 'Disable' : 'Enable'} Live Reload
+            {autoAdvance ? <ToggleLeft /> : <ToggleRight />}
+            Auto Advance: {isPolling ? 'ON' : 'OFF'}
           </Button>
         </motion.div>
       </div>
