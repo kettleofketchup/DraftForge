@@ -365,3 +365,77 @@ class DraftBuildRoundsIntegrationTest(TestCase):
         remaining = self.draft.draft_rounds.order_by("pick_number")[1:]
         for draft_round in remaining:
             self.assertIsNone(draft_round.captain)
+
+
+from rest_framework.test import APIClient
+
+
+class PickPlayerForRoundShuffleTest(TestCase):
+    """Test pick_player_for_round view with shuffle draft."""
+
+    def setUp(self):
+        """Create tournament, draft, and make API client."""
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament", date_played=date.today()
+        )
+
+        # Create staff user for API calls
+        self.staff = CustomUser.objects.create_user(
+            username="staff", password="test", is_staff=True
+        )
+
+        # Create captains and players
+        self.captain1 = CustomUser.objects.create_user(
+            username="cap1", password="test", mmr=5000
+        )
+        self.captain2 = CustomUser.objects.create_user(
+            username="cap2", password="test", mmr=4000
+        )
+        self.player1 = CustomUser.objects.create_user(
+            username="player1", password="test", mmr=3000
+        )
+        self.player2 = CustomUser.objects.create_user(
+            username="player2", password="test", mmr=2000
+        )
+
+        # Create teams
+        self.team1 = Team.objects.create(
+            name="Team 1", captain=self.captain1, tournament=self.tournament
+        )
+        self.team1.members.add(self.captain1)
+        self.team2 = Team.objects.create(
+            name="Team 2", captain=self.captain2, tournament=self.tournament
+        )
+        self.team2.members.add(self.captain2)
+
+        # Add players to tournament
+        self.tournament.users.add(self.player1, self.player2)
+
+        # Create draft
+        self.draft = Draft.objects.create(
+            tournament=self.tournament, draft_style="shuffle"
+        )
+        self.draft.build_rounds()
+
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.staff)
+
+    def test_assigns_next_captain_after_pick(self):
+        """After pick, next round gets captain assigned."""
+        first_round = self.draft.draft_rounds.order_by("pick_number").first()
+        second_round = self.draft.draft_rounds.order_by("pick_number")[1]
+
+        # Second round should have no captain yet
+        self.assertIsNone(second_round.captain)
+
+        # Make pick
+        response = self.client.post(
+            "/api/tournaments/pick_player",
+            {"draft_round_pk": first_round.pk, "user_pk": self.player1.pk},
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+        # Refresh and check second round now has captain
+        second_round.refresh_from_db()
+        self.assertIsNotNone(second_round.captain)
