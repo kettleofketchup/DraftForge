@@ -7,6 +7,7 @@ import { CaptainCards } from './roundView/captainCards';
 import { PlayerChoiceView } from './roundView/choiceCard';
 import { CurrentTeamView } from './roundView/currentTeam';
 import { TurnIndicator } from './roundView/TurnIndicator';
+import { ShufflePickOrder } from './shuffle/ShufflePickOrder';
 const log = getLogger('DraftRoundView');
 
 export const DraftRoundView: React.FC = () => {
@@ -62,7 +63,7 @@ export const DraftRoundView: React.FC = () => {
     log.debug('Not latest round', draft);
     return (
       <>
-        <CaptainCards />
+        {draft.draft_style === 'shuffle' ? <ShufflePickOrder /> : <CaptainCards />}
 
         <div className="mb-4">
           <h3 className="text-xl font-bold">Not Current Round</h3>
@@ -78,7 +79,7 @@ export const DraftRoundView: React.FC = () => {
 
   return (
     <>
-      <CaptainCards />
+      {draft.draft_style === 'shuffle' ? <ShufflePickOrder /> : <CaptainCards />}
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold">Draft View</h2>
