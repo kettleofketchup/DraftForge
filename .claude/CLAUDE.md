@@ -138,7 +138,8 @@ inv dev.stop           # Stop without removing
 inv dev.build          # Build dev images
 inv dev.pull           # Pull dev images
 inv dev.top            # Show running processes
-inv dev.exec <svc> <cmd>  # Execute command in container
+inv dev.exec <svc> <cmd>  # Execute command in running container
+inv dev.run --service backend --cmd '<cmd>'  # Run one-off command in new container
 
 inv test.up            # Start test environment
 inv test.down          # Stop test environment
@@ -203,7 +204,22 @@ npm run dev
 
 ## Testing
 
-**Backend**: `python manage.py test`
+**Backend (via Docker - Recommended)**:
+```bash
+source .venv/bin/activate
+
+# Run all tests (avoids Redis hanging issues)
+inv test.run --cmd 'python manage.py test app.tests -v 2'
+
+# Run specific test module
+inv test.run --cmd 'python manage.py test app.tests.test_shuffle_draft -v 2'
+```
+
+**Backend (Local - May hang on cleanup due to Redis/cacheops)**:
+```bash
+DISABLE_CACHE=true python manage.py test app.tests -v 2
+```
+
 **Frontend E2E**: Cypress tests in `frontend/tests/cypress/`
 
 ## Documentation
@@ -226,10 +242,10 @@ Docs available at http://127.0.0.1:8000
 
 - `python-backend` - Django/Python backend expertise
 - `typescript-frontend` - React/TypeScript frontend expertise
-- `inv-runner` - Python Invoke task runner (consults with docs and docker agents)
 - `mkdocs-documentation` - MkDocs Material documentation management
 - `docker-ops` - Docker setup, troubleshooting, and verification
 
 ## Skills Available
 
+- `inv-runner` - Python Invoke task automation (backend tests via Docker, environment management)
 - `visual-debugging` - Chrome MCP browser automation for debugging
