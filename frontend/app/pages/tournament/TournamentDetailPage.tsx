@@ -16,8 +16,8 @@ export const TournamentDetailPage: React.FC = () => {
   const setActiveTab = useTournamentStore((state) => state.setActiveTab);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const setLiveReload = useTournamentStore((state) => state.setLiveReload);
-  const liveReload = useTournamentStore((state) => state.liveReload);
+  const setAutoAdvance = useTournamentStore((state) => state.setAutoAdvance);
+  const autoAdvance = useTournamentStore((state) => state.autoAdvance);
   useEffect(() => {
     const parts = slug?.split('/') || [];
     const tab = parts[0] || 'players';
@@ -25,7 +25,7 @@ export const TournamentDetailPage: React.FC = () => {
 
     setActiveTab(tab);
     setLive(live);
-    setLiveReload(live);
+    setAutoAdvance(live);
   }, [slug, setActiveTab]);
   useEffect(() => {
     if (pk) {
