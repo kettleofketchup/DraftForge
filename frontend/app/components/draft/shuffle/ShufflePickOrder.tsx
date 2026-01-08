@@ -2,7 +2,8 @@ import { cn } from '~/lib/utils';
 import { Badge } from '~/components/ui/badge';
 import { Card } from '~/components/ui/card';
 import { useUserStore } from '~/store/userStore';
-import type { TeamType } from '~/index';
+import type { TeamType, UserType } from '~/index';
+import type { DraftRoundType } from '../types';
 
 interface TeamPickStatus {
   team: TeamType;
@@ -18,7 +19,7 @@ export const ShufflePickOrder: React.FC = () => {
 
   const getTeamMmr = (team: TeamType): number => {
     let total = team.captain?.mmr || 0;
-    team.members?.forEach((member) => {
+    team.members?.forEach((member: UserType) => {
       if (member.pk !== team.captain?.pk) {
         total += member.mmr || 0;
       }
@@ -34,7 +35,7 @@ export const ShufflePickOrder: React.FC = () => {
 
       const picksMade =
         draft?.draft_rounds?.filter(
-          (r) => r.choice && r.captain?.pk === team.captain?.pk
+          (r: DraftRoundType) => r.choice && r.captain?.pk === team.captain?.pk
         ).length || 0;
 
       return { team, totalMmr, picksMade, pickOrder: 0 };

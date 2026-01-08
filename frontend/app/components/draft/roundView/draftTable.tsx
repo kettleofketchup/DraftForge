@@ -45,7 +45,7 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
 
   const getTeamMmr = (team: TeamType): number => {
     let total = team.captain?.mmr || 0;
-    team.members?.forEach((member) => {
+    team.members?.forEach((member: UserType) => {
       if (member.pk !== team.captain?.pk) {
         total += member.mmr || 0;
       }

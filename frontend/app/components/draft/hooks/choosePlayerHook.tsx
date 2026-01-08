@@ -14,6 +14,7 @@ type hookParams = {
   curDraftRound: DraftRoundType;
   setDraft: (draft: DraftType) => void;
   setCurDraftRound: (draftRound: DraftRoundType) => void;
+  setDraftIndex: (index: number) => void;
   onTieResolution?: (tieResolution: TieResolution) => void;
 };
 
@@ -24,6 +25,7 @@ export const choosePlayerHook = async ({
   curDraftRound,
   setDraft,
   setCurDraftRound,
+  setDraftIndex,
   onTieResolution,
 }: hookParams) => {
   if (!tournament || !tournament.pk) {
@@ -52,31 +54,51 @@ export const choosePlayerHook = async ({
     return tournament.draft as DraftType;
   };
   const getDraftRound = (draft: DraftType, roundPk: number) => {
-    return draft.draft_rounds?.find((round) => round.pk === roundPk);
+    return draft.draft_rounds?.find((round: DraftRoundType) => round.pk === roundPk);
   };
   toast.promise(PickPlayerForRound(dataRoundUpdate), {
     loading: `Choosing ${player.username} for ${curDraftRound.captain?.username} in round ${curDraftRound.pick_number}`,
     success: (data) => {
-      let newRound: DraftRoundType = data.draft.draft_rounds?.find(
-        (round: DraftRoundType) => round.pk === curDraftRound.pk,
-      );
-
-      log.debug('newRound', newRound);
-      log.debug('draft', data.draft);
       setTournament(data);
       setDraft(data.draft);
-      setCurDraftRound(newRound);
 
-      // Show tie overlay for shuffle draft
-      if (
-        data.draft?.draft_style === 'shuffle' &&
-        data.tie_resolution &&
-        onTieResolution
-      ) {
-        onTieResolution(data.tie_resolution);
+      // Find and advance to next round (first with captain assigned but no choice)
+      const nextRound = data.draft.draft_rounds?.find(
+        (r: DraftRoundType) => r.captain && !r.choice
+      );
+
+      if (nextRound) {
+        setCurDraftRound(nextRound);
+        const idx = data.draft.draft_rounds?.findIndex(
+          (r: DraftRoundType) => r.pk === nextRound.pk
+        );
+        if (idx !== undefined && idx >= 0) {
+          setDraftIndex(idx);
+        }
+        log.debug('Advanced to next round', nextRound);
+      } else {
+        // No more rounds with captains, stay on current (now completed) round
+        const updatedRound = data.draft.draft_rounds?.find(
+          (round: DraftRoundType) => round.pk === curDraftRound.pk
+        );
+        if (updatedRound) {
+          setCurDraftRound(updatedRound);
+        }
+        log.debug('No more rounds to advance to');
       }
 
-      return `${curDraftRound?.pick_number} has been updated successfully!`;
+      // Show tie overlay for shuffle draft
+      // Cast data to include tie_resolution from backend
+      const responseData = data as TournamentType & { tie_resolution?: TieResolution };
+      if (
+        responseData.draft?.draft_style === 'shuffle' &&
+        responseData.tie_resolution &&
+        onTieResolution
+      ) {
+        onTieResolution(responseData.tie_resolution);
+      }
+
+      return `Pick ${curDraftRound?.pick_number} complete!`;
     },
     error: (err) => {
       const val = err.response.data;
