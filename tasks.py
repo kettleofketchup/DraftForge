@@ -143,6 +143,16 @@ def docker_compose_exec(c, compose_file: Path, service: str, cmd_str: str):
         c.run(cmd, pty=True)
 
 
+def docker_compose_run(c, compose_file: Path, service: str, cmd_str: str):
+    """Run a one-off command in a new container with --rm flag."""
+    with c.cd(paths.PROJECT_PATH):
+        cmd = (
+            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {compose_file.resolve()} run --rm {service} {cmd_str}"
+        )
+        c.run(cmd, pty=True)
+
+
 def _wait_for_backend(c, compose_file: Path, timeout: int = 120):
     """Wait for backend container to be healthy and accepting requests."""
     import time
@@ -433,6 +443,12 @@ def dev_exec(c, service, cmd):
     docker_compose_exec(c, paths.DOCKER_COMPOSE_DEBUG_PATH, service, cmd)
 
 
+@task
+def dev_run(c, service="backend", cmd=""):
+    """Run a one-off command in dev environment. Example: inv dev.run --cmd 'python manage.py test'"""
+    docker_compose_run(c, paths.DOCKER_COMPOSE_DEBUG_PATH, service, cmd)
+
+
 ns_dev.add_task(dev_up, "up")
 ns_dev.add_task(dev_down, "down")
 ns_dev.add_task(dev_logs, "logs")
@@ -443,6 +459,7 @@ ns_dev.add_task(dev_build, "build")
 ns_dev.add_task(dev_pull, "pull")
 ns_dev.add_task(dev_top, "top")
 ns_dev.add_task(dev_exec, "exec")
+ns_dev.add_task(dev_run, "run")
 ns_dev.add_task(dev_sync_users, "sync-users")
 ns_dev.add_task(dev_sync_tournaments, "sync-tournaments")
 ns_dev.add_task(dev_sync_all, "sync-all")
@@ -502,6 +519,12 @@ def test_exec(c, service, cmd):
     docker_compose_exec(c, paths.DOCKER_COMPOSE_TEST_PATH, service, cmd)
 
 
+@task(name="test-run")
+def test_run(c, service="backend", cmd=""):
+    """Run a one-off command in test environment. Example: inv test.run --cmd 'python manage.py test app.tests -v 2'"""
+    docker_compose_run(c, paths.DOCKER_COMPOSE_TEST_PATH, service, cmd)
+
+
 ns_test.add_task(test_up, "up")
 ns_test.add_task(test_down, "down")
 ns_test.add_task(test_logs, "logs")
@@ -512,6 +535,7 @@ ns_test.add_task(test_build, "build")
 ns_test.add_task(test_pull, "pull")
 ns_test.add_task(test_top, "top")
 ns_test.add_task(test_exec, "exec")
+ns_test.add_task(test_run, "run")
 
 
 # Prod environment tasks (uses docker-compose.prod.yaml)
@@ -565,6 +589,12 @@ def prod_exec(c, service, cmd):
     docker_compose_exec(c, paths.DOCKER_COMPOSE_PROD_PATH, service, cmd)
 
 
+@task
+def prod_run(c, service="backend", cmd=""):
+    """Run a one-off command in prod environment. Example: inv prod.run --cmd 'python manage.py shell'"""
+    docker_compose_run(c, paths.DOCKER_COMPOSE_PROD_PATH, service, cmd)
+
+
 ns_prod.add_task(prod_up, "up")
 ns_prod.add_task(prod_down, "down")
 ns_prod.add_task(prod_logs, "logs")
@@ -575,3 +605,4 @@ ns_prod.add_task(prod_build, "build")
 ns_prod.add_task(prod_pull, "pull")
 ns_prod.add_task(prod_top, "top")
 ns_prod.add_task(prod_exec, "exec")
+ns_prod.add_task(prod_run, "run")
