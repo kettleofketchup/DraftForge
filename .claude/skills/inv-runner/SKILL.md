@@ -9,17 +9,18 @@ Python Invoke task automation for the DTX website project.
 
 ## Prerequisites
 
-**CRITICAL**: Always source virtual environment before invoke commands.
+**CRITICAL**: Always cd into the project/worktree directory first, then use `poetry run inv`.
 
 ```bash
-# Main repo
-source .venv/bin/activate
-
-# Git worktrees - use main repo venv
-source /home/kettle/git_repos/website/.venv/bin/activate
+cd /path/to/project  # or worktree path
+poetry run inv --list
 ```
 
-Run `inv --list` to see all available tasks.
+Alternative (activate venv):
+```bash
+source .venv/bin/activate
+inv --list
+```
 
 ## Quick Reference
 
@@ -73,36 +74,36 @@ inv dev.exec backend 'python manage.py shell'
 
 ### Start Development
 ```bash
-source .venv/bin/activate
-inv dev.debug
+cd /path/to/project
+poetry run inv dev.debug
 ```
 
 ### Run Backend Tests
 ```bash
-source .venv/bin/activate
-inv test.run --cmd 'python manage.py test app.tests -v 2'
+cd /path/to/project
+poetry run inv test.run --cmd 'python manage.py test app.tests -v 2'
 ```
 
 ### E2E Testing (Cypress)
 ```bash
-source .venv/bin/activate
-inv test.setup
-inv test.open  # or inv test.headless
+cd /path/to/project
+poetry run inv test.setup
+poetry run inv test.open  # or inv test.headless
 ```
 
 ### Release New Version
 ```bash
-source .venv/bin/activate
-inv version.set 1.2.3
-inv docker.all.build
-inv docker.all.push
-inv version.tag
+cd /path/to/project
+poetry run inv version.set 1.2.3
+poetry run inv docker.all.build
+poetry run inv docker.all.push
+poetry run inv version.tag
 ```
 
 ### Database Operations
 ```bash
-inv db.migrate           # Run migrations
-inv db.populate.all      # Reset and populate test DB
+poetry run inv db.migrate           # Run migrations
+poetry run inv db.populate.all      # Reset and populate test DB
 ```
 
 ## Environment Management
@@ -110,10 +111,10 @@ inv db.populate.all      # Reset and populate test DB
 Each environment (dev, test, prod) supports:
 
 ```bash
-inv <env>.up      # Start
-inv <env>.down    # Stop and remove
-inv <env>.logs    # Follow logs
-inv <env>.run --cmd '<cmd>'  # Run one-off command
+poetry run inv <env>.up      # Start
+poetry run inv <env>.down    # Stop and remove
+poetry run inv <env>.logs    # Follow logs
+poetry run inv <env>.run --cmd '<cmd>'  # Run one-off command
 ```
 
 ## Notes
