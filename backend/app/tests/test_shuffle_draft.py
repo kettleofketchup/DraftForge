@@ -246,3 +246,83 @@ class BuildShuffleRoundsTest(TestCase):
         self.assertEqual(rounds[3].pick_phase, 1)
         self.assertEqual(rounds[4].pick_phase, 2)
         self.assertEqual(rounds[15].pick_phase, 4)
+
+
+class AssignNextShuffleCaptainTest(TestCase):
+    """Test assign_next_shuffle_captain function."""
+
+    def setUp(self):
+        """Create tournament with draft and make first pick."""
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament", date_played=date.today()
+        )
+
+        # Create 2 captains
+        self.captain1 = CustomUser.objects.create_user(
+            username="cap1", password="test", mmr=5000
+        )
+        self.captain2 = CustomUser.objects.create_user(
+            username="cap2", password="test", mmr=4000
+        )
+
+        # Create player to be picked
+        self.player = CustomUser.objects.create_user(
+            username="player1", password="test", mmr=3000
+        )
+
+        # Create 2 teams
+        self.team1 = Team.objects.create(
+            name="Team 1", captain=self.captain1, tournament=self.tournament
+        )
+        self.team1.members.add(self.captain1)
+
+        self.team2 = Team.objects.create(
+            name="Team 2", captain=self.captain2, tournament=self.tournament
+        )
+        self.team2.members.add(self.captain2)
+
+        # Add player to tournament users (needed for users_remaining property)
+        self.tournament.users.add(self.player)
+
+        # Create draft and build rounds
+        self.draft = Draft.objects.create(
+            tournament=self.tournament, draft_style="shuffle"
+        )
+
+        from app.functions.shuffle_draft import build_shuffle_rounds
+
+        build_shuffle_rounds(self.draft)
+
+    def test_assigns_captain_to_next_null_round(self):
+        """Assigns captain to next round with null captain."""
+        from app.functions.shuffle_draft import assign_next_shuffle_captain
+
+        # First round should have captain2 (4000 MMR)
+        first_round = self.draft.draft_rounds.order_by("pick_number").first()
+        self.assertEqual(first_round.captain.pk, self.captain2.pk)
+
+        # Simulate pick - add player to team2
+        first_round.choice = self.player
+        first_round.save()
+        self.team2.members.add(self.player)
+
+        # Now team2 has 7000 MMR, team1 has 5000 MMR
+        # Team1 should pick next
+        tie_data = assign_next_shuffle_captain(self.draft)
+
+        second_round = self.draft.draft_rounds.order_by("pick_number")[1]
+        self.assertEqual(second_round.captain.pk, self.captain1.pk)
+        self.assertIsNone(tie_data)
+
+    def test_returns_none_when_no_more_rounds(self):
+        """Returns None when all rounds have captains."""
+        from app.functions.shuffle_draft import assign_next_shuffle_captain
+
+        # Assign captains to all rounds
+        for draft_round in self.draft.draft_rounds.all():
+            draft_round.captain = self.captain1
+            draft_round.save()
+
+        result = assign_next_shuffle_captain(self.draft)
+
+        self.assertIsNone(result)

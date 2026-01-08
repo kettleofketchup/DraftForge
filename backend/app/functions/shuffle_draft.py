@@ -1,6 +1,7 @@
 """Shuffle draft logic - lowest MMR picks first."""
 
 import random
+from typing import Optional
 
 
 def get_team_total_mmr(team) -> int:
@@ -108,3 +109,31 @@ def build_shuffle_rounds(draft) -> None:
         first_round.was_tie = True
         first_round.tie_roll_data = tie_data
     first_round.save()
+
+
+def assign_next_shuffle_captain(draft) -> Optional[dict]:
+    """
+    After a pick, assign captain to next round.
+
+    Args:
+        draft: Draft model instance
+
+    Returns:
+        tie_resolution data if tie occurred, else None
+    """
+    next_round = (
+        draft.draft_rounds.filter(captain__isnull=True).order_by("pick_number").first()
+    )
+    if not next_round:
+        return None
+
+    teams = list(draft.tournament.teams.all())
+    next_team, tie_data = get_lowest_mmr_team(teams)
+
+    next_round.captain = next_team.captain
+    if tie_data:
+        next_round.was_tie = True
+        next_round.tie_roll_data = tie_data
+    next_round.save()
+
+    return tie_data
