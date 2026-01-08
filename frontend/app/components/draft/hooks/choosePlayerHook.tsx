@@ -42,7 +42,7 @@ export const choosePlayerHook = async ({
   }
 
   log.debug(
-    `Choosing player ${player.username} for captain  ${curDraftRound.captain?.username}`,
+    `Choosing player ${player.nickname || player.username} for captain ${curDraftRound.captain?.nickname || curDraftRound.captain?.username}`,
   );
 
   const dataRoundUpdate: PickPlayerForRoundAPI = {
@@ -57,7 +57,7 @@ export const choosePlayerHook = async ({
     return draft.draft_rounds?.find((round: DraftRoundType) => round.pk === roundPk);
   };
   toast.promise(PickPlayerForRound(dataRoundUpdate), {
-    loading: `Choosing ${player.username} for ${curDraftRound.captain?.username} in round ${curDraftRound.pick_number}`,
+    loading: `Choosing ${player.nickname || player.username} for ${curDraftRound.captain?.nickname || curDraftRound.captain?.username} in round ${curDraftRound.pick_number}`,
     success: (data) => {
       setTournament(data);
       setDraft(data.draft);

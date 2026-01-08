@@ -30,6 +30,7 @@ import { LatestRoundButton } from './buttons/latestButton';
 import { NextRoundButton } from './buttons/nextButton';
 import { PrevRoundButton } from './buttons/prevButton';
 import { ShareDraftButton } from './buttons/shareDraftButton';
+import { UndoPickButton } from './buttons/undoPickButton';
 import { DraftBalanceDisplay } from './draftBalanceDisplay';
 import { DraftRoundView } from './draftRoundView';
 import { refreshDraftHook } from './hooks/refreshDraftHook';
@@ -49,6 +50,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const draftIndex = useUserStore((state) => state.draftIndex);
   const setDraftIndex = useUserStore((state) => state.setDraftIndex);
   const live = useTournamentStore((state) => state.live);
+  const livePolling = useTournamentStore((state) => state.livePolling);
   const autoAdvance = useTournamentStore((state) => state.autoAdvance);
   const [open, setOpen] = useState(live);
   const isStaff = useUserStore((state) => state.isStaff);
@@ -100,11 +102,11 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
 
   const draftLiveOptions = useMemo(
     () => ({
-      enabled: open && !!tournament?.draft?.pk && autoAdvance,
+      enabled: open && !!tournament?.draft?.pk && livePolling,
       interval: 3000, // Poll every 3 seconds when modal is open
       onUpdate,
     }),
-    [open, tournament?.draft?.pk, autoAdvance, onUpdate],
+    [open, tournament?.draft?.pk, livePolling, onUpdate],
   );
 
   const { isPolling, forceRefresh } = useDraftLive(draftLiveOptions);
@@ -205,8 +207,8 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
 
   const header = () => {
     return (
-      <div className="flex flex-col gap-2">
-        <LiveView isPolling={autoAdvance} />
+      <div className="flex flex-col gap-1">
+        <LiveView isPolling={livePolling} />
         <DraftBalanceDisplay />
       </div>
     );
@@ -278,6 +280,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
           <div className="flex w-full justify-center md:justify-start gap-2">
             <InitDraftButton />
             <DraftStyleModal />
+            <UndoPickButton />
           </div>
           {choiceButtons()}
           <div className="flex w-full justify-center md:justify-end gap-2">

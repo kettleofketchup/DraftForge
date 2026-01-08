@@ -1,63 +1,72 @@
-import { motion } from 'framer-motion';
-import { ToggleLeft, ToggleRight } from 'lucide-react';
-import { useEffect } from 'react';
-import { getLogger } from '~/lib/logger';
+import { Radio, FastForward } from 'lucide-react';
+import { cn } from '~/lib/utils';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
 import { Button } from '../ui/button';
-const log = getLogger('liveView');
+
 interface LiveViewProps {
   isPolling: boolean;
 }
 
 export const LiveView: React.FC<LiveViewProps> = ({ isPolling }) => {
-  const tournament = useUserStore((state) => state.tournament);
+  const curDraftRound = useUserStore((state) => state.curDraftRound);
+  const toggleLivePolling = useTournamentStore(
+    (state) => state.toggleLivePolling,
+  );
   const toggleAutoAdvance = useTournamentStore(
     (state) => state.toggleAutoAdvance,
   );
   const autoAdvance = useTournamentStore((state) => state.autoAdvance);
-  useEffect(() => {}, [isPolling, autoAdvance]);
+
+  const livePollingButtonClick = () => {
+    toggleLivePolling();
+  };
   const autoAdvanceButtonClick = () => {
     toggleAutoAdvance();
   };
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center flex-col sm:flex-row gap-2 justify-between sm:justify-start">
-        <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold">Draft Progress</h3>{' '}
-        </div>
 
-        {tournament?.draft?.pk && (
-          <div className="flex items-center gap-2 align-middle">
-            <div
-              className={`w-2 h-2 rounded-full ${
-                isPolling ? 'w-2 bg-success animate-pulse' : 'bg-warning'
-              }`}
-            />
-            <span className="w-[10em] text-xs text-base-content/70">
-              {isPolling ? 'Live updates' : 'Manual refresh only'}
-            </span>
-          </div>
+  return (
+    <div className="flex flex-wrap items-center gap-2 justify-between">
+      {/* Left side: Title, pick number */}
+      <div className="flex items-center gap-2">
+        <h3 className="text-base font-semibold">Draft</h3>
+        {curDraftRound?.pick_number && (
+          <span className="text-xs font-medium px-1.5 py-0.5 bg-primary/20 text-primary rounded">
+            #{curDraftRound.pick_number}
+          </span>
         )}
-        <motion.div
-          initial={{ scale: 1 }}
-          animate={{
-            scale: autoAdvance ? 1 : 1,
-          }}
-          whileTap={{
-            opacity: 0,
-            transition: { duration: 0.5, ease: 'easeInOut' },
-          }}
+      </div>
+
+      {/* Right side: Toggle buttons */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <Button
+          onClick={livePollingButtonClick}
+          variant={'outline'}
+          size="sm"
+          className={cn(
+            'h-8 px-3 text-xs',
+            isPolling
+              ? 'bg-green-900/50 border-green-600 text-green-400'
+              : 'bg-muted/50'
+          )}
         >
-          <Button
-            onClick={autoAdvanceButtonClick}
-            variant={'outline'}
-            className="rounded-full"
-          >
-            {autoAdvance ? <ToggleLeft /> : <ToggleRight />}
-            Auto Advance: {isPolling ? 'ON' : 'OFF'}
-          </Button>
-        </motion.div>
+          <Radio className={cn('h-3 w-3 mr-1', isPolling && 'animate-pulse')} />
+          Live
+        </Button>
+        <Button
+          onClick={autoAdvanceButtonClick}
+          variant={'outline'}
+          size="sm"
+          className={cn(
+            'h-8 px-3 text-xs',
+            autoAdvance
+              ? 'bg-blue-900/50 border-blue-600 text-blue-400'
+              : 'bg-muted/50'
+          )}
+        >
+          <FastForward className="h-3 w-3 mr-1" />
+          Auto
+        </Button>
       </div>
     </div>
   );

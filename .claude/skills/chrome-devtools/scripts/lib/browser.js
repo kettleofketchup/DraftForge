@@ -40,12 +40,18 @@ export async function getBrowser(options = {}) {
     }
   }
 
+  const certArgs = options.ignoreHTTPSErrors === true
+    ? ['--ignore-certificate-errors', '--ignore-certificate-errors-spki-list']
+    : [];
+
   const launchOptions = {
     headless: options.headless !== false,
+    ignoreHTTPSErrors: options.ignoreHTTPSErrors === true,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
+      ...certArgs,
       ...(options.args || [])
     ],
     defaultViewport: options.viewport || {

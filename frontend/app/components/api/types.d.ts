@@ -28,3 +28,7 @@ export interface DraftStyleMMRsAPIReturn {
   normal_first_pick_mmr: number;
   normal_last_pick_mmr: number;
 }
+
+export interface UndoPickAPI {
+  draft_pk: number;
+}

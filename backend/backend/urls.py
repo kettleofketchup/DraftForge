@@ -17,6 +17,7 @@ from app.functions.tournament import (
     get_draft_style_mmrs,
     pick_player_for_round,
     rebuild_team,
+    undo_last_pick,
 )
 from app.functions.user import profile_update
 from app.views import (
@@ -97,6 +98,11 @@ urlpatterns = [
         "api/tournaments/pick_player",
         pick_player_for_round,
         name="pick_player",
+    ),
+    path(
+        "api/tournaments/undo-pick",
+        undo_last_pick,
+        name="undo-pick",
     ),
     path(
         "api/active-draft-for-user/",

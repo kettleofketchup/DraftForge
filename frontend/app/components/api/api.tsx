@@ -20,6 +20,7 @@ import type {
   InitDraftRoundsAPI,
   PickPlayerForRoundAPI,
   RebuildDraftRoundsAPI,
+  UndoPickAPI,
 } from './types';
 const log = getLogger('api');
 
@@ -255,4 +256,11 @@ export async function getDraftStyleMMRs(
 ): Promise<DraftStyleMMRsAPIReturn> {
   const response = await axios.post(`/draft/get-style-mmrs`, data);
   return response.data as DraftStyleMMRsAPIReturn;
+}
+
+export async function undoLastPick(
+  data: UndoPickAPI,
+): Promise<TournamentType> {
+  const response = await axios.post(`/tournaments/undo-pick`, data);
+  return response.data as TournamentType;
 }

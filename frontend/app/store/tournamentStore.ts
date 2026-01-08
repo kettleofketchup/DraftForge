@@ -6,6 +6,9 @@ export interface TournamentState {
   setLive: (live: boolean) => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  livePolling: boolean;
+  setLivePolling: (livePolling: boolean) => void;
+  toggleLivePolling: () => void;
   autoAdvance: boolean;
   setAutoAdvance: (autoAdvance: boolean) => void;
   toggleAutoAdvance: () => void;
@@ -19,7 +22,10 @@ export const useTournamentStore = create<TournamentState>((set, get) => ({
   setLive: (live: boolean) => set({ live }),
   activeTab: 'players',
   setActiveTab: (tab: string) => set({ activeTab: tab }),
-  autoAdvance: false,
+  livePolling: true, // Default ON
+  setLivePolling: (livePolling: boolean) => set({ livePolling }),
+  toggleLivePolling: () => get().setLivePolling(!get().livePolling),
+  autoAdvance: false, // Default OFF
   toggleAutoAdvance: () => get().setAutoAdvance(!get().autoAdvance),
   setAutoAdvance: (autoAdvance: boolean) => set({ autoAdvance }),
   draftPredictedMMRs: {} as DraftStyleMMRsAPIReturn,
