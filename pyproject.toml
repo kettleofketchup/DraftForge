@@ -33,6 +33,7 @@ dependencies = [
     "django-cacheops (>=7.2,<8.0)",
     "django-redis (>=6.0.0,<7.0.0)",
     "pydantic (>=2.11.9,<3.0.0)",
+    "celery[redis] (>=5.3,<6.0)",
 ]
 
 

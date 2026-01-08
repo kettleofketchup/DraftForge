@@ -42,7 +42,16 @@ ns.add_collection(ns_docs, "docs")
 from dotenv import load_dotenv
 
 
+def docker_stop_all(c):
+    """Stop and remove all Docker containers."""
+    result = c.run("docker ps -aq", hide=True, warn=True)
+    if result.stdout.strip():
+        c.run("docker stop $(docker ps -aq)", warn=True)
+        c.run("docker rm $(docker ps -aq)", warn=True)
+
+
 def docker_compose_down(c, compose_file: Path):
+    docker_stop_all(c)
     with c.cd(paths.PROJECT_PATH):
         cmd = (
             f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
@@ -51,11 +60,12 @@ def docker_compose_down(c, compose_file: Path):
         c.run(cmd)
 
 
-def docker_compose_up(c, compose_file: Path):
+def docker_compose_up(c, compose_file: Path, detach: bool = False):
     with c.cd(paths.PROJECT_PATH):
+        detach_flag = "-d" if detach else ""
         cmd = (
             f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
-            f"-f {compose_file.resolve()} up --remove-orphans"
+            f"-f {compose_file.resolve()} up {detach_flag} --remove-orphans"
         )
         c.run(cmd)
 
@@ -88,6 +98,7 @@ def docker_compose_restart(c, compose_file: Path):
 
 
 def docker_compose_stop(c, compose_file: Path):
+    docker_stop_all(c)
     with c.cd(paths.PROJECT_PATH):
         cmd = (
             f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
@@ -132,7 +143,72 @@ def docker_compose_exec(c, compose_file: Path, service: str, cmd_str: str):
         c.run(cmd, pty=True)
 
 
-from backend.tasks import db_migrate
+def docker_compose_run(c, compose_file: Path, service: str, cmd_str: str):
+    """Run a one-off command in a new container with --rm flag."""
+    with c.cd(paths.PROJECT_PATH):
+        cmd = (
+            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {compose_file.resolve()} run --rm {service} {cmd_str}"
+        )
+        c.run(cmd, pty=True)
+
+
+def _wait_for_backend(c, compose_file: Path, timeout: int = 120):
+    """Wait for backend container to be healthy and accepting requests."""
+    import time
+
+    print("Waiting for backend to be ready...")
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        try:
+            # Check if backend container is running
+            result = c.run(
+                f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+                f"-f {compose_file.resolve()} ps backend --format json",
+                hide=True,
+                warn=True,
+            )
+            if result.ok and "running" in result.stdout.lower():
+                # Try to hit the health endpoint
+                health_result = c.run(
+                    f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+                    f"-f {compose_file.resolve()} exec -T backend "
+                    f"python -c \"import requests; requests.get('http://localhost:8000/api/', timeout=5)\"",
+                    hide=True,
+                    warn=True,
+                )
+                if health_result.ok:
+                    print("Backend is ready!")
+                    return True
+        except Exception:
+            pass
+        time.sleep(2)
+
+    print("Warning: Backend health check timed out, proceeding anyway...")
+    return False
+
+
+def _auto_link_all_tournaments(c, compose_file: Path):
+    """Run auto-link for all tournaments to link games to Steam matches."""
+    print("Auto-linking tournament games to Steam matches...")
+    with c.cd(paths.PROJECT_PATH):
+        cmd = (
+            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {compose_file.resolve()} exec -T backend "
+            f'python -c "'
+            f"import django; django.setup(); "
+            f"from app.models import Tournament; "
+            f"from steam.functions.game_linking import auto_link_matches_for_tournament; "
+            f"results = [auto_link_matches_for_tournament(t.id) for t in Tournament.objects.all()]; "
+            f"linked = sum(r['auto_linked_count'] for r in results); "
+            f"suggestions = sum(r['suggestions_created_count'] for r in results); "
+            f"print(f'Auto-linked {{linked}} games, created {{suggestions}} suggestions')\""
+        )
+        c.run(cmd, warn=True)
+
+
+from backend.tasks import db_migrate, db_populate_steam
 
 
 @task
@@ -257,10 +333,69 @@ ns_dev.add_task(dev_release, "release")
 # =============================================================================
 
 
+# Sync from production tasks (defined before dev_up since it depends on them)
+@task
+def dev_sync_users(c, dry_run=False):
+    """Sync users from production (dota.kettle.sh) to local dev database."""
+    load_dotenv(paths.DEBUG_ENV_FILE)
+    db_migrate(c, paths.DEBUG_ENV_FILE)
+    with c.cd(paths.BACKEND_PATH):
+        flags = "--dry-run" if dry_run else ""
+        cmd = f"DISABLE_CACHE=true python manage.py sync_prod_users {flags}"
+        c.run(cmd, pty=True)
+
+
+@task
+def dev_sync_tournaments(c, dry_run=False):
+    """Sync tournaments from production (dota.kettle.sh) to local dev database."""
+    load_dotenv(paths.DEBUG_ENV_FILE)
+    with c.cd(paths.BACKEND_PATH):
+        flags = "--dry-run" if dry_run else ""
+        cmd = f"DISABLE_CACHE=true python manage.py sync_prod_tournaments {flags}"
+        c.run(cmd, pty=True)
+
+
+@task
+def dev_sync_all(c, dry_run=False):
+    """Sync all data (users, tournaments) from production to local dev database."""
+    dev_sync_users(c, dry_run=dry_run)
+    dev_sync_tournaments(c, dry_run=dry_run)
+
+
 # Dev environment tasks (uses docker-compose.debug.yaml)
 @task
-def dev_up(c):
-    docker_compose_up(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+def dev_up(c, sync: bool = True):
+    """Start dev environment, optionally sync data from production.
+
+    Args:
+        sync: If True (default), sync users, tournaments, and Steam stats from production.
+              Use --no-sync to skip syncing and just start containers.
+    """
+    if sync:
+        # Start containers in detached mode first
+        docker_compose_up(c, paths.DOCKER_COMPOSE_DEBUG_PATH, detach=True)
+
+        # Wait for backend to be ready
+        _wait_for_backend(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+
+        # Sync users and tournaments from production
+        print("\n=== Syncing data from production ===")
+        dev_sync_all(c)
+
+        # Pull Steam matchmaking stats
+        print("\n=== Pulling Steam matchmaking stats ===")
+        db_populate_steam(c, paths.DEBUG_ENV_FILE, full_sync=False, relink=True)
+
+        # Auto-link tournament games to Steam matches
+        print("\n=== Auto-linking tournament games ===")
+        _auto_link_all_tournaments(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+
+        # Attach to logs
+        print("\n=== Sync complete, attaching to logs ===")
+        docker_compose_logs(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
+    else:
+        # Just start containers normally
+        docker_compose_up(c, paths.DOCKER_COMPOSE_DEBUG_PATH)
 
 
 @task
@@ -308,6 +443,12 @@ def dev_exec(c, service, cmd):
     docker_compose_exec(c, paths.DOCKER_COMPOSE_DEBUG_PATH, service, cmd)
 
 
+@task
+def dev_run(c, service="backend", cmd=""):
+    """Run a one-off command in dev environment. Example: inv dev.run --cmd 'python manage.py test'"""
+    docker_compose_run(c, paths.DOCKER_COMPOSE_DEBUG_PATH, service, cmd)
+
+
 ns_dev.add_task(dev_up, "up")
 ns_dev.add_task(dev_down, "down")
 ns_dev.add_task(dev_logs, "logs")
@@ -318,6 +459,10 @@ ns_dev.add_task(dev_build, "build")
 ns_dev.add_task(dev_pull, "pull")
 ns_dev.add_task(dev_top, "top")
 ns_dev.add_task(dev_exec, "exec")
+ns_dev.add_task(dev_run, "run")
+ns_dev.add_task(dev_sync_users, "sync-users")
+ns_dev.add_task(dev_sync_tournaments, "sync-tournaments")
+ns_dev.add_task(dev_sync_all, "sync-all")
 
 
 # Test environment tasks (uses docker-compose.test.yaml)
@@ -374,6 +519,12 @@ def test_exec(c, service, cmd):
     docker_compose_exec(c, paths.DOCKER_COMPOSE_TEST_PATH, service, cmd)
 
 
+@task(name="test-run")
+def test_run(c, service="backend", cmd=""):
+    """Run a one-off command in test environment. Example: inv test.run --cmd 'python manage.py test app.tests -v 2'"""
+    docker_compose_run(c, paths.DOCKER_COMPOSE_TEST_PATH, service, cmd)
+
+
 ns_test.add_task(test_up, "up")
 ns_test.add_task(test_down, "down")
 ns_test.add_task(test_logs, "logs")
@@ -384,6 +535,7 @@ ns_test.add_task(test_build, "build")
 ns_test.add_task(test_pull, "pull")
 ns_test.add_task(test_top, "top")
 ns_test.add_task(test_exec, "exec")
+ns_test.add_task(test_run, "run")
 
 
 # Prod environment tasks (uses docker-compose.prod.yaml)
@@ -437,6 +589,12 @@ def prod_exec(c, service, cmd):
     docker_compose_exec(c, paths.DOCKER_COMPOSE_PROD_PATH, service, cmd)
 
 
+@task
+def prod_run(c, service="backend", cmd=""):
+    """Run a one-off command in prod environment. Example: inv prod.run --cmd 'python manage.py shell'"""
+    docker_compose_run(c, paths.DOCKER_COMPOSE_PROD_PATH, service, cmd)
+
+
 ns_prod.add_task(prod_up, "up")
 ns_prod.add_task(prod_down, "down")
 ns_prod.add_task(prod_logs, "logs")
@@ -447,3 +605,4 @@ ns_prod.add_task(prod_build, "build")
 ns_prod.add_task(prod_pull, "pull")
 ns_prod.add_task(prod_top, "top")
 ns_prod.add_task(prod_exec, "exec")
+ns_prod.add_task(prod_run, "run")

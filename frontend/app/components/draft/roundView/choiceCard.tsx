@@ -3,6 +3,7 @@ import type { UserClassType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { UserCard } from '../../user';
+import { DoublePickThreshold } from '../shuffle/DoublePickThreshold';
 import { DraftTable } from './draftTable';
 const log = getLogger('choiceCard');
 interface PlayerChoiceViewProps {}
@@ -19,7 +20,13 @@ export const PlayerChoiceView: React.FC<PlayerChoiceViewProps> = ({}) => {
     );
   }, [draft?.users_remaining?.length]);
 
-  if (!curRound || !curRound?.choice) return <DraftTable />;
+  if (!curRound || !curRound?.choice)
+    return (
+      <div>
+        <DoublePickThreshold />
+        <DraftTable />
+      </div>
+    );
 
   return (
     <div className="mb-4">

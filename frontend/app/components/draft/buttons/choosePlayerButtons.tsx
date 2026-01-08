@@ -1,4 +1,4 @@
-import { useEffect, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import {
   AlertDialog,
@@ -17,12 +17,15 @@ import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { choosePlayerHook } from '../hooks/choosePlayerHook';
 import { refreshDraftHook } from '../hooks/refreshDraftHook';
+import { TieResolutionOverlay } from '../TieResolutionOverlay';
+import type { TieResolution } from '../types';
 const log = getLogger('pickPlayerButton');
 
 export const ChoosePlayerButton: React.FC<{
   user: UserType;
 }> = ({ user }) => {
   const tournament = useUserStore((state) => state.tournament);
+  const currentUser = useUserStore((state) => state.currentUser);
 
   const setTournament = useUserStore((state) => state.setTournament);
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
@@ -31,6 +34,17 @@ export const ChoosePlayerButton: React.FC<{
   const isStaff = useUserStore((state) => state.isStaff);
 
   const setDraft = useUserStore((state) => state.setDraft);
+  const setDraftIndex = useUserStore((state) => state.setDraftIndex);
+
+  const [tieResolution, setTieResolution] = useState<TieResolution | null>(
+    null,
+  );
+  const [showTieOverlay, setShowTieOverlay] = useState(false);
+
+  // Check if current user is the captain for this round
+  const isCaptainForRound = currentUser?.pk === curDraftRound?.captain?.pk;
+  const canPick = isStaff() || isCaptainForRound;
+  const pickAlreadyMade = !!curDraftRound?.choice;
 
   useEffect(() => {}, [tournament.draft, tournament.teams]);
 
@@ -46,6 +60,11 @@ export const ChoosePlayerButton: React.FC<{
       curDraftRound,
       setCurDraftRound,
       setDraft,
+      setDraftIndex,
+      onTieResolution: (resolution) => {
+        setTieResolution(resolution);
+        setShowTieOverlay(true);
+      },
     });
     refreshDraftHook({ draft, setDraft });
 
@@ -55,34 +74,61 @@ export const ChoosePlayerButton: React.FC<{
       draft: draft,
     });
   };
-  if (!isStaff()) {
+
+  // If pick already made for this round, show disabled button
+  if (pickAlreadyMade) {
+    return (
+      <Button disabled variant="outline">
+        Pick made
+      </Button>
+    );
+  }
+
+  // If user can't pick (not staff and not captain for this round)
+  if (!canPick) {
+    const captainName = curDraftRound?.captain?.username || 'captain';
     return (
       <>
-        <AdminOnlyButton buttonTxt="Only Staff Can Pick" />
+        <AdminOnlyButton buttonTxt={`Waiting for ${captainName}`} />
       </>
     );
   }
+
   return (
-    <div className="flex flex-row items-center gap-4">
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button>Pick</Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent className={`bg-green-900`}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Choose player {user.username}</AlertDialogTitle>
-            <AlertDialogDescription className="text-base-700">
-              This Chooses Player {user.username}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleChange}>
-              Confirm Pick
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+    <>
+      <div
+        className="flex flex-row items-center gap-4"
+        data-testid="available-player"
+      >
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button>Pick</Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent className={`bg-green-900`}>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Choose player {user.username}</AlertDialogTitle>
+              <AlertDialogDescription className="text-base-700">
+                This Chooses Player {user.username}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleChange}>
+                Confirm Pick
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+      {showTieOverlay && tieResolution && (
+        <TieResolutionOverlay
+          tieResolution={tieResolution}
+          onDismiss={() => {
+            setShowTieOverlay(false);
+            setTieResolution(null);
+          }}
+        />
+      )}
+    </>
   );
 };

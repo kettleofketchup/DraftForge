@@ -12,6 +12,7 @@ import { Toaster } from '~/components/ui/sonner';
 import { getLogger } from '~/lib/logger';
 import type { Route } from './+types/root';
 import './app.css';
+import { FloatingDraftIndicator } from './components/draft/FloatingDraftIndicator';
 import ResponsiveAppBar from './components/navbar/navbar';
 
 ('use client');
@@ -79,6 +80,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <Toaster richColors closeButton position="top-center" />
+          <FloatingDraftIndicator />
         </QueryClientProvider>
 
         <ScrollRestoration />

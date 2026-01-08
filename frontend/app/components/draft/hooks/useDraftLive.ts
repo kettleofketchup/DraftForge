@@ -30,7 +30,7 @@ export const useDraftLive = ({
   const tournament = useUserStore((state) => state.tournament);
   const draft = useUserStore((state) => state.draft);
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
-  const liveReload = useTournamentStore((state) => state.liveReload);
+  const autoAdvance = useTournamentStore((state) => state.autoAdvance);
   // Keep onUpdate ref current
   useEffect(() => {
     onUpdateRef.current = onUpdate;
