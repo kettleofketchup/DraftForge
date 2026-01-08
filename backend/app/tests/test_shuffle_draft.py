@@ -326,3 +326,42 @@ class AssignNextShuffleCaptainTest(TestCase):
         result = assign_next_shuffle_captain(self.draft)
 
         self.assertIsNone(result)
+
+
+class DraftBuildRoundsIntegrationTest(TestCase):
+    """Test Draft.build_rounds() integration with shuffle draft."""
+
+    def setUp(self):
+        """Create tournament with 4 teams."""
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament", date_played=date.today()
+        )
+
+        for i, mmr in enumerate([5000, 4000, 6000, 4500]):
+            captain = CustomUser.objects.create_user(
+                username=f"cap{i}", password="test", mmr=mmr
+            )
+            team = Team.objects.create(
+                name=f"Team {i}", captain=captain, tournament=self.tournament
+            )
+            team.members.add(captain)
+
+        self.draft = Draft.objects.create(
+            tournament=self.tournament, draft_style="shuffle"
+        )
+
+    def test_build_rounds_delegates_to_shuffle_module(self):
+        """Draft.build_rounds() uses shuffle module for shuffle style."""
+        self.draft.build_rounds()
+
+        # Should have 16 rounds
+        self.assertEqual(self.draft.draft_rounds.count(), 16)
+
+        # First round should have captain assigned
+        first_round = self.draft.draft_rounds.order_by("pick_number").first()
+        self.assertIsNotNone(first_round.captain)
+
+        # Remaining rounds should have null captain
+        remaining = self.draft.draft_rounds.order_by("pick_number")[1:]
+        for draft_round in remaining:
+            self.assertIsNone(draft_round.captain)
