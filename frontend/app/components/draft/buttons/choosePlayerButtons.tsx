@@ -16,7 +16,6 @@ import type { UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { choosePlayerHook } from '../hooks/choosePlayerHook';
-import { refreshDraftHook } from '../hooks/refreshDraftHook';
 import { TieResolutionOverlay } from '../TieResolutionOverlay';
 import type { TieResolution } from '../types';
 const log = getLogger('pickPlayerButton');
@@ -53,7 +52,9 @@ export const ChoosePlayerButton: React.FC<{
       tournament,
     });
 
-    choosePlayerHook({
+    // choosePlayerHook handles all state updates in its success callback
+    // No need for separate refreshDraftHook call - it would use stale data
+    await choosePlayerHook({
       tournament,
       setTournament,
       player: user,
@@ -66,7 +67,6 @@ export const ChoosePlayerButton: React.FC<{
         setShowTieOverlay(true);
       },
     });
-    refreshDraftHook({ draft, setDraft });
 
     log.debug('updateDraftRound', {
       user: user.username,
@@ -86,7 +86,7 @@ export const ChoosePlayerButton: React.FC<{
 
   // If user can't pick (not staff and not captain for this round)
   if (!canPick) {
-    const captainName = curDraftRound?.captain?.username || 'captain';
+    const captainName = curDraftRound?.captain?.nickname || curDraftRound?.captain?.username || 'captain';
     return (
       <>
         <AdminOnlyButton buttonTxt={`Waiting for ${captainName}`} />

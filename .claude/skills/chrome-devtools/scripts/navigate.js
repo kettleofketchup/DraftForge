@@ -15,7 +15,8 @@ async function navigate() {
 
   try {
     const browser = await getBrowser({
-      headless: args.headless !== 'false'
+      headless: args.headless !== 'false',
+      ignoreHTTPSErrors: args['ignore-https-errors'] === 'true' || args['ignore-https-errors'] === true
     });
 
     const page = await getPage(browser);

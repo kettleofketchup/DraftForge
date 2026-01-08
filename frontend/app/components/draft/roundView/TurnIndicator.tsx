@@ -11,7 +11,7 @@ export const TurnIndicator: React.FC = () => {
   const curDraftRound = useUserStore((state) => state.curDraftRound);
 
   const isMyTurn = currentUser?.pk === curDraftRound?.captain?.pk;
-  const captainName = curDraftRound?.captain?.username || 'Unknown';
+  const captainName = curDraftRound?.captain?.nickname || curDraftRound?.captain?.username || 'Unknown';
   const pickNumber = curDraftRound?.pick_number || 0;
   const pickAlreadyMade = !!curDraftRound?.choice;
 

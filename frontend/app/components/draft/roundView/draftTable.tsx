@@ -18,6 +18,8 @@ import { ChoosePlayerButton } from '../buttons/choosePlayerButtons';
 import type { DraftRoundType } from '../types';
 const log = getLogger('draftTable');
 
+const MAX_TEAM_SIZE = 5;
+
 interface ProjectedData {
   newTeamMmr: number;
   newPickOrder: number;
@@ -53,17 +55,22 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
     return total;
   };
 
+  const isTeamMaxed = (team: TeamType): boolean => {
+    return (team.members?.length || 0) >= MAX_TEAM_SIZE;
+  };
+
   const getCurrentTeam = (): TeamType | undefined => {
     return tournament?.teams?.find(
       (t) => t.captain?.pk === curRound?.captain?.pk
     );
   };
 
-  const teamMmrs = useMemo(() => {
+  // Get active (non-maxed) teams and their MMRs
+  const activeTeamMmrs = useMemo(() => {
     if (!isShuffle) return new Map<number, number>();
     const map = new Map<number, number>();
     tournament?.teams?.forEach((team) => {
-      if (team.pk) {
+      if (team.pk && !isTeamMaxed(team)) {
         map.set(team.pk, getTeamMmr(team));
       }
     });
@@ -79,16 +86,21 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
     const currentTeamMmr = getTeamMmr(currentTeam);
     const newTeamMmr = currentTeamMmr + userMmr;
 
-    // Calculate new pick order
-    const otherTeamMmrs = Array.from(teamMmrs.entries())
+    // Calculate new pick order - only considering active (non-maxed) teams
+    const otherActiveTeamMmrs = Array.from(activeTeamMmrs.entries())
       .filter(([pk]) => pk !== currentTeam.pk)
       .map(([, mmr]) => mmr);
 
-    const allMmrs = [...otherTeamMmrs, newTeamMmr].sort((a, b) => a - b);
+    // If no other active teams, we're the only one picking
+    if (otherActiveTeamMmrs.length === 0) {
+      return { newTeamMmr, newPickOrder: 1, isDoublePick: true };
+    }
+
+    const allMmrs = [...otherActiveTeamMmrs, newTeamMmr].sort((a, b) => a - b);
     const newPickOrder = allMmrs.indexOf(newTeamMmr) + 1;
 
     // Check if this would result in a double pick
-    const lowestOtherMmr = Math.min(...otherTeamMmrs);
+    const lowestOtherMmr = Math.min(...otherActiveTeamMmrs);
     const isDoublePick = newTeamMmr < lowestOtherMmr;
 
     return { newTeamMmr, newPickOrder, isDoublePick };

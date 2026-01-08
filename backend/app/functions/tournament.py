@@ -326,6 +326,81 @@ def get_draft_style_mmrs(request):
     return Response(data, 201)
 
 
+class UndoPickSerializer(serializers.Serializer):
+    draft_pk = serializers.IntegerField(required=True)
+
+
+@api_view(["POST"])
+@permission_classes([IsStaff])
+def undo_last_pick(request):
+    """
+    Undo the last pick in a draft.
+
+    This removes the last draft round (if it has a choice) and restores
+    the player to the available pool.
+
+    Request body:
+        draft_pk: int - Primary key of the draft
+
+    Returns:
+        200: Success with updated tournament data
+        400: No picks to undo
+        404: Draft not found
+    """
+    serializer = UndoPickSerializer(data=request.data)
+
+    if serializer.is_valid():
+        draft_pk = serializer.validated_data["draft_pk"]
+    else:
+        return Response(serializer.errors, status=400)
+
+    try:
+        draft = Draft.objects.get(pk=draft_pk)
+    except Draft.DoesNotExist:
+        return Response({"error": "Draft not found"}, status=404)
+
+    # Find the last round with a choice
+    last_round_with_choice = (
+        draft.draft_rounds.filter(choice__isnull=False).order_by("-pick_number").first()
+    )
+
+    if not last_round_with_choice:
+        return Response({"error": "No picks to undo"}, status=400)
+
+    # Get the player that was picked
+    player = last_round_with_choice.choice
+    team = last_round_with_choice.team
+
+    log.info(
+        f"Undoing pick: {player.username} from team {team.name if team else 'unknown'}"
+    )
+
+    # Remove player from team
+    if team and player:
+        team.members.remove(player)
+        team.save()
+
+    # Note: users_remaining is a computed property, not a field.
+    # Clearing the choice below will automatically make the player
+    # appear in users_remaining again.
+
+    # Clear the choice and reset the round
+    last_round_with_choice.choice = None
+    last_round_with_choice.save()
+
+    # Note: latest_round is a computed property that automatically returns
+    # the first round without a choice. No need to set it manually.
+
+    tournament = draft.tournament
+
+    invalidate_model(Tournament)
+    invalidate_model(Draft)
+    invalidate_model(Team)
+    invalidate_model(DraftRound)
+
+    return Response(TournamentSerializer(tournament).data, status=200)
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_active_draft_for_user(request):
