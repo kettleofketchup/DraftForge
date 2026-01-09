@@ -254,3 +254,38 @@ def advance_winner(request, game_id):
         winning_team.save()
 
     return Response(BracketGameSerializer(game).data)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAdminUser])
+def set_team_placement(request, tournament_id, team_id):
+    """Manually set or clear a team's tournament placement."""
+    try:
+        tournament = Tournament.objects.get(pk=tournament_id)
+    except Tournament.DoesNotExist:
+        return Response(
+            {"error": "Tournament not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    try:
+        team = Team.objects.get(pk=team_id, tournament=tournament)
+    except Team.DoesNotExist:
+        return Response(
+            {"error": "Team not found in this tournament"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    placement = request.data.get("placement")
+
+    # Validate placement
+    if placement is not None:
+        if not isinstance(placement, int) or placement < 1:
+            return Response(
+                {"error": "Placement must be a positive integer or null"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    team.placement = placement
+    team.save()
+
+    return Response({"team_id": team.pk, "placement": team.placement})

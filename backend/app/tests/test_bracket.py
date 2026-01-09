@@ -429,3 +429,99 @@ class AdvanceWinnerPlacementTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.team2.refresh_from_db()
         self.assertIsNone(self.team2.placement)
+
+
+class ManualPlacementOverrideTest(TestCase):
+    """Test manual placement override endpoint."""
+
+    def setUp(self):
+        """Create test data."""
+        self.admin = CustomUser.objects.create_superuser(
+            username="admin",
+            password="admin123",
+            email="admin@test.com",
+        )
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament",
+            date_played=date.today(),
+        )
+        self.captain = CustomUser.objects.create_user(username="cap", password="test")
+        self.team = Team.objects.create(
+            name="Team 1",
+            captain=self.captain,
+            tournament=self.tournament,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+
+    def test_set_placement_success(self):
+        """Admin can set team placement manually."""
+        response = self.client.patch(
+            f"/api/bracket/tournaments/{self.tournament.pk}/teams/{self.team.pk}/placement/",
+            {"placement": 3},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.team.refresh_from_db()
+        self.assertEqual(self.team.placement, 3)
+
+    def test_clear_placement(self):
+        """Admin can clear placement by setting to null."""
+        self.team.placement = 2
+        self.team.save()
+
+        response = self.client.patch(
+            f"/api/bracket/tournaments/{self.tournament.pk}/teams/{self.team.pk}/placement/",
+            {"placement": None},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.team.refresh_from_db()
+        self.assertIsNone(self.team.placement)
+
+    def test_invalid_placement_rejected(self):
+        """Invalid placement values are rejected."""
+        response = self.client.patch(
+            f"/api/bracket/tournaments/{self.tournament.pk}/teams/{self.team.pk}/placement/",
+            {"placement": 0},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_requires_admin(self):
+        """Regular users cannot set placement."""
+        regular_user = CustomUser.objects.create_user(
+            username="regular",
+            password="test123",
+        )
+        self.client.force_authenticate(user=regular_user)
+
+        response = self.client.patch(
+            f"/api/bracket/tournaments/{self.tournament.pk}/teams/{self.team.pk}/placement/",
+            {"placement": 1},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_team_must_belong_to_tournament(self):
+        """Cannot set placement for team in different tournament."""
+        other_tournament = Tournament.objects.create(
+            name="Other Tournament",
+            date_played=date.today(),
+        )
+        other_team = Team.objects.create(
+            name="Other Team",
+            tournament=other_tournament,
+        )
+
+        response = self.client.patch(
+            f"/api/bracket/tournaments/{self.tournament.pk}/teams/{other_team.pk}/placement/",
+            {"placement": 1},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 404)
