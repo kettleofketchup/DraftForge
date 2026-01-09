@@ -65,6 +65,7 @@ def generate_bracket(request, tournament_id):
 
 @api_view(["POST"])
 @permission_classes([IsAdminUser])
+@transaction.atomic
 def save_bracket(request, tournament_id):
     """Save bracket structure to database."""
     try:
@@ -78,10 +79,66 @@ def save_bracket(request, tournament_id):
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # TODO: Implement bracket saving logic
-    return Response(
-        {"tournamentId": tournament_id, "message": "Bracket save placeholder"}
+    matches = serializer.validated_data["matches"]
+
+    # Delete existing bracket games for this tournament
+    Game.objects.filter(tournament=tournament).delete()
+
+    # Pass 1: Create all games without FK relationships
+    # Map frontend ID -> database PK
+    id_to_game = {}
+
+    for match in matches:
+        game = Game.objects.create(
+            tournament=tournament,
+            round=match.get("round", 1),
+            position=match.get("position", 0),
+            bracket_type=match.get("bracketType", "winners"),
+            elimination_type=match.get("eliminationType", "double"),
+            status=match.get("status", "pending"),
+            next_game_slot=match.get("nextMatchSlot"),
+            loser_next_game_slot=match.get("loserNextMatchSlot"),
+            swiss_record_wins=match.get("swissRecordWins", 0),
+            swiss_record_losses=match.get("swissRecordLosses", 0),
+        )
+
+        # Set teams if provided
+        radiant_team = match.get("radiantTeam")
+        if radiant_team and radiant_team.get("pk"):
+            game.radiant_team_id = radiant_team["pk"]
+
+        dire_team = match.get("direTeam")
+        if dire_team and dire_team.get("pk"):
+            game.dire_team_id = dire_team["pk"]
+
+        game.save()
+        id_to_game[match["id"]] = game
+
+    # Pass 2: Wire up FK relationships
+    for match in matches:
+        game = id_to_game[match["id"]]
+        updated = False
+
+        next_match_id = match.get("nextMatchId")
+        if next_match_id and next_match_id in id_to_game:
+            game.next_game = id_to_game[next_match_id]
+            updated = True
+
+        loser_next_match_id = match.get("loserNextMatchId")
+        if loser_next_match_id and loser_next_match_id in id_to_game:
+            game.loser_next_game = id_to_game[loser_next_match_id]
+            updated = True
+
+        if updated:
+            game.save()
+
+    # Return saved games
+    saved_games = Game.objects.filter(tournament=tournament).select_related(
+        "radiant_team", "dire_team", "winning_team", "next_game", "loser_next_game"
     )
+    result_serializer = BracketGameSerializer(saved_games, many=True)
+
+    return Response({"tournamentId": tournament_id, "matches": result_serializer.data})
 
 
 @api_view(["POST"])
