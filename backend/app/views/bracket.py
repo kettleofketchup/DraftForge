@@ -185,7 +185,7 @@ def calculate_placement(game):
 @permission_classes([IsAdminUser])
 @transaction.atomic
 def advance_winner(request, game_id):
-    """Mark winner and advance to next match."""
+    """Mark winner and advance to next match, setting placement if eliminated."""
     try:
         game = Game.objects.get(pk=game_id)
     except Game.DoesNotExist:
@@ -204,14 +204,17 @@ def advance_winner(request, game_id):
                 {"error": "No radiant team assigned"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        game.winning_team = game.radiant_team
+        winning_team = game.radiant_team
+        losing_team = game.dire_team
     else:
         if not game.dire_team:
             return Response(
                 {"error": "No dire team assigned"}, status=status.HTTP_400_BAD_REQUEST
             )
-        game.winning_team = game.dire_team
+        winning_team = game.dire_team
+        losing_team = game.radiant_team
 
+    game.winning_team = winning_team
     game.status = "completed"
     game.save()
 
@@ -219,23 +222,35 @@ def advance_winner(request, game_id):
     if game.next_game and game.next_game_slot:
         next_game = game.next_game
         if game.next_game_slot == "radiant":
-            next_game.radiant_team = game.winning_team
+            next_game.radiant_team = winning_team
         else:
-            next_game.dire_team = game.winning_team
+            next_game.dire_team = winning_team
         next_game.save()
 
-    # Advance loser if elimination_type is 'double' and loser path exists
-    if (
-        game.elimination_type == "double"
-        and game.loser_next_game
-        and game.loser_next_game_slot
-    ):
-        losing_team = game.dire_team if winner_slot == "radiant" else game.radiant_team
-        loser_game = game.loser_next_game
-        if game.loser_next_game_slot == "radiant":
-            loser_game.radiant_team = losing_team
+    # Handle loser path
+    if losing_team:
+        if (
+            game.elimination_type == "double"
+            and game.loser_next_game
+            and game.loser_next_game_slot
+        ):
+            # Advance loser to losers bracket
+            loser_game = game.loser_next_game
+            if game.loser_next_game_slot == "radiant":
+                loser_game.radiant_team = losing_team
+            else:
+                loser_game.dire_team = losing_team
+            loser_game.save()
         else:
-            loser_game.dire_team = losing_team
-        loser_game.save()
+            # No loser path - team is eliminated, set placement
+            placement = calculate_placement(game)
+            if placement:
+                losing_team.placement = placement
+                losing_team.save()
+
+    # Grand finals - also set winner's placement
+    if game.bracket_type == "grand_finals":
+        winning_team.placement = 1
+        winning_team.save()
 
     return Response(BracketGameSerializer(game).data)
