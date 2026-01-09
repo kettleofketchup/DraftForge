@@ -64,6 +64,7 @@ def pick_player_for_round(request):
         404: Draft round or user not found
         500: Error during pick
     """
+
     serializer = PickPlayerForRound(data=request.data)
 
     if serializer.is_valid():
@@ -77,7 +78,6 @@ def pick_player_for_round(request):
     except DraftRound.DoesNotExist:
         return Response({"error": "Draft round not found"}, status=404)
 
-    # Authorization check: staff OR captain for this round
     is_staff = request.user.is_staff
     is_captain_for_round = draft_round.captain == request.user
 
@@ -91,6 +91,7 @@ def pick_player_for_round(request):
             status=403,
         )
 
+    # Authorization check: staff OR captain for this round
     try:
         user = CustomUser.objects.get(pk=user_pk)
     except CustomUser.DoesNotExist:
@@ -104,30 +105,28 @@ def pick_player_for_round(request):
         )
         return Response({"error": f"Failed to pick player. {str(e)}"}, status=500)
 
-    try:
-        tournament = draft_round.draft.tournament
-    except Tournament.DoesNotExist:
-        return Response({"error": "Tournament not found"}, status=404)
-
     draft = draft_round.draft
     draft.save()
     draft_round.save()
-
-    # Build response data
-    response_data = TournamentSerializer(tournament).data
 
     # For shuffle draft, assign next captain
     if draft.draft_style == "shuffle" and draft.users_remaining.exists():
         from app.functions.shuffle_draft import assign_next_shuffle_captain
 
         tie_data = assign_next_shuffle_captain(draft)
-        if tie_data:
-            response_data["tie_resolution"] = tie_data
+
+    try:
+        tournament = draft_round.draft.tournament
+    except Tournament.DoesNotExist:
+        return Response({"error": "Tournament not found"}, status=404)
+    # Build response data
+    response_data = TournamentSerializer(tournament).data
+    if tie_data:
+        response_data["tie_resolution"] = tie_data
 
     invalidate_model(Tournament)
     invalidate_model(Draft)
     invalidate_model(Team)
-
     return Response(response_data, status=201)
 
 

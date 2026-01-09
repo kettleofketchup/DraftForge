@@ -81,12 +81,16 @@ interface UserState {
   getCurrentDraftRound: () => Promise<void>;
   draftIndex: number;
   setDraftIndex: (index: number) => void;
+  autoRefreshDraft: (() => Promise<void>) | null;
+  setAutoRefreshDraft: (refresh: (() => Promise<void>) | null) => void;
 }
 export const useUserStore = create<UserState>()(
   persist(
     (set, get) => ({
       tournament: {} as TournamentType,
       draft: get()?.tournament?.draft as DraftType,
+      autoRefreshDraft: null,
+      setAutoRefreshDraft: (refresh) => set({ autoRefreshDraft: refresh }),
       getDraft: async () => {
         try {
           await get().getCurrentTournament();

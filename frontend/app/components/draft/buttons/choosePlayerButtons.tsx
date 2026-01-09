@@ -34,6 +34,7 @@ export const ChoosePlayerButton: React.FC<{
 
   const setDraft = useUserStore((state) => state.setDraft);
   const setDraftIndex = useUserStore((state) => state.setDraftIndex);
+  const autoRefreshDraft = useUserStore((state) => state.autoRefreshDraft);
 
   const [tieResolution, setTieResolution] = useState<TieResolution | null>(
     null,
@@ -66,6 +67,7 @@ export const ChoosePlayerButton: React.FC<{
         setTieResolution(resolution);
         setShowTieOverlay(true);
       },
+      autoRefreshDraft: autoRefreshDraft || undefined,
     });
 
     log.debug('updateDraftRound', {

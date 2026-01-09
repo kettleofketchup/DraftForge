@@ -35,6 +35,7 @@ import { DraftBalanceDisplay } from './draftBalanceDisplay';
 import { DraftRoundView } from './draftRoundView';
 import { refreshDraftHook } from './hooks/refreshDraftHook';
 import { refreshTournamentHook } from './hooks/refreshTournamentHook';
+import { useAutoRefreshDraft } from './hooks/useAutoRefreshDraft';
 import { useDraftLive } from './hooks/useDraftLive';
 import { LiveView } from './liveView';
 import type { DraftRoundType, DraftType } from './types';
@@ -49,6 +50,9 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
   const draftIndex = useUserStore((state) => state.draftIndex);
   const setDraftIndex = useUserStore((state) => state.setDraftIndex);
+  const setAutoRefreshDraft = useUserStore(
+    (state) => state.setAutoRefreshDraft,
+  );
   const live = useTournamentStore((state) => state.live);
   const livePolling = useTournamentStore((state) => state.livePolling);
   const autoAdvance = useTournamentStore((state) => state.autoAdvance);
@@ -90,12 +94,14 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     log.debug('Set draft round to latest:', { newDraft, i });
     log.debug('Current round after update:', curDraftRound);
   };
+
   const onUpdate = useCallback(() => {
-    if (!autoAdvance) return;
-    if (autoAdvance) {
+    if (livePolling) {
       log.debug('Auto advance is enabled, refreshing draft and tournament');
       refreshDraftHook({ draft, setDraft });
       refreshTournamentHook({ tournament, setTournament });
+    }
+    if (autoAdvance) {
       setDraftRoundToLatest();
     }
   }, [autoAdvance, draft, setDraft, tournament, setTournament]);
@@ -110,6 +116,21 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   );
 
   const { isPolling, forceRefresh } = useDraftLive(draftLiveOptions);
+
+  // Auto-refresh draft every second when current captain choice is null
+  const { refresh: autoRefreshDraft } = useAutoRefreshDraft({
+    enabled: open,
+    curDraftRound,
+    draft,
+    setDraft,
+    interval: 1000,
+  });
+
+  // Store refresh function in userStore so other components can access it
+  useEffect(() => {
+    setAutoRefreshDraft(autoRefreshDraft);
+    return () => setAutoRefreshDraft(null);
+  }, [autoRefreshDraft, setAutoRefreshDraft]);
 
   const goToLatestRound = async () => {
     if (!draft) return;
@@ -170,7 +191,10 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   };
 
   useEffect(() => {
-    log.debug('rerender: Tournament Modal Initialized draft data:', tournament?.draft);
+    log.debug(
+      'rerender: Tournament Modal Initialized draft data:',
+      tournament?.draft,
+    );
 
     if (tournament?.draft) {
       setDraft(tournament.draft);

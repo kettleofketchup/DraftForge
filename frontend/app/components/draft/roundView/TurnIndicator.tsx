@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useUserStore } from '~/store/userStore';
 
 /**
@@ -15,6 +16,10 @@ export const TurnIndicator: React.FC = () => {
   const pickNumber = curDraftRound?.pick_number || 0;
   const pickAlreadyMade = !!curDraftRound?.choice;
 
+  useEffect(() => {
+    // TODO: Add any side effects here if needed
+  }, [curDraftRound?.pk, curDraftRound?.choice, curDraftRound?.captain?.pk]);
+
   if (pickAlreadyMade) {
     return (
       <div className="p-4 rounded-lg text-center bg-base-200">
@@ -24,6 +29,7 @@ export const TurnIndicator: React.FC = () => {
       </div>
     );
   }
+
 
   return (
     <div
