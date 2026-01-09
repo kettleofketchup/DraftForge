@@ -240,3 +240,192 @@ class SaveBracketTest(TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+
+class CalculatePlacementTest(TestCase):
+    """Test placement calculation logic."""
+
+    def test_grand_finals_loser_gets_2nd(self):
+        """Loser of grand finals gets 2nd place."""
+        from app.views.bracket import calculate_placement
+
+        tournament = Tournament.objects.create(name="Test", date_played=date.today())
+        game = Game.objects.create(
+            tournament=tournament,
+            bracket_type="grand_finals",
+            round=1,
+            position=0,
+        )
+
+        placement = calculate_placement(game)
+        self.assertEqual(placement, 2)
+
+    def test_losers_finals_loser_gets_3rd(self):
+        """Loser of losers finals gets 3rd place."""
+        from app.views.bracket import calculate_placement
+
+        tournament = Tournament.objects.create(name="Test", date_played=date.today())
+        # Create losers bracket with 2 rounds (finals is round 2)
+        Game.objects.create(
+            tournament=tournament,
+            bracket_type="losers",
+            round=1,
+            position=0,
+        )
+        losers_finals = Game.objects.create(
+            tournament=tournament,
+            bracket_type="losers",
+            round=2,
+            position=0,
+        )
+
+        placement = calculate_placement(losers_finals)
+        self.assertEqual(placement, 3)
+
+    def test_losers_semi_loser_gets_4th(self):
+        """Loser of losers semi gets 4th place."""
+        from app.views.bracket import calculate_placement
+
+        tournament = Tournament.objects.create(name="Test", date_played=date.today())
+        # Create losers bracket with 3 rounds
+        losers_semi = Game.objects.create(
+            tournament=tournament,
+            bracket_type="losers",
+            round=1,
+            position=0,
+        )
+        Game.objects.create(
+            tournament=tournament,
+            bracket_type="losers",
+            round=2,
+            position=0,
+        )
+        Game.objects.create(
+            tournament=tournament,
+            bracket_type="losers",
+            round=3,
+            position=0,
+        )
+
+        placement = calculate_placement(losers_semi)
+        self.assertEqual(placement, 4)
+
+    def test_winners_bracket_elimination_returns_none(self):
+        """Winners bracket games don't set placement (loser goes to losers)."""
+        from app.views.bracket import calculate_placement
+
+        tournament = Tournament.objects.create(name="Test", date_played=date.today())
+        game = Game.objects.create(
+            tournament=tournament,
+            bracket_type="winners",
+            round=1,
+            position=0,
+        )
+
+        placement = calculate_placement(game)
+        self.assertIsNone(placement)
+
+
+class AdvanceWinnerPlacementTest(TestCase):
+    """Test advance_winner sets placement correctly."""
+
+    def setUp(self):
+        """Create test data."""
+        self.admin = CustomUser.objects.create_superuser(
+            username="admin",
+            password="admin123",
+            email="admin@test.com",
+        )
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament",
+            date_played=date.today(),
+        )
+        self.captain1 = CustomUser.objects.create_user(username="cap1", password="test")
+        self.captain2 = CustomUser.objects.create_user(username="cap2", password="test")
+        self.team1 = Team.objects.create(
+            name="Team 1",
+            captain=self.captain1,
+            tournament=self.tournament,
+        )
+        self.team2 = Team.objects.create(
+            name="Team 2",
+            captain=self.captain2,
+            tournament=self.tournament,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+
+    def test_advance_winner_sets_loser_placement_when_eliminated(self):
+        """When loser has no loser_next_game, their placement is set."""
+        # Losers finals - no loser path, loser gets 3rd
+        losers_finals = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="losers",
+            round=1,  # Only losers round = finals
+            position=0,
+            radiant_team=self.team1,
+            dire_team=self.team2,
+        )
+
+        response = self.client.post(
+            f"/api/bracket/games/{losers_finals.pk}/advance-winner/",
+            {"winner": "radiant"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.team2.refresh_from_db()
+        self.assertEqual(self.team2.placement, 3)
+
+    def test_advance_winner_sets_winner_placement_in_grand_finals(self):
+        """Grand finals winner gets 1st place."""
+        grand_finals = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="grand_finals",
+            round=1,
+            position=0,
+            radiant_team=self.team1,
+            dire_team=self.team2,
+        )
+
+        response = self.client.post(
+            f"/api/bracket/games/{grand_finals.pk}/advance-winner/",
+            {"winner": "radiant"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.team1.refresh_from_db()
+        self.team2.refresh_from_db()
+        self.assertEqual(self.team1.placement, 1)
+        self.assertEqual(self.team2.placement, 2)
+
+    def test_advance_winner_no_placement_when_loser_has_path(self):
+        """When loser has loser_next_game, no placement is set."""
+        losers_game = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="losers",
+            round=2,
+            position=0,
+        )
+        winners_game = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="winners",
+            round=1,
+            position=0,
+            radiant_team=self.team1,
+            dire_team=self.team2,
+            loser_next_game=losers_game,
+            loser_next_game_slot="radiant",
+            elimination_type="double",
+        )
+
+        response = self.client.post(
+            f"/api/bracket/games/{winners_game.pk}/advance-winner/",
+            {"winner": "radiant"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.team2.refresh_from_db()
+        self.assertIsNone(self.team2.placement)
