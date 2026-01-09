@@ -1,6 +1,7 @@
 """Bracket API views for tournament bracket management."""
 
 from django.db import transaction
+from django.db.models import Max
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser
@@ -139,6 +140,45 @@ def save_bracket(request, tournament_id):
     result_serializer = BracketGameSerializer(saved_games, many=True)
 
     return Response({"tournamentId": tournament_id, "matches": result_serializer.data})
+
+
+def calculate_placement(game):
+    """
+    Calculate placement for a team eliminated from this game.
+
+    Returns placement number or None if team isn't eliminated
+    (e.g., winners bracket losers go to losers bracket).
+    """
+    # Grand finals loser = 2nd place
+    if game.bracket_type == "grand_finals":
+        return 2
+
+    # Losers bracket elimination
+    if game.bracket_type == "losers":
+        # Find max losers round for this tournament
+        max_round = Game.objects.filter(
+            tournament=game.tournament,
+            bracket_type="losers",
+        ).aggregate(Max("round"))["round__max"]
+
+        if max_round is None:
+            return 3  # Only one losers game = losers finals
+
+        rounds_from_final = max_round - game.round
+
+        if rounds_from_final == 0:  # Losers finals
+            return 3
+        elif rounds_from_final <= 2:  # Losers semi (4th)
+            return 4
+        else:
+            # Each earlier round: 5th-6th, 7th-8th, etc.
+            base = 5
+            for i in range(rounds_from_final - 3):
+                base += 2**i
+            return base
+
+    # Winners bracket elimination → goes to losers (no placement yet)
+    return None
 
 
 @api_view(["POST"])
