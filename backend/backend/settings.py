@@ -357,3 +357,9 @@ CELERY_TASK_TIME_LIMIT = 300  # 5 minutes
 
 # League Stats Configuration
 LEAGUE_MMR_MIN_GAMES = int(os.environ.get("LEAGUE_MMR_MIN_GAMES", "5"))
+
+# League configuration
+from config.leagues import app_config
+
+LEAGUE_CHOICES = app_config.league_choices
+DEFAULT_LEAGUE_ID = app_config.default_league_id

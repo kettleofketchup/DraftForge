@@ -1,0 +1,4 @@
+leagues:
+  - id: 17929
+    name: "DTX"
+    default: true
