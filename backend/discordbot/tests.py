@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock, patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
@@ -116,3 +118,40 @@ class EmbedBuildersTest(TestCase):
 
         self.assertIn("Test Tournament", embed["title"])
         self.assertIn("color", embed)
+
+
+class UtilsTest(TestCase):
+    @patch("discordbot.utils.requests.post")
+    def test_sync_send_embed(self, mock_post):
+        """sync_send_embed sends POST to Discord webhook."""
+        from discordbot.utils import sync_send_embed
+
+        mock_post.return_value = MagicMock(status_code=200)
+
+        result = sync_send_embed(
+            channel_id="123456789",
+            title="Test Title",
+            description="Test Description",
+            color=0x00FF00,
+        )
+
+        self.assertTrue(mock_post.called)
+
+    @patch("discordbot.utils.requests.post")
+    def test_sync_send_templated_embed(self, mock_post):
+        """sync_send_templated_embed sends embed from EventTemplate."""
+        from discordbot.utils import sync_send_templated_embed
+
+        mock_post.return_value = MagicMock(status_code=200)
+
+        template = EventTemplate.objects.create(
+            name="Test",
+            template_type="announcement",
+            title="Test Title",
+            description="Test Desc",
+            color="#FF0000",
+            channel_id="123456789",
+        )
+
+        sync_send_templated_embed(template)
+        self.assertTrue(mock_post.called)
