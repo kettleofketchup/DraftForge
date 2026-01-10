@@ -46,11 +46,9 @@ def db_makemigrations(c, path: Path = paths.DEBUG_ENV_FILE):
         c.run(cmd, pty=True)
 
 
-@task(pre=[])
-def db_migrate(c, path: Path = paths.DEBUG_ENV_FILE):
-    load_dotenv(path)
-    db_makemigrations(c, path)
-
+def _run_migrations(c, path: Path):
+    """Run migrations for a specific environment."""
+    load_dotenv(path, override=True)
     with c.cd(paths.BACKEND_PATH.absolute()):
         for app in apps:
             cmd = f"DISABLE_CACHE=true python manage.py migrate {app}"
@@ -58,6 +56,22 @@ def db_migrate(c, path: Path = paths.DEBUG_ENV_FILE):
 
         cmd = f"DISABLE_CACHE=true python manage.py migrate"
         c.run(cmd, pty=True)
+
+
+@task(pre=[])
+def db_migrate(c, path: Path = paths.DEBUG_ENV_FILE):
+    """Run migrations for both dev and test databases."""
+    # First, generate migration files (only needed once)
+    load_dotenv(path)
+    db_makemigrations(c, path)
+
+    # Migrate dev database
+    print("\n=== Migrating dev database ===")
+    _run_migrations(c, paths.DEBUG_ENV_FILE)
+
+    # Migrate test database
+    print("\n=== Migrating test database ===")
+    _run_migrations(c, paths.TEST_ENV_FILE)
 
 
 @task
