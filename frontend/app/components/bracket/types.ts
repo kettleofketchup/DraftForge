@@ -49,6 +49,8 @@ export interface BracketState {
 
 // React Flow node data - index signature required for @xyflow/react Node<T> compatibility
 export interface MatchNodeData extends BracketMatch {
+  // Badge mapping for this node (passed from parent)
+  badgeMapping?: BadgeMapping;
   // Additional display properties can go here
   [key: string]: unknown;
 }
@@ -64,4 +66,10 @@ export interface EmptySlotData {
 export interface BracketResponse {
   tournamentId: number;
   matches: BracketMatch[];
+}
+
+// Badge mapping for losers bracket slots
+// Maps losers game ID + slot to the badge letter
+export interface BadgeMapping {
+  [gameIdAndSlot: string]: string; // e.g., "l-1-0:radiant" -> "A"
 }

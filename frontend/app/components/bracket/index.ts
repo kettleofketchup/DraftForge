@@ -1,4 +1,5 @@
 export { BracketView } from './BracketView';
+export { BracketBadge } from './BracketBadge';
 export * from './types';
 export * from './schemas';
 export * from './nodes';

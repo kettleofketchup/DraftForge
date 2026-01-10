@@ -11,7 +11,10 @@ This document describes the test tournaments created by `populate_test_tournamen
 | `draft_captain_turn` | Captain Turn Test | **Captain auth flow**, pick permissions, notifications |
 | `draft_completed` | Draft Completed | Draft to bracket transition, team rosters |
 | `bracket_partial` | Bracket Partial | Bracket progression, match results display |
-| `bracket_complete` | Bracket Complete | Final standings, tournament history |
+| `bracket_complete` | Bracket Complete | Final standings, tournament history, bracket badges |
+| `shuffle_draft_not_started` | Shuffle Draft Not Started | Shuffle draft initialization, MMR sorting |
+| `shuffle_draft_in_progress` | Shuffle Draft In Progress | MMR-based pick order, tie resolution |
+| `shuffle_draft_captain_turn` | Shuffle Draft Captain Turn | Captain auth with shuffle draft |
 
 ## Detailed Scenarios
 
@@ -66,7 +69,28 @@ This document describes the test tournaments created by `populate_test_tournamen
 
 - All 6 double-elimination games completed
 - Full Steam match history with player stats
-- **Cypress tests:** Final standings, winner display, match history
+- **Cypress tests:** Final standings, winner display, match history, bracket badges
+
+### shuffle_draft_not_started
+
+**Purpose:** Test shuffle draft initialization
+
+- Tournament with shuffle draft style ready to start
+- **Cypress tests:** Shuffle draft initialization, MMR sorting
+
+### shuffle_draft_in_progress
+
+**Purpose:** Test active shuffle draft
+
+- Shuffle draft with 2 picks made
+- **Cypress tests:** MMR-based pick order, tie resolution
+
+### shuffle_draft_captain_turn
+
+**Purpose:** Test shuffle draft captain auth
+
+- Shuffle draft where test user is captain
+- **Cypress tests:** Captain auth with shuffle draft
 
 ## Helper Functions
 
@@ -216,6 +240,65 @@ cy.getTournamentByKey('draft_in_progress').then((tournament) => {
   cy.visit(`/tournaments/${tournament.pk}`);
 });
 ```
+
+## Testing Brackets
+
+### Bracket Structure
+
+The test tournaments use 4-team double elimination brackets with the following structure:
+
+```
+Winners Bracket:
+  R1: Match 0 (Team 0 vs Team 1) → Winners Final
+  R1: Match 1 (Team 2 vs Team 3) → Winners Final
+  R2: Winners Final → Grand Finals
+
+Losers Bracket:
+  R1: Losers Round 1 (Losers from W-R1) → Losers Final
+  R2: Losers Final (Winner of L-R1 vs Loser of WF) → Grand Finals
+
+Grand Finals:
+  Winner of WF vs Winner of LF
+```
+
+### Bracket Badges
+
+Bracket badges visually link winners bracket matches to their losers bracket destinations:
+
+| Badge | Winners Match | Losers Destination |
+|-------|--------------|-------------------|
+| A | Winners R1 M1 (position=0) | Losers R1 radiant slot |
+| B | Winners R1 M2 (position=1) | Losers R1 dire slot |
+| C | Winners Final | Losers Final dire slot |
+
+**Test IDs for Badges:**
+
+- `[data-testid="bracket-badge-A-right"]` - Badge A on winners match
+- `[data-testid="bracket-badge-A-left-top"]` - Badge A on losers radiant slot
+- `[data-testid="bracket-badge-B-left-bottom"]` - Badge B on losers dire slot
+- `[data-testid="bracket-badge-letter-A"]` - The letter element inside the badge
+
+### Running Bracket Tests
+
+```bash
+# Run all bracket tests
+inv test.spec --spec bracket
+
+# Run specific bracket test file
+cd frontend && npx cypress run --spec "tests/cypress/e2e/09-bracket/**/*.cy.ts"
+
+# Open Cypress interactive mode for brackets
+cd frontend && npx cypress open
+# Then select 09-bracket tests
+```
+
+### Tournaments for Bracket Testing
+
+| Tournament | PK | Bracket State | Best For Testing |
+|------------|-----|---------------|------------------|
+| Spring Championship | 1 | All 6 games completed | Full bracket with badges |
+| Summer League | 2 | 2 games completed | Partial bracket progression |
+| Autumn Cup | 3 | 0 games completed | Empty/pending bracket |
 
 ## Adding New Test Scenarios
 

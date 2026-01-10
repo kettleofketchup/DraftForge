@@ -295,6 +295,11 @@ class Team(models.Model):
     )
 
     current_points = models.IntegerField(default=0, blank=True)
+    placement = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Final tournament placement (1=winner, 2=runner-up, etc.)",
+    )
 
     def __str__(self):
         return self.name

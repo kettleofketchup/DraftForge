@@ -150,7 +150,7 @@ inv prod.down          # Stop prod environment
 # ... (same commands as dev)
 
 # Database
-inv db.migrate         # Run migrations
+inv db.migrate         # Run migrations (applies to Docker DB via mounted volume)
 inv db.populate.all    # Reset and populate test DB
 
 # Docker Images
@@ -249,7 +249,7 @@ Docs available at http://127.0.0.1:8000
 cd /home/kettle/git_repos/website
 git worktree add .worktrees/feature-name -b feature/feature-name
 
-# 2. Setup worktree environment
+# 2. Setup worktree Python environment
 cd /home/kettle/git_repos/website/.worktrees/feature-name
 python -m venv .venv
 source .venv/bin/activate
@@ -258,8 +258,20 @@ poetry install
 # 3. Copy backend secrets from main repo
 cp /home/kettle/git_repos/website/backend/.env ./backend/.env
 
-# 4. Install frontend deps
-cd frontend && npm install
+# 4. Install frontend dependencies (IMPORTANT: must be in worktree!)
+cd /home/kettle/git_repos/website/.worktrees/feature-name/frontend
+npm install
+
+# 5. Run migrations (from worktree root)
+cd /home/kettle/git_repos/website/.worktrees/feature-name
+source .venv/bin/activate
+inv db.migrate
+
+# 6. Start Docker environment
+inv dev.test  # Detached mode for testing, or inv dev.debug for dev
+
+# 7. Populate test data (optional)
+inv db.populate.all
 ```
 
 ### Using Invoke in Worktrees

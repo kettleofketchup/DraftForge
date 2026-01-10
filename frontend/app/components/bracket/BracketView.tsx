@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -23,7 +23,8 @@ import { DividerNode, type DividerNodeData } from './nodes/DividerNode';
 import { BracketEdge } from './edges/BracketEdge';
 import { BracketToolbar } from './controls/BracketToolbar';
 import { MatchStatsModal } from './modals/MatchStatsModal';
-import type { BracketMatch, MatchNodeData } from './types';
+import type { BracketMatch, MatchNodeData, BadgeMapping } from './types';
+import { buildBadgeMapping } from './utils/badgeUtils';
 
 // Register node/edge types outside component to prevent re-renders
 const nodeTypes = {
@@ -88,12 +89,12 @@ function createAdvancementEdges(matches: BracketMatch[]): Edge[] {
 /**
  * Convert matches to ReactFlow nodes
  */
-function matchesToNodes(matches: BracketMatch[]): MatchNodeType[] {
+function matchesToNodes(matches: BracketMatch[], badgeMapping: BadgeMapping): MatchNodeType[] {
   return matches.map((match) => ({
     id: match.id,
     type: 'match' as const,
     position: { x: 0, y: 0 },
-    data: { ...match } as MatchNodeData,
+    data: { ...match, badgeMapping } as MatchNodeData,
   }));
 }
 
@@ -138,6 +139,9 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const selectedMatch = matches.find((m) => m.id === selectedMatchId) ?? null;
 
+  // Pre-compute badge mapping for all matches
+  const badgeMapping = useMemo(() => buildBadgeMapping(matches), [matches]);
+
   // Load bracket on mount
   useEffect(() => {
     loadBracket(tournamentId);
@@ -169,8 +173,8 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       const grandFinalsMatches = matches.filter(m => m.bracketType === 'grand_finals');
 
       // Create nodes
-      const winnersNodes = matchesToNodes(winnersMatches);
-      const losersNodes = matchesToNodes(losersMatches);
+      const winnersNodes = matchesToNodes(winnersMatches, badgeMapping);
+      const losersNodes = matchesToNodes(losersMatches, badgeMapping);
 
       // Create structural edges for layout
       const winnersEdges = createStructuralEdges(winnersMatches);
@@ -316,7 +320,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         id: match.id,
         type: 'match' as const,
         position: { x: grandFinalsX, y: grandFinalsY + i * (NODE_HEIGHT + 30) },
-        data: { ...match } as MatchNodeData,
+        data: { ...match, badgeMapping } as MatchNodeData,
       }));
 
       // Calculate bracket bounds for divider - extend far beyond visible area
@@ -442,7 +446,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
 
       {/* Single ReactFlow instance for entire bracket */}
       {matches.length > 0 && (
-        <div className="h-[700px] border rounded-lg overflow-hidden bg-background">
+        <div className="h-[700px] border rounded-lg overflow-hidden bg-background" data-testid="bracketContainer">
           <ReactFlow
             nodes={nodes}
             edges={edges}

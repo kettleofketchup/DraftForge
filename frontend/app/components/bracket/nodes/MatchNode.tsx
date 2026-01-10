@@ -13,6 +13,8 @@ import { cn } from '~/lib/utils';
 import type { MatchNodeData } from '../types';
 import type { TeamType } from '~/components/tournament/types';
 import { getRoundLabel } from '../utils/doubleElimination';
+import { BracketBadge } from '../BracketBadge';
+import { getBadgeLetter } from '../utils/badgeUtils';
 
 const statusConfig = {
   pending: { label: 'Upcoming', className: 'bg-muted text-muted-foreground' },
@@ -49,10 +51,20 @@ export const MatchNode = memo(({ data, selected }: NodeProps & { data: MatchNode
   const roundLabel = getRoundLabel(data.bracketType, data.round);
   const bracketStyle = bracketTypeStyles[data.bracketType] || bracketTypeStyles.winners;
 
+  // Calculate badge for winners bracket
+  const winnersBadgeLetter =
+    data.bracketType === 'winners' && data.loserNextMatchId
+      ? getBadgeLetter(data.bracketType, data.round, data.position, true)
+      : null;
+
+  // Get badges for losers bracket slots
+  const radiantBadgeLetter = data.badgeMapping?.[`${data.id}:radiant`];
+  const direBadgeLetter = data.badgeMapping?.[`${data.id}:dire`];
+
   return (
     <BaseNode
       className={cn(
-        'w-52 cursor-pointer transition-all',
+        'w-52 cursor-pointer transition-all relative',
         bracketStyle.bg,
         bracketStyle.border,
         selected && 'ring-2 ring-primary'
@@ -60,6 +72,14 @@ export const MatchNode = memo(({ data, selected }: NodeProps & { data: MatchNode
     >
       {/* Left handle - receives winner from previous match */}
       <BaseHandle type="target" position={Position.Left} />
+
+      {/* Losers bracket badges - left side of slots */}
+      {data.bracketType === 'losers' && radiantBadgeLetter && (
+        <BracketBadge letter={radiantBadgeLetter} position="left" slot="top" />
+      )}
+      {data.bracketType === 'losers' && direBadgeLetter && (
+        <BracketBadge letter={direBadgeLetter} position="left" slot="bottom" />
+      )}
 
       {/* Header with round label and status */}
       <BaseNodeHeader className={cn('border-b pb-2', bracketStyle.headerBg)}>
@@ -90,6 +110,11 @@ export const MatchNode = memo(({ data, selected }: NodeProps & { data: MatchNode
 
       {/* Right handle - winner advances to next match */}
       <BaseHandle type="source" position={Position.Right} />
+
+      {/* Winners bracket badge - right side */}
+      {winnersBadgeLetter && (
+        <BracketBadge letter={winnersBadgeLetter} position="right" />
+      )}
     </BaseNode>
   );
 });

@@ -91,6 +91,28 @@ less file.txt
 more file.txt
 ```
 
+## Command Chaining Bypasses
+
+Complex command chains can evade permission evaluation:
+
+```bash
+# WRONG - chains multiple operations making permission review difficult
+cd /path && git branch --show-current && git log --oneline | wc -l && echo "---" && git log --oneline
+
+# WRONG - mixing cd with other commands in chain
+cd /path && command1 && command2
+```
+**Correct:** Run commands separately so each can be individually reviewed:
+```bash
+# First call
+git branch --show-current
+
+# Second call
+git log --oneline
+```
+
+**Why:** Permission systems evaluate the full command string. Complex chains with `&&`, `|`, `wc`, `echo` etc. make it harder to review what's actually being executed and can bypass allowlist patterns.
+
 ## Search Bypasses
 
 ```bash

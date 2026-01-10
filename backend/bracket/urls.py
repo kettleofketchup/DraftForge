@@ -5,6 +5,7 @@ from app.views.bracket import (
     generate_bracket,
     get_bracket,
     save_bracket,
+    set_team_placement,
 )
 
 from .functions.generate import gen_double_elim
@@ -19,5 +20,10 @@ urlpatterns = [
         name="generate_bracket",
     ),
     path("tournaments/<int:tournament_id>/save/", save_bracket, name="save_bracket"),
+    path(
+        "tournaments/<int:tournament_id>/teams/<int:team_id>/placement/",
+        set_team_placement,
+        name="set_team_placement",
+    ),
     path("games/<int:game_id>/advance-winner/", advance_winner, name="advance_winner"),
 ]
