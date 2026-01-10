@@ -79,3 +79,40 @@ class RSVPModelTest(TestCase):
         )
         self.assertEqual(rsvp.status, "yes")
         self.assertEqual(rsvp.discord_username, "TestUser")
+
+
+class EmbedBuildersTest(TestCase):
+    def test_event_announcement_embed(self):
+        """event_announcement_embed returns dict with correct structure."""
+        from discordbot.embeds import event_announcement_embed
+
+        template = EventTemplate.objects.create(
+            name="Test",
+            template_type="event",
+            title="Weekly Game Night",
+            description="Join us for fun!",
+            color="#5865F2",
+            channel_id="123",
+        )
+        embed = event_announcement_embed(template)
+
+        self.assertEqual(embed["title"], "Weekly Game Night")
+        self.assertEqual(embed["description"], "Join us for fun!")
+        self.assertEqual(embed["color"], 0x5865F2)
+        self.assertIn("footer", embed)
+
+    def test_tournament_created_embed(self):
+        """tournament_created_embed returns dict with tournament info."""
+        from datetime import date
+
+        from app.models import Tournament
+        from discordbot.embeds import tournament_created_embed
+
+        tournament = Tournament.objects.create(
+            name="Test Tournament",
+            date_played=date.today(),
+        )
+        embed = tournament_created_embed(tournament)
+
+        self.assertIn("Test Tournament", embed["title"])
+        self.assertIn("color", embed)
