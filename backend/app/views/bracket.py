@@ -1,6 +1,7 @@
 """Bracket API views for tournament bracket management."""
 
 from django.db import transaction
+from django.db.models import Max
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAdminUser
@@ -65,6 +66,7 @@ def generate_bracket(request, tournament_id):
 
 @api_view(["POST"])
 @permission_classes([IsAdminUser])
+@transaction.atomic
 def save_bracket(request, tournament_id):
     """Save bracket structure to database."""
     try:
@@ -78,17 +80,112 @@ def save_bracket(request, tournament_id):
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # TODO: Implement bracket saving logic
-    return Response(
-        {"tournamentId": tournament_id, "message": "Bracket save placeholder"}
+    matches = serializer.validated_data["matches"]
+
+    # Delete existing bracket games for this tournament
+    Game.objects.filter(tournament=tournament).delete()
+
+    # Pass 1: Create all games without FK relationships
+    # Map frontend ID -> database PK
+    id_to_game = {}
+
+    for match in matches:
+        game = Game.objects.create(
+            tournament=tournament,
+            round=match.get("round", 1),
+            position=match.get("position", 0),
+            bracket_type=match.get("bracketType", "winners"),
+            elimination_type=match.get("eliminationType", "double"),
+            status=match.get("status", "pending"),
+            next_game_slot=match.get("nextMatchSlot"),
+            loser_next_game_slot=match.get("loserNextMatchSlot"),
+            swiss_record_wins=match.get("swissRecordWins", 0),
+            swiss_record_losses=match.get("swissRecordLosses", 0),
+        )
+
+        # Set teams if provided
+        radiant_team = match.get("radiantTeam")
+        if radiant_team and radiant_team.get("pk"):
+            game.radiant_team_id = radiant_team["pk"]
+
+        dire_team = match.get("direTeam")
+        if dire_team and dire_team.get("pk"):
+            game.dire_team_id = dire_team["pk"]
+
+        game.save()
+        id_to_game[match["id"]] = game
+
+    # Pass 2: Wire up FK relationships
+    for match in matches:
+        game = id_to_game[match["id"]]
+        updated = False
+
+        next_match_id = match.get("nextMatchId")
+        if next_match_id and next_match_id in id_to_game:
+            game.next_game = id_to_game[next_match_id]
+            updated = True
+
+        loser_next_match_id = match.get("loserNextMatchId")
+        if loser_next_match_id and loser_next_match_id in id_to_game:
+            game.loser_next_game = id_to_game[loser_next_match_id]
+            updated = True
+
+        if updated:
+            game.save()
+
+    # Return saved games
+    saved_games = Game.objects.filter(tournament=tournament).select_related(
+        "radiant_team", "dire_team", "winning_team", "next_game", "loser_next_game"
     )
+    result_serializer = BracketGameSerializer(saved_games, many=True)
+
+    return Response({"tournamentId": tournament_id, "matches": result_serializer.data})
+
+
+def calculate_placement(game):
+    """
+    Calculate placement for a team eliminated from this game.
+
+    Returns placement number or None if team isn't eliminated
+    (e.g., winners bracket losers go to losers bracket).
+    """
+    # Grand finals loser = 2nd place
+    if game.bracket_type == "grand_finals":
+        return 2
+
+    # Losers bracket elimination
+    if game.bracket_type == "losers":
+        # Find max losers round for this tournament
+        max_round = Game.objects.filter(
+            tournament=game.tournament,
+            bracket_type="losers",
+        ).aggregate(Max("round"))["round__max"]
+
+        if max_round is None:
+            return 3  # Only one losers game = losers finals
+
+        rounds_from_final = max_round - game.round
+
+        if rounds_from_final == 0:  # Losers finals
+            return 3
+        elif rounds_from_final <= 2:  # Losers semi (4th)
+            return 4
+        else:
+            # Each earlier round: 5th-6th, 7th-8th, etc.
+            base = 5
+            for i in range(rounds_from_final - 3):
+                base += 2**i
+            return base
+
+    # Winners bracket elimination → goes to losers (no placement yet)
+    return None
 
 
 @api_view(["POST"])
 @permission_classes([IsAdminUser])
 @transaction.atomic
 def advance_winner(request, game_id):
-    """Mark winner and advance to next match."""
+    """Mark winner and advance to next match, setting placement if eliminated."""
     try:
         game = Game.objects.get(pk=game_id)
     except Game.DoesNotExist:
@@ -107,14 +204,17 @@ def advance_winner(request, game_id):
                 {"error": "No radiant team assigned"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        game.winning_team = game.radiant_team
+        winning_team = game.radiant_team
+        losing_team = game.dire_team
     else:
         if not game.dire_team:
             return Response(
                 {"error": "No dire team assigned"}, status=status.HTTP_400_BAD_REQUEST
             )
-        game.winning_team = game.dire_team
+        winning_team = game.dire_team
+        losing_team = game.radiant_team
 
+    game.winning_team = winning_team
     game.status = "completed"
     game.save()
 
@@ -122,23 +222,70 @@ def advance_winner(request, game_id):
     if game.next_game and game.next_game_slot:
         next_game = game.next_game
         if game.next_game_slot == "radiant":
-            next_game.radiant_team = game.winning_team
+            next_game.radiant_team = winning_team
         else:
-            next_game.dire_team = game.winning_team
+            next_game.dire_team = winning_team
         next_game.save()
 
-    # Advance loser if elimination_type is 'double' and loser path exists
-    if (
-        game.elimination_type == "double"
-        and game.loser_next_game
-        and game.loser_next_game_slot
-    ):
-        losing_team = game.dire_team if winner_slot == "radiant" else game.radiant_team
-        loser_game = game.loser_next_game
-        if game.loser_next_game_slot == "radiant":
-            loser_game.radiant_team = losing_team
+    # Handle loser path
+    if losing_team:
+        if (
+            game.elimination_type == "double"
+            and game.loser_next_game
+            and game.loser_next_game_slot
+        ):
+            # Advance loser to losers bracket
+            loser_game = game.loser_next_game
+            if game.loser_next_game_slot == "radiant":
+                loser_game.radiant_team = losing_team
+            else:
+                loser_game.dire_team = losing_team
+            loser_game.save()
         else:
-            loser_game.dire_team = losing_team
-        loser_game.save()
+            # No loser path - team is eliminated, set placement
+            placement = calculate_placement(game)
+            if placement:
+                losing_team.placement = placement
+                losing_team.save()
+
+    # Grand finals - also set winner's placement
+    if game.bracket_type == "grand_finals":
+        winning_team.placement = 1
+        winning_team.save()
 
     return Response(BracketGameSerializer(game).data)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAdminUser])
+def set_team_placement(request, tournament_id, team_id):
+    """Manually set or clear a team's tournament placement."""
+    try:
+        tournament = Tournament.objects.get(pk=tournament_id)
+    except Tournament.DoesNotExist:
+        return Response(
+            {"error": "Tournament not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    try:
+        team = Team.objects.get(pk=team_id, tournament=tournament)
+    except Team.DoesNotExist:
+        return Response(
+            {"error": "Team not found in this tournament"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    placement = request.data.get("placement")
+
+    # Validate placement
+    if placement is not None:
+        if not isinstance(placement, int) or placement < 1:
+            return Response(
+                {"error": "Placement must be a positive integer or null"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    team.placement = placement
+    team.save()
+
+    return Response({"team_id": team.pk, "placement": team.placement})

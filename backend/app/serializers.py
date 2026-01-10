@@ -84,6 +84,7 @@ class TeamSerializerForTournament(serializers.ModelSerializer):
             "left_members",
             "captain",
             "draft_order",
+            "placement",
         )
 
 
@@ -352,6 +353,7 @@ class TeamSerializer(serializers.ModelSerializer):
             "current_points",
             "tournament",
             "total_mmr",
+            "placement",
         )
 
 
