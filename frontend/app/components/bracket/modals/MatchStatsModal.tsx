@@ -9,10 +9,11 @@ import {
 import { Button } from '~/components/ui/button';
 import { Badge } from '~/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, Link2 } from 'lucide-react';
 import { useUserStore } from '~/store/userStore';
 import { useBracketStore } from '~/store/bracketStore';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
+import { LinkSteamMatchModal } from './LinkSteamMatchModal';
 import type { BracketMatch } from '../types';
 import { cn } from '~/lib/utils';
 
@@ -24,8 +25,10 @@ interface MatchStatsModalProps {
 
 export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps) {
   const isStaff = useUserStore((state) => state.isStaff());
-  const { setMatchWinner, advanceWinner } = useBracketStore();
+  const tournament = useUserStore((state) => state.tournament);
+  const { setMatchWinner, advanceWinner, loadBracket } = useBracketStore();
   const [showStatsModal, setShowStatsModal] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
 
   if (!match) return null;
 
@@ -35,6 +38,12 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
   const handleSetWinner = (winner: 'radiant' | 'dire') => {
     setMatchWinner(match.id, winner);
     advanceWinner(match.id);
+  };
+
+  const handleLinkUpdated = () => {
+    if (tournament?.pk) {
+      loadBracket(tournament.pk);
+    }
   };
 
   return (
@@ -125,13 +134,38 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
               </div>
             </div>
           )}
+
+          {/* Staff: Link Steam Match button */}
+          {isStaff && (
+            <div className="border-t pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowLinkModal(true)}
+                data-testid="link-steam-match-btn"
+              >
+                <Link2 className="w-4 h-4 mr-1" />
+                {match.steamMatchId
+                  ? `Linked: Match #${match.steamMatchId}`
+                  : 'Link Steam Match'}
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Detailed Match Stats Modal */}
         <DotaMatchStatsModal
           open={showStatsModal}
           onClose={() => setShowStatsModal(false)}
-          matchId={match.steamMatchId}
+          matchId={match.steamMatchId ?? null}
+        />
+
+        {/* Link Steam Match Modal */}
+        <LinkSteamMatchModal
+          isOpen={showLinkModal}
+          onClose={() => setShowLinkModal(false)}
+          game={match}
+          onLinkUpdated={handleLinkUpdated}
         />
       </DialogContent>
     </Dialog>
