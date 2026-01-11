@@ -1,5 +1,7 @@
 // Holds the general draft view
 import { useEffect } from 'react';
+import { Separator } from '~/components/ui/separator';
+
 import type { DraftRoundType, DraftType, TournamentType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -63,7 +65,11 @@ export const DraftRoundView: React.FC = () => {
     log.debug('Not latest round', draft);
     return (
       <>
-        {draft.draft_style === 'shuffle' ? <ShufflePickOrder /> : <CaptainCards />}
+        {draft.draft_style === 'shuffle' ? (
+          <ShufflePickOrder />
+        ) : (
+          <CaptainCards />
+        )}
 
         <div className="mb-4">
           <h3 className="text-xl font-bold">Not Current Round</h3>
@@ -79,13 +85,23 @@ export const DraftRoundView: React.FC = () => {
 
   return (
     <>
-      {draft.draft_style === 'shuffle' ? <ShufflePickOrder /> : <CaptainCards />}
+      {draft.draft_style === 'shuffle' ? (
+        <ShufflePickOrder />
+      ) : (
+        <CaptainCards />
+      )}
       <div className="p-4">
-        <div className="flex items-center justify-between mb-4">
+        <TurnIndicator />
+        <div className="flex items-center text-center justify-between my-4">
           <h2 className="text-2xl font-bold">My Current Team</h2>
         </div>
-        <TurnIndicator />
         <CurrentTeamView />
+
+        <Separator className="my-4" />
+
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-center">Pick A player</h2>
+        </div>
         <PlayerChoiceView />
       </div>
     </>

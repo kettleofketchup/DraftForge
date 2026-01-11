@@ -195,7 +195,15 @@
       "Bash(DISABLE_CACHE=true PYTHONPATH=/home/kettle/git_repos/website/backend /home/kettle/git_repos/website/.venv/bin/python:*)",
       "Bash(git -C /home/kettle/git_repos/website add backend/tests/helpers/tournament_config.py)",
       "Bash(git -C /home/kettle/git_repos/website commit -m \"refactor: convert print statements to logging in tournament_config\")",
-      "Bash(git -C /home/kettle/git_repos/website show --stat HEAD)"
+      "Bash(git -C /home/kettle/git_repos/website show --stat HEAD)",
+      "Bash(gh issue view:*)",
+      "Bash(/home/kettle/git_repos/website/.worktrees/shuffle-draft-fix/.venv/bin/pip install:*)",
+      "Bash(/home/kettle/git_repos/website/.worktrees/shuffle-draft-fix/.venv/bin/poetry install:*)",
+      "Bash(/home/kettle/git_repos/website/.worktrees/shuffle-draft-fix/.venv/bin/inv db.migrate.test:*)",
+      "Bash(/home/kettle/git_repos/website/.venv/bin/poetry install:*)",
+      "Bash(/home/kettle/git_repos/website/.venv/bin/poetry env info:*)",
+      "Bash(/home/kettle/git_repos/website/.venv/bin/inv test.run:*)",
+      "Bash(/home/kettle/git_repos/website/.venv/bin/inv test.up:*)"
     ]
   },
   "enableAllProjectMcpServers": true,
