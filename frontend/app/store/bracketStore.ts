@@ -182,14 +182,27 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
 
   advanceWinner: (matchId) => {
     const match = get().matches.find((m) => m.id === matchId);
-    if (!match?.winner || !match.nextMatchId) return;
+    if (!match?.winner) return;
 
     const winningTeam =
       match.winner === 'radiant' ? match.radiantTeam : match.direTeam;
-    if (!winningTeam) return;
+    const losingTeam =
+      match.winner === 'radiant' ? match.direTeam : match.radiantTeam;
 
-    log.debug('Advancing winner', { matchId, nextMatchId: match.nextMatchId });
-    get().assignTeamToSlot(match.nextMatchId, match.nextMatchSlot!, winningTeam);
+    // Advance winner to next match
+    if (winningTeam && match.nextMatchId && match.nextMatchSlot) {
+      log.debug('Advancing winner', { matchId, nextMatchId: match.nextMatchId });
+      get().assignTeamToSlot(match.nextMatchId, match.nextMatchSlot, winningTeam);
+    }
+
+    // Advance loser to losers bracket (double elimination)
+    if (losingTeam && match.loserNextMatchId && match.loserNextMatchSlot) {
+      log.debug('Advancing loser to losers bracket', {
+        matchId,
+        loserNextMatchId: match.loserNextMatchId,
+      });
+      get().assignTeamToSlot(match.loserNextMatchId, match.loserNextMatchSlot, losingTeam);
+    }
   },
 
   saveBracket: async (tournamentId) => {

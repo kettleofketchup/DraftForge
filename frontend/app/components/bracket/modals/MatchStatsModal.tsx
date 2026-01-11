@@ -101,14 +101,14 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
                   className="flex-1"
                   onClick={() => handleSetWinner('radiant')}
                 >
-                  {match.radiantTeam.name} Wins
+                  {match.radiantTeam.captain?.username ?? match.radiantTeam.name} Wins
                 </Button>
                 <Button
                   variant="outline"
                   className="flex-1"
                   onClick={() => handleSetWinner('dire')}
                 >
-                  {match.direTeam.name} Wins
+                  {match.direTeam.captain?.username ?? match.direTeam.name} Wins
                 </Button>
               </div>
             </div>
