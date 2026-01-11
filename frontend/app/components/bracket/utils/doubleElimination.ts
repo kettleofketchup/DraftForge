@@ -37,6 +37,9 @@ export function generateDoubleElimination(teams: TeamType[]): BracketMatch[] {
   matchId += losersMatches.length;
   matches.push(...losersMatches);
 
+  // Wire loser paths from winners bracket to losers bracket
+  wireLoserPaths(winnersMatches, losersMatches);
+
   // Generate Grand Finals
   const { grandFinals, connections } = generateGrandFinals(matchId, winnersMatches, losersMatches);
   matches.push(...grandFinals);
@@ -77,6 +80,7 @@ function generateWinnersBracket(
         round,
         position,
         bracketType: 'winners',
+        eliminationType: 'double',
         status: 'pending',
       };
 
@@ -116,6 +120,7 @@ function generateLosersBracket(
         round,
         position,
         bracketType: 'losers',
+        eliminationType: 'double',
         status: 'pending',
       };
 
@@ -132,6 +137,62 @@ function generateLosersBracket(
   }
 
   return matches;
+}
+
+/**
+ * Wire loser paths from winners bracket to losers bracket.
+ *
+ * Pattern:
+ * - WB R1 losers → LB R1 (major round): 2 WB matches feed 1 LB match
+ * - WB R2+ losers → LB even rounds (minor rounds): 1:1 mapping, dire slot
+ *
+ * For 8 teams:
+ * - WB R1 (4 matches) → LB R1 (2 matches): positions 0,1→match 0; 2,3→match 1
+ * - WB R2 (2 matches) → LB R2 (2 matches): 1:1 into dire slots
+ * - WB Finals (1 match) → LB Finals (1 match): into dire slot
+ */
+function wireLoserPaths(
+  winnersMatches: BracketMatch[],
+  losersMatches: BracketMatch[]
+): void {
+  const winnersRounds = Math.max(...winnersMatches.map((m) => m.round));
+
+  for (const wMatch of winnersMatches) {
+    // Determine which LB round this WB round feeds into
+    // WB R1 → LB R1, WB R2 → LB R2, WB R3 → LB R4, WB R4 → LB R6, etc.
+    const lbRound = wMatch.round === 1 ? 1 : 2 * (wMatch.round - 1);
+
+    // Find LB matches in the target round
+    const lbMatchesInRound = losersMatches.filter((m) => m.round === lbRound);
+
+    if (wMatch.round === 1) {
+      // Major round (LB R1): 2 WB matches → 1 LB match
+      // Even WB position → radiant, odd → dire
+      const lbPosition = Math.floor(wMatch.position / 2);
+      const lbMatch = lbMatchesInRound.find((m) => m.position === lbPosition);
+      if (lbMatch) {
+        wMatch.loserNextMatchId = lbMatch.id;
+        wMatch.loserNextMatchSlot = wMatch.position % 2 === 0 ? 'radiant' : 'dire';
+      }
+    } else if (wMatch.round < winnersRounds) {
+      // Minor rounds (LB R2, R4, etc.): 1:1 mapping, dire slot
+      const lbMatch = lbMatchesInRound.find((m) => m.position === wMatch.position);
+      if (lbMatch) {
+        wMatch.loserNextMatchId = lbMatch.id;
+        wMatch.loserNextMatchSlot = 'dire';
+      }
+    } else {
+      // Winners Finals → Losers Finals (last LB round)
+      const losersFinalsRound = Math.max(...losersMatches.map((m) => m.round));
+      const losersFinals = losersMatches.find(
+        (m) => m.round === losersFinalsRound && m.position === 0
+      );
+      if (losersFinals) {
+        wMatch.loserNextMatchId = losersFinals.id;
+        wMatch.loserNextMatchSlot = 'dire';
+      }
+    }
+  }
 }
 
 interface GrandFinalsResult {
@@ -156,6 +217,7 @@ function generateGrandFinals(
     round: 1,
     position: 0,
     bracketType: 'grand_finals',
+    eliminationType: 'double',
     status: 'pending',
   };
 
