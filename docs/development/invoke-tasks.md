@@ -65,8 +65,15 @@ inv docker.nginx.run      # Run nginx container
 ## Database Tasks (`inv db.*`)
 
 ```bash
-inv db.migrate              # Run all migrations
+# Migrations
+inv db.migrate              # Run migrations (dev, default)
+inv db.migrate.dev          # Run migrations for dev
+inv db.migrate.test         # Run migrations for test
+inv db.migrate.prod         # Run migrations for prod
+inv db.migrate.all          # Run migrations for all environments
 inv db.makemigrations       # Create migrations
+
+# Population
 inv db.populate.users       # Populate users
 inv db.populate.tournaments # Populate tournaments
 inv db.populate.all         # Reset and populate all

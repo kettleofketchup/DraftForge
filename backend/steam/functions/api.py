@@ -275,6 +275,8 @@ def get_game_match_suggestions(request, game_id):
 @permission_classes([IsAdminUser])
 def link_game_match(request, game_id):
     """Link a bracket game to a Steam match."""
+    from cacheops import invalidate_obj
+
     from app.models import Game
 
     serializer = LinkMatchRequestSerializer(data=request.data)
@@ -284,7 +286,7 @@ def link_game_match(request, game_id):
     match_id = serializer.validated_data["match_id"]
 
     try:
-        game = Game.objects.get(pk=game_id)
+        game = Game.objects.select_related("tournament").get(pk=game_id)
     except Game.DoesNotExist:
         return Response(
             {"error": "Game not found"},
@@ -301,6 +303,11 @@ def link_game_match(request, game_id):
     game.gameid = match_id
     game.save()
 
+    # Invalidate cache for game and tournament
+    invalidate_obj(game)
+    if game.tournament:
+        invalidate_obj(game.tournament)
+
     return Response({"status": "linked", "match_id": match_id})
 
 
@@ -308,10 +315,12 @@ def link_game_match(request, game_id):
 @permission_classes([IsAdminUser])
 def unlink_game_match(request, game_id):
     """Unlink a bracket game from its Steam match."""
+    from cacheops import invalidate_obj
+
     from app.models import Game
 
     try:
-        game = Game.objects.get(pk=game_id)
+        game = Game.objects.select_related("tournament").get(pk=game_id)
     except Game.DoesNotExist:
         return Response(
             {"error": "Game not found"},
@@ -319,6 +328,13 @@ def unlink_game_match(request, game_id):
         )
 
     game.gameid = None
-    game.save()
+    game.winning_team = None
+    game.status = "scheduled"
+    game.save(update_fields=["gameid", "winning_team", "status"])
+
+    # Invalidate cache for game and tournament
+    invalidate_obj(game)
+    if game.tournament:
+        invalidate_obj(game.tournament)
 
     return Response({"status": "unlinked"})

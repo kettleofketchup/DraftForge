@@ -57,9 +57,8 @@ def check_match_for_games(match):
                 continue
 
             if confidence == 1.0:
-                # High confidence - auto-link
-                game.gameid = match.match_id
-                game.save(update_fields=["gameid"])
+                # High confidence - auto-link and set winner
+                _link_game_to_match(game, match)
 
                 GameMatchSuggestion.objects.create(
                     game=game,
@@ -99,6 +98,108 @@ def _get_game_player_steam_ids(game):
         steam_ids.update(dire_ids)
 
     return steam_ids
+
+
+def _determine_winner_from_match(game, match):
+    """
+    Determine which tournament team won based on Steam match data.
+
+    Uses player_slot to determine which team was radiant/dire:
+    - player_slot 0-4 = radiant
+    - player_slot 128-132 = dire
+
+    Returns: The winning Team object, or None if unable to determine
+    """
+    if not game.radiant_team or not game.dire_team:
+        return None
+
+    # Get steam_ids for each tournament team
+    radiant_team_steam_ids = set(
+        game.radiant_team.members.exclude(steamid__isnull=True).values_list(
+            "steamid", flat=True
+        )
+    )
+    dire_team_steam_ids = set(
+        game.dire_team.members.exclude(steamid__isnull=True).values_list(
+            "steamid", flat=True
+        )
+    )
+
+    # Get players from match grouped by side (using player_slot)
+    match_radiant_steam_ids = set(
+        match.players.filter(player_slot__lt=128).values_list("steam_id", flat=True)
+    )
+    match_dire_steam_ids = set(
+        match.players.filter(player_slot__gte=128).values_list("steam_id", flat=True)
+    )
+
+    # Calculate overlap for each possible mapping
+    # Option A: tournament radiant = match radiant, tournament dire = match dire
+    radiant_as_radiant = len(radiant_team_steam_ids & match_radiant_steam_ids)
+    dire_as_dire = len(dire_team_steam_ids & match_dire_steam_ids)
+    option_a_score = radiant_as_radiant + dire_as_dire
+
+    # Option B: tournament radiant = match dire, tournament dire = match radiant
+    radiant_as_dire = len(radiant_team_steam_ids & match_dire_steam_ids)
+    dire_as_radiant = len(dire_team_steam_ids & match_radiant_steam_ids)
+    option_b_score = radiant_as_dire + dire_as_radiant
+
+    if option_a_score == 0 and option_b_score == 0:
+        log.warning(f"Cannot determine team mapping for game {game.id}")
+        return None
+
+    # Determine which mapping is correct
+    if option_a_score >= option_b_score:
+        # Tournament teams match their names (radiant=radiant, dire=dire)
+        if match.radiant_win:
+            winner = game.radiant_team
+        else:
+            winner = game.dire_team
+    else:
+        # Tournament teams are swapped (radiant played as dire, dire played as radiant)
+        if match.radiant_win:
+            winner = game.dire_team
+        else:
+            winner = game.radiant_team
+
+    log.info(
+        f"Game {game.id}: Determined winner is {winner.name} "
+        f"(option_a={option_a_score}, option_b={option_b_score}, radiant_win={match.radiant_win})"
+    )
+    return winner
+
+
+def _link_game_to_match(game, match):
+    """
+    Link a game to a match and set the winner based on match data.
+
+    Updates:
+    - game.gameid = match.match_id
+    - game.winning_team = determined from match.radiant_win and player positions
+    - game.status = "completed"
+    """
+    from cacheops import invalidate_obj
+
+    game.gameid = match.match_id
+
+    winner = _determine_winner_from_match(game, match)
+    if winner:
+        game.winning_team = winner
+        game.status = "completed"
+        log.info(
+            f"Linked game {game.id} to match {match.match_id}, winner: {winner.name}"
+        )
+    else:
+        log.warning(
+            f"Linked game {game.id} to match {match.match_id}, but could not determine winner"
+        )
+
+    game.save(update_fields=["gameid", "winning_team", "status"])
+
+    # Invalidate cache for game and tournament
+    invalidate_obj(game)
+    if game.tournament:
+        invalidate_obj(game.tournament)
 
 
 def get_suggestions_for_tournament(tournament_id):
@@ -149,8 +250,7 @@ def confirm_suggestion(suggestion_id):
         # Game already linked
         return False
 
-    suggestion.game.gameid = suggestion.match.match_id
-    suggestion.game.save(update_fields=["gameid"])
+    _link_game_to_match(suggestion.game, suggestion.match)
 
     suggestion.auto_linked = True
     suggestion.save(update_fields=["auto_linked"])
@@ -221,9 +321,8 @@ def auto_link_matches_for_tournament(tournament_id):
                 continue
 
             if confidence == 1.0:
-                # Perfect match - auto-link
-                game.gameid = match.match_id
-                game.save(update_fields=["gameid"])
+                # Perfect match - auto-link and set winner
+                _link_game_to_match(game, match)
 
                 GameMatchSuggestion.objects.create(
                     game=game,
@@ -234,7 +333,6 @@ def auto_link_matches_for_tournament(tournament_id):
                     auto_linked=True,
                 )
                 auto_linked_count += 1
-                log.info(f"Auto-linked game {game.id} to match {match.match_id}")
                 break  # Game is now linked, move to next game
             else:
                 # Partial match - create suggestion

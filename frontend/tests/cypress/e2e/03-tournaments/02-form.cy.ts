@@ -5,7 +5,7 @@ import {
 import {
   dateYYYYMMDD,
   editedName,
-  springChampionship,
+  completedBracketTest,
   thisName,
 } from './constants';
 
@@ -113,10 +113,10 @@ describe('Tournaments — create (e2e)', () => {
 
   it('View Button works', () => {
     // Ensure the tournament exists
-    cy.contains(springChampionship).should('exist');
+    cy.contains(completedBracketTest).should('exist');
 
     // Find the nearest card/container for the tournament and click the View button inside it
-    cy.contains(springChampionship)
+    cy.contains(completedBracketTest)
       .closest(
         '.tournament-card, [data-testid="tournament-card"], article, li, .card, .tournament, [role="article"]',
       )

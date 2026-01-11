@@ -149,8 +149,14 @@ inv prod.up            # Start prod environment
 inv prod.down          # Stop prod environment
 # ... (same commands as dev)
 
-# Database
-inv db.migrate         # Run migrations (applies to Docker DB via mounted volume)
+# Database Migrations
+inv db.migrate         # Run migrations for dev (default)
+inv db.migrate.dev     # Run migrations for dev environment
+inv db.migrate.test    # Run migrations for test environment
+inv db.migrate.prod    # Run migrations for prod environment
+inv db.migrate.all     # Run migrations for all environments
+
+# Database Population
 inv db.populate.all    # Reset and populate test DB
 
 # Docker Images
@@ -262,10 +268,10 @@ cp /home/kettle/git_repos/website/backend/.env ./backend/.env
 cd /home/kettle/git_repos/website/.worktrees/feature-name/frontend
 npm install
 
-# 5. Run migrations (from worktree root)
+# 5. Run migrations for all environments (from worktree root)
 cd /home/kettle/git_repos/website/.worktrees/feature-name
 source .venv/bin/activate
-inv db.migrate
+inv db.migrate.all
 
 # 6. Start Docker environment
 inv dev.test  # Detached mode for testing, or inv dev.debug for dev

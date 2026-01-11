@@ -128,22 +128,24 @@ def _generate_team_stats(match: Match, team: Team, is_radiant: bool, won: bool) 
         # Generate Steam ID - use player's steamid or generate from pk
         steam_id = player.steamid or (76561197960265728 + player.pk)
 
-        PlayerMatchStats.objects.create(
+        PlayerMatchStats.objects.update_or_create(
             match=match,
             steam_id=steam_id,
-            user=player,
-            player_slot=slot,
-            hero_id=random.randint(1, 130),
-            kills=random.randint(max(0, kill_base - 3), kill_base + 7),
-            deaths=random.randint(max(0, death_base - 3), death_base + 5),
-            assists=random.randint(5, 20),
-            gold_per_min=random.randint(350, 700),
-            xp_per_min=random.randint(400, 800),
-            last_hits=random.randint(50, 300),
-            denies=random.randint(0, 30),
-            hero_damage=random.randint(10000, 40000),
-            tower_damage=random.randint(0, 8000),
-            hero_healing=random.randint(0, 5000),
+            defaults={
+                "user": player,
+                "player_slot": slot,
+                "hero_id": random.randint(1, 130),
+                "kills": random.randint(max(0, kill_base - 3), kill_base + 7),
+                "deaths": random.randint(max(0, death_base - 3), death_base + 5),
+                "assists": random.randint(5, 20),
+                "gold_per_min": random.randint(350, 700),
+                "xp_per_min": random.randint(400, 800),
+                "last_hits": random.randint(50, 300),
+                "denies": random.randint(0, 30),
+                "hero_damage": random.randint(10000, 40000),
+                "tower_damage": random.randint(0, 8000),
+                "hero_healing": random.randint(0, 5000),
+            },
         )
 
 

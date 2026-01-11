@@ -972,8 +972,9 @@ class DraftRound(models.Model):
         if self.choice:
             raise ValueError("This draft round already has a choice.")
 
+        captain_name = self.captain.username if self.captain else "unassigned"
         log.debug(
-            f"Draft round {self.pk} picking player {user.username} for captain {self.captain.username}"
+            f"Draft round {self.pk} picking player {user.username} for captain {captain_name}"
         )
         log.debug(self.draft.users_remaining)
 
@@ -983,8 +984,10 @@ class DraftRound(models.Model):
 
         if self.draft.users_remaining.filter(id=user.id).exists():
             self.choice = user
-            self.team.members.add(user)
-            self.team.save()
+            team = self.team
+            if team:
+                team.members.add(user)
+                team.save()
             self.save()  # This triggers cache invalidation
 
             remaining_count_after = self.draft.users_remaining.count()

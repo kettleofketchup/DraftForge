@@ -268,12 +268,39 @@ def populate_tournaments(force=False):
         return
 
     # Tournament configurations
+    # Names are descriptive of what feature each tournament tests
+    # Player counts match team counts (teams × 5 players per team)
     tournament_configs = [
-        {"name": "Spring Championship", "users": 20, "type": "double_elimination"},
-        {"name": "Summer League", "users": 30, "type": "single_elimination"},
-        {"name": "Autumn Cup", "users": 25, "type": "swiss"},
-        {"name": "Winter Tournament", "users": 35, "type": "double_elimination"},
-        {"name": "Grand Masters", "users": 40, "type": "single_elimination"},
+        # All 6 bracket games completed - used for bracket badges, match stats tests
+        {
+            "name": "Completed Bracket Test",
+            "users": 20,
+            "teams": 4,
+            "type": "double_elimination",
+        },
+        # 2 games completed, 4 pending - used for partial bracket tests
+        {
+            "name": "Partial Bracket Test",
+            "users": 20,
+            "teams": 4,
+            "type": "double_elimination",
+        },
+        # 0 games completed, all pending - used for pending bracket tests
+        {
+            "name": "Pending Bracket Test",
+            "users": 20,
+            "teams": 4,
+            "type": "double_elimination",
+        },
+        # Used for captain draft and shuffle draft tests
+        {"name": "Draft Test", "users": 30, "teams": 6, "type": "double_elimination"},
+        # Larger tournament for general testing
+        {
+            "name": "Large Tournament Test",
+            "users": 40,
+            "teams": 8,
+            "type": "single_elimination",
+        },
     ]
 
     tournaments_created = 0
@@ -323,17 +350,31 @@ def populate_tournaments(force=False):
             # Add users to tournament
             tournament.users.set(selected_users)
 
-            # Create teams (4 teams of 5 for bracket testing)
-            team_names = ["Team Alpha", "Team Beta", "Team Gamma", "Team Delta"]
+            # Create teams based on config (5 players per team: 1 captain + 4 members)
+            team_name_pool = [
+                "Team Alpha",
+                "Team Beta",
+                "Team Gamma",
+                "Team Delta",
+                "Team Epsilon",
+                "Team Zeta",
+                "Team Eta",
+                "Team Theta",
+            ]
+            team_count = config.get("teams", 4)
             team_size = 5
+            required_users = team_count * team_size
 
             # Get users with Steam IDs for team membership
-            users_for_teams = users_with_steam[
-                :20
-            ]  # Need 20 users (4 teams * 5 players)
+            users_for_teams = users_with_steam[:required_users]
 
-            if len(users_for_teams) >= 20:
-                for team_idx, team_name in enumerate(team_names):
+            if len(users_for_teams) >= required_users:
+                for team_idx in range(team_count):
+                    team_name = (
+                        team_name_pool[team_idx]
+                        if team_idx < len(team_name_pool)
+                        else f"Team {team_idx + 1}"
+                    )
                     team_members = users_for_teams[
                         team_idx * team_size : (team_idx + 1) * team_size
                     ]
@@ -366,9 +407,9 @@ def populate_steam_matches(force=False):
     """
     Generate and save mock Steam matches for test tournaments.
     Creates bracket Game objects with different completion states:
-    - Tournament 1 (Spring Championship): All games completed with Steam matches
-    - Tournament 2 (Summer League): 2 games completed, 2 pending
-    - Tournament 3 (Autumn Cup): All games pending (no completed games)
+    - Tournament 1 (Completed Bracket Test): All 6 games completed with Steam matches
+    - Tournament 2 (Partial Bracket Test): 2 games completed, 4 pending
+    - Tournament 3 (Pending Bracket Test): All games pending (no completed games)
 
     Args:
         force: If True, delete existing mock matches and games first
@@ -638,15 +679,23 @@ def _flush_redis_cache():
 
         redis_url = getattr(settings, "CACHEOPS_REDIS", None)
         if redis_url:
-            # Parse redis URL or use dict config
+            # Parse redis URL or use dict config with short timeout to avoid hanging
             if isinstance(redis_url, str):
-                client = redis.from_url(redis_url)
+                client = redis.from_url(
+                    redis_url, socket_timeout=2, socket_connect_timeout=2
+                )
             else:
-                client = redis.Redis(**redis_url)
+                # Add timeout to dict config
+                config = {**redis_url, "socket_timeout": 2, "socket_connect_timeout": 2}
+                client = redis.Redis(**config)
             client.flushall()
             print("Redis cache flushed successfully")
         else:
             print("No CACHEOPS_REDIS configured, skipping cache flush")
+    except redis.exceptions.ConnectionError as e:
+        print(f"Redis not available, skipping cache flush: {e}")
+    except redis.exceptions.TimeoutError as e:
+        print(f"Redis timeout, skipping cache flush: {e}")
     except Exception as e:
         print(f"Warning: Failed to flush Redis cache: {e}")
 
@@ -655,7 +704,7 @@ def populate_bracket_linking_scenario(force=False):
     """
     Creates test data for the bracket match linking feature.
 
-    Creates a tournament "Link Test Tournament" with:
+    Creates a tournament "Bracket Linking Test" with:
     - league_id=17929
     - 4 teams with 5 players each (20 users with steam IDs)
     - Bracket games (winners round 1, losers bracket, grand finals)
@@ -674,12 +723,15 @@ def populate_bracket_linking_scenario(force=False):
     from app.models import CustomUser, Game, PositionsModel, Team, Tournament
     from steam.models import Match, PlayerMatchStats
 
-    TOURNAMENT_NAME = "Link Test Tournament"
+    TOURNAMENT_NAME = "Bracket Linking Test"
+    OLD_TOURNAMENT_NAME = "Link Test Tournament"  # Handle renamed tournament
     LEAGUE_ID = 17929
     BASE_MATCH_ID = 9100000001
 
-    # Check if tournament already exists
+    # Check if tournament already exists (check both old and new names)
     existing_tournament = Tournament.objects.filter(name=TOURNAMENT_NAME).first()
+    old_tournament = Tournament.objects.filter(name=OLD_TOURNAMENT_NAME).first()
+
     if existing_tournament and not force:
         print(
             f"Tournament '{TOURNAMENT_NAME}' already exists. Use force=True to recreate."
@@ -687,13 +739,23 @@ def populate_bracket_linking_scenario(force=False):
         return existing_tournament
 
     # Delete existing data if force=True
-    if existing_tournament and force:
-        print(f"Deleting existing tournament '{TOURNAMENT_NAME}'...")
-        # Delete related matches
-        Match.objects.filter(
+    if force:
+        # Always clean up matches in our ID range
+        deleted_matches = Match.objects.filter(
             match_id__gte=BASE_MATCH_ID, match_id__lt=BASE_MATCH_ID + 10
         ).delete()
-        existing_tournament.delete()
+        if deleted_matches[0] > 0:
+            print(f"  Deleted {deleted_matches[0]} existing matches in ID range")
+
+        # Delete old tournament (renamed)
+        if old_tournament:
+            print(f"Deleting old tournament '{OLD_TOURNAMENT_NAME}'...")
+            old_tournament.delete()
+
+        # Delete current tournament
+        if existing_tournament:
+            print(f"Deleting existing tournament '{TOURNAMENT_NAME}'...")
+            existing_tournament.delete()
 
     print(f"Creating '{TOURNAMENT_NAME}' with bracket linking test data...")
 
@@ -887,41 +949,45 @@ def populate_bracket_linking_scenario(force=False):
         dire_players = config["dire_players"]
 
         for slot_idx, player in enumerate(radiant_players):
-            PlayerMatchStats.objects.create(
+            PlayerMatchStats.objects.update_or_create(
                 match=match,
                 steam_id=player.steamid,
-                user=player,
-                player_slot=slot_idx,
-                hero_id=random.randint(1, 130),
-                kills=random.randint(2, 15),
-                deaths=random.randint(1, 10),
-                assists=random.randint(5, 25),
-                gold_per_min=random.randint(300, 600),
-                xp_per_min=random.randint(400, 700),
-                last_hits=random.randint(50, 300),
-                denies=random.randint(0, 20),
-                hero_damage=random.randint(10000, 40000),
-                tower_damage=random.randint(500, 5000),
-                hero_healing=random.randint(0, 5000),
+                defaults={
+                    "user": player,
+                    "player_slot": slot_idx,
+                    "hero_id": random.randint(1, 130),
+                    "kills": random.randint(2, 15),
+                    "deaths": random.randint(1, 10),
+                    "assists": random.randint(5, 25),
+                    "gold_per_min": random.randint(300, 600),
+                    "xp_per_min": random.randint(400, 700),
+                    "last_hits": random.randint(50, 300),
+                    "denies": random.randint(0, 20),
+                    "hero_damage": random.randint(10000, 40000),
+                    "tower_damage": random.randint(500, 5000),
+                    "hero_healing": random.randint(0, 5000),
+                },
             )
 
         for slot_idx, player in enumerate(dire_players):
-            PlayerMatchStats.objects.create(
+            PlayerMatchStats.objects.update_or_create(
                 match=match,
                 steam_id=player.steamid,
-                user=player,
-                player_slot=128 + slot_idx,  # Dire slots start at 128
-                hero_id=random.randint(1, 130),
-                kills=random.randint(2, 15),
-                deaths=random.randint(1, 10),
-                assists=random.randint(5, 25),
-                gold_per_min=random.randint(300, 600),
-                xp_per_min=random.randint(400, 700),
-                last_hits=random.randint(50, 300),
-                denies=random.randint(0, 20),
-                hero_damage=random.randint(10000, 40000),
-                tower_damage=random.randint(500, 5000),
-                hero_healing=random.randint(0, 5000),
+                defaults={
+                    "user": player,
+                    "player_slot": 128 + slot_idx,  # Dire slots start at 128
+                    "hero_id": random.randint(1, 130),
+                    "kills": random.randint(2, 15),
+                    "deaths": random.randint(1, 10),
+                    "assists": random.randint(5, 25),
+                    "gold_per_min": random.randint(300, 600),
+                    "xp_per_min": random.randint(400, 700),
+                    "last_hits": random.randint(50, 300),
+                    "denies": random.randint(0, 20),
+                    "hero_damage": random.randint(10000, 40000),
+                    "tower_damage": random.randint(500, 5000),
+                    "hero_healing": random.randint(0, 5000),
+                },
             )
 
         matches_created += 1

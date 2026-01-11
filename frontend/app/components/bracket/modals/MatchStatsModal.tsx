@@ -173,7 +173,7 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
 }
 
 interface TeamCardProps {
-  team?: { name: string; captain?: { avatarUrl?: string } };
+  team?: { name: string; captain?: { avatarUrl?: string; username?: string } };
   score?: number;
   isWinner: boolean;
   label: string;
@@ -189,6 +189,9 @@ function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
     );
   }
 
+  const displayName = team.captain?.username ?? team.name;
+  const initials = displayName.substring(0, 2).toUpperCase();
+
   return (
     <div
       className={cn(
@@ -198,9 +201,9 @@ function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
     >
       <Avatar className="h-12 w-12 mx-auto mb-2">
         <AvatarImage src={team.captain?.avatarUrl} />
-        <AvatarFallback>{team.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+        <AvatarFallback>{initials}</AvatarFallback>
       </Avatar>
-      <p className={cn('font-medium', isWinner && 'text-green-500')}>{team.name}</p>
+      <p className={cn('font-medium', isWinner && 'text-green-500')}>{displayName}</p>
       <p className="text-xs text-muted-foreground">{label}</p>
       {score !== undefined && (
         <p className={cn('text-2xl font-bold mt-1', isWinner && 'text-green-500')}>

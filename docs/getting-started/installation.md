@@ -67,7 +67,11 @@ inv docker.all.build
 
 ```bash
 source .venv/bin/activate
-inv db.migrate
+inv db.migrate.all     # Run migrations for all environments
+# Or for specific environment:
+# inv db.migrate.dev   # Dev only (default)
+# inv db.migrate.test  # Test only
+# inv db.migrate.prod  # Prod only
 ```
 
 ## Verify Installation

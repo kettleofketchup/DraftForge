@@ -102,7 +102,9 @@ poetry run inv version.tag
 
 ### Database Operations
 ```bash
-poetry run inv db.migrate           # Run migrations
+poetry run inv db.migrate           # Run migrations (dev, default)
+poetry run inv db.migrate.all       # Run migrations for all environments
+poetry run inv db.migrate.test      # Run migrations for test
 poetry run inv db.populate.all      # Reset and populate test DB
 ```
 

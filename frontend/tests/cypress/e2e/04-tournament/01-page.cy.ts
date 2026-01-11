@@ -9,6 +9,6 @@ describe('API Integration Tests', () => {
     // Verify the API was called
 
     // Check that the page displays the mocked data
-    cy.get('body').should('contain.text', 'Spring Championship');
+    cy.get('body').should('contain.text', 'Completed Bracket Test');
   });
 });

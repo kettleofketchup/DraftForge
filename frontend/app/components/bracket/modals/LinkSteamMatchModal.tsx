@@ -55,6 +55,7 @@ export function LinkSteamMatchModal({
   const [linkedMatchId, setLinkedMatchId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [detailsMatchId, setDetailsMatchId] = useState<number | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Fetch suggestions when modal opens or search changes
   useEffect(() => {
@@ -78,7 +79,7 @@ export function LinkSteamMatchModal({
 
     const debounce = setTimeout(fetchSuggestions, 300);
     return () => clearTimeout(debounce);
-  }, [isOpen, game.gameId, search]);
+  }, [isOpen, game.gameId, search, refreshKey]);
 
   const handleLink = async (matchId: number) => {
     if (!game.gameId) return;
@@ -101,6 +102,7 @@ export function LinkSteamMatchModal({
     try {
       await api.delete(`/steam/games/${game.gameId}/unlink-match/`);
       setLinkedMatchId(null);
+      setRefreshKey((prev) => prev + 1);
       onLinkUpdated();
     } catch (error) {
       console.error('Failed to unlink match:', error);
