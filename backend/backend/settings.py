@@ -21,8 +21,12 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import logging
+import warnings
 
 from paths import DEV_DB_PATH, PROD_DB_PATH, TEST_DB_PATH
+
+# Show cacheops Redis connection warning only once (not on every import)
+warnings.filterwarnings("once", message=r".*cacheops cache is unreachable.*")
 
 log = logging.getLogger(__name__)
 load_dotenv()
@@ -53,7 +57,6 @@ BASE_DIR_PATH = Path(BASE_DIR)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = "v*kswpdyi3+*-=q4a)7&_!xwb%@udm1vi56r690!!j6e*p3^mn"
-import logging
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
