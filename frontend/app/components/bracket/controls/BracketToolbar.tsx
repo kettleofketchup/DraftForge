@@ -24,18 +24,14 @@ interface BracketToolbarProps {
   tournamentId: number;
   teams: TeamType[];
   hasMatches: boolean;
-  isDirty: boolean;
-  isVirtual: boolean;
 }
 
 export function BracketToolbar({
   tournamentId,
   teams,
   hasMatches,
-  isDirty,
-  isVirtual,
 }: BracketToolbarProps) {
-  const { generateBracket, reseedBracket, saveBracket, resetBracket, isLoading } =
+  const { generateBracket, reseedBracket, saveBracket, resetBracket, isLoading, isDirty, isVirtual } =
     useBracketStore();
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);

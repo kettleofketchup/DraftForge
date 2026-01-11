@@ -417,8 +417,6 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
           tournamentId={tournamentId}
           teams={teams}
           hasMatches={matches.length > 0}
-          isDirty={isDirty}
-          isVirtual={isVirtual}
         />
       )}
 
