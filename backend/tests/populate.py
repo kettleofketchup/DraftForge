@@ -5,7 +5,7 @@ import pytest
 from django.conf import settings
 from django.db import models, transaction
 
-from app.models import CustomUser, PositionsModel, Team
+from app.models import CustomUser, Game, PositionsModel, Team
 
 # Dota 2 themed usernames for mock data
 MOCK_USERNAMES = [
@@ -268,12 +268,39 @@ def populate_tournaments(force=False):
         return
 
     # Tournament configurations
+    # Names are descriptive of what feature each tournament tests
+    # Player counts match team counts (teams × 5 players per team)
     tournament_configs = [
-        {"name": "Spring Championship", "users": 20, "type": "double_elimination"},
-        {"name": "Summer League", "users": 30, "type": "single_elimination"},
-        {"name": "Autumn Cup", "users": 25, "type": "swiss"},
-        {"name": "Winter Tournament", "users": 35, "type": "double_elimination"},
-        {"name": "Grand Masters", "users": 40, "type": "single_elimination"},
+        # All 6 bracket games completed - used for bracket badges, match stats tests
+        {
+            "name": "Completed Bracket Test",
+            "users": 20,
+            "teams": 4,
+            "type": "double_elimination",
+        },
+        # 2 games completed, 4 pending - used for partial bracket tests
+        {
+            "name": "Partial Bracket Test",
+            "users": 20,
+            "teams": 4,
+            "type": "double_elimination",
+        },
+        # 0 games completed, all pending - used for pending bracket tests
+        {
+            "name": "Pending Bracket Test",
+            "users": 20,
+            "teams": 4,
+            "type": "double_elimination",
+        },
+        # Used for captain draft and shuffle draft tests
+        {"name": "Draft Test", "users": 30, "teams": 6, "type": "double_elimination"},
+        # Larger tournament for general testing
+        {
+            "name": "Large Tournament Test",
+            "users": 40,
+            "teams": 8,
+            "type": "single_elimination",
+        },
     ]
 
     tournaments_created = 0
@@ -323,17 +350,31 @@ def populate_tournaments(force=False):
             # Add users to tournament
             tournament.users.set(selected_users)
 
-            # Create teams (4 teams of 5 for bracket testing)
-            team_names = ["Team Alpha", "Team Beta", "Team Gamma", "Team Delta"]
+            # Create teams based on config (5 players per team: 1 captain + 4 members)
+            team_name_pool = [
+                "Team Alpha",
+                "Team Beta",
+                "Team Gamma",
+                "Team Delta",
+                "Team Epsilon",
+                "Team Zeta",
+                "Team Eta",
+                "Team Theta",
+            ]
+            team_count = config.get("teams", 4)
             team_size = 5
+            required_users = team_count * team_size
 
             # Get users with Steam IDs for team membership
-            users_for_teams = users_with_steam[
-                :20
-            ]  # Need 20 users (4 teams * 5 players)
+            users_for_teams = users_with_steam[:required_users]
 
-            if len(users_for_teams) >= 20:
-                for team_idx, team_name in enumerate(team_names):
+            if len(users_for_teams) >= required_users:
+                for team_idx in range(team_count):
+                    team_name = (
+                        team_name_pool[team_idx]
+                        if team_idx < len(team_name_pool)
+                        else f"Team {team_idx + 1}"
+                    )
                     team_members = users_for_teams[
                         team_idx * team_size : (team_idx + 1) * team_size
                     ]
@@ -366,9 +407,9 @@ def populate_steam_matches(force=False):
     """
     Generate and save mock Steam matches for test tournaments.
     Creates bracket Game objects with different completion states:
-    - Tournament 1 (Spring Championship): All games completed with Steam matches
-    - Tournament 2 (Summer League): 2 games completed, 2 pending
-    - Tournament 3 (Autumn Cup): All games pending (no completed games)
+    - Tournament 1 (Completed Bracket Test): All 6 games completed with Steam matches
+    - Tournament 2 (Partial Bracket Test): 2 games completed, 4 pending
+    - Tournament 3 (Pending Bracket Test): All games pending (no completed games)
 
     Args:
         force: If True, delete existing mock matches and games first
@@ -638,17 +679,330 @@ def _flush_redis_cache():
 
         redis_url = getattr(settings, "CACHEOPS_REDIS", None)
         if redis_url:
-            # Parse redis URL or use dict config
+            # Parse redis URL or use dict config with short timeout to avoid hanging
             if isinstance(redis_url, str):
-                client = redis.from_url(redis_url)
+                client = redis.from_url(
+                    redis_url, socket_timeout=2, socket_connect_timeout=2
+                )
             else:
-                client = redis.Redis(**redis_url)
+                # Add timeout to dict config
+                config = {**redis_url, "socket_timeout": 2, "socket_connect_timeout": 2}
+                client = redis.Redis(**config)
             client.flushall()
             print("Redis cache flushed successfully")
         else:
             print("No CACHEOPS_REDIS configured, skipping cache flush")
+    except redis.exceptions.ConnectionError as e:
+        print(f"Redis not available, skipping cache flush: {e}")
+    except redis.exceptions.TimeoutError as e:
+        print(f"Redis timeout, skipping cache flush: {e}")
     except Exception as e:
         print(f"Warning: Failed to flush Redis cache: {e}")
+
+
+def populate_bracket_linking_scenario(force=False):
+    """
+    Creates test data for the bracket match linking feature.
+
+    Creates a tournament "Bracket Linking Test" with:
+    - league_id=17929
+    - 4 teams with 5 players each (20 users with steam IDs)
+    - Bracket games (winners round 1, losers bracket, grand finals)
+    - 6 Steam matches in league 17929 with different player overlap tiers:
+      - 2 matches with all 10 players (tier: all_players)
+      - 2 matches with both captains + some players (tier: captains_plus)
+      - 2 matches with both captains only (tier: captains_only)
+
+    Match IDs: 9100000001-9100000010 (avoids conflict with other populate functions)
+
+    Args:
+        force: If True, recreate the tournament even if it exists
+    """
+    from datetime import datetime
+
+    from app.models import CustomUser, Game, PositionsModel, Team, Tournament
+    from steam.models import Match, PlayerMatchStats
+
+    TOURNAMENT_NAME = "Bracket Linking Test"
+    OLD_TOURNAMENT_NAME = "Link Test Tournament"  # Handle renamed tournament
+    LEAGUE_ID = 17929
+    BASE_MATCH_ID = 9100000001
+
+    # Check if tournament already exists (check both old and new names)
+    existing_tournament = Tournament.objects.filter(name=TOURNAMENT_NAME).first()
+    old_tournament = Tournament.objects.filter(name=OLD_TOURNAMENT_NAME).first()
+
+    if existing_tournament and not force:
+        print(
+            f"Tournament '{TOURNAMENT_NAME}' already exists. Use force=True to recreate."
+        )
+        return existing_tournament
+
+    # Delete existing data if force=True
+    if force:
+        # Always clean up matches in our ID range
+        deleted_matches = Match.objects.filter(
+            match_id__gte=BASE_MATCH_ID, match_id__lt=BASE_MATCH_ID + 10
+        ).delete()
+        if deleted_matches[0] > 0:
+            print(f"  Deleted {deleted_matches[0]} existing matches in ID range")
+
+        # Delete old tournament (renamed)
+        if old_tournament:
+            print(f"Deleting old tournament '{OLD_TOURNAMENT_NAME}'...")
+            old_tournament.delete()
+
+        # Delete current tournament
+        if existing_tournament:
+            print(f"Deleting existing tournament '{TOURNAMENT_NAME}'...")
+            existing_tournament.delete()
+
+    print(f"Creating '{TOURNAMENT_NAME}' with bracket linking test data...")
+
+    # Create 20 users with unique steam IDs for the 4 teams
+    team_users = []
+    for i in range(20):
+        discord_id = str(200000000000000000 + i)
+        username = f"link_test_player_{i}"
+        steam_id = 76561197960300000 + i  # Unique steam IDs for linking
+
+        user, created = CustomUser.objects.get_or_create(
+            discordId=discord_id,
+            defaults={
+                "username": username,
+                "steamid": steam_id,
+                "mmr": 3000 + (i * 100),
+            },
+        )
+        if created:
+            # Create positions for new user
+            positions = PositionsModel.objects.create(
+                carry=3, mid=3, offlane=3, soft_support=3, hard_support=3
+            )
+            user.positions = positions
+            user.save()
+        elif user.steamid != steam_id:
+            # Ensure steam ID is set correctly
+            user.steamid = steam_id
+            user.save()
+
+        team_users.append(user)
+
+    # Create tournament
+    tournament = Tournament.objects.create(
+        name=TOURNAMENT_NAME,
+        date_played=date.today(),
+        state="in_progress",
+        tournament_type="double_elimination",
+        league_id=LEAGUE_ID,
+    )
+
+    # Add all users to tournament
+    tournament.users.set(team_users)
+
+    # Create 4 teams with 5 players each
+    team_names = ["Link Alpha", "Link Beta", "Link Gamma", "Link Delta"]
+    teams = []
+    for team_idx, team_name in enumerate(team_names):
+        team_members = team_users[team_idx * 5 : (team_idx + 1) * 5]
+        captain = team_members[0]  # First player is captain
+
+        team = Team.objects.create(
+            tournament=tournament,
+            name=team_name,
+            captain=captain,
+            draft_order=team_idx + 1,
+        )
+        team.members.set(team_members)
+        teams.append(team)
+
+    print(f"  Created 4 teams: {', '.join(team_names)}")
+
+    # Create bracket games (6 games for 4-team double elimination)
+    bracket_structure = [
+        {"round": 1, "bracket_type": "winners", "position": 0},  # WR1 M1
+        {"round": 1, "bracket_type": "winners", "position": 1},  # WR1 M2
+        {"round": 1, "bracket_type": "losers", "position": 0},  # LR1
+        {"round": 2, "bracket_type": "winners", "position": 0},  # Winners Final
+        {"round": 2, "bracket_type": "losers", "position": 0},  # Losers Final
+        {"round": 1, "bracket_type": "grand_finals", "position": 0},  # Grand Final
+    ]
+
+    games = []
+    for idx, bracket_info in enumerate(bracket_structure):
+        # Assign teams to first round games only
+        if idx == 0:
+            radiant_team, dire_team = teams[0], teams[1]
+        elif idx == 1:
+            radiant_team, dire_team = teams[2], teams[3]
+        else:
+            radiant_team, dire_team = None, None  # Later rounds TBD
+
+        game = Game.objects.create(
+            tournament=tournament,
+            round=bracket_info["round"],
+            bracket_type=bracket_info["bracket_type"],
+            position=bracket_info["position"],
+            elimination_type="double",
+            radiant_team=radiant_team,
+            dire_team=dire_team,
+            status="pending",
+        )
+        games.append(game)
+
+    # Set up bracket links
+    if len(games) >= 6:
+        games[0].next_game = games[3]
+        games[0].next_game_slot = "radiant"
+        games[0].loser_next_game = games[2]
+        games[0].loser_next_game_slot = "radiant"
+        games[0].save()
+
+        games[1].next_game = games[3]
+        games[1].next_game_slot = "dire"
+        games[1].loser_next_game = games[2]
+        games[1].loser_next_game_slot = "dire"
+        games[1].save()
+
+        games[2].next_game = games[4]
+        games[2].next_game_slot = "radiant"
+        games[2].save()
+
+        games[3].next_game = games[5]
+        games[3].next_game_slot = "radiant"
+        games[3].loser_next_game = games[4]
+        games[3].loser_next_game_slot = "dire"
+        games[3].save()
+
+        games[4].next_game = games[5]
+        games[4].next_game_slot = "dire"
+        games[4].save()
+
+    print(f"  Created {len(games)} bracket games")
+
+    # Now create 6 unlinked Steam matches in the league with different tiers
+    # Use teams[0] vs teams[1] as the test matchup
+    radiant_team = teams[0]
+    dire_team = teams[1]
+    radiant_members = list(radiant_team.members.all())
+    dire_members = list(dire_team.members.all())
+    radiant_captain = radiant_team.captain
+    dire_captain = dire_team.captain
+
+    base_time = int(datetime.now().timestamp()) - 86400  # Yesterday
+    match_interval = 3600  # 1 hour between matches
+
+    match_configs = [
+        # Tier: all_players - all 10 players present
+        {
+            "tier": "all_players",
+            "radiant_players": radiant_members,
+            "dire_players": dire_members,
+        },
+        {
+            "tier": "all_players",
+            "radiant_players": radiant_members,
+            "dire_players": dire_members,
+        },
+        # Tier: captains_plus - both captains + 2 other players per team
+        {
+            "tier": "captains_plus",
+            "radiant_players": [radiant_captain] + radiant_members[1:3],
+            "dire_players": [dire_captain] + dire_members[1:3],
+        },
+        {
+            "tier": "captains_plus",
+            "radiant_players": [radiant_captain] + radiant_members[2:4],
+            "dire_players": [dire_captain] + dire_members[2:4],
+        },
+        # Tier: captains_only - only both captains
+        {
+            "tier": "captains_only",
+            "radiant_players": [radiant_captain],
+            "dire_players": [dire_captain],
+        },
+        {
+            "tier": "captains_only",
+            "radiant_players": [radiant_captain],
+            "dire_players": [dire_captain],
+        },
+    ]
+
+    matches_created = 0
+    for idx, config in enumerate(match_configs):
+        match_id = BASE_MATCH_ID + idx
+        start_time = base_time + (idx * match_interval)
+
+        # Create match
+        match = Match.objects.create(
+            match_id=match_id,
+            radiant_win=idx % 2 == 0,  # Alternate wins
+            duration=random.randint(1500, 3300),
+            start_time=start_time,
+            game_mode=2,  # Captain's Mode
+            lobby_type=1,
+            league_id=LEAGUE_ID,
+        )
+
+        # Create player stats for each player in the match
+        radiant_players = config["radiant_players"]
+        dire_players = config["dire_players"]
+
+        for slot_idx, player in enumerate(radiant_players):
+            PlayerMatchStats.objects.update_or_create(
+                match=match,
+                steam_id=player.steamid,
+                defaults={
+                    "user": player,
+                    "player_slot": slot_idx,
+                    "hero_id": random.randint(1, 130),
+                    "kills": random.randint(2, 15),
+                    "deaths": random.randint(1, 10),
+                    "assists": random.randint(5, 25),
+                    "gold_per_min": random.randint(300, 600),
+                    "xp_per_min": random.randint(400, 700),
+                    "last_hits": random.randint(50, 300),
+                    "denies": random.randint(0, 20),
+                    "hero_damage": random.randint(10000, 40000),
+                    "tower_damage": random.randint(500, 5000),
+                    "hero_healing": random.randint(0, 5000),
+                },
+            )
+
+        for slot_idx, player in enumerate(dire_players):
+            PlayerMatchStats.objects.update_or_create(
+                match=match,
+                steam_id=player.steamid,
+                defaults={
+                    "user": player,
+                    "player_slot": 128 + slot_idx,  # Dire slots start at 128
+                    "hero_id": random.randint(1, 130),
+                    "kills": random.randint(2, 15),
+                    "deaths": random.randint(1, 10),
+                    "assists": random.randint(5, 25),
+                    "gold_per_min": random.randint(300, 600),
+                    "xp_per_min": random.randint(400, 700),
+                    "last_hits": random.randint(50, 300),
+                    "denies": random.randint(0, 20),
+                    "hero_damage": random.randint(10000, 40000),
+                    "tower_damage": random.randint(500, 5000),
+                    "hero_healing": random.randint(0, 5000),
+                },
+            )
+
+        matches_created += 1
+        print(
+            f"  Created match {match_id} (tier: {config['tier']}, players: {len(radiant_players) + len(dire_players)})"
+        )
+
+    print(
+        f"Created tournament '{TOURNAMENT_NAME}' with {len(games)} games and {matches_created} unlinked Steam matches"
+    )
+
+    # Flush Redis cache
+    _flush_redis_cache()
+
+    return tournament
 
 
 def populate_all(force=False):
@@ -656,3 +1010,4 @@ def populate_all(force=False):
     populate_users(force)
     populate_tournaments(force)
     populate_steam_matches(force)
+    populate_bracket_linking_scenario(force)

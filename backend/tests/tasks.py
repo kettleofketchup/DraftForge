@@ -8,7 +8,7 @@ from paths import BACKEND_PATH, PROJECT_PATH, TEST_DB_PATH, TEST_ENV_FILE
 ns_dbtest = Collection("test")
 from dotenv import load_dotenv
 
-from backend.tasks import db_migrate
+from backend.tasks import db_migrate_test
 
 
 def load_env(c):

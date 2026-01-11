@@ -7,7 +7,7 @@
  */
 
 describe('Undo Pick', () => {
-  const TOURNAMENT_PK = 1; // Spring Championship
+  const TOURNAMENT_PK = 1; // Completed Bracket Test
 
   beforeEach(() => {
     cy.clearCookies();
@@ -26,7 +26,7 @@ describe('Undo Pick', () => {
       cy.get('body').should('be.visible');
 
       // Wait for page to load
-      cy.contains('h1', 'Spring Championship', { timeout: 10000 }).should(
+      cy.contains('h1', 'Completed Bracket Test', { timeout: 10000 }).should(
         'be.visible',
       );
 
@@ -97,7 +97,7 @@ describe('Undo Pick', () => {
       cy.get('body').should('be.visible');
 
       // Wait for page to load
-      cy.contains('h1', 'Spring Championship', { timeout: 10000 }).should(
+      cy.contains('h1', 'Completed Bracket Test', { timeout: 10000 }).should(
         'be.visible',
       );
 
@@ -128,7 +128,7 @@ describe('Undo Pick', () => {
       cy.get('body').should('be.visible');
 
       // Wait for page to load
-      cy.contains('h1', 'Spring Championship', { timeout: 10000 }).should(
+      cy.contains('h1', 'Completed Bracket Test', { timeout: 10000 }).should(
         'be.visible',
       );
 
@@ -180,7 +180,7 @@ describe('Undo Pick', () => {
       cy.get('body').should('be.visible');
 
       // Wait for page to load
-      cy.contains('h1', 'Spring Championship', { timeout: 10000 }).should(
+      cy.contains('h1', 'Completed Bracket Test', { timeout: 10000 }).should(
         'be.visible',
       );
 
@@ -279,7 +279,7 @@ describe('Undo Pick', () => {
       cy.get('body').should('be.visible');
 
       // Wait for page to load
-      cy.contains('h1', 'Spring Championship', { timeout: 10000 }).should(
+      cy.contains('h1', 'Completed Bracket Test', { timeout: 10000 }).should(
         'be.visible',
       );
 

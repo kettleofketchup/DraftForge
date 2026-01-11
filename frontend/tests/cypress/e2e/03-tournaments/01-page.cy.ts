@@ -10,6 +10,6 @@ describe('API Integration Tests', () => {
     // Verify the API was called
 
     // Check that the page displays the mocked data
-    cy.get('body').should('contain.text', 'Summer League');
+    cy.get('body').should('contain.text', 'Partial Bracket Test');
   });
 });

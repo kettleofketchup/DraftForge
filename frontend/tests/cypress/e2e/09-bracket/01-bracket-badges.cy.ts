@@ -10,7 +10,7 @@ describe('Bracket Badges (e2e)', () => {
   });
 
   it('should display bracket with completed games', () => {
-    // Spring Championship (Tournament 1) has all 6 games completed
+    // Completed Bracket Test (Tournament 1) has all 6 games completed
     visitAndWaitForHydration('/tournament/1/games');
 
     // Wait for the games tab to load
@@ -26,7 +26,7 @@ describe('Bracket Badges (e2e)', () => {
   });
 
   it('should display bracket badges on winners bracket matches', () => {
-    // Spring Championship has completed bracket with badges
+    // Completed Bracket Test has completed bracket with badges
     visitAndWaitForHydration('/tournament/1/games');
 
     // Wait for bracket to load
@@ -102,7 +102,7 @@ describe('Bracket Badges (e2e)', () => {
   });
 
   it('should handle tournament with partial bracket', () => {
-    // Summer League (Tournament 2) has 2 games completed, 4 pending
+    // Partial Bracket Test (Tournament 2) has 2 games completed, 4 pending
     visitAndWaitForHydration('/tournament/2/games');
 
     cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');
@@ -117,7 +117,7 @@ describe('Bracket Badges (e2e)', () => {
   });
 
   it('should handle tournament with no bracket games', () => {
-    // Autumn Cup (Tournament 3) has 0 games completed
+    // Pending Bracket Test (Tournament 3) has 0 games completed
     visitAndWaitForHydration('/tournament/3/games');
 
     cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');

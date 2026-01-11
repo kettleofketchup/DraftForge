@@ -46,4 +46,20 @@ urlpatterns = [
     path("leaderboard/", LeaderboardView.as_view(), name="leaderboard"),
     path("league-stats/me/", MyLeagueStatsView.as_view(), name="my-league-stats"),
     path("league-stats/<int:user_id>/", LeagueStatsView.as_view(), name="league-stats"),
+    # Game Match Linking
+    path(
+        "games/<int:game_id>/match-suggestions/",
+        steam_api.get_game_match_suggestions,
+        name="game_match_suggestions",
+    ),
+    path(
+        "games/<int:game_id>/link-match/",
+        steam_api.link_game_match,
+        name="link_game_match",
+    ),
+    path(
+        "games/<int:game_id>/unlink-match/",
+        steam_api.unlink_game_match,
+        name="unlink_game_match",
+    ),
 ]

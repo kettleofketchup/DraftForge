@@ -55,7 +55,12 @@ inv docker.frontend.run   # Run frontend container
 ## Database Commands (`inv db.*`)
 
 ```bash
-inv db.migrate              # Run migrations (default: debug env)
+# Migrations
+inv db.migrate              # Run migrations (dev, default)
+inv db.migrate.dev          # Run migrations for dev
+inv db.migrate.test         # Run migrations for test
+inv db.migrate.prod         # Run migrations for prod
+inv db.migrate.all          # Run migrations for all environments
 inv db.makemigrations       # Create migrations
 
 # Populate test data

@@ -36,7 +36,9 @@ inv dev.live       # Development with tmux
 ### Database Operations
 
 ```bash
-inv db.migrate           # Run migrations
+inv db.migrate           # Run migrations (dev, default)
+inv db.migrate.all       # Run migrations for all environments
+inv db.migrate.test      # Run migrations for test environment
 inv db.populate.all      # Populate test data
 inv db.populate.users    # Populate users only
 ```

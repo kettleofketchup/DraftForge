@@ -246,6 +246,13 @@ class Tournament(models.Model):
         max_length=20, choices=TOURNAMNET_TYPE_CHOICES, default="double_elimination"
     )
 
+    league_id = models.IntegerField(
+        null=True,
+        blank=True,
+        default=settings.DEFAULT_LEAGUE_ID,
+        help_text="Steam league ID for match linking",
+    )
+
     def __str__(self):
         return self.name
 
@@ -309,34 +316,6 @@ class Team(models.Model):
         return Game.objects.filter(
             models.Q(radiant_team=self) | models.Q(dire_team=self)
         )
-
-
-class GameStat(models.Model):
-    user = models.ForeignKey(
-        User, related_name="games", on_delete=models.CASCADE, blank=True
-    )
-    game = models.ForeignKey(
-        "Game", related_name="stats", on_delete=models.CASCADE, blank=True
-    )
-    team = models.ForeignKey("Team", on_delete=models.CASCADE, blank=True)
-    kills = models.IntegerField(default=0, blank=True)
-    deaths = models.IntegerField(default=0, blank=True)
-    assists = models.IntegerField(default=0, blank=True)
-    hero_damage = models.IntegerField(default=0, blank=True)
-    tower_damage = models.IntegerField(default=0, blank=True)
-    gold_per_minute = models.IntegerField(default=0, blank=True)
-    xp_per_minute = models.IntegerField(default=0, blank=True)
-    radiant = models.BooleanField(blank=True, default=False)
-
-    def __str__(self):
-        return f"{self.user.username} stats for {self.game}"
-
-    @property
-    def team(self):
-        if not self.game:
-            return
-        if not self.user:
-            return
 
 
 class Game(models.Model):
@@ -993,8 +972,9 @@ class DraftRound(models.Model):
         if self.choice:
             raise ValueError("This draft round already has a choice.")
 
+        captain_name = self.captain.username if self.captain else "unassigned"
         log.debug(
-            f"Draft round {self.pk} picking player {user.username} for captain {self.captain.username}"
+            f"Draft round {self.pk} picking player {user.username} for captain {captain_name}"
         )
         log.debug(self.draft.users_remaining)
 
@@ -1004,8 +984,10 @@ class DraftRound(models.Model):
 
         if self.draft.users_remaining.filter(id=user.id).exists():
             self.choice = user
-            self.team.members.add(user)
-            self.team.save()
+            team = self.team
+            if team:
+                team.members.add(user)
+                team.save()
             self.save()  # This triggers cache invalidation
 
             remaining_count_after = self.draft.users_remaining.count()

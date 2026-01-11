@@ -104,14 +104,14 @@ describe('Match Stats Modal - UI Integration', () => {
     cy.visit('/tournaments');
     cy.get('body').should('be.visible');
     // Check that the page has tournament content
-    cy.contains('Spring Championship').should('be.visible');
+    cy.contains('Completed Bracket Test').should('be.visible');
   });
 
   it('should navigate to tournament detail page', () => {
     cy.visit('/tournament/1');
     cy.get('body').should('be.visible');
     // The tournament detail page should load
-    cy.contains('Spring Championship').should('be.visible');
+    cy.contains('Completed Bracket Test').should('be.visible');
   });
 
   it('should display Games tab in tournament detail', () => {

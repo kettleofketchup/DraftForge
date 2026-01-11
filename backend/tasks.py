@@ -19,8 +19,11 @@ from dotenv import load_dotenv
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 
 ns_db = Collection("db")
+ns_db_migrate = Collection("migrate")
+
 ns_db_populate = Collection("populate")
 ns_db.add_collection(ns_db_populate, "populate")
+ns_db.add_collection(ns_db_migrate, "migrate")
 apps = ["steam", "app", "bracket", "discordbot"]
 
 
@@ -59,19 +62,32 @@ def _run_migrations(c, path: Path):
 
 
 @task(pre=[])
-def db_migrate(c, path: Path = paths.DEBUG_ENV_FILE):
-    """Run migrations for both dev and test databases."""
-    # First, generate migration files (only needed once)
-    load_dotenv(path)
-    db_makemigrations(c, path)
+def db_migrate_test(c):
+    db_migrate(c, paths.TEST_ENV_FILE)
 
-    # Migrate dev database
-    print("\n=== Migrating dev database ===")
-    _run_migrations(c, paths.DEBUG_ENV_FILE)
 
-    # Migrate test database
-    print("\n=== Migrating test database ===")
-    _run_migrations(c, paths.TEST_ENV_FILE)
+@task(pre=[])
+def db_migrate_dev(c):
+    db_migrate(c, paths.DEBUG_ENV_FILE)
+
+
+@task(pre=[])
+def db_migrate_prod(c):
+    db_migrate(c, paths.PROD_ENV_FILE)
+
+
+@task(pre=[])
+def db_migrate_all(c):
+
+    db_migrate_dev(
+        c,
+    )
+    db_migrate_prod(
+        c,
+    )
+    db_migrate_test(
+        c,
+    )
 
 
 @task
@@ -151,26 +167,45 @@ def db_populate_test_tournaments(
 
 
 @task
+def db_populate_bracket_linking(
+    c, path: Path = paths.TEST_ENV_FILE, force: bool = False
+):
+    """Populate bracket linking test scenario for Cypress testing."""
+    load_dotenv(path)
+
+    with c.cd(paths.BACKEND_PATH.absolute()):
+        force_arg = "True" if force else "False"
+        cmd = f'DISABLE_CACHE=true python manage.py shell -c "from tests.populate import populate_bracket_linking_scenario; populate_bracket_linking_scenario(force={force_arg})"'
+        c.run(cmd, pty=True)
+
+
+@task
 def populate_all(c):
     paths.TEST_DB_PATH.unlink(missing_ok=True)
 
     paths.TEST_DB_PATH.unlink(missing_ok=True)
     paths.TEST_DB_PATH.touch()
-    db_migrate(c, paths.TEST_ENV_FILE)
+    db_migrate_test(c)
     db_populate_users(c, paths.TEST_ENV_FILE)
     db_populate_tournaments(c, paths.TEST_ENV_FILE)
     db_populate_steam_mock(c, paths.TEST_ENV_FILE)
     db_populate_test_tournaments(c, paths.TEST_ENV_FILE)
+    db_populate_bracket_linking(c, paths.TEST_ENV_FILE)
 
 
-ns_db.add_task(db_migrate, "migrate")
 ns_db.add_task(db_makemigrations, "makemigrations")
 ns_db_populate.add_task(db_populate_users, "users")
 ns_db_populate.add_task(db_populate_tournaments, "tournaments")
 ns_db_populate.add_task(db_populate_steam, "steam")
 ns_db_populate.add_task(db_populate_steam_mock, "steam-mock")
 ns_db_populate.add_task(db_populate_test_tournaments, "test-tournaments")
+ns_db_populate.add_task(db_populate_bracket_linking, "bracket-linking")
 ns_db_populate.add_task(populate_all, "all")
 
+ns_db_migrate.add_task(db_migrate_all, "all")
+
+ns_db_migrate.add_task(db_migrate_dev, "dev", default=True)
+ns_db_migrate.add_task(db_migrate_test, "test")
+ns_db_migrate.add_task(db_migrate_prod, "prod")
 
 # ns_db.add_task(db_fill, "fill")

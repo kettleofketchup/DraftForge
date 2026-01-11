@@ -29,7 +29,7 @@ interface TournamentData {
 }
 
 describe('Shuffle Draft - Full Flow', () => {
-  // We'll use Spring Championship (pk=1) which has 4 teams
+  // We'll use Completed Bracket Test (pk=1) which has 4 teams
   const TOURNAMENT_PK = 1;
 
   beforeEach(() => {
@@ -46,7 +46,7 @@ describe('Shuffle Draft - Full Flow', () => {
     cy.get('body').should('be.visible');
 
     // Wait for page content to load
-    cy.contains('h1', 'Spring Championship', { timeout: 10000 }).should(
+    cy.contains('h1', 'Completed Bracket Test', { timeout: 10000 }).should(
       'be.visible',
     );
 
@@ -63,7 +63,7 @@ describe('Shuffle Draft - Full Flow', () => {
     cy.visit(`/tournament/${TOURNAMENT_PK}`);
 
     // Wait for page to load
-    cy.contains('h1', 'Spring Championship', { timeout: 10000 }).should(
+    cy.contains('h1', 'Completed Bracket Test', { timeout: 10000 }).should(
       'be.visible',
     );
 
@@ -132,7 +132,7 @@ describe('Shuffle Draft - Full Flow', () => {
     cy.visit(`/tournament/${TOURNAMENT_PK}`);
 
     // Wait for page to load
-    cy.contains('h1', 'Spring Championship', { timeout: 10000 }).should(
+    cy.contains('h1', 'Completed Bracket Test', { timeout: 10000 }).should(
       'be.visible',
     );
 

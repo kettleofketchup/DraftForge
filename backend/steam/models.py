@@ -120,6 +120,13 @@ class LeaguePlayerStats(models.Model):
             self.avg_xpm = 0.0
 
 
+class SuggestionTier(models.TextChoices):
+    ALL_PLAYERS = "all_players", "All Players Match"
+    CAPTAINS_PLUS = "captains_plus", "Both Captains + Some Players"
+    CAPTAINS_ONLY = "captains_only", "Both Captains Only"
+    PARTIAL = "partial", "Partial Player Overlap"
+
+
 class GameMatchSuggestion(models.Model):
     game = models.ForeignKey(
         "app.Game",
@@ -138,6 +145,11 @@ class GameMatchSuggestion(models.Model):
     )
     confidence_score = models.FloatField()
     player_overlap = models.IntegerField()
+    suggestion_tier = models.CharField(
+        max_length=20,
+        choices=SuggestionTier.choices,
+        default=SuggestionTier.PARTIAL,
+    )
     auto_linked = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 

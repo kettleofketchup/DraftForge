@@ -49,7 +49,7 @@ describe('Mobile-First: Tournament Bracket', () => {
 
         // Page should be visible
         cy.get('body').should('be.visible');
-        cy.contains('Spring Championship').should('be.visible');
+        cy.contains('Completed Bracket Test').should('be.visible');
 
         // No horizontal scrolling
         cy.get('body').then(($body) => {

@@ -20,12 +20,13 @@ from steam.functions.league_sync import (
     sync_league_matches,
 )
 from steam.functions.match_utils import find_matches_by_players
-from steam.models import LeagueSyncState, PlayerMatchStats
+from steam.models import LeagueSyncState, Match, PlayerMatchStats
 from steam.serializers import (
     AutoLinkRequestSerializer,
     AutoLinkResultSerializer,
     FindMatchesByPlayersSerializer,
     GameMatchSuggestionSerializer,
+    LinkMatchRequestSerializer,
     MatchSerializer,
     RelinkUsersSerializer,
     RetryFailedRequestSerializer,
@@ -33,6 +34,7 @@ from steam.serializers import (
     SyncResultSerializer,
     SyncStatusSerializer,
 )
+from steam.services.match_suggestions import get_match_suggestions_for_game
 from steam.utils.steam_api_caller import SteamAPI
 
 log = logging.getLogger(__name__)
@@ -226,3 +228,113 @@ def dismiss_match_suggestion(request, suggestion_id):
             {"error": "Suggestion not found"},
             status=status.HTTP_404_NOT_FOUND,
         )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_game_match_suggestions(request, game_id):
+    """
+    Get match suggestions for a bracket game with captain-aware tiers.
+
+    Query params:
+    - search: Filter by match ID or captain name
+    """
+    from app.models import Game
+
+    try:
+        game = (
+            Game.objects.select_related(
+                "tournament",
+                "radiant_team__captain",
+                "dire_team__captain",
+            )
+            .prefetch_related(
+                "radiant_team__members",
+                "dire_team__members",
+            )
+            .get(pk=game_id)
+        )
+    except Game.DoesNotExist:
+        return Response(
+            {"error": "Game not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    search = request.query_params.get("search", None)
+    suggestions = get_match_suggestions_for_game(game, search=search)
+
+    return Response(
+        {
+            "suggestions": suggestions,
+            "linked_match_id": game.gameid,
+        }
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+def link_game_match(request, game_id):
+    """Link a bracket game to a Steam match."""
+    from cacheops import invalidate_obj
+
+    from app.models import Game
+
+    serializer = LinkMatchRequestSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    match_id = serializer.validated_data["match_id"]
+
+    try:
+        game = Game.objects.select_related("tournament").get(pk=game_id)
+    except Game.DoesNotExist:
+        return Response(
+            {"error": "Game not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Verify match exists
+    if not Match.objects.filter(match_id=match_id).exists():
+        return Response(
+            {"error": "Match not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    game.gameid = match_id
+    game.save()
+
+    # Invalidate cache for game and tournament
+    invalidate_obj(game)
+    if game.tournament:
+        invalidate_obj(game.tournament)
+
+    return Response({"status": "linked", "match_id": match_id})
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAdminUser])
+def unlink_game_match(request, game_id):
+    """Unlink a bracket game from its Steam match."""
+    from cacheops import invalidate_obj
+
+    from app.models import Game
+
+    try:
+        game = Game.objects.select_related("tournament").get(pk=game_id)
+    except Game.DoesNotExist:
+        return Response(
+            {"error": "Game not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    game.gameid = None
+    game.winning_team = None
+    game.status = "scheduled"
+    game.save(update_fields=["gameid", "winning_team", "status"])
+
+    # Invalidate cache for game and tournament
+    invalidate_obj(game)
+    if game.tournament:
+        invalidate_obj(game.tournament)
+
+    return Response({"status": "unlinked"})

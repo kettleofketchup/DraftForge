@@ -328,6 +328,9 @@ TEST_TOURNAMENTS: List[TestTournamentConfig] = [
 # Mapping from key to tournament name for lookups
 TEST_KEY_TO_NAME = {config.key: config.name for config in TEST_TOURNAMENTS}
 
+# Add bracket linking scenario (created by populate_bracket_linking_scenario)
+TEST_KEY_TO_NAME["bracket_linking"] = "Bracket Linking Test"
+
 
 def get_tournament_config(key: str) -> TestTournamentConfig:
     """
@@ -366,7 +369,7 @@ def populate_test_tournaments(force: bool = False) -> list:
     existing = Tournament.objects.filter(name__in=[t.name for t in TEST_TOURNAMENTS])
 
     if existing.exists() and not force:
-        print("Test tournaments exist. Use force=True to recreate.")
+        log.info("Test tournaments exist. Use force=True to recreate.")
         return list(existing)
 
     if force:
@@ -376,7 +379,7 @@ def populate_test_tournaments(force: bool = False) -> list:
     for config in TEST_TOURNAMENTS:
         tournament = config.create()
         created.append(tournament)
-        print(f"Created: {tournament.name} (key: {config.key})")
+        log.info(f"Created: {tournament.name} (key: {config.key})")
 
-    print(f"\nCreated {len(created)} test tournaments")
+    log.info(f"Created {len(created)} test tournaments")
     return created

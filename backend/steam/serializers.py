@@ -154,6 +154,32 @@ class GameMatchSuggestionSerializer(serializers.Serializer):
 # =============================================================================
 
 
+class MatchSuggestionDetailSerializer(serializers.Serializer):
+    match_id = serializers.IntegerField()
+    start_time = serializers.IntegerField()
+    duration = serializers.IntegerField()
+    radiant_win = serializers.BooleanField()
+    tier = serializers.CharField()
+    tier_display = serializers.CharField()
+    player_overlap = serializers.IntegerField()
+    radiant_captain = serializers.DictField(allow_null=True)
+    dire_captain = serializers.DictField(allow_null=True)
+
+
+class MatchSuggestionsResponseSerializer(serializers.Serializer):
+    suggestions = MatchSuggestionDetailSerializer(many=True)
+    linked_match_id = serializers.IntegerField(allow_null=True)
+
+
+class LinkMatchRequestSerializer(serializers.Serializer):
+    match_id = serializers.IntegerField()
+
+
+# =============================================================================
+# League Stats Serializers
+# =============================================================================
+
+
 class LeaguePlayerStatsSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
     avatar = serializers.CharField(source="user.avatar", read_only=True)
