@@ -328,6 +328,9 @@ TEST_TOURNAMENTS: List[TestTournamentConfig] = [
 # Mapping from key to tournament name for lookups
 TEST_KEY_TO_NAME = {config.key: config.name for config in TEST_TOURNAMENTS}
 
+# Add bracket linking scenario (created by populate_bracket_linking_scenario)
+TEST_KEY_TO_NAME["bracket_linking"] = "Link Test Tournament"
+
 
 def get_tournament_config(key: str) -> TestTournamentConfig:
     """
