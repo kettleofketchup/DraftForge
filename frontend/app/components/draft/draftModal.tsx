@@ -56,20 +56,23 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const live = useTournamentStore((state) => state.live);
   const livePolling = useTournamentStore((state) => state.livePolling);
   const autoAdvance = useTournamentStore((state) => state.autoAdvance);
+  const setAutoAdvance = useTournamentStore((state) => state.setAutoAdvance);
   const [open, setOpen] = useState(live);
   const isStaff = useUserStore((state) => state.isStaff);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Auto-open modal when ?draft=open is in URL
+  // Auto-open modal when ?draft=open is in URL (from share URL)
   useEffect(() => {
     const draftParam = searchParams.get('draft');
     if (draftParam === 'open') {
       setOpen(true);
+      // Enable auto-advance when opened via share URL
+      setAutoAdvance(true);
       // Remove the param after opening to avoid re-opening on navigation
       searchParams.delete('draft');
       setSearchParams(searchParams, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, setAutoAdvance]);
 
   useEffect(() => {
     if (live) {

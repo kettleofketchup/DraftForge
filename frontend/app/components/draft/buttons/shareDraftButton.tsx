@@ -14,7 +14,7 @@ import { useUserStore } from '~/store/userStore';
 
 export const ShareDraftButton = () => {
   const tournament = useUserStore((state) => state.tournament);
-  const shareUrl = `${window.location.origin}/tournament/${tournament.pk}/teams/draft`;
+  const shareUrl = `${window.location.origin}/tournament/${tournament.pk}/teams/draft?draft=open`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(shareUrl);

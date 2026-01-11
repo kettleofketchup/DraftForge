@@ -91,17 +91,22 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
       .filter(([pk]) => pk !== currentTeam.pk)
       .map(([, mmr]) => mmr);
 
+    // Check if team would be at capacity after this pick (can't double pick)
+    const currentTeamSize = currentTeam.members?.length || 0;
+    const wouldBeMaxedAfterPick = currentTeamSize + 1 >= MAX_TEAM_SIZE;
+
     // If no other active teams, we're the only one picking
     if (otherActiveTeamMmrs.length === 0) {
-      return { newTeamMmr, newPickOrder: 1, isDoublePick: true };
+      return { newTeamMmr, newPickOrder: 1, isDoublePick: !wouldBeMaxedAfterPick };
     }
 
     const allMmrs = [...otherActiveTeamMmrs, newTeamMmr].sort((a, b) => a - b);
     const newPickOrder = allMmrs.indexOf(newTeamMmr) + 1;
 
     // Check if this would result in a double pick
+    // Can only double pick if team won't be maxed after this pick
     const lowestOtherMmr = Math.min(...otherActiveTeamMmrs);
-    const isDoublePick = newTeamMmr < lowestOtherMmr;
+    const isDoublePick = !wouldBeMaxedAfterPick && newTeamMmr < lowestOtherMmr;
 
     return { newTeamMmr, newPickOrder, isDoublePick };
   };

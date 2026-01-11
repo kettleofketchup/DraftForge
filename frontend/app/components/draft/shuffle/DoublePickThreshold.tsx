@@ -95,6 +95,10 @@ export const DoublePickThreshold: React.FC = () => {
   // Don't show if current team is already maxed
   if (isTeamMaxed(currentTeam)) return null;
 
+  // Don't show if current team only has 1 slot remaining (can't double pick)
+  const currentTeamSize = currentTeam.members?.length || 0;
+  if (currentTeamSize >= MAX_TEAM_SIZE - 1) return null;
+
   const currentMmr = getTeamMmr(currentTeam);
   const buffer = threshold.mmr - currentMmr;
 
