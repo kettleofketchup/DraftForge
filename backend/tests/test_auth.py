@@ -1,5 +1,6 @@
 # views_test_auth.py
 import logging
+import random
 import token
 
 from django.conf import settings
@@ -86,6 +87,7 @@ def createTestSuperUser() -> tuple[CustomUser, bool]:
     )
     if created:
         user.set_password("cypress")
+        user.mmr = random.randint(2000, 6000)
         user.save()
     create_social_auth(user)
 
@@ -110,6 +112,7 @@ def createTestStaffUser() -> tuple[CustomUser, bool]:
     )
     if created:
         user.set_password("cypress")
+        user.mmr = random.randint(2000, 6000)
         user.save()
     create_social_auth(user)
 
@@ -136,6 +139,7 @@ def createTestUser() -> tuple[CustomUser, bool]:
 
     if created:
         user.set_password("cypress")
+        user.mmr = random.randint(2000, 6000)
         user.save()
     create_social_auth(user)
 
