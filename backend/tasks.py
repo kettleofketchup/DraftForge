@@ -49,7 +49,11 @@ def db_makemigrations(c, path: Path = paths.DEBUG_ENV_FILE):
         c.run(cmd, pty=True)
 
 
-def _run_migrations(c, path: Path):
+@task(pre=[])
+def db_migrate(c, path: Path = paths.DEBUG_ENV_FILE):
+    load_dotenv(path)
+    db_makemigrations(c, path)
+
     """Run migrations for a specific environment."""
     load_dotenv(path, override=True)
     with c.cd(paths.BACKEND_PATH.absolute()):
