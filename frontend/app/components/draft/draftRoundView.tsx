@@ -82,7 +82,7 @@ export const DraftRoundView: React.FC = () => {
       {draft.draft_style === 'shuffle' ? <ShufflePickOrder /> : <CaptainCards />}
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold">Draft View</h2>
+          <h2 className="text-2xl font-bold">My Current Team</h2>
         </div>
         <TurnIndicator />
         <CurrentTeamView />
