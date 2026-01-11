@@ -439,3 +439,189 @@ class PickPlayerForRoundShuffleTest(TestCase):
         # Refresh and check second round now has captain
         second_round.refresh_from_db()
         self.assertIsNotNone(second_round.captain)
+
+
+class FullTeamNotAssignedTest(TestCase):
+    """Test that full teams (5 members) are not assigned as next picker."""
+
+    def setUp(self):
+        """Create tournament with 2 teams, one at max size."""
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament", date_played=date.today()
+        )
+
+        # Create captains - team2 has lower MMR
+        self.captain1 = CustomUser.objects.create_user(
+            username="cap1", password="test", mmr=5000
+        )
+        self.captain2 = CustomUser.objects.create_user(
+            username="cap2", password="test", mmr=1000  # Much lower MMR
+        )
+
+        # Create teams
+        self.team1 = Team.objects.create(
+            name="Team 1", captain=self.captain1, tournament=self.tournament
+        )
+        self.team1.members.add(self.captain1)
+
+        self.team2 = Team.objects.create(
+            name="Team 2", captain=self.captain2, tournament=self.tournament
+        )
+        self.team2.members.add(self.captain2)
+
+        # Add 4 more members to team2 to make it full (5 total)
+        for i in range(4):
+            member = CustomUser.objects.create_user(
+                username=f"team2_member{i}", password="test", mmr=1000
+            )
+            self.team2.members.add(member)
+
+        # Create draft
+        self.draft = Draft.objects.create(
+            tournament=self.tournament, draft_style="shuffle"
+        )
+
+    def test_full_team_not_assigned_as_next_picker(self):
+        """Full team should not be assigned as next picker even with lowest MMR."""
+        from app.functions.shuffle_draft import assign_next_shuffle_captain
+
+        # Create a round without captain
+        DraftRound.objects.create(
+            draft=self.draft, captain=None, pick_number=1, pick_phase=1
+        )
+
+        # Team2 has lower MMR but is full (5 members)
+        # Team1 should be assigned instead
+        assign_next_shuffle_captain(self.draft)
+
+        first_round = self.draft.draft_rounds.first()
+        self.assertEqual(first_round.captain.pk, self.captain1.pk)
+
+    def test_returns_none_when_all_teams_full(self):
+        """Returns None when all teams have reached max size."""
+        from app.functions.shuffle_draft import assign_next_shuffle_captain
+
+        # Make team1 also full
+        for i in range(4):
+            member = CustomUser.objects.create_user(
+                username=f"team1_member{i}", password="test", mmr=1000
+            )
+            self.team1.members.add(member)
+
+        # Create a round without captain
+        DraftRound.objects.create(
+            draft=self.draft, captain=None, pick_number=1, pick_phase=1
+        )
+
+        result = assign_next_shuffle_captain(self.draft)
+
+        self.assertIsNone(result)
+
+
+class UndoClearsNextCaptainTest(TestCase):
+    """Test that undo clears the next round's captain."""
+
+    def setUp(self):
+        """Create tournament with draft and make picks."""
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament", date_played=date.today()
+        )
+
+        # Create staff user for API calls
+        self.staff = CustomUser.objects.create_user(
+            username="staff", password="test", is_staff=True
+        )
+
+        # Create captains
+        self.captain1 = CustomUser.objects.create_user(
+            username="cap1", password="test", mmr=5000
+        )
+        self.captain2 = CustomUser.objects.create_user(
+            username="cap2", password="test", mmr=4000
+        )
+
+        # Create players (need multiple so users_remaining exists after first pick)
+        self.player1 = CustomUser.objects.create_user(
+            username="player1", password="test", mmr=3000
+        )
+        self.player2 = CustomUser.objects.create_user(
+            username="player2", password="test", mmr=2500
+        )
+
+        # Create teams
+        self.team1 = Team.objects.create(
+            name="Team 1", captain=self.captain1, tournament=self.tournament
+        )
+        self.team1.members.add(self.captain1)
+        self.team2 = Team.objects.create(
+            name="Team 2", captain=self.captain2, tournament=self.tournament
+        )
+        self.team2.members.add(self.captain2)
+
+        # Add players to tournament
+        self.tournament.users.add(self.player1, self.player2)
+
+        # Create draft with shuffle style
+        self.draft = Draft.objects.create(
+            tournament=self.tournament, draft_style="shuffle"
+        )
+        self.draft.build_rounds()
+
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.staff)
+
+    def test_undo_clears_next_round_captain(self):
+        """Undo should clear the next round's captain assignment."""
+        first_round = self.draft.draft_rounds.order_by("pick_number").first()
+        second_round = self.draft.draft_rounds.order_by("pick_number")[1]
+
+        # Make a pick
+        response = self.client.post(
+            "/api/tournaments/pick_player",
+            {"draft_round_pk": first_round.pk, "user_pk": self.player1.pk},
+        )
+        self.assertEqual(response.status_code, 201)
+
+        # Verify second round now has captain
+        second_round.refresh_from_db()
+        self.assertIsNotNone(second_round.captain)
+
+        # Undo the pick
+        response = self.client.post(
+            "/api/tournaments/undo-pick",
+            {"draft_pk": self.draft.pk},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # Second round should now have no captain
+        second_round.refresh_from_db()
+        self.assertIsNone(second_round.captain)
+
+    def test_undo_clears_tie_data_on_next_round(self):
+        """Undo should also clear tie resolution data on next round."""
+        first_round = self.draft.draft_rounds.order_by("pick_number").first()
+        second_round = self.draft.draft_rounds.order_by("pick_number")[1]
+
+        # Manually set tie data on second round (simulating a tie resolution)
+        second_round.captain = self.captain1
+        second_round.was_tie = True
+        second_round.tie_roll_data = {"test": "data"}
+        second_round.save()
+
+        # Make a pick on first round
+        first_round.choice = self.player1
+        first_round.save()
+        self.team2.members.add(self.player1)
+
+        # Undo the pick
+        response = self.client.post(
+            "/api/tournaments/undo-pick",
+            {"draft_pk": self.draft.pk},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        # Second round should have tie data cleared
+        second_round.refresh_from_db()
+        self.assertIsNone(second_round.captain)
+        self.assertFalse(second_round.was_tie)
+        self.assertIsNone(second_round.tie_roll_data)

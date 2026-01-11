@@ -110,6 +110,7 @@ def pick_player_for_round(request):
     draft_round.save()
 
     # For shuffle draft, assign next captain
+    tie_data = None
     if draft.draft_style == "shuffle" and draft.users_remaining.exists():
         from app.functions.shuffle_draft import assign_next_shuffle_captain
 
@@ -386,6 +387,18 @@ def undo_last_pick(request):
     # Clear the choice and reset the round
     last_round_with_choice.choice = None
     last_round_with_choice.save()
+
+    # Clear the next round's captain so it gets recalculated on next pick
+    next_round = (
+        draft.draft_rounds.filter(pick_number__gt=last_round_with_choice.pick_number)
+        .order_by("pick_number")
+        .first()
+    )
+    if next_round and next_round.choice is None:
+        next_round.captain = None
+        next_round.was_tie = False
+        next_round.tie_roll_data = None
+        next_round.save()
 
     # Note: latest_round is a computed property that automatically returns
     # the first round without a choice. No need to set it manually.
