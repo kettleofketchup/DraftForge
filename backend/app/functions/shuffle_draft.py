@@ -3,6 +3,9 @@
 import random
 from typing import Optional
 
+# Maximum team size (captain + 4 drafted players)
+MAX_TEAM_SIZE = 5
+
 
 def get_team_total_mmr(team) -> int:
     """
@@ -128,7 +131,14 @@ def assign_next_shuffle_captain(draft) -> Optional[dict]:
         return None
 
     teams = list(draft.tournament.teams.all())
-    next_team, tie_data = get_lowest_mmr_team(teams)
+
+    # Filter out teams that have reached max size (5 members)
+    eligible_teams = [t for t in teams if t.members.count() < MAX_TEAM_SIZE]
+
+    if not eligible_teams:
+        return None  # All teams full, draft complete
+
+    next_team, tie_data = get_lowest_mmr_team(eligible_teams)
 
     next_round.captain = next_team.captain
     if tie_data:
