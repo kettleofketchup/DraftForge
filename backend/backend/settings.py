@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/1.10/ref/settings/
 """
 
 import contextlib
+import functools
 import os
 import sys
 from pathlib import Path
@@ -73,8 +74,17 @@ TEST = env_bool("TEST")
 RELEASE = env_bool("RELEASE")
 DEBUG = env_bool("DEBUG")
 
-if DEBUG or TEST:
-    logging.basicConfig(level=logging.DEBUG)
+# Configure logging - default to INFO, allow override via LOG_LEVEL env var
+_log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, _log_level, logging.INFO),
+    format="%(levelname)s:%(name)s:%(message)s",
+)
+
+# Quiet down noisy loggers unless explicitly debugging
+if _log_level != "DEBUG":
+    logging.getLogger("app.models").setLevel(logging.INFO)
+    logging.getLogger("app.functions.tournament").setLevel(logging.INFO)
 
 
 # Application definition
@@ -223,12 +233,29 @@ DATABASES = {
     }
 }
 
+
+# Docker environment detection
+@functools.lru_cache(maxsize=1)
+def is_docker() -> bool:
+    """Check if running inside Docker container."""
+    if os.path.exists("/.dockerenv"):
+        return True
+    try:
+        with open("/proc/1/cgroup", "r") as f:
+            return "docker" in f.read()
+    except Exception:
+        return False
+
+
+IN_DOCKER = is_docker()
+REDIS_HOST = "redis" if IN_DOCKER else "localhost"
+
 # Cacheops/Redis cache configuration
 if not env_bool("DISABLE_CACHE"):
     CACHES = {
         "default": {
             "BACKEND": "django_redis.cache.RedisCache",
-            "LOCATION": "redis://redis:6379/1",
+            "LOCATION": f"redis://{REDIS_HOST}:6379/1",
             "OPTIONS": {
                 "CLIENT_CLASS": "django_redis.client.DefaultClient",
             },
@@ -242,10 +269,11 @@ else:
     }
 
 CACHEOPS_REDIS = {
-    "host": "redis",
+    "host": REDIS_HOST,
     "port": 6379,
     "db": 1,
-    "socket_timeout": 3,
+    "socket_timeout": 2,  # Timeout for read/write operations
+    "socket_connect_timeout": 2,  # Timeout for initial connection (prevents hanging)
 }
 
 # Enable caching for tournament-related models
@@ -349,8 +377,10 @@ CSRF_TRUSTED_ORIGINS = [
 AUTH_USER_MODEL = "app.CustomUser"
 
 # Celery Configuration
-CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/1")
-CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "redis://redis:6379/1")
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", f"redis://{REDIS_HOST}:6379/1")
+CELERY_RESULT_BACKEND = os.environ.get(
+    "CELERY_RESULT_BACKEND", f"redis://{REDIS_HOST}:6379/1"
+)
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
