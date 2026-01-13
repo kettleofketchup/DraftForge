@@ -42,11 +42,11 @@ LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/dota_t
 
 WORKDIR /app
 EXPOSE 8000
-ENTRYPOINT ["python", "backend/manage.py", "runserver", "0.0.0.0:8000"]
+ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "backend.asgi:application"]
 
 # ---- Runtime for dev/test ----
 FROM source-dev AS runtime-dev
 LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/dota_tournament"
 WORKDIR /app
 EXPOSE 8000
-ENTRYPOINT ["python", "backend/manage.py", "runserver", "0.0.0.0:8000"]
+ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "backend.asgi:application"]
