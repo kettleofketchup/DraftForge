@@ -40,13 +40,13 @@ COPY ./backend /app/backend
 FROM source AS runtime
 LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/dota_tournament"
 
-WORKDIR /app
+WORKDIR /app/backend
 EXPOSE 8000
 ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "backend.asgi:application"]
 
 # ---- Runtime for dev/test ----
 FROM source-dev AS runtime-dev
 LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/dota_tournament"
-WORKDIR /app
+WORKDIR /app/backend
 EXPOSE 8000
 ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "backend.asgi:application"]
