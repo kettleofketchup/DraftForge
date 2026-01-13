@@ -31,6 +31,7 @@ export function DraftEventFab({
   return (
     <>
       <Button
+        data-testid="draft-event-fab"
         variant="default"
         size="icon"
         className={cn(
