@@ -532,6 +532,14 @@ class TournamentSerializer(serializers.ModelSerializer):
     tournament_type = serializers.CharField(read_only=False)
     captains = TournamentUserSerializer(many=True, read_only=True)
     games = GameSerializerForTournament(many=True, read_only=True)
+    league = LeaguesSerializer(read_only=True)
+    league_id_write = serializers.PrimaryKeyRelatedField(
+        queryset=League.objects.all(),
+        write_only=True,
+        source="league",
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = Tournament
@@ -548,6 +556,8 @@ class TournamentSerializer(serializers.ModelSerializer):
             "user_ids",  # Allow setting user IDs for the tournament
             "captains",
             "tournament_type",
+            "league",
+            "league_id_write",
         )
 
 
