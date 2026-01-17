@@ -1,5 +1,6 @@
 import logging
 
+import nh3
 import requests
 from cacheops import cached_as, invalidate_model
 from django.conf import settings
@@ -226,6 +227,35 @@ class CustomUser(AbstractUser):
             return f"https://cdn.discordapp.com/embed/avatars/{(int(self.discordId) >> 22) % 6}.png"
 
         return f"https://cdn.discordapp.com/embed/avatars/0.png"  # Fallback
+
+
+class Organization(models.Model):
+    """Organization that owns leagues and tournaments."""
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="", max_length=10000)
+    logo = models.URLField(blank=True, default="")
+    rules_template = models.TextField(blank=True, default="", max_length=50000)
+    admins = models.ManyToManyField(
+        "CustomUser",
+        related_name="admin_organizations",
+        blank=True,
+    )
+    staff = models.ManyToManyField(
+        "CustomUser",
+        related_name="staff_organizations",
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Organization"
+        verbose_name_plural = "Organizations"
+
+    def __str__(self):
+        return self.name
 
 
 TOURNAMNET_TYPE_CHOICES = [
