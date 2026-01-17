@@ -8,6 +8,7 @@ from django.contrib.auth import login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Count
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -27,12 +28,31 @@ from social_django.utils import load_strategy, psa
 from backend import settings
 
 from .decorators import render_to
-from .models import CustomUser, Draft, DraftRound, Game, Team, Tournament
+from .models import (
+    CustomUser,
+    Draft,
+    DraftRound,
+    Game,
+    League,
+    Organization,
+    Team,
+    Tournament,
+)
 from .permissions import IsStaff
+from .permissions_org import (
+    IsLeagueAdmin,
+    IsOrgAdmin,
+    has_league_admin_access,
+    has_org_admin_access,
+)
 from .serializers import (
     DraftRoundSerializer,
     DraftSerializer,
     GameSerializer,
+    LeagueSerializer,
+    LeaguesSerializer,
+    OrganizationSerializer,
+    OrganizationsSerializer,
     TeamSerializer,
     TournamentSerializer,
     TournamentsSerializer,
@@ -613,6 +633,58 @@ class TournamentsBasicView(viewsets.ModelViewSet):
         def get_data():
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+
+class OrganizationView(viewsets.ModelViewSet):
+    """Organization CRUD endpoints."""
+
+    queryset = Organization.objects.all()
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return OrganizationsSerializer
+        return OrganizationSerializer
+
+    def get_queryset(self):
+        """Annotate counts to avoid N+1 queries."""
+        return Organization.objects.annotate(
+            league_count=Count("leagues", distinct=True),
+            tournament_count=Count("leagues__tournaments", distinct=True),
+        ).order_by("name")
+
+    def get_permissions(self):
+        if self.action in ["create", "destroy"]:
+            self.permission_classes = [IsAdminUser]
+        elif self.action in ["update", "partial_update"]:
+            self.permission_classes = [IsOrgAdmin]
+        else:
+            self.permission_classes = [AllowAny]
+        return super().get_permissions()
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f"organization_list:{request.get_full_path()}"
+
+        @cached_as(Organization, League, Tournament, extra=cache_key, timeout=60 * 10)
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+    def retrieve(self, request, *args, **kwargs):
+        pk = kwargs.get("pk")
+        cache_key = f"organization_detail:{pk}"
+
+        @cached_as(Organization, League, Tournament, extra=cache_key, timeout=60 * 10)
+        def get_data():
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
             return serializer.data
 
         data = get_data()
