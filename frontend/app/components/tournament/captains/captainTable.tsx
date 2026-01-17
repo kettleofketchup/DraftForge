@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { PlayerPopover } from '~/components/player';
 import {
   Table,
   TableBody,
@@ -61,16 +62,18 @@ export const CaptainTable: React.FC<TournamentUsersTable> = () => {
         {members().map((user: UserType, idx: number) => (
           <TableRow key={`TeamTableRow-${user.pk}`}>
             <TableCell>
-              <div className="flex items-center gap-2">
-                <span className="avatar w-8 h-8">
-                  <img
-                    src={AvatarUrl(user)}
-                    alt={user.username}
-                    className="rounded-full"
-                  />
-                </span>
-                <span>{user.nickname || user.username}</span>
-              </div>
+              <PlayerPopover player={user}>
+                <div className="flex items-center gap-2 hover:text-primary transition-colors">
+                  <span className="avatar w-8 h-8">
+                    <img
+                      src={AvatarUrl(user)}
+                      alt={user.username}
+                      className="rounded-full hover:ring-2 hover:ring-primary transition-all"
+                    />
+                  </span>
+                  <span>{user.nickname || user.username}</span>
+                </div>
+              </PlayerPopover>
             </TableCell>
             <TableCell>{user.mmr ?? 'N/A'}</TableCell>
             <TableCell>
