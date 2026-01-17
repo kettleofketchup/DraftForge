@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AxiosError } from 'axios';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import api from '~/components/api/axios';
@@ -47,8 +48,13 @@ export function useTangoes(enabled: boolean = true): UseTangoesReturn {
       queryClient.setQueryData(['tangoes'], data.tangoes);
       toast.success(data.message);
     },
-    onError: (error: any) => {
-      const message = error?.response?.data?.detail || 'Failed to buy tango';
+    onError: (error: Error) => {
+      let message = 'Failed to buy tango';
+      if (error instanceof AxiosError && error.response?.data?.detail) {
+        message = error.response.data.detail;
+      } else if (error.message) {
+        message = error.message;
+      }
       toast.error(message);
     },
   });
