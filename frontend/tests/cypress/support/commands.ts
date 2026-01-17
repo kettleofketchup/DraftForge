@@ -216,23 +216,22 @@ Cypress.Commands.add('isInViewport', { prevSubject: true }, (subject) => {
 
 // Wait for React hydration to complete
 Cypress.Commands.add('waitForHydration', () => {
-  // Wait for React to be available
-  cy.window().should('have.property', 'React');
-
-  // Wait for DOM to be stable (no more mutations from hydration)
+  // Wait for DOM to be stable (body should be visible)
   cy.get('body').should('be.visible');
 
-  // Give React a moment to finish hydration
-  cy.wait(100);
-
-  // Ensure no hydration errors in console
+  // Wait for document ready state to be complete
   cy.window().then((win) => {
-    // Check if hydration completed successfully
     cy.wrap(null).should(() => {
-      // This ensures the DOM is in a stable state
       expect(win.document.readyState).to.eq('complete');
     });
   });
+
+  // Wait for app root to be hydrated (React Router app structure)
+  // Look for common React app indicators like navigation or main content
+  cy.get('[data-slot], nav, main, #root', { timeout: 10000 }).should('exist');
+
+  // Give React a moment to finish hydration
+  cy.wait(200);
 });
 
 // Visit and wait for React app to be ready

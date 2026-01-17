@@ -241,14 +241,14 @@ describe('Undo Pick', () => {
 
           cy.wait(2000);
 
-          // Now undo the pick
+          // Now undo the pick - wait for button to appear first (confirms pick was recorded)
           cy.get('[role="dialog"]')
-            .contains('button', 'Undo')
+            .contains('button', 'Undo', { timeout: 10000 })
+            .should('be.visible')
             .click({ force: true });
-          cy.wait(500);
 
           // Confirm undo in the alert dialog
-          cy.get('[role="alertdialog"]').should('be.visible');
+          cy.get('[role="alertdialog"]', { timeout: 10000 }).should('be.visible');
           cy.get('[role="alertdialog"]')
             .contains('button', 'Undo Pick')
             .click({ force: true });

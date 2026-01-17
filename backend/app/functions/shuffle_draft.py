@@ -3,6 +3,9 @@
 import random
 from typing import Optional
 
+from app.broadcast import broadcast_event
+from app.models import DraftEvent
+
 # Maximum team size (captain + 4 drafted players)
 MAX_TEAM_SIZE = 5
 
@@ -113,6 +116,18 @@ def build_shuffle_rounds(draft) -> None:
         first_round.tie_roll_data = tie_data
     first_round.save()
 
+    # Create draft_started event
+    event = DraftEvent.objects.create(
+        draft=draft,
+        event_type="draft_started",
+        payload={
+            "draft_id": draft.pk,
+            "draft_style": draft.draft_style,
+            "team_count": num_teams,
+        },
+    )
+    broadcast_event(event)
+
 
 def assign_next_shuffle_captain(draft) -> Optional[dict]:
     """
@@ -145,5 +160,35 @@ def assign_next_shuffle_captain(draft) -> Optional[dict]:
         next_round.was_tie = True
         next_round.tie_roll_data = tie_data
     next_round.save()
+
+    # Create captain_assigned event
+    captain_event = DraftEvent.objects.create(
+        draft=draft,
+        event_type="captain_assigned",
+        payload={
+            "pick_number": next_round.pick_number,
+            "captain_id": next_team.captain.pk,
+            "captain_name": next_team.captain.username,
+            "team_id": next_team.pk,
+            "team_name": next_team.name,
+            "team_mmr": get_team_total_mmr(next_team),
+        },
+    )
+    broadcast_event(captain_event)
+
+    # If there was a tie, also create a tie_roll event
+    if tie_data:
+        tie_event = DraftEvent.objects.create(
+            draft=draft,
+            event_type="tie_roll",
+            payload={
+                "pick_number": next_round.pick_number,
+                "tied_teams": tie_data["tied_teams"],
+                "roll_rounds": tie_data["roll_rounds"],
+                "winner_id": tie_data["winner_id"],
+                "winner_name": next_team.captain.username,
+            },
+        )
+        broadcast_event(tie_event)
 
     return tie_data

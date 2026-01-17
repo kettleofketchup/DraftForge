@@ -10,6 +10,7 @@ import { PlayerChoiceView } from './roundView/choiceCard';
 import { CurrentTeamView } from './roundView/currentTeam';
 import { TurnIndicator } from './roundView/TurnIndicator';
 import { ShufflePickOrder } from './shuffle/ShufflePickOrder';
+
 const log = getLogger('DraftRoundView');
 
 export const DraftRoundView: React.FC = () => {
@@ -42,10 +43,12 @@ export const DraftRoundView: React.FC = () => {
       curDraftRound?.pk,
     );
   }, [curDraftRound?.pk]);
+
   const latestRound = () =>
     draft?.draft_rounds?.find(
       (round: DraftRoundType) => round.pk === draft?.latest_round,
     );
+
   const noDraftView = () => {
     return (
       <>
@@ -57,11 +60,12 @@ export const DraftRoundView: React.FC = () => {
 
   if (!draft || !draft.draft_rounds) return <>{noDraftView()}</>;
 
-  if (
+  const isNotLatestRound =
     draft?.latest_round &&
     draft?.latest_round !== curDraftRound?.pk &&
-    !curDraftRound?.choice
-  ) {
+    !curDraftRound?.choice;
+
+  if (isNotLatestRound) {
     log.debug('Not latest round', draft);
     return (
       <>

@@ -92,6 +92,8 @@ if "NODE_ENV" in os.environ:
     NODE_ENV = os.environ.get("NODE_ENV")
 
 INSTALLED_APPS = [
+    "daphne",
+    "channels",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -172,6 +174,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "backend.wsgi.application"
+ASGI_APPLICATION = "backend.asgi.application"
 SOCIAL_AUTH_ALLOWED_REDIRECT_HOSTS = ["dota.kettle.sh", "localhost"]
 
 AUTHENTICATION_BACKENDS = (
@@ -295,6 +298,16 @@ else:
 
 
 CACHEOPS_DEGRADE_ON_FAILURE = True
+
+# Channel Layers for WebSocket support
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(REDIS_HOST, 6379)],
+        },
+    },
+}
 
 
 # Password validation

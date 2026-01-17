@@ -4,6 +4,15 @@ import {
 } from 'tests/cypress/support/utils';
 
 describe('Bracket Generation and Winner Advancement (e2e)', () => {
+  let tournamentPk: number;
+
+  before(() => {
+    // Get the tournament pk for the pending bracket test scenario
+    cy.getTournamentByKey('pending_bracket').then((response) => {
+      tournamentPk = response.body.pk;
+    });
+  });
+
   beforeEach(() => {
     cy.loginStaff();
     suppressHydrationErrors();
@@ -11,8 +20,8 @@ describe('Bracket Generation and Winner Advancement (e2e)', () => {
 
   describe('Bracket Generation', () => {
     it('should generate a bracket with seeding', () => {
-      // Use Pending Bracket Test (Tournament 3) which has teams but pending games
-      visitAndWaitForHydration('/tournament/3/games');
+      // Use Pending Bracket Test which has teams but pending games
+      visitAndWaitForHydration(`/tournament/${tournamentPk}/games`);
 
       // Wait for the games tab to load
       cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');
@@ -27,7 +36,7 @@ describe('Bracket Generation and Winner Advancement (e2e)', () => {
     });
 
     it('should allow reseeding with different methods', () => {
-      visitAndWaitForHydration('/tournament/3/games');
+      visitAndWaitForHydration(`/tournament/${tournamentPk}/games`);
 
       cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
         'be.visible',
@@ -43,7 +52,7 @@ describe('Bracket Generation and Winner Advancement (e2e)', () => {
     });
 
     it('should enable save button after reseeding', () => {
-      visitAndWaitForHydration('/tournament/3/games');
+      visitAndWaitForHydration(`/tournament/${tournamentPk}/games`);
 
       cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
         'be.visible',
@@ -78,7 +87,7 @@ describe('Bracket Generation and Winner Advancement (e2e)', () => {
   describe('Winner Selection', () => {
     it('should show captain names in winner selection buttons', () => {
       // Use Pending Bracket Test with teams assigned
-      visitAndWaitForHydration('/tournament/3/games');
+      visitAndWaitForHydration(`/tournament/${tournamentPk}/games`);
 
       cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
         'be.visible',
@@ -116,7 +125,7 @@ describe('Bracket Generation and Winner Advancement (e2e)', () => {
     });
 
     it('should advance winner to next match after selection', () => {
-      visitAndWaitForHydration('/tournament/3/games');
+      visitAndWaitForHydration(`/tournament/${tournamentPk}/games`);
 
       cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
         'be.visible',
@@ -156,7 +165,7 @@ describe('Bracket Generation and Winner Advancement (e2e)', () => {
 
     // Skip: This test is flaky due to timing issues with modal after reseed
     it.skip('should advance loser to losers bracket after winner selection', () => {
-      visitAndWaitForHydration('/tournament/3/games');
+      visitAndWaitForHydration(`/tournament/${tournamentPk}/games`);
 
       cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
         'be.visible',
@@ -208,7 +217,7 @@ describe('Bracket Generation and Winner Advancement (e2e)', () => {
 
   describe('Bracket Saving', () => {
     it('should save bracket and persist changes', () => {
-      visitAndWaitForHydration('/tournament/3/games');
+      visitAndWaitForHydration(`/tournament/${tournamentPk}/games`);
 
       cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
         'be.visible',

@@ -1,5 +1,5 @@
 import { ClipboardPen, EyeIcon } from 'lucide-react';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { Button } from '~/components/ui/button';
 import {
@@ -24,6 +24,7 @@ import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
 import { TEAMS_BUTTONS_WIDTH } from '../constants';
 import { DIALOG_CSS, SCROLLAREA_CSS } from '../reusable/modal';
+import { DraftHistoryButton } from './buttons/DraftHistoryButton';
 import { DraftStyleModal } from './buttons/draftStyleModal';
 import { InitDraftButton } from './buttons/initDraftDialog';
 import { LatestRoundButton } from './buttons/latestButton';
@@ -37,6 +38,7 @@ import { refreshDraftHook } from './hooks/refreshDraftHook';
 import { refreshTournamentHook } from './hooks/refreshTournamentHook';
 import { useAutoRefreshDraft } from './hooks/useAutoRefreshDraft';
 import { useDraftLive } from './hooks/useDraftLive';
+import { useDraftWebSocket } from './hooks/useDraftWebSocket';
 import { LiveView } from './liveView';
 import type { DraftRoundType, DraftType } from './types';
 const log = getLogger('DraftModal');
@@ -109,13 +111,108 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     }
   }, [autoAdvance, draft, setDraft, tournament, setTournament]);
 
+  // WebSocket for real-time draft events
+  // Use refs to avoid recreating callback on every render
+  const tournamentRef = useRef(tournament);
+  const curDraftRoundRef = useRef(curDraftRound);
+  const autoAdvanceRef = useRef(autoAdvance);
+
+  useEffect(() => {
+    tournamentRef.current = tournament;
+  }, [tournament]);
+
+  useEffect(() => {
+    curDraftRoundRef.current = curDraftRound;
+  }, [curDraftRound]);
+
+  useEffect(() => {
+    autoAdvanceRef.current = autoAdvance;
+  }, [autoAdvance]);
+
+  // Handle draft state updates directly from WebSocket (avoids API calls)
+  const handleDraftStateUpdate = useCallback(
+    (wsState: unknown) => {
+      // Cast to DraftType - the backend sends matching structure
+      const draftState = wsState as DraftType;
+      log.debug('WebSocket draft state update:', draftState);
+
+      // Update the draft in the store
+      setDraft(draftState);
+
+      // Find and update the current draft round with new data
+      const currentDraftRound = curDraftRoundRef.current;
+      if (currentDraftRound?.pk && draftState.draft_rounds) {
+        const updatedRound = draftState.draft_rounds.find(
+          (round: DraftRoundType) => round.pk === currentDraftRound.pk,
+        );
+        if (updatedRound) {
+          setCurDraftRound(updatedRound);
+        }
+      }
+
+      // Auto-advance to latest round if enabled
+      if (autoAdvanceRef.current && draftState.latest_round) {
+        const latestRound = draftState.draft_rounds?.find(
+          (round: DraftRoundType) => round.pk === draftState.latest_round,
+        );
+        if (latestRound) {
+          log.debug('Auto-advancing to latest round:', latestRound.pk);
+          setCurDraftRound(latestRound);
+          const i = draftState.draft_rounds?.findIndex(
+            (round: DraftRoundType) => round.pk === latestRound.pk,
+          );
+          if (i !== undefined && i >= 0) {
+            setDraftIndex(i);
+          }
+        }
+      }
+    },
+    [setDraft, setCurDraftRound, setDraftIndex],
+  );
+
+  // Fallback refresh for when draft state is not included in WebSocket message
+  const handleWebSocketRefresh = useCallback(async () => {
+    const currentTournament = tournamentRef.current;
+    const currentDraftRound = curDraftRoundRef.current;
+    if (currentTournament?.pk) {
+      log.debug('WebSocket triggered refresh (fallback)');
+      await refreshTournamentHook({
+        tournament: currentTournament,
+        setTournament,
+        setDraft,
+        curDraftRound: currentDraftRound,
+        setCurDraftRound,
+      });
+    }
+  }, [setTournament, setDraft, setCurDraftRound]);
+
+  const {
+    events: draftEvents,
+    isConnected: wsConnected,
+    hasNewEvent,
+    clearNewEventFlag,
+  } = useDraftWebSocket({
+    draftId: draft?.pk ?? null,
+    onDraftStateUpdate: handleDraftStateUpdate,
+    onRefreshNeeded: handleWebSocketRefresh,
+  });
+
+  // Auto-advance to latest round when latest_round changes and autoAdvance is enabled
+  // Uses primitive value (draft?.latest_round) to avoid infinite loops from object reference changes
+  useEffect(() => {
+    if (autoAdvance && draft?.latest_round) {
+      setDraftRoundToLatest();
+    }
+  }, [draft?.latest_round, autoAdvance]);
+
+  // Only use polling as fallback when WebSocket is not connected
   const draftLiveOptions = useMemo(
     () => ({
-      enabled: open && !!tournament?.draft?.pk && livePolling,
-      interval: 3000, // Poll every 3 seconds when modal is open
+      enabled: open && !!tournament?.draft?.pk && livePolling && !wsConnected,
+      interval: 3000, // Poll every 3 seconds when modal is open and WS disconnected
       onUpdate,
     }),
-    [open, tournament?.draft?.pk, livePolling, onUpdate],
+    [open, tournament?.draft?.pk, livePolling, wsConnected, onUpdate],
   );
 
   const { isPolling, forceRefresh } = useDraftLive(draftLiveOptions);
@@ -311,6 +408,11 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
           </div>
           {choiceButtons()}
           <div className="flex w-full justify-center md:justify-end gap-2">
+            <DraftHistoryButton
+              events={draftEvents}
+              hasNewEvent={hasNewEvent}
+              onViewed={clearNewEventFlag}
+            />
             <ShareDraftButton />
 
             <DialogClose asChild>

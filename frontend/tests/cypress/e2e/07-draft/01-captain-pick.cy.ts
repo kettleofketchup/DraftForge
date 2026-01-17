@@ -2,7 +2,7 @@
  * Captain Draft Pick Tests
  *
  * Tests the captain's ability to pick players during a draft.
- * Uses the 'captain_draft_test' tournament which is configured with:
+ * Uses the 'draft_captain_turn' tournament which is configured with:
  * - Active draft in progress
  * - Captain assigned with pending pick
  */
@@ -23,11 +23,22 @@ describe('Captain Draft Pick', () => {
 
   before(() => {
     // Get tournament info from test config
-    cy.getTournamentByKey('captain_draft_test').then((response) => {
+    cy.getTournamentByKey('draft_captain_turn').then((response) => {
       expect(response.status).to.eq(200);
       tournamentPk = response.body.pk;
-      // Captain PK will be extracted from tournament data
-      // For now, we'll use the first captain from the draft
+
+      // Extract captain PK from first team (sorted by draft_order)
+      const teams = response.body.teams || [];
+      const sortedTeams = [...teams].sort(
+        (a, b) => (a.draft_order || 0) - (b.draft_order || 0),
+      );
+      const firstTeam = sortedTeams[0];
+      if (firstTeam && firstTeam.captain) {
+        captainPk = firstTeam.captain.pk;
+        cy.log(`Found captain PK: ${captainPk}`);
+      } else {
+        throw new Error('Could not find captain for first team');
+      }
     });
   });
 

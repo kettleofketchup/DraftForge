@@ -10,6 +10,7 @@ log = getLogger(__name__)
 from .models import (
     CustomUser,
     Draft,
+    DraftEvent,
     DraftRound,
     Game,
     Joke,
@@ -564,3 +565,17 @@ class JokeSerializer(serializers.ModelSerializer):
         model = Joke
         fields = ["tangoes_purchased"]
         read_only_fields = ["tangoes_purchased"]
+
+
+class DraftEventSerializer(serializers.ModelSerializer):
+    actor = TournamentUserSerializer(read_only=True)
+
+    class Meta:
+        model = DraftEvent
+        fields = (
+            "pk",
+            "event_type",
+            "payload",
+            "actor",
+            "created_at",
+        )

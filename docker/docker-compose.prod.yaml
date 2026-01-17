@@ -45,7 +45,8 @@ services:
 
   celery-worker:
     image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
-    command: celery -A config worker -l info
+    entrypoint: ["celery"]
+    command: ["-A", "config", "worker", "-l", "info"]
     env_file: "./docker/.env.prod"
     depends_on:
       - redis
@@ -54,7 +55,8 @@ services:
 
   celery-beat:
     image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
-    command: celery -A config beat -l info
+    entrypoint: ["celery"]
+    command: ["-A", "config", "beat", "-l", "info"]
     env_file: "./docker/.env.prod"
     depends_on:
       - redis
