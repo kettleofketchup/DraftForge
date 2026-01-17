@@ -40,6 +40,11 @@ COPY ./backend /app/backend
 FROM source AS runtime
 LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/dota_tournament"
 
+# Create non-root user for running services (especially Celery)
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid 1000 --shell /bin/bash --create-home appuser && \
+    chown -R appuser:appuser /app
+
 WORKDIR /app/backend
 EXPOSE 8000
 ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "backend.asgi:application"]
@@ -47,6 +52,12 @@ ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "backend.asgi:application"]
 # ---- Runtime for dev/test ----
 FROM source-dev AS runtime-dev
 LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/dota_tournament"
+
+# Create non-root user for running services (especially Celery)
+RUN groupadd --gid 1000 appuser && \
+    useradd --uid 1000 --gid 1000 --shell /bin/bash --create-home appuser && \
+    chown -R appuser:appuser /app
+
 WORKDIR /app/backend
 EXPOSE 8000
 ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "backend.asgi:application"]
