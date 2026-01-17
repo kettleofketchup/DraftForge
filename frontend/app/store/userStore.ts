@@ -3,15 +3,20 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import {
   fetchCurrentUser,
   fetchDraft,
+  fetchOrganization,
   fetchTournament,
   fetchUsers,
   get_dtx_members,
   getGames,
+  getLeagues,
+  getOrganizations,
   getTeams,
   getTournaments,
   getTournamentsBasic,
 } from '~/components/api/api';
 import type { DraftRoundType, DraftType } from '~/components/draft/types';
+import type { LeagueType } from '~/components/league/schemas';
+import type { OrganizationType } from '~/components/organization/schemas';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
 import { User } from '~/components/user/user';
 import type { GameType, GuildMember, GuildMembers, UserType } from '~/index';
@@ -83,6 +88,21 @@ interface UserState {
   setDraftIndex: (index: number) => void;
   autoRefreshDraft: (() => Promise<void>) | null;
   setAutoRefreshDraft: (refresh: (() => Promise<void>) | null) => void;
+
+  // Organizations
+  organizations: OrganizationType[];
+  organization: OrganizationType | null;
+  setOrganizations: (orgs: OrganizationType[]) => void;
+  setOrganization: (org: OrganizationType | null) => void;
+  getOrganizations: () => Promise<void>;
+  getOrganization: (pk: number) => Promise<void>;
+
+  // Leagues
+  leagues: LeagueType[];
+  league: LeagueType | null;
+  setLeagues: (leagues: LeagueType[]) => void;
+  setLeague: (league: LeagueType | null) => void;
+  getLeagues: (orgId?: number) => Promise<void>;
 }
 export const useUserStore = create<UserState>()(
   persist(
@@ -357,6 +377,46 @@ export const useUserStore = create<UserState>()(
       userAPIError: null,
       setUserAPIError: (error: any) => set({ userAPIError: error }),
       clearUserAPIError: () => set({ userAPIError: null }),
+
+      // Organizations
+      organizations: [] as OrganizationType[],
+      organization: null,
+      setOrganizations: (orgs) => set({ organizations: orgs }),
+      setOrganization: (org) => set({ organization: org }),
+      getOrganizations: async () => {
+        try {
+          const response = await getOrganizations();
+          set({ organizations: response });
+          log.debug('Organizations fetched successfully:', response);
+        } catch (error) {
+          log.error('Error fetching organizations:', error);
+        }
+      },
+      getOrganization: async (pk: number) => {
+        try {
+          const response = await fetchOrganization(pk);
+          set({ organization: response });
+          log.debug('Organization fetched successfully:', response);
+        } catch (error) {
+          log.error('Error fetching organization:', error);
+          set({ organization: null });
+        }
+      },
+
+      // Leagues
+      leagues: [] as LeagueType[],
+      league: null,
+      setLeagues: (leagues) => set({ leagues }),
+      setLeague: (league) => set({ league }),
+      getLeagues: async (orgId?: number) => {
+        try {
+          const response = await getLeagues(orgId);
+          set({ leagues: response });
+          log.debug('Leagues fetched successfully:', response);
+        } catch (error) {
+          log.error('Error fetching leagues:', error);
+        }
+      },
     }),
     {
       name: 'dtx-storage', // key in localStorage
