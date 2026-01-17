@@ -258,6 +258,42 @@ class Organization(models.Model):
         return self.name
 
 
+class League(models.Model):
+    """League that belongs to an organization, 1:1 with Steam league."""
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="leagues",
+    )
+    steam_league_id = models.IntegerField(unique=True)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="", max_length=10000)
+    rules = models.TextField(blank=True, default="", max_length=50000)
+    prize_pool = models.CharField(max_length=100, blank=True, default="")
+    admins = models.ManyToManyField(
+        "CustomUser",
+        related_name="admin_leagues",
+        blank=True,
+    )
+    staff = models.ManyToManyField(
+        "CustomUser",
+        related_name="staff_leagues",
+        blank=True,
+    )
+    last_synced = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "League"
+        verbose_name_plural = "Leagues"
+
+    def __str__(self):
+        return f"{self.name} ({self.steam_league_id})"
+
+
 TOURNAMNET_TYPE_CHOICES = [
     ("single_elimination", "Single Elimination"),
     ("double_elimination", "Double Elimination"),
