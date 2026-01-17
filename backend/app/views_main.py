@@ -691,6 +691,83 @@ class OrganizationView(viewsets.ModelViewSet):
         return Response(data)
 
 
+class LeagueView(viewsets.ModelViewSet):
+    """League CRUD endpoints with org filtering."""
+
+    queryset = League.objects.all()
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return LeaguesSerializer
+        return LeagueSerializer
+
+    def get_queryset(self):
+        """Optimize with select_related and annotations."""
+        queryset = (
+            League.objects.select_related("organization")
+            .annotate(
+                tournament_count=Count("tournaments", distinct=True),
+            )
+            .order_by("name")
+        )
+
+        org_id = self.request.query_params.get("organization")
+        if org_id:
+            queryset = queryset.filter(organization_id=org_id)
+        return queryset
+
+    def get_permissions(self):
+        if self.action == "create":
+            self.permission_classes = [IsAuthenticated]
+        elif self.action in ["update", "partial_update", "destroy"]:
+            self.permission_classes = [IsLeagueAdmin]
+        else:
+            self.permission_classes = [AllowAny]
+        return super().get_permissions()
+
+    def create(self, request, *args, **kwargs):
+        org_id = request.data.get("organization")
+        if org_id:
+            try:
+                org = Organization.objects.get(pk=org_id)
+                if not has_org_admin_access(request.user, org):
+                    return Response(
+                        {"error": "Must be organization admin to create league"},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            except Organization.DoesNotExist:
+                return Response(
+                    {"error": "Organization not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        return super().create(request, *args, **kwargs)
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f"league_list:{request.get_full_path()}"
+
+        @cached_as(League, Tournament, Organization, extra=cache_key, timeout=60 * 10)
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+    def retrieve(self, request, *args, **kwargs):
+        pk = kwargs.get("pk")
+        cache_key = f"league_detail:{pk}"
+
+        @cached_as(League, Tournament, Organization, extra=cache_key, timeout=60 * 10)
+        def get_data():
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+
 class TeamCreateView(generics.CreateAPIView):
     serializer_class = TeamSerializer
     permission_classes = [IsStaff]
