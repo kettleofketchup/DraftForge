@@ -564,6 +564,11 @@ class TournamentSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     teams = TeamSerializer(many=True, read_only=True)  # Associated teams
     positions = PositionsSerializer(many=False, read_only=False, required=False)
+    default_organization = serializers.PrimaryKeyRelatedField(
+        queryset=Organization.objects.all(),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = CustomUser
@@ -584,6 +589,7 @@ class UserSerializer(serializers.ModelSerializer):
             "date_joined",
             "teams",  # Include associated teams
             "positions",
+            "default_organization",
         )
 
     def update(self, instance, validated_data):
