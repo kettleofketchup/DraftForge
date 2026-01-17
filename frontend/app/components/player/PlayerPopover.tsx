@@ -34,16 +34,28 @@ export const PlayerPopover: React.FC<PlayerPopoverProps> = ({
     }
   }, [handleClick]);
 
+  const handleMouseEnter = useCallback(() => {
+    setPopoverOpen(true);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setPopoverOpen(false);
+  }, []);
+
   return (
     <>
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <PopoverTrigger asChild onClick={handleClick}>
+        <PopoverTrigger asChild>
           <span
             className="cursor-pointer"
             role="button"
             tabIndex={0}
             aria-label={`View profile for ${playerName}`}
+            aria-expanded={popoverOpen}
+            onClick={handleClick}
             onKeyDown={handleKeyDown}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
           >
             {children}
           </span>
@@ -51,6 +63,8 @@ export const PlayerPopover: React.FC<PlayerPopoverProps> = ({
         <PopoverContent
           className="w-56 p-3"
           onOpenAutoFocus={(e) => e.preventDefault()}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
         >
           <div className="space-y-2">
             {/* Header with avatar and name */}
