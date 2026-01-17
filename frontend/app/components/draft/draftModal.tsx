@@ -186,8 +186,17 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
           }
         }
       }
+
+      // Also refresh tournament to get updated team MMR data
+      const currentTournament = tournamentRef.current;
+      if (currentTournament?.pk) {
+        refreshTournamentHook({
+          tournament: currentTournament,
+          setTournament,
+        });
+      }
     },
-    [setDraft, setCurDraftRound, setDraftIndex],
+    [setDraft, setCurDraftRound, setDraftIndex, setTournament],
   );
 
   // Fallback refresh for when draft state is not included in WebSocket message
