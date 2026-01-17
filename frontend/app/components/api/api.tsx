@@ -299,3 +299,34 @@ export async function updateOrganization(
 export async function deleteOrganization(pk: number): Promise<void> {
   await axios.delete(`/organizations/${pk}/`);
 }
+
+// League API
+export async function getLeagues(organizationId?: number): Promise<LeaguesType> {
+  const params = organizationId ? `?organization=${organizationId}` : '';
+  const response = await axios.get<LeaguesType>(`/leagues/${params}`);
+  return response.data;
+}
+
+export async function fetchLeague(pk: number): Promise<LeagueType> {
+  const response = await axios.get<LeagueType>(`/leagues/${pk}/`);
+  return response.data;
+}
+
+export async function createLeague(
+  data: Partial<LeagueType>,
+): Promise<LeagueType> {
+  const response = await axios.post<LeagueType>('/leagues/', data);
+  return response.data;
+}
+
+export async function updateLeague(
+  pk: number,
+  data: Partial<LeagueType>,
+): Promise<LeagueType> {
+  const response = await axios.patch<LeagueType>(`/leagues/${pk}/`, data);
+  return response.data;
+}
+
+export async function deleteLeague(pk: number): Promise<void> {
+  await axios.delete(`/leagues/${pk}/`);
+}
