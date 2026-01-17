@@ -42,6 +42,8 @@ export interface CaptainAssignedPayload {
   pick_number: number;
   captain_id: number;
   captain_name: string;
+  captain_avatar?: string | null;
+  captain_discord_id?: string | null;
   team_id: number;
   was_tie: boolean;
 }
@@ -50,8 +52,12 @@ export interface PlayerPickedPayload {
   pick_number: number;
   captain_id: number;
   captain_name: string;
+  captain_avatar?: string | null;
+  captain_discord_id?: string | null;
   picked_id: number;
   picked_name: string;
+  picked_avatar?: string | null;
+  picked_discord_id?: string | null;
   team_id: number | null;
   team_name: string | null;
 }

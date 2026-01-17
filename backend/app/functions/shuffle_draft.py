@@ -162,13 +162,16 @@ def assign_next_shuffle_captain(draft) -> Optional[dict]:
     next_round.save()
 
     # Create captain_assigned event
+    captain = next_team.captain
     captain_event = DraftEvent.objects.create(
         draft=draft,
         event_type="captain_assigned",
         payload={
             "pick_number": next_round.pick_number,
-            "captain_id": next_team.captain.pk,
-            "captain_name": next_team.captain.username,
+            "captain_id": captain.pk,
+            "captain_name": captain.username,
+            "captain_avatar": captain.avatar,
+            "captain_discord_id": captain.discordId,
             "team_id": next_team.pk,
             "team_name": next_team.name,
             "team_mmr": get_team_total_mmr(next_team),

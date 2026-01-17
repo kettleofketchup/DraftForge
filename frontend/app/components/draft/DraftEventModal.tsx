@@ -5,13 +5,24 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { ScrollArea } from "~/components/ui/scroll-area";
-import type { DraftEvent } from "~/types/draftEvent";
+import type { DraftEvent, PlayerPickedPayload, CaptainAssignedPayload } from "~/types/draftEvent";
 import { formatDistanceToNow } from "date-fns";
 
 interface DraftEventModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   events: DraftEvent[];
+}
+
+// Build Discord avatar URL from discord_id and avatar hash
+function getDiscordAvatarUrl(discordId?: string | null, avatarHash?: string | null): string | null {
+  if (!discordId) return null;
+  if (avatarHash) {
+    return `https://cdn.discordapp.com/avatars/${discordId}/${avatarHash}.png?size=32`;
+  }
+  // Default Discord avatar based on discriminator (use id mod 5 for new usernames)
+  const defaultIndex = Number(BigInt(discordId) % BigInt(5));
+  return `https://cdn.discordapp.com/embed/avatars/${defaultIndex}.png`;
 }
 
 function getEventIcon(eventType: DraftEvent["event_type"]): string {
@@ -33,6 +44,26 @@ function getEventIcon(eventType: DraftEvent["event_type"]): string {
   }
 }
 
+interface EventAvatars {
+  captain?: string | null;
+  picked?: string | null;
+}
+
+function getEventAvatars(event: DraftEvent): EventAvatars {
+  const avatars: EventAvatars = {};
+
+  if (event.event_type === "player_picked") {
+    const payload = event.payload as PlayerPickedPayload;
+    avatars.captain = payload.captain_avatar || getDiscordAvatarUrl(payload.captain_discord_id);
+    avatars.picked = payload.picked_avatar || getDiscordAvatarUrl(payload.picked_discord_id);
+  } else if (event.event_type === "captain_assigned") {
+    const payload = event.payload as CaptainAssignedPayload;
+    avatars.captain = payload.captain_avatar || getDiscordAvatarUrl(payload.captain_discord_id);
+  }
+
+  return avatars;
+}
+
 function getEventDescription(event: DraftEvent): string {
   switch (event.event_type) {
     case "draft_started":
@@ -40,7 +71,7 @@ function getEventDescription(event: DraftEvent): string {
     case "draft_completed":
       return "Draft completed";
     case "player_picked": {
-      const payload = event.payload as { captain_name: string; picked_name: string; pick_number: number };
+      const payload = event.payload as PlayerPickedPayload;
       return `${payload.captain_name} picked ${payload.picked_name} (Pick ${payload.pick_number})`;
     }
     case "tie_roll": {
@@ -55,7 +86,7 @@ function getEventDescription(event: DraftEvent): string {
       return `Tie! ${names} rolled ${rolls} → ${payload.winner_name} wins`;
     }
     case "captain_assigned": {
-      const payload = event.payload as { captain_name: string };
+      const payload = event.payload as CaptainAssignedPayload;
       return `${payload.captain_name} is picking next`;
     }
     case "pick_undone": {
@@ -65,6 +96,32 @@ function getEventDescription(event: DraftEvent): string {
     default:
       return "Unknown event";
   }
+}
+
+function EventAvatarDisplay({ avatars }: { avatars: EventAvatars }) {
+  if (!avatars.captain && !avatars.picked) return null;
+
+  return (
+    <div className="flex items-center gap-1 flex-shrink-0">
+      {avatars.captain && (
+        <img
+          src={avatars.captain}
+          alt="Captain"
+          className="w-6 h-6 rounded-full"
+        />
+      )}
+      {avatars.picked && (
+        <>
+          <span className="text-muted-foreground text-xs">→</span>
+          <img
+            src={avatars.picked}
+            alt="Picked"
+            className="w-6 h-6 rounded-full"
+          />
+        </>
+      )}
+    </div>
+  );
 }
 
 export function DraftEventModal({ open, onOpenChange, events }: DraftEventModalProps) {
@@ -81,24 +138,30 @@ export function DraftEventModal({ open, onOpenChange, events }: DraftEventModalP
             </p>
           ) : (
             <div className="space-y-3">
-              {events.map((event) => (
-                <div
-                  key={event.pk}
-                  className="flex items-start gap-3 p-2 rounded-lg bg-muted/50"
-                >
-                  <span className="text-lg">{getEventIcon(event.event_type)}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">
-                      {getEventDescription(event)}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(event.created_at), {
-                        addSuffix: true,
-                      })}
-                    </p>
+              {events.map((event) => {
+                const avatars = getEventAvatars(event);
+                return (
+                  <div
+                    key={event.pk}
+                    className="flex items-start gap-3 p-2 rounded-lg bg-muted/50"
+                  >
+                    <span className="text-lg">{getEventIcon(event.event_type)}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <EventAvatarDisplay avatars={avatars} />
+                        <p className="text-sm font-medium">
+                          {getEventDescription(event)}
+                        </p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(event.created_at), {
+                          addSuffix: true,
+                        })}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </ScrollArea>

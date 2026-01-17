@@ -112,16 +112,21 @@ def pick_player_for_round(request):
 
     # Create player_picked event
     team = draft_round.team
+    captain = draft_round.captain
     picked_event = DraftEvent.objects.create(
         draft=draft,
         event_type="player_picked",
         actor=request.user,
         payload={
             "pick_number": draft_round.pick_number,
-            "captain_id": draft_round.captain.pk,
-            "captain_name": draft_round.captain.username,
+            "captain_id": captain.pk,
+            "captain_name": captain.username,
+            "captain_avatar": captain.avatar,
+            "captain_discord_id": captain.discordId,
             "picked_id": user.pk,
             "picked_name": user.username,
+            "picked_avatar": user.avatar,
+            "picked_discord_id": user.discordId,
             "team_id": team.pk if team else None,
             "team_name": team.name if team else None,
         },
