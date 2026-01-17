@@ -78,8 +78,19 @@ export async function getTournamentsBasic(): Promise<TournamentsType> {
   const response = await axios.get<TournamentsType>(`/tournaments-basic`);
   return response.data as TournamentsType;
 }
-export async function getTournaments(): Promise<TournamentsType> {
-  const response = await axios.get<TournamentsType>(`/tournaments`);
+export async function getTournaments(filters?: {
+  organizationId?: number;
+  leagueId?: number;
+}): Promise<TournamentsType> {
+  const params = new URLSearchParams();
+  if (filters?.organizationId) {
+    params.append('organization', filters.organizationId.toString());
+  }
+  if (filters?.leagueId) {
+    params.append('league', filters.leagueId.toString());
+  }
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const response = await axios.get<TournamentsType>(`/tournaments/${queryString}`);
   return response.data as TournamentsType;
 }
 
