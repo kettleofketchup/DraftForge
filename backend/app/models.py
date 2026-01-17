@@ -303,14 +303,12 @@ class Team(models.Model):
         null=True,
         help_text="Order in which a team picks their players in the draft",
     )
-    members = models.ManyToManyField(
-        User, related_name="teams_as_member", blank=True, null=True
-    )
+    members = models.ManyToManyField(User, related_name="teams_as_member", blank=True)
     dropin_members = models.ManyToManyField(
-        User, related_name="teams_as_dropin", blank=True, null=True
+        User, related_name="teams_as_dropin", blank=True
     )
     left_members = models.ManyToManyField(
-        User, related_name="teams_as_left", blank=True, null=True
+        User, related_name="teams_as_left", blank=True
     )
 
     current_points = models.IntegerField(default=0, blank=True)
