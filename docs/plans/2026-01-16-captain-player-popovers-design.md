@@ -1,7 +1,7 @@
 # Captain & Player Popovers Design
 
 **Date:** 2026-01-16
-**Status:** Draft
+**Status:** Implemented
 
 ## Overview
 
