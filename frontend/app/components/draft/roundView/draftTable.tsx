@@ -16,6 +16,7 @@ import { useUserStore } from '~/store/userStore';
 import { RolePositions } from '../../user/positions';
 import { ChoosePlayerButton } from '../buttons/choosePlayerButtons';
 import type { DraftRoundType } from '../types';
+import { PlayerPopover } from '~/components/player';
 const log = getLogger('draftTable');
 
 const MAX_TEAM_SIZE = 5;
@@ -152,16 +153,18 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
                 className={cn(projected?.isDoublePick && 'bg-green-950/30')}
               >
                 <TableCell>
-                  <div className="flex items-center gap-2">
-                    <span className="avatar w-8 h-8">
-                      <img
-                        src={AvatarUrl(user)}
-                        alt={user.username}
-                        className="rounded-full"
-                      />
-                    </span>
-                    <span>{user.nickname || user.username}</span>
-                  </div>
+                  <PlayerPopover player={user}>
+                    <div className="flex items-center gap-2 hover:text-primary transition-colors">
+                      <span className="avatar w-8 h-8">
+                        <img
+                          src={AvatarUrl(user)}
+                          alt={user.username}
+                          className="rounded-full hover:ring-2 hover:ring-primary transition-all"
+                        />
+                      </span>
+                      <span>{user.nickname || user.username}</span>
+                    </div>
+                  </PlayerPopover>
                 </TableCell>
                 <TableCell>{user.mmr ?? 'N/A'}</TableCell>
                 <TableCell className="hidden md:table-cell">
