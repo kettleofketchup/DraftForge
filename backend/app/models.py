@@ -1004,3 +1004,19 @@ class DraftRound(models.Model):
 
     def __str__(self):
         return f"{self.picker.username} picked {self.choice.username} in {self.tournament.name}"
+
+
+class Joke(models.Model):
+    """Tracks joke-related data per user (tangoes purchased, etc.)."""
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="joke")
+    tangoes_purchased = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Joke"
+        verbose_name_plural = "Jokes"
+
+    def __str__(self):
+        return f"{self.user.username} - {self.tangoes_purchased} tangoes"
