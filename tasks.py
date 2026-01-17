@@ -449,7 +449,14 @@ def dev_run(c, service="backend", cmd=""):
     docker_compose_run(c, paths.DOCKER_COMPOSE_DEBUG_PATH, service, cmd)
 
 
+@task
+def dev_upd(c):
+    """Start dev environment in detached mode."""
+    docker_compose_up(c, paths.DOCKER_COMPOSE_DEBUG_PATH, detach=True)
+
+
 ns_dev.add_task(dev_up, "up")
+ns_dev.add_task(dev_upd, "upd")
 ns_dev.add_task(dev_down, "down")
 ns_dev.add_task(dev_logs, "logs")
 ns_dev.add_task(dev_ps, "ps")
@@ -525,7 +532,14 @@ def test_run(c, service="backend", cmd=""):
     docker_compose_run(c, paths.DOCKER_COMPOSE_TEST_PATH, service, cmd)
 
 
+@task(name="test-upd")
+def test_upd(c):
+    """Start test environment in detached mode."""
+    docker_compose_up(c, paths.DOCKER_COMPOSE_TEST_PATH, detach=True)
+
+
 ns_test.add_task(test_up, "up")
+ns_test.add_task(test_upd, "upd")
 ns_test.add_task(test_down, "down")
 ns_test.add_task(test_logs, "logs")
 ns_test.add_task(test_ps, "ps")
@@ -595,7 +609,14 @@ def prod_run(c, service="backend", cmd=""):
     docker_compose_run(c, paths.DOCKER_COMPOSE_PROD_PATH, service, cmd)
 
 
+@task
+def prod_upd(c):
+    """Start prod environment in detached mode."""
+    docker_compose_up(c, paths.DOCKER_COMPOSE_PROD_PATH, detach=True)
+
+
 ns_prod.add_task(prod_up, "up")
+ns_prod.add_task(prod_upd, "upd")
 ns_prod.add_task(prod_down, "down")
 ns_prod.add_task(prod_logs, "logs")
 ns_prod.add_task(prod_ps, "ps")
@@ -623,7 +644,7 @@ def discord_ngrok(c, port=443):
     interaction webhooks. After starting, copy the HTTPS URL and set it
     as your Interactions Endpoint URL in the Discord Developer Portal.
 
-    The endpoint URL will be: <ngrok-url>/api/discord/interactions/
+    The endpoint URL will be: <ngrok-url>/discord/interactions/
 
     Args:
         port: Local port to tunnel (default: 443 for HTTPS via nginx)
@@ -633,12 +654,11 @@ def discord_ngrok(c, port=443):
     print("After ngrok starts:")
     print("1. Copy the HTTPS 'Forwarding' URL (e.g., https://abc123.ngrok.io)")
     print("2. Go to Discord Developer Portal > Your App > General Information")
-    print(
-        "3. Set 'Interactions Endpoint URL' to: <ngrok-url>/api/discord/interactions/"
-    )
+    print("3. Set 'Interactions Endpoint URL' to: <ngrok-url>/discord/interactions/")
     print("4. Discord will send a PING to verify - check backend logs for confirmation")
     print("")
-    c.run(f"ngrok http {port}", pty=True)
+    # Use --host-header to preserve the host and skip cert verification for self-signed certs
+    c.run(f"ngrok http https://localhost:{port} --host-header=localhost", pty=True)
 
 
 @task

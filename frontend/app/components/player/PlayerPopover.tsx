@@ -62,6 +62,8 @@ export const PlayerPopover: React.FC<PlayerPopoverProps> = ({
         </PopoverTrigger>
         <PopoverContent
           className="w-56 p-3"
+          forceMount
+          instant
           onOpenAutoFocus={(e) => e.preventDefault()}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}

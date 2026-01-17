@@ -730,6 +730,8 @@ class Draft(models.Model):
             for draft_round in self.draft_rounds.all():
                 if not draft_round.captain == captain:
                     continue
+                if not draft_round.choice:
+                    continue  # Skip rounds with no choice (e.g., after restart)
                 logging.debug(
                     f"Rebuild_TEAMS: Creating draft round for {team.name} for tournament {self.tournament.name}"
                 )

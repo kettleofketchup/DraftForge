@@ -2,7 +2,7 @@ import { AlertTriangle } from 'lucide-react';
 import { cn } from '~/lib/utils';
 import { Badge } from '~/components/ui/badge';
 import { Card } from '~/components/ui/card';
-import { CaptainPopover } from '~/components/captain';
+import { TeamPopover } from '~/components/team';
 import { useUserStore } from '~/store/userStore';
 import { AvatarUrl, type TeamType, type UserType } from '~/index';
 import type { DraftRoundType } from '../types';
@@ -112,72 +112,83 @@ export const ShufflePickOrder: React.FC = () => {
         </div>
       )}
 
-      <div className="flex gap-2 overflow-x-auto pb-2 justify-center">
-        {activeStatuses.map((status) => (
-          <Card
-            key={status.team.pk}
-            className={cn(
-              'flex-shrink-0 p-3 min-w-[140px]',
-              isCurrentPicker(status.team)
-                ? 'border-green-500 border-2 bg-green-950/20'
-                : 'border-muted'
-            )}
-          >
-            <div className="flex flex-col gap-1 items-center">
-              {status.team.captain ? (
-                <>
-                  <CaptainPopover captain={status.team.captain} team={status.team}>
-                    {/* Captain avatar */}
-                    <img
-                      src={AvatarUrl(status.team.captain)}
-                      alt={status.team.captain?.username || 'Captain'}
-                      className="w-10 h-10 rounded-full hover:ring-2 hover:ring-primary transition-all"
-                    />
-                  </CaptainPopover>
+      <div className="flex gap-2 overflow-x-auto pb-2 justify-center items-stretch">
+        {activeStatuses.map((status) => {
+          const captainUsername = status.team.captain?.username || 'unknown';
+          return (
+            <TeamPopover
+              key={status.team.pk}
+              team={status.team}
+            >
+              <Card
+                data-id={`captain-card-${captainUsername}`}
+                className={cn(
+                  'flex-shrink-0 p-3 min-w-[140px] h-full',
+                  isCurrentPicker(status.team)
+                    ? 'border-green-500 border-2 bg-green-950/20'
+                    : 'border-muted'
+                )}
+              >
+                <div className="flex flex-col gap-1 items-center">
+                  {status.team.captain ? (
+                    <>
+                      {/* Captain avatar */}
+                      <img
+                        src={AvatarUrl(status.team.captain)}
+                        alt={status.team.captain?.username || 'Captain'}
+                        className="w-10 h-10 rounded-full hover:ring-2 hover:ring-primary transition-all"
+                      />
 
-                  {/* Captain name */}
-                  <CaptainPopover captain={status.team.captain} team={status.team}>
-                    <span className="font-medium text-sm truncate text-center hover:text-primary transition-colors">
-                      {status.team.captain?.nickname || status.team.captain?.username || 'Unknown'}
-                    </span>
-                  </CaptainPopover>
-                </>
-              ) : (
-                <>
-                  <div className="w-10 h-10 rounded-full bg-muted" />
-                  <span className="font-medium text-sm truncate text-center text-muted-foreground">
-                    No Captain
-                  </span>
-                </>
-              )}
-
-              <span className="text-xs text-muted-foreground">
-                {status.totalMmr.toLocaleString()} MMR
-              </span>
-
-              <div className="flex items-center gap-2 text-xs">
-                <span>{status.picksMade} picks</span>
-                <span
-                  className={cn(
-                    parseInt(getPickDelta(status.picksMade, statuses)) < 0
-                      ? 'text-red-400'
-                      : parseInt(getPickDelta(status.picksMade, statuses)) > 0
-                        ? 'text-green-400'
-                        : 'text-muted-foreground'
+                      {/* Captain name */}
+                      <span className="font-medium text-sm truncate text-center hover:text-primary transition-colors">
+                        {status.team.captain?.nickname || status.team.captain?.username || 'Unknown'}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-10 h-10 rounded-full bg-muted" />
+                      <span className="font-medium text-sm truncate text-center text-muted-foreground">
+                        No Captain
+                      </span>
+                    </>
                   )}
-                >
-                  {getPickDelta(status.picksMade, statuses)}
-                </span>
-              </div>
 
-              {isCurrentPicker(status.team) && (
-                <Badge variant="default" className="mt-1 bg-green-600 text-xs">
-                  PICKING
-                </Badge>
-              )}
-            </div>
-          </Card>
-        ))}
+                  <span className="text-xs text-muted-foreground">
+                    {status.totalMmr.toLocaleString()} MMR
+                  </span>
+
+                  <div className="flex items-center gap-2 text-xs">
+                    <span>{status.picksMade} picks</span>
+                    <span
+                      className={cn(
+                        parseInt(getPickDelta(status.picksMade, statuses)) < 0
+                          ? 'text-red-400'
+                          : parseInt(getPickDelta(status.picksMade, statuses)) > 0
+                            ? 'text-green-400'
+                            : 'text-muted-foreground'
+                      )}
+                    >
+                      {getPickDelta(status.picksMade, statuses)}
+                    </span>
+                  </div>
+
+                  {/* Always reserve space for the badge to maintain equal heights */}
+                  <Badge
+                    variant="default"
+                    className={cn(
+                      'mt-1 text-xs',
+                      isCurrentPicker(status.team)
+                        ? 'bg-green-600'
+                        : 'invisible'
+                    )}
+                  >
+                    PICKING
+                  </Badge>
+                </div>
+              </Card>
+            </TeamPopover>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { ClipboardPen, EyeIcon } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
@@ -59,9 +59,29 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const livePolling = useTournamentStore((state) => state.livePolling);
   const autoAdvance = useTournamentStore((state) => state.autoAdvance);
   const setAutoAdvance = useTournamentStore((state) => state.setAutoAdvance);
+  const setLive = useTournamentStore((state) => state.setLive);
+  const activeTab = useTournamentStore((state) => state.activeTab);
   const [open, setOpen] = useState(live);
   const isStaff = useUserStore((state) => state.isStaff);
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { pk } = useParams<{ pk: string }>();
+
+  // Sync URL with modal open/close state
+  const handleOpenChange = useCallback((isOpen: boolean) => {
+    setOpen(isOpen);
+    if (pk) {
+      if (isOpen) {
+        // Add /draft to URL when opening
+        navigate(`/tournament/${pk}/${activeTab}/draft`, { replace: true });
+        setLive(true);
+      } else {
+        // Remove /draft from URL when closing
+        navigate(`/tournament/${pk}/${activeTab}`, { replace: true });
+        setLive(false);
+      }
+    }
+  }, [pk, activeTab, navigate, setLive]);
 
   // Auto-open modal when ?draft=open is in URL (from share URL)
   useEffect(() => {
@@ -383,7 +403,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     );
   };
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       {draftDialogButton()}
 
       <DialogContent className={DIALOG_CSS}>
@@ -416,7 +436,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
             <ShareDraftButton />
 
             <DialogClose asChild>
-              <Button onClick={() => setOpen(false)}>Close</Button>
+              <Button onClick={() => handleOpenChange(false)}>Close</Button>
             </DialogClose>
           </div>
         </DialogFooter>
