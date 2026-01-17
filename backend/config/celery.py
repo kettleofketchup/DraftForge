@@ -14,6 +14,10 @@ app.conf.beat_schedule = {
         "task": "steam.tasks.sync_league_matches_task",
         "schedule": 60.0,  # Every 60 seconds
     },
+    "check-discord-scheduled-events": {
+        "task": "discordbot.tasks.check_scheduled_events",
+        "schedule": 60.0,  # Every 60 seconds
+    },
 }
 
 
