@@ -3,3 +3,4 @@ export type { OrganizationType, OrganizationsType, CreateOrganizationInput } fro
 export { useOrganizations } from './hooks/useOrganizations';
 export { useOrganization } from './hooks/useOrganization';
 export { OrganizationCard } from './OrganizationCard';
+export { OrganizationPopover } from './OrganizationPopover';
