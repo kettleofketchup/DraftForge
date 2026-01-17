@@ -12,6 +12,7 @@ from .models import (
     Draft,
     DraftRound,
     Game,
+    Joke,
     PositionsModel,
     Team,
     Tournament,
@@ -556,3 +557,10 @@ class BracketGenerateSerializer(serializers.Serializer):
     seeding_method = serializers.ChoiceField(
         choices=["random", "mmr_total", "captain_mmr"], default="mmr_total"
     )
+
+
+class JokeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Joke
+        fields = ["tangoes_purchased"]
+        read_only_fields = ["tangoes_purchased"]
