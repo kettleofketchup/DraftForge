@@ -9,6 +9,8 @@ import {
   ScrollRestoration,
 } from 'react-router';
 import { Toaster } from '~/components/ui/sonner';
+import { SharedPopoverProvider } from '~/components/ui/shared-popover-context';
+import { SharedPopoverRenderer } from '~/components/ui/shared-popover-renderer';
 import { getLogger } from '~/lib/logger';
 import type { Route } from './+types/root';
 import './app.css';
@@ -73,14 +75,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <QueryClientProvider client={queryClient}>
-          <div className="flex flex-col w-screen h-screen justify-between">
-            <ResponsiveAppBar />
-            <div id="outlet_root" className="flex-grow overflow-x-hidden">
-              {children}
+          <SharedPopoverProvider>
+            <div className="flex flex-col w-screen h-screen justify-between">
+              <ResponsiveAppBar />
+              <div id="outlet_root" className="flex-grow overflow-x-hidden">
+                {children}
+              </div>
             </div>
-          </div>
-          <Toaster richColors closeButton position="top-center" />
-          <FloatingDraftIndicator />
+            <Toaster richColors closeButton position="top-center" />
+            <FloatingDraftIndicator />
+            <SharedPopoverRenderer />
+          </SharedPopoverProvider>
         </QueryClientProvider>
 
         <ScrollRestoration />
