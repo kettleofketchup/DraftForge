@@ -338,11 +338,20 @@ class Tournament(models.Model):
         max_length=20, choices=TOURNAMNET_TYPE_CHOICES, default="double_elimination"
     )
 
-    league_id = models.IntegerField(
+    steam_league_id = models.IntegerField(
         null=True,
         blank=True,
         default=settings.DEFAULT_LEAGUE_ID,
         help_text="Steam league ID for match linking",
+        db_column="league_id",  # Keep existing column name for backwards compatibility
+    )
+    league = models.ForeignKey(
+        "League",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tournaments",
+        db_column="league_fk_id",
     )
 
     def __str__(self):

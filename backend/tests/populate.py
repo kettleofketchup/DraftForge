@@ -794,7 +794,7 @@ def populate_bracket_linking_scenario(force=False):
         date_played=date.today(),
         state="in_progress",
         tournament_type="double_elimination",
-        league_id=LEAGUE_ID,
+        steam_league_id=LEAGUE_ID,
     )
 
     # Add all users to tournament
