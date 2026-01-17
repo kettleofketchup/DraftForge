@@ -11,6 +11,8 @@ import type {
   UsersType,
   UserType,
 } from '~/index';
+import type { OrganizationType, OrganizationsType } from '~/components/organization/schemas';
+import type { LeagueType, LeaguesType } from '~/components/league/schemas';
 import { getLogger } from '~/lib/logger';
 import axios from './axios';
 import type {
@@ -263,4 +265,37 @@ export async function undoLastPick(
 ): Promise<TournamentType> {
   const response = await axios.post(`/tournaments/undo-pick`, data);
   return response.data as TournamentType;
+}
+
+// Organization API
+export async function getOrganizations(): Promise<OrganizationsType> {
+  const response = await axios.get<OrganizationsType>('/organizations/');
+  return response.data;
+}
+
+export async function fetchOrganization(pk: number): Promise<OrganizationType> {
+  const response = await axios.get<OrganizationType>(`/organizations/${pk}/`);
+  return response.data;
+}
+
+export async function createOrganization(
+  data: Partial<OrganizationType>,
+): Promise<OrganizationType> {
+  const response = await axios.post<OrganizationType>('/organizations/', data);
+  return response.data;
+}
+
+export async function updateOrganization(
+  pk: number,
+  data: Partial<OrganizationType>,
+): Promise<OrganizationType> {
+  const response = await axios.patch<OrganizationType>(
+    `/organizations/${pk}/`,
+    data,
+  );
+  return response.data;
+}
+
+export async function deleteOrganization(pk: number): Promise<void> {
+  await axios.delete(`/organizations/${pk}/`);
 }
