@@ -41,6 +41,15 @@ export const CaptainPopover: React.FC<CaptainPopoverProps> = ({
     setOpen(false);
   }, []);
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setOpen((prev) => !prev);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  }, []);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -52,6 +61,7 @@ export const CaptainPopover: React.FC<CaptainPopoverProps> = ({
           aria-expanded={open}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
+          onKeyDown={handleKeyDown}
         >
           {children}
         </span>
