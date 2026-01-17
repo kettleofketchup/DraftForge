@@ -6,7 +6,33 @@
 
 **Architecture:** Backend Django model for Joke (tangoes), REST API endpoints, frontend React components using Radix Popover/Dialog primitives, React Query for state management.
 
-**Tech Stack:** Django, Django REST Framework, React, TypeScript, Radix UI (Popover/Dialog), React Query, Zod, Tailwind CSS
+**Tech Stack:** Django, Django REST Framework, React, TypeScript, Radix UI (Popover/Dialog), React Query, Zod, Tailwind CSS, Axios
+
+---
+
+## Task 0: Frontend - Install Progress Component
+
+**Files:**
+- Create: `frontend/app/components/ui/progress.tsx`
+
+**Step 1: Install Progress component from shadcn/ui**
+
+Run from frontend directory:
+```bash
+cd frontend && npx shadcn@latest add progress
+```
+
+**Step 2: Verify installation**
+
+Run: `ls frontend/app/components/ui/progress.tsx`
+Expected: File exists
+
+**Step 3: Commit**
+
+```bash
+git add frontend/app/components/ui/progress.tsx
+git commit -m "feat: add shadcn Progress component"
+```
 
 ---
 
@@ -284,9 +310,13 @@ git commit -m "test: add joke API tests"
 
 **Step 1: Create hook file**
 
+Uses axios for CSRF token handling and toast for error feedback:
+
 ```typescript
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { z } from 'zod';
+import api from '~/components/api/axios';
 
 const TangoesResponseSchema = z.object({
   tangoes_purchased: z.number(),
@@ -297,35 +327,27 @@ const BuyTangoResponseSchema = z.object({
   message: z.string(),
 });
 
+interface UseTangoesReturn {
+  tangoes: number;
+  isLoading: boolean;
+  buyTango: () => void;
+  isBuying: boolean;
+  error: Error | null;
+}
+
 async function fetchTangoes(): Promise<number> {
-  const response = await fetch('/api/jokes/tangoes/', {
-    credentials: 'include',
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to fetch tangoes: ${response.status}`);
-  }
-  const data = await response.json();
-  const parsed = TangoesResponseSchema.parse(data);
+  const response = await api.get('/jokes/tangoes/');
+  const parsed = TangoesResponseSchema.parse(response.data);
   return parsed.tangoes_purchased;
 }
 
-async function buyTango(): Promise<{ tangoes: number; message: string }> {
-  const response = await fetch('/api/jokes/tangoes/buy/', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to buy tango: ${response.status}`);
-  }
-  const data = await response.json();
-  const parsed = BuyTangoResponseSchema.parse(data);
+async function buyTangoRequest(): Promise<{ tangoes: number; message: string }> {
+  const response = await api.post('/jokes/tangoes/buy/');
+  const parsed = BuyTangoResponseSchema.parse(response.data);
   return { tangoes: parsed.tangoes_purchased, message: parsed.message };
 }
 
-export function useTangoes(enabled: boolean = true) {
+export function useTangoes(enabled: boolean = true): UseTangoesReturn {
   const queryClient = useQueryClient();
 
   const tangoesQuery = useQuery({
@@ -335,17 +357,23 @@ export function useTangoes(enabled: boolean = true) {
   });
 
   const buyTangoMutation = useMutation({
-    mutationFn: buyTango,
+    mutationFn: buyTangoRequest,
     onSuccess: (data) => {
       queryClient.setQueryData(['tangoes'], data.tangoes);
+      toast.success(data.message);
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.detail || 'Failed to buy tango';
+      toast.error(message);
     },
   });
 
   return {
     tangoes: tangoesQuery.data ?? 0,
     isLoading: tangoesQuery.isLoading,
-    buyTango: buyTangoMutation.mutate,
+    buyTango: () => buyTangoMutation.mutate(),
     isBuying: buyTangoMutation.isPending,
+    error: tangoesQuery.error,
   };
 }
 ```
@@ -354,7 +382,7 @@ export function useTangoes(enabled: boolean = true) {
 
 ```bash
 git add frontend/app/hooks/useTangoes.ts
-git commit -m "feat: add useTangoes hook for tango API"
+git commit -m "feat: add useTangoes hook with axios and toast notifications"
 ```
 
 ---
@@ -366,7 +394,10 @@ git commit -m "feat: add useTangoes hook for tango API"
 
 **Step 1: Create the component**
 
+Includes useMemo for computed values and accessibility attributes:
+
 ```typescript
+import { memo, useMemo } from 'react';
 import { Construction } from 'lucide-react';
 import { Button } from '~/components/ui/button';
 import { Progress } from '~/components/ui/progress';
@@ -381,24 +412,31 @@ interface PlayerUnderConstructionProps {
   playerName: string;
 }
 
-export const PlayerUnderConstruction: React.FC<PlayerUnderConstructionProps> = ({
+export const PlayerUnderConstruction: React.FC<PlayerUnderConstructionProps> = memo(({
   playerName,
 }) => {
   const currentUser = useUserStore((state) => state.currentUser);
   const isLoggedIn = !!currentUser?.pk;
   const { tangoes, buyTango, isBuying, isLoading } = useTangoes(isLoggedIn);
 
-  const gamesProgress = (GAMES_THROWN / GAMES_TO_THROW) * 100;
-  const tangoesProgress = Math.min((tangoes / TANGOES_REQUIRED) * 100, 100);
+  const gamesProgress = useMemo(
+    () => (GAMES_THROWN / GAMES_TO_THROW) * 100,
+    []
+  );
+
+  const tangoesProgress = useMemo(
+    () => Math.min((tangoes / TANGOES_REQUIRED) * 100, 100),
+    [tangoes]
+  );
 
   return (
     <div className="border border-dashed border-yellow-500/50 rounded-lg p-4 bg-yellow-950/10">
       <div className="flex items-center justify-center gap-2 mb-4">
-        <Construction className="h-5 w-5 text-yellow-500" />
+        <Construction className="h-5 w-5 text-yellow-500" aria-hidden="true" />
         <h3 className="text-lg font-semibold text-yellow-500">
           EXTENDED PROFILE UNDER CONSTRUCTION
         </h3>
-        <Construction className="h-5 w-5 text-yellow-500" />
+        <Construction className="h-5 w-5 text-yellow-500" aria-hidden="true" />
       </div>
 
       <p className="text-center text-muted-foreground mb-4">
@@ -411,7 +449,11 @@ export const PlayerUnderConstruction: React.FC<PlayerUnderConstructionProps> = (
           Option A: Throw {GAMES_TO_THROW} of {playerName}'s games
         </p>
         <div className="flex items-center gap-2">
-          <Progress value={gamesProgress} className="flex-1" />
+          <Progress
+            value={gamesProgress}
+            className="flex-1"
+            aria-label={`${GAMES_THROWN} of ${GAMES_TO_THROW} games thrown`}
+          />
           <span className="text-sm text-muted-foreground whitespace-nowrap">
             {GAMES_THROWN}/{GAMES_TO_THROW} games thrown
           </span>
@@ -426,8 +468,12 @@ export const PlayerUnderConstruction: React.FC<PlayerUnderConstructionProps> = (
           Option B: Purchase {TANGOES_REQUIRED.toLocaleString()} tangoes
         </p>
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-lg">🌿</span>
-          <Progress value={tangoesProgress} className="flex-1" />
+          <span className="text-lg" aria-hidden="true">🌿</span>
+          <Progress
+            value={tangoesProgress}
+            className="flex-1"
+            aria-label={`${tangoes} of ${TANGOES_REQUIRED} tangoes purchased`}
+          />
           <span className="text-sm text-muted-foreground whitespace-nowrap">
             {tangoes.toLocaleString()} / {TANGOES_REQUIRED.toLocaleString()}
           </span>
@@ -436,9 +482,10 @@ export const PlayerUnderConstruction: React.FC<PlayerUnderConstructionProps> = (
           <Button
             variant="outline"
             size="sm"
-            onClick={() => buyTango()}
+            onClick={buyTango}
             disabled={isBuying || isLoading}
             className="w-full"
+            aria-busy={isBuying}
           >
             🌿 {isBuying ? 'Buying...' : 'Buy Tango'}
           </Button>
@@ -450,7 +497,9 @@ export const PlayerUnderConstruction: React.FC<PlayerUnderConstructionProps> = (
       </div>
     </div>
   );
-};
+});
+
+PlayerUnderConstruction.displayName = 'PlayerUnderConstruction';
 ```
 
 **Step 2: Commit**
@@ -501,7 +550,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   const playerName = player.nickname || player.username || 'Unknown';
 
   const goToDotabuff = () => {
-    return `https://www.dotabuff.com/players/${player.steamid}`;
+    if (!player.steamid) return '#';
+    return `https://www.dotabuff.com/players/${encodeURIComponent(String(player.steamid))}`;
   };
 
   return (
@@ -517,7 +567,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
           <div className="flex items-center gap-4">
             <img
               src={AvatarUrl(player)}
-              alt={playerName}
+              alt={`${playerName}'s avatar`}
               className="w-16 h-16 rounded-full border border-primary"
             />
             <div className="flex-1">
@@ -531,7 +581,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
                 )}
               </div>
             </div>
-            {canEdit && <UserEditModal user={new User(player)} />}
+            {canEdit && player.pk && <UserEditModal user={new User(player)} />}
           </div>
 
           {/* Player info */}
@@ -601,8 +651,10 @@ git commit -m "feat: add PlayerModal component with full profile view"
 
 **Step 1: Create the component**
 
+Includes useCallback for event handlers and keyboard accessibility:
+
 ```typescript
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Popover,
   PopoverContent,
@@ -626,16 +678,31 @@ export const PlayerPopover: React.FC<PlayerPopoverProps> = ({
   const [modalOpen, setModalOpen] = useState(false);
   const playerName = player.nickname || player.username || 'Unknown';
 
-  const handleClick = () => {
+  const handleClick = useCallback(() => {
     setPopoverOpen(false);
     setModalOpen(true);
-  };
+  }, []);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleClick();
+    }
+  }, [handleClick]);
 
   return (
     <>
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <PopoverTrigger asChild onClick={handleClick}>
-          <span className="cursor-pointer">{children}</span>
+          <span
+            className="cursor-pointer"
+            role="button"
+            tabIndex={0}
+            aria-label={`View profile for ${playerName}`}
+            onKeyDown={handleKeyDown}
+          >
+            {children}
+          </span>
         </PopoverTrigger>
         <PopoverContent
           className="w-56 p-3"
@@ -646,7 +713,7 @@ export const PlayerPopover: React.FC<PlayerPopoverProps> = ({
             <div className="flex items-center gap-3">
               <img
                 src={AvatarUrl(player)}
-                alt={playerName}
+                alt={`${playerName}'s avatar`}
                 className="w-12 h-12 rounded-full"
               />
               <div>
@@ -684,7 +751,7 @@ export const PlayerPopover: React.FC<PlayerPopoverProps> = ({
 
 ```bash
 git add frontend/app/components/player/PlayerPopover.tsx
-git commit -m "feat: add PlayerPopover component for hover preview"
+git commit -m "feat: add PlayerPopover component with keyboard accessibility"
 ```
 
 ---
@@ -718,9 +785,12 @@ git commit -m "feat: add player component exports"
 
 **Step 1: Create the component**
 
+Uses correct type imports and useMemo for computed values:
+
 ```typescript
-import { useState } from 'react';
-import type { TeamType, UserType } from '~/components/tournament/types';
+import { useMemo, useState } from 'react';
+import type { TeamType } from '~/components/tournament/types';
+import type { UserType } from '~/components/user/types';
 import {
   Popover,
   PopoverContent,
@@ -741,20 +811,26 @@ export const CaptainPopover: React.FC<CaptainPopoverProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
 
-  const getAverageMMR = (): number => {
+  const avgMMR = useMemo(() => {
     if (!team.members || team.members.length === 0) return 0;
     const total = team.members.reduce((sum, m) => sum + (m.mmr || 0), 0);
     return Math.round(total / team.members.length);
-  };
+  }, [team.members]);
 
   const teamName = team.name || `${captain.nickname || captain.username}'s Team`;
-  const avgMMR = getAverageMMR();
   const hasMembers = team.members && team.members.length > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <span className="cursor-pointer">{children}</span>
+        <span
+          className="cursor-pointer"
+          role="button"
+          tabIndex={0}
+          aria-label={`View ${teamName} roster`}
+        >
+          {children}
+        </span>
       </PopoverTrigger>
       <PopoverContent
         className="w-80 p-0"
@@ -816,9 +892,11 @@ Add after existing imports:
 import { CaptainPopover } from '~/components/captain';
 ```
 
-**Step 2: Wrap captain avatar and name with CaptainPopover**
+**Step 2: Wrap captain avatar and name with CaptainPopover (with null safety)**
 
-Replace lines 126-136 (the captain avatar and name section inside the Card):
+Find the section inside the Card that renders captain avatar and name (around lines 125-137).
+
+Replace:
 
 ```typescript
             <div className="flex flex-col gap-1 items-center">
@@ -835,25 +913,36 @@ Replace lines 126-136 (the captain avatar and name section inside the Card):
               </span>
 ```
 
-With:
+With (includes null safety check):
 
 ```typescript
             <div className="flex flex-col gap-1 items-center">
-              <CaptainPopover captain={status.team.captain!} team={status.team}>
-                {/* Captain avatar */}
-                <img
-                  src={AvatarUrl(status.team.captain)}
-                  alt={status.team.captain?.username || 'Captain'}
-                  className="w-10 h-10 rounded-full hover:ring-2 hover:ring-primary transition-all"
-                />
-              </CaptainPopover>
+              {status.team.captain ? (
+                <>
+                  <CaptainPopover captain={status.team.captain} team={status.team}>
+                    {/* Captain avatar */}
+                    <img
+                      src={AvatarUrl(status.team.captain)}
+                      alt={status.team.captain?.username || 'Captain'}
+                      className="w-10 h-10 rounded-full hover:ring-2 hover:ring-primary transition-all"
+                    />
+                  </CaptainPopover>
 
-              {/* Captain name */}
-              <CaptainPopover captain={status.team.captain!} team={status.team}>
-                <span className="font-medium text-sm truncate text-center hover:text-primary transition-colors">
-                  {status.team.captain?.nickname || status.team.captain?.username || 'Unknown'}
-                </span>
-              </CaptainPopover>
+                  {/* Captain name */}
+                  <CaptainPopover captain={status.team.captain} team={status.team}>
+                    <span className="font-medium text-sm truncate text-center hover:text-primary transition-colors">
+                      {status.team.captain?.nickname || status.team.captain?.username || 'Unknown'}
+                    </span>
+                  </CaptainPopover>
+                </>
+              ) : (
+                <>
+                  <div className="w-10 h-10 rounded-full bg-muted" />
+                  <span className="font-medium text-sm truncate text-center text-muted-foreground">
+                    No Captain
+                  </span>
+                </>
+              )}
 ```
 
 **Step 3: Commit**
@@ -880,7 +969,9 @@ import { PlayerPopover } from '~/components/player';
 
 **Step 2: Wrap player avatar and name with PlayerPopover**
 
-Replace lines 62-81 (the TableCell with avatar and name):
+Find the TableCell that renders member avatar and name (around lines 62-83).
+
+Replace:
 
 ```typescript
             <TableCell>
@@ -945,7 +1036,81 @@ git commit -m "feat: integrate PlayerPopover in TeamTable"
 
 ---
 
-## Task 14: Test Full Integration
+## Task 14: Frontend - Integrate PlayerPopover in CaptainTable
+
+**Files:**
+- Modify: `frontend/app/components/tournament/captains/captainTable.tsx`
+
+**Step 1: Add import**
+
+Add after existing imports:
+
+```typescript
+import { PlayerPopover } from '~/components/player';
+```
+
+**Step 2: Wrap player avatar and name with PlayerPopover**
+
+Find the TableCell that renders user avatar and name (look for the pattern with avatar w-8 h-8).
+
+Wrap the content inside the TableCell containing the avatar/name with:
+
+```typescript
+<PlayerPopover player={user}>
+  {/* existing avatar and name content */}
+</PlayerPopover>
+```
+
+Add hover styles to the container div: `hover:text-primary transition-colors`
+Add hover styles to the img: `hover:ring-2 hover:ring-primary transition-all`
+
+**Step 3: Commit**
+
+```bash
+git add frontend/app/components/tournament/captains/captainTable.tsx
+git commit -m "feat: integrate PlayerPopover in CaptainTable"
+```
+
+---
+
+## Task 15: Frontend - Integrate PlayerPopover in DraftTable
+
+**Files:**
+- Modify: `frontend/app/components/draft/roundView/draftTable.tsx`
+
+**Step 1: Add import**
+
+Add after existing imports:
+
+```typescript
+import { PlayerPopover } from '~/components/player';
+```
+
+**Step 2: Wrap player avatar and name with PlayerPopover**
+
+Find the TableCell that renders user avatar and name in the draft pool table.
+
+Wrap the content inside the TableCell containing the avatar/name with:
+
+```typescript
+<PlayerPopover player={user}>
+  {/* existing avatar and name content */}
+</PlayerPopover>
+```
+
+Add hover styles to the container div: `hover:text-primary transition-colors`
+Add hover styles to the img: `hover:ring-2 hover:ring-primary transition-all`
+
+**Step 3: Commit**
+
+```bash
+git add frontend/app/components/draft/roundView/draftTable.tsx
+git commit -m "feat: integrate PlayerPopover in DraftTable"
+```
+
+---
+
+## Task 16: Test Full Integration
 
 **Step 1: Start test environment**
 
@@ -962,19 +1127,22 @@ Expected: All tests pass
 2. Hover over captain avatars in ShufflePickOrder - verify team popover appears
 3. Click on a player in any TeamTable - verify popover then modal appears
 4. In modal, verify "Under Construction" section displays
-5. Click "Buy Tango" button (if logged in) - verify count increments
+5. Click "Buy Tango" button (if logged in) - verify count increments and toast appears
 6. Refresh page - verify tango count persists
+7. Test keyboard navigation (Tab to player, Enter to open modal)
+8. Test PlayerPopover in CaptainTable
+9. Test PlayerPopover in DraftTable (draft pool)
 
 **Step 4: Commit any final fixes**
 
 ```bash
 git add -A
-git commit -m "chore: final integration fixes"
+git commit -m "fix: address integration issues"
 ```
 
 ---
 
-## Task 15: Final Cleanup and Documentation
+## Task 17: Final Cleanup and Documentation
 
 **Step 1: Update design doc status**
 
@@ -1003,18 +1171,42 @@ git commit -m "docs: mark captain/player popovers design as implemented"
 
 | Task | Description | Files |
 |------|-------------|-------|
+| 0 | Install Progress component | `frontend/app/components/ui/progress.tsx` |
 | 1 | Create Joke model | `backend/app/models.py` |
 | 2 | Create JokeSerializer | `backend/app/serializers.py` |
 | 3 | Create Joke API views | `backend/app/views_joke.py` |
 | 4 | Register Joke URL routes | `backend/backend/urls.py` |
 | 5 | Write Joke API tests | `backend/app/tests/test_joke.py` |
-| 6 | Create useTangoes hook | `frontend/app/hooks/useTangoes.ts` |
+| 6 | Create useTangoes hook (axios + toast) | `frontend/app/hooks/useTangoes.ts` |
 | 7 | Create PlayerUnderConstruction | `frontend/app/components/player/PlayerUnderConstruction.tsx` |
 | 8 | Create PlayerModal | `frontend/app/components/player/PlayerModal.tsx` |
-| 9 | Create PlayerPopover | `frontend/app/components/player/PlayerPopover.tsx` |
+| 9 | Create PlayerPopover (keyboard a11y) | `frontend/app/components/player/PlayerPopover.tsx` |
 | 10 | Create player index | `frontend/app/components/player/index.ts` |
-| 11 | Create CaptainPopover | `frontend/app/components/captain/CaptainPopover.tsx` |
-| 12 | Integrate CaptainPopover | `frontend/app/components/draft/shuffle/ShufflePickOrder.tsx` |
-| 13 | Integrate PlayerPopover | `frontend/app/components/team/teamTable/teamTable.tsx` |
-| 14 | Test full integration | Manual testing |
-| 15 | Final cleanup | `docs/plans/...` |
+| 11 | Create CaptainPopover (useMemo) | `frontend/app/components/captain/CaptainPopover.tsx` |
+| 12 | Integrate CaptainPopover (null safe) | `frontend/app/components/draft/shuffle/ShufflePickOrder.tsx` |
+| 13 | Integrate PlayerPopover in TeamTable | `frontend/app/components/team/teamTable/teamTable.tsx` |
+| 14 | Integrate PlayerPopover in CaptainTable | `frontend/app/components/tournament/captains/captainTable.tsx` |
+| 15 | Integrate PlayerPopover in DraftTable | `frontend/app/components/draft/roundView/draftTable.tsx` |
+| 16 | Test full integration | Manual testing |
+| 17 | Final cleanup | `docs/plans/...` |
+
+---
+
+## Review Changes Applied
+
+Based on 3 independent reviews, the following improvements were made:
+
+| Issue | Fix Applied |
+|-------|-------------|
+| Missing Progress component | Added Task 0 to install shadcn Progress |
+| CSRF token missing for POST | Task 6 now uses axios instead of fetch |
+| No error toast feedback | Task 6 includes toast.success/error |
+| Missing CaptainTable integration | Added Task 14 |
+| Missing DraftTable integration | Added Task 15 |
+| Null safety for captain prop | Task 12 includes null check |
+| Wrong type imports | Task 11 uses correct import paths |
+| Missing useMemo | Tasks 7, 11 include useMemo for computed values |
+| Missing useCallback | Task 9 includes useCallback for handlers |
+| Missing keyboard accessibility | Tasks 9, 11 include role, tabIndex, onKeyDown |
+| Missing aria labels | Tasks 7, 8, 9, 11 include aria attributes |
+| Missing memo | Task 7 wraps component in memo() |
