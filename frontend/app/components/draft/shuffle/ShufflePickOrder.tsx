@@ -2,6 +2,7 @@ import { AlertTriangle } from 'lucide-react';
 import { cn } from '~/lib/utils';
 import { Badge } from '~/components/ui/badge';
 import { Card } from '~/components/ui/card';
+import { CaptainPopover } from '~/components/captain';
 import { useUserStore } from '~/store/userStore';
 import { AvatarUrl, type TeamType, type UserType } from '~/index';
 import type { DraftRoundType } from '../types';
@@ -123,17 +124,32 @@ export const ShufflePickOrder: React.FC = () => {
             )}
           >
             <div className="flex flex-col gap-1 items-center">
-              {/* Captain avatar */}
-              <img
-                src={AvatarUrl(status.team.captain)}
-                alt={status.team.captain?.username || 'Captain'}
-                className="w-10 h-10 rounded-full"
-              />
+              {status.team.captain ? (
+                <>
+                  <CaptainPopover captain={status.team.captain} team={status.team}>
+                    {/* Captain avatar */}
+                    <img
+                      src={AvatarUrl(status.team.captain)}
+                      alt={status.team.captain?.username || 'Captain'}
+                      className="w-10 h-10 rounded-full hover:ring-2 hover:ring-primary transition-all"
+                    />
+                  </CaptainPopover>
 
-              {/* Captain name */}
-              <span className="font-medium text-sm truncate text-center">
-                {status.team.captain?.nickname || status.team.captain?.username || 'Unknown'}
-              </span>
+                  {/* Captain name */}
+                  <CaptainPopover captain={status.team.captain} team={status.team}>
+                    <span className="font-medium text-sm truncate text-center hover:text-primary transition-colors">
+                      {status.team.captain?.nickname || status.team.captain?.username || 'Unknown'}
+                    </span>
+                  </CaptainPopover>
+                </>
+              ) : (
+                <>
+                  <div className="w-10 h-10 rounded-full bg-muted" />
+                  <span className="font-medium text-sm truncate text-center text-muted-foreground">
+                    No Captain
+                  </span>
+                </>
+              )}
 
               <span className="text-xs text-muted-foreground">
                 {status.totalMmr.toLocaleString()} MMR
