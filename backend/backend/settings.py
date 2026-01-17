@@ -37,6 +37,7 @@ SOCIAL_AUTH_DISCORD_SECRET = os.environ.get("discord_secret")
 DISCORD_BOT_TOKEN = os.environ.get("discord_token")
 DISCORD_GUILD_ID = 734185035623825559
 DISCORD_ADMIN_CHANNEL_ID = os.environ.get("DISCORD_ADMIN_CHANNEL_ID")
+DISCORD_PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY")
 # SOCIAL_AUTH_LOGIN_REDIRECT_URL= "http://localhost:8000/complete/discord/"
 SOCIAL_AUTH_DJANGO_EXTRA_DATA = [
     "avatar",

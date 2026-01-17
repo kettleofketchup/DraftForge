@@ -17,7 +17,7 @@ RSVP_EMOJIS = {
 }
 
 
-class DTXBot(discord.Client):
+class KettleBot(discord.Client):
     """Discord bot for DTX gaming organization."""
 
     def __init__(self):
@@ -107,7 +107,7 @@ class DTXBot(discord.Client):
 
 
 # Create bot instance
-bot = DTXBot()
+bot = KettleBot()
 
 
 @bot.tree.command(name="roles", description="Set your Dota 2 position preferences")

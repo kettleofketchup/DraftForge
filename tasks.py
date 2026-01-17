@@ -606,3 +606,49 @@ ns_prod.add_task(prod_pull, "pull")
 ns_prod.add_task(prod_top, "top")
 ns_prod.add_task(prod_exec, "exec")
 ns_prod.add_task(prod_run, "run")
+
+
+# =============================================================================
+# Discord Bot Tasks
+# =============================================================================
+
+ns_discord = Collection("discord")
+
+
+@task
+def discord_ngrok(c, port=443):
+    """Start ngrok tunnel for Discord bot interactions.
+
+    This exposes the local server to the internet so Discord can send
+    interaction webhooks. After starting, copy the HTTPS URL and set it
+    as your Interactions Endpoint URL in the Discord Developer Portal.
+
+    The endpoint URL will be: <ngrok-url>/api/discord/interactions/
+
+    Args:
+        port: Local port to tunnel (default: 443 for HTTPS via nginx)
+    """
+    print("Starting ngrok tunnel for Discord interactions...")
+    print("")
+    print("After ngrok starts:")
+    print("1. Copy the HTTPS 'Forwarding' URL (e.g., https://abc123.ngrok.io)")
+    print("2. Go to Discord Developer Portal > Your App > General Information")
+    print(
+        "3. Set 'Interactions Endpoint URL' to: <ngrok-url>/api/discord/interactions/"
+    )
+    print("4. Discord will send a PING to verify - check backend logs for confirmation")
+    print("")
+    c.run(f"ngrok http {port}", pty=True)
+
+
+@task
+def discord_logs(c):
+    """Show logs from the Discord bot container."""
+    c.run(
+        "docker logs -f captain-user-popover-discord-bot-1 2>&1 | tail -100", pty=True
+    )
+
+
+ns_discord.add_task(discord_ngrok, "ngrok")
+ns_discord.add_task(discord_logs, "logs")
+ns.add_collection(ns_discord, "discord")
