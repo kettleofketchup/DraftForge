@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Popover,
   PopoverContent,
@@ -20,9 +20,16 @@ export const PlayerPopover: React.FC<PlayerPopoverProps> = ({
 }) => {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const hoverIntentRef = useRef<NodeJS.Timeout | null>(null);
+  const isHoveringRef = useRef(false);
   const playerName = player.nickname || player.username || 'Unknown';
 
-  const handleClick = useCallback(() => {
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (hoverIntentRef.current) {
+      clearTimeout(hoverIntentRef.current);
+    }
     setPopoverOpen(false);
     setModalOpen(true);
   }, []);
@@ -30,15 +37,28 @@ export const PlayerPopover: React.FC<PlayerPopoverProps> = ({
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      handleClick();
+      setPopoverOpen(false);
+      setModalOpen(true);
+    } else if (e.key === 'Escape') {
+      setPopoverOpen(false);
     }
-  }, [handleClick]);
+  }, []);
 
   const handleMouseEnter = useCallback(() => {
-    setPopoverOpen(true);
+    isHoveringRef.current = true;
+    // Small delay to prevent accidental triggers
+    hoverIntentRef.current = setTimeout(() => {
+      if (isHoveringRef.current) {
+        setPopoverOpen(true);
+      }
+    }, 50);
   }, []);
 
   const handleMouseLeave = useCallback(() => {
+    isHoveringRef.current = false;
+    if (hoverIntentRef.current) {
+      clearTimeout(hoverIntentRef.current);
+    }
     setPopoverOpen(false);
   }, []);
 
@@ -62,8 +82,6 @@ export const PlayerPopover: React.FC<PlayerPopoverProps> = ({
         </PopoverTrigger>
         <PopoverContent
           className="w-56 p-3"
-          forceMount
-          instant
           onOpenAutoFocus={(e) => e.preventDefault()}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}

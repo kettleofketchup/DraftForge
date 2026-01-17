@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import type { TeamType } from '~/components/tournament/types';
 import type { UserType } from '~/components/user/types';
 import {
@@ -66,6 +66,8 @@ export const TeamPopover: React.FC<TeamPopoverProps> = ({
 }) => {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const hoverIntentRef = useRef<NodeJS.Timeout | null>(null);
+  const isHoveringRef = useRef(false);
 
   const captain = team.captain;
 
@@ -92,16 +94,29 @@ export const TeamPopover: React.FC<TeamPopoverProps> = ({
   const hasMembers = team.members && team.members.length > 0;
 
   const handleMouseEnter = useCallback(() => {
-    setPopoverOpen(true);
+    isHoveringRef.current = true;
+    // Small delay to prevent accidental triggers
+    hoverIntentRef.current = setTimeout(() => {
+      if (isHoveringRef.current) {
+        setPopoverOpen(true);
+      }
+    }, 50);
   }, []);
 
   const handleMouseLeave = useCallback(() => {
+    isHoveringRef.current = false;
+    if (hoverIntentRef.current) {
+      clearTimeout(hoverIntentRef.current);
+    }
     setPopoverOpen(false);
   }, []);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (hoverIntentRef.current) {
+      clearTimeout(hoverIntentRef.current);
+    }
     setPopoverOpen(false);
     setModalOpen(true);
   }, []);
@@ -136,8 +151,6 @@ export const TeamPopover: React.FC<TeamPopoverProps> = ({
         </PopoverTrigger>
         <PopoverContent
           className="w-[640px] p-0"
-          forceMount
-          instant
           onOpenAutoFocus={(e) => e.preventDefault()}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
