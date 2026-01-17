@@ -4,6 +4,8 @@ export default [
   index('routes/home.tsx'),
   route('tournaments', 'routes/tournaments.tsx'),
   route('tournament/:pk/*', 'routes/tournament.tsx'),
+  route('organizations', 'routes/organizations.tsx'),
+  route('organizations/:organizationId', 'routes/organization.tsx'),
   route('about', 'routes/about.tsx'),
   route('blog', 'routes/blog.tsx'),
   route('users', 'routes/users.tsx'),
