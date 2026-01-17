@@ -36,6 +36,10 @@ dependencies = [
     "pydantic-settings (>=2.7.0,<3.0.0)",
     "pyyaml (>=6.0.2,<7.0.0)",
     "celery[redis] (>=5.3,<6.0)",
+    "channels (>=4.0.0,<5.0.0)",
+    "channels-redis (>=4.2.0,<5.0.0)",
+    "daphne (>=4.0.0,<5.0.0)",
+    "pynacl (>=1.5.0,<2.0.0)",
 ]
 
 

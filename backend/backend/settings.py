@@ -36,6 +36,8 @@ SOCIAL_AUTH_DISCORD_KEY = os.environ.get("client_id")
 SOCIAL_AUTH_DISCORD_SECRET = os.environ.get("discord_secret")
 DISCORD_BOT_TOKEN = os.environ.get("discord_token")
 DISCORD_GUILD_ID = 734185035623825559
+DISCORD_ADMIN_CHANNEL_ID = os.environ.get("DISCORD_ADMIN_CHANNEL_ID")
+DISCORD_PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY")
 # SOCIAL_AUTH_LOGIN_REDIRECT_URL= "http://localhost:8000/complete/discord/"
 SOCIAL_AUTH_DJANGO_EXTRA_DATA = [
     "avatar",
@@ -92,6 +94,8 @@ if "NODE_ENV" in os.environ:
     NODE_ENV = os.environ.get("NODE_ENV")
 
 INSTALLED_APPS = [
+    "daphne",
+    "channels",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -109,6 +113,9 @@ INSTALLED_APPS = [
     "cacheops",  # Added for django-cacheops
 ]
 
+# Default primary key field type
+# https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -172,6 +179,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "backend.wsgi.application"
+ASGI_APPLICATION = "backend.asgi.application"
 SOCIAL_AUTH_ALLOWED_REDIRECT_HOSTS = ["dota.kettle.sh", "localhost"]
 
 AUTHENTICATION_BACKENDS = (
@@ -295,6 +303,16 @@ else:
 
 
 CACHEOPS_DEGRADE_ON_FAILURE = True
+
+# Channel Layers for WebSocket support
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(REDIS_HOST, 6379)],
+        },
+    },
+}
 
 
 # Password validation

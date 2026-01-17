@@ -9,8 +9,13 @@ export const getDraftButton = (cy: cyType) => {
 
 /**
  * Open the draft modal
+ * Note: The draft button is only visible on the Teams tab
  */
 export const openDraftModal = (cy: cyType) => {
+  // First navigate to Teams tab where the draft button is located
+  cy.get('[data-testid="teamsTab"]', { timeout: 10000 }).click();
+  cy.wait(500); // Wait for tab content to load
+
   getDraftButton(cy).click({ force: true });
   cy.get('[role="dialog"]').should('be.visible');
 };

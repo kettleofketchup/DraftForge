@@ -4,10 +4,16 @@ import { Button } from '~/components/ui/button';
 import { Progress } from '~/components/ui/progress';
 import { useTangoes } from '~/hooks/useTangoes';
 import { useUserStore } from '~/store/userStore';
+import bucketoffishAvatar from '~/assets/bucketoffish-avatar.png';
 
 const GAMES_TO_THROW = 10;
 const GAMES_THROWN = 2; // Always 2/10 - it's a joke
 const TANGOES_REQUIRED = 46326;
+
+// The joke target - everyone has to throw bucketoffish's games
+const BUCKETOFFISH = {
+  nickname: 'bucketoffish',
+};
 
 interface PlayerUnderConstructionProps {
   playerName: string;
@@ -19,6 +25,8 @@ export const PlayerUnderConstruction: React.FC<PlayerUnderConstructionProps> = m
   const currentUser = useUserStore((state) => state.currentUser);
   const isLoggedIn = !!currentUser?.pk;
   const { tangoes, buyTango, isBuying, isLoading } = useTangoes(isLoggedIn);
+
+  const targetName = BUCKETOFFISH.nickname || BUCKETOFFISH.username;
 
   const gamesProgress = useMemo(
     () => (GAMES_THROWN / GAMES_TO_THROW) * 100,
@@ -46,9 +54,16 @@ export const PlayerUnderConstruction: React.FC<PlayerUnderConstructionProps> = m
 
       {/* Option A: Throw games */}
       <div className="border border-muted rounded-lg p-3 mb-3">
-        <p className="font-medium mb-2">
-          Option A: Throw {GAMES_TO_THROW} of {playerName}'s games
-        </p>
+        <div className="flex items-center gap-2 mb-2">
+          <img
+            src={bucketoffishAvatar}
+            alt={`${targetName}'s avatar`}
+            className="w-8 h-8 rounded-full"
+          />
+          <p className="font-medium">
+            Option A: Throw {GAMES_TO_THROW} of {targetName}'s games
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <Progress
             value={gamesProgress}

@@ -45,7 +45,9 @@ services:
 
   celery-worker:
     image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
-    command: celery -A config worker -l info
+    user: "1000:1000"
+    entrypoint: ["celery"]
+    command: ["-A", "config", "worker", "-l", "info"]
     env_file: "./docker/.env.prod"
     depends_on:
       - redis
@@ -54,9 +56,21 @@ services:
 
   celery-beat:
     image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
-    command: celery -A config beat -l info
+    user: "1000:1000"
+    entrypoint: ["celery"]
+    command: ["-A", "config", "beat", "-l", "info"]
     env_file: "./docker/.env.prod"
     depends_on:
       - redis
       - celery-worker
+    restart: always
+
+  discord-bot:
+    image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
+    user: "1000:1000"
+    entrypoint: ["python", "manage.py", "run_discord_bot"]
+    env_file: "./docker/.env.prod"
+    depends_on:
+      - redis
+      - backend
     restart: always

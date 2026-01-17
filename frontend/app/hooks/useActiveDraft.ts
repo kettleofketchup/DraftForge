@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import axios from '~/components/api/axios';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -17,33 +17,105 @@ export interface ActiveDraftInfo {
 }
 
 /**
- * Hook to check if the current user has an active draft turn.
- *
- * Polls the backend every 5 seconds to check if the user is a captain
- * with a pending pick in any active tournament.
- *
- * @returns {Object} Active draft state
- * @returns {ActiveDraftInfo | null} activeDraft - Draft info if user has active turn
- * @returns {boolean} hasActiveTurn - True if user needs to make a pick
- * @returns {boolean} loading - True while initial check is in progress
- * @returns {() => void} refresh - Function to manually trigger a refresh
- *
- * @example
- * const { activeDraft, hasActiveTurn, loading } = useActiveDraft();
- *
- * if (hasActiveTurn) {
- *   // Show notification badge, floating indicator, etc.
- * }
+ * Singleton state manager for active draft polling.
+ * Ensures only ONE polling interval exists regardless of how many components use the hook.
  */
-export const useActiveDraft = () => {
-  const currentUser = useUserStore((state) => state.currentUser);
-  const [activeDraft, setActiveDraft] = useState<ActiveDraftInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+class ActiveDraftManager {
+  private static instance: ActiveDraftManager;
+  private subscribers = new Set<() => void>();
+  private state: ActiveDraftInfo | null = null;
+  private loading = true;
+  private intervalRef: NodeJS.Timeout | null = null;
+  private currentUserPk: number | null = null;
+  // Memoized snapshot to prevent infinite re-renders with useSyncExternalStore
+  private snapshot: { state: ActiveDraftInfo | null; loading: boolean } = {
+    state: null,
+    loading: true,
+  };
 
-  const checkActiveDraft = async () => {
-    if (!currentUser?.pk) {
-      setActiveDraft(null);
-      setLoading(false);
+  private constructor() {}
+
+  static getInstance(): ActiveDraftManager {
+    if (!ActiveDraftManager.instance) {
+      ActiveDraftManager.instance = new ActiveDraftManager();
+    }
+    return ActiveDraftManager.instance;
+  }
+
+  subscribe = (callback: () => void): (() => void) => {
+    this.subscribers.add(callback);
+    // Start polling when first subscriber joins
+    if (this.subscribers.size === 1 && this.currentUserPk) {
+      this.startPolling();
+    }
+    return () => {
+      this.subscribers.delete(callback);
+      // Stop polling when last subscriber leaves
+      if (this.subscribers.size === 0) {
+        this.stopPolling();
+      }
+    };
+  };
+
+  private notify = () => {
+    this.subscribers.forEach((callback) => callback());
+  };
+
+  // Update the memoized snapshot - call this before notify()
+  private updateSnapshot = () => {
+    this.snapshot = { state: this.state, loading: this.loading };
+  };
+
+  getSnapshot = (): { state: ActiveDraftInfo | null; loading: boolean } => {
+    // Return the memoized snapshot to prevent infinite re-renders
+    return this.snapshot;
+  };
+
+  setCurrentUser = (userPk: number | null) => {
+    if (this.currentUserPk === userPk) return;
+
+    this.currentUserPk = userPk;
+
+    if (!userPk) {
+      this.state = null;
+      this.loading = false;
+      this.stopPolling();
+      this.updateSnapshot();
+      this.notify();
+      return;
+    }
+
+    // Only start polling if we have subscribers
+    if (this.subscribers.size > 0) {
+      this.startPolling();
+    }
+  };
+
+  private startPolling = () => {
+    if (this.intervalRef) return;
+
+    // Immediate check
+    this.checkActiveDraft();
+
+    // Poll every 5 seconds
+    this.intervalRef = setInterval(this.checkActiveDraft, 5000);
+    log.debug('Started active draft polling');
+  };
+
+  private stopPolling = () => {
+    if (this.intervalRef) {
+      clearInterval(this.intervalRef);
+      this.intervalRef = null;
+      log.debug('Stopped active draft polling');
+    }
+  };
+
+  private checkActiveDraft = async () => {
+    if (!this.currentUserPk) {
+      this.state = null;
+      this.loading = false;
+      this.updateSnapshot();
+      this.notify();
       return;
     }
 
@@ -55,32 +127,63 @@ export const useActiveDraft = () => {
 
       if (data.has_active_turn) {
         log.debug('User has active draft turn:', data);
-        setActiveDraft(data);
+        this.state = data;
       } else {
-        setActiveDraft(null);
+        this.state = null;
       }
     } catch (err) {
       log.debug('Error checking active draft:', err);
-      setActiveDraft(null);
+      this.state = null;
     } finally {
-      setLoading(false);
+      this.loading = false;
+      this.updateSnapshot();
+      this.notify();
     }
   };
 
+  refresh = () => {
+    this.checkActiveDraft();
+  };
+}
+
+const manager = ActiveDraftManager.getInstance();
+
+/**
+ * Hook to check if the current user has an active draft turn.
+ *
+ * Uses a singleton manager to ensure only ONE polling interval exists
+ * regardless of how many components use this hook.
+ *
+ * @returns {Object} Active draft state
+ * @returns {ActiveDraftInfo | null} activeDraft - Draft info if user has active turn
+ * @returns {boolean} hasActiveTurn - True if user needs to make a pick
+ * @returns {boolean} loading - True while initial check is in progress
+ * @returns {() => void} refresh - Function to manually trigger a refresh
+ */
+export const useActiveDraft = () => {
+  const currentUser = useUserStore((state) => state.currentUser);
+  const currentUserPkRef = useRef<number | null>(null);
+
+  // Update manager when user changes
   useEffect(() => {
-    // Initial check
-    checkActiveDraft();
-
-    // Poll every 5 seconds
-    const interval = setInterval(checkActiveDraft, 5000);
-
-    return () => clearInterval(interval);
+    const userPk = currentUser?.pk ?? null;
+    if (currentUserPkRef.current !== userPk) {
+      currentUserPkRef.current = userPk;
+      manager.setCurrentUser(userPk);
+    }
   }, [currentUser?.pk]);
+
+  // Subscribe to manager state changes
+  const { state: activeDraft, loading } = useSyncExternalStore(
+    manager.subscribe,
+    manager.getSnapshot,
+    manager.getSnapshot, // Server snapshot (same as client for this use case)
+  );
 
   return {
     activeDraft,
     hasActiveTurn: !!activeDraft?.has_active_turn,
     loading,
-    refresh: checkActiveDraft,
+    refresh: manager.refresh,
   };
 };

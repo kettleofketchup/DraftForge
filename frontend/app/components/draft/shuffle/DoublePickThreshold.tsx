@@ -111,22 +111,16 @@ export const DoublePickThreshold: React.FC = () => {
   // Can only double pick if there's a player low enough to stay under threshold
   const canDoublePick = currentMmr < threshold.mmr && lowestAvailablePlayerMmr < buffer;
 
-  log.debug('DoublePickThreshold check', {
-    currentTeamCaptain: currentTeam.captain?.username,
-    currentMmr,
-    thresholdTeamCaptain: threshold.team.captain?.username,
-    thresholdMmr: threshold.mmr,
-    buffer,
-    lowestAvailablePlayerMmr,
-    canDoublePick,
-    currentTeamMembers: currentTeam.members?.length,
-    latestRoundPk: latestRound?.pk,
-    latestRoundCaptain: latestRound?.captain?.username,
-    curDraftRoundPk: curDraftRound?.pk,
-  });
-
   // Only show when double pick is actually possible with available players
   if (!canDoublePick) return null;
+
+  // Only log when we're actually showing the indicator
+  log.debug('DoublePickThreshold showing', {
+    currentTeamCaptain: currentTeam.captain?.username,
+    currentMmr,
+    thresholdMmr: threshold.mmr,
+    buffer,
+  });
 
   return (
     <Card className="mb-4 border-green-500 bg-green-950/20">

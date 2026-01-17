@@ -1,9 +1,16 @@
 ---
+skills:
+  - inv-runner
+  - django-redis-caching
 ---
 
 # Python Backend Agent
 
 Expert agent for Django/Python backend development in the DTX website project.
+
+## Quick Reference
+
+See [docs/development/backend-quickstart.md](../../../docs/development/backend-quickstart.md) for complete commands.
 
 ## Project Context
 
@@ -20,12 +27,15 @@ Expert agent for Django/Python backend development in the DTX website project.
 
 ## Environment Setup
 
-```bash
-# Activate virtual environment
-source .venv/bin/activate
+Use the `inv-runner` skill for all invoke commands. Key patterns:
 
-# If Redis is unavailable, disable caching for management commands
-DISABLE_CACHE=true python manage.py <command>
+```bash
+# Method 1: PATH prefix (recommended for Claude)
+PATH=".venv/bin:$PATH" inv <command>
+
+# Method 2: Activate venv
+source .venv/bin/activate
+inv <command>
 ```
 
 ## Key Directories
@@ -52,16 +62,37 @@ Based on migrations, the project has these key models:
 - Follow RESTful conventions
 
 ### Testing
-- Test endpoints available in `backend/tests/urls.py` for user/staff/admin login
-- Tests use real database (no mocking)
-- Run with: `python manage.py test`
+
+Test endpoints available in `backend/tests/urls.py` for user/staff/admin login.
+
+**Docker (recommended)** - avoids Redis hanging issues:
+```bash
+inv test.run --cmd 'python manage.py test app.tests -v 2'
+```
+
+**Local** - may hang on cleanup:
+```bash
+cd backend && DISABLE_CACHE=true python manage.py test app.tests -v 2
+```
 
 ### Database Operations
+
+Use invoke tasks for database operations (see `inv-runner` skill):
+
 ```bash
-python manage.py makemigrations app
-python manage.py migrate app
-python manage.py createsuperuser
-python manage.py runserver
+# Migrations (all environments)
+inv db.migrate.all
+
+# Specific environment migrations
+inv db.migrate.dev    # Development
+inv db.migrate.test   # Test
+inv db.migrate.prod   # Production
+
+# Create migrations (requires venv)
+cd backend && DISABLE_CACHE=true python manage.py makemigrations app
+
+# Populate test data
+inv db.populate.all
 ```
 
 ### Adding Dependencies

@@ -61,7 +61,9 @@ services:
 
   celery-worker:
     image: ghcr.io/kettleofketchup/dota_tournament/backend-dev:latest
-    command: celery -A config worker -l info
+    user: "1000:1000"
+    entrypoint: ["celery"]
+    command: ["-A", "config", "worker", "-l", "info"]
     volumes:
       - ./backend/:/app/backend
       - ./poetry.lock/:/app/poetry.lock
@@ -76,7 +78,9 @@ services:
 
   celery-beat:
     image: ghcr.io/kettleofketchup/dota_tournament/backend-dev:latest
-    command: celery -A config beat -l info
+    user: "1000:1000"
+    entrypoint: ["celery"]
+    command: ["-A", "config", "beat", "-l", "info"]
     volumes:
       - ./backend/:/app/backend
       - ./poetry.lock/:/app/poetry.lock
@@ -85,6 +89,22 @@ services:
     depends_on:
       - redis
       - celery-worker
+    restart: always
+    networks:
+      - test-network
+
+  discord-bot:
+    image: ghcr.io/kettleofketchup/dota_tournament/backend-dev:latest
+    user: "1000:1000"
+    entrypoint: ["python", "manage.py", "run_discord_bot"]
+    volumes:
+      - ./backend/:/app/backend
+      - ./poetry.lock/:/app/poetry.lock
+      - ./pyproject.toml/:/app/pyproject.toml
+    env_file: "./docker/.env.test"
+    depends_on:
+      - redis
+      - backend
     restart: always
     networks:
       - test-network

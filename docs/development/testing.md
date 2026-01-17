@@ -122,3 +122,63 @@ source .venv/bin/activate
 cd backend
 python manage.py test
 ```
+
+## Worktree Testing Verification
+
+When working in a git worktree (e.g., `.worktrees/feature-name`), you **must** verify the full stack works before completing the branch (merge, PR, or discard).
+
+### Why Worktrees Need Special Attention
+
+- Worktrees have isolated environments with separate databases
+- Unit tests alone don't catch integration issues (database, Docker, nginx routing)
+- The test environment verifies frontend-backend integration works
+
+### Required Verification Steps
+
+From the worktree root directory:
+
+```bash
+cd /home/kettle/git_repos/website/.worktrees/feature-name
+
+# 1. Source the worktree's virtual environment
+source .venv/bin/activate
+
+# 2. Stop any existing test environment
+inv test.down
+
+# 3. Run full test setup (builds images, installs deps)
+inv test.setup
+
+# 4. Run database migrations for test environment
+inv db.migrate.test
+
+# 5. Populate test data
+inv db.populate.all
+
+# 6. Run backend tests in Docker
+inv test.run --cmd 'python manage.py test app.tests -v 2'
+
+# 7. Start test environment
+inv test.up
+
+# 8. Run Cypress smoke tests
+inv test.headless
+```
+
+### Quick Verification (Minimum)
+
+If full Cypress tests aren't required, at minimum:
+
+1. Run `inv test.up` and verify containers start without errors
+2. Navigate to `https://localhost` in browser
+3. Verify login works and pages load without database errors
+4. Check browser console for JavaScript errors
+
+### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| Database errors on page load | Run `inv db.migrate.test` and `inv db.populate.all` |
+| Container won't start | Run `inv test.down` then `inv test.setup` |
+| WebSocket connection failed | Check nginx config routes `/ws/` correctly |
+| Missing dependencies | Run `inv test.setup` to rebuild images |

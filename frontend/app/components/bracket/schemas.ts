@@ -48,8 +48,8 @@ export const SaveBracketRequestSchema = z.object({
   matches: z.array(BracketMatchSchema),
 });
 
-// Type exports
-export type BracketMatch = z.infer<typeof BracketMatchSchema>;
-export type BracketResponse = z.infer<typeof BracketResponseSchema>;
+// Type exports (API DTOs - use types.ts for frontend interfaces)
+export type BracketMatchDTO = z.infer<typeof BracketMatchSchema>;
+export type BracketResponseDTO = z.infer<typeof BracketResponseSchema>;
 export type GenerateBracketRequest = z.infer<typeof GenerateBracketRequestSchema>;
 export type SaveBracketRequest = z.infer<typeof SaveBracketRequestSchema>;

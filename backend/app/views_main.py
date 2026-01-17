@@ -140,7 +140,7 @@ from .serializers import UserSerializer
 @permission_classes((IsStaff,))
 class UserView(viewsets.ModelViewSet):
     serializer_class = UserSerializer
-    queryset = CustomUser.objects.all()
+    queryset = CustomUser.objects.select_related("positions").all()
     http_method_names = [
         "get",
         "post",
@@ -728,7 +728,7 @@ def refresh_all_avatars(request):
         )
 
     updated_count = 0
-    users = CustomUser.objects.all()
+    users = CustomUser.objects.select_related("positions").all()
     for user in users:
         if user.check_and_update_avatar():
             updated_count += 1

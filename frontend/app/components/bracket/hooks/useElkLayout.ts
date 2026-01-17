@@ -22,7 +22,7 @@ export interface LayoutConfig {
 }
 
 // Type for match nodes used in bracket layout
-export type MatchNode = Node<MatchNodeData, 'match'>;
+export type MatchNodeType = Node<MatchNodeData, 'match'>;
 
 export function useElkLayout() {
   const getLayoutedElements = useCallback(
@@ -88,7 +88,7 @@ export function useElkLayout() {
 export async function layoutDoubleElimination(
   matches: BracketMatch[],
   getLayoutedElements: ReturnType<typeof useElkLayout>['getLayoutedElements']
-): Promise<{ nodes: MatchNode[]; edges: Edge[] }> {
+): Promise<{ nodes: MatchNodeType[]; edges: Edge[] }> {
   const BRACKET_GAP = 150;
 
   // Separate matches by bracket type
@@ -97,7 +97,7 @@ export async function layoutDoubleElimination(
   const grandFinalsMatches = matches.filter((m) => m.bracketType === 'grand_finals');
 
   // Convert to nodes - spread match into MatchNodeData to satisfy index signature
-  const toNodes = (matchList: BracketMatch[]): MatchNode[] =>
+  const toNodes = (matchList: BracketMatch[]): MatchNodeType[] =>
     matchList.map((match) => ({
       id: match.id,
       type: 'match' as const,
@@ -131,7 +131,7 @@ export async function layoutDoubleElimination(
   const losersOffset = winnersMaxY + BRACKET_GAP;
 
   // Apply offset to losers nodes
-  const offsetLosers: MatchNode[] = losers.nodes.map((node) => ({
+  const offsetLosers: MatchNodeType[] = losers.nodes.map((node) => ({
     ...node,
     position: { x: node.position.x, y: node.position.y + losersOffset },
   }));
@@ -142,7 +142,7 @@ export async function layoutDoubleElimination(
   const grandFinalsX = Math.max(winnersMaxX, losersMaxX) + 250;
   const grandFinalsY = (winnersMaxY + losersOffset) / 2;
 
-  const grandFinalsNodes: MatchNode[] = grandFinalsMatches.map((match) => ({
+  const grandFinalsNodes: MatchNodeType[] = grandFinalsMatches.map((match) => ({
     id: match.id,
     type: 'match' as const,
     position: { x: grandFinalsX, y: grandFinalsY },

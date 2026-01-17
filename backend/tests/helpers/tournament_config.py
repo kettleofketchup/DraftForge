@@ -331,6 +331,13 @@ TEST_KEY_TO_NAME = {config.key: config.name for config in TEST_TOURNAMENTS}
 # Add bracket linking scenario (created by populate_bracket_linking_scenario)
 TEST_KEY_TO_NAME["bracket_linking"] = "Bracket Linking Test"
 
+# Add tournaments created by populate_tournaments() for test lookups
+TEST_KEY_TO_NAME["completed_bracket"] = "Completed Bracket Test"
+TEST_KEY_TO_NAME["partial_bracket"] = "Partial Bracket Test"
+TEST_KEY_TO_NAME["pending_bracket"] = "Pending Bracket Test"
+TEST_KEY_TO_NAME["draft_test"] = "Draft Test"
+TEST_KEY_TO_NAME["large_tournament"] = "Large Tournament Test"
+
 
 def get_tournament_config(key: str) -> TestTournamentConfig:
     """

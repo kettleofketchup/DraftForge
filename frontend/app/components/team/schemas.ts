@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { DraftSchema } from '../draft/schemas';
 import { UserSchema } from '../user';
 
 export const TeamSchema = z.object({

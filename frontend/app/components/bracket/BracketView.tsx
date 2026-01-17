@@ -16,7 +16,7 @@ import './bracket-styles.css';
 
 import { useBracketStore } from '~/store/bracketStore';
 import { useUserStore } from '~/store/userStore';
-import { useElkLayout, type MatchNode as MatchNodeType } from './hooks/useElkLayout';
+import { useElkLayout, type MatchNodeType } from './hooks/useElkLayout';
 import { MatchNode } from './nodes/MatchNode';
 import { EmptySlotNode } from './nodes/EmptySlotNode';
 import { DividerNode, type DividerNodeData } from './nodes/DividerNode';
