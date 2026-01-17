@@ -36,6 +36,7 @@ from app.views import (
     UserView,
     current_user,
 )
+from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 
 router = routers.DefaultRouter()
@@ -111,6 +112,8 @@ urlpatterns = [
     ),
     path("api/avatars/refresh/", app_views.refresh_all_avatars, name="refresh-avatars"),
     path("api/profile_update", profile_update, name="profile_update"),
+    path("api/jokes/tangoes/", get_tangoes, name="get-tangoes"),
+    path("api/jokes/tangoes/buy/", buy_tango, name="buy-tango"),
     path("api/steam/", include("steam.urls")),
     path("api/bracket/", include("bracket.urls")),
     path("api/discord/", include("discordbot.urls")),
