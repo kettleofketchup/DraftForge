@@ -2,6 +2,7 @@ export { LeagueSchema, CreateLeagueSchema, LeagueMatchSchema, EditLeagueSchema }
 export type { LeagueType, LeaguesType, CreateLeagueInput, LeagueMatchType, EditLeagueInput } from './schemas';
 export { useLeagues } from './hooks/useLeagues';
 export { useLeague } from './hooks/useLeague';
+export { useLeagueMatches } from './hooks/useLeagueMatches';
 export { LeagueCard } from './LeagueCard';
 export { LeaguePopover } from './LeaguePopover';
 export { CreateLeagueModal } from './forms/CreateLeagueModal';
