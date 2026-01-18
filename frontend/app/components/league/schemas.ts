@@ -56,9 +56,9 @@ export type LeagueMatchType = z.infer<typeof LeagueMatchSchema>;
 // Edit league schema
 export const EditLeagueSchema = z.object({
   name: z.string().min(1, 'League name is required').max(255),
-  description: z.string().max(10000).optional().default(''),
-  rules: z.string().max(50000).optional().default(''),
-  prize_pool: z.string().max(100).optional().default(''),
+  description: z.string().max(10000),
+  rules: z.string().max(50000),
+  prize_pool: z.string().max(100),
 });
 
 export type EditLeagueInput = z.infer<typeof EditLeagueSchema>;

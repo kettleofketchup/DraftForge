@@ -6,5 +6,7 @@ export { useLeagueMatches } from './hooks/useLeagueMatches';
 export { LeagueCard } from './LeagueCard';
 export { LeagueMatchCard } from './LeagueMatchCard';
 export { LeaguePopover } from './LeaguePopover';
+export { LeagueTabs } from './LeagueTabs';
 export { CreateLeagueModal } from './forms/CreateLeagueModal';
+export { EditLeagueModal } from './EditLeagueModal';
 export { InfoTab, TournamentsTab, MatchesTab } from './tabs';
