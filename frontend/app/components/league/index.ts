@@ -4,5 +4,6 @@ export { useLeagues } from './hooks/useLeagues';
 export { useLeague } from './hooks/useLeague';
 export { useLeagueMatches } from './hooks/useLeagueMatches';
 export { LeagueCard } from './LeagueCard';
+export { LeagueMatchCard } from './LeagueMatchCard';
 export { LeaguePopover } from './LeaguePopover';
 export { CreateLeagueModal } from './forms/CreateLeagueModal';
