@@ -25,12 +25,13 @@ export default function LeaguePage() {
     getTournaments();
   }, [getTournaments]);
 
-  // Sync tab with URL
+  // Sync tab with URL - only react to URL changes
   useEffect(() => {
     if (tab && tab !== activeTab) {
       setActiveTab(tab);
     }
-  }, [tab, activeTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   const handleTabChange = (newTab: string) => {
     setActiveTab(newTab);

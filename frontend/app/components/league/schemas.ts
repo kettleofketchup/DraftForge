@@ -23,14 +23,17 @@ export const CreateLeagueSchema = z.object({
   organization: z.number(),
   steam_league_id: z.number().min(1, 'Steam League ID is required'),
   name: z.string().min(1, 'Name is required').max(255),
-  description: z.string(),
-  rules: z.string(),
+  description: z.string().max(10000),
+  rules: z.string().max(50000),
 });
 
-export type LeagueType = z.infer<typeof LeagueSchema> & {
-  admins?: UserType[];
-  staff?: UserType[];
-};
+// Extended schema that includes nested user objects (returned by API)
+export const LeagueWithUsersSchema = LeagueSchema.extend({
+  admins: z.array(UserSchema).optional(),
+  staff: z.array(UserSchema).optional(),
+});
+
+export type LeagueType = z.infer<typeof LeagueWithUsersSchema>;
 export type CreateLeagueInput = z.infer<typeof CreateLeagueSchema>;
 export type LeaguesType = LeagueType[];
 
@@ -53,7 +56,7 @@ export const LeagueMatchSchema = z.object({
 
 export type LeagueMatchType = z.infer<typeof LeagueMatchSchema>;
 
-// Edit league schema
+// Edit league schema - consistent with CreateLeagueSchema validation
 export const EditLeagueSchema = z.object({
   name: z.string().min(1, 'League name is required').max(255),
   description: z.string().max(10000),
