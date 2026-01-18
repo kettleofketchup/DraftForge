@@ -12,7 +12,7 @@ import type {
   UserType,
 } from '~/index';
 import type { OrganizationType, OrganizationsType } from '~/components/organization/schemas';
-import type { LeagueType, LeaguesType } from '~/components/league/schemas';
+import type { LeagueType, LeaguesType, LeagueMatchType } from '~/components/league/schemas';
 import { getLogger } from '~/lib/logger';
 import axios from './axios';
 import type {
@@ -340,4 +340,19 @@ export async function updateLeague(
 
 export async function deleteLeague(pk: number): Promise<void> {
   await axios.delete(`/leagues/${pk}/`);
+}
+
+export async function getLeagueMatches(
+  leaguePk: number,
+  options?: { tournament?: number; linkedOnly?: boolean }
+): Promise<LeagueMatchType[]> {
+  const params = new URLSearchParams();
+  if (options?.tournament) params.append('tournament', options.tournament.toString());
+  if (options?.linkedOnly) params.append('linked_only', 'true');
+
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const response = await axios.get<LeagueMatchType[]>(
+    `/leagues/${leaguePk}/matches/${queryString}`
+  );
+  return response.data;
 }

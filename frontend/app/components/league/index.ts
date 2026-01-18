@@ -1,5 +1,5 @@
-export { LeagueSchema, CreateLeagueSchema } from './schemas';
-export type { LeagueType, LeaguesType, CreateLeagueInput } from './schemas';
+export { LeagueSchema, CreateLeagueSchema, LeagueMatchSchema, EditLeagueSchema } from './schemas';
+export type { LeagueType, LeaguesType, CreateLeagueInput, LeagueMatchType, EditLeagueInput } from './schemas';
 export { useLeagues } from './hooks/useLeagues';
 export { useLeague } from './hooks/useLeague';
 export { LeagueCard } from './LeagueCard';

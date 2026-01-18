@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { UserType } from '~/components/user/types';
+import { UserSchema } from '~/components/user/schemas';
 
 export const LeagueSchema = z.object({
   pk: z.number().optional(),
@@ -18,12 +19,12 @@ export const LeagueSchema = z.object({
   updated_at: z.string().optional(),
 });
 
-export const CreateLeagueSchema = LeagueSchema.pick({
-  organization: true,
-  steam_league_id: true,
-  name: true,
-  description: true,
-  rules: true,
+export const CreateLeagueSchema = z.object({
+  organization: z.number(),
+  steam_league_id: z.number().min(1, 'Steam League ID is required'),
+  name: z.string().min(1, 'Name is required').max(255),
+  description: z.string(),
+  rules: z.string(),
 });
 
 export type LeagueType = z.infer<typeof LeagueSchema> & {
@@ -32,3 +33,32 @@ export type LeagueType = z.infer<typeof LeagueSchema> & {
 };
 export type CreateLeagueInput = z.infer<typeof CreateLeagueSchema>;
 export type LeaguesType = LeagueType[];
+
+// LeagueMatch schema - uses gameid to link to Steam matches
+export const LeagueMatchSchema = z.object({
+  pk: z.number(),
+  tournament_pk: z.number().nullable(),
+  tournament_name: z.string().nullable(),
+  round: z.number().nullable(),
+  date_played: z.string().nullable(),
+  radiant_team: z.number().nullable(),
+  dire_team: z.number().nullable(),
+  radiant_team_name: z.string().nullable(),
+  dire_team_name: z.string().nullable(),
+  radiant_captain: UserSchema.nullable(),
+  dire_captain: UserSchema.nullable(),
+  winning_team: z.number().nullable(),
+  gameid: z.number().nullable(),
+});
+
+export type LeagueMatchType = z.infer<typeof LeagueMatchSchema>;
+
+// Edit league schema
+export const EditLeagueSchema = z.object({
+  name: z.string().min(1, 'League name is required').max(255),
+  description: z.string().max(10000).optional().default(''),
+  rules: z.string().max(50000).optional().default(''),
+  prize_pool: z.string().max(100).optional().default(''),
+});
+
+export type EditLeagueInput = z.infer<typeof EditLeagueSchema>;
