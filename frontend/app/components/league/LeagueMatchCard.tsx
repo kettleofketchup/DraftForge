@@ -43,7 +43,7 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
 
   return (
     <>
-      <Card className="hover:shadow-md transition-shadow">
+      <Card className="hover:shadow-md transition-shadow" data-testid={`league-match-card-${match.pk}`}>
         <CardContent className="p-4">
           {/* Header: Tournament + Round */}
           <div className="flex items-center justify-between mb-3">
