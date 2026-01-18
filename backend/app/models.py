@@ -271,6 +271,17 @@ class Organization(models.Model):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Invalidate Organization cache when modified
+        invalidate_model(Organization)
+
+    def delete(self, *args, **kwargs):
+        # Invalidate caches before deletion
+        invalidate_model(Organization)
+        invalidate_model(League)
+        super().delete(*args, **kwargs)
+
 
 class League(models.Model):
     """League that belongs to an organization, 1:1 with Steam league."""
@@ -306,6 +317,19 @@ class League(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.steam_league_id})"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Invalidate League cache and Organization cache
+        # (Organization has league_count annotation that depends on leagues)
+        invalidate_model(League)
+        invalidate_model(Organization)
+
+    def delete(self, *args, **kwargs):
+        # Invalidate caches before deletion
+        invalidate_model(League)
+        invalidate_model(Organization)
+        super().delete(*args, **kwargs)
 
 
 TOURNAMNET_TYPE_CHOICES = [
@@ -356,6 +380,14 @@ class Tournament(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Invalidate Tournament cache and related caches
+        # (Organization has tournament_count annotation that depends on tournaments via leagues)
+        invalidate_model(Tournament)
+        invalidate_model(League)
+        invalidate_model(Organization)
 
     @property
     def captains(self):
@@ -419,7 +451,18 @@ class Team(models.Model):
 
 class Game(models.Model):
     tournament = models.ForeignKey(
-        Tournament, related_name="games", on_delete=models.CASCADE, blank=True
+        Tournament,
+        related_name="games",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,  # Now optional
+    )
+    league = models.ForeignKey(
+        "League",
+        related_name="games",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,  # Games can belong directly to a league
     )
     round = models.IntegerField(default=1)
 
@@ -520,7 +563,10 @@ class Game(models.Model):
     )
 
     def __str__(self):
-        return f"{self.radiant_team.name} vs {self.dire_team.name} in {self.tournament.name}"
+        tourn_name = self.tournament.name if self.tournament else "No Tournament"
+        radiant = self.radiant_team.name if self.radiant_team else "TBD"
+        dire = self.dire_team.name if self.dire_team else "TBD"
+        return f"{radiant} vs {dire} in {tourn_name}"
 
     @property
     def teams(self):
@@ -528,11 +574,13 @@ class Game(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate tournament and team caches when games are modified
+        # Invalidate tournament, league, and team caches when games are modified
         from cacheops import invalidate_model, invalidate_obj
 
         if self.tournament_id:
             invalidate_obj(self.tournament)
+        if self.league_id:
+            invalidate_obj(self.league)
         invalidate_model(Team)
 
 
