@@ -7,3 +7,4 @@ export { LeagueCard } from './LeagueCard';
 export { LeagueMatchCard } from './LeagueMatchCard';
 export { LeaguePopover } from './LeaguePopover';
 export { CreateLeagueModal } from './forms/CreateLeagueModal';
+export { InfoTab, TournamentsTab, MatchesTab } from './tabs';
