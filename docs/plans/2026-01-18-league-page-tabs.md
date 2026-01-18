@@ -18,6 +18,78 @@
 
 ---
 
+## Task 0: Backend - Update Game Model
+
+**Files:**
+- Modify: `backend/app/models.py`
+
+**Context:** Game currently has a required `tournament` FK. User requested:
+1. Add `league` FK to Game (optional, ForeignKey to League)
+2. Make `tournament` FK optional (null=True, blank=True)
+3. Keep `gameid` for steam match linking (already exists as IntegerField)
+
+**Step 1: Update Game model fields**
+
+Find the `Game` model and update the tournament FK to be optional, then add a league FK:
+
+```python
+class Game(models.Model):
+    tournament = models.ForeignKey(
+        Tournament, related_name="games", on_delete=models.CASCADE,
+        null=True, blank=True  # Now optional
+    )
+    league = models.ForeignKey(
+        "League", related_name="games", on_delete=models.CASCADE,
+        null=True, blank=True  # Games can belong directly to a league
+    )
+    # ... rest of model unchanged
+```
+
+**Step 2: Update __str__ method**
+
+The `__str__` method references `self.tournament.name` which will fail if tournament is None:
+
+```python
+def __str__(self):
+    tourn_name = self.tournament.name if self.tournament else "No Tournament"
+    radiant = self.radiant_team.name if self.radiant_team else "TBD"
+    dire = self.dire_team.name if self.dire_team else "TBD"
+    return f"{radiant} vs {dire} in {tourn_name}"
+```
+
+**Step 3: Update save method cache invalidation**
+
+The save method invalidates tournament cache - update to handle None:
+
+```python
+def save(self, *args, **kwargs):
+    super().save(*args, **kwargs)
+    from cacheops import invalidate_model, invalidate_obj
+
+    if self.tournament_id:
+        invalidate_obj(self.tournament)
+    if self.league_id:
+        invalidate_obj(self.league)
+    invalidate_model(Team)
+```
+
+**Step 4: Create and run migration**
+
+```bash
+cd backend
+python manage.py makemigrations app -n game_add_league_optional_tournament
+python manage.py migrate
+```
+
+**Step 5: Commit**
+
+```bash
+git add backend/app/models.py backend/app/migrations/
+git commit -m "feat: add league FK to Game, make tournament optional"
+```
+
+---
+
 ## Task 1: Backend - Add League Matches Endpoint
 
 **Files:**
@@ -60,18 +132,22 @@ from rest_framework.decorators import action
 Add to `LeagueView` class:
 
 ```python
+from django.db.models import Q
+
 @action(detail=True, methods=['get'])
 def matches(self, request, pk=None):
-    """Get all matches from tournaments in this league."""
+    """Get all matches for this league (direct or via tournaments)."""
     league = self.get_object()
+    # Games directly belonging to league OR games in tournaments belonging to league
     games = Game.objects.filter(
-        tournament__league=league
+        Q(league=league) | Q(tournament__league=league)
     ).select_related(
         'tournament',
+        'league',
         'radiant_team__captain',
         'dire_team__captain',
         'winning_team',
-    ).order_by('-tournament__date_played', '-pk')
+    ).order_by('-pk')
 
     # Optional filtering
     tournament_pk = request.query_params.get('tournament')
@@ -1197,6 +1273,7 @@ git commit -m "feat: complete League page tabs implementation"
 
 | Task | Component | Description |
 |------|-----------|-------------|
+| 0 | Game model | Add league FK, make tournament optional |
 | 1 | LeagueView.matches | Add matches endpoint to backend |
 | 2 | api.tsx | Add getLeagueMatches function |
 | 3 | schemas.ts | Add LeagueMatch and EditLeague schemas |
