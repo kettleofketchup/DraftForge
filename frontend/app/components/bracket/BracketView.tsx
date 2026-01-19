@@ -54,7 +54,7 @@ const ROUND_HORIZONTAL_GAP = 180; // Gap between rounds
 function createAdvancementEdges(matches: BracketMatch[]): Edge[] {
   const matchMap = new Map(matches.map(m => [m.id, m]));
 
-  return matches
+  const edges = matches
     .filter(m => {
       // Must have a next match and a winner
       if (!m.nextMatchId || !m.winner) return false;
@@ -79,11 +79,13 @@ function createAdvancementEdges(matches: BracketMatch[]): Edge[] {
         id: `${match.id}-${match.nextMatchId}`,
         source: match.id,
         target: match.nextMatchId!,
-        type: 'bracket',
+        type: 'bracket' as const,
         data: { isWinnerPath: true },
       };
     })
-    .filter((e): e is Edge => e !== null);
+    .filter((e): e is NonNullable<typeof e> => e !== null);
+
+  return edges;
 }
 
 /**

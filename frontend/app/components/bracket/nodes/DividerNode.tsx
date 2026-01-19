@@ -2,6 +2,7 @@ import { memo } from 'react';
 import { type NodeProps } from '@xyflow/react';
 
 export interface DividerNodeData {
+  [key: string]: unknown;
   width: number;
   label?: string;
 }
