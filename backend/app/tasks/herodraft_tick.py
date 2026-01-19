@@ -71,6 +71,55 @@ async def broadcast_tick(draft_id: int):
             log.warning(f"Failed to broadcast tick for draft {draft_id}: {e}")
 
 
+async def check_timeout(draft_id: int):
+    """Check if current round has timed out and auto-pick if needed."""
+    from django.db import transaction
+
+    from app.functions.herodraft import auto_random_pick
+    from app.models import DraftTeam, HeroDraft
+
+    @sync_to_async
+    def check_and_auto_pick():
+        # Use transaction with select_for_update to prevent race conditions
+        with transaction.atomic():
+            try:
+                draft = HeroDraft.objects.select_for_update().get(id=draft_id)
+            except HeroDraft.DoesNotExist:
+                return None
+
+            if draft.state != "drafting":
+                return None
+
+            current_round = (
+                draft.rounds.select_for_update().filter(state="active").first()
+            )
+            if not current_round:
+                return None
+
+            now = timezone.now()
+            if not current_round.started_at:
+                return None
+
+            elapsed_ms = int((now - current_round.started_at).total_seconds() * 1000)
+
+            # Lock the team to ensure reserve_time_remaining is consistent
+            team = DraftTeam.objects.select_for_update().get(
+                id=current_round.draft_team_id
+            )
+            total_time = current_round.grace_time_ms + team.reserve_time_remaining
+
+            if elapsed_ms >= total_time:
+                # Time's up - auto pick
+                log.info(
+                    f"Timeout reached for draft {draft_id}, round {current_round.round_number}"
+                )
+                return auto_random_pick(draft, team)
+
+            return None
+
+    return await check_and_auto_pick()
+
+
 async def run_tick_loop(draft_id: int, stop_event: threading.Event):
     """Run tick broadcasts every second while draft is active."""
     from app.models import HeroDraft
@@ -85,6 +134,7 @@ async def run_tick_loop(draft_id: int, stop_event: threading.Event):
 
     while not stop_event.is_set() and await is_draft_active():
         await broadcast_tick(draft_id)
+        await check_timeout(draft_id)
         await asyncio.sleep(1)
 
 

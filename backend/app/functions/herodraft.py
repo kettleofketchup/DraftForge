@@ -248,3 +248,23 @@ def get_available_heroes(draft: HeroDraft) -> list[int]:
     )
 
     return [h for h in ALL_HERO_IDS if h not in used_heroes]
+
+
+def auto_random_pick(draft: HeroDraft, team: DraftTeam) -> HeroDraftRound:
+    """Auto-pick a random available hero when time runs out."""
+    available = get_available_heroes(draft)
+    if not available:
+        raise ValueError("No heroes available")
+
+    hero_id = random.choice(available)
+
+    # Record timeout event
+    HeroDraftEvent.objects.create(
+        draft=draft,
+        event_type="round_timeout",
+        draft_team=team,
+        metadata={"auto_picked_hero": hero_id},
+    )
+
+    # Submit the pick
+    return submit_pick(draft, team, hero_id)
