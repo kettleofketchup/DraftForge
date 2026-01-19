@@ -151,6 +151,7 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
         # Verify draft exists
         draft_exists = await self.draft_exists(self.draft_id)
         if not draft_exists:
+            log.warning(f"HeroDraft {self.draft_id} not found, closing connection")
             await self.close()
             return
 
@@ -159,15 +160,22 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
         # Send initial state
-        initial_state = await self.get_draft_state(self.draft_id)
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "initial_state",
-                    "draft_state": initial_state,
-                }
+        try:
+            initial_state = await self.get_draft_state(self.draft_id)
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "type": "initial_state",
+                        "draft_state": initial_state,
+                    }
+                )
             )
-        )
+        except Exception as e:
+            log.error(
+                f"Failed to send initial state for herodraft {self.draft_id}: {e}"
+            )
+            await self.close()
+            return
 
         # Mark captain as connected if authenticated
         if self.user and self.user.is_authenticated:
@@ -175,11 +183,24 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         # Mark captain as disconnected
-        if hasattr(self, "user") and self.user and self.user.is_authenticated:
-            await self.mark_captain_connected(self.draft_id, self.user, False)
+        if (
+            hasattr(self, "user")
+            and hasattr(self, "draft_id")
+            and self.user
+            and self.user.is_authenticated
+        ):
+            try:
+                await self.mark_captain_connected(self.draft_id, self.user, False)
+            except Exception as e:
+                log.error(
+                    f"Failed to mark captain disconnected for herodraft {self.draft_id}: {e}"
+                )
 
         # Leave room group
-        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+        if hasattr(self, "room_group_name"):
+            await self.channel_layer.group_discard(
+                self.room_group_name, self.channel_name
+            )
 
     async def receive(self, text_data):
         # Read-only consumer - ignore incoming messages
@@ -232,45 +253,54 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def mark_captain_connected(self, draft_id, user, is_connected):
+        from django.db import transaction
+
         from app.models import HeroDraft, HeroDraftEvent
 
         try:
-            draft = HeroDraft.objects.get(id=draft_id)
-        except HeroDraft.DoesNotExist:
-            return
+            with transaction.atomic():
+                draft = HeroDraft.objects.select_for_update().get(id=draft_id)
 
-        draft_team = draft.draft_teams.filter(tournament_team__captain=user).first()
+                draft_team = draft.draft_teams.filter(
+                    tournament_team__captain=user
+                ).first()
 
-        if draft_team:
-            draft_team.is_connected = is_connected
-            draft_team.save()
+                if draft_team:
+                    draft_team.is_connected = is_connected
+                    draft_team.save()
 
-            event_type = "captain_connected" if is_connected else "captain_disconnected"
-            HeroDraftEvent.objects.create(
-                draft=draft,
-                event_type=event_type,
-                draft_team=draft_team,
-                metadata={"user_id": user.id},
-            )
-
-            # Handle pause/resume on disconnect
-            if not is_connected and draft.state == "drafting":
-                draft.state = "paused"
-                draft.save()
-                HeroDraftEvent.objects.create(
-                    draft=draft,
-                    event_type="draft_paused",
-                    draft_team=draft_team,
-                    metadata={"reason": "captain_disconnected"},
-                )
-            elif is_connected and draft.state == "paused":
-                # Check if both captains connected
-                all_connected = all(t.is_connected for t in draft.draft_teams.all())
-                if all_connected:
-                    draft.state = "drafting"
-                    draft.save()
+                    event_type = (
+                        "captain_connected" if is_connected else "captain_disconnected"
+                    )
                     HeroDraftEvent.objects.create(
                         draft=draft,
-                        event_type="draft_resumed",
-                        metadata={},
+                        event_type=event_type,
+                        draft_team=draft_team,
+                        metadata={"user_id": user.id},
                     )
+
+                    # Handle pause/resume on disconnect
+                    if not is_connected and draft.state == "drafting":
+                        draft.state = "paused"
+                        draft.save()
+                        HeroDraftEvent.objects.create(
+                            draft=draft,
+                            event_type="draft_paused",
+                            draft_team=draft_team,
+                            metadata={"reason": "captain_disconnected"},
+                        )
+                    elif is_connected and draft.state == "paused":
+                        # Check if both captains connected
+                        all_connected = all(
+                            t.is_connected for t in draft.draft_teams.all()
+                        )
+                        if all_connected:
+                            draft.state = "drafting"
+                            draft.save()
+                            HeroDraftEvent.objects.create(
+                                draft=draft,
+                                event_type="draft_resumed",
+                                metadata={},
+                            )
+        except HeroDraft.DoesNotExist:
+            return
