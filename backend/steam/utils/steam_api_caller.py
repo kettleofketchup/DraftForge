@@ -2,6 +2,8 @@ import os
 
 import requests
 
+from steam.utils.retry import throttle_request
+
 
 class SteamAPI:
     def __init__(self, api_key=None):
@@ -12,6 +14,7 @@ class SteamAPI:
             )
         self.base_url = "https://api.steampowered.com"
 
+    @throttle_request(min_delay=0.5)
     def _request(self, interface, method, version, params=None):
         if params is None:
             params = {}
