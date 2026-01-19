@@ -13,7 +13,11 @@ from .models import (
     Draft,
     DraftEvent,
     DraftRound,
+    DraftTeam,
     Game,
+    HeroDraft,
+    HeroDraftEvent,
+    HeroDraftRound,
     Joke,
     League,
     Organization,
@@ -370,6 +374,12 @@ class GameSerializerForTournament(serializers.ModelSerializer):
     dire_team = TeamSerializerForTournament(many=False, read_only=True)
     radiant_team = TeamSerializerForTournament(many=False, read_only=True)
     winning_team = TeamSerializerForTournament(many=False, read_only=True)
+    herodraft_id = serializers.SerializerMethodField()
+
+    def get_herodraft_id(self, obj):
+        if hasattr(obj, "herodraft"):
+            return obj.herodraft.id
+        return None
 
     class Meta:
         model = Game
@@ -381,6 +391,7 @@ class GameSerializerForTournament(serializers.ModelSerializer):
             "gameid",
             "round",
             "winning_team",
+            "herodraft_id",
         )
 
 
@@ -671,6 +682,12 @@ class GameSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False,
     )
+    herodraft_id = serializers.SerializerMethodField()
+
+    def get_herodraft_id(self, obj):
+        if hasattr(obj, "herodraft"):
+            return obj.herodraft.id
+        return None
 
     class Meta:
         model = Game
@@ -686,6 +703,7 @@ class GameSerializer(serializers.ModelSerializer):
             "round",
             "winning_team",
             "winning_team_id",
+            "herodraft_id",
         )
 
 
@@ -797,3 +815,88 @@ class LeagueMatchSerializer(serializers.ModelSerializer):
             "winning_team",
             "gameid",
         ]
+
+
+class HeroDraftEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HeroDraftEvent
+        fields = ["id", "event_type", "draft_team", "metadata", "created_at"]
+
+
+class HeroDraftRoundSerializerFull(serializers.ModelSerializer):
+    """Full serializer for HeroDraftRound with all fields."""
+
+    class Meta:
+        model = HeroDraftRound
+        fields = [
+            "id",
+            "round_number",
+            "action_type",
+            "hero_id",
+            "state",
+            "grace_time_ms",
+            "started_at",
+            "completed_at",
+            "draft_team",
+        ]
+
+
+class DraftTeamSerializerFull(serializers.ModelSerializer):
+    """Full serializer for DraftTeam with captain info."""
+
+    captain = TournamentUserSerializer(read_only=True)
+    team_name = serializers.CharField(source="tournament_team.name", read_only=True)
+
+    class Meta:
+        model = DraftTeam
+        fields = [
+            "id",
+            "tournament_team",
+            "captain",
+            "team_name",
+            "is_first_pick",
+            "is_radiant",
+            "reserve_time_remaining",
+            "is_ready",
+            "is_connected",
+        ]
+
+
+class HeroDraftSerializer(serializers.ModelSerializer):
+    """Full serializer for HeroDraft with nested relations."""
+
+    draft_teams = DraftTeamSerializerFull(many=True, read_only=True)
+    rounds = HeroDraftRoundSerializerFull(many=True, read_only=True)
+    roll_winner = DraftTeamSerializerFull(read_only=True)
+    current_round = serializers.SerializerMethodField()
+
+    class Meta:
+        model = HeroDraft
+        fields = [
+            "id",
+            "game",
+            "state",
+            "roll_winner",
+            "draft_teams",
+            "rounds",
+            "current_round",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_current_round(self, obj):
+        active_round = obj.rounds.filter(state="active").first()
+        if active_round:
+            return HeroDraftRoundSerializerFull(active_round).data
+        return None
+
+
+class HeroDraftTickSerializer(serializers.Serializer):
+    """Serializer for WebSocket tick updates."""
+
+    current_round = serializers.IntegerField()
+    active_team_id = serializers.IntegerField()
+    grace_time_remaining_ms = serializers.IntegerField()
+    team_a_reserve_ms = serializers.IntegerField()
+    team_b_reserve_ms = serializers.IntegerField()
+    draft_state = serializers.CharField()
