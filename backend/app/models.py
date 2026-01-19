@@ -1227,3 +1227,147 @@ class DraftEvent(models.Model):
 
     def __str__(self):
         return f"{self.event_type} - Draft {self.draft_id} at {self.created_at}"
+
+
+class HeroDraft(models.Model):
+    """Captain's Mode hero draft for a tournament game."""
+
+    STATE_CHOICES = [
+        ("waiting_for_captains", "Waiting for Captains"),
+        ("rolling", "Rolling"),
+        ("choosing", "Choosing"),
+        ("drafting", "Drafting"),
+        ("paused", "Paused"),
+        ("completed", "Completed"),
+    ]
+
+    game = models.OneToOneField(
+        "app.Game", on_delete=models.CASCADE, related_name="herodraft"
+    )
+    state = models.CharField(
+        max_length=32, choices=STATE_CHOICES, default="waiting_for_captains"
+    )
+    roll_winner = models.ForeignKey(
+        "DraftTeam",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="won_rolls",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        invalidate_model(HeroDraft)
+
+    def __str__(self):
+        return f"HeroDraft for {self.game}"
+
+
+class DraftTeam(models.Model):
+    """One of the two teams in a hero draft."""
+
+    draft = models.ForeignKey(
+        HeroDraft, on_delete=models.CASCADE, related_name="draft_teams"
+    )
+    tournament_team = models.ForeignKey(
+        "app.Team", on_delete=models.CASCADE, related_name="hero_draft_teams"
+    )
+    is_first_pick = models.BooleanField(null=True, blank=True)
+    is_radiant = models.BooleanField(null=True, blank=True)
+    reserve_time_remaining = models.IntegerField(default=90000)  # 90 seconds in ms
+    is_ready = models.BooleanField(default=False)
+    is_connected = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        invalidate_model(DraftTeam)
+
+    @property
+    def captain(self):
+        return self.tournament_team.captain
+
+    def __str__(self):
+        return f"DraftTeam: {self.tournament_team} in {self.draft}"
+
+
+class HeroDraftRound(models.Model):
+    """A single pick or ban action in the draft."""
+
+    ACTION_CHOICES = [
+        ("ban", "Ban"),
+        ("pick", "Pick"),
+    ]
+
+    STATE_CHOICES = [
+        ("planned", "Planned"),
+        ("active", "Active"),
+        ("completed", "Completed"),
+    ]
+
+    draft = models.ForeignKey(
+        HeroDraft, on_delete=models.CASCADE, related_name="rounds"
+    )
+    draft_team = models.ForeignKey(
+        DraftTeam, on_delete=models.CASCADE, related_name="rounds"
+    )
+    round_number = models.IntegerField()
+    action_type = models.CharField(max_length=8, choices=ACTION_CHOICES)
+    hero_id = models.IntegerField(null=True, blank=True)
+    state = models.CharField(max_length=16, choices=STATE_CHOICES, default="planned")
+    grace_time_ms = models.IntegerField(default=30000)  # 30 seconds
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["round_number"]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        invalidate_model(HeroDraftRound)
+
+    def __str__(self):
+        return f"Round {self.round_number}: {self.action_type} by {self.draft_team}"
+
+
+class HeroDraftEvent(models.Model):
+    """Audit log for hero draft events."""
+
+    EVENT_CHOICES = [
+        ("captain_connected", "Captain Connected"),
+        ("captain_disconnected", "Captain Disconnected"),
+        ("draft_paused", "Draft Paused"),
+        ("draft_resumed", "Draft Resumed"),
+        ("roll_triggered", "Roll Triggered"),
+        ("roll_result", "Roll Result"),
+        ("choice_made", "Choice Made"),
+        ("round_started", "Round Started"),
+        ("hero_selected", "Hero Selected"),
+        ("round_timeout", "Round Timeout"),
+        ("draft_completed", "Draft Completed"),
+    ]
+
+    draft = models.ForeignKey(
+        HeroDraft, on_delete=models.CASCADE, related_name="events"
+    )
+    event_type = models.CharField(max_length=32, choices=EVENT_CHOICES)
+    draft_team = models.ForeignKey(
+        DraftTeam,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="events",
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        invalidate_model(HeroDraftEvent)
+
+    def __str__(self):
+        return f"{self.event_type} at {self.created_at}"
