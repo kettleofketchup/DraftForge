@@ -275,3 +275,35 @@ ns_backend.add_task(backend_steam, "steam")
 ns_backend.add_task(backend_draft, "draft")
 
 ns_test.add_collection(ns_backend, "backend")
+
+
+# =============================================================================
+# CI/CD Test Collections
+# =============================================================================
+
+
+@task
+def cicd_cypress(c):
+    """Run Cypress tests for CI/CD (with setup)."""
+    setup(c)
+    cypress_all(c)
+
+
+@task
+def cicd_backend(c):
+    """Run backend tests for CI/CD."""
+    backend_all(c)
+
+
+@task
+def cicd_all(c):
+    """Run all tests for CI/CD."""
+    cicd_backend(c)
+    cicd_cypress(c)
+
+
+ns_cicd.add_task(cicd_cypress, "cypress")
+ns_cicd.add_task(cicd_backend, "backend")
+ns_cicd.add_task(cicd_all, "all")
+
+ns_test.add_collection(ns_cicd, "cicd")
