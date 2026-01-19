@@ -63,9 +63,6 @@ export const ProfilePage: React.FC = () => {
 
   useEffect(() => {
     initialiazeForm();
-  }, []);
-  useEffect(() => {
-    initialiazeForm();
   }, [currentUser, form]);
 
   if (!currentUser) {
@@ -144,12 +141,7 @@ export const ProfilePage: React.FC = () => {
               />
 
               <div className="flex justify-center align-center self-center">
-                <Button
-                  type="submit"
-                  onClick={() => onSubmit(form.getValues())}
-                >
-                  Submit
-                </Button>
+                <Button type="submit">Submit</Button>
               </div>
             </form>
           </Form>
