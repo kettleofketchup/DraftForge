@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import threading
+from collections import namedtuple
 
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
@@ -10,8 +11,10 @@ from django.utils import timezone
 
 log = logging.getLogger(__name__)
 
-# Thread registry to prevent multiple threads per draft and enable stopping
-_active_tick_tasks = {}  # draft_id -> threading.Event (stop signal)
+# Thread-safe registry to prevent multiple threads per draft and enable stopping
+_lock = threading.Lock()
+_active_tick_tasks = {}  # draft_id -> TaskInfo(stop_event, thread)
+TaskInfo = namedtuple("TaskInfo", ["stop_event", "thread"])
 
 
 async def broadcast_tick(draft_id: int):
@@ -87,13 +90,7 @@ async def run_tick_loop(draft_id: int, stop_event: threading.Event):
 
 def start_tick_broadcaster(draft_id: int):
     """Start the tick broadcaster for a draft."""
-    # Check if already running
-    if draft_id in _active_tick_tasks:
-        log.debug(f"Tick broadcaster already running for draft {draft_id}")
-        return
-
     stop_event = threading.Event()
-    _active_tick_tasks[draft_id] = stop_event
 
     def run_in_thread():
         loop = asyncio.new_event_loop()
@@ -104,18 +101,41 @@ def start_tick_broadcaster(draft_id: int):
             log.error(f"Tick broadcaster error for draft {draft_id}: {e}")
         finally:
             loop.close()
-            # Cleanup when loop ends
-            if draft_id in _active_tick_tasks:
-                del _active_tick_tasks[draft_id]
+            # Cleanup when loop ends (thread-safe)
+            with _lock:
+                _active_tick_tasks.pop(draft_id, None)
 
-    thread = threading.Thread(target=run_in_thread, daemon=True)
+    # Check if already running and register (thread-safe)
+    with _lock:
+        if draft_id in _active_tick_tasks:
+            log.debug(f"Tick broadcaster already running for draft {draft_id}")
+            return
+
+        thread = threading.Thread(target=run_in_thread, daemon=True)
+        _active_tick_tasks[draft_id] = TaskInfo(stop_event, thread)
+
+    # Start thread outside lock to avoid holding lock during thread startup
     thread.start()
     log.info(f"Started tick broadcaster for draft {draft_id}")
 
 
 def stop_tick_broadcaster(draft_id: int):
     """Stop the tick broadcaster for a draft."""
-    if draft_id in _active_tick_tasks:
-        log.info(f"Stopping tick broadcaster for draft {draft_id}")
-        _active_tick_tasks[draft_id].set()  # Signal stop
-        del _active_tick_tasks[draft_id]
+    # Get task info (thread-safe)
+    with _lock:
+        task_info = _active_tick_tasks.get(draft_id)
+        if task_info is None:
+            return
+
+    log.info(f"Stopping tick broadcaster for draft {draft_id}")
+
+    # Signal the thread to stop
+    task_info.stop_event.set()
+
+    # Wait for thread to finish (outside lock to avoid deadlock)
+    task_info.thread.join(timeout=2.0)
+
+    # Clean up registry (thread-safe)
+    # Note: thread's finally block may have already cleaned up
+    with _lock:
+        _active_tick_tasks.pop(draft_id, None)
