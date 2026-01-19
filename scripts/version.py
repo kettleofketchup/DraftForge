@@ -59,8 +59,14 @@ def sync_version_from_pyproject(c):
 
 
 @task
-def set_version(c, version):
-    """Set version across all files"""
+def set_version(c, version, commit=True, tag_version=True):
+    """Set version across all files and optionally commit and tag.
+
+    Args:
+        version: The version string to set (e.g., "1.2.3")
+        commit: If True, commit the version changes (default: True)
+        tag_version: If True, create a git tag for the version (default: True)
+    """
     # Import functions locally to avoid import issues
     import os
     import sys
@@ -77,6 +83,23 @@ def set_version(c, version):
         update_env_version(env_file, version)
 
     print("Version sync complete!")
+
+    if commit:
+        print(f"Committing version changes...")
+        crun(c, "git add pyproject.toml docker/.env.release docker/.env.prod")
+        result = crun(c, f'git commit -m "Updated version to {version}"', warn=True)
+        if result.ok:
+            print("Committed version changes.")
+        else:
+            print("Warning: Git commit failed (possibly nothing to commit).")
+
+    if tag_version:
+        print(f"Creating git tag {version}...")
+        result = crun(c, f"git tag {version}", warn=True)
+        if result.ok:
+            print(f"Created tag {version}.")
+        else:
+            print(f"Warning: Failed to create tag {version} (may already exist).")
 
 
 @task

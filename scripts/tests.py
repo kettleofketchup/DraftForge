@@ -42,12 +42,21 @@ def dev_test(c):
 
 @task
 def setup(c):
-
     from backend.tasks import populate_all
     from scripts.docker import docker_build_all, docker_pull_all
     from scripts.update import update_for_test
 
     load_dotenv(paths.TEST_ENV_FILE)
+
+    # Ensure test stack is down before setup
+    print("Ensuring test stack is down...")
+    with c.cd(paths.PROJECT_PATH):
+        cmd = (
+            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {paths.DOCKER_COMPOSE_TEST_PATH.resolve()} down --remove-orphans"
+        )
+        c.run(cmd, warn=True)
+
     update_for_test(c)
     docker_build_all(c)
     populate_all(c)
