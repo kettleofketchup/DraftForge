@@ -104,6 +104,7 @@ class TournamentsSerializer(serializers.ModelSerializer):
             "pk",
             "name",
             "date_played",
+            "timezone",
             "tournament_type",
             "state",
             "captains",
@@ -548,6 +549,7 @@ class TournamentSerializer(serializers.ModelSerializer):
             "name",
             "draft",
             "date_played",
+            "timezone",
             "users",
             "teams",  # Include full team objects
             "winning_team",

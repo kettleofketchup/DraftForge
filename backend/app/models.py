@@ -346,7 +346,14 @@ class Tournament(models.Model):
         ("past", "Past"),
     ]
     name = models.CharField(max_length=255)
-    date_played = models.DateField()
+    date_played = models.DateTimeField(
+        help_text="Tournament date and time (stored in UTC)"
+    )
+    timezone = models.CharField(
+        max_length=50,
+        default="UTC",
+        help_text="Tournament timezone (e.g., 'America/New_York', 'Europe/London')",
+    )
     users = models.ManyToManyField(User, related_name="tournaments")
     # Removed teams field; handled by ForeignKey in Team
     winning_team = models.OneToOneField(

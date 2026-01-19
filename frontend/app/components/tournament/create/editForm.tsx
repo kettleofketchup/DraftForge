@@ -1,216 +1,417 @@
-import { getLogger } from '~/lib/logger';
-
-import type { FormEvent, JSX } from 'react';
-import React, { useEffect, useState } from 'react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { format, parseISO } from 'date-fns';
+import { CalendarIcon, Clock, Globe } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { Tournament } from '~/components/tournament/tournament';
-import { DialogClose } from '~/components/ui/dialog';
-import { Label } from '~/components/ui/label';
-import { useUserStore } from '~/store/userStore';
-import { TOURNAMENT_TYPE } from '../constants';
-import type { TournamentClassType, TournamentType } from '../types';
-
-const log = getLogger('editForm');
-
-import type { UserType } from '~/components/user/types';
 
 import { createTournament, updateTournament } from '~/components/api/api';
-import { SCROLLAREA_CSS } from '~/components/reusable/modal';
+import type { LeagueType } from '~/components/league/schemas';
+import { Button } from '~/components/ui/button';
+import { Calendar } from '~/components/ui/calendar';
+import { DialogClose } from '~/components/ui/dialog';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '~/components/ui/popover';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import { cn } from '~/lib/utils';
+import { useUserStore } from '~/store/userStore';
+import {
+  COMMON_TIMEZONES,
+  CreateTournamentSchema,
+  type CreateTournamentInput,
+  type TournamentTypeValue,
+} from '../schemas';
+import type { TournamentClassType, TournamentType } from '../types';
+import { getLogger } from '~/lib/logger';
+import { SCROLLAREA_CSS } from '~/components/reusable/modal';
+
+const log = getLogger('TournamentEditForm');
+
+// Helper to format timezone for display
+function formatTimezoneLabel(tz: string): string {
+  const parts = tz.split('/');
+  return parts.length > 1 ? parts[1].replace(/_/g, ' ') : tz;
+}
+
+// Helper to extract date and time from ISO string
+function extractDateAndTime(isoString: string | null | undefined): { date: string; time: string } {
+  if (!isoString) {
+    const now = new Date();
+    return {
+      date: format(now, 'yyyy-MM-dd'),
+      time: '19:00', // Default to 7 PM
+    };
+  }
+  try {
+    const date = parseISO(isoString);
+    return {
+      date: format(date, 'yyyy-MM-dd'),
+      time: format(date, 'HH:mm'),
+    };
+  } catch {
+    return {
+      date: format(new Date(), 'yyyy-MM-dd'),
+      time: '19:00',
+    };
+  }
+}
+
+// Helper to combine date and time into ISO string
+function combineDateAndTime(dateStr: string, timeStr: string): string {
+  return `${dateStr}T${timeStr}:00`;
+}
+
 interface Props {
-  tourn: TournamentClassType; // Accepts both UserClassType and TournamentType
-  form: TournamentClassType;
-  setForm: React.Dispatch<React.SetStateAction<TournamentClassType>>;
+  tourn: TournamentClassType;
+  form?: TournamentClassType;
+  setForm?: React.Dispatch<React.SetStateAction<TournamentClassType>>;
+  onSuccess?: () => void;
 }
 
 export const TournamentEditForm: React.FC<Props> = ({
   tourn,
-  form,
-  setForm,
+  onSuccess,
 }) => {
-  const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
-  const [errorMessage, setErrorMessage] = useState<
-    Partial<Record<keyof TournamentType, string>>
-  >({});
+  const currentUser = useUserStore((state) => state.currentUser);
+  const getTournaments = useUserStore((state) => state.getTournaments);
+  const leagues = useUserStore((state) => state.leagues);
+  const getLeagues = useUserStore((state) => state.getLeagues);
 
-  const [isSaving, setIsSaving] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<string | null>('null');
-  const addTournament = useUserStore((state) => state.addTournament); // Zustand setter
-  const delTournament = useUserStore((state) => state.delTournament); // Zustand setter
-  const setTournamentStore = useUserStore((state) => state.setTournament); // Zustand setter
-  const getTournaments = useUserStore((state) => state.getTournaments); // Zustand setter
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
-  const handleChange = (field: keyof TournamentClassType, value: any) => {
-    setForm((prev) => ({ ...prev, [field]: value }) as TournamentClassType);
-  };
+  const isEditing = !!tourn?.pk;
 
-  if (!currentUser.is_staff && !currentUser.is_superuser) {
+  // Extract initial date and time from existing tournament
+  const initialDateTime = extractDateAndTime(tourn?.date_played);
+  const [selectedDate, setSelectedDate] = useState(initialDateTime.date);
+  const [selectedTime, setSelectedTime] = useState(initialDateTime.time);
+
+  // Fetch leagues if not loaded
+  useEffect(() => {
+    if (!leagues || leagues.length === 0) {
+      getLeagues();
+    }
+  }, [leagues, getLeagues]);
+
+  const form = useForm<CreateTournamentInput>({
+    resolver: zodResolver(CreateTournamentSchema),
+    defaultValues: {
+      name: tourn?.name || '',
+      tournament_type: (tourn?.tournament_type as TournamentTypeValue) || 'double_elimination',
+      date_played: combineDateAndTime(initialDateTime.date, initialDateTime.time),
+      timezone: (tourn as unknown as { timezone?: string })?.timezone || 'America/New_York',
+      league: tourn?.league || null,
+    },
+  });
+
+  // Update date_played when date or time changes
+  useEffect(() => {
+    form.setValue('date_played', combineDateAndTime(selectedDate, selectedTime));
+  }, [selectedDate, selectedTime, form]);
+
+  // Permission check
+  if (!currentUser?.is_staff && !currentUser?.is_superuser) {
     return (
-      <div className="text-error">
+      <div className="text-destructive p-4">
         You do not have permission to edit tournaments.
       </div>
     );
   }
 
-  const createErrorMessage = (
-    val: Partial<Record<keyof TournamentType, string>>,
-  ): JSX.Element => {
-    const headerText = () => <h5>Error creating Tournament:</h5>;
-    if (!val || Object.keys(val).length === 0) return headerText();
+  async function onSubmit(data: CreateTournamentInput) {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
-    return (
-      <div className="text-error">
-        {headerText()}
-        <ul>
-          {Object.entries(val).map(([field, message]) => (
-            <li key={field}>{message}</li>
-          ))}
-        </ul>
-      </div>
-    );
-  };
+    try {
+      const payload: Partial<TournamentType> & { timezone?: string } = {
+        name: data.name,
+        tournament_type: data.tournament_type,
+        date_played: data.date_played,
+        timezone: data.timezone,
+        league: data.league || null,
+      };
 
-  const handleSave = async (e: FormEvent) => {
-    setErrorMessage({}); // Clear old errors
+      if (isEditing) {
+        await updateTournament(tourn.pk!, payload);
+        toast.success(`Tournament "${data.name}" updated successfully`);
+      } else {
+        await createTournament(payload);
+        toast.success(`Tournament "${data.name}" created successfully`);
+      }
 
-    tourn = new Tournament(form as TournamentType); // Create a new instance of Tournament with the form data
-    log.debug(tourn);
-
-    if (!tourn.pk) {
-      let updateData = {
-        ...form,
-      } as Partial<TournamentType>;
-      toast.promise(createTournament(updateData), {
-        loading: `Creating tournament .`,
-        success: () => {
-          setIsSaving(true);
-          setStatusMsg('tourn created successfully!');
-          getTournaments(); // Refresh the tournaments list
-          return `${tourn?.name} has been Created`;
-        },
-        error: (err) => {
-          let val = err.response.data;
-          log.error(`Failed to update tourn ${tourn.pk}`, err);
-          setErrorMessage(val);
-          return <>{createErrorMessage(val)}</>;
-        },
-      });
-      setIsSaving(false);
-    } else {
-      let updateData = {
-        pk: tourn.pk,
-        ...form,
-      } as Partial<TournamentType>;
-
-      log.debug('Saving tournament with payload:', updateData);
-      toast.promise(updateTournament(tourn.pk, updateData), {
-        loading: `Updating tourn ${tourn.pk}.`,
-        success: (data: TournamentType) => {
-          setIsSaving(true);
-          setStatusMsg('tourn updated successfully!');
-
-          setTournamentStore(data); // Update Zustand store with the current instance
-          return `${tourn.pk} has been updated`;
-        },
-        error: (err) => {
-          let val = err.response.data;
-          log.error(`Failed to update tourn ${tourn.pk}`, err);
-          setErrorMessage(err);
-          return <>{createErrorMessage(val)}</>;
-        },
-      });
-      setIsSaving(false);
+      getTournaments();
+      onSuccess?.();
+      form.reset();
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      log.error('Failed to save tournament:', err);
+      toast.error(isEditing ? 'Failed to update tournament' : 'Failed to create tournament');
+    } finally {
+      setIsSubmitting(false);
     }
-  };
-
-  useEffect(() => {}, [tourn, form, setForm]);
-
-  const tournamentTypeInput = () => {
-    return (
-      <div className="w-full flex flex-col items-start">
-        <Label htmlFor="tournament_type">Tournament Type</Label>
-        <Select
-          id="tournament_type"
-          value={form.tournament_type || ''}
-          onValueChange={(value) => handleChange('tournament_type', value)}
-          style={{ width: '90%' }}
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select a tournament type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectLabel>Tournament Type</SelectLabel>
-              {/* Replace these with your actual TOURNAMENT_TYPE enum values */}
-              {/* For example, if TOURNAMENT_TYPE.SINGLE_ELIMINATION is "Single Elimination" */}
-              <SelectItem value={TOURNAMENT_TYPE.single_elimination}>
-                Single Elimination
-              </SelectItem>
-              <SelectItem value={TOURNAMENT_TYPE.double_elimination}>
-                Double Elimination
-              </SelectItem>
-
-              <SelectItem value={TOURNAMENT_TYPE.swiss}>
-                Swiss System
-              </SelectItem>
-              {/* Add other tournament types from your enum here */}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </div>
-    );
-  };
-  const inputView = (key: string, label: string, type: string = 'text') => {
-    return (
-      <div className="w-full">
-        <Label className="font-semibold">{label}</Label>
-        <Input
-          type={type}
-          id={`tourn-${label}`}
-          placeholder={tourn[key] ?? ''}
-          value={form[key] ?? ''}
-          onFocus={() => handleChange(key as keyof TournamentType, tourn[key])}
-          onChange={(e) =>
-            handleChange(key as keyof TournamentType, e.target.value)
-          }
-          className={`input input-bordered w-full mt-1 ${errorMessage[key] ? 'input-error' : ''}`}
-        />
-        {errorMessage[key] && (
-          <p className="text-error text-sm mt-1">{errorMessage[key]}</p>
-        )}
-      </div>
-    );
-  };
+  }
 
   return (
-    <ScrollArea className={`${SCROLLAREA_CSS}`}>
-      <div className="flex flex-col justify-center align-center items-center w-full gap-4 ">
-        {inputView('name', 'Name: ')}
-        {tournamentTypeInput()}
-        {inputView('date_played', 'Date Played')}
-        <div className="flex flex-row items-start gap-4">
-          <DialogClose asChild>
-            <button
-              onClick={handleSave}
-              className="btn btn-primary btn-sm mt-3"
-              disabled={isSaving}
+    <ScrollArea className={SCROLLAREA_CSS}>
+      <Form {...form}>
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="flex flex-col gap-4 p-1"
+          data-testid="tournament-form"
+        >
+          {/* Tournament Name */}
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Tournament Name</FormLabel>
+                <FormControl>
+                  <Input
+                    placeholder="Enter tournament name"
+                    data-testid="tournament-name-input"
+                    {...field}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Tournament Type */}
+          <FormField
+            control={form.control}
+            name="tournament_type"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Tournament Type</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger data-testid="tournament-type-select">
+                      <SelectValue placeholder="Select tournament type" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem
+                      value="single_elimination"
+                      data-testid="tournament-type-single"
+                    >
+                      Single Elimination
+                    </SelectItem>
+                    <SelectItem
+                      value="double_elimination"
+                      data-testid="tournament-type-double"
+                    >
+                      Double Elimination
+                    </SelectItem>
+                    <SelectItem
+                      value="swiss"
+                      data-testid="tournament-type-swiss"
+                    >
+                      Swiss System
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Date & Time Picker */}
+          <FormField
+            control={form.control}
+            name="date_played"
+            render={({ field }) => (
+              <FormItem className="flex flex-col">
+                <FormLabel>Tournament Date & Time</FormLabel>
+                <div className="flex gap-2">
+                  {/* Date Picker */}
+                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            'flex-1 pl-3 text-left font-normal',
+                            !selectedDate && 'text-muted-foreground'
+                          )}
+                          data-testid="tournament-date-picker"
+                        >
+                          {selectedDate ? (
+                            format(new Date(selectedDate), 'PPP')
+                          ) : (
+                            <span>Pick a date</span>
+                          )}
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate ? new Date(selectedDate) : undefined}
+                        onSelect={(date) => {
+                          if (date) {
+                            setSelectedDate(format(date, 'yyyy-MM-dd'));
+                            setCalendarOpen(false);
+                          }
+                        }}
+                        data-testid="tournament-calendar"
+                      />
+                    </PopoverContent>
+                  </Popover>
+
+                  {/* Time Picker */}
+                  <div className="relative">
+                    <Input
+                      type="time"
+                      value={selectedTime}
+                      onChange={(e) => setSelectedTime(e.target.value)}
+                      className="w-32"
+                      data-testid="tournament-time-picker"
+                    />
+                    <Clock className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50 pointer-events-none" />
+                  </div>
+                </div>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Timezone Picker */}
+          <FormField
+            control={form.control}
+            name="timezone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="flex items-center gap-2">
+                  <Globe className="h-4 w-4" />
+                  Timezone
+                </FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                >
+                  <FormControl>
+                    <SelectTrigger data-testid="tournament-timezone-select">
+                      <SelectValue placeholder="Select timezone" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {COMMON_TIMEZONES.map((tz) => (
+                      <SelectItem
+                        key={tz}
+                        value={tz}
+                        data-testid={`tournament-timezone-${tz}`}
+                      >
+                        {tz === 'UTC' ? 'UTC' : `${formatTimezoneLabel(tz)} (${tz})`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormDescription>
+                  The timezone in which the tournament will be played
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* League Picker */}
+          <FormField
+            control={form.control}
+            name="league"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>League (Optional)</FormLabel>
+                <Select
+                  onValueChange={(value) =>
+                    field.onChange(value === 'none' ? null : parseInt(value, 10))
+                  }
+                  value={field.value?.toString() || 'none'}
+                >
+                  <FormControl>
+                    <SelectTrigger data-testid="tournament-league-select">
+                      <SelectValue placeholder="Select a league" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="none" data-testid="tournament-league-none">
+                      No League
+                    </SelectItem>
+                    {leagues?.map((league: LeagueType) => (
+                      <SelectItem
+                        key={league.pk}
+                        value={league.pk?.toString() || ''}
+                        data-testid={`tournament-league-${league.pk}`}
+                      >
+                        {league.name}
+                        {league.organization_name && (
+                          <span className="text-muted-foreground ml-2">
+                            ({league.organization_name})
+                          </span>
+                        )}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Submit Button */}
+          <div className="flex flex-row justify-end gap-2 pt-4">
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSubmitting}
+                data-testid="tournament-cancel-button"
+              >
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              data-testid="tournament-submit-button"
             >
-              {tourn && tourn.pk && (isSaving ? 'Saving...' : 'Save Changes')}
-              {tourn && !tourn.pk && (isSaving ? 'Saving...' : 'Create tourn')}
-            </button>
-          </DialogClose>
-        </div>
-      </div>
+              {isSubmitting
+                ? isEditing
+                  ? 'Saving...'
+                  : 'Creating...'
+                : isEditing
+                  ? 'Save Changes'
+                  : 'Create Tournament'}
+            </Button>
+          </div>
+        </form>
+      </Form>
     </ScrollArea>
   );
 };
