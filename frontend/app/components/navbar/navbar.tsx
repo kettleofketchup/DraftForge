@@ -42,6 +42,9 @@ const menuItems = () => {
       <li>
         <a href="/organizations">Organizations</a>
       </li>
+      <li>
+        <a href="/leagues">Leagues</a>
+      </li>
       {currentUser?.is_staff && (
         <>
           <li>
