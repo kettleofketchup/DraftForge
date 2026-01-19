@@ -9,11 +9,13 @@ import {
 import { Button } from '~/components/ui/button';
 import { Badge } from '~/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { BarChart3, Link2 } from 'lucide-react';
+import { BarChart3, Link2, Swords } from 'lucide-react';
 import { useUserStore } from '~/store/userStore';
 import { useBracketStore } from '~/store/bracketStore';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import { LinkSteamMatchModal } from './LinkSteamMatchModal';
+import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
+import { createHeroDraft } from '~/components/herodraft/api';
 import type { BracketMatch } from '../types';
 import { cn } from '~/lib/utils';
 
@@ -29,6 +31,8 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
   const { setMatchWinner, advanceWinner, loadBracket } = useBracketStore();
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
+  const [showDraftModal, setShowDraftModal] = useState(false);
+  const [draftId, setDraftId] = useState<number | null>(null);
 
   if (!match) return null;
 
@@ -43,6 +47,22 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
   const handleLinkUpdated = () => {
     if (tournament?.pk) {
       loadBracket(tournament.pk);
+    }
+  };
+
+  const handleOpenDraft = async () => {
+    try {
+      if (match.herodraft_id) {
+        // Draft exists, open it
+        setDraftId(match.herodraft_id);
+      } else if (match.gameId) {
+        // Create new draft
+        const draft = await createHeroDraft(match.gameId);
+        setDraftId(draft.id);
+      }
+      setShowDraftModal(true);
+    } catch (error) {
+      console.error("Failed to open draft:", error);
     }
   };
 
@@ -114,6 +134,21 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
             </div>
           )}
 
+          {/* Hero Draft button - show for staff or if both teams are set */}
+          {match.radiantTeam && match.direTeam && (
+            <div className="border-t pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenDraft}
+                data-testid="view-draft-btn"
+              >
+                <Swords className="w-4 h-4 mr-1" />
+                {match.herodraft_id ? 'View Draft' : 'Start Draft'}
+              </Button>
+            </div>
+          )}
+
           {/* Steam match info and Stats button */}
           {hasMatchId && (
             <div className="border-t pt-4">
@@ -167,6 +202,15 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
           game={match}
           onLinkUpdated={handleLinkUpdated}
         />
+
+        {/* Hero Draft Modal */}
+        {draftId && (
+          <HeroDraftModal
+            draftId={draftId}
+            open={showDraftModal}
+            onClose={() => setShowDraftModal(false)}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );
