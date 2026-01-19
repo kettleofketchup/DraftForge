@@ -1337,6 +1337,7 @@ class HeroDraftEvent(models.Model):
     EVENT_CHOICES = [
         ("captain_connected", "Captain Connected"),
         ("captain_disconnected", "Captain Disconnected"),
+        ("captain_ready", "Captain Ready"),
         ("draft_paused", "Draft Paused"),
         ("draft_resumed", "Draft Resumed"),
         ("roll_triggered", "Roll Triggered"),
