@@ -43,7 +43,9 @@ export const UndoPickButton: React.FC = () => {
       const updatedTournament = await undoLastPick({ draft_pk: draft.pk });
 
       setTournament(updatedTournament);
-      setDraft(updatedTournament.draft);
+      if (updatedTournament.draft) {
+        setDraft(updatedTournament.draft);
+      }
 
       // Find the round that was undone (now has no choice)
       const undoneRound = updatedTournament.draft?.draft_rounds?.find(

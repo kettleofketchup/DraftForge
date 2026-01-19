@@ -64,6 +64,10 @@ export const choosePlayerHook = async ({
     loading: `Choosing ${player.nickname || player.username} for ${curDraftRound.captain?.nickname || curDraftRound.captain?.username} in round ${curDraftRound.pick_number}`,
     success: (data) => {
       setTournament(data);
+      if (!data.draft) {
+        log.error('No draft in response');
+        return `Pick ${curDraftRound?.pick_number} complete!`;
+      }
       setDraft(data.draft);
 
       // Find and advance to next round (first with captain assigned but no choice)

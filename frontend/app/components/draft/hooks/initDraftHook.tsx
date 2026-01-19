@@ -43,8 +43,14 @@ export const initDraftHook = async ({
     success: (data) => {
       log.debug('DraftRebuild sucess, data:', data);
       setTournament(data);
+      if (!data.draft) {
+        log.error('No draft in response');
+        return `Tournament Draft has been initialized!`;
+      }
       setDraft(data.draft);
-      setCurDraftRound(data?.draft?.draft_rounds[0] as DraftRoundType);
+      if (data.draft.draft_rounds?.[0]) {
+        setCurDraftRound(data.draft.draft_rounds[0]);
+      }
       setDraftIndex(0);
       return `Tournament Draft has been initialized!`;
     },
