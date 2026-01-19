@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,8 @@ interface MatchStatsModalProps {
 }
 
 export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps) {
+  const navigate = useNavigate();
+  const { pk } = useParams<{ pk: string }>();
   const isStaff = useUserStore((state) => state.isStaff());
   const tournament = useUserStore((state) => state.tournament);
   const { setMatchWinner, advanceWinner, loadBracket } = useBracketStore();
@@ -51,16 +54,27 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
   };
 
   const handleOpenDraft = async () => {
+    if (!pk) {
+      console.error("Tournament pk is required to open draft");
+      return;
+    }
     try {
+      let draftIdToOpen: number | null = null;
       if (match.herodraft_id) {
         // Draft exists, open it
-        setDraftId(match.herodraft_id);
+        draftIdToOpen = match.herodraft_id;
       } else if (match.gameId) {
         // Create new draft
         const draft = await createHeroDraft(match.gameId);
-        setDraftId(draft.id);
+        draftIdToOpen = draft.id;
       }
-      setShowDraftModal(true);
+
+      if (draftIdToOpen) {
+        setDraftId(draftIdToOpen);
+        setShowDraftModal(true);
+        // Update URL to include draft
+        navigate(`/tournament/${pk}/bracket/draft/${draftIdToOpen}`, { replace: true });
+      }
     } catch (error) {
       console.error("Failed to open draft:", error);
     }
@@ -208,7 +222,13 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
           <HeroDraftModal
             draftId={draftId}
             open={showDraftModal}
-            onClose={() => setShowDraftModal(false)}
+            onClose={() => {
+              setShowDraftModal(false);
+              // Restore URL without draft
+              if (pk) {
+                navigate(`/tournament/${pk}/bracket`, { replace: true });
+              }
+            }}
           />
         )}
       </DialogContent>
