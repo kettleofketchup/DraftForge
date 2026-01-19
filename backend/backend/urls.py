@@ -10,6 +10,16 @@ log = logging.getLogger(__name__)
 from django.views.generic.base import RedirectView
 
 from app import views_main as app_views
+from app.functions.herodraft_views import (
+    create_herodraft,
+    do_submit_choice,
+    do_submit_pick,
+    do_trigger_roll,
+    get_herodraft,
+    list_available_heroes,
+    list_events,
+    set_ready,
+)
 from app.functions.tournament import (
     create_team_from_captain,
     generate_draft_rounds,
@@ -120,6 +130,41 @@ urlpatterns = [
     path("api/steam/", include("steam.urls")),
     path("api/bracket/", include("bracket.urls")),
     path("api/discord/", include("discordbot.urls")),
+    # HeroDraft (Captain's Mode) endpoints
+    path(
+        "api/games/<int:game_pk>/create-herodraft/",
+        create_herodraft,
+        name="create_herodraft",
+    ),
+    path("api/herodraft/<int:draft_pk>/", get_herodraft, name="get_herodraft"),
+    path(
+        "api/herodraft/<int:draft_pk>/set-ready/", set_ready, name="herodraft_set_ready"
+    ),
+    path(
+        "api/herodraft/<int:draft_pk>/trigger-roll/",
+        do_trigger_roll,
+        name="herodraft_trigger_roll",
+    ),
+    path(
+        "api/herodraft/<int:draft_pk>/submit-choice/",
+        do_submit_choice,
+        name="herodraft_submit_choice",
+    ),
+    path(
+        "api/herodraft/<int:draft_pk>/submit-pick/",
+        do_submit_pick,
+        name="herodraft_submit_pick",
+    ),
+    path(
+        "api/herodraft/<int:draft_pk>/list-events/",
+        list_events,
+        name="herodraft_list_events",
+    ),
+    path(
+        "api/herodraft/<int:draft_pk>/list-available-heroes/",
+        list_available_heroes,
+        name="herodraft_list_available_heroes",
+    ),
 ]
 
 log.warning(f"Test Environ:  {isTestEnvironment()}")
