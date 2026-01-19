@@ -9,6 +9,7 @@ import {
 
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
+import type { UserType } from '~/components/user/types';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -65,7 +66,7 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
     });
     for (const team of teams) {
       const submitTeam: TeamType = {
-        member_ids: team.members?.map((user) => user.pk),
+        member_ids: team.members?.map((user: UserType) => user.pk),
         captain_id: team.captain?.pk,
         pk: team.pk ? team.pk : undefined,
         name: team.name,
