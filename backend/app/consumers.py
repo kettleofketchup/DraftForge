@@ -138,3 +138,139 @@ class TournamentConsumer(AsyncWebsocketConsumer):
             return DraftEventSerializer(events, many=True).data
         except Draft.DoesNotExist:
             return []
+
+
+class HeroDraftConsumer(AsyncWebsocketConsumer):
+    """WebSocket consumer for Captain's Mode hero draft."""
+
+    async def connect(self):
+        self.draft_id = self.scope["url_route"]["kwargs"]["draft_id"]
+        self.room_group_name = f"herodraft_{self.draft_id}"
+        self.user = self.scope.get("user")
+
+        # Verify draft exists
+        draft_exists = await self.draft_exists(self.draft_id)
+        if not draft_exists:
+            await self.close()
+            return
+
+        # Join room group
+        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+        await self.accept()
+
+        # Send initial state
+        initial_state = await self.get_draft_state(self.draft_id)
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "initial_state",
+                    "draft_state": initial_state,
+                }
+            )
+        )
+
+        # Mark captain as connected if authenticated
+        if self.user and self.user.is_authenticated:
+            await self.mark_captain_connected(self.draft_id, self.user, True)
+
+    async def disconnect(self, close_code):
+        # Mark captain as disconnected
+        if hasattr(self, "user") and self.user and self.user.is_authenticated:
+            await self.mark_captain_connected(self.draft_id, self.user, False)
+
+        # Leave room group
+        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+
+    async def receive(self, text_data):
+        # Read-only consumer - ignore incoming messages
+        pass
+
+    async def herodraft_event(self, event):
+        """Handle herodraft.event messages from channel layer."""
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "herodraft_event",
+                    "event_type": event.get("event_type"),
+                    "event_id": event.get("event_id"),
+                    "draft_team": event.get("draft_team"),
+                    "draft_state": event.get("draft_state"),
+                    "timestamp": event.get("timestamp"),
+                }
+            )
+        )
+
+    async def herodraft_tick(self, event):
+        """Handle tick updates during active drafting."""
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "herodraft_tick",
+                    "current_round": event.get("current_round"),
+                    "active_team_id": event.get("active_team_id"),
+                    "grace_time_remaining_ms": event.get("grace_time_remaining_ms"),
+                    "team_a_reserve_ms": event.get("team_a_reserve_ms"),
+                    "team_b_reserve_ms": event.get("team_b_reserve_ms"),
+                    "draft_state": event.get("draft_state"),
+                }
+            )
+        )
+
+    @database_sync_to_async
+    def draft_exists(self, draft_id):
+        from app.models import HeroDraft
+
+        return HeroDraft.objects.filter(id=draft_id).exists()
+
+    @database_sync_to_async
+    def get_draft_state(self, draft_id):
+        from app.models import HeroDraft
+        from app.serializers import HeroDraftSerializer
+
+        draft = HeroDraft.objects.get(id=draft_id)
+        return HeroDraftSerializer(draft).data
+
+    @database_sync_to_async
+    def mark_captain_connected(self, draft_id, user, is_connected):
+        from app.models import HeroDraft, HeroDraftEvent
+
+        try:
+            draft = HeroDraft.objects.get(id=draft_id)
+        except HeroDraft.DoesNotExist:
+            return
+
+        draft_team = draft.draft_teams.filter(tournament_team__captain=user).first()
+
+        if draft_team:
+            draft_team.is_connected = is_connected
+            draft_team.save()
+
+            event_type = "captain_connected" if is_connected else "captain_disconnected"
+            HeroDraftEvent.objects.create(
+                draft=draft,
+                event_type=event_type,
+                draft_team=draft_team,
+                metadata={"user_id": user.id},
+            )
+
+            # Handle pause/resume on disconnect
+            if not is_connected and draft.state == "drafting":
+                draft.state = "paused"
+                draft.save()
+                HeroDraftEvent.objects.create(
+                    draft=draft,
+                    event_type="draft_paused",
+                    draft_team=draft_team,
+                    metadata={"reason": "captain_disconnected"},
+                )
+            elif is_connected and draft.state == "paused":
+                # Check if both captains connected
+                all_connected = all(t.is_connected for t in draft.draft_teams.all())
+                if all_connected:
+                    draft.state = "drafting"
+                    draft.save()
+                    HeroDraftEvent.objects.create(
+                        draft=draft,
+                        event_type="draft_resumed",
+                        metadata={},
+                    )
