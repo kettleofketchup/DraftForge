@@ -8,6 +8,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from app.broadcast import broadcast_herodraft_event
 from app.functions.herodraft import (
     get_available_heroes,
     submit_choice,
@@ -18,11 +19,6 @@ from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent
 from app.serializers import HeroDraftEventSerializer, HeroDraftSerializer
 
 log = logging.getLogger(__name__)
-
-
-def broadcast_herodraft_event(draft, event_type, draft_team=None):
-    """Stub - will be implemented in Task 7."""
-    pass
 
 
 def _get_draft_team_for_user(draft: HeroDraft, user) -> DraftTeam | None:
