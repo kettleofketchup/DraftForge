@@ -6,7 +6,11 @@ import type { BracketMatch, SeedingMethod } from '../types';
  */
 export function getTotalMMR(team: TeamType): number {
   const captainMMR = team.captain?.mmr ?? 0;
-  const membersMMR = team.members?.reduce((sum, m) => sum + (m.mmr ?? 0), 0) ?? 0;
+  const membersMMR =
+    team.members?.reduce(
+      (sum: number, m: NonNullable<TeamType['members']>[number]) => sum + (m.mmr ?? 0),
+      0
+    ) ?? 0;
   return captainMMR + membersMMR;
 }
 
