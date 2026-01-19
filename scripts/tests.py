@@ -220,6 +220,16 @@ def cypress_mobile(c):
 
 
 @task
+def cypress_league_steam(c):
+    """Run league steam matching Cypress tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run(
+            'npx cypress run --spec "tests/cypress/e2e/10-leagues/04-steam-matches.cy.ts"'
+        )
+
+
+@task
 def cypress_all(c):
     """Run all Cypress tests."""
     flush_test_redis(c)
@@ -232,6 +242,7 @@ ns_cypress.add_task(cypress_draft, "draft")
 ns_cypress.add_task(cypress_tournament, "tournament")
 ns_cypress.add_task(cypress_bracket, "bracket")
 ns_cypress.add_task(cypress_league, "league")
+ns_cypress.add_task(cypress_league_steam, "league-steam")
 ns_cypress.add_task(cypress_navigation, "navigation")
 ns_cypress.add_task(cypress_mobile, "mobile")
 ns_cypress.add_task(cypress_all, "all")
