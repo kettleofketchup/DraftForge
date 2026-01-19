@@ -5,6 +5,12 @@ import { UserSchema } from '../user/user';
 import { STATE_CHOICES, TOURNAMENT_TYPE } from './constants';
 import { TeamSchema, TournamentSchema } from './schemas';
 
+// Re-export types from other modules for convenience
+export type { GameType } from '../game/types';
+
+// Re-export constants
+export { STATE_CHOICES, TOURNAMENT_TYPE };
+
 export type TeamType = z.infer<typeof TeamSchema>;
 export type TournamentType = z.infer<typeof TournamentSchema>;
 

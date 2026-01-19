@@ -1,13 +1,13 @@
 import type {
   GameType,
-  STATE_CHOICES,
   TeamType,
   TournamentClassType,
   TournamentType,
 } from './types';
 
-import type { UserType } from '../user/types';
-import type { TOURNAMENT_TYPE } from './constants';
+import type { UserType } from '../user/types.d';
+import type { DraftType } from '../draft/types.d';
+import type { StateValue, TournamentTypeValue } from './schemas';
 
 import {
   createTournament,
@@ -19,16 +19,23 @@ import {
 import { getLogger } from '~/lib/logger';
 const log = getLogger('tournamentClass');
 export class Tournament implements TournamentClassType {
-  name!: string;
-  date_played!: string;
-  users?: UserType[];
-  user_ids?: number[];
-  teams?: TeamType[];
-  pk?: number;
-  winning_team?: number;
-  state?: STATE_CHOICES;
-  tournament_type?: TOURNAMENT_TYPE;
-  games?: GameType[];
+  name: string | null = null;
+  date_played: string | null = null;
+  timezone: string = 'UTC';
+  users: UserType[] | null = null;
+  user_ids: number[] | null = null;
+  teams: TeamType[] | null = null;
+  team_ids: number[] | null = null;
+  captains: UserType[] | null = null;
+  captain_ids: number[] | null = null;
+  pk: number | null = null;
+  winning_team: number | null = null;
+  state: StateValue | null = null;
+  tournament_type: TournamentTypeValue | null = null;
+  games: GameType[] | null = null;
+  draft?: DraftType;
+  league?: number | null;
+  steam_league_id?: number | null;
 
   constructor(data: TournamentType) {
     Object.assign(this, data);
