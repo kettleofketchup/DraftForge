@@ -196,6 +196,22 @@ def db_populate_bracket_linking(
 
 
 @task
+def db_populate_real_tournament(
+    c,
+    path: Path = paths.TEST_ENV_FILE,
+    tournament_id: int = 38,
+    include_draft: bool = True,
+):
+    """Populate database with real tournament data from production."""
+    load_dotenv(path)
+
+    with c.cd(paths.BACKEND_PATH.absolute()):
+        draft_flag = "--include-draft" if include_draft else ""
+        cmd = f"DISABLE_CACHE=true python manage.py import_prod_tournament {tournament_id} {draft_flag}"
+        c.run(cmd, pty=True)
+
+
+@task
 def populate_all(c):
     paths.TEST_DB_PATH.unlink(missing_ok=True)
     paths.TEST_DB_PATH.touch()
@@ -216,6 +232,7 @@ ns_db_populate.add_task(db_populate_steam, "steam")
 ns_db_populate.add_task(db_populate_steam_mock, "steam-mock")
 ns_db_populate.add_task(db_populate_test_tournaments, "test-tournaments")
 ns_db_populate.add_task(db_populate_bracket_linking, "bracket-linking")
+ns_db_populate.add_task(db_populate_real_tournament, "real-tournament")
 ns_db_populate.add_task(populate_all, "all")
 
 ns_db_migrate.add_task(db_migrate_all, "all")
