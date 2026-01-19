@@ -310,6 +310,13 @@ def do_submit_choice(request, draft_pk):
 
     # Refresh draft to get updated state
     draft.refresh_from_db()
+
+    # Start tick broadcaster if draft just entered drafting state
+    if draft.state == "drafting":
+        from app.tasks.herodraft_tick import start_tick_broadcaster
+
+        start_tick_broadcaster(draft.id)
+
     return Response(HeroDraftSerializer(draft).data)
 
 

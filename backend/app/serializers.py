@@ -887,7 +887,8 @@ class HeroDraftSerializer(serializers.ModelSerializer):
     def get_current_round(self, obj):
         active_round = obj.rounds.filter(state="active").first()
         if active_round:
-            return HeroDraftRoundSerializerFull(active_round).data
+            # Return index (0-based) into rounds array for frontend compatibility
+            return active_round.round_number - 1
         return None
 
 
