@@ -12,7 +12,7 @@ import {
 
 interface DatePickerDemoProps {
   date?: Date;
-  setDate?: (date: Date) => void;
+  setDate?: (date: Date | undefined) => void;
 }
 export const DatePicker: React.FC<DatePickerDemoProps> = ({
   date,
@@ -31,7 +31,7 @@ export const DatePicker: React.FC<DatePickerDemoProps> = ({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0">
-        <Calendar mode="single" selected={date} onSelect={setDate} />
+        <Calendar mode="single" selected={date} onSelect={setDate} required={false} />
       </PopoverContent>
     </Popover>
   );

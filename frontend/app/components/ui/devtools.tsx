@@ -15,7 +15,7 @@ import {
   useStoreApi,
   ViewportPortal,
   useReactFlow,
-  PanelPosition,
+  type PanelPosition,
   type OnNodesChange,
   type NodeChange,
   type XYPosition,

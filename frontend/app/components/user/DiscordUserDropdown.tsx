@@ -68,7 +68,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
             .toLowerCase()
             .includes(query?.toLowerCase());
 
-          const nickname = person.user?.nick
+          const nickname = (person as any).user?.nick
             ?.toLowerCase()
             .includes(query?.toLowerCase());
 
@@ -170,7 +170,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
         <div className="flex items-center w-full">
           <img
             src={AvatarUrl(user)}
-            alt={user.user.global_name}
+            alt={user.user.global_name ?? undefined}
             className="w-8 h-8 rounded-full"
           />
           <div className="flex w-full flex-col ">

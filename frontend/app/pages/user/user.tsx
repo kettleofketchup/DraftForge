@@ -3,6 +3,9 @@ import { useParams } from 'react-router-dom';
 import axios from '~/components/api/axios'; // Assuming axios is configured for your API
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
+import { getLogger } from '~/lib/logger';
+
+const log = getLogger('userDetailPage');
 
 export const UserDetailPage: React.FC = () => {
   const { pk } = useParams<{ pk: string }>();
