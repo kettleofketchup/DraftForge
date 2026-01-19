@@ -68,6 +68,13 @@ def create_herodraft(request, game_pk):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # Check both teams have captains
+    if not game.radiant_team.captain or not game.dire_team.captain:
+        return Response(
+            {"error": "Both teams must have captains assigned"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     # Create the draft
     draft = HeroDraft.objects.create(game=game, state="waiting_for_captains")
 
@@ -139,7 +146,7 @@ def set_ready(request, draft_pk):
 
     HeroDraftEvent.objects.create(
         draft=draft,
-        event_type="captain_connected",
+        event_type="captain_ready",
         draft_team=draft_team,
         metadata={"captain_id": request.user.pk},
     )
@@ -281,6 +288,12 @@ def do_submit_choice(request, draft_pk):
         pass
     else:
         # Non-winner can only choose if winner already made a choice
+        # Safety check: roll_winner should exist if we're in choosing state
+        if not draft.roll_winner:
+            return Response(
+                {"error": "Roll winner not set"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         winner_made_choice = (
             draft.roll_winner.is_first_pick is not None
             or draft.roll_winner.is_radiant is not None
