@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router';
+import { getTournaments } from '~/components/api/api';
 import { TournamentCard } from '~/components/tournament/card/TournamentCard';
 import { TournamentCreateModal } from '~/components/tournament/create/createModal';
+import { TournamentFilterBar } from '~/components/tournament';
 
 import type {
   TournamentClassType,
@@ -8,23 +11,14 @@ import type {
 } from '~/components/tournament/types';
 import { useUserStore } from '~/store/userStore';
 export default function Tournament() {
-  const [count, setCount] = useState(0);
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-  const open = Boolean(anchorEl);
-  const tournament: TournamentType = useUserStore((state) => state.tournament); // Zustand setter
-  const getGames = useUserStore((state) => state.getGames); // Zustand setter
-  const getTeams = useUserStore((state) => state.getTeams); // Zustand setter
-  const getTournamentsBasic = useUserStore(
-    (state) => state.getTournamentsBasic,
-  ); // Zustand setter
-  const setTournaments = useUserStore((state) => state.setTournaments); // Zustand setter
-  const setGames = useUserStore((state) => state.setGames); // Zustand setter
-  const setTeams = useUserStore((state) => state.setTeams); // Zustand setter
-  const setTournament = useUserStore((state) => state.setTournament); // Zustand setter
-  const setTeam = useUserStore((state) => state.setTeam); // Zustand setter
+  const [searchParams] = useSearchParams();
+  const orgId = searchParams.get('organization');
+  const leagueId = searchParams.get('league');
+
+  const setTournaments = useUserStore((state) => state.setTournaments);
   const tournaments: TournamentType[] = useUserStore(
     (state) => state.tournaments,
-  ); // Zustand setter
+  );
   const [query, setQuery] = useState('');
   const filteredTournaments =
     query === ''
@@ -35,20 +29,39 @@ export default function Tournament() {
         });
 
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getTournamentsBasic();
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    setLoading(false);
-  }, [tournaments.length]);
+    const fetchTournaments = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await getTournaments({
+          organizationId: orgId ? parseInt(orgId, 10) : undefined,
+          leagueId: leagueId ? parseInt(leagueId, 10) : undefined,
+        });
+        setTournaments(response as TournamentType[]);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load tournaments');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTournaments();
+  }, [orgId, leagueId, setTournaments]);
 
   if (loading) {
     return (
       <div className="flex justify-center align-middle content-center pt-10">
         Loading...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex justify-center align-middle content-center pt-10 text-red-500">
+        Error: {error}
       </div>
     );
   }
@@ -91,6 +104,7 @@ export default function Tournament() {
             <TournamentCreateModal />
           </div>
         </div>
+        <TournamentFilterBar />
         <div
           className="grid grid-flow-row-dense grid-auto-rows
           align-middle content-center justify-center

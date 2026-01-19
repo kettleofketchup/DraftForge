@@ -8,11 +8,12 @@ from django.contrib.auth import login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Count, Q
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from rest_framework import generics, permissions, status, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
@@ -27,12 +28,32 @@ from social_django.utils import load_strategy, psa
 from backend import settings
 
 from .decorators import render_to
-from .models import CustomUser, Draft, DraftRound, Game, Team, Tournament
+from .models import (
+    CustomUser,
+    Draft,
+    DraftRound,
+    Game,
+    League,
+    Organization,
+    Team,
+    Tournament,
+)
 from .permissions import IsStaff
+from .permissions_org import (
+    IsLeagueAdmin,
+    IsOrgAdmin,
+    has_league_admin_access,
+    has_org_admin_access,
+)
 from .serializers import (
     DraftRoundSerializer,
     DraftSerializer,
     GameSerializer,
+    LeagueMatchSerializer,
+    LeagueSerializer,
+    LeaguesSerializer,
+    OrganizationSerializer,
+    OrganizationsSerializer,
     TeamSerializer,
     TournamentSerializer,
     TournamentsSerializer,
@@ -217,6 +238,16 @@ class TournamentView(viewsets.ModelViewSet):
         "options",
         "trace",
     ]
+
+    def get_queryset(self):
+        queryset = Tournament.objects.all().order_by("-date_played")
+        org_id = self.request.query_params.get("organization")
+        league_id = self.request.query_params.get("league")
+        if org_id:
+            queryset = queryset.filter(league__organization_id=org_id)
+        if league_id:
+            queryset = queryset.filter(league_id=league_id)
+        return queryset
 
     def list(self, request, *args, **kwargs):
         cache_key = f"tournament_list:{request.get_full_path()}"
@@ -617,6 +648,171 @@ class TournamentsBasicView(viewsets.ModelViewSet):
 
         data = get_data()
         return Response(data)
+
+
+class OrganizationView(viewsets.ModelViewSet):
+    """Organization CRUD endpoints."""
+
+    queryset = Organization.objects.all()
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return OrganizationsSerializer
+        return OrganizationSerializer
+
+    def get_queryset(self):
+        """Annotate counts and prefetch M2M to avoid N+1 queries."""
+        return (
+            Organization.objects.prefetch_related("admins", "staff")
+            .annotate(
+                league_count=Count("leagues", distinct=True),
+                tournament_count=Count("leagues__tournaments", distinct=True),
+            )
+            .order_by("name")
+        )
+
+    def get_permissions(self):
+        if self.action in ["create", "destroy"]:
+            self.permission_classes = [IsAdminUser]
+        elif self.action in ["update", "partial_update"]:
+            self.permission_classes = [IsOrgAdmin]
+        else:
+            self.permission_classes = [AllowAny]
+        return super().get_permissions()
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f"organization_list:{request.get_full_path()}"
+
+        @cached_as(Organization, League, Tournament, extra=cache_key, timeout=60 * 10)
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+    def retrieve(self, request, *args, **kwargs):
+        pk = kwargs.get("pk")
+        cache_key = f"organization_detail:{pk}"
+
+        @cached_as(Organization, League, Tournament, extra=cache_key, timeout=60 * 10)
+        def get_data():
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+
+class LeagueView(viewsets.ModelViewSet):
+    """League CRUD endpoints with org filtering."""
+
+    queryset = League.objects.all()
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return LeaguesSerializer
+        return LeagueSerializer
+
+    def get_queryset(self):
+        """Optimize with select_related, prefetch_related, and annotations."""
+        queryset = (
+            League.objects.select_related("organization")
+            .prefetch_related("admins", "staff")
+            .annotate(
+                tournament_count=Count("tournaments", distinct=True),
+            )
+            .order_by("name")
+        )
+
+        org_id = self.request.query_params.get("organization")
+        if org_id:
+            queryset = queryset.filter(organization_id=org_id)
+        return queryset
+
+    def get_permissions(self):
+        if self.action == "create":
+            self.permission_classes = [IsAuthenticated]
+        elif self.action in ["update", "partial_update", "destroy"]:
+            self.permission_classes = [IsLeagueAdmin]
+        else:
+            self.permission_classes = [AllowAny]
+        return super().get_permissions()
+
+    def create(self, request, *args, **kwargs):
+        org_id = request.data.get("organization")
+        if org_id:
+            try:
+                org = Organization.objects.get(pk=org_id)
+                if not has_org_admin_access(request.user, org):
+                    return Response(
+                        {"detail": "Must be organization admin to create league"},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            except Organization.DoesNotExist:
+                return Response(
+                    {"detail": "Organization not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+        return super().create(request, *args, **kwargs)
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f"league_list:{request.get_full_path()}"
+
+        @cached_as(League, Tournament, Organization, extra=cache_key, timeout=60 * 10)
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+    def retrieve(self, request, *args, **kwargs):
+        pk = kwargs.get("pk")
+        cache_key = f"league_detail:{pk}"
+
+        @cached_as(League, Tournament, Organization, extra=cache_key, timeout=60 * 10)
+        def get_data():
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+    @action(detail=True, methods=["get"])
+    def matches(self, request, pk=None):
+        """Get all matches for this league (direct or via tournaments)."""
+        league = self.get_object()
+        # Games directly belonging to league OR games in tournaments belonging to league
+        games = (
+            Game.objects.filter(Q(league=league) | Q(tournament__league=league))
+            .select_related(
+                "tournament",
+                "league",
+                "radiant_team",
+                "radiant_team__captain",
+                "dire_team",
+                "dire_team__captain",
+                "winning_team",
+            )
+            .order_by("-pk")
+        )
+
+        # Optional filtering
+        tournament_pk = request.query_params.get("tournament")
+        if tournament_pk:
+            games = games.filter(tournament_id=tournament_pk)
+
+        linked_only = request.query_params.get("linked_only")
+        if linked_only == "true":
+            games = games.filter(gameid__isnull=False)
+
+        serializer = LeagueMatchSerializer(games, many=True)
+        return Response(serializer.data)
 
 
 class TeamCreateView(generics.CreateAPIView):

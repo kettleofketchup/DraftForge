@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { TeamSchema } from '../team/schemas';
-import { TournamentSchema } from '../tournament/schemas';
 import { UserSchema } from '../user/schemas';
 
 export const DraftRoundSchema = z.object({
@@ -13,9 +12,10 @@ export const DraftRoundSchema = z.object({
   team: TeamSchema.nullable(),
 });
 
+// Use z.lazy() to avoid circular dependency with TournamentSchema
 export const DraftSchema = z.object({
   pk: z.number().nullable(),
-  tournament: TournamentSchema.nullable(),
+  tournament: z.lazy(() => z.any()).nullable(), // Lazy reference to avoid circular import
   users_remaining: z.array(UserSchema).nullable(),
   draft_rounds: z.array(DraftRoundSchema).nullable(),
   latest_round: z.number().nullable(),

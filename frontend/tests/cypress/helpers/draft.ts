@@ -1,6 +1,15 @@
 import type { cyType } from './types';
 
 /**
+ * Wait for the user to be logged in (avatar visible in navbar)
+ * This ensures currentUser is populated in the store before checking draft state
+ */
+export const waitForUserLoggedIn = (cy: cyType) => {
+  // Wait for the profile avatar to appear, indicating user data is loaded
+  cy.get('.avatar img', { timeout: 15000 }).should('be.visible');
+};
+
+/**
  * Get the draft modal trigger button
  */
 export const getDraftButton = (cy: cyType) => {
@@ -67,16 +76,18 @@ export const assertWaitingForCaptain = (cy: cyType, captainName: string) => {
 
 /**
  * Get the floating draft indicator
+ * Note: Uses longer timeout to account for user fetch + active draft polling
  */
 export const getFloatingDraftIndicator = (cy: cyType) => {
-  return cy.get('[data-testid="floating-draft-indicator"]');
+  return cy.get('[data-testid="floating-draft-indicator"]', { timeout: 15000 });
 };
 
 /**
  * Get the draft notification badge (on user avatar)
+ * Note: Uses longer timeout to account for user fetch + active draft polling
  */
 export const getDraftNotificationBadge = (cy: cyType) => {
-  return cy.get('[data-testid="draft-notification-badge"]');
+  return cy.get('[data-testid="draft-notification-badge"]', { timeout: 15000 });
 };
 
 /**

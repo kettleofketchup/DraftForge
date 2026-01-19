@@ -287,6 +287,8 @@ CACHEOPS_REDIS = {
 # Enable caching for tournament-related models
 if not env_bool("DISABLE_CACHE"):
     CACHEOPS = {
+        "app.organization": {"ops": "all", "timeout": 60 * 60},
+        "app.league": {"ops": "all", "timeout": 60 * 60},
         "app.tournament": {"ops": "all", "timeout": 60 * 60},
         "app.team": {"ops": "all", "timeout": 60 * 60},
         "app.customuser": {"ops": "all", "timeout": 60 * 60},
@@ -298,8 +300,20 @@ if not env_bool("DISABLE_CACHE"):
         "steam.playermatchstats": {"ops": "all", "timeout": 30 * 60},
     }
 else:
-    # Disable all caching
-    CACHEOPS = {}
+    # Disable all caching - but still register models to avoid ImproperlyConfigured errors
+    # when @cached_as is called with model classes
+    CACHEOPS = {
+        "app.organization": {"ops": (), "timeout": 0},
+        "app.league": {"ops": (), "timeout": 0},
+        "app.tournament": {"ops": (), "timeout": 0},
+        "app.team": {"ops": (), "timeout": 0},
+        "app.customuser": {"ops": (), "timeout": 0},
+        "app.draft": {"ops": (), "timeout": 0},
+        "app.game": {"ops": (), "timeout": 0},
+        "app.draftround": {"ops": (), "timeout": 0},
+        "steam.match": {"ops": (), "timeout": 0},
+        "steam.playermatchstats": {"ops": (), "timeout": 0},
+    }
 
 
 CACHEOPS_DEGRADE_ON_FAILURE = True

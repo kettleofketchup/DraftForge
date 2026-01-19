@@ -95,6 +95,18 @@ def db_migrate_all(c):
 
 
 @task
+def db_populate_organizations(c, path: Path = paths.TEST_ENV_FILE, force: bool = False):
+    """Populate the database with organizations and leagues."""
+    load_dotenv(path)
+    db_migrate(c, path)
+
+    with c.cd(paths.BACKEND_PATH.absolute()):
+        force_arg = "True" if force else "False"
+        cmd = f'DISABLE_CACHE=true python manage.py shell -c "from tests.populate import populate_organizations_and_leagues; populate_organizations_and_leagues(force={force_arg})"'
+        c.run(cmd, pty=True)
+
+
+@task
 def db_populate_users(c, path: Path = paths.TEST_ENV_FILE, force: bool = False):
     """Populate the database with Discord users."""
 
@@ -186,10 +198,9 @@ def db_populate_bracket_linking(
 @task
 def populate_all(c):
     paths.TEST_DB_PATH.unlink(missing_ok=True)
-
-    paths.TEST_DB_PATH.unlink(missing_ok=True)
     paths.TEST_DB_PATH.touch()
     db_migrate_test(c)
+    db_populate_organizations(c, paths.TEST_ENV_FILE)
     db_populate_users(c, paths.TEST_ENV_FILE)
     db_populate_tournaments(c, paths.TEST_ENV_FILE)
     db_populate_steam_mock(c, paths.TEST_ENV_FILE)
@@ -198,6 +209,7 @@ def populate_all(c):
 
 
 ns_db.add_task(db_makemigrations, "makemigrations")
+ns_db_populate.add_task(db_populate_organizations, "organizations")
 ns_db_populate.add_task(db_populate_users, "users")
 ns_db_populate.add_task(db_populate_tournaments, "tournaments")
 ns_db_populate.add_task(db_populate_steam, "steam")

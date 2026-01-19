@@ -27,9 +27,7 @@ services:
     image: ghcr.io/kettleofketchup/dota_tournament/backend-dev:latest
     restart: always
     volumes:
-      - ./backend/:/app/backend
-      - ./poetry.lock/:/app/poetry.lock
-      - ./pyproject.toml/:/app/pyproject.toml
+      - ./backend:/app/backend
     depends_on:
       - redis
     networks:
@@ -65,9 +63,7 @@ services:
     entrypoint: ["celery"]
     command: ["-A", "config", "worker", "-l", "info"]
     volumes:
-      - ./backend/:/app/backend
-      - ./poetry.lock/:/app/poetry.lock
-      - ./pyproject.toml/:/app/pyproject.toml
+      - ./backend:/app/backend
     env_file: "./docker/.env.test"
     depends_on:
       - redis
@@ -82,9 +78,7 @@ services:
     entrypoint: ["celery"]
     command: ["-A", "config", "beat", "-l", "info"]
     volumes:
-      - ./backend/:/app/backend
-      - ./poetry.lock/:/app/poetry.lock
-      - ./pyproject.toml/:/app/pyproject.toml
+      - ./backend:/app/backend
     env_file: "./docker/.env.test"
     depends_on:
       - redis
@@ -98,9 +92,7 @@ services:
     user: "1000:1000"
     entrypoint: ["python", "manage.py", "run_discord_bot"]
     volumes:
-      - ./backend/:/app/backend
-      - ./poetry.lock/:/app/poetry.lock
-      - ./pyproject.toml/:/app/pyproject.toml
+      - ./backend:/app/backend
     env_file: "./docker/.env.test"
     depends_on:
       - redis

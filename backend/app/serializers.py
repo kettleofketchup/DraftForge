@@ -2,6 +2,7 @@ from ast import alias
 from logging import getLogger
 from typing import TypeAlias
 
+import nh3
 from django.contrib.auth.models import User
 from django.db import transaction
 from rest_framework import serializers
@@ -14,6 +15,8 @@ from .models import (
     DraftRound,
     Game,
     Joke,
+    League,
+    Organization,
     PositionsModel,
     Team,
     Tournament,
@@ -101,11 +104,165 @@ class TournamentsSerializer(serializers.ModelSerializer):
             "pk",
             "name",
             "date_played",
+            "timezone",
             "tournament_type",
             "state",
             "captains",
             "winner",
         )
+
+
+class OrganizationSerializer(serializers.ModelSerializer):
+    admins = TournamentUserSerializer(many=True, read_only=True)
+    staff = TournamentUserSerializer(many=True, read_only=True)
+    admin_ids = serializers.PrimaryKeyRelatedField(
+        queryset=CustomUser.objects.all(),
+        many=True,
+        write_only=True,
+        source="admins",
+        required=False,
+    )
+    staff_ids = serializers.PrimaryKeyRelatedField(
+        queryset=CustomUser.objects.all(),
+        many=True,
+        write_only=True,
+        source="staff",
+        required=False,
+    )
+    # Use annotated fields from ViewSet queryset (avoids N+1)
+    league_count = serializers.IntegerField(read_only=True)
+    tournament_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Organization
+        fields = (
+            "pk",
+            "name",
+            "description",
+            "logo",
+            "rules_template",
+            "admins",
+            "staff",
+            "admin_ids",
+            "staff_ids",
+            "default_league",
+            "league_count",
+            "tournament_count",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "pk",
+            "created_at",
+            "updated_at",
+            "league_count",
+            "tournament_count",
+        )
+
+    def validate_description(self, value):
+        """Sanitize markdown to prevent XSS."""
+        if value:
+            return nh3.clean(value)
+        return value
+
+    def validate_rules_template(self, value):
+        """Sanitize markdown to prevent XSS."""
+        if value:
+            return nh3.clean(value)
+        return value
+
+
+class OrganizationsSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for organization list view."""
+
+    league_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Organization
+        fields = ("pk", "name", "logo", "league_count", "created_at")
+        read_only_fields = ("pk", "league_count", "created_at")
+
+
+class LeagueSerializer(serializers.ModelSerializer):
+    admins = TournamentUserSerializer(many=True, read_only=True)
+    staff = TournamentUserSerializer(many=True, read_only=True)
+    admin_ids = serializers.PrimaryKeyRelatedField(
+        queryset=CustomUser.objects.all(),
+        many=True,
+        write_only=True,
+        source="admins",
+        required=False,
+    )
+    staff_ids = serializers.PrimaryKeyRelatedField(
+        queryset=CustomUser.objects.all(),
+        many=True,
+        write_only=True,
+        source="staff",
+        required=False,
+    )
+    tournament_count = serializers.IntegerField(read_only=True)
+    organization_name = serializers.CharField(
+        source="organization.name", read_only=True
+    )
+
+    class Meta:
+        model = League
+        fields = (
+            "pk",
+            "organization",
+            "organization_name",
+            "steam_league_id",
+            "name",
+            "description",
+            "rules",
+            "prize_pool",
+            "admins",
+            "staff",
+            "admin_ids",
+            "staff_ids",
+            "tournament_count",
+            "last_synced",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "pk",
+            "created_at",
+            "updated_at",
+            "tournament_count",
+            "organization_name",
+        )
+
+    def validate_description(self, value):
+        if value:
+            return nh3.clean(value)
+        return value
+
+    def validate_rules(self, value):
+        if value:
+            return nh3.clean(value)
+        return value
+
+
+class LeaguesSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for league list view."""
+
+    tournament_count = serializers.IntegerField(read_only=True)
+    organization_name = serializers.CharField(
+        source="organization.name", read_only=True
+    )
+
+    class Meta:
+        model = League
+        fields = (
+            "pk",
+            "organization",
+            "organization_name",
+            "steam_league_id",
+            "name",
+            "tournament_count",
+        )
+        read_only_fields = ("pk", "tournament_count", "organization_name")
 
 
 class DraftRoundForDraftSerializer(serializers.ModelSerializer):
@@ -376,6 +533,14 @@ class TournamentSerializer(serializers.ModelSerializer):
     tournament_type = serializers.CharField(read_only=False)
     captains = TournamentUserSerializer(many=True, read_only=True)
     games = GameSerializerForTournament(many=True, read_only=True)
+    league = LeaguesSerializer(read_only=True)
+    league_id_write = serializers.PrimaryKeyRelatedField(
+        queryset=League.objects.all(),
+        write_only=True,
+        source="league",
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = Tournament
@@ -384,6 +549,7 @@ class TournamentSerializer(serializers.ModelSerializer):
             "name",
             "draft",
             "date_played",
+            "timezone",
             "users",
             "teams",  # Include full team objects
             "winning_team",
@@ -392,12 +558,19 @@ class TournamentSerializer(serializers.ModelSerializer):
             "user_ids",  # Allow setting user IDs for the tournament
             "captains",
             "tournament_type",
+            "league",
+            "league_id_write",
         )
 
 
 class UserSerializer(serializers.ModelSerializer):
     teams = TeamSerializer(many=True, read_only=True)  # Associated teams
     positions = PositionsSerializer(many=False, read_only=False, required=False)
+    default_organization = serializers.PrimaryKeyRelatedField(
+        queryset=Organization.objects.all(),
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = CustomUser
@@ -418,6 +591,7 @@ class UserSerializer(serializers.ModelSerializer):
             "date_joined",
             "teams",  # Include associated teams
             "positions",
+            "default_organization",
         )
 
     def update(self, instance, validated_data):
@@ -579,3 +753,47 @@ class DraftEventSerializer(serializers.ModelSerializer):
             "actor",
             "created_at",
         )
+
+
+class LeagueMatchSerializer(serializers.ModelSerializer):
+    """Serializer for matches in a league context with captain info."""
+
+    radiant_captain = TournamentUserSerializer(
+        source="radiant_team.captain", read_only=True, allow_null=True
+    )
+    dire_captain = TournamentUserSerializer(
+        source="dire_team.captain", read_only=True, allow_null=True
+    )
+    radiant_team_name = serializers.CharField(
+        source="radiant_team.name", read_only=True, allow_null=True
+    )
+    dire_team_name = serializers.CharField(
+        source="dire_team.name", read_only=True, allow_null=True
+    )
+    tournament_name = serializers.CharField(
+        source="tournament.name", read_only=True, allow_null=True
+    )
+    tournament_pk = serializers.IntegerField(
+        source="tournament.pk", read_only=True, allow_null=True
+    )
+    date_played = serializers.DateField(
+        source="tournament.date_played", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = Game
+        fields = [
+            "pk",
+            "tournament_pk",
+            "tournament_name",
+            "round",
+            "date_played",
+            "radiant_team",
+            "dire_team",
+            "radiant_team_name",
+            "dire_team_name",
+            "radiant_captain",
+            "dire_captain",
+            "winning_team",
+            "gameid",
+        ]

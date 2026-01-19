@@ -37,6 +37,13 @@ describe('Bracket Match Linking (e2e)', () => {
 
   describe('Staff User Tests', () => {
     beforeEach(() => {
+      // Clear all storage to prevent stale user data from previous tests
+      cy.clearCookies();
+      cy.clearLocalStorage();
+      cy.window().then((win) => {
+        win.sessionStorage.clear();
+      });
+
       cy.loginStaff();
       suppressHydrationErrors();
     });
@@ -417,8 +424,13 @@ describe('Bracket Match Linking (e2e)', () => {
 
   describe('Non-Staff User Access', () => {
     beforeEach(() => {
-      // Clear cookies first to ensure clean state
+      // Clear all storage to prevent stale user data from previous tests
       cy.clearCookies();
+      cy.clearLocalStorage();
+      cy.window().then((win) => {
+        win.sessionStorage.clear();
+      });
+
       cy.loginUser(); // Login as regular user instead of staff
       suppressHydrationErrors();
     });

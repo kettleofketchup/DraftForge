@@ -56,6 +56,9 @@ router.register(
 )
 router.register(r"games", GameView, "games")
 
+router.register(r"organizations", app_views.OrganizationView, basename="organization")
+router.register(r"leagues", app_views.LeagueView, basename="league")
+
 router.register(r"tournaments-basic", TournamentsBasicView, "tournaments-basic")
 urlpatterns = [
     path("done/", RedirectView.as_view(url="http://localhost:5173")),

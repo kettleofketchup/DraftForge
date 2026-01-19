@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 try:
@@ -211,9 +212,11 @@ def docker_nginx_run(c):
 def docker_build_all(c):
     funcs = [docker_backend_build, docker_frontend_build, docker_nginx_build]
     with alive_bar(total=3, title="Building Images") as bar:
-        for func in funcs:
-            func(c)
-            bar()
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(func, c): func for func in funcs}
+            for future in as_completed(futures):
+                future.result()
+                bar()
 
 
 @task
@@ -221,18 +224,22 @@ def docker_push_all(c):
     docker_build_all(c)
     funcs = [docker_backend_push, docker_frontend_push, docker_nginx_push]
     with alive_bar(total=3, title="Pushing Images") as bar:
-        for func in funcs:
-            func(c)
-            bar()
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(func, c): func for func in funcs}
+            for future in as_completed(futures):
+                future.result()
+                bar()
 
 
 @task
 def docker_pull_all(c):
     funcs = [docker_backend_pull, docker_frontend_pull, docker_nginx_pull]
     with alive_bar(total=3, title="Pulling Images") as bar:
-        for func in funcs:
-            func(c)
-            bar()
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(func, c): func for func in funcs}
+            for future in as_completed(futures):
+                future.result()
+                bar()
 
 
 ns_docker_frontend.add_task(docker_frontend_build, "build")

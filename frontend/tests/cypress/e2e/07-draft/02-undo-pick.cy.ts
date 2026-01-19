@@ -4,14 +4,29 @@
  * Tests the staff ability to undo draft picks.
  * The undo button should only be visible to staff members
  * and should revert the last pick made in the draft.
+ *
+ * Uses 'completed_bracket' tournament from test config
  */
 
 describe('Undo Pick', () => {
-  const TOURNAMENT_PK = 1; // Completed Bracket Test
+  let tournamentPk: number;
+
+  before(() => {
+    // Get tournament PK dynamically instead of hardcoding
+    cy.getTournamentByKey('completed_bracket').then((response) => {
+      expect(response.status).to.eq(200);
+      tournamentPk = response.body.pk;
+    });
+  });
 
   beforeEach(() => {
+    // Clear all storage to prevent stale user data from previous tests
+    // The Zustand user store persists to sessionStorage
     cy.clearCookies();
     cy.clearLocalStorage();
+    cy.window().then((win) => {
+      win.sessionStorage.clear();
+    });
   });
 
   describe('Undo Button Visibility', () => {
@@ -22,7 +37,7 @@ describe('Undo Pick', () => {
         url: `${Cypress.env('apiUrl')}/tests/login-admin/`,
       });
 
-      cy.visit(`/tournament/${TOURNAMENT_PK}`);
+      cy.visit(`/tournament/${tournamentPk}`);
       cy.get('body').should('be.visible');
 
       // Wait for page to load
@@ -93,7 +108,7 @@ describe('Undo Pick', () => {
         url: `${Cypress.env('apiUrl')}/tests/login-user/`,
       });
 
-      cy.visit(`/tournament/${TOURNAMENT_PK}`);
+      cy.visit(`/tournament/${tournamentPk}`);
       cy.get('body').should('be.visible');
 
       // Wait for page to load
@@ -124,7 +139,7 @@ describe('Undo Pick', () => {
         url: `${Cypress.env('apiUrl')}/tests/login-admin/`,
       });
 
-      cy.visit(`/tournament/${TOURNAMENT_PK}`);
+      cy.visit(`/tournament/${tournamentPk}`);
       cy.get('body').should('be.visible');
 
       // Wait for page to load
@@ -176,7 +191,7 @@ describe('Undo Pick', () => {
         url: `${Cypress.env('apiUrl')}/tests/login-admin/`,
       });
 
-      cy.visit(`/tournament/${TOURNAMENT_PK}`);
+      cy.visit(`/tournament/${tournamentPk}`);
       cy.get('body').should('be.visible');
 
       // Wait for page to load
@@ -275,7 +290,7 @@ describe('Undo Pick', () => {
         url: `${Cypress.env('apiUrl')}/tests/login-admin/`,
       });
 
-      cy.visit(`/tournament/${TOURNAMENT_PK}`);
+      cy.visit(`/tournament/${tournamentPk}`);
       cy.get('body').should('be.visible');
 
       // Wait for page to load

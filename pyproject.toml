@@ -1,6 +1,6 @@
 [project]
 name = "website"
-version = "0.5.5"
+version = "0.5.6"
 description = ""
 authors = [
     {name = "kettleofketchup@gmail.com",email = "kettleofketchup@gmail.com"}
@@ -40,6 +40,7 @@ dependencies = [
     "channels-redis (>=4.2.0,<5.0.0)",
     "daphne (>=4.0.0,<5.0.0)",
     "pynacl (>=1.5.0,<2.0.0)",
+    "nh3 (>=0.3.2,<0.4.0)",
 ]
 
 

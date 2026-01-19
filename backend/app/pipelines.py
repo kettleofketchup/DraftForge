@@ -18,8 +18,12 @@ def save_discord(
     avatar = social_auth.extra_data["avatar"]
     logger.info(f"SAVE_DISCORD {social_auth.extra_data}")
     discordUsername = social_auth.extra_data["username"]
-    position = PositionsModel.objects.create()
-    user.positions = position
+
+    # Only create positions if user doesn't have any (preserve existing positions!)
+    if not user.positions_id:
+        position = PositionsModel.objects.create()
+        user.positions = position
+
     user.avatar = avatar
     user.discordId = discordId
     user.discordUsername = discordUsername

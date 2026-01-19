@@ -6,8 +6,11 @@ from backend.tests.tasks import ns_dbtest
 from backend.tests.tasks import run_tests as run_db_tests
 from scripts.docker import docker_build_all
 
-ns_test = Collection("tests")
+ns_test = Collection("test")
+ns_runner = Collection("runner")
+ns_cicd = Collection("cicd")
 ns_test.add_collection(ns_dbtest, "db")
+ns_test.add_collection(ns_runner, "runner")
 
 
 import paths
@@ -39,12 +42,21 @@ def dev_test(c):
 
 @task
 def setup(c):
-
     from backend.tasks import populate_all
     from scripts.docker import docker_build_all, docker_pull_all
     from scripts.update import update_for_test
 
     load_dotenv(paths.TEST_ENV_FILE)
+
+    # Ensure test stack is down before setup
+    print("Ensuring test stack is down...")
+    with c.cd(paths.PROJECT_PATH):
+        cmd = (
+            f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {paths.DOCKER_COMPOSE_TEST_PATH.resolve()} down --remove-orphans"
+        )
+        c.run(cmd, warn=True)
+
     update_for_test(c)
     docker_build_all(c)
     populate_all(c)
@@ -61,7 +73,7 @@ def cypress_open(c):
         c.run(cmd)
 
 
-@task(pre=[setup])
+@task
 def cypress_headless(c):
     # Flush Redis cache before running tests to ensure fresh bracket data
     flush_test_redis(c)
@@ -69,6 +81,32 @@ def cypress_headless(c):
     with c.cd(paths.FRONTEND_PATH):
         cmd = " npm run test:e2e:headless"
         c.run(cmd)
+
+
+@task(pre=[setup])
+def cicd_headless(c):
+    cypress_headless(c)
+
+
+@task
+def cypress_parallel(c, threads=3):
+    flush_test_redis(c)
+
+    with c.cd(paths.FRONTEND_PATH):
+        cmd = f"npm run test:e2e:parallel"
+        c.run(cmd)
+
+
+@task(pre=[setup])
+def cicd_parallel(c, threads=3):
+    """Run Cypress tests in parallel using multiple threads.
+
+    Usage:
+        inv test.parallel           # Run with 3 threads (default)
+        inv test.parallel --threads 4  # Run with 4 threads
+    """
+    # Flush Redis cache before running tests to ensure fresh bracket data
+    cypress_parallel(c, threads)
 
 
 @task
@@ -102,9 +140,21 @@ def cypress_spec(c, spec=""):
 
 
 ns_test.add_task(cypress_headless, "headless")
+ns_test.add_task(cypress_parallel, "parallel")
+
 ns_test.add_task(cypress_spec, "spec")
 
 
 ns_test.add_task(cypress_open, "open")
 
 ns_test.add_task(setup, "setup")
+ns_cicd.add_task(cicd_headless, "headless")
+
+ns_cicd.add_task(cicd_parallel, "run")
+
+ns_test.add_task(cypress_parallel, "parallel")
+
+ns_runner.add_task(cypress_headless, "headless")
+ns_runner.add_task(cypress_parallel, "run")
+
+ns_test.add_task(cicd_headless, "headless")

@@ -16,9 +16,7 @@ services:
     image: ghcr.io/kettleofketchup/dota_tournament/backend-dev:latest
     restart: always
     volumes:
-      - ./backend/:/app/backend
-      - ./poetry.lock/:/app/poetry.lock
-      - ./pyproject.toml/:/app/pyproject.toml
+      - ./backend:/app/backend
     depends_on:
       - redis
   redis:

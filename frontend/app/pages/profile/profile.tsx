@@ -13,7 +13,16 @@ import { z } from 'zod';
 
 import { UpdateProfile } from '~/components/api/api';
 import { Button } from '~/components/ui/button';
-import { Form } from '~/components/ui/form';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '~/components/ui/form';
+import { Input } from '~/components/ui/input';
 import { UserSchema } from '~/components/user/schemas';
 import { PositionForm } from './forms/position';
 export const ProfilePage: React.FC = () => {
@@ -47,13 +56,11 @@ export const ProfilePage: React.FC = () => {
       'positions.hard_support',
       currentUser?.positions?.hard_support || 0,
     );
+    form.setValue('steamid', currentUser?.steamid || null);
     log.debug('Form initialized with values:', form.getValues());
     log.debug(currentUser);
   };
 
-  useEffect(() => {
-    initialiazeForm();
-  }, []);
   useEffect(() => {
     initialiazeForm();
   }, [currentUser, form]);
@@ -97,13 +104,44 @@ export const ProfilePage: React.FC = () => {
             <form onSubmit={form.handleSubmit(onSubmit)} className="">
               <PositionForm form={form} />
 
+              <FormField
+                control={form.control}
+                name="steamid"
+                rules={{
+                  validate: (value) => {
+                    if (currentUser?.steamid && !value) {
+                      return 'Steam ID cannot be cleared once set';
+                    }
+                    return true;
+                  },
+                }}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Steam ID</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="Enter your Steam ID"
+                        {...field}
+                        value={field.value ?? ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          field.onChange(val ? parseInt(val, 10) : null);
+                        }}
+                      />
+                    </FormControl>
+                    {currentUser?.steamid && (
+                      <FormDescription>
+                        Steam ID cannot be removed once set
+                      </FormDescription>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <div className="flex justify-center align-center self-center">
-                <Button
-                  type="submit"
-                  onClick={() => onSubmit(form.getValues())}
-                >
-                  Submit
-                </Button>
+                <Button type="submit">Submit</Button>
               </div>
             </form>
           </Form>

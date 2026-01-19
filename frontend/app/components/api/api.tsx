@@ -11,6 +11,8 @@ import type {
   UsersType,
   UserType,
 } from '~/index';
+import type { OrganizationType, OrganizationsType } from '~/components/organization/schemas';
+import type { LeagueType, LeaguesType, LeagueMatchType } from '~/components/league/schemas';
 import { getLogger } from '~/lib/logger';
 import axios from './axios';
 import type {
@@ -76,8 +78,19 @@ export async function getTournamentsBasic(): Promise<TournamentsType> {
   const response = await axios.get<TournamentsType>(`/tournaments-basic`);
   return response.data as TournamentsType;
 }
-export async function getTournaments(): Promise<TournamentsType> {
-  const response = await axios.get<TournamentsType>(`/tournaments`);
+export async function getTournaments(filters?: {
+  organizationId?: number;
+  leagueId?: number;
+}): Promise<TournamentsType> {
+  const params = new URLSearchParams();
+  if (filters?.organizationId) {
+    params.append('organization', filters.organizationId.toString());
+  }
+  if (filters?.leagueId) {
+    params.append('league', filters.leagueId.toString());
+  }
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const response = await axios.get<TournamentsType>(`/tournaments/${queryString}`);
   return response.data as TournamentsType;
 }
 
@@ -263,4 +276,83 @@ export async function undoLastPick(
 ): Promise<TournamentType> {
   const response = await axios.post(`/tournaments/undo-pick`, data);
   return response.data as TournamentType;
+}
+
+// Organization API
+export async function getOrganizations(): Promise<OrganizationsType> {
+  const response = await axios.get<OrganizationsType>('/organizations/');
+  return response.data;
+}
+
+export async function fetchOrganization(pk: number): Promise<OrganizationType> {
+  const response = await axios.get<OrganizationType>(`/organizations/${pk}/`);
+  return response.data;
+}
+
+export async function createOrganization(
+  data: Partial<OrganizationType>,
+): Promise<OrganizationType> {
+  const response = await axios.post<OrganizationType>('/organizations/', data);
+  return response.data;
+}
+
+export async function updateOrganization(
+  pk: number,
+  data: Partial<OrganizationType>,
+): Promise<OrganizationType> {
+  const response = await axios.patch<OrganizationType>(
+    `/organizations/${pk}/`,
+    data,
+  );
+  return response.data;
+}
+
+export async function deleteOrganization(pk: number): Promise<void> {
+  await axios.delete(`/organizations/${pk}/`);
+}
+
+// League API
+export async function getLeagues(organizationId?: number): Promise<LeaguesType> {
+  const params = organizationId ? `?organization=${organizationId}` : '';
+  const response = await axios.get<LeaguesType>(`/leagues/${params}`);
+  return response.data;
+}
+
+export async function fetchLeague(pk: number): Promise<LeagueType> {
+  const response = await axios.get<LeagueType>(`/leagues/${pk}/`);
+  return response.data;
+}
+
+export async function createLeague(
+  data: Partial<LeagueType>,
+): Promise<LeagueType> {
+  const response = await axios.post<LeagueType>('/leagues/', data);
+  return response.data;
+}
+
+export async function updateLeague(
+  pk: number,
+  data: Partial<LeagueType>,
+): Promise<LeagueType> {
+  const response = await axios.patch<LeagueType>(`/leagues/${pk}/`, data);
+  return response.data;
+}
+
+export async function deleteLeague(pk: number): Promise<void> {
+  await axios.delete(`/leagues/${pk}/`);
+}
+
+export async function getLeagueMatches(
+  leaguePk: number,
+  options?: { tournament?: number; linkedOnly?: boolean }
+): Promise<LeagueMatchType[]> {
+  const params = new URLSearchParams();
+  if (options?.tournament) params.append('tournament', options.tournament.toString());
+  if (options?.linkedOnly) params.append('linked_only', 'true');
+
+  const queryString = params.toString() ? `?${params.toString()}` : '';
+  const response = await axios.get<LeagueMatchType[]>(
+    `/leagues/${leaguePk}/matches/${queryString}`
+  );
+  return response.data;
 }

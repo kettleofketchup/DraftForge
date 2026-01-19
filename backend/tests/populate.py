@@ -183,6 +183,120 @@ def create_user(user_data):
 
 from tests.test_auth import createTestStaffUser, createTestSuperUser, createTestUser
 
+# Organization/League constants for test data
+DTX_ORG_NAME = "DTX"  # Main DTX organization
+DTX_LEAGUE_NAME = "DTX League"
+DTX_STEAM_LEAGUE_ID = 17929  # Default Steam league ID used throughout the codebase
+
+TEST_ORG_NAME = "Test Organization"
+TEST_LEAGUE_NAME = "Test League"
+TEST_STEAM_LEAGUE_ID = 17930  # Different Steam league ID for testing
+
+
+def populate_organizations_and_leagues(force=False):
+    """
+    Creates the DTX Organization and League, plus a Test Organization and League.
+    Should be run BEFORE populate_users and populate_tournaments.
+
+    Creates:
+    - DTX (Organization) with DTX League (steam_league_id=17929)
+    - Test Organization with Test League (steam_league_id=17930)
+
+    Args:
+        force (bool): If True, recreate organizations even if they exist.
+    """
+    from app.models import League, Organization
+
+    print("Populating organizations and leagues...")
+
+    # Check if DTX org already exists (by name)
+    dtx_org = Organization.objects.filter(name=DTX_ORG_NAME).first()
+    test_org = Organization.objects.filter(name=TEST_ORG_NAME).first()
+
+    # Also check for DTX League existence
+    dtx_league = League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).first()
+    test_league = League.objects.filter(steam_league_id=TEST_STEAM_LEAGUE_ID).first()
+
+    if dtx_org and dtx_league and test_org and test_league and not force:
+        print(
+            f"Organizations and leagues already exist. " "Use force=True to recreate."
+        )
+        return dtx_org, test_org
+
+    # Create or update DTX Organization
+    dtx_org, created = Organization.objects.update_or_create(
+        name=DTX_ORG_NAME,
+        defaults={
+            "description": "DTX - A Dota 2 amateur tournament organization.",
+            "logo": "",
+            "rules_template": "Standard DTX tournament rules apply.",
+        },
+    )
+    action = "Created" if created else "Updated"
+    print(f"  {action} organization: {DTX_ORG_NAME}")
+
+    # Create or update DTX League
+    dtx_league, created = League.objects.update_or_create(
+        steam_league_id=DTX_STEAM_LEAGUE_ID,
+        defaults={
+            "organization": dtx_org,
+            "name": DTX_LEAGUE_NAME,
+            "description": "Main DTX League for in-house tournaments.",
+            "rules": "Standard DTX tournament rules apply.",
+            "prize_pool": "",
+        },
+    )
+    action = "Created" if created else "Updated"
+    print(
+        f"  {action} league: {DTX_LEAGUE_NAME} (steam_league_id={DTX_STEAM_LEAGUE_ID})"
+    )
+
+    # Set DTX League as default for DTX Organization
+    if dtx_org.default_league != dtx_league:
+        dtx_org.default_league = dtx_league
+        dtx_org.save()
+        print(f"  Set {DTX_LEAGUE_NAME} as default league for {DTX_ORG_NAME}")
+
+    # Create or update Test Organization
+    test_org, created = Organization.objects.update_or_create(
+        name=TEST_ORG_NAME,
+        defaults={
+            "description": "Test organization for Cypress E2E tests.",
+            "logo": "",
+            "rules_template": "Test rules template.",
+        },
+    )
+    action = "Created" if created else "Updated"
+    print(f"  {action} organization: {TEST_ORG_NAME}")
+
+    # Create or update Test League
+    test_league, created = League.objects.update_or_create(
+        steam_league_id=TEST_STEAM_LEAGUE_ID,
+        defaults={
+            "organization": test_org,
+            "name": TEST_LEAGUE_NAME,
+            "description": "Test league for Cypress E2E tests.",
+            "rules": "Test rules.",
+            "prize_pool": "",
+        },
+    )
+    action = "Created" if created else "Updated"
+    print(
+        f"  {action} league: {TEST_LEAGUE_NAME} (steam_league_id={TEST_STEAM_LEAGUE_ID})"
+    )
+
+    # Set Test League as default for Test Organization
+    if test_org.default_league != test_league:
+        test_org.default_league = test_league
+        test_org.save()
+        print(f"  Set {TEST_LEAGUE_NAME} as default league for {TEST_ORG_NAME}")
+
+    print(
+        f"Organizations and leagues ready. "
+        f"DTX: {dtx_org.pk}/{dtx_league.pk}, Test: {test_org.pk}/{test_league.pk}"
+    )
+    return dtx_org, test_org
+
 
 def populate_users(force=False):
     """
@@ -243,18 +357,20 @@ from pydantic import BaseModel
 
 def populate_tournaments(force=False):
     """
-    Creates 5 tournaments with 20, 30, 25, 35, 40 random users respectively.
+    Creates 6 tournaments:
+    - 5 tournaments assigned to DTX League (steam_league_id=17929)
+    - 1 tournament assigned to Test League (steam_league_id=17930)
 
     Args:
         force (bool): If True, create tournaments even if some already exist.
     """
-    from app.models import Tournament
+    from app.models import League, Tournament
 
     # Check if tournaments already exist
     existing_tournaments = Tournament.objects.count()
-    if existing_tournaments >= 5 and not force:
+    if existing_tournaments >= 6 and not force:
         print(
-            f"Database already has {existing_tournaments} tournaments (>=5). Use force=True to create anyway."
+            f"Database already has {existing_tournaments} tournaments (>=6). Use force=True to create anyway."
         )
         return
 
@@ -267,9 +383,18 @@ def populate_tournaments(force=False):
         print("Run populate_users first to create users.")
         return
 
+    # Get the DTX and Test leagues
+    dtx_league = League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).first()
+    test_league = League.objects.filter(steam_league_id=TEST_STEAM_LEAGUE_ID).first()
+
+    if not dtx_league or not test_league:
+        print("Leagues not found. Run populate_organizations_and_leagues first.")
+        return
+
     # Tournament configurations
     # Names are descriptive of what feature each tournament tests
     # Player counts match team counts (teams × 5 players per team)
+    # All use DTX league by default
     tournament_configs = [
         # All 6 bracket games completed - used for bracket badges, match stats tests
         {
@@ -277,6 +402,7 @@ def populate_tournaments(force=False):
             "users": 20,
             "teams": 4,
             "type": "double_elimination",
+            "league": dtx_league,
         },
         # 2 games completed, 4 pending - used for partial bracket tests
         {
@@ -284,6 +410,7 @@ def populate_tournaments(force=False):
             "users": 20,
             "teams": 4,
             "type": "double_elimination",
+            "league": dtx_league,
         },
         # 0 games completed, all pending - used for pending bracket tests
         {
@@ -291,15 +418,31 @@ def populate_tournaments(force=False):
             "users": 20,
             "teams": 4,
             "type": "double_elimination",
+            "league": dtx_league,
         },
         # Used for captain draft and shuffle draft tests
-        {"name": "Draft Test", "users": 30, "teams": 6, "type": "double_elimination"},
+        {
+            "name": "Draft Test",
+            "users": 30,
+            "teams": 6,
+            "type": "double_elimination",
+            "league": dtx_league,
+        },
         # Larger tournament for general testing
         {
             "name": "Large Tournament Test",
             "users": 40,
             "teams": 8,
             "type": "single_elimination",
+            "league": dtx_league,
+        },
+        # Test League tournament - used for multi-org/league testing
+        {
+            "name": "Test League Tournament",
+            "users": 20,
+            "teams": 4,
+            "type": "double_elimination",
+            "league": test_league,
         },
     ]
 
@@ -309,6 +452,7 @@ def populate_tournaments(force=False):
         tournament_name = config["name"]
         user_count = config["users"]
         tournament_type = config["type"]
+        league = config["league"]
 
         # Check if tournament with this name already exists
         if Tournament.objects.filter(name=tournament_name).exists() and not force:
@@ -329,12 +473,14 @@ def populate_tournaments(force=False):
             state = "in_progress"
 
         with transaction.atomic():
-            # Create tournament
+            # Create tournament with league assignment
             tournament = Tournament.objects.create(
                 name=tournament_name,
                 date_played=tournament_date,
                 state=state,
                 tournament_type=tournament_type,
+                league=league,
+                steam_league_id=league.steam_league_id,
             )
 
             # Get random users for this tournament
@@ -394,7 +540,8 @@ def populate_tournaments(force=False):
             team_count = tournament.teams.count()
             print(
                 f"Created tournament '{tournament_name}' with {len(selected_users)} users, "
-                f"{team_count} teams (type: {tournament_type}, state: {state})"
+                f"{team_count} teams (type: {tournament_type}, state: {state}, "
+                f"league: {league.name})"
             )
             tournaments_created += 1
 
@@ -573,7 +720,7 @@ def populate_steam_matches(force=False):
                         "start_time": result["start_time"],
                         "game_mode": result["game_mode"],
                         "lobby_type": result["lobby_type"],
-                        "league_id": 17929,
+                        "league_id": DTX_STEAM_LEAGUE_ID,
                     },
                 )
 
@@ -705,28 +852,35 @@ def populate_bracket_linking_scenario(force=False):
     Creates test data for the bracket match linking feature.
 
     Creates a tournament "Bracket Linking Test" with:
-    - league_id=17929
+    - Assigned to DTX League (steam_league_id=17929)
     - 4 teams with 5 players each (20 users with steam IDs)
     - Bracket games (winners round 1, losers bracket, grand finals)
-    - 6 Steam matches in league 17929 with different player overlap tiers:
+    - 6 Steam matches in DTX League with different player overlap tiers:
       - 2 matches with all 10 players (tier: all_players)
       - 2 matches with both captains + some players (tier: captains_plus)
       - 2 matches with both captains only (tier: captains_only)
 
     Match IDs: 9100000001-9100000010 (avoids conflict with other populate functions)
 
+    Requires: populate_organizations_and_leagues must be run first.
+
     Args:
         force: If True, recreate the tournament even if it exists
     """
     from datetime import datetime
 
-    from app.models import CustomUser, Game, PositionsModel, Team, Tournament
+    from app.models import CustomUser, Game, League, PositionsModel, Team, Tournament
     from steam.models import Match, PlayerMatchStats
 
     TOURNAMENT_NAME = "Bracket Linking Test"
     OLD_TOURNAMENT_NAME = "Link Test Tournament"  # Handle renamed tournament
-    LEAGUE_ID = 17929
     BASE_MATCH_ID = 9100000001
+
+    # Get the DTX league (should be created by populate_organizations_and_leagues)
+    dtx_league = League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).first()
+    if not dtx_league:
+        print(f"DTX League not found. Run populate_organizations_and_leagues first.")
+        return None
 
     # Check if tournament already exists (check both old and new names)
     existing_tournament = Tournament.objects.filter(name=TOURNAMENT_NAME).first()
@@ -788,13 +942,14 @@ def populate_bracket_linking_scenario(force=False):
 
         team_users.append(user)
 
-    # Create tournament
+    # Create tournament with DTX league
     tournament = Tournament.objects.create(
         name=TOURNAMENT_NAME,
         date_played=date.today(),
         state="in_progress",
         tournament_type="double_elimination",
-        league_id=LEAGUE_ID,
+        league=dtx_league,
+        steam_league_id=DTX_STEAM_LEAGUE_ID,
     )
 
     # Add all users to tournament
@@ -941,7 +1096,7 @@ def populate_bracket_linking_scenario(force=False):
             start_time=start_time,
             game_mode=2,  # Captain's Mode
             lobby_type=1,
-            league_id=LEAGUE_ID,
+            league_id=DTX_STEAM_LEAGUE_ID,
         )
 
         # Create player stats for each player in the match
@@ -1006,7 +1161,8 @@ def populate_bracket_linking_scenario(force=False):
 
 
 def populate_all(force=False):
-    """Run all population functions."""
+    """Run all population functions in the correct order."""
+    populate_organizations_and_leagues(force)
     populate_users(force)
     populate_tournaments(force)
     populate_steam_matches(force)

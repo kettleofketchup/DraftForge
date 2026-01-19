@@ -1,5 +1,6 @@
 import logging
 
+import nh3
 import requests
 from cacheops import cached_as, invalidate_model
 from django.conf import settings
@@ -86,6 +87,13 @@ class CustomUser(AbstractUser):
     discordUsername = models.TextField(null=True, blank=True)
     discordNickname = models.TextField(null=True, blank=True)
     guildNickname = models.TextField(null=True, blank=True)
+    default_organization = models.ForeignKey(
+        "Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="default_for_users",
+    )
 
     def createFromDiscordData(self, data):
         self.username = data["user"]["username"]
@@ -228,6 +236,102 @@ class CustomUser(AbstractUser):
         return f"https://cdn.discordapp.com/embed/avatars/0.png"  # Fallback
 
 
+class Organization(models.Model):
+    """Organization that owns leagues and tournaments."""
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="", max_length=10000)
+    logo = models.URLField(blank=True, default="")
+    rules_template = models.TextField(blank=True, default="", max_length=50000)
+    admins = models.ManyToManyField(
+        "CustomUser",
+        related_name="admin_organizations",
+        blank=True,
+    )
+    staff = models.ManyToManyField(
+        "CustomUser",
+        related_name="staff_organizations",
+        blank=True,
+    )
+    default_league = models.ForeignKey(
+        "League",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="default_for_organization",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Organization"
+        verbose_name_plural = "Organizations"
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Invalidate Organization cache when modified
+        invalidate_model(Organization)
+
+    def delete(self, *args, **kwargs):
+        # Invalidate caches before deletion
+        invalidate_model(Organization)
+        invalidate_model(League)
+        super().delete(*args, **kwargs)
+
+
+class League(models.Model):
+    """League that belongs to an organization, 1:1 with Steam league."""
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="leagues",
+    )
+    steam_league_id = models.IntegerField(unique=True)
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="", max_length=10000)
+    rules = models.TextField(blank=True, default="", max_length=50000)
+    prize_pool = models.CharField(max_length=100, blank=True, default="")
+    admins = models.ManyToManyField(
+        "CustomUser",
+        related_name="admin_leagues",
+        blank=True,
+    )
+    staff = models.ManyToManyField(
+        "CustomUser",
+        related_name="staff_leagues",
+        blank=True,
+    )
+    last_synced = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "League"
+        verbose_name_plural = "Leagues"
+
+    def __str__(self):
+        return f"{self.name} ({self.steam_league_id})"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Invalidate League cache and Organization cache
+        # (Organization has league_count annotation that depends on leagues)
+        invalidate_model(League)
+        invalidate_model(Organization)
+
+    def delete(self, *args, **kwargs):
+        # Invalidate caches before deletion
+        invalidate_model(League)
+        invalidate_model(Organization)
+        super().delete(*args, **kwargs)
+
+
 TOURNAMNET_TYPE_CHOICES = [
     ("single_elimination", "Single Elimination"),
     ("double_elimination", "Double Elimination"),
@@ -242,7 +346,14 @@ class Tournament(models.Model):
         ("past", "Past"),
     ]
     name = models.CharField(max_length=255)
-    date_played = models.DateField()
+    date_played = models.DateTimeField(
+        help_text="Tournament date and time (stored in UTC)"
+    )
+    timezone = models.CharField(
+        max_length=50,
+        default="UTC",
+        help_text="Tournament timezone (e.g., 'America/New_York', 'Europe/London')",
+    )
     users = models.ManyToManyField(User, related_name="tournaments")
     # Removed teams field; handled by ForeignKey in Team
     winning_team = models.OneToOneField(
@@ -258,15 +369,32 @@ class Tournament(models.Model):
         max_length=20, choices=TOURNAMNET_TYPE_CHOICES, default="double_elimination"
     )
 
-    league_id = models.IntegerField(
+    steam_league_id = models.IntegerField(
         null=True,
         blank=True,
         default=settings.DEFAULT_LEAGUE_ID,
         help_text="Steam league ID for match linking",
+        db_column="league_id",  # Keep existing column name for backwards compatibility
+    )
+    league = models.ForeignKey(
+        "League",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="tournaments",
+        db_column="league_fk_id",
     )
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Invalidate Tournament cache and related caches
+        # (Organization has tournament_count annotation that depends on tournaments via leagues)
+        invalidate_model(Tournament)
+        invalidate_model(League)
+        invalidate_model(Organization)
 
     @property
     def captains(self):
@@ -330,7 +458,18 @@ class Team(models.Model):
 
 class Game(models.Model):
     tournament = models.ForeignKey(
-        Tournament, related_name="games", on_delete=models.CASCADE, blank=True
+        Tournament,
+        related_name="games",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,  # Now optional
+    )
+    league = models.ForeignKey(
+        "League",
+        related_name="games",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,  # Games can belong directly to a league
     )
     round = models.IntegerField(default=1)
 
@@ -431,7 +570,10 @@ class Game(models.Model):
     )
 
     def __str__(self):
-        return f"{self.radiant_team.name} vs {self.dire_team.name} in {self.tournament.name}"
+        tourn_name = self.tournament.name if self.tournament else "No Tournament"
+        radiant = self.radiant_team.name if self.radiant_team else "TBD"
+        dire = self.dire_team.name if self.dire_team else "TBD"
+        return f"{radiant} vs {dire} in {tourn_name}"
 
     @property
     def teams(self):
@@ -439,11 +581,13 @@ class Game(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate tournament and team caches when games are modified
+        # Invalidate tournament, league, and team caches when games are modified
         from cacheops import invalidate_model, invalidate_obj
 
         if self.tournament_id:
             invalidate_obj(self.tournament)
+        if self.league_id:
+            invalidate_obj(self.league)
         invalidate_model(Team)
 
 

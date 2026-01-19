@@ -103,8 +103,8 @@ describe('Match Stats Modal - UI Integration', () => {
   it('should load tournaments page', () => {
     cy.visit('/tournaments');
     cy.get('body').should('be.visible');
-    // Check that the page has tournament content
-    cy.contains('Completed Bracket Test').should('be.visible');
+    // Check that the page has tournament content - wait for loading to complete
+    cy.contains('Completed Bracket Test', { timeout: 10000 }).scrollIntoView().should('exist');
   });
 
   it('should navigate to tournament detail page', () => {

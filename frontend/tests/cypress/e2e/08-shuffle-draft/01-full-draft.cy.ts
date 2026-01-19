@@ -33,6 +33,13 @@ describe('Shuffle Draft - Full Flow', () => {
   const TOURNAMENT_PK = 1;
 
   beforeEach(() => {
+    // Clear all storage to prevent stale user data from previous tests
+    cy.clearCookies();
+    cy.clearLocalStorage();
+    cy.window().then((win) => {
+      win.sessionStorage.clear();
+    });
+
     // Login as admin before each test
     cy.request({
       method: 'POST',
@@ -55,7 +62,8 @@ describe('Shuffle Draft - Full Flow', () => {
     cy.wait(1000);
 
     // Verify teams exist (check for team headers)
-    cy.contains('Team 1').should('exist');
+    // Teams are named "Team Alpha", "Team Beta", etc. in populate_tournaments()
+    cy.contains('Team Alpha').should('exist');
     cy.contains('Avg MMR').should('exist');
   });
 

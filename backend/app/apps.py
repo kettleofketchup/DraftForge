@@ -16,7 +16,7 @@ class AppConfig(AppConfig):
         """
 
         if os.environ.get("DISABLE_CACHE", "false").lower() == "true":
-            log.warning("✅ Cacheops cache disabled via DISABLE_CACHE env var")
+            log.debug("✅ Cacheops cache disabled via DISABLE_CACHE env var")
             return
         try:
 
@@ -24,6 +24,6 @@ class AppConfig(AppConfig):
             from cacheops import invalidate_all
 
             invalidate_all()
-            log.warning("✅ Cacheops cache invalidated on startup (app)")
+            log.debug("✅ Cacheops cache invalidated on startup (app)")
         except Exception as e:
-            log.warning(f"ℹ️  Skipping cache invalidation (Redis not available): {e}")
+            log.debug(f"ℹ️  Skipping cache invalidation (Redis not available): {e}")

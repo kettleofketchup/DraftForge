@@ -41,7 +41,8 @@ export default defineConfig({
   env: {
     // Environment variables for tests
     theme: 'dark',
-
+    ELECTRON_EXTRA_LAUNCH_ARGS:
+      '--disable-gpu --disable-dev-shm-usage --no-sandbox',
     apiUrl: 'https://localhost/api',
     coverage: false,
   },

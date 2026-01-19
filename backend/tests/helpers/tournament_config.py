@@ -239,6 +239,7 @@ class TestTournamentConfig(BaseModel):
 
     def _set_test_user_as_captain(self) -> None:
         """Make test user the first captain for auth testing."""
+        from app.models import DraftRound
         from tests.test_auth import createTestUser
 
         test_user, _ = createTestUser()
@@ -251,6 +252,13 @@ class TestTournamentConfig(BaseModel):
             first_team.members.add(test_user)
             first_team.save()
             self._tournament.users.add(test_user)
+
+            # Also update any DraftRounds that had the old captain
+            # This ensures the test user is recognized as having an active turn
+            if hasattr(self._tournament, "draft") and self._tournament.draft:
+                DraftRound.objects.filter(
+                    draft=self._tournament.draft, captain=old_captain
+                ).update(captain=test_user)
 
 
 # Pre-defined test scenarios
