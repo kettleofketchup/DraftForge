@@ -59,7 +59,7 @@ describe('Tournaments — create (e2e)', () => {
 
     // After submission, the created tournament should appear in the list.
     // Wait up to 10s for backend work and UI update.
-    cy.get('body').contains(thisName, { timeout: 10000 }).should('be.visible');
+    cy.contains(thisName, { timeout: 10000 }).scrollIntoView().should('be.visible');
   });
 
   // Skip: This test depends on the previous test's created tournament which may not persist
