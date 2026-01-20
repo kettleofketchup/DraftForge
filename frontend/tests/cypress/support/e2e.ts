@@ -75,6 +75,7 @@ Cypress.on('uncaught:exception', (err, runnable) => {
   // Add patterns for errors that should not fail tests
   const ignoredErrors = [
     'ResizeObserver loop limit exceeded',
+    'ResizeObserver loop completed with undelivered notifications',
     'Non-Error promise rejection captured',
     'Script error',
     'Hydration failed because the server rendered HTML',
