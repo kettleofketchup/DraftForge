@@ -147,6 +147,7 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
         self.draft_id = self.scope["url_route"]["kwargs"]["draft_id"]
         self.room_group_name = f"herodraft_{self.draft_id}"
         self.user = self.scope.get("user")
+        self._connection_tracked = False
 
         # Verify draft exists
         draft_exists = await self.draft_exists(self.draft_id)
@@ -159,6 +160,9 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
+        # Track connection count for tick broadcaster
+        await self.track_connection(True)
+
         # Send initial state
         try:
             initial_state = await self.get_draft_state(self.draft_id)
@@ -170,6 +174,11 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                     }
                 )
             )
+
+            # Start tick broadcaster if draft is in drafting state
+            if initial_state.get("state") == "drafting":
+                await self.maybe_start_tick_broadcaster()
+
         except Exception as e:
             log.error(
                 f"Failed to send initial state for herodraft {self.draft_id}: {e}"
@@ -182,6 +191,10 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
             await self.mark_captain_connected(self.draft_id, self.user, True)
 
     async def disconnect(self, close_code):
+        # Track disconnection
+        if hasattr(self, "_connection_tracked") and self._connection_tracked:
+            await self.track_connection(False)
+
         # Mark captain as disconnected
         if (
             hasattr(self, "user")
@@ -200,6 +213,36 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
         if hasattr(self, "room_group_name"):
             await self.channel_layer.group_discard(
                 self.room_group_name, self.channel_name
+            )
+
+    @database_sync_to_async
+    def track_connection(self, is_connecting: bool):
+        """Track WebSocket connection count in Redis."""
+        from app.tasks.herodraft_tick import (
+            decrement_connection_count,
+            increment_connection_count,
+        )
+
+        try:
+            if is_connecting:
+                increment_connection_count(self.draft_id)
+                self._connection_tracked = True
+            else:
+                decrement_connection_count(self.draft_id)
+                self._connection_tracked = False
+        except Exception as e:
+            log.warning(f"Failed to track connection for draft {self.draft_id}: {e}")
+
+    @database_sync_to_async
+    def maybe_start_tick_broadcaster(self):
+        """Start tick broadcaster if not already running."""
+        from app.tasks.herodraft_tick import start_tick_broadcaster
+
+        try:
+            start_tick_broadcaster(self.draft_id)
+        except Exception as e:
+            log.warning(
+                f"Failed to start tick broadcaster for draft {self.draft_id}: {e}"
             )
 
     async def receive(self, text_data):
@@ -230,7 +273,9 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                     "current_round": event.get("current_round"),
                     "active_team_id": event.get("active_team_id"),
                     "grace_time_remaining_ms": event.get("grace_time_remaining_ms"),
+                    "team_a_id": event.get("team_a_id"),
                     "team_a_reserve_ms": event.get("team_a_reserve_ms"),
+                    "team_b_id": event.get("team_b_id"),
                     "team_b_reserve_ms": event.get("team_b_reserve_ms"),
                     "draft_state": event.get("draft_state"),
                 }

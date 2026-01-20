@@ -1,20 +1,79 @@
-"""Background task to broadcast tick updates during active drafts."""
+"""Background task to broadcast tick updates during active drafts.
+
+Uses Redis distributed locking to prevent duplicate broadcasters across
+multiple Django instances, and connection tracking to stop when no
+WebSocket clients are connected.
+"""
 
 import asyncio
+import atexit
 import logging
 import threading
+import time
 from collections import namedtuple
 
+import redis
 from asgiref.sync import sync_to_async
 from channels.layers import get_channel_layer
+from django.conf import settings
 from django.utils import timezone
 
 log = logging.getLogger(__name__)
 
-# Thread-safe registry to prevent multiple threads per draft and enable stopping
+# Redis client for locking and connection tracking
+_redis_client = None
+
+
+def get_redis_client():
+    """Get or create Redis client singleton."""
+    global _redis_client
+    if _redis_client is None:
+        redis_host = getattr(settings, "REDIS_HOST", "localhost")
+        _redis_client = redis.Redis(
+            host=redis_host, port=6379, db=2, decode_responses=True
+        )
+    return _redis_client
+
+
+# Thread-safe registry for local cleanup
 _lock = threading.Lock()
 _active_tick_tasks = {}  # draft_id -> TaskInfo(stop_event, thread)
 TaskInfo = namedtuple("TaskInfo", ["stop_event", "thread"])
+
+# Connection tracking keys
+CONN_COUNT_KEY = "herodraft:connections:{draft_id}"
+LOCK_KEY = "herodraft:tick_lock:{draft_id}"
+LOCK_TIMEOUT = 10  # Lock expires after 10 seconds (renewed each tick)
+
+
+def increment_connection_count(draft_id: int) -> int:
+    """Increment WebSocket connection count for a draft. Returns new count."""
+    r = get_redis_client()
+    key = CONN_COUNT_KEY.format(draft_id=draft_id)
+    count = r.incr(key)
+    r.expire(key, 300)  # Expire after 5 min of no activity
+    log.debug(f"Draft {draft_id} connection count incremented to {count}")
+    return count
+
+
+def decrement_connection_count(draft_id: int) -> int:
+    """Decrement WebSocket connection count for a draft. Returns new count."""
+    r = get_redis_client()
+    key = CONN_COUNT_KEY.format(draft_id=draft_id)
+    count = r.decr(key)
+    if count <= 0:
+        r.delete(key)
+        count = 0
+    log.debug(f"Draft {draft_id} connection count decremented to {count}")
+    return count
+
+
+def get_connection_count(draft_id: int) -> int:
+    """Get current WebSocket connection count for a draft."""
+    r = get_redis_client()
+    key = CONN_COUNT_KEY.format(draft_id=draft_id)
+    count = r.get(key)
+    return int(count) if count else 0
 
 
 async def broadcast_tick(draft_id: int):
@@ -41,7 +100,8 @@ async def broadcast_tick(draft_id: int):
         if not current_round:
             return None
 
-        teams = list(draft.draft_teams.all())
+        # Use explicit ordering by ID for deterministic team order
+        teams = list(draft.draft_teams.all().order_by("id"))
         team_a = teams[0] if teams else None
         team_b = teams[1] if len(teams) > 1 else None
 
@@ -58,7 +118,10 @@ async def broadcast_tick(draft_id: int):
             "current_round": current_round.round_number,
             "active_team_id": current_round.draft_team_id,
             "grace_time_remaining_ms": grace_remaining,
+            # Include team IDs so frontend can match reserve times correctly
+            "team_a_id": team_a.id if team_a else None,
             "team_a_reserve_ms": team_a.reserve_time_remaining if team_a else 0,
+            "team_b_id": team_b.id if team_b else None,
             "team_b_reserve_ms": team_b.reserve_time_remaining if team_b else 0,
             "draft_state": draft.state,
         }
@@ -120,27 +183,82 @@ async def check_timeout(draft_id: int):
     return await check_and_auto_pick()
 
 
-async def run_tick_loop(draft_id: int, stop_event: threading.Event):
-    """Run tick broadcasts every second while draft is active."""
+def should_continue_ticking(draft_id: int, r: redis.Redis) -> tuple[bool, str]:
+    """
+    Check if tick loop should continue.
+
+    Returns:
+        tuple: (should_continue, reason_if_stopping)
+    """
     from app.models import HeroDraft
 
-    @sync_to_async
-    def is_draft_active():
-        try:
-            draft = HeroDraft.objects.get(id=draft_id)
-            return draft.state == "drafting"
-        except HeroDraft.DoesNotExist:
-            return False
+    # Check connection count
+    conn_count = get_connection_count(draft_id)
+    if conn_count <= 0:
+        return False, "no_connections"
 
-    while not stop_event.is_set() and await is_draft_active():
+    # Check draft state
+    try:
+        draft = HeroDraft.objects.get(id=draft_id)
+        if draft.state != "drafting":
+            return False, f"draft_state_{draft.state}"
+    except HeroDraft.DoesNotExist:
+        return False, "draft_not_found"
+
+    return True, ""
+
+
+async def run_tick_loop(draft_id: int, stop_event: threading.Event):
+    """Run tick broadcasts every second while draft is active and has connections."""
+    r = get_redis_client()
+    lock_key = LOCK_KEY.format(draft_id=draft_id)
+
+    @sync_to_async
+    def check_continue():
+        return should_continue_ticking(draft_id, r)
+
+    @sync_to_async
+    def extend_lock():
+        # Extend lock timeout to show we're still alive
+        r.expire(lock_key, LOCK_TIMEOUT)
+
+    log.info(f"Tick loop started for draft {draft_id}")
+
+    while not stop_event.is_set():
+        should_continue, reason = await check_continue()
+        if not should_continue:
+            log.info(f"Stopping tick loop for draft {draft_id}: {reason}")
+            break
+
         await broadcast_tick(draft_id)
         await check_timeout(draft_id)
+        await extend_lock()
         await asyncio.sleep(1)
 
+    log.info(f"Tick loop ended for draft {draft_id}")
 
-def start_tick_broadcaster(draft_id: int):
-    """Start the tick broadcaster for a draft."""
+
+def start_tick_broadcaster(draft_id: int) -> bool:
+    """
+    Start the tick broadcaster for a draft.
+
+    Uses Redis distributed lock to ensure only one broadcaster runs
+    across all Django instances.
+
+    Returns:
+        bool: True if broadcaster was started, False if already running elsewhere
+    """
+    r = get_redis_client()
+    lock_key = LOCK_KEY.format(draft_id=draft_id)
     stop_event = threading.Event()
+
+    # Try to acquire distributed lock (non-blocking)
+    # SET NX = only set if not exists, EX = expire time
+    acquired = r.set(lock_key, "locked", nx=True, ex=LOCK_TIMEOUT)
+
+    if not acquired:
+        log.debug(f"Tick broadcaster already running for draft {draft_id} (lock held)")
+        return False
 
     def run_in_thread():
         loop = asyncio.new_event_loop()
@@ -151,41 +269,63 @@ def start_tick_broadcaster(draft_id: int):
             log.error(f"Tick broadcaster error for draft {draft_id}: {e}")
         finally:
             loop.close()
-            # Cleanup when loop ends (thread-safe)
+            # Release lock and cleanup
+            try:
+                r.delete(lock_key)
+            except Exception:
+                pass
             with _lock:
                 _active_tick_tasks.pop(draft_id, None)
 
-    # Check if already running and register (thread-safe)
+    # Register locally for cleanup
     with _lock:
         if draft_id in _active_tick_tasks:
-            log.debug(f"Tick broadcaster already running for draft {draft_id}")
-            return
+            # Race condition - another local thread started
+            r.delete(lock_key)
+            return False
 
         thread = threading.Thread(target=run_in_thread, daemon=True)
         _active_tick_tasks[draft_id] = TaskInfo(stop_event, thread)
 
-    # Start thread outside lock to avoid holding lock during thread startup
     thread.start()
     log.info(f"Started tick broadcaster for draft {draft_id}")
+    return True
 
 
 def stop_tick_broadcaster(draft_id: int):
     """Stop the tick broadcaster for a draft."""
-    # Get task info (thread-safe)
+    r = get_redis_client()
+    lock_key = LOCK_KEY.format(draft_id=draft_id)
+
+    # Get local task info
     with _lock:
         task_info = _active_tick_tasks.get(draft_id)
-        if task_info is None:
-            return
 
-    log.info(f"Stopping tick broadcaster for draft {draft_id}")
+    if task_info:
+        log.info(f"Stopping tick broadcaster for draft {draft_id}")
+        task_info.stop_event.set()
+        task_info.thread.join(timeout=2.0)
 
-    # Signal the thread to stop
-    task_info.stop_event.set()
+    # Release lock (in case local thread didn't clean up)
+    try:
+        r.delete(lock_key)
+    except Exception:
+        pass
 
-    # Wait for thread to finish (outside lock to avoid deadlock)
-    task_info.thread.join(timeout=2.0)
-
-    # Clean up registry (thread-safe)
-    # Note: thread's finally block may have already cleaned up
     with _lock:
         _active_tick_tasks.pop(draft_id, None)
+
+
+def stop_all_broadcasters():
+    """Stop all active tick broadcasters. Called on shutdown."""
+    with _lock:
+        draft_ids = list(_active_tick_tasks.keys())
+
+    for draft_id in draft_ids:
+        stop_tick_broadcaster(draft_id)
+
+    log.info(f"Stopped {len(draft_ids)} tick broadcasters on shutdown")
+
+
+# Register cleanup on process exit
+atexit.register(stop_all_broadcasters)

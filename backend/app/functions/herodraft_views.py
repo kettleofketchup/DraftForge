@@ -50,12 +50,12 @@ def create_herodraft(request, game_pk):
     """
     game = get_object_or_404(Game, pk=game_pk)
 
-    # Check if draft already exists
+    # Check if draft already exists - return existing draft instead of error
     if hasattr(game, "herodraft"):
-        return Response(
-            {"error": "This game already has a hero draft"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        from app.serializers import HeroDraftSerializer
+
+        serializer = HeroDraftSerializer(game.herodraft)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     # Check game has both teams
     if not game.radiant_team or not game.dire_team:
@@ -415,3 +415,57 @@ def list_available_heroes(request, draft_pk):
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
     available = get_available_heroes(draft)
     return Response({"available_heroes": available})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def abandon_draft(request, draft_pk):
+    """
+    Abandon a hero draft.
+
+    Can be called by an admin or a captain in the draft.
+    Transitions the draft to "abandoned" state.
+
+    Returns:
+        200: Updated draft data
+        403: User is not authorized to abandon this draft
+        404: Draft not found
+        400: Draft already completed or abandoned
+    """
+    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+
+    # Check if draft is already in a terminal state
+    if draft.state in ("completed", "abandoned"):
+        return Response(
+            {"error": f"Cannot abandon draft in state '{draft.state}'"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Check authorization: must be admin or captain in this draft
+    is_captain = _user_is_captain_in_draft(draft, request.user)
+    is_admin = request.user.is_staff
+
+    if not is_captain and not is_admin:
+        return Response(
+            {"error": "You are not authorized to abandon this draft"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    # Transition to abandoned state
+    draft.state = "abandoned"
+    draft.save()
+
+    log.info(
+        f"HeroDraft {draft.pk} abandoned by user {request.user.pk} (admin={is_admin})"
+    )
+
+    # Create event for audit trail
+    HeroDraftEvent.objects.create(
+        draft=draft,
+        event_type="draft_abandoned",
+        metadata={"abandoned_by": request.user.pk, "was_admin": is_admin},
+    )
+
+    broadcast_herodraft_event(draft, "draft_abandoned")
+
+    return Response(HeroDraftSerializer(draft).data)

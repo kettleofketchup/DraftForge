@@ -11,6 +11,7 @@ from django.views.generic.base import RedirectView
 
 from app import views_main as app_views
 from app.functions.herodraft_views import (
+    abandon_draft,
     create_herodraft,
     do_submit_choice,
     do_submit_pick,
@@ -164,6 +165,11 @@ urlpatterns = [
         "api/herodraft/<int:draft_pk>/list-available-heroes/",
         list_available_heroes,
         name="herodraft_list_available_heroes",
+    ),
+    path(
+        "api/herodraft/<int:draft_pk>/abandon/",
+        abandon_draft,
+        name="herodraft_abandon",
     ),
 ]
 

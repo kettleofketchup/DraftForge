@@ -95,6 +95,25 @@ class CustomUser(AbstractUser):
         related_name="default_for_users",
     )
 
+    # Steam ID conversion constant
+    # Steam64 (Friend ID) = 76561197960265728 + Steam32 (Account ID)
+    STEAM_ID_64_BASE = 76561197960265728
+
+    @property
+    def steam_account_id(self):
+        """
+        Returns the 32-bit Steam Account ID computed from the 64-bit Friend ID.
+
+        Steam uses two ID formats:
+        - Steam64/Friend ID: Used in Steam Community URLs (e.g., 76561198012345678)
+        - Steam32/Account ID: Used in match data from Steam API (e.g., 52079950)
+
+        Conversion: Account ID = Friend ID - 76561197960265728
+        """
+        if self.steamid is None:
+            return None
+        return self.steamid - self.STEAM_ID_64_BASE
+
     def createFromDiscordData(self, data):
         self.username = data["user"]["username"]
         self.discordId = data["user"]["id"]
@@ -1239,6 +1258,7 @@ class HeroDraft(models.Model):
         ("drafting", "Drafting"),
         ("paused", "Paused"),
         ("completed", "Completed"),
+        ("abandoned", "Abandoned"),
     ]
 
     game = models.OneToOneField(
