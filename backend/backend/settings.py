@@ -123,6 +123,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "telemetry.middleware.TelemetryMiddleware",  # AFTER AuthenticationMiddleware
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
@@ -428,3 +429,12 @@ from config.leagues import app_config
 
 LEAGUE_CHOICES = app_config.league_choices
 DEFAULT_LEAGUE_ID = app_config.default_league_id
+
+# =============================================================================
+# Telemetry Configuration
+# =============================================================================
+
+# Initialize telemetry (structured logging + optional OTel tracing)
+from telemetry.config import init_telemetry
+
+init_telemetry()
