@@ -17,11 +17,8 @@ describe('Tournaments — create (e2e)', () => {
     cy.loginAdmin();
     visitAndWaitForHydration('/tournaments');
   });
-  const getDate = () =>
-    cy
-      .contains('label', 'Date Played', { timeout: 10000 })
-      .parent()
-      .find('input');
+  const getDatePicker = () =>
+    cy.get('[data-testid="tournament-date-picker"]', { timeout: 10000 });
   const getName = () =>
     cy.get('[data-testid="tournament-name-input"]', { timeout: 10000 });
 
@@ -52,7 +49,11 @@ describe('Tournaments — create (e2e)', () => {
       .should('be.visible')
       .click({ force: true });
 
-    getDate().clear().type(dateYYYYMMDD);
+    // Click the date picker button to open calendar popover
+    getDatePicker().click();
+    // Select today's date from the calendar
+    cy.get('[role="gridcell"]').contains(/^\d+$/).first().click({ force: true });
+
     cy.get('button.btn.btn-primary')
       .contains(/Create|Create tourn|Saving.../)
       .first()
