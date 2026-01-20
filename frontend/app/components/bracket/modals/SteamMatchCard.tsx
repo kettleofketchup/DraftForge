@@ -17,6 +17,7 @@ export interface MatchedPlayer {
   hero_id: number;
   player_slot: number;
   is_radiant: boolean;
+  is_captain: boolean;
 }
 
 export interface MatchSuggestion {
@@ -42,14 +43,18 @@ interface SteamMatchCardProps {
 function PlayerDisplay({ player }: { player: MatchedPlayer }) {
   return (
     <div className="flex items-center gap-2 py-1">
-      <Avatar className="h-6 w-6">
+      <Avatar className={cn("h-6 w-6", player.is_captain && "ring-2 ring-yellow-500")}>
         <AvatarImage src={player.avatar || undefined} />
         <AvatarFallback>
           <User className="h-3 w-3" />
         </AvatarFallback>
       </Avatar>
-      <span className="text-xs text-foreground truncate max-w-[100px]">
+      <span className={cn(
+        "text-xs truncate max-w-[100px]",
+        player.is_captain ? "text-yellow-500 font-medium" : "text-foreground"
+      )}>
         {player.username || `Steam ${player.steam_id}`}
+        {player.is_captain && " (C)"}
       </span>
     </div>
   );
