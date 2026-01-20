@@ -6,8 +6,13 @@ import token
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    permission_classes,
+)
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from social_django.models import UserSocialAuth
@@ -162,7 +167,9 @@ def return_tokens(user):
 from django.test import Client
 
 
+@csrf_exempt
 @api_view(["POST"])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def login_admin(request):
     if not isTestEnvironment(request):
@@ -176,7 +183,9 @@ def login_admin(request):
     return return_tokens(user)
 
 
+@csrf_exempt
 @api_view(["POST"])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def login_staff(request):
     if not isTestEnvironment(request):
@@ -189,7 +198,9 @@ def login_staff(request):
     return return_tokens(user)
 
 
+@csrf_exempt
 @api_view(["POST"])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def login_user(request):
     if not isTestEnvironment(request):
@@ -203,7 +214,9 @@ def login_user(request):
     return return_tokens(user)
 
 
+@csrf_exempt
 @api_view(["POST"])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def login_as_user(request):
     """
