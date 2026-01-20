@@ -144,7 +144,9 @@ def get_match_suggestions_for_game(game: Game, search: str | None = None) -> lis
                 "player_overlap": _count_player_overlap(match, all_team_steam_ids),
                 "radiant_captain": radiant_captain_info,
                 "dire_captain": dire_captain_info,
-                "matched_players": _get_matched_players(match, all_team_steam_ids),
+                "matched_players": _get_matched_players(
+                    match, all_team_steam_ids, radiant_captain_id, dire_captain_id
+                ),
             }
         )
 
@@ -187,9 +189,16 @@ def _count_player_overlap(match: Match, all_team_steam_ids: set[int]) -> int:
     return len(all_team_steam_ids & match_steam_ids)
 
 
-def _get_matched_players(match: Match, all_team_steam_ids: set[int]) -> list[dict]:
+def _get_matched_players(
+    match: Match,
+    all_team_steam_ids: set[int],
+    radiant_captain_id: int | None = None,
+    dire_captain_id: int | None = None,
+) -> list[dict]:
     """Get info for all matched players in the match."""
     from app.models import CustomUser
+
+    captain_ids = {radiant_captain_id, dire_captain_id} - {None}
 
     # Get all player stats for this match
     stats = PlayerMatchStats.objects.filter(match=match).select_related("user")
@@ -211,9 +220,12 @@ def _get_matched_players(match: Match, all_team_steam_ids: set[int]) -> list[dic
                     "hero_id": stat.hero_id,
                     "player_slot": stat.player_slot,
                     "is_radiant": stat.player_slot < 128,
+                    "is_captain": stat.steam_id in captain_ids,
                 }
             )
 
-    # Sort by team (radiant first) then by slot
-    matched.sort(key=lambda p: (not p["is_radiant"], p["player_slot"]))
+    # Sort by team (radiant first), captain first within team, then by slot
+    matched.sort(
+        key=lambda p: (not p["is_radiant"], not p["is_captain"], p["player_slot"])
+    )
     return matched

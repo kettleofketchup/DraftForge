@@ -161,6 +161,7 @@ class MatchedPlayerSerializer(serializers.Serializer):
     hero_id = serializers.IntegerField()
     player_slot = serializers.IntegerField()
     is_radiant = serializers.BooleanField()
+    is_captain = serializers.BooleanField()
 
 
 class MatchSuggestionDetailSerializer(serializers.Serializer):
