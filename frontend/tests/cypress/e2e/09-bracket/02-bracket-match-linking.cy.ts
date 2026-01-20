@@ -35,6 +35,52 @@ describe('Bracket Match Linking (e2e)', () => {
     );
   };
 
+  describe('Bracket Setup', () => {
+    before(() => {
+      // Clear all storage
+      cy.clearCookies();
+      cy.clearLocalStorage();
+    });
+
+    it('should generate and save bracket for test tournament', () => {
+      cy.loginStaff();
+      suppressHydrationErrors();
+
+      visitAndWaitForHydration(`/tournament/${tournamentPk}/games`);
+
+      // Wait for the games tab to load
+      cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');
+
+      // Check if bracket already exists
+      cy.get('body').then(($body) => {
+        if ($body.find('[data-testid="bracketContainer"]').length === 0) {
+          // No bracket exists, generate one
+          // Click the Generate Bracket dropdown
+          cy.contains('button', 'Generate Bracket').click();
+
+          // Select random seeding option from dropdown
+          cy.contains('Random Seeding').click();
+
+          // Wait for bracket to be generated
+          cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
+            'be.visible'
+          );
+
+          // Save the bracket
+          cy.contains('button', 'Save Bracket').click();
+
+          // Wait for save to complete
+          cy.wait(2000);
+        }
+      });
+
+      // Verify bracket container is now visible
+      cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
+        'be.visible'
+      );
+    });
+  });
+
   describe('Staff User Tests', () => {
     beforeEach(() => {
       // Clear all storage to prevent stale user data from previous tests
