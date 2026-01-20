@@ -3407,3 +3407,245 @@ This implementation plan covers:
 12. **Testing** (Tasks 21-22): Integration tests and full test suite
 
 Each task follows TDD with explicit file paths, complete code, and exact commands.
+
+---
+
+## Post-Implementation Code Review Fixes
+
+After implementation, a comprehensive 3-agent code review identified issues across Backend, Frontend, and Integration layers. The following fixes were applied:
+
+### Critical Fixes (C1-C4)
+
+**C1: roll_winner Schema Mismatch** ✅
+- **Issue:** Backend returned full DraftTeam object for `roll_winner`, but frontend schema expected just an ID
+- **Fix:** Updated `schemas.ts` to use `DraftTeamSchema.nullable()` and modified `HeroDraftModal.tsx` to use the object directly
+- **Files:** `frontend/app/components/herodraft/schemas.ts`, `frontend/app/components/herodraft/HeroDraftModal.tsx`
+
+**C2: Team Ordering Indeterminacy in Tick Data** ✅
+- **Issue:** `draft_teams.all()` had non-deterministic order, causing reserve times to mismatch teams
+- **Fix:** Added `.order_by("id")` to teams query and included explicit `team_a_id`/`team_b_id` in tick data
+- **Files:** `backend/app/tasks/herodraft_tick.py`, `backend/app/consumers.py`, `frontend/app/components/herodraft/schemas.ts`
+
+**C3: Array Bounds Checks for draft_teams Access** ✅
+- **Issue:** Direct array access `draft.draft_teams[0]` could crash if array empty
+- **Fix:** Added optional chaining `draft.draft_teams?.[0] ?? null` and `getTeamReserve()` function to match by team ID
+- **Files:** `frontend/app/components/herodraft/DraftTopBar.tsx`
+
+**C4: Missing Loading States During API Calls** ✅
+- **Issue:** Users could double-click buttons during async operations
+- **Fix:** Added `isSubmitting` state with `try/finally` blocks and `disabled={isSubmitting}` to all action buttons
+- **Files:** `frontend/app/components/herodraft/HeroDraftModal.tsx`
+
+### Important Fixes (I1-I8)
+
+**I1: WebSocket State Drift on Reconnection** ✅
+- **Issue:** State could drift if `initial_state` wasn't properly handled
+- **Fix:** Added documentation comment clarifying full state replace on `initial_state` message
+- **Files:** `frontend/app/components/herodraft/hooks/useHeroDraftWebSocket.ts`
+
+**I2: Add WebSocket Consumer Tests** ✅
+- **Issue:** No test coverage for WebSocket consumer behavior
+- **Fix:** Created `test_herodraft_consumers.py` with 7 test cases covering connection, groups, and message handling
+- **Files:** `backend/app/tests/test_herodraft_consumers.py` (new)
+
+**I3: Add Timeout Tests** ✅
+- **Issue:** No tests for timeout and tick broadcaster functionality
+- **Fix:** Created `test_herodraft_tick.py` with tests for timeout handling and tick broadcasting
+- **Files:** `backend/app/tests/test_herodraft_tick.py` (new)
+
+**I4: Add Zod Validation on WebSocket Messages** ✅
+- **Issue:** WebSocket messages weren't validated at runtime
+- **Fix:** Added discriminated union schema `HeroDraftWebSocketMessageSchema` and `safeParse` validation with error logging
+- **Files:** `frontend/app/components/herodraft/schemas.ts`, `frontend/app/components/herodraft/hooks/useHeroDraftWebSocket.ts`
+
+**I5: Add dotaconstants Type Declarations** ✅
+- **Issue:** Missing TypeScript types for `dotaconstants` package
+- **Fix:** Created `dotaconstants.d.ts` module declaration with full hero data interface
+- **Files:** `frontend/app/types/dotaconstants.d.ts` (new)
+
+**I6: Add Abandon/Forfeit Draft Mechanism** ✅
+- **Issue:** No way to abandon a draft that can't be completed
+- **Fix:** Added "abandoned" state to model, created `abandon_draft` API endpoint, added frontend API function
+- **Files:** `backend/app/models.py`, `backend/app/functions/herodraft_views.py`, `backend/backend/urls.py`, `frontend/app/components/herodraft/api.ts`, `frontend/app/components/herodraft/schemas.ts`
+
+**I7: Add URL Route for Deep-Linking to Draft** ✅
+- **Issue:** No way to share a direct link to an active draft
+- **Fix:** Added URL parsing for `/tournament/:pk/bracket/draft/:draftId`, `pendingDraftId` state in store, and auto-open logic in BracketView/MatchStatsModal
+- **Files:** `frontend/app/store/tournamentStore.ts`, `frontend/app/pages/tournament/TournamentDetailPage.tsx`, `frontend/app/components/bracket/BracketView.tsx`, `frontend/app/components/bracket/modals/MatchStatsModal.tsx`
+
+**I8: Add Team Name to Round Data** ✅
+- **Issue:** Frontend had to look up team name from ID when displaying rounds
+- **Fix:** Added `team_name` field to `HeroDraftRoundSerializerFull` and frontend schema
+- **Files:** `backend/app/serializers.py`, `frontend/app/components/herodraft/schemas.ts`
+
+### Summary of Files Changed
+
+**Backend:**
+- `backend/app/models.py` - Added "abandoned" state
+- `backend/app/serializers.py` - Added team_name to round serializer
+- `backend/app/consumers.py` - Added team IDs to tick handler
+- `backend/app/tasks/herodraft_tick.py` - Fixed team ordering, added team IDs
+- `backend/app/functions/herodraft_views.py` - Added abandon_draft endpoint
+- `backend/backend/urls.py` - Added abandon route
+- `backend/app/tests/test_herodraft_consumers.py` (new) - WebSocket tests
+- `backend/app/tests/test_herodraft_tick.py` (new) - Timeout tests
+
+**Frontend:**
+- `frontend/app/components/herodraft/schemas.ts` - Multiple schema fixes
+- `frontend/app/components/herodraft/types.ts` - Added WebSocket message type
+- `frontend/app/components/herodraft/HeroDraftModal.tsx` - Loading states, roll_winner fix
+- `frontend/app/components/herodraft/DraftTopBar.tsx` - Array bounds checks
+- `frontend/app/components/herodraft/hooks/useHeroDraftWebSocket.ts` - Zod validation
+- `frontend/app/components/herodraft/api.ts` - Added abandonDraft function
+- `frontend/app/store/tournamentStore.ts` - Added pendingDraftId state
+- `frontend/app/pages/tournament/TournamentDetailPage.tsx` - URL parsing
+- `frontend/app/components/bracket/BracketView.tsx` - Deep-link auto-open
+- `frontend/app/components/bracket/modals/MatchStatsModal.tsx` - initialDraftId prop
+- `frontend/app/types/dotaconstants.d.ts` (new) - Type declarations
+
+---
+
+## Post-Implementation Infrastructure Enhancements
+
+After the code review fixes, additional infrastructure improvements were implemented for production reliability:
+
+### Redis Distributed Locking for Tick Broadcaster
+
+**Problem:** The original tick broadcaster used a simple thread registry, which only prevents duplicate threads within a single Django process. In production with multiple Daphne/Django instances, this could result in multiple broadcasters for the same draft.
+
+**Solution:** Redis distributed locking with automatic expiration.
+
+**Implementation:**
+
+```python
+# backend/app/tasks/herodraft_tick.py
+
+# Redis keys
+CONN_COUNT_KEY = "herodraft:connections:{draft_id}"
+LOCK_KEY = "herodraft:tick_lock:{draft_id}"
+LOCK_TIMEOUT = 10  # Lock expires after 10 seconds
+
+def start_tick_broadcaster(draft_id: int) -> bool:
+    r = get_redis_client()
+    lock_key = LOCK_KEY.format(draft_id=draft_id)
+
+    # SET NX = only set if not exists, EX = expire time
+    acquired = r.set(lock_key, "locked", nx=True, ex=LOCK_TIMEOUT)
+
+    if not acquired:
+        return False  # Another instance owns the lock
+
+    # Start thread, renew lock each tick
+    ...
+```
+
+**Key Features:**
+
+1. **Atomic lock acquisition**: `SET NX EX` is atomic - no race conditions
+2. **Auto-expiration**: Lock expires after 10 seconds if process crashes
+3. **Lock renewal**: Running broadcaster extends lock each tick cycle
+4. **Connection tracking**: Uses Redis counters to track WebSocket connections
+
+**Files Modified:**
+- `backend/app/tasks/herodraft_tick.py` - Complete rewrite with Redis locking
+- `backend/app/consumers.py` - Added connection tracking and tick broadcaster startup
+
+### WebSocket Connection Tracking
+
+**Problem:** Tick broadcaster had no way to know when all WebSocket clients disconnected, causing unnecessary resource usage.
+
+**Solution:** Redis counters for connection tracking.
+
+```python
+def increment_connection_count(draft_id: int) -> int:
+    r = get_redis_client()
+    key = CONN_COUNT_KEY.format(draft_id=draft_id)
+    count = r.incr(key)
+    r.expire(key, 300)  # Expire after 5 min of no activity
+    return count
+
+def decrement_connection_count(draft_id: int) -> int:
+    r = get_redis_client()
+    key = CONN_COUNT_KEY.format(draft_id=draft_id)
+    count = r.decr(key)
+    if count <= 0:
+        r.delete(key)
+        count = 0
+    return count
+```
+
+The tick loop checks connection count each iteration and stops when count reaches 0:
+
+```python
+def should_continue_ticking(draft_id: int, r: redis.Redis) -> tuple[bool, str]:
+    conn_count = get_connection_count(draft_id)
+    if conn_count <= 0:
+        return False, "no_connections"
+    # Also check draft state
+    ...
+```
+
+### Celery Beat for Discord Avatar Refresh
+
+**Problem:** Discord avatar URLs expire and become invalid over time. The UI was previously triggering refreshes, which was inconsistent and unreliable.
+
+**Solution:** Celery Beat scheduled tasks for automatic avatar maintenance.
+
+**Implementation:**
+
+```python
+# backend/app/tasks/avatar_refresh.py
+
+@shared_task
+def refresh_discord_avatars(batch_size: int = 100):
+    """Batch refresh - runs every 5 minutes via Beat."""
+    from app.utils.avatar_utils import refresh_invalid_avatars
+    results = refresh_invalid_avatars(batch_size=batch_size)
+    return results
+
+@shared_task
+def refresh_single_user_avatar(user_id: int):
+    """On-demand single user refresh (e.g., on login)."""
+    from app.utils.avatar_utils import refresh_user_avatar
+    return refresh_user_avatar(user_id)
+
+@shared_task
+def refresh_all_discord_data():
+    """Full refresh - runs daily at 4 AM."""
+    # Iterates all users with Discord IDs in batches
+    ...
+```
+
+**Beat Schedule:**
+
+```python
+# backend/config/celery.py
+
+app.conf.beat_schedule = {
+    # ... existing tasks ...
+    "refresh-discord-avatars": {
+        "task": "app.tasks.avatar_refresh.refresh_discord_avatars",
+        "schedule": 300.0,  # Every 5 minutes
+        "kwargs": {"batch_size": 50},
+    },
+    "refresh-all-discord-data-daily": {
+        "task": "app.tasks.avatar_refresh.refresh_all_discord_data",
+        "schedule": crontab(hour=4, minute=0),
+    },
+}
+```
+
+**Files Created/Modified:**
+- `backend/app/tasks/avatar_refresh.py` (new) - Celery tasks for avatar refresh
+- `backend/app/tasks/__init__.py` - Updated exports
+- `backend/config/celery.py` - Added Beat schedule entries
+
+### Summary of Infrastructure Files
+
+| File | Changes |
+|------|---------|
+| `backend/app/tasks/herodraft_tick.py` | Redis locking, connection tracking, auto-stop |
+| `backend/app/consumers.py` | Connection tracking calls, tick broadcaster startup |
+| `backend/app/tasks/avatar_refresh.py` | New Celery tasks for Discord avatar maintenance |
+| `backend/app/tasks/__init__.py` | Exports for new tasks |
+| `backend/config/celery.py` | Beat schedule for avatar refresh tasks |
