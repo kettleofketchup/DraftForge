@@ -38,21 +38,27 @@ export const SearchUserDropdown: React.FC<Props> = ({
           );
         });
 
-  const handleSearchUserSelect = (userName: UserType | string) => {
-    if (typeof userName === 'object') {
-      log.debug(userName);
-      userName = userName?.username || userName?.nickname || '';
-    }
-    if (userName === undefined || userName === '') {
+  const handleSearchUserSelect = (userName: UserType | string | null) => {
+    if (userName === null) {
       return;
     }
-    log.debug(`Selected user: ${userName}`, userName);
+    let searchName: string;
+    if (typeof userName === 'object') {
+      log.debug(userName);
+      searchName = userName?.username || userName?.nickname || '';
+    } else {
+      searchName = userName;
+    }
+    if (searchName === undefined || searchName === '') {
+      return;
+    }
+    log.debug(`Selected user: ${searchName}`, searchName);
 
     const user: UserType | undefined = users.find(
       (user) =>
         user &&
-        (user.username?.toLowerCase() === userName?.toLowerCase() ||
-          user.nickname?.toLowerCase() === userName?.toLowerCase()),
+        (user.username?.toLowerCase() === searchName?.toLowerCase() ||
+          user.nickname?.toLowerCase() === searchName?.toLowerCase()),
     );
   };
 

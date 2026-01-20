@@ -5,7 +5,7 @@ import { getLogger } from '~/lib/logger';
 const log = getLogger('InitDraft');
 
 type hookParams = {
-  draftStyle: 'snake' | 'normal';
+  draftStyle: 'snake' | 'normal' | 'shuffle';
   draft: DraftType;
   setDraft: (draft: DraftType) => void;
 };
@@ -28,7 +28,7 @@ export const updateDraftStyleHook = async ({
 
   const updatedDraft: Partial<DraftType> = {
     pk: draft.pk,
-    draft_style: draftStyle as 'snake' | 'normal',
+    draft_style: draftStyle as 'snake' | 'normal' | 'shuffle',
   };
   toast.promise(updateDraft(draft.pk, updatedDraft), {
     loading: `Setting draft style to ${draftStyle}...`,

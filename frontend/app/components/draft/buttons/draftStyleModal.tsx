@@ -53,7 +53,7 @@ export const DraftStyleModal: React.FC = () => {
   );
 
   useEffect(() => {
-    if (open && draft) {
+    if (open && draft && draft.pk !== null) {
       updateDraftPredictedMMRs(draft.pk);
     }
   }, [open, draft]);
@@ -164,7 +164,7 @@ export const DraftStyleModal: React.FC = () => {
           {/* Draft Style Selection */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Draft Style</Label>
-            <Select value={selectedStyle} onValueChange={setSelectedStyle}>
+            <Select value={selectedStyle} onValueChange={(value) => setSelectedStyle(value as 'snake' | 'normal' | 'shuffle')}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select draft style" />
               </SelectTrigger>

@@ -114,7 +114,7 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
 
   const members = () => {
     const a = tournament?.draft?.users_remaining?.sort(
-      (a: UserType, b: UserType) => {
+      (a: UserType, b: UserType): number => {
         if (!a.mmr && !b.mmr) return 0;
         if (!a.mmr) return 1; // Treat undefined MMR as lower
         if (!b.mmr) return -1; // Treat undefined MMR as lower
@@ -122,10 +122,11 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
           if (a.username && b.username) {
             return a.username.localeCompare(b.username);
           }
+          return 0;
         }
         if (a.mmr >= b.mmr) return -1;
 
-        if (a.mmr < b.mmr) return 1;
+        return 1;
       },
     );
     return a || [];

@@ -9,6 +9,8 @@ from scripts.docker import docker_build_all
 ns_test = Collection("test")
 ns_runner = Collection("runner")
 ns_cicd = Collection("cicd")
+ns_cypress = Collection("cypress")
+ns_backend = Collection("backend")
 ns_test.add_collection(ns_dbtest, "db")
 ns_test.add_collection(ns_runner, "runner")
 
@@ -158,3 +160,161 @@ ns_runner.add_task(cypress_headless, "headless")
 ns_runner.add_task(cypress_parallel, "run")
 
 ns_test.add_task(cicd_headless, "headless")
+
+
+# =============================================================================
+# Cypress Test Collections
+# =============================================================================
+
+
+@task
+def cypress_draft(c):
+    """Run draft-related Cypress tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run(
+            'npx cypress run --spec "tests/cypress/e2e/07-draft/**/*.cy.ts,tests/cypress/e2e/08-shuffle-draft/**/*.cy.ts"'
+        )
+
+
+@task
+def cypress_tournament(c):
+    """Run tournament creation Cypress tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run(
+            'npx cypress run --spec "tests/cypress/e2e/03-tournaments/**/*.cy.ts,tests/cypress/e2e/04-tournament/**/*.cy.ts"'
+        )
+
+
+@task
+def cypress_bracket(c):
+    """Run bracket-related Cypress tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run('npx cypress run --spec "tests/cypress/e2e/09-bracket/**/*.cy.ts"')
+
+
+@task
+def cypress_league(c):
+    """Run league-related Cypress tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run('npx cypress run --spec "tests/cypress/e2e/10-leagues/**/*.cy.ts"')
+
+
+@task
+def cypress_navigation(c):
+    """Run navigation/hydration Cypress tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run('npx cypress run --spec "tests/cypress/e2e/0[01]-*.cy.ts"')
+
+
+@task
+def cypress_mobile(c):
+    """Run mobile/responsive Cypress tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run('npx cypress run --spec "tests/cypress/e2e/06-mobile/**/*.cy.ts"')
+
+
+@task
+def cypress_league_steam(c):
+    """Run league steam matching Cypress tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run(
+            'npx cypress run --spec "tests/cypress/e2e/10-leagues/04-steam-matches.cy.ts"'
+        )
+
+
+@task
+def cypress_all(c):
+    """Run all Cypress tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npm run test:e2e:headless")
+
+
+# Add tasks to cypress collection
+ns_cypress.add_task(cypress_draft, "draft")
+ns_cypress.add_task(cypress_tournament, "tournament")
+ns_cypress.add_task(cypress_bracket, "bracket")
+ns_cypress.add_task(cypress_league, "league")
+ns_cypress.add_task(cypress_league_steam, "league-steam")
+ns_cypress.add_task(cypress_navigation, "navigation")
+ns_cypress.add_task(cypress_mobile, "mobile")
+ns_cypress.add_task(cypress_all, "all")
+
+ns_test.add_collection(ns_cypress, "cypress")
+
+
+# =============================================================================
+# Backend Test Collections
+# =============================================================================
+
+
+@task
+def backend_all(c):
+    """Run all backend tests."""
+    run_db_tests(c)
+
+
+@task
+def backend_steam(c):
+    """Run Steam-related backend tests."""
+    load_dotenv(paths.TEST_ENV_FILE)
+    with c.cd(paths.BACKEND_PATH):
+        c.run("DISABLE_CACHE=true pytest -vvv steam/tests/ -c pytest.ini", pty=True)
+
+
+@task
+def backend_draft(c):
+    """Run draft-related backend tests."""
+    load_dotenv(paths.TEST_ENV_FILE)
+    with c.cd(paths.BACKEND_PATH):
+        c.run(
+            "DISABLE_CACHE=true pytest -vvv app/tests/test_shuffle_draft*.py -c pytest.ini",
+            pty=True,
+        )
+
+
+# Add tasks to backend collection
+ns_backend.add_task(backend_all, "all")
+ns_backend.add_task(backend_steam, "steam")
+ns_backend.add_task(backend_draft, "draft")
+
+ns_test.add_collection(ns_backend, "backend")
+
+
+# =============================================================================
+# CI/CD Test Collections
+# =============================================================================
+
+
+@task
+def cicd_cypress(c):
+    """Run Cypress tests for CI/CD (with setup)."""
+    setup(c)
+    cypress_all(c)
+
+
+@task
+def cicd_backend(c):
+    """Run backend tests for CI/CD."""
+    backend_all(c)
+
+
+@task
+def cicd_all(c):
+    """Run all tests for CI/CD."""
+    cicd_backend(c)
+    cicd_cypress(c)
+
+
+ns_cicd.add_task(cicd_cypress, "cypress")
+ns_cicd.add_task(cicd_backend, "backend")
+ns_cicd.add_task(cicd_all, "all")
+
+ns_test.add_collection(ns_cicd, "cicd")

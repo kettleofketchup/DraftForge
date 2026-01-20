@@ -8,6 +8,7 @@ export default [
   route('organizations/:organizationId', 'routes/organization.tsx'),
   route('leagues', 'routes/leagues.tsx'),
   route('leagues/:leagueId/:tab?', 'routes/league.tsx'),
+  route('leaderboard', 'routes/leaderboard.tsx'),
   route('about', 'routes/about.tsx'),
   route('blog', 'routes/blog.tsx'),
   route('users', 'routes/users.tsx'),

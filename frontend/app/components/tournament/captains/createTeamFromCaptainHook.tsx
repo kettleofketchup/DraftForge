@@ -65,7 +65,7 @@ export const createTeamFromCaptainHook = async ({
   }
 
   const getTeam = () => {
-    return tournament?.teams?.find((t) => t.captain.pk === captain.pk);
+    return tournament?.teams?.find((t) => t.captain?.pk === captain.pk);
   };
   var newTournament: Partial<TournamentType> = {
     pk: tournament.pk,
@@ -74,7 +74,7 @@ export const createTeamFromCaptainHook = async ({
   if (team && team.pk) {
     log.debug(`Team found for captain: ${captain.username}...deleting team`);
     if (team.captain && team.captain.pk === captain.pk) setIsCaptain?.(false);
-    toast.promise(deleteTeam(getTeam().pk), {
+    toast.promise(deleteTeam(team.pk!), {
       loading: `Deleting team for ${captain.username}`,
       success: () => {
         setDraftOrder?.('0');

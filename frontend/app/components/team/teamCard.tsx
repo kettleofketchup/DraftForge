@@ -37,7 +37,7 @@ export const TeamCard: React.FC<Props> = ({
 
   const getAverageMMR = () => {
     if (!team.members || team.members.length === 0) return 'N/A';
-    const totalMMR = team.members.reduce((acc, member) => {
+    const totalMMR = team.members.reduce((acc: number, member: UserType) => {
       return acc + (member.mmr || 0);
     }, 0);
     return (totalMMR / team.members.length).toFixed(2);

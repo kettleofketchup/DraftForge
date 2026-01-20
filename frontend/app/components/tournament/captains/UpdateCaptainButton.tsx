@@ -42,7 +42,7 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
   const [draft_order, setDraftOrder] = useState<string>(getDraftOrder());
   const msg = () => (isCaptain ? `Remove` : `Add`);
 
-  const getButtonVariant = () => `${isCaptain ? 'destructive' : 'default'}`;
+  const getButtonVariant = (): 'destructive' | 'default' => isCaptain ? 'destructive' : 'default';
 
   useEffect(() => {
     setIsCaptain(determineIsCaptain());

@@ -4,7 +4,7 @@ import type { BracketMatch, SeedingMethod } from '~/components/bracket/types';
 import type { TeamType } from '~/components/tournament/types.d';
 import { generateBracket, reseedBracket } from '~/components/bracket/utils/bracketFactory';
 import { api } from '~/components/api/axios';
-import { BracketResponseSchema, type BracketMatch as ApiBracketMatch } from '~/components/bracket/schemas';
+import { BracketResponseSchema, type BracketMatchDTO as ApiBracketMatch } from '~/components/bracket/schemas';
 import { getLogger } from '~/lib/logger';
 
 const log = getLogger('bracketStore');
@@ -71,11 +71,11 @@ function mapApiMatchToMatch(apiMatch: ApiBracketMatch, allMatches: ApiBracketMat
     direTeam: apiMatch.dire_team,
     winner,
     status: apiMatch.status,
-    steamMatchId: apiMatch.gameid,
+    steamMatchId: apiMatch.gameid ?? undefined,
     nextMatchId,
-    nextMatchSlot: apiMatch.next_game_slot,
+    nextMatchSlot: apiMatch.next_game_slot ?? undefined,
     loserNextMatchId,
-    loserNextMatchSlot: apiMatch.loser_next_game_slot,
+    loserNextMatchSlot: apiMatch.loser_next_game_slot ?? undefined,
     swissRecordWins: apiMatch.swiss_record_wins,
     swissRecordLosses: apiMatch.swiss_record_losses,
   };

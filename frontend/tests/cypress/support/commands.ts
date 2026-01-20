@@ -31,13 +31,37 @@ declare namespace Cypress {
      * Custom command to login as a specific user by primary key (TEST ONLY)
      * @example cy.loginAsUser(123)
      */
-    loginAsUser(userPk: number): Chainable<Cypress.Response<{ user_id: number; username: string }>>;
+    loginAsUser(userPk: number): Chainable<Cypress.Response<{
+      success: boolean;
+      user: {
+        pk: number;
+        username: string;
+        discordUsername: string;
+        mmr: number;
+      };
+    }>>;
 
     /**
      * Custom command to get tournament details by test config key (TEST ONLY)
      * @example cy.getTournamentByKey('captain_draft_test')
      */
-    getTournamentByKey(key: string): Chainable<Cypress.Response<{ pk: number; name: string }>>;
+    getTournamentByKey(key: string): Chainable<Cypress.Response<{
+      pk: number;
+      name: string;
+      teams: Array<{
+        pk: number;
+        name: string;
+        captain: {
+          pk: number;
+          username: string;
+        };
+        draft_order: number;
+      }>;
+      captains: Array<{
+        pk: number;
+        username: string;
+      }>;
+    }>>;
 
     /**
      * Custom command to logout
