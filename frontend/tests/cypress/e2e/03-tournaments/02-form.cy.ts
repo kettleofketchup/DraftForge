@@ -23,7 +23,7 @@ describe('Tournaments — create (e2e)', () => {
       .parent()
       .find('input');
   const getName = () =>
-    cy.contains('label', 'Name:', { timeout: 10000 }).parent().find('input');
+    cy.get('[data-testid="tournament-name-input"]', { timeout: 10000 });
 
   it('logs in, creates a tournament via the UI and shows it in the list', () => {
     // Build local date in YYYY-MM-DD format (avoid UTC toISOString() shifting date in some timezones)

@@ -95,5 +95,7 @@ export const getDraftNotificationBadge = (cy: cyType) => {
  */
 export const visitTournamentWithDraftOpen = (cy: cyType, tournamentPk: number) => {
   cy.visit(`/tournament/${tournamentPk}?draft=open`);
-  cy.get('[role="dialog"]').should('be.visible');
+  cy.waitForHydration();
+  // Wait for dialog to appear - may take time for draft data to load
+  cy.get('[role="dialog"]', { timeout: 15000 }).should('be.visible');
 };
