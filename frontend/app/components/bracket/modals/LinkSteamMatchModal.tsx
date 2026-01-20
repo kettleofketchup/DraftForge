@@ -114,15 +114,27 @@ export function LinkSteamMatchModal({
     }
   };
 
-  // Group suggestions by tier
-  const groupedSuggestions = suggestions.reduce(
+  // Group suggestions by day, then by tier within each day
+  const groupedByDay = suggestions.reduce(
     (acc, suggestion) => {
-      const tier = suggestion.tier;
-      if (!acc[tier]) acc[tier] = [];
-      acc[tier].push(suggestion);
+      const date = new Date(suggestion.start_time * 1000);
+      const dayKey = date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+      if (!acc[dayKey]) {
+        acc[dayKey] = { timestamp: suggestion.start_time, matches: [] };
+      }
+      acc[dayKey].matches.push(suggestion);
       return acc;
     },
-    {} as Record<string, MatchSuggestion[]>
+    {} as Record<string, { timestamp: number; matches: MatchSuggestion[] }>
+  );
+
+  // Sort days by timestamp (most recent first)
+  const sortedDays = Object.entries(groupedByDay).sort(
+    ([, a], [, b]) => b.timestamp - a.timestamp
   );
 
   const tierOrder = ['all_players', 'captains_plus', 'captains_only', 'partial'];
@@ -182,39 +194,66 @@ export function LinkSteamMatchModal({
                 No matches found
               </div>
             ) : (
-              tierOrder.map((tier) => {
-                const tierSuggestions = groupedSuggestions[tier];
-                if (!tierSuggestions?.length) return null;
-
-                const styles = TIER_STYLES[tier];
-                const tierLabel =
-                  tierSuggestions[0]?.tier_display || tier.replace('_', ' ');
+              sortedDays.map(([dayLabel, { matches: dayMatches }]) => {
+                // Group this day's matches by tier
+                const tierGroups = dayMatches.reduce(
+                  (acc, match) => {
+                    if (!acc[match.tier]) acc[match.tier] = [];
+                    acc[match.tier].push(match);
+                    return acc;
+                  },
+                  {} as Record<string, MatchSuggestion[]>
+                );
 
                 return (
-                  <div key={tier} data-testid={`tier-${tier}`}>
-                    <div
-                      className={cn(
-                        'px-3 py-1.5 rounded-t-lg border-b',
-                        styles.bg,
-                        styles.border,
-                        styles.text
-                      )}
-                    >
-                      <span className="text-sm font-medium">{tierLabel}</span>
+                  <div key={dayLabel} className="space-y-2">
+                    {/* Day header */}
+                    <div className="sticky top-0 bg-background/95 backdrop-blur py-2 border-b">
+                      <span className="text-sm font-semibold text-foreground">
+                        {dayLabel}
+                      </span>
+                      <span className="text-xs text-muted-foreground ml-2">
+                        ({dayMatches.length} match{dayMatches.length !== 1 ? 'es' : ''})
+                      </span>
                     </div>
-                    <div className="space-y-2 p-2 border border-t-0 rounded-b-lg">
-                      {tierSuggestions.map((suggestion) => (
-                        <SteamMatchCard
-                          key={suggestion.match_id}
-                          match={suggestion}
-                          onLink={handleLink}
-                          onViewDetails={setDetailsMatchId}
-                          isCurrentlyLinked={
-                            linkedMatchId === suggestion.match_id
-                          }
-                        />
-                      ))}
-                    </div>
+
+                    {/* Tier groups within this day */}
+                    {tierOrder.map((tier) => {
+                      const tierSuggestions = tierGroups[tier];
+                      if (!tierSuggestions?.length) return null;
+
+                      const styles = TIER_STYLES[tier];
+                      const tierLabel =
+                        tierSuggestions[0]?.tier_display || tier.replace('_', ' ');
+
+                      return (
+                        <div key={`${dayLabel}-${tier}`} data-testid={`tier-${tier}`}>
+                          <div
+                            className={cn(
+                              'px-3 py-1 rounded-t-lg border-b text-xs',
+                              styles.bg,
+                              styles.border,
+                              styles.text
+                            )}
+                          >
+                            <span className="font-medium">{tierLabel}</span>
+                          </div>
+                          <div className="space-y-2 p-2 border border-t-0 rounded-b-lg">
+                            {tierSuggestions.map((suggestion) => (
+                              <SteamMatchCard
+                                key={suggestion.match_id}
+                                match={suggestion}
+                                onLink={handleLink}
+                                onViewDetails={setDetailsMatchId}
+                                isCurrentlyLinked={
+                                  linkedMatchId === suggestion.match_id
+                                }
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })
