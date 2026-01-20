@@ -65,24 +65,25 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
       log.debug(`Removing user: ${user.username}`);
       const updatedUsers = tournament.users
         ?.filter((u) => u.username !== user.username)
-        .map((u) => u.pk);
+        .map((u) => u.pk)
+        .filter((pk): pk is number => pk !== undefined);
 
       log.debug('Updated users:', updatedUsers);
 
       const updatedTournament = {
-        user_ids: updatedUsers,
+        user_ids: updatedUsers ?? [],
       };
       if (tournament.pk === undefined) {
         log.error('Tournament primary key is missing');
         return;
       }
 
-      toast.promise(updateTournament(tournament.pk, updatedTournament), {
+      toast.promise(updateTournament(tournament.pk!, updatedTournament), {
         loading: `Creating User ${user.username}.`,
         success: (data) => {
           tournament.users = tournament.users?.filter(
             (u) => u.username !== user.username,
-          );
+          ) ?? null;
           //Trigger rerender of tournament users
           setTournament(data);
           return `${user.username} has been removed`;

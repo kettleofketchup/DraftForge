@@ -28,7 +28,7 @@ export const GameCreateForm: React.FC = () => {
   const setTournament = useUserStore((state) => state.setTournament); // Zustand setter
   const [form, setForm] = useState<GameType>({} as GameType);
   const handleChange = (field: keyof GameType, value: any) => {
-    setForm((prev) => ({ ...prev, [field]: value }) as GameType);
+    setForm((prev: GameType) => ({ ...prev, [field]: value }) as GameType);
   };
 
   if (!currentUser.is_staff && !currentUser.is_superuser) {

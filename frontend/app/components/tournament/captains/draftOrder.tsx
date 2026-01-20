@@ -26,7 +26,7 @@ export const DraftOrderButton: React.FC<{
   );
   const [isLoading, setIsLoading] = useState(false);
   const getTeam = () => {
-    return tournament?.teams?.find((t) => t.captain.pk === user.pk);
+    return tournament?.teams?.find((t) => t.captain?.pk === user.pk);
   };
   const handleChange = async (value: string) => {
     log.debug('handleChange', { value });
@@ -52,7 +52,7 @@ export const DraftOrderButton: React.FC<{
       draft_order,
       team: team.name,
     });
-    toast.promise(updateTeam(team.pk, newTeam), {
+    toast.promise(updateTeam(team.pk!, newTeam), {
       loading: ` Updating Draft order for ${user.username}`,
 
       success: (data) => {
@@ -79,7 +79,7 @@ export const DraftOrderButton: React.FC<{
     <div className="flex flex-col items-center gap-2 md:flex-row">
       <Label htmlFor={id}>Draft Order</Label>
 
-      <Select id={id} onValueChange={handleChange} value={draft_order}>
+      <Select onValueChange={handleChange} value={draft_order}>
         <SelectTrigger className="w-[80px]">
           <SelectValue placeholder={draft_order} />
         </SelectTrigger>

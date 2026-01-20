@@ -35,7 +35,7 @@ export const refreshTournamentHook = async ({
 
     const data = await fetchTournament(tournament.pk);
     setTournament(data);
-    if (setDraft) setDraft(data.draft);
+    if (setDraft && data.draft) setDraft(data.draft);
     if (setCurDraftRound)
       (log.debug('curDraftRound', { curDraftRound, tournament }),
         setCurDraftRound(

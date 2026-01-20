@@ -58,9 +58,10 @@ export const TournamentCard: React.FC<Props> = ({
     e.stopPropagation();
     setErrorMessage({}); // clear old errors
 
+    const { pk: _pk, ...formWithoutPk } = form;
     const payload: Partial<TournamentType> = {
       pk: tournament.pk,
-      ...form,
+      ...formWithoutPk,
     };
     log.debug('Saving tournament with payload:', payload);
     log.debug('Save function:', saveFunc);

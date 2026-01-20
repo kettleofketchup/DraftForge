@@ -46,7 +46,7 @@ export const PlayersTab: React.FC = memo(() => {
       user_ids: [...(updatedUsers || []), thisUser.pk],
     };
 
-    if (tournament.pk === undefined) {
+    if (tournament.pk === undefined || tournament.pk === null) {
       log.error('Tournament primary key is missing');
       return;
     }
@@ -127,7 +127,7 @@ export const PlayersTab: React.FC = memo(() => {
           <SearchUserDropdown
             users={tournament?.users || []}
             query={query}
-            setQuery={setQuery}
+            setQuery={(val) => typeof val === 'string' ? setQuery(val) : setQuery(val(''))}
             data-testid="playerSearchDropdown"
           />
         </div>
@@ -137,7 +137,7 @@ export const PlayersTab: React.FC = memo(() => {
             query={addPlayerQuery}
             setQuery={setAddPlayerQuery}
             addPlayerCallback={addUserCallback}
-            addedUsers={tournament.users}
+            addedUsers={tournament.users ?? undefined}
           />
         </div>
       </div>

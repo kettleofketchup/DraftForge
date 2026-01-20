@@ -1,6 +1,6 @@
 
 
-import { ColumnDef } from '@tanstack/react-table';
+import type { ColumnDef } from '@tanstack/react-table';
 import type { UserType } from '~/components/user/types';
 // You can use a Zod schema here if you want.
 export type Payment = {

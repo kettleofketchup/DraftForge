@@ -90,22 +90,22 @@ export const TeamEditForm: React.FC<Props> = ({ user, form, setForm }) => {
     }
   };
 
-  const inputView = (key: string, label: string, type: string = 'text') => {
+  const inputView = (key: keyof UserClassType, label: string, type: string = 'text') => {
     return (
       <div>
         <label className="font-semibold">{label}</label>
         <input
           type={type}
-          placeholder={user[key] ?? ''}
-          value={form[key] ?? ''}
-          onFocus={() => handleChange(key as keyof UserClassType, user[key])}
+          placeholder={String(user[key] ?? '')}
+          value={String(form[key as keyof UserType] ?? '')}
+          onFocus={() => handleChange(key, user[key])}
           onChange={(e) =>
-            handleChange(key as keyof UserClassType, e.target.value)
+            handleChange(key, e.target.value)
           }
-          className={`input input-bordered w-full mt-1 ${errorMessage[key] ? 'input-error' : ''}`}
+          className={`input input-bordered w-full mt-1 ${errorMessage[key as keyof UserType] ? 'input-error' : ''}`}
         />
-        {errorMessage[key] && (
-          <p className="text-error text-sm mt-1">{errorMessage[key]}</p>
+        {errorMessage[key as keyof UserType] && (
+          <p className="text-error text-sm mt-1">{errorMessage[key as keyof UserType]}</p>
         )}
       </div>
     );

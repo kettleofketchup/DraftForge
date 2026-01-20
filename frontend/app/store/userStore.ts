@@ -125,7 +125,7 @@ export const useUserStore = create<UserState>()(
 
           set({
             curDraftRound:
-              get().tournament.draft.draft_rounds[get().draftIndex],
+              get().tournament.draft?.draft_rounds?.[get().draftIndex],
           });
         } catch (err) {
           log.error('Failed to fetch draft:', err);
@@ -145,7 +145,7 @@ export const useUserStore = create<UserState>()(
           console.debug('Current draft does not have a primary key (pk).');
           return;
         }
-        const draft = await fetchDraft(get().draft.pk);
+        const draft = await fetchDraft(get().draft.pk!);
         set({ draft: draft });
       },
       curDraftRound: {} as DraftRoundType,
@@ -229,7 +229,7 @@ export const useUserStore = create<UserState>()(
               return user;
             }
             return u;
-          });
+          }) ?? null;
           log.debug('Updating tournament with user:', tournament.users, user);
           if (change) {
             log.debug('Setting tournament with updated user:', tournament);

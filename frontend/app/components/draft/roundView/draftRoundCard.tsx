@@ -54,7 +54,7 @@ export const DraftRoundCard = memo(
             align-middle"
               >
                 <img
-                  src={AvatarUrl(draftRound?.captain)}
+                  src={AvatarUrl(draftRound?.captain ?? undefined)}
                   alt="User Avatar"
                   className="w-12 h-12 rounded-full"
                 />{' '}

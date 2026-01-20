@@ -14,7 +14,7 @@ export default function PlayersTab({
   const filteredUsers =
     query === ''
       ? tournament.users
-      : tournament.users.filter((person) => {
+      : tournament.users?.filter((person) => {
           const q = query.toLowerCase();
           return (
             person.username?.toLowerCase().includes(q) ||

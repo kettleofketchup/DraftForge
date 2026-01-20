@@ -76,7 +76,7 @@ export const TeamEditModal: React.FC<Props> = ({ team }) => {
               Please fill in the details below to edit the user.
             </DialogDescription>
           </DialogHeader>
-          <TeamEditForm team={team} form={form} setForm={setForm} />
+          <TeamEditForm user={team.captain as UserClassType} form={form} setForm={setForm} />
           <DialogFooter>
             <DialogClose asChild>
               <Button variant="outline">Cancel</Button>

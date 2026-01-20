@@ -47,10 +47,12 @@ export const getPickButton = (cy: cyType, username: string) => {
  * Pick a player and confirm the selection
  */
 export const pickPlayer = (cy: cyType, username: string) => {
-  getPickButton(cy, username).click({ force: true });
-  // Confirm the pick in the alert dialog
-  cy.get('[role="alertdialog"]').should('be.visible');
-  cy.get('[role="alertdialog"]').contains('Confirm Pick').click({ force: true });
+  getPickButton(cy, username).scrollIntoView().click({ force: true });
+  // Confirm the pick in the alert dialog with increased timeout
+  cy.get('[role="alertdialog"]', { timeout: 10000 }).should('be.visible');
+  cy.get('[role="alertdialog"]')
+    .contains('Confirm Pick')
+    .click({ force: true });
 };
 
 /**
@@ -95,5 +97,7 @@ export const getDraftNotificationBadge = (cy: cyType) => {
  */
 export const visitTournamentWithDraftOpen = (cy: cyType, tournamentPk: number) => {
   cy.visit(`/tournament/${tournamentPk}?draft=open`);
-  cy.get('[role="dialog"]').should('be.visible');
+  cy.waitForHydration();
+  // Wait for dialog to appear - may take time for draft data to load
+  cy.get('[role="dialog"]', { timeout: 15000 }).should('be.visible');
 };
