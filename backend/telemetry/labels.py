@@ -51,9 +51,13 @@ def extract_labels(path: str) -> dict[str, Any]:
         Returns empty dict for unrecognized paths.
     """
     # Process API paths and WebSocket paths
-    # WebSocket paths like /draft/5/ don't have /api/ prefix
+    # WebSocket paths like /ws/draft/5/ or /draft/5/ don't have /api/ prefix
     is_api_path = path.startswith("/api/")
-    is_ws_path = path.startswith("/draft/") or path.startswith("/tournament/")
+    is_ws_path = (
+        path.startswith("/ws/")
+        or path.startswith("/draft/")
+        or path.startswith("/tournament/")
+    )
 
     if not (is_api_path or is_ws_path):
         return {}
