@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { getTournaments } from '~/components/api/api';
 import { TournamentCard } from '~/components/tournament/card/TournamentCard';
@@ -10,6 +10,34 @@ import type {
   TournamentType,
 } from '~/components/tournament/types';
 import { useUserStore } from '~/store/userStore';
+
+/** Memoized wrapper for individual tournament cards */
+const TournamentCardWrapper = memo(({
+  tournamentData,
+  animationIndex,
+}: {
+  tournamentData: TournamentType;
+  animationIndex: number;
+}) => {
+  const [isCardEditing, setIsCardEditing] = useState(false);
+
+  const wrapperClassName = isCardEditing
+    ? ' col-span-2'
+    : ' col-span-1';
+
+  const cssClassNames = wrapperClassName + 'flex gap-4 content-center h-full';
+
+  return (
+    <div className={cssClassNames} key={tournamentData.pk}>
+      <TournamentCard
+        tournament={tournamentData as TournamentClassType}
+        saveFunc={'save'}
+        onEditModeChange={setIsCardEditing}
+        animationIndex={animationIndex}
+      />
+    </div>
+  );
+});
 export default function Tournament() {
   const [searchParams] = useSearchParams();
   const orgId = searchParams.get('organization');
@@ -66,31 +94,6 @@ export default function Tournament() {
     );
   }
 
-  // Helper component to manage individual card state
-  const TournamentCardWrapper = ({
-    tournamentData,
-  }: {
-    tournamentData: TournamentType;
-  }) => {
-    const [isCardEditing, setIsCardEditing] = useState(false);
-
-    const wrapperClassName = isCardEditing
-      ? ' col-span-2' // Spanning classes
-      : ' col-span-1'; // Default class for the wrapper, assuming "grid" was intentional for item styling
-
-    const cssClassNames = wrapperClassName + 'flex gap-4 content-center h-full';
-
-    return (
-      <div className={cssClassNames} key={tournamentData.pk}>
-        <TournamentCard
-          tournament={tournamentData as TournamentClassType}
-          saveFunc={'save'}
-          onEditModeChange={setIsCardEditing} // Pass the setter
-        />
-      </div>
-    );
-  };
-
   return (
     <>
       <div className="flex flex-col items-start p-4 h-full  ">
@@ -111,8 +114,12 @@ export default function Tournament() {
            grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4
            mb-0 mt-0 p-0 bg-base-900  w-full"
         >
-          {filteredTournaments?.map((u) => (
-            <TournamentCardWrapper tournamentData={u} key={`wrapper-${u.pk}`} />
+          {filteredTournaments?.map((u, index) => (
+            <TournamentCardWrapper
+              tournamentData={u}
+              key={`wrapper-${u.pk}`}
+              animationIndex={index}
+            />
           ))}
         </div>
       </div>

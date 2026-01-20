@@ -19,14 +19,17 @@ interface Props {
   tournament: TournamentType;
   edit?: boolean;
   saveFunc?: string;
-  onEditModeChange?: (isEditing: boolean) => void; // Added new prop
+  onEditModeChange?: (isEditing: boolean) => void;
+  /** Animation delay index for staggered loading */
+  animationIndex?: number;
 }
 
-export const TournamentCard: React.FC<Props> = ({
+export const TournamentCard: React.FC<Props> = React.memo(({
   tournament,
   edit,
   saveFunc,
   onEditModeChange,
+  animationIndex = 0,
 }) => {
   let navigate = useNavigate();
   const [editMode, setEditMode] = useState(edit || false);
@@ -89,9 +92,10 @@ export const TournamentCard: React.FC<Props> = ({
   const [saveCallback, setSaveCallBack] = useState(saveFunc || 'save');
 
   useEffect(() => {
-    log.debug('reset form', tournament);
+    log.debug('reset form', tournament.pk);
     setForm(tournament);
-  }, [tournament]);
+    // Only reset form when tournament pk changes, not on every object reference change
+  }, [tournament.pk]);
 
   useEffect(() => {
     // Added useEffect to call onEditModeChange
@@ -271,9 +275,9 @@ export const TournamentCard: React.FC<Props> = ({
   };
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.2 }}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, delay: animationIndex * 0.05 }}
       key={`Tournamentcard:${getKeyName()} base`}
       className={
         'flex items-center justify-center p-4 gap-6 content-center w-full h-full'
@@ -302,4 +306,15 @@ export const TournamentCard: React.FC<Props> = ({
       </div>
     </motion.div>
   );
-};
+}, (prevProps, nextProps) => {
+  // Custom comparison - only re-render if these values actually change
+  return (
+    prevProps.tournament.pk === nextProps.tournament.pk &&
+    prevProps.tournament.name === nextProps.tournament.name &&
+    prevProps.tournament.state === nextProps.tournament.state &&
+    prevProps.tournament.date_played === nextProps.tournament.date_played &&
+    prevProps.animationIndex === nextProps.animationIndex &&
+    prevProps.edit === nextProps.edit &&
+    prevProps.saveFunc === nextProps.saveFunc
+  );
+});
