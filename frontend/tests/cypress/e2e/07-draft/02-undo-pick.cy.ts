@@ -91,6 +91,16 @@ describe('Undo Pick', () => {
           });
 
           cy.wait(2000);
+
+          // After making a pick, the draft advances to the next round
+          // Navigate back to the previous round to see the Undo button
+          // (Undo button only shows on rounds that have a choice)
+          cy.get('[role="dialog"]')
+            .find('button')
+            .filter(':has(svg)')
+            .first() // Prev button is first in the navigation row
+            .click({ force: true });
+          cy.wait(500);
         }
       });
 
@@ -256,6 +266,15 @@ describe('Undo Pick', () => {
 
           cy.wait(2000);
 
+          // After making a pick, the draft advances to the next round
+          // Navigate back to the previous round to see the Undo button
+          cy.get('[role="dialog"]')
+            .find('button')
+            .filter(':has(svg)')
+            .first() // Prev button is first in navigation row
+            .click({ force: true });
+          cy.wait(500);
+
           // Now undo the pick - wait for button to appear first (confirms pick was recorded)
           cy.get('[role="dialog"]')
             .contains('button', 'Undo', { timeout: 10000 })
@@ -325,6 +344,15 @@ describe('Undo Pick', () => {
           });
 
           cy.wait(2000);
+
+          // After making a pick, the draft advances to the next round
+          // Navigate back to the previous round to see the Undo button
+          cy.get('[role="dialog"]')
+            .find('button')
+            .filter(':has(svg)')
+            .first() // Prev button is first in navigation row
+            .click({ force: true });
+          cy.wait(500);
         }
       });
 

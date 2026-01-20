@@ -47,10 +47,12 @@ export const getPickButton = (cy: cyType, username: string) => {
  * Pick a player and confirm the selection
  */
 export const pickPlayer = (cy: cyType, username: string) => {
-  getPickButton(cy, username).click({ force: true });
-  // Confirm the pick in the alert dialog
-  cy.get('[role="alertdialog"]').should('be.visible');
-  cy.get('[role="alertdialog"]').contains('Confirm Pick').click({ force: true });
+  getPickButton(cy, username).scrollIntoView().click({ force: true });
+  // Confirm the pick in the alert dialog with increased timeout
+  cy.get('[role="alertdialog"]', { timeout: 10000 }).should('be.visible');
+  cy.get('[role="alertdialog"]')
+    .contains('Confirm Pick')
+    .click({ force: true });
 };
 
 /**
