@@ -8,6 +8,7 @@ import {
 import { Input } from '~/components/ui/input';
 import { Button } from '~/components/ui/button';
 import { Search, Unlink } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '~/components/api/axios';
 import { SteamMatchCard, type MatchSuggestion } from './SteamMatchCard';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
@@ -90,9 +91,11 @@ export function LinkSteamMatchModal({
       });
       setLinkedMatchId(matchId);
       onLinkUpdated();
+      toast.success(`Linked to Match #${matchId}`);
       onClose();
     } catch (error) {
       console.error('Failed to link match:', error);
+      toast.error('Failed to link match. Are you logged in as staff?');
     }
   };
 
@@ -104,8 +107,10 @@ export function LinkSteamMatchModal({
       setLinkedMatchId(null);
       setRefreshKey((prev) => prev + 1);
       onLinkUpdated();
+      toast.success('Match unlinked');
     } catch (error) {
       console.error('Failed to unlink match:', error);
+      toast.error('Failed to unlink match. Are you logged in as staff?');
     }
   };
 
