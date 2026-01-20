@@ -215,6 +215,7 @@ def _get_matched_players(
             matched.append(
                 {
                     "steam_id": stat.steam_id,
+                    "user_id": user.pk if user else None,
                     "username": user.username if user else None,
                     "avatar": user.avatar if user else None,
                     "hero_id": stat.hero_id,

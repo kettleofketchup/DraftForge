@@ -156,6 +156,7 @@ class GameMatchSuggestionSerializer(serializers.Serializer):
 
 class MatchedPlayerSerializer(serializers.Serializer):
     steam_id = serializers.IntegerField()
+    user_id = serializers.IntegerField(allow_null=True)
     username = serializers.CharField(allow_null=True)
     avatar = serializers.CharField(allow_null=True)
     hero_id = serializers.IntegerField()

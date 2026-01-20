@@ -2,6 +2,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
 import { User } from 'lucide-react';
 import { cn } from '~/lib/utils';
+import { UserPopover } from '~/components/user/UserPopover';
 
 export interface CaptainInfo {
   steam_id: number;
@@ -12,6 +13,7 @@ export interface CaptainInfo {
 
 export interface MatchedPlayer {
   steam_id: number;
+  user_id: number | null;
   username: string | null;
   avatar: string | null;
   hero_id: number;
@@ -41,8 +43,8 @@ interface SteamMatchCardProps {
 }
 
 function PlayerDisplay({ player }: { player: MatchedPlayer }) {
-  return (
-    <div className="flex items-center gap-2 py-1">
+  const content = (
+    <div className="flex items-center gap-2 py-1 cursor-pointer">
       <Avatar className={cn("h-6 w-6", player.is_captain && "ring-2 ring-yellow-500")}>
         <AvatarImage src={player.avatar || undefined} />
         <AvatarFallback>
@@ -51,13 +53,29 @@ function PlayerDisplay({ player }: { player: MatchedPlayer }) {
       </Avatar>
       <span className={cn(
         "text-xs truncate max-w-[100px]",
-        player.is_captain ? "text-yellow-500 font-medium" : "text-foreground"
+        player.is_captain ? "text-yellow-500 font-medium" : "text-foreground",
+        player.user_id && "hover:underline"
       )}>
         {player.username || `Steam ${player.steam_id}`}
         {player.is_captain && " (C)"}
       </span>
     </div>
   );
+
+  // If player is linked to a user, wrap with popover
+  if (player.user_id && player.username) {
+    return (
+      <UserPopover
+        userId={player.user_id}
+        username={player.username}
+        avatar={player.avatar}
+      >
+        {content}
+      </UserPopover>
+    );
+  }
+
+  return content;
 }
 
 export function SteamMatchCard({
