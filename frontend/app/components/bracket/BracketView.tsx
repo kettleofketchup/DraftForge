@@ -16,6 +16,7 @@ import './bracket-styles.css';
 
 import { useBracketStore } from '~/store/bracketStore';
 import { useUserStore } from '~/store/userStore';
+import { useTournamentStore } from '~/store/tournamentStore';
 import { useElkLayout, type MatchNodeType } from './hooks/useElkLayout';
 import { MatchNode } from './nodes/MatchNode';
 import { EmptySlotNode } from './nodes/EmptySlotNode';
@@ -118,6 +119,8 @@ function createStructuralEdges(matches: BracketMatch[]): Edge[] {
 function BracketFlowInner({ tournamentId }: BracketViewProps) {
   const isStaff = useUserStore((state) => state.isStaff());
   const tournament = useUserStore((state) => state.tournament);
+  const pendingDraftId = useTournamentStore((state) => state.pendingDraftId);
+  const setPendingDraftId = useTournamentStore((state) => state.setPendingDraftId);
 
   const {
     matches,
@@ -140,6 +143,22 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   // Selected match for stats modal
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const selectedMatch = matches.find((m) => m.id === selectedMatchId) ?? null;
+
+  // Track the draftId to auto-open from deep link
+  const [initialDraftId, setInitialDraftId] = useState<number | null>(null);
+
+  // Deep-linking: auto-open match when pendingDraftId is set
+  useEffect(() => {
+    if (pendingDraftId && matches.length > 0) {
+      const matchWithDraft = matches.find((m) => m.herodraft_id === pendingDraftId);
+      if (matchWithDraft) {
+        setSelectedMatchId(matchWithDraft.id);
+        setInitialDraftId(pendingDraftId);
+        // Clear the pending draft ID after processing
+        setPendingDraftId(null);
+      }
+    }
+  }, [pendingDraftId, matches, setPendingDraftId]);
 
   // Pre-compute badge mapping for all matches
   const badgeMapping = useMemo(() => buildBadgeMapping(matches), [matches]);
@@ -478,7 +497,11 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       <MatchStatsModal
         match={selectedMatch}
         isOpen={!!selectedMatchId}
-        onClose={() => setSelectedMatchId(null)}
+        onClose={() => {
+          setSelectedMatchId(null);
+          setInitialDraftId(null);
+        }}
+        initialDraftId={initialDraftId}
       />
     </div>
   );

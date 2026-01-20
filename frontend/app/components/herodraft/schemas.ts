@@ -29,13 +29,14 @@ export const HeroDraftRoundSchema = z.object({
   started_at: z.string().nullable(),
   completed_at: z.string().nullable(),
   draft_team: z.number(),
+  team_name: z.string().nullable(),
 });
 
 export const HeroDraftSchema = z.object({
   id: z.number(),
   game: z.number(),
-  state: z.enum(["waiting_for_captains", "rolling", "choosing", "drafting", "paused", "completed"]),
-  roll_winner: z.number().nullable(),
+  state: z.enum(["waiting_for_captains", "rolling", "choosing", "drafting", "paused", "completed", "abandoned"]),
+  roll_winner: DraftTeamSchema.nullable(), // Backend returns full DraftTeam object
   draft_teams: z.array(DraftTeamSchema),
   rounds: z.array(HeroDraftRoundSchema),
   current_round: z.number().nullable(),
@@ -49,7 +50,10 @@ export const HeroDraftTickSchema = z.object({
   current_round: z.number(),
   active_team_id: z.number().nullable(),
   grace_time_remaining_ms: z.number(),
+  // Team IDs for matching reserve times to correct teams
+  team_a_id: z.number().nullable(),
   team_a_reserve_ms: z.number(),
+  team_b_id: z.number().nullable(),
   team_b_reserve_ms: z.number(),
   draft_state: z.string(),
 });
@@ -57,5 +61,18 @@ export const HeroDraftTickSchema = z.object({
 export const HeroDraftEventSchema = z.object({
   type: z.literal("herodraft_event"),
   event_type: z.string(),
+  draft_team: z.number().nullable().optional(),
   draft_state: HeroDraftSchema.optional(),
 });
+
+export const InitialStateMessageSchema = z.object({
+  type: z.literal("initial_state"),
+  draft_state: HeroDraftSchema,
+});
+
+// Discriminated union for all WebSocket message types
+export const HeroDraftWebSocketMessageSchema = z.discriminatedUnion("type", [
+  InitialStateMessageSchema,
+  HeroDraftEventSchema,
+  HeroDraftTickSchema,
+]);

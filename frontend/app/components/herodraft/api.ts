@@ -62,3 +62,8 @@ export async function listAvailableHeroes(
   const response = await api.get(`/herodraft/${draftId}/list-available-heroes/`);
   return response.data;
 }
+
+export async function abandonDraft(draftId: number): Promise<HeroDraft> {
+  const response = await api.post(`/herodraft/${draftId}/abandon/`);
+  return response.data;
+}

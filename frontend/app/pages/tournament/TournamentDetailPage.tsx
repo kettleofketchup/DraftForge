@@ -18,15 +18,20 @@ export const TournamentDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const setAutoAdvance = useTournamentStore((state) => state.setAutoAdvance);
   const autoAdvance = useTournamentStore((state) => state.autoAdvance);
+  const setPendingDraftId = useTournamentStore((state) => state.setPendingDraftId);
+
   useEffect(() => {
     const parts = slug?.split('/') || [];
     const tab = parts[0] || 'players';
     const live = parts[1] === 'draft';
+    // Parse draftId from URL: /tournament/:pk/bracket/draft/:draftId
+    const draftId = parts[1] === 'draft' && parts[2] ? parseInt(parts[2], 10) : null;
 
     setActiveTab(tab);
     setLive(live);
     setAutoAdvance(live);
-  }, [slug, setActiveTab]);
+    setPendingDraftId(Number.isNaN(draftId) ? null : draftId);
+  }, [slug, setActiveTab, setPendingDraftId]);
   useEffect(() => {
     if (pk) {
       const fetchTournament = async () => {

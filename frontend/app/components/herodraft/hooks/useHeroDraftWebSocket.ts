@@ -1,21 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getLogger } from "~/lib/logger";
 import type { HeroDraft, HeroDraftTick } from "../types";
+import { HeroDraftWebSocketMessageSchema } from "../schemas";
 
 const log = getLogger("useHeroDraftWebSocket");
-
-interface HeroDraftWebSocketMessage {
-  type: "initial_state" | "herodraft_event" | "herodraft_tick";
-  draft_state?: HeroDraft;
-  event_type?: string;
-  draft_team?: number | null;
-  // Tick fields
-  current_round?: number;
-  active_team_id?: number | null;
-  grace_time_remaining_ms?: number;
-  team_a_reserve_ms?: number;
-  team_b_reserve_ms?: number;
-}
 
 interface UseHeroDraftWebSocketOptions {
   draftId: number | null;
@@ -84,12 +72,24 @@ export function useHeroDraftWebSocket({
 
     ws.onmessage = (messageEvent) => {
       try {
-        const data: HeroDraftWebSocketMessage = JSON.parse(messageEvent.data);
+        const rawData = JSON.parse(messageEvent.data);
+
+        // Validate with Zod for runtime type safety
+        const parseResult = HeroDraftWebSocketMessageSchema.safeParse(rawData);
+        if (!parseResult.success) {
+          log.warn("Invalid WebSocket message format:", parseResult.error.issues);
+          log.debug("Raw message:", rawData);
+          return;
+        }
+
+        const data = parseResult.data;
         log.debug("HeroDraft WebSocket message:", data);
 
         switch (data.type) {
           case "initial_state":
-            if (data.draft_state && onStateUpdateRef.current) {
+            // Full state replace on connect/reconnect - prevents state drift
+            if (onStateUpdateRef.current) {
+              log.debug("Received initial_state - replacing full draft state");
               onStateUpdateRef.current(data.draft_state);
             }
             break;
@@ -104,15 +104,17 @@ export function useHeroDraftWebSocket({
             break;
 
           case "herodraft_tick":
-            if (onTickRef.current && data.current_round !== undefined) {
+            if (onTickRef.current) {
               onTickRef.current({
                 type: "herodraft_tick",
                 current_round: data.current_round,
-                active_team_id: data.active_team_id ?? null,
-                grace_time_remaining_ms: data.grace_time_remaining_ms ?? 0,
-                team_a_reserve_ms: data.team_a_reserve_ms ?? 0,
-                team_b_reserve_ms: data.team_b_reserve_ms ?? 0,
-                draft_state: data.draft_state?.state ?? "",
+                active_team_id: data.active_team_id,
+                grace_time_remaining_ms: data.grace_time_remaining_ms,
+                team_a_id: data.team_a_id,
+                team_a_reserve_ms: data.team_a_reserve_ms,
+                team_b_id: data.team_b_id,
+                team_b_reserve_ms: data.team_b_reserve_ms,
+                draft_state: data.draft_state,
               });
             }
             break;

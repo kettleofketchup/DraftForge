@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
   Dialog,
@@ -10,7 +10,7 @@ import {
 import { Button } from '~/components/ui/button';
 import { Badge } from '~/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { BarChart3, Link2, Swords } from 'lucide-react';
+import { BarChart3, Eye, Link2, Swords } from 'lucide-react';
 import { useUserStore } from '~/store/userStore';
 import { useBracketStore } from '~/store/bracketStore';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
@@ -24,9 +24,10 @@ interface MatchStatsModalProps {
   match: BracketMatch | null;
   isOpen: boolean;
   onClose: () => void;
+  initialDraftId?: number | null;
 }
 
-export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps) {
+export function MatchStatsModal({ match, isOpen, onClose, initialDraftId }: MatchStatsModalProps) {
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
   const isStaff = useUserStore((state) => state.isStaff());
@@ -36,6 +37,14 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [draftId, setDraftId] = useState<number | null>(null);
+
+  // Auto-open draft modal when initialDraftId is provided (deep link)
+  useEffect(() => {
+    if (initialDraftId && match?.herodraft_id === initialDraftId && isOpen) {
+      setDraftId(initialDraftId);
+      setShowDraftModal(true);
+    }
+  }, [initialDraftId, match?.herodraft_id, isOpen]);
 
   if (!match) return null;
 

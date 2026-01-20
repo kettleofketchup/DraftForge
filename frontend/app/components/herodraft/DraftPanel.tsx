@@ -9,21 +9,32 @@ interface DraftPanelProps {
   currentRound: number | null;
 }
 
+// Create a lookup map once at module load (not per render)
+const heroByIdMap = new Map<number, { img: string; name: string }>();
+Object.values(heroes).forEach((hero: any) => {
+  heroByIdMap.set(hero.id, {
+    img: `https://cdn.cloudflare.steamstatic.com${hero.img}`,
+    name: hero.localized_name,
+  });
+});
+
 function getHeroImage(heroId: number | null): string | null {
   if (!heroId) return null;
-  const hero = Object.values(heroes).find((h: any) => h.id === heroId);
-  return hero ? `https://cdn.cloudflare.steamstatic.com${(hero as any).img}` : null;
+  return heroByIdMap.get(heroId)?.img ?? null;
 }
 
 function getHeroName(heroId: number | null): string {
   if (!heroId) return '';
-  const hero = Object.values(heroes).find((h: any) => h.id === heroId);
-  return hero ? (hero as any).localized_name : '';
+  return heroByIdMap.get(heroId)?.name ?? '';
 }
 
 export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
-  const radiantTeam = draft.draft_teams.find((t) => t.is_radiant);
-  const direTeam = draft.draft_teams.find((t) => !t.is_radiant);
+  // Memoize team lookups to prevent recalculation on every render
+  const { radiantTeam, direTeam } = useMemo(() => {
+    const radiant = draft.draft_teams.find((t) => t.is_radiant);
+    const dire = draft.draft_teams.find((t) => !t.is_radiant);
+    return { radiantTeam: radiant, direTeam: dire };
+  }, [draft.draft_teams]);
 
   const roundsByTeam = useMemo(() => {
     const radiantRounds: HeroDraftRound[] = [];
@@ -42,29 +53,29 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
   }, [draft]);
 
   return (
-    <div className="h-full flex flex-col bg-black/80 rounded-lg overflow-hidden">
+    <div className="h-full flex flex-col bg-black/80 rounded-lg overflow-hidden" data-testid="herodraft-panel">
       {/* Headers */}
-      <div className="flex">
-        <div className="flex-1 p-3 text-center">
+      <div className="flex" data-testid="herodraft-panel-headers">
+        <div className="flex-1 p-3 text-center" data-testid="herodraft-panel-radiant-header">
           <h3 className="text-lg font-bold text-green-400 drop-shadow-[0_0_10px_rgba(34,197,94,0.5)]">
             RADIANT
           </h3>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground" data-testid="herodraft-panel-radiant-captain">
             {radiantTeam?.captain?.nickname || radiantTeam?.captain?.username}
           </p>
         </div>
-        <div className="flex-1 p-3 text-center">
+        <div className="flex-1 p-3 text-center" data-testid="herodraft-panel-dire-header">
           <h3 className="text-lg font-bold text-red-400 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]">
             DIRE
           </h3>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground" data-testid="herodraft-panel-dire-captain">
             {direTeam?.captain?.nickname || direTeam?.captain?.username}
           </p>
         </div>
       </div>
 
       {/* Draft slots */}
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto p-2" data-testid="herodraft-panel-slots">
         {draft.rounds.map((round) => {
           const isRadiant = draft.draft_teams.find(
             (t) => t.id === round.draft_team
@@ -81,6 +92,9 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                 'flex items-center gap-2 py-1',
                 isActive && 'bg-yellow-500/20 rounded'
               )}
+              data-testid={`herodraft-round-${round.round_number}`}
+              data-round-active={isActive}
+              data-round-state={round.state}
             >
               {/* Radiant slot */}
               <div
@@ -88,6 +102,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                   'flex-1 flex justify-end',
                   !isRadiant && 'invisible'
                 )}
+                data-testid={`herodraft-round-${round.round_number}-radiant-slot`}
               >
                 {isRadiant && (
                   <div
@@ -102,6 +117,8 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                       round.action_type === 'ban' && round.state === 'completed' && 'grayscale'
                     )}
                     title={heroName}
+                    data-testid={`herodraft-round-${round.round_number}-hero`}
+                    data-hero-id={round.hero_id}
                   >
                     {heroImg ? (
                       <img
@@ -124,6 +141,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                   'w-8 text-center text-sm font-mono',
                   isActive ? 'text-yellow-400 font-bold' : 'text-muted-foreground'
                 )}
+                data-testid={`herodraft-round-${round.round_number}-number`}
               >
                 {round.round_number}
               </div>
@@ -134,6 +152,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                   'flex-1 flex justify-start',
                   isRadiant && 'invisible'
                 )}
+                data-testid={`herodraft-round-${round.round_number}-dire-slot`}
               >
                 {!isRadiant && (
                   <div
@@ -148,6 +167,8 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                       round.action_type === 'ban' && round.state === 'completed' && 'grayscale'
                     )}
                     title={heroName}
+                    data-testid={`herodraft-round-${round.round_number}-hero`}
+                    data-hero-id={round.hero_id}
                   >
                     {heroImg ? (
                       <img

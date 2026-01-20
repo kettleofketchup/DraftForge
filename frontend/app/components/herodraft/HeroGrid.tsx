@@ -22,10 +22,21 @@ const ATTRIBUTE_LABELS: Record<HeroAttribute, string> = {
 };
 
 export function HeroGrid({ onHeroClick, disabled, showActionButton }: HeroGridProps) {
-  const { searchQuery, setSearchQuery, getUsedHeroIds, selectedHeroId, setSelectedHeroId } =
-    useHeroDraftStore();
+  // Use selectors to prevent re-renders when unrelated state changes
+  const searchQuery = useHeroDraftStore((state) => state.searchQuery);
+  const setSearchQuery = useHeroDraftStore((state) => state.setSearchQuery);
+  const selectedHeroId = useHeroDraftStore((state) => state.selectedHeroId);
+  const setSelectedHeroId = useHeroDraftStore((state) => state.setSelectedHeroId);
+  // Select draft rounds directly for memoization
+  const draftRounds = useHeroDraftStore((state) => state.draft?.rounds);
 
-  const usedHeroIds = getUsedHeroIds();
+  // Memoize used hero IDs to prevent recalculation unless rounds change
+  const usedHeroIds = useMemo(() => {
+    if (!draftRounds) return [];
+    return draftRounds
+      .filter((r) => r.hero_id !== null)
+      .map((r) => r.hero_id as number);
+  }, [draftRounds]);
 
   const heroList = useMemo(() => {
     return Object.values(heroes).map((hero: any) => ({
@@ -47,24 +58,25 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton }: HeroGridPr
     filteredHeroes.some((h) => h.id === heroId);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-2">
+    <div className="flex flex-col h-full" data-testid="herodraft-hero-grid">
+      <div className="p-2" data-testid="herodraft-search-container">
         <Input
           type="text"
           placeholder="Search heroes..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full"
+          data-testid="herodraft-hero-search"
         />
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-4">
+      <div className="flex-1 overflow-y-auto p-2 space-y-4" data-testid="herodraft-hero-list">
         {ATTRIBUTE_ORDER.map((attr) => (
-          <div key={attr}>
-            <h3 className="text-sm font-semibold mb-2 text-muted-foreground">
+          <div key={attr} data-testid={`herodraft-attr-section-${attr}`}>
+            <h3 className="text-sm font-semibold mb-2 text-muted-foreground" data-testid={`herodraft-attr-label-${attr}`}>
               {ATTRIBUTE_LABELS[attr]}
             </h3>
-            <div className="grid grid-cols-8 gap-1">
+            <div className="grid grid-cols-8 gap-1" data-testid={`herodraft-attr-grid-${attr}`}>
               {heroList
                 .filter((h) => h.attr === attr)
                 .map((hero) => {
@@ -91,6 +103,10 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton }: HeroGridPr
                         !matches && searchQuery && 'grayscale opacity-50',
                         disabled && 'cursor-not-allowed'
                       )}
+                      data-testid={`herodraft-hero-${hero.id}`}
+                      data-hero-name={hero.name}
+                      data-hero-available={available}
+                      data-hero-selected={isSelected}
                     >
                       <img
                         src={hero.icon}
@@ -98,7 +114,7 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton }: HeroGridPr
                         className="w-full h-full object-cover"
                       />
                       {!available && (
-                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center" data-testid={`herodraft-hero-${hero.id}-unavailable`}>
                           <span className="text-red-500 text-xs">✕</span>
                         </div>
                       )}

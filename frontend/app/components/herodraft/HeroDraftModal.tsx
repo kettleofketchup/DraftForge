@@ -1,5 +1,5 @@
 // frontend/app/components/herodraft/HeroDraftModal.tsx
-import { useCallback, useState } from "react";
+import { useCallback, useState, useMemo } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent } from "~/components/ui/dialog";
 import { Button } from "~/components/ui/button";
@@ -30,10 +30,15 @@ interface HeroDraftModalProps {
 
 export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) {
   const { currentUser } = useUserStore();
-  const { draft, tick, setDraft, setTick, setSelectedHeroId } =
-    useHeroDraftStore();
+  // Use selectors to prevent re-renders when unrelated state changes
+  const draft = useHeroDraftStore((state) => state.draft);
+  const tick = useHeroDraftStore((state) => state.tick);
+  const setDraft = useHeroDraftStore((state) => state.setDraft);
+  const setTick = useHeroDraftStore((state) => state.setTick);
+  const setSelectedHeroId = useHeroDraftStore((state) => state.setSelectedHeroId);
 
   const [confirmHeroId, setConfirmHeroId] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleStateUpdate = useCallback(
     (newDraft: HeroDraft) => {
@@ -90,8 +95,9 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
   };
 
   const handleConfirmPick = async () => {
-    if (!confirmHeroId || !draft) return;
+    if (!confirmHeroId || !draft || isSubmitting) return;
 
+    setIsSubmitting(true);
     try {
       const updated = await submitPick(draft.id, confirmHeroId);
       setDraft(updated);
@@ -100,11 +106,14 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       toast.error(axiosError.response?.data?.error || "Failed to submit pick");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleReady = async () => {
-    if (!draft) return;
+    if (!draft || isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const updated = await setReady(draft.id);
       setDraft(updated);
@@ -112,17 +121,22 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       toast.error(axiosError.response?.data?.error || "Failed to set ready");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleTriggerRoll = async () => {
-    if (!draft) return;
+    if (!draft || isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const updated = await triggerRoll(draft.id);
       setDraft(updated);
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       toast.error(axiosError.response?.data?.error || "Failed to trigger roll");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -130,7 +144,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     choiceType: "pick_order" | "side",
     value: string
   ) => {
-    if (!draft) return;
+    if (!draft || isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const updated = await submitChoice(
         draft.id,
@@ -141,6 +156,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       toast.error(axiosError.response?.data?.error || "Failed to submit choice");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -156,36 +173,36 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
   const isCaptain = draft?.draft_teams.some((t) => t.captain?.id === currentUser?.pk);
   const myTeam = draft?.draft_teams.find((t) => t.captain?.id === currentUser?.pk);
-  const rollWinnerTeam = draft?.roll_winner
-    ? draft.draft_teams.find(t => t.id === draft.roll_winner)
-    : null;
+  // roll_winner is already the full DraftTeam object from the backend
+  const rollWinnerTeam = draft?.roll_winner ?? null;
 
   const currentAction = currentRoundData?.action_type;
 
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-        <DialogContent className="max-w-[100vw] max-h-[100vh] w-screen h-screen p-0 gap-0">
+        <DialogContent className="max-w-[100vw] max-h-[100vh] w-screen h-screen p-0 gap-0" data-testid="herodraft-modal">
           {draft && (
-            <div className="flex flex-col h-full bg-gray-900">
+            <div className="flex flex-col h-full bg-gray-900" data-testid="herodraft-container">
               {/* Top Bar */}
               <DraftTopBar draft={draft} tick={tick} />
 
               {/* Pre-draft phases */}
               {draft.state === "waiting_for_captains" && (
-                <div className="flex-1 flex items-center justify-center">
+                <div className="flex-1 flex items-center justify-center" data-testid="herodraft-waiting-phase">
                   <div className="text-center space-y-4">
-                    <h2 className="text-2xl font-bold">Waiting for Captains</h2>
-                    <div className="flex gap-8">
+                    <h2 className="text-2xl font-bold" data-testid="herodraft-waiting-title">Waiting for Captains</h2>
+                    <div className="flex gap-8" data-testid="herodraft-captain-status-list">
                       {draft.draft_teams.map((team) => (
-                        <div key={team.id} className="text-center">
-                          <p className="font-semibold">
+                        <div key={team.id} className="text-center" data-testid={`herodraft-captain-status-${team.id}`}>
+                          <p className="font-semibold" data-testid={`herodraft-captain-name-${team.id}`}>
                             {team.captain?.nickname || team.captain?.username}
                           </p>
                           <p
                             className={
                               team.is_ready ? "text-green-400" : "text-yellow-400"
                             }
+                            data-testid={`herodraft-ready-status-${team.id}`}
                           >
                             {team.is_ready ? "Ready" : "Not Ready"}
                           </p>
@@ -193,77 +210,93 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                       ))}
                     </div>
                     {isCaptain && !myTeam?.is_ready && (
-                      <Button onClick={handleReady}>Ready</Button>
+                      <Button onClick={handleReady} disabled={isSubmitting} data-testid="herodraft-ready-button">
+                        {isSubmitting ? "Submitting..." : "Ready"}
+                      </Button>
                     )}
                   </div>
                 </div>
               )}
 
               {draft.state === "rolling" && (
-                <div className="flex-1 flex items-center justify-center">
+                <div className="flex-1 flex items-center justify-center" data-testid="herodraft-rolling-phase">
                   <div className="text-center space-y-4">
-                    <h2 className="text-2xl font-bold">Both Captains Ready!</h2>
-                    <p>Click to trigger the coin flip</p>
+                    <h2 className="text-2xl font-bold" data-testid="herodraft-rolling-title">Both Captains Ready!</h2>
+                    <p data-testid="herodraft-rolling-instruction">Click to trigger the coin flip</p>
                     {isCaptain && (
-                      <Button onClick={handleTriggerRoll}>Flip Coin</Button>
+                      <Button onClick={handleTriggerRoll} disabled={isSubmitting} data-testid="herodraft-flip-coin-button">
+                        {isSubmitting ? "Flipping..." : "Flip Coin"}
+                      </Button>
                     )}
                   </div>
                 </div>
               )}
 
               {draft.state === "choosing" && (
-                <div className="flex-1 flex items-center justify-center">
+                <div className="flex-1 flex items-center justify-center" data-testid="herodraft-choosing-phase">
                   <div className="text-center space-y-4">
-                    <h2 className="text-2xl font-bold">
+                    <h2 className="text-2xl font-bold" data-testid="herodraft-flip-winner">
                       {rollWinnerTeam?.captain?.username} won the flip!
                     </h2>
                     {rollWinnerTeam?.id === myTeam?.id ? (
-                      <div className="space-y-2">
+                      <div className="space-y-2" data-testid="herodraft-winner-choices">
                         <p>Choose your preference:</p>
-                        <div className="flex gap-4 justify-center">
+                        <div className="flex gap-4 justify-center" data-testid="herodraft-choice-buttons">
                           <Button
                             onClick={() => handleChoiceSubmit("pick_order", "first")}
+                            disabled={isSubmitting}
+                            data-testid="herodraft-choice-first-pick"
                           >
-                            First Pick
+                            {isSubmitting ? "..." : "First Pick"}
                           </Button>
                           <Button
                             onClick={() => handleChoiceSubmit("pick_order", "second")}
+                            disabled={isSubmitting}
+                            data-testid="herodraft-choice-second-pick"
                           >
-                            Second Pick
+                            {isSubmitting ? "..." : "Second Pick"}
                           </Button>
                           <Button
                             onClick={() => handleChoiceSubmit("side", "radiant")}
+                            disabled={isSubmitting}
+                            data-testid="herodraft-choice-radiant"
                           >
-                            Radiant
+                            {isSubmitting ? "..." : "Radiant"}
                           </Button>
                           <Button
                             onClick={() => handleChoiceSubmit("side", "dire")}
+                            disabled={isSubmitting}
+                            data-testid="herodraft-choice-dire"
                           >
-                            Dire
+                            {isSubmitting ? "..." : "Dire"}
                           </Button>
                         </div>
                       </div>
                     ) : myTeam && !rollWinnerTeam ? (
-                      <p>Waiting for roll winner to choose...</p>
+                      <p data-testid="herodraft-waiting-for-winner">Waiting for roll winner to choose...</p>
                     ) : myTeam ? (
-                      <div className="space-y-2">
+                      <div className="space-y-2" data-testid="herodraft-loser-choices">
                         <p>Choose the remaining option:</p>
-                        <div className="flex gap-4 justify-center">
+                        <div className="flex gap-4 justify-center" data-testid="herodraft-remaining-choice-buttons">
                           {rollWinnerTeam?.is_first_pick === null && (
                             <>
                               <Button
                                 onClick={() =>
                                   handleChoiceSubmit("pick_order", "first")
                                 }
+                                disabled={isSubmitting}
+                                data-testid="herodraft-remaining-first-pick"
                               >
-                                First Pick
+                                {isSubmitting ? "..." : "First Pick"}
                               </Button>
                               <Button
                                 onClick={() =>
                                   handleChoiceSubmit("pick_order", "second")
                                 }
+                                disabled={isSubmitting}
+                                data-testid="herodraft-remaining-second-pick"
                               >
-                                Second Pick
+                                {isSubmitting ? "..." : "Second Pick"}
                               </Button>
                             </>
                           )}
@@ -271,20 +304,24 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                             <>
                               <Button
                                 onClick={() => handleChoiceSubmit("side", "radiant")}
+                                disabled={isSubmitting}
+                                data-testid="herodraft-remaining-radiant"
                               >
-                                Radiant
+                                {isSubmitting ? "..." : "Radiant"}
                               </Button>
                               <Button
                                 onClick={() => handleChoiceSubmit("side", "dire")}
+                                disabled={isSubmitting}
+                                data-testid="herodraft-remaining-dire"
                               >
-                                Dire
+                                {isSubmitting ? "..." : "Dire"}
                               </Button>
                             </>
                           )}
                         </div>
                       </div>
                     ) : (
-                      <p>Spectating...</p>
+                      <p data-testid="herodraft-spectating">Spectating...</p>
                     )}
                   </div>
                 </div>
@@ -292,9 +329,9 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
               {/* Main draft area */}
               {(draft.state === "drafting" || draft.state === "paused" || draft.state === "completed") && (
-                <div className="flex-1 flex overflow-hidden">
+                <div className="flex-1 flex overflow-hidden" data-testid="herodraft-main-area">
                   {/* Left: Hero Grid */}
-                  <div className="flex-1 border-r border-gray-800">
+                  <div className="flex-1 border-r border-gray-800" data-testid="herodraft-hero-grid-container">
                     <HeroGrid
                       onHeroClick={handleHeroClick}
                       disabled={!isMyTurn || draft.state !== "drafting"}
@@ -303,7 +340,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                   </div>
 
                   {/* Right: Draft Panel */}
-                  <div className="w-80">
+                  <div className="w-80" data-testid="herodraft-panel-container">
                     <DraftPanel
                       draft={draft}
                       currentRound={tick?.current_round ?? null}
@@ -313,18 +350,18 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
               )}
 
               {/* Bottom: Chat placeholder */}
-              <div className="h-20 border-t border-gray-800 flex items-center justify-center text-muted-foreground">
+              <div className="h-20 border-t border-gray-800 flex items-center justify-center text-muted-foreground" data-testid="herodraft-chat-placeholder">
                 <span>Team Chat - Under Construction</span>
               </div>
 
               {/* Paused overlay */}
               {draft.state === "paused" && (
-                <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/70 flex items-center justify-center" data-testid="herodraft-paused-overlay">
                   <div className="text-center">
-                    <h2 className="text-3xl font-bold text-yellow-400">
+                    <h2 className="text-3xl font-bold text-yellow-400" data-testid="herodraft-paused-title">
                       Draft Paused
                     </h2>
-                    <p className="text-muted-foreground">
+                    <p className="text-muted-foreground" data-testid="herodraft-paused-message">
                       Waiting for captain to reconnect...
                     </p>
                   </div>
@@ -333,7 +370,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
               {/* Connection status */}
               {!isConnected && (
-                <div className="absolute top-2 right-2 bg-red-500/80 text-white px-2 py-1 rounded text-sm">
+                <div className="absolute top-2 right-2 bg-red-500/80 text-white px-2 py-1 rounded text-sm" data-testid="herodraft-reconnecting">
                   Reconnecting...
                 </div>
               )}
@@ -347,19 +384,21 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
         open={confirmHeroId !== null}
         onOpenChange={() => setConfirmHeroId(null)}
       >
-        <AlertDialogContent>
+        <AlertDialogContent data-testid="herodraft-confirm-dialog">
           <AlertDialogHeader>
-            <AlertDialogTitle>
+            <AlertDialogTitle data-testid="herodraft-confirm-title">
               {currentAction === "ban" ? "Ban" : "Pick"} this hero?
             </AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription data-testid="herodraft-confirm-description">
               Are you sure you want to {currentAction} this hero?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmPick}>
-              Confirm {currentAction === "ban" ? "Ban" : "Pick"}
+            <AlertDialogCancel disabled={isSubmitting} data-testid="herodraft-confirm-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmPick} disabled={isSubmitting} data-testid="herodraft-confirm-submit">
+              {isSubmitting
+                ? "Submitting..."
+                : `Confirm ${currentAction === "ban" ? "Ban" : "Pick"}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
