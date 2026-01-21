@@ -1,32 +1,38 @@
 import { motion } from 'framer-motion';
 import { ClipboardPen } from 'lucide-react';
-import { useActiveDraft } from '~/hooks/useActiveDraft';
+import { Link } from 'react-router';
+import { useUserStore } from '~/store/userStore';
+import { getDraftUrl } from './utils';
+
+const MotionLink = motion.create(Link);
 
 /**
- * Floating indicator shown at bottom-right of screen when user has an active draft turn.
- *
- * Provides a prominent, always-visible notification that follows scroll.
- * Clicking navigates to the tournament page with the draft modal open.
- *
- * @example
- * // Add to root layout
- * <FloatingDraftIndicator />
+ * Floating indicator shown at bottom-right of screen when user has active drafts.
+ * For mobile usage - provides a prominent, always-visible notification.
+ * Hidden on desktop (md breakpoint and above) where ActiveDraftBanner is shown instead.
  */
 export const FloatingDraftIndicator: React.FC = () => {
-  const { activeDraft, hasActiveTurn } = useActiveDraft();
+  const activeDrafts = useUserStore(
+    (state) => state.currentUser?.active_drafts,
+  );
 
-  if (!hasActiveTurn || !activeDraft) {
+  if (!activeDrafts || activeDrafts.length === 0) {
     return null;
   }
 
+  // Show first draft for mobile floating indicator
+  const firstDraft = activeDrafts[0];
+  const draftLabel =
+    firstDraft.type === 'team_draft' ? 'Team Draft' : 'Hero Draft';
+
   return (
-    <motion.a
+    <MotionLink
       data-testid="floating-draft-indicator"
-      href={`/tournaments/${activeDraft.tournament_pk}?draft=open`}
+      to={getDraftUrl(firstDraft)}
       className="fixed bottom-6 right-6 z-50 bg-red-600 hover:bg-red-700
                  text-white px-4 py-3 rounded-full shadow-lg
                  flex items-center gap-2 cursor-pointer
-                 transition-colors duration-200"
+                 transition-colors duration-200 md:hidden"
       animate={{
         scale: [1, 1.05, 1],
       }}
@@ -35,11 +41,15 @@ export const FloatingDraftIndicator: React.FC = () => {
         repeat: Infinity,
         ease: 'easeInOut',
       }}
-      aria-label={`Your turn to pick in ${activeDraft.tournament_name}`}
+      aria-label={`Active ${draftLabel}`}
       role="alert"
     >
       <ClipboardPen className="w-5 h-5" />
-      <span className="font-medium">Your turn to pick!</span>
-    </motion.a>
+      <span className="font-medium">
+        {activeDrafts.length > 1
+          ? `${activeDrafts.length} Active Drafts`
+          : `Active ${draftLabel}`}
+      </span>
+    </MotionLink>
   );
 };
