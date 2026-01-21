@@ -743,4 +743,102 @@ describe('Hero Draft Full Flow (e2e)', () => {
       });
     });
   });
+
+  describe('Draft Completion', () => {
+    it('should complete draft after all picks (logged to events)', () => {
+      setupDraftingPhase().then(() => {
+        // Use force-timeout repeatedly to complete all rounds quickly
+        // Captain's Mode has 24 rounds (6 bans + 5 picks per team = 22, plus extras)
+
+        const completeRound = (): Cypress.Chainable<Cypress.Response<{ state: string }>> => {
+          return cy
+            .request<{ state: string }>({
+              method: 'GET',
+              url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+            })
+            .then((response): Cypress.Chainable<Cypress.Response<{ state: string }>> => {
+              if (response.body.state === 'drafting') {
+                return cy
+                  .request({
+                    method: 'POST',
+                    url: `${Cypress.env('apiUrl')}/tests/herodraft/${heroDraftPk}/force-timeout/`,
+                  })
+                  .then((): Cypress.Chainable<Cypress.Response<{ state: string }>> =>
+                    completeRound(),
+                  );
+              }
+              return cy.wrap(response);
+            });
+        };
+
+        // Complete all rounds via timeout
+        completeRound().then((finalResponse) => {
+          expect(finalResponse.body.state).to.eq('completed');
+
+          // Verify completion event logged
+          cy.request({
+            method: 'GET',
+            url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+          }).then((eventsResponse) => {
+            const events = eventsResponse.body;
+            const completionEvent = events.find(
+              (e: { event_type: string }) => e.event_type === 'draft_completed',
+            );
+            expect(completionEvent).to.exist;
+          });
+        });
+      });
+    });
+
+    it('should show final draft results', () => {
+      // First complete the draft
+      setupDraftingPhase().then(() => {
+        const completeRound = (): Cypress.Chainable<Cypress.Response<{ state: string }>> => {
+          return cy
+            .request<{ state: string }>({
+              method: 'GET',
+              url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+            })
+            .then((response): Cypress.Chainable<Cypress.Response<{ state: string }>> => {
+              if (response.body.state === 'drafting') {
+                return cy
+                  .request({
+                    method: 'POST',
+                    url: `${Cypress.env('apiUrl')}/tests/herodraft/${heroDraftPk}/force-timeout/`,
+                  })
+                  .then((): Cypress.Chainable<Cypress.Response<{ state: string }>> =>
+                    completeRound(),
+                  );
+              }
+              return cy.wrap(response);
+            });
+        };
+
+        completeRound().then(() => {
+          // Visit the draft page
+          switchToCaptainRadiant(cy);
+          visitAndWaitForHydration(
+            `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+          );
+          waitForHeroDraftModal(cy);
+
+          // Should show completed state with both teams' picks
+          cy.get('[data-testid="herodraft-panel-container"]').should('be.visible');
+
+          // Verify all 10 picks visible (5 per team)
+          cy.request({
+            method: 'GET',
+            url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+          }).then((response) => {
+            const rounds = response.body.rounds || [];
+            const picks = rounds.filter(
+              (r: { action_type: string; state: string }) =>
+                r.action_type === 'pick' && r.state === 'completed',
+            );
+            expect(picks.length).to.eq(10); // 5 picks per team
+          });
+        });
+      });
+    });
+  });
 });
