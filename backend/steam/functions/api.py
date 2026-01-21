@@ -7,6 +7,7 @@ from rest_framework.response import Response
 
 from steam.constants import LEAGUE_ID
 from steam.functions.game_linking import (
+    auto_assign_matches_by_time,
     auto_link_matches_for_tournament,
     confirm_suggestion,
     dismiss_suggestion,
@@ -338,3 +339,48 @@ def unlink_game_match(request, game_id):
         invalidate_obj(game.tournament)
 
     return Response({"status": "unlinked"})
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+def auto_assign_matches(request):
+    """
+    Auto-assign Steam matches to tournament bracket games based on time order.
+
+    Uses tournament date_played to filter matches to that day only,
+    then assigns matches to games based on bracket order (winners first,
+    then losers, sorted by round/position) and player overlap.
+
+    Body params:
+    - tournament_id: Tournament to auto-assign matches for
+    - preview: If true (default), returns assignments without applying them
+    - min_overlap: Minimum player overlap required (default 4)
+    - apply: If true, applies the assignments (overrides preview)
+    """
+    tournament_id = request.data.get("tournament_id")
+    if not tournament_id:
+        return Response(
+            {"error": "tournament_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    preview = request.data.get("preview", True)
+    apply_assignments = request.data.get("apply", False)
+    min_overlap = request.data.get("min_overlap", 4)
+
+    # apply=True overrides preview
+    if apply_assignments:
+        preview = False
+
+    try:
+        min_overlap = int(min_overlap)
+    except (TypeError, ValueError):
+        min_overlap = 4
+
+    result = auto_assign_matches_by_time(
+        tournament_id=tournament_id,
+        preview=preview,
+        min_overlap=min_overlap,
+    )
+
+    return Response(result)
