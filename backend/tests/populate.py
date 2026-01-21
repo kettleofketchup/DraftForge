@@ -1044,7 +1044,13 @@ def populate_bracket_linking_scenario(force=False):
     radiant_captain = radiant_team.captain
     dire_captain = dire_team.captain
 
-    base_time = int(datetime.now().timestamp()) - 86400  # Yesterday
+    # Create matches on the tournament day (today)
+    # Start at 10 AM tournament day
+    from datetime import time as dt_time
+    from datetime import timezone as dt_tz
+
+    tournament_start = datetime.combine(date.today(), dt_time(10, 0), tzinfo=dt_tz.utc)
+    base_time = int(tournament_start.timestamp())
     match_interval = 3600  # 1 hour between matches
 
     match_configs = [
