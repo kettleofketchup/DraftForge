@@ -7,10 +7,17 @@ import { getAddPlayerButton } from 'tests/cypress/helpers/tournament';
 import { getUserCard, getUserRemoveButton } from 'tests/cypress/helpers/users';
 
 describe('Tournament UI Elements (e2e)', () => {
+  let tournamentPk: number;
+
+  before(() => {
+    cy.getTournamentByKey('completed_bracket').then((response) => {
+      tournamentPk = response.body.pk;
+    });
+  });
+
   beforeEach(() => {
     cy.loginAdmin();
-
-    visitAndWaitForHydration('/tournament/1/players');
+    visitAndWaitForHydration(`/tournament/${tournamentPk}/players`);
     suppressHydrationErrors();
   });
 
