@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -7,13 +7,15 @@ import {
 } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
 import { Button } from '~/components/ui/button';
-import { Search, Unlink } from 'lucide-react';
+import { Badge } from '~/components/ui/badge';
+import { Search, Unlink, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '~/components/api/axios';
 import { SteamMatchCard, type MatchSuggestion } from './SteamMatchCard';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import type { BracketMatch } from '../types';
 import { cn } from '~/lib/utils';
+import { useUserStore } from '~/store/userStore';
 
 interface LinkSteamMatchModalProps {
   isOpen: boolean;
@@ -51,12 +53,21 @@ export function LinkSteamMatchModal({
   game,
   onLinkUpdated,
 }: LinkSteamMatchModalProps) {
+  const tournament = useUserStore((state) => state.tournament);
   const [search, setSearch] = useState('');
   const [suggestions, setSuggestions] = useState<MatchSuggestion[]>([]);
   const [linkedMatchId, setLinkedMatchId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [detailsMatchId, setDetailsMatchId] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Get tournament date for prioritizing matches on that day
+  // Use ISO date string (YYYY-MM-DD) for reliable comparison
+  const tournamentDateISO = useMemo(() => {
+    if (!tournament?.date_played) return null;
+    const date = new Date(tournament.date_played);
+    return date.toISOString().split('T')[0]; // e.g., "2026-01-18"
+  }, [tournament?.date_played]);
 
   // Fetch suggestions when modal opens or search changes
   useEffect(() => {
@@ -118,24 +129,36 @@ export function LinkSteamMatchModal({
   const groupedByDay = suggestions.reduce(
     (acc, suggestion) => {
       const date = new Date(suggestion.start_time * 1000);
-      const dayKey = date.toLocaleDateString('en-US', {
+      // Use ISO date for comparison key
+      const dateISO = date.toISOString().split('T')[0];
+      // Use formatted string for display
+      const displayLabel = date.toLocaleDateString('en-US', {
         weekday: 'short',
         month: 'short',
         day: 'numeric',
       });
-      if (!acc[dayKey]) {
-        acc[dayKey] = { timestamp: suggestion.start_time, matches: [] };
+      if (!acc[dateISO]) {
+        acc[dateISO] = {
+          timestamp: suggestion.start_time,
+          matches: [],
+          displayLabel,
+          isTournamentDay: dateISO === tournamentDateISO,
+        };
       }
-      acc[dayKey].matches.push(suggestion);
+      acc[dateISO].matches.push(suggestion);
       return acc;
     },
-    {} as Record<string, { timestamp: number; matches: MatchSuggestion[] }>
+    {} as Record<string, { timestamp: number; matches: MatchSuggestion[]; displayLabel: string; isTournamentDay: boolean }>
   );
 
-  // Sort days by timestamp (most recent first)
-  const sortedDays = Object.entries(groupedByDay).sort(
-    ([, a], [, b]) => b.timestamp - a.timestamp
-  );
+  // Sort days: tournament day first, then most recent
+  const sortedDays = Object.entries(groupedByDay).sort(([keyA, a], [keyB, b]) => {
+    // Tournament day always comes first
+    if (a.isTournamentDay) return -1;
+    if (b.isTournamentDay) return 1;
+    // Then sort by timestamp (most recent first)
+    return b.timestamp - a.timestamp;
+  });
 
   const tierOrder = ['all_players', 'captains_plus', 'captains_only', 'partial'];
 
@@ -194,7 +217,7 @@ export function LinkSteamMatchModal({
                 No matches found
               </div>
             ) : (
-              sortedDays.map(([dayLabel, { matches: dayMatches }]) => {
+              sortedDays.map(([dateKey, { matches: dayMatches, displayLabel, isTournamentDay }]) => {
                 // Group this day's matches by tier
                 const tierGroups = dayMatches.reduce(
                   (acc, match) => {
@@ -206,13 +229,25 @@ export function LinkSteamMatchModal({
                 );
 
                 return (
-                  <div key={dayLabel} className="space-y-2">
+                  <div key={dateKey} className="space-y-2">
                     {/* Day header */}
-                    <div className="sticky top-0 bg-background/95 backdrop-blur py-2 border-b">
-                      <span className="text-sm font-semibold text-foreground">
-                        {dayLabel}
+                    <div className={cn(
+                      "sticky top-0 backdrop-blur py-2 border-b flex items-center gap-2",
+                      isTournamentDay ? "bg-primary/10" : "bg-background/95"
+                    )}>
+                      <span className={cn(
+                        "text-sm font-semibold",
+                        isTournamentDay ? "text-primary" : "text-foreground"
+                      )}>
+                        {displayLabel}
                       </span>
-                      <span className="text-xs text-muted-foreground ml-2">
+                      {isTournamentDay && (
+                        <Badge variant="default" className="text-xs py-0">
+                          <Calendar className="h-3 w-3 mr-1" />
+                          Tournament Day
+                        </Badge>
+                      )}
+                      <span className="text-xs text-muted-foreground">
                         ({dayMatches.length} match{dayMatches.length !== 1 ? 'es' : ''})
                       </span>
                     </div>
