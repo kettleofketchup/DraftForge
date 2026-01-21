@@ -14,7 +14,7 @@ describe('Bracket Badges (e2e)', () => {
     visitAndWaitForHydration('/tournament/1/games');
 
     // Wait for the games tab to load
-    cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');
+    cy.get('[data-testid="bracketTab"]', { timeout: 10000 }).should('be.visible');
 
     // Default view should be bracket view
     cy.contains('Bracket View').should('be.visible');
@@ -105,7 +105,7 @@ describe('Bracket Badges (e2e)', () => {
     // Partial Bracket Test (Tournament 2) has 2 games completed, 4 pending
     visitAndWaitForHydration('/tournament/2/games');
 
-    cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');
+    cy.get('[data-testid="bracketTab"]', { timeout: 10000 }).should('be.visible');
 
     // Should still show bracket container
     cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
@@ -120,7 +120,7 @@ describe('Bracket Badges (e2e)', () => {
     // Pending Bracket Test (Tournament 3) has 0 games completed
     visitAndWaitForHydration('/tournament/3/games');
 
-    cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');
+    cy.get('[data-testid="bracketTab"]', { timeout: 10000 }).should('be.visible');
 
     // May show bracket container with pending games or empty state
     // The bracket structure should still exist
@@ -132,7 +132,7 @@ describe('Bracket Badges (e2e)', () => {
   it('can switch between bracket and list view', () => {
     visitAndWaitForHydration('/tournament/1/games');
 
-    cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');
+    cy.get('[data-testid="bracketTab"]', { timeout: 10000 }).should('be.visible');
 
     // Click on List View tab
     cy.contains('List View').click();
