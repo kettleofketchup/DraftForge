@@ -49,7 +49,7 @@ describe('Bracket Match Linking (e2e)', () => {
       visitAndWaitForHydration(`/tournament/${tournamentPk}/games`);
 
       // Wait for the games tab to load
-      cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');
+      cy.get('[data-testid="bracketTab"]', { timeout: 10000 }).should('be.visible');
 
       // Check if bracket already exists
       cy.get('body').then(($body) => {
@@ -99,7 +99,7 @@ describe('Bracket Match Linking (e2e)', () => {
         visitAndWaitForHydration(`/tournament/${tournamentPk}/games`);
 
         // Wait for the games tab to load
-        cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should(
+        cy.get('[data-testid="bracketTab"]', { timeout: 10000 }).should(
           'be.visible'
         );
 

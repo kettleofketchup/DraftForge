@@ -10,10 +10,10 @@ This document lists all the test identifiers added to tournament components for 
 - `tournamentTabsList` - Container for all tab triggers
 - `playersTab` - Players tab trigger
 - `teamsTab` - Teams tab trigger
-- `gamesTab` - Games tab trigger
+- `bracketTab` - Bracket tab trigger
 - `playersTabContent` - Players tab content area
 - `teamsTabContent` - Teams tab content area
-- `gamesTabContent` - Games tab content area
+- `bracketTabContent` - Bracket tab content area
 
 ## Players Tab
 - `playerSearchDropdown` - Main search dropdown for players
@@ -32,7 +32,7 @@ This document lists all the test identifiers added to tournament components for 
 - `confirmTeamsCreationBtn` - Confirm button in teams creation dialog
 - `closeTeamsModalBtn` - Close button for teams modal
 
-## Games Tab
+## Bracket Tab
 - `gameCreateModalBtn` - Button to create new game
 
 ## Usage Examples
