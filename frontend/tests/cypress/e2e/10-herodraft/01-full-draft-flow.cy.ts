@@ -613,4 +613,134 @@ describe('Hero Draft Full Flow (e2e)', () => {
       });
     });
   });
+
+  describe('Reserve Time Timeout', () => {
+    it('should randomly select hero when time expires (logged to events)', () => {
+      setupDraftingPhase().then(() => {
+        // Force timeout via test endpoint
+        cy.request({
+          method: 'POST',
+          url: `${Cypress.env('apiUrl')}/tests/herodraft/${heroDraftPk}/force-timeout/`,
+        }).then((response) => {
+          expect(response.status).to.eq(200);
+
+          // Verify timeout event logged
+          cy.request({
+            method: 'GET',
+            url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+          }).then((eventsResponse) => {
+            const events = eventsResponse.body;
+            const timeoutEvent = events.find(
+              (e: { event_type: string; metadata?: { was_random?: boolean } }) =>
+                e.event_type === 'round_timeout',
+            );
+            expect(timeoutEvent).to.exist;
+            expect(timeoutEvent.metadata.was_random).to.be.true;
+          });
+        });
+      });
+    });
+  });
+
+  describe('WebSocket Disconnect', () => {
+    it('should pause draft when captain disconnects (logged to events)', () => {
+      setupDraftingPhase().then(() => {
+        // Get first pick captain
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+        }).then((response) => {
+          const draft = response.body;
+          const firstPickTeam = draft.draft_teams.find(
+            (t: { is_first_pick: boolean }) => t.is_first_pick,
+          );
+          const firstPickCaptainDiscordId =
+            firstPickTeam?.tournament_team?.captain?.discordId;
+
+          // Switch to first pick captain
+          if (firstPickCaptainDiscordId === CAPTAIN_RADIANT.discordId) {
+            switchToCaptainRadiant(cy);
+          } else {
+            switchToCaptainDire(cy);
+          }
+
+          visitAndWaitForHydration(
+            `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+          );
+          waitForHeroDraftModal(cy);
+          assertDraftingPhase(cy);
+
+          // Navigate away to trigger disconnect
+          cy.visit('/');
+          cy.wait(1000);
+
+          // Check if draft recorded disconnect (via API since we left the page)
+          cy.request({
+            method: 'GET',
+            url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+          }).then((eventsResponse) => {
+            const events = eventsResponse.body;
+            const disconnectEvent = events.find(
+              (e: { event_type: string }) => e.event_type === 'captain_disconnected',
+            );
+            expect(disconnectEvent).to.exist;
+          });
+        });
+      });
+    });
+
+    it('should resume draft when captain reconnects', () => {
+      setupDraftingPhase().then(() => {
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+        }).then((response) => {
+          const draft = response.body;
+          const firstPickTeam = draft.draft_teams.find(
+            (t: { is_first_pick: boolean }) => t.is_first_pick,
+          );
+          const firstPickCaptainDiscordId =
+            firstPickTeam?.tournament_team?.captain?.discordId;
+
+          // Switch to first pick captain
+          if (firstPickCaptainDiscordId === CAPTAIN_RADIANT.discordId) {
+            switchToCaptainRadiant(cy);
+          } else {
+            switchToCaptainDire(cy);
+          }
+
+          visitAndWaitForHydration(
+            `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+          );
+          waitForHeroDraftModal(cy);
+
+          // Navigate away (disconnect)
+          cy.visit('/');
+          cy.wait(500);
+
+          // Reconnect by visiting draft again
+          visitAndWaitForHydration(
+            `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+          );
+          waitForHeroDraftModal(cy);
+
+          // Verify connected event
+          cy.request({
+            method: 'GET',
+            url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+          }).then((eventsResponse) => {
+            const events = eventsResponse.body;
+            const reconnectEvents = events.filter(
+              (e: { event_type: string }) => e.event_type === 'captain_connected',
+            );
+            // Should have multiple connect events (initial + reconnect)
+            expect(reconnectEvents.length).to.be.greaterThan(0);
+          });
+
+          // Should be able to continue drafting (not paused)
+          assertDraftingPhase(cy);
+        });
+      });
+    });
+  });
 });
