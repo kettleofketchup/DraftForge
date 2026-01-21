@@ -12,6 +12,7 @@ import { Badge } from '~/components/ui/badge';
 import { cn } from '~/lib/utils';
 import type { MatchNodeData } from '../types';
 import type { TeamType } from '~/components/tournament/types';
+import { DisplayName } from '~/components/user/avatar';
 import { getRoundLabel } from '../utils/doubleElimination';
 import { BracketBadge } from '../BracketBadge';
 import { getBadgeLetter } from '../utils/badgeUtils';
@@ -140,7 +141,7 @@ function TeamSlot({ team, score, isWinner, isCompleted }: TeamSlotProps) {
 
   // Use captain's username and avatar
   const captain = team.captain;
-  const displayName = captain?.username ?? team.name ?? 'Unknown';
+  const displayName = captain ? DisplayName(captain) : team.name ?? 'Unknown';
   const avatarUrl = captain?.avatarUrl ?? captain?.avatar;
 
   return (

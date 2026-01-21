@@ -114,9 +114,15 @@ def broadcast_herodraft_event(draft, event_type: str, draft_team=None, metadata=
         "timestamp": event.created_at.isoformat(),
     }
 
-    # Include full draft state
+    # Include full draft state with prefetched members
     try:
-        draft.refresh_from_db()
+        from app.models import HeroDraft
+
+        draft = HeroDraft.objects.prefetch_related(
+            "draft_teams__tournament_team__captain",
+            "draft_teams__tournament_team__members",
+            "rounds",
+        ).get(id=draft.id)
         payload["draft_state"] = HeroDraftSerializer(draft).data
     except Exception as e:
         log.warning(f"Failed to serialize herodraft state: {e}")

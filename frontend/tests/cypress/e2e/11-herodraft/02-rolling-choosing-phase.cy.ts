@@ -136,6 +136,15 @@ describe('HeroDraft - Rolling & Choosing Phases', () => {
       });
     });
 
+    // Reset draft to choosing state before each test to ensure clean state
+    beforeEach(() => {
+      cy.request({
+        method: 'GET',
+        url: `${Cypress.env('apiUrl')}/tests/herodraft-by-key/choosing_phase/`,
+        failOnStatusCode: false,
+      });
+    });
+
     it('should display flip winner name', function () {
       if (!choosingDraftId) {
         this.skip();

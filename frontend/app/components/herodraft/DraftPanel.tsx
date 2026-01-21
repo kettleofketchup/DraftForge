@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { heroes } from 'dotaconstants';
 import { cn } from '~/lib/utils';
 import type { HeroDraft, HeroDraftRound } from '~/components/herodraft/types';
+import { DisplayName } from '~/components/user/avatar';
 
 interface DraftPanelProps {
   draft: HeroDraft;
@@ -61,7 +62,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
             RADIANT
           </h3>
           <p className="text-sm text-muted-foreground" data-testid="herodraft-panel-radiant-captain">
-            {radiantTeam?.captain?.nickname || radiantTeam?.captain?.username}
+            {radiantTeam?.captain ? DisplayName(radiantTeam.captain) : ''}
           </p>
         </div>
         <div className="flex-1 p-3 text-center" data-testid="herodraft-panel-dire-header">
@@ -69,7 +70,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
             DIRE
           </h3>
           <p className="text-sm text-muted-foreground" data-testid="herodraft-panel-dire-captain">
-            {direTeam?.captain?.nickname || direTeam?.captain?.username}
+            {direTeam?.captain ? DisplayName(direTeam.captain) : ''}
           </p>
         </div>
       </div>

@@ -18,6 +18,9 @@ export interface TournamentState {
   // Deep-linking support: draftId to auto-open from URL
   pendingDraftId: number | null;
   setPendingDraftId: (draftId: number | null) => void;
+  // Deep-linking support: matchId to auto-open from URL
+  pendingMatchId: string | null;
+  setPendingMatchId: (matchId: string | null) => void;
 }
 
 export const useTournamentStore = create<TournamentState>((set, get) => ({
@@ -45,4 +48,6 @@ export const useTournamentStore = create<TournamentState>((set, get) => ({
   // Deep-linking support
   pendingDraftId: null,
   setPendingDraftId: (draftId: number | null) => set({ pendingDraftId: draftId }),
+  pendingMatchId: null,
+  setPendingMatchId: (matchId: string | null) => set({ pendingMatchId: matchId }),
 }));

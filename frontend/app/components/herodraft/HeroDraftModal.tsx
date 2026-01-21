@@ -4,14 +4,23 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "~/components/ui/dialog";
 import { VisuallyHidden } from "~/components/ui/visually-hidden";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import { useHeroDraftStore } from "~/store/heroDraftStore";
 import { useHeroDraftWebSocket } from "./hooks/useHeroDraftWebSocket";
 import { useUserStore } from "~/store/userStore";
 import { DraftTopBar } from "./DraftTopBar";
 import { HeroGrid } from "./HeroGrid";
 import { DraftPanel } from "./DraftPanel";
+import { HeroDraftHistoryModal } from "./HeroDraftHistoryModal";
 import { submitPick, setReady, triggerRoll, submitChoice } from "./api";
 import type { HeroDraft } from "./types";
+import { DisplayName } from "~/components/user/avatar";
+import { X, Send, History } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,6 +49,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
   const [confirmHeroId, setConfirmHeroId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [chatMessage, setChatMessage] = useState("");
 
   const handleStateUpdate = useCallback(
     (newDraft: HeroDraft) => {
@@ -183,7 +194,11 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-        <DialogContent className="max-w-[100vw] max-h-[100vh] w-screen h-screen p-0 gap-0" data-testid="herodraft-modal">
+        <DialogContent
+          className="!fixed !inset-0 !translate-x-0 !translate-y-0 !top-0 !left-0 !max-w-none !sm:max-w-none !w-screen !h-screen !p-0 !gap-0 !rounded-none !border-0 bg-gray-900"
+          showCloseButton={false}
+          data-testid="herodraft-modal"
+        >
           <VisuallyHidden>
             <DialogTitle>Hero Draft</DialogTitle>
             <DialogDescription>Captain's Mode hero draft interface</DialogDescription>
@@ -202,7 +217,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                       {draft.draft_teams.map((team) => (
                         <div key={team.id} className="text-center" data-testid={`herodraft-captain-status-${team.id}`}>
                           <p className="font-semibold" data-testid={`herodraft-captain-name-${team.id}`}>
-                            {team.captain?.nickname || team.captain?.username}
+                            {team.captain ? DisplayName(team.captain) : 'Unknown'}
                           </p>
                           <p
                             className={
@@ -242,7 +257,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                 <div className="flex-1 flex items-center justify-center" data-testid="herodraft-choosing-phase">
                   <div className="text-center space-y-4">
                     <h2 className="text-2xl font-bold" data-testid="herodraft-flip-winner">
-                      {rollWinnerTeam?.captain?.username} won the flip!
+                      {rollWinnerTeam?.captain ? DisplayName(rollWinnerTeam.captain) : 'Unknown'} won the flip!
                     </h2>
                     {rollWinnerTeam?.id === myTeam?.id ? (
                       <div className="space-y-2" data-testid="herodraft-winner-choices">
@@ -333,11 +348,11 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                 </div>
               )}
 
-              {/* Main draft area */}
+              {/* Main draft area - mobile: stacked, desktop: side-by-side */}
               {(draft.state === "drafting" || draft.state === "paused" || draft.state === "completed") && (
-                <div className="flex-1 flex overflow-hidden" data-testid="herodraft-main-area">
-                  {/* Left: Hero Grid */}
-                  <div className="flex-1 border-r border-gray-800" data-testid="herodraft-hero-grid-container">
+                <div className="flex-1 flex flex-col lg:flex-row overflow-hidden" data-testid="herodraft-main-area">
+                  {/* Hero Grid - full width on mobile, flex-1 on desktop */}
+                  <div className="flex-1 min-h-0 border-b lg:border-b-0 lg:border-r border-gray-800" data-testid="herodraft-hero-grid-container">
                     <HeroGrid
                       onHeroClick={handleHeroClick}
                       disabled={!isMyTurn || draft.state !== "drafting"}
@@ -345,8 +360,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                     />
                   </div>
 
-                  {/* Right: Draft Panel */}
-                  <div className="w-80" data-testid="herodraft-panel-container">
+                  {/* Draft Panel - full width on mobile, fixed width on desktop */}
+                  <div className="h-48 lg:h-auto lg:w-80 overflow-auto" data-testid="herodraft-panel-container">
                     <DraftPanel
                       draft={draft}
                       currentRound={tick?.current_round ?? null}
@@ -355,9 +370,62 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                 </div>
               )}
 
-              {/* Bottom: Chat placeholder */}
-              <div className="h-20 border-t border-gray-800 flex items-center justify-center text-muted-foreground" data-testid="herodraft-chat-placeholder">
-                <span>Team Chat - Under Construction</span>
+              {/* Bottom toolbar with chat and controls */}
+              <div className="h-16 border-t border-gray-800 flex items-center px-4 gap-4" data-testid="herodraft-bottom-toolbar">
+                {/* Chat input - left side, takes remaining space */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex-1 flex items-center gap-2">
+                      <Input
+                        placeholder="Team chat..."
+                        value={chatMessage}
+                        onChange={(e) => setChatMessage(e.target.value)}
+                        disabled
+                        className="flex-1 bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 cursor-not-allowed"
+                        data-testid="herodraft-chat-input"
+                      />
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        disabled
+                        className="shrink-0"
+                        data-testid="herodraft-chat-send"
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Under Construction</TooltipContent>
+                </Tooltip>
+
+                {/* Right side controls */}
+                <div className="flex items-center gap-2">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowHistoryModal(true)}
+                        className="text-white border-gray-600 hover:bg-gray-800"
+                        data-testid="herodraft-history-btn"
+                      >
+                        <History className="h-4 w-4 mr-2" />
+                        History
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Draft Events</TooltipContent>
+                  </Tooltip>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={onClose}
+                    data-testid="herodraft-close-btn"
+                    className="flex items-center justify-start"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Close
+                  </Button>
+                </div>
               </div>
 
               {/* Paused overlay */}
@@ -384,6 +452,16 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Draft history modal */}
+      {draft && (
+        <HeroDraftHistoryModal
+          open={showHistoryModal}
+          onOpenChange={setShowHistoryModal}
+          rounds={draft.rounds}
+          draftTeams={draft.draft_teams}
+        />
+      )}
 
       {/* Confirm pick dialog */}
       <AlertDialog

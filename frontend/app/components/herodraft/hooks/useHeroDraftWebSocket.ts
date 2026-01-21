@@ -31,6 +31,7 @@ export function useHeroDraftWebSocket({
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const shouldConnectRef = useRef(false);
+  const connectionIdRef = useRef(0); // Track connection ID to ignore stale callbacks
 
   // Store callbacks in refs to avoid triggering reconnects when they change
   const onStateUpdateRef = useRef(onStateUpdate);
@@ -56,9 +57,10 @@ export function useHeroDraftWebSocket({
       return;
     }
 
-    // Don't reconnect if already connected
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      log.debug("WebSocket already connected, skipping reconnect");
+    // Don't reconnect if already connected or connecting
+    if (wsRef.current?.readyState === WebSocket.OPEN ||
+        wsRef.current?.readyState === WebSocket.CONNECTING) {
+      log.debug("WebSocket already connected/connecting, skipping reconnect");
       return;
     }
 
@@ -67,16 +69,30 @@ export function useHeroDraftWebSocket({
 
     log.debug(`Connecting to HeroDraft WebSocket: ${wsUrl}`);
 
+    // Increment connection ID to track this specific connection
+    const thisConnectionId = ++connectionIdRef.current;
+
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      // Ignore if this is a stale connection (component remounted)
+      if (connectionIdRef.current !== thisConnectionId) {
+        log.debug("Ignoring stale WebSocket open");
+        ws.close(1000, "Stale connection");
+        return;
+      }
       log.debug("HeroDraft WebSocket connected");
       setIsConnected(true);
       setConnectionError(null);
     };
 
     ws.onmessage = (messageEvent) => {
+      // Ignore if this is a stale connection
+      if (connectionIdRef.current !== thisConnectionId) {
+        log.debug("Ignoring stale WebSocket message");
+        return;
+      }
       try {
         const rawData = JSON.parse(messageEvent.data);
 
@@ -131,6 +147,11 @@ export function useHeroDraftWebSocket({
     };
 
     ws.onclose = (closeEvent) => {
+      // Ignore if this is a stale connection
+      if (connectionIdRef.current !== thisConnectionId) {
+        log.debug("Ignoring stale WebSocket close");
+        return;
+      }
       log.debug("HeroDraft WebSocket closed:", closeEvent.code, closeEvent.reason);
       setIsConnected(false);
 
@@ -144,6 +165,11 @@ export function useHeroDraftWebSocket({
     };
 
     ws.onerror = (error) => {
+      // Ignore if this is a stale connection (e.g., StrictMode double-mount)
+      if (connectionIdRef.current !== thisConnectionId) {
+        log.debug("Ignoring stale WebSocket error");
+        return;
+      }
       log.error("HeroDraft WebSocket error:", error);
       setConnectionError("Connection error");
     };
@@ -171,7 +197,13 @@ export function useHeroDraftWebSocket({
         clearTimeout(reconnectTimeoutRef.current);
       }
       if (wsRef.current) {
-        wsRef.current.close(1000, "Component unmounting");
+        // Only close if actually connected - prevents StrictMode double-mount issues
+        // where WebSocket gets closed before connection is established
+        if (wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.close(1000, "Component unmounting");
+        }
+        // Clear ref regardless - let CONNECTING sockets fail naturally
+        wsRef.current = null;
       }
     };
   }, [connect, enabled, draftId]);

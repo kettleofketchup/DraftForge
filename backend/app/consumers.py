@@ -293,7 +293,11 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
         from app.models import HeroDraft
         from app.serializers import HeroDraftSerializer
 
-        draft = HeroDraft.objects.get(id=draft_id)
+        draft = HeroDraft.objects.prefetch_related(
+            "draft_teams__tournament_team__captain",
+            "draft_teams__tournament_team__members",
+            "rounds",
+        ).get(id=draft_id)
         return HeroDraftSerializer(draft).data
 
     @database_sync_to_async

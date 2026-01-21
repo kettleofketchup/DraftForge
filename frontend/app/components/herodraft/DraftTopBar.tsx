@@ -3,6 +3,7 @@ import { PlayerPopover } from "~/components/player";
 import { cn } from "~/lib/utils";
 import type { HeroDraft, HeroDraftTick } from "~/components/herodraft/types";
 import type { UserType } from "~/components/user/types.d";
+import { AvatarUrl, DisplayName } from "~/components/user/avatar";
 
 interface DraftTopBarProps {
   draft: HeroDraft;
@@ -17,19 +18,23 @@ function formatTime(ms: number): string {
 }
 
 /**
- * Convert draft captain data to UserType for PlayerPopover compatibility
+ * Convert draft captain data to UserType for PlayerPopover/AvatarUrl compatibility
  */
 function captainToUser(captain: {
-  pk: number;  // Backend uses 'pk' not 'id'
+  pk: number;
   username: string;
   nickname: string | null;
   avatar: string | null;
+  avatarUrl?: string | null;
+  discordId?: string | null;
 }): UserType {
   return {
     pk: captain.pk,
     username: captain.username,
     nickname: captain.nickname,
     avatar: captain.avatar,
+    avatarUrl: captain.avatarUrl ?? undefined,
+    discordId: captain.discordId ?? undefined,
   };
 }
 
@@ -75,81 +80,99 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
     return { completed, total };
   }, [draft.rounds, teamB?.id]);
 
+  // Get non-captain members (filter out captain from members list)
+  const teamAMembers = useMemo(() => {
+    if (!teamA?.members) return [];
+    return teamA.members.filter((m) => m.pk !== teamA.captain?.pk).slice(0, 4);
+  }, [teamA?.members, teamA?.captain?.pk]);
+
+  const teamBMembers = useMemo(() => {
+    if (!teamB?.members) return [];
+    return teamB.members.filter((m) => m.pk !== teamB.captain?.pk).slice(0, 4);
+  }, [teamB?.members, teamB?.captain?.pk]);
+
+  // Helper to render a player avatar with name underneath
+  const renderPlayer = (
+    player: { pk: number; username: string; nickname: string | null; avatar: string | null; avatarUrl?: string | null; discordId?: string | null },
+    isCaptain: boolean,
+    testIdPrefix: string
+  ) => (
+    <PlayerPopover key={`player-${player.pk}`} player={captainToUser(player)}>
+      <button
+        className="flex flex-col items-center hover:bg-white/10 rounded p-1 min-w-[48px]"
+        data-testid={`${testIdPrefix}-button`}
+      >
+        <img
+          src={AvatarUrl(captainToUser(player))}
+          alt={player.username}
+          className={cn(
+            "rounded-full",
+            isCaptain ? "w-10 h-10 ring-2 ring-yellow-500" : "w-8 h-8 opacity-80 hover:opacity-100"
+          )}
+          data-testid={`${testIdPrefix}-avatar`}
+        />
+        <span
+          className={cn(
+            "text-xs truncate max-w-[56px] mt-1",
+            isCaptain ? "font-semibold text-yellow-400" : "text-muted-foreground"
+          )}
+          data-testid={`${testIdPrefix}-name`}
+        >
+          {DisplayName(captainToUser(player))}
+        </span>
+      </button>
+    </PlayerPopover>
+  );
+
   return (
     <div className="bg-black/90 border-b border-gray-800" data-testid="herodraft-topbar">
-      {/* Row 1: Captains */}
-      <div className="grid grid-cols-5 items-center p-2" data-testid="herodraft-captains-row">
-        {/* Team A Captain */}
-        <div className="flex items-center gap-2" data-testid="herodraft-team-a-captain">
-          {teamA?.captain && (
-            <PlayerPopover player={captainToUser(teamA.captain)}>
-              <button className="flex items-center gap-2 hover:bg-white/10 rounded p-1" data-testid="herodraft-team-a-captain-button">
-                <img
-                  src={teamA.captain.avatar || "/default-avatar.png"}
-                  alt={teamA.captain.username}
-                  className="w-10 h-10 rounded-full"
-                  data-testid="herodraft-team-a-avatar"
-                />
-                <div className="text-left">
-                  <p className="font-semibold text-sm" data-testid="herodraft-team-a-name">
-                    {teamA.captain.nickname || teamA.captain.username}
-                  </p>
-                  <p className="text-xs text-muted-foreground" data-testid="herodraft-team-a-side">
-                    {teamA.is_radiant ? "Radiant" : "Dire"}
-                  </p>
-                </div>
-              </button>
-            </PlayerPopover>
-          )}
+      {/* Row 1: Teams - Captain on outer edges, members flowing inward */}
+      <div className="flex items-center justify-between p-2" data-testid="herodraft-teams-row">
+        {/* Team A: Captain on left, members flowing right */}
+        <div className="flex items-center gap-1" data-testid="herodraft-team-a">
+          {/* Captain - outer edge */}
+          {teamA?.captain && renderPlayer(teamA.captain, true, "herodraft-team-a-captain")}
+          {/* Team members */}
+          {teamAMembers.map((member, idx) => renderPlayer(member, false, `herodraft-team-a-member-${idx}`))}
           {activeTeamId === teamA?.id && (
-            <span className="text-yellow-400 text-sm animate-pulse" data-testid="herodraft-team-a-picking">
+            <span className="text-yellow-400 text-sm animate-pulse ml-2" data-testid="herodraft-team-a-picking">
               ◀ PICKING
             </span>
           )}
         </div>
 
-        {/* Team A Bans/Picks summary */}
-        <div className="text-center text-xs text-muted-foreground" data-testid="herodraft-team-a-progress">
-          {teamAProgress.completed} / {teamAProgress.total}
+        {/* Center: VS and progress (only show progress during drafting) */}
+        <div className="flex items-center gap-4">
+          {draft.state === "drafting" || draft.state === "completed" ? (
+            <>
+              <div className="text-center text-xs text-muted-foreground" data-testid="herodraft-team-a-progress">
+                {teamAProgress.completed}/{teamAProgress.total}
+              </div>
+              <div className="text-center" data-testid="herodraft-vs-section">
+                <span className="text-2xl font-bold text-muted-foreground">VS</span>
+              </div>
+              <div className="text-center text-xs text-muted-foreground" data-testid="herodraft-team-b-progress">
+                {teamBProgress.completed}/{teamBProgress.total}
+              </div>
+            </>
+          ) : (
+            <div className="text-center" data-testid="herodraft-vs-section">
+              <span className="text-2xl font-bold text-muted-foreground">VS</span>
+            </div>
+          )}
         </div>
 
-        {/* VS / Current action */}
-        <div className="text-center" data-testid="herodraft-vs-section">
-          <span className="text-2xl font-bold text-muted-foreground">VS</span>
-        </div>
-
-        {/* Team B Bans/Picks summary */}
-        <div className="text-center text-xs text-muted-foreground" data-testid="herodraft-team-b-progress">
-          {teamBProgress.completed} / {teamBProgress.total}
-        </div>
-
-        {/* Team B Captain */}
-        <div className="flex items-center gap-2 justify-end" data-testid="herodraft-team-b-captain">
+        {/* Team B: Members flowing left, Captain on right */}
+        <div className="flex items-center gap-1" data-testid="herodraft-team-b">
           {activeTeamId === teamB?.id && (
-            <span className="text-yellow-400 text-sm animate-pulse" data-testid="herodraft-team-b-picking">
+            <span className="text-yellow-400 text-sm animate-pulse mr-2" data-testid="herodraft-team-b-picking">
               PICKING ▶
             </span>
           )}
-          {teamB?.captain && (
-            <PlayerPopover player={captainToUser(teamB.captain)}>
-              <button className="flex items-center gap-2 hover:bg-white/10 rounded p-1" data-testid="herodraft-team-b-captain-button">
-                <div className="text-right">
-                  <p className="font-semibold text-sm" data-testid="herodraft-team-b-name">
-                    {teamB.captain.nickname || teamB.captain.username}
-                  </p>
-                  <p className="text-xs text-muted-foreground" data-testid="herodraft-team-b-side">
-                    {teamB.is_radiant ? "Radiant" : "Dire"}
-                  </p>
-                </div>
-                <img
-                  src={teamB.captain.avatar || "/default-avatar.png"}
-                  alt={teamB.captain.username}
-                  className="w-10 h-10 rounded-full"
-                  data-testid="herodraft-team-b-avatar"
-                />
-              </button>
-            </PlayerPopover>
-          )}
+          {/* Team members (reversed order so they flow toward center) */}
+          {[...teamBMembers].reverse().map((member, idx) => renderPlayer(member, false, `herodraft-team-b-member-${idx}`))}
+          {/* Captain - outer edge */}
+          {teamB?.captain && renderPlayer(teamB.captain, true, "herodraft-team-b-captain")}
         </div>
       </div>
 

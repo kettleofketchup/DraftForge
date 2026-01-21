@@ -16,4 +16,5 @@ export default [
   route('logout', 'routes/logoutRedirect.tsx'),
   route('done', 'routes/doneRedirect.tsx'),
   route('profile', 'routes/profile.tsx'),
+  route('herodraft/:id', 'routes/herodraft.tsx'),
 ] satisfies RouteConfig;

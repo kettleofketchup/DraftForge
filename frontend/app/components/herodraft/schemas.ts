@@ -5,6 +5,8 @@ export const DraftTeamCaptainSchema = z.object({
   username: z.string(),
   nickname: z.string().nullable(),
   avatar: z.string().nullable(),
+  avatarUrl: z.string().nullable().optional(),
+  discordId: z.string().nullable().optional(),
 });
 
 export const DraftTeamSchema = z.object({
@@ -12,6 +14,7 @@ export const DraftTeamSchema = z.object({
   tournament_team: z.number(),
   captain: DraftTeamCaptainSchema.nullable(),
   team_name: z.string(),
+  members: z.array(DraftTeamCaptainSchema).optional().default([]),
   is_first_pick: z.boolean().nullable(),
   is_radiant: z.boolean().nullable(),
   reserve_time_remaining: z.number(), // milliseconds

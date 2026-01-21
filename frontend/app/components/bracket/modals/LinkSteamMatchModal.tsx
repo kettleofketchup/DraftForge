@@ -62,11 +62,15 @@ export function LinkSteamMatchModal({
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Get tournament date for prioritizing matches on that day
-  // Use ISO date string (YYYY-MM-DD) for reliable comparison
-  const tournamentDateISO = useMemo(() => {
+  // Use local date string (YYYY-MM-DD) for reliable comparison (avoids UTC timezone shift)
+  const tournamentDateLocal = useMemo(() => {
     if (!tournament?.date_played) return null;
     const date = new Date(tournament.date_played);
-    return date.toISOString().split('T')[0]; // e.g., "2026-01-18"
+    // Use local date components to avoid UTC conversion shifting the date
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`; // e.g., "2026-01-18"
   }, [tournament?.date_played]);
 
   // Fetch suggestions when modal opens or search changes
@@ -129,23 +133,26 @@ export function LinkSteamMatchModal({
   const groupedByDay = suggestions.reduce(
     (acc, suggestion) => {
       const date = new Date(suggestion.start_time * 1000);
-      // Use ISO date for comparison key
-      const dateISO = date.toISOString().split('T')[0];
+      // Use local date for comparison key (avoids UTC timezone shift)
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateLocal = `${year}-${month}-${day}`;
       // Use formatted string for display
       const displayLabel = date.toLocaleDateString('en-US', {
         weekday: 'short',
         month: 'short',
         day: 'numeric',
       });
-      if (!acc[dateISO]) {
-        acc[dateISO] = {
+      if (!acc[dateLocal]) {
+        acc[dateLocal] = {
           timestamp: suggestion.start_time,
           matches: [],
           displayLabel,
-          isTournamentDay: dateISO === tournamentDateISO,
+          isTournamentDay: dateLocal === tournamentDateLocal,
         };
       }
-      acc[dateISO].matches.push(suggestion);
+      acc[dateLocal].matches.push(suggestion);
       return acc;
     },
     {} as Record<string, { timestamp: number; matches: MatchSuggestion[]; displayLabel: string; isTournamentDay: boolean }>
@@ -257,9 +264,14 @@ export function LinkSteamMatchModal({
                       const tierSuggestions = tierGroups[tier];
                       if (!tierSuggestions?.length) return null;
 
+                      // Sort matches within tier by start_time (most recent first)
+                      const sortedTierSuggestions = [...tierSuggestions].sort(
+                        (a, b) => b.start_time - a.start_time
+                      );
+
                       const styles = TIER_STYLES[tier];
                       const tierLabel =
-                        tierSuggestions[0]?.tier_display || tier.replace('_', ' ');
+                        sortedTierSuggestions[0]?.tier_display || tier.replace('_', ' ');
 
                       return (
                         <div key={`${dateKey}-${tier}`} data-testid={`tier-${tier}`}>
@@ -274,7 +286,7 @@ export function LinkSteamMatchModal({
                             <span className="font-medium">{tierLabel}</span>
                           </div>
                           <div className="space-y-2 p-2 border border-t-0 rounded-b-lg">
-                            {tierSuggestions.map((suggestion) => (
+                            {sortedTierSuggestions.map((suggestion) => (
                               <SteamMatchCard
                                 key={suggestion.match_id}
                                 match={suggestion}

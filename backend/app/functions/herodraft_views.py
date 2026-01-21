@@ -21,6 +21,15 @@ from app.serializers import HeroDraftEventSerializer, HeroDraftSerializer
 log = logging.getLogger(__name__)
 
 
+def _get_draft_with_prefetch(draft_pk: int) -> HeroDraft:
+    """Get a draft with all related data prefetched for serialization."""
+    return HeroDraft.objects.prefetch_related(
+        "draft_teams__tournament_team__captain",
+        "draft_teams__tournament_team__members",
+        "rounds",
+    ).get(pk=draft_pk)
+
+
 def _get_draft_team_for_user(draft: HeroDraft, user) -> DraftTeam | None:
     """Get the DraftTeam for a user in this draft, if they are a captain."""
     for draft_team in draft.draft_teams.all():
@@ -52,8 +61,8 @@ def create_herodraft(request, game_pk):
 
     # Check if draft already exists - return existing draft instead of error
     if hasattr(game, "herodraft"):
-        serializer = HeroDraftSerializer(game.herodraft)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        draft = _get_draft_with_prefetch(game.herodraft.pk)
+        return Response(HeroDraftSerializer(draft).data, status=status.HTTP_200_OK)
 
     # Check game has both teams
     if not game.radiant_team or not game.dire_team:
@@ -87,6 +96,8 @@ def create_herodraft(request, game_pk):
 
     broadcast_herodraft_event(draft, "draft_created")
 
+    # Refetch with prefetch for proper serialization
+    draft = _get_draft_with_prefetch(draft.pk)
     return Response(HeroDraftSerializer(draft).data, status=status.HTTP_201_CREATED)
 
 
@@ -100,7 +111,7 @@ def get_herodraft(request, draft_pk):
         200: Draft data
         404: Draft not found
     """
-    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+    draft = _get_draft_with_prefetch(draft_pk)
     return Response(HeroDraftSerializer(draft).data)
 
 
@@ -154,6 +165,7 @@ def set_ready(request, draft_pk):
 
     broadcast_herodraft_event(draft, "captain_ready", draft_team)
 
+    draft = _get_draft_with_prefetch(draft.pk)
     return Response(HeroDraftSerializer(draft).data)
 
 
@@ -196,8 +208,8 @@ def do_trigger_roll(request, draft_pk):
 
     broadcast_herodraft_event(draft, "roll_result", winner)
 
-    # Refresh draft to get updated state
-    draft.refresh_from_db()
+    # Refetch with prefetch for proper serialization
+    draft = _get_draft_with_prefetch(draft.pk)
     return Response(HeroDraftSerializer(draft).data)
 
 
@@ -306,8 +318,8 @@ def do_submit_choice(request, draft_pk):
 
     broadcast_herodraft_event(draft, "choice_made", draft_team)
 
-    # Refresh draft to get updated state
-    draft.refresh_from_db()
+    # Refetch with prefetch for proper serialization
+    draft = _get_draft_with_prefetch(draft.pk)
 
     # Start tick broadcaster if draft just entered drafting state
     if draft.state == "drafting":
@@ -380,8 +392,8 @@ def do_submit_pick(request, draft_pk):
 
     broadcast_herodraft_event(draft, "hero_selected", draft_team)
 
-    # Refresh draft to get updated state
-    draft.refresh_from_db()
+    # Refetch with prefetch for proper serialization
+    draft = _get_draft_with_prefetch(draft.pk)
     return Response(HeroDraftSerializer(draft).data)
 
 
@@ -466,4 +478,5 @@ def abandon_draft(request, draft_pk):
 
     broadcast_herodraft_event(draft, "draft_abandoned")
 
+    draft = _get_draft_with_prefetch(draft.pk)
     return Response(HeroDraftSerializer(draft).data)

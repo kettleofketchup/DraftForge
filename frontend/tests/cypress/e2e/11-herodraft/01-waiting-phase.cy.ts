@@ -52,6 +52,15 @@ describe('HeroDraft - Waiting Phase', () => {
     cy.window().then((win) => {
       win.sessionStorage.clear();
     });
+
+    // Reset the draft state before each test
+    if (heroDraftId) {
+      cy.request({
+        method: 'POST',
+        url: `${Cypress.env('apiUrl')}/tests/herodraft/${heroDraftId}/reset/`,
+        failOnStatusCode: false,
+      });
+    }
   });
 
   describe('Phase Display', () => {

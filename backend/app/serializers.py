@@ -864,10 +864,13 @@ class HeroDraftRoundSerializerFull(serializers.ModelSerializer):
 
 
 class DraftTeamSerializerFull(serializers.ModelSerializer):
-    """Full serializer for DraftTeam with captain info."""
+    """Full serializer for DraftTeam with captain and team members."""
 
     captain = TournamentUserSerializer(read_only=True)
     team_name = serializers.CharField(source="tournament_team.name", read_only=True)
+    members = TournamentUserSerializer(
+        source="tournament_team.members", many=True, read_only=True
+    )
 
     class Meta:
         model = DraftTeam
@@ -876,6 +879,7 @@ class DraftTeamSerializerFull(serializers.ModelSerializer):
             "tournament_team",
             "captain",
             "team_name",
+            "members",
             "is_first_pick",
             "is_radiant",
             "reserve_time_remaining",
@@ -887,6 +891,7 @@ class DraftTeamSerializerFull(serializers.ModelSerializer):
 class HeroDraftSerializer(serializers.ModelSerializer):
     """Full serializer for HeroDraft with nested relations."""
 
+    pk = serializers.IntegerField(source="id", read_only=True)
     draft_teams = DraftTeamSerializerFull(many=True, read_only=True)
     rounds = HeroDraftRoundSerializerFull(many=True, read_only=True)
     roll_winner = DraftTeamSerializerFull(read_only=True)
@@ -895,6 +900,7 @@ class HeroDraftSerializer(serializers.ModelSerializer):
     class Meta:
         model = HeroDraft
         fields = [
+            "pk",
             "id",
             "game",
             "state",

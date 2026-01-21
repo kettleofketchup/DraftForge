@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import {
   Dialog,
@@ -15,19 +15,20 @@ import { useUserStore } from '~/store/userStore';
 import { useBracketStore } from '~/store/bracketStore';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import { LinkSteamMatchModal } from './LinkSteamMatchModal';
-import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
 import { createHeroDraft } from '~/components/herodraft/api';
 import type { BracketMatch } from '../types';
 import { cn } from '~/lib/utils';
+import { DisplayName } from '~/components/user/avatar';
 
 interface MatchStatsModalProps {
   match: BracketMatch | null;
   isOpen: boolean;
   onClose: () => void;
   initialDraftId?: number | null;
+  onOpenHeroDraft?: (draftId: number) => void;
 }
 
-export function MatchStatsModal({ match, isOpen, onClose, initialDraftId }: MatchStatsModalProps) {
+export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpenHeroDraft }: MatchStatsModalProps) {
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
   const isStaff = useUserStore((state) => state.isStaff());
@@ -35,16 +36,6 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId }: Matc
   const { setMatchWinner, advanceWinner, loadBracket } = useBracketStore();
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
-  const [showDraftModal, setShowDraftModal] = useState(false);
-  const [draftId, setDraftId] = useState<number | null>(null);
-
-  // Auto-open draft modal when initialDraftId is provided (deep link)
-  useEffect(() => {
-    if (initialDraftId && match?.herodraft_id === initialDraftId && isOpen) {
-      setDraftId(initialDraftId);
-      setShowDraftModal(true);
-    }
-  }, [initialDraftId, match?.herodraft_id, isOpen]);
 
   if (!match) return null;
 
@@ -63,8 +54,8 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId }: Matc
   };
 
   const handleOpenDraft = async () => {
-    if (!pk) {
-      console.error("Tournament pk is required to open draft");
+    if (!pk || !onOpenHeroDraft) {
+      console.error("Tournament pk and onOpenHeroDraft callback are required");
       return;
     }
     try {
@@ -83,10 +74,10 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId }: Matc
       }
 
       if (draftIdToOpen) {
-        setDraftId(draftIdToOpen);
-        setShowDraftModal(true);
         // Update URL to include draft
         navigate(`/tournament/${pk}/bracket/draft/${draftIdToOpen}`, { replace: true });
+        // Open hero draft modal via parent callback (this also closes match modal)
+        onOpenHeroDraft(draftIdToOpen);
       }
     } catch (error) {
       console.error("Failed to open draft:", error);
@@ -148,14 +139,14 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId }: Matc
                   className="flex-1"
                   onClick={() => handleSetWinner('radiant')}
                 >
-                  {match.radiantTeam.captain?.username ?? match.radiantTeam.name} Wins
+                  {match.radiantTeam.captain ? DisplayName(match.radiantTeam.captain) : match.radiantTeam.name} Wins
                 </Button>
                 <Button
                   variant="outline"
                   className="flex-1"
                   onClick={() => handleSetWinner('dire')}
                 >
-                  {match.direTeam.captain?.username ?? match.direTeam.name} Wins
+                  {match.direTeam.captain ? DisplayName(match.direTeam.captain) : match.direTeam.name} Wins
                 </Button>
               </div>
             </div>
@@ -229,21 +220,6 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId }: Matc
           game={match}
           onLinkUpdated={handleLinkUpdated}
         />
-
-        {/* Hero Draft Modal */}
-        {draftId && (
-          <HeroDraftModal
-            draftId={draftId}
-            open={showDraftModal}
-            onClose={() => {
-              setShowDraftModal(false);
-              // Restore URL without draft
-              if (pk) {
-                navigate(`/tournament/${pk}/bracket`, { replace: true });
-              }
-            }}
-          />
-        )}
       </DialogContent>
     </Dialog>
   );
@@ -266,7 +242,7 @@ function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
     );
   }
 
-  const displayName = team.captain?.username ?? team.name;
+  const displayName = team.captain ? DisplayName(team.captain) : team.name;
   const initials = displayName.substring(0, 2).toUpperCase();
 
   return (

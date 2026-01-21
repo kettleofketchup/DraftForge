@@ -137,15 +137,46 @@ export const UserEditModalButton: React.FC = memo(() => {
 export const UserEditModal: React.FC<Props> = memo(({ user }) => {
   const currentUser: UserType = useUserStore((state) => state.currentUser);
 
-  const [form, setForm] = useState<UserType>({} as UserType);
+  // Initialize form with user data to prevent null updates
+  const [form, setForm] = useState<UserType>(() => ({
+    pk: user.pk,
+    username: user.username,
+    nickname: user.nickname,
+    avatar: user.avatar,
+    avatarUrl: user.avatarUrl,
+    discordId: user.discordId,
+    mmr: user.mmr,
+    steamid: user.steamid,
+    positions: user.positions,
+    is_staff: user.is_staff,
+    is_superuser: user.is_superuser,
+    guildNickname: user.guildNickname,
+  } as UserType));
 
-  useEffect(() => {}, [user]);
+  // Update form when user prop changes
+  useEffect(() => {
+    setForm({
+      pk: user.pk,
+      username: user.username,
+      nickname: user.nickname,
+      avatar: user.avatar,
+      avatarUrl: user.avatarUrl,
+      discordId: user.discordId,
+      mmr: user.mmr,
+      steamid: user.steamid,
+      positions: user.positions,
+      is_staff: user.is_staff,
+      is_superuser: user.is_superuser,
+      guildNickname: user.guildNickname,
+    } as UserType);
+  }, [user]);
+
   if (!currentUser || (!currentUser.is_staff && !currentUser.is_superuser)) {
     return <></>;
   }
 
   return (
-    <Dialog key={`user-edit-modal-${user.id}`}>
+    <Dialog key={`user-edit-modal-${user.pk}`}>
       <form>
         <UserEditModalButton />
         <UserEditModalDialog user={user} form={form} setForm={setForm} />
