@@ -49,11 +49,11 @@ describe('Hero Draft Full Flow (e2e)', () => {
       // This is vrm.mtl vs ethan0688_
       cy.request({
         method: 'GET',
-        url: `${Cypress.env('apiUrl')}/api/bracket/tournaments/${tournamentPk}/`,
+        url: `${Cypress.env('apiUrl')}/bracket/tournaments/${tournamentPk}/`,
       }).then((bracketResponse) => {
-        const games = bracketResponse.body.games || [];
+        const matches = bracketResponse.body.matches || [];
         // Find the pending Winners Final (round 2, winners bracket)
-        const winnersFinal = games.find(
+        const winnersFinal = matches.find(
           (g: any) =>
             g.round === 2 &&
             g.bracket_type === 'winners' &&
@@ -80,7 +80,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
       // Create hero draft via API
       cy.request({
         method: 'POST',
-        url: `${Cypress.env('apiUrl')}/api/herodraft/game/${gamePk}/create/`,
+        url: `${Cypress.env('apiUrl')}/herodraft/game/${gamePk}/create/`,
       }).then((response) => {
         expect(response.status).to.be.oneOf([200, 201]);
         heroDraftPk = response.body.pk;
@@ -120,7 +120,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
       // Verify ready state via API (logged to events)
       cy.request({
         method: 'GET',
-        url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+        url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/events/`,
       }).then((response) => {
         const events = response.body;
         const readyEvent = events.find(
@@ -150,7 +150,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
       // Verify both ready events logged
       cy.request({
         method: 'GET',
-        url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+        url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/events/`,
       }).then((response) => {
         const events = response.body;
         const readyEvents = events.filter(
@@ -223,7 +223,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
       // Verify roll events logged
       cy.request({
         method: 'GET',
-        url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+        url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/events/`,
       }).then((response) => {
         const events = response.body;
         const rollEvent = events.find(
@@ -276,7 +276,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
       // Get current draft to find roll winner
       cy.request({
         method: 'GET',
-        url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+        url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/`,
       }).then((response) => {
         const draft = response.body;
         const rollWinnerDiscordId =
@@ -300,7 +300,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
         // Verify choice logged
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+          url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/events/`,
         }).then((eventsResponse) => {
           const events = eventsResponse.body;
           const choiceEvent = events.find(
@@ -315,7 +315,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
       // Get roll winner
       cy.request({
         method: 'GET',
-        url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+        url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/`,
       }).then((response) => {
         const draft = response.body;
         const rollWinnerDiscordId =
@@ -386,7 +386,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
     return cy
       .request({
         method: 'GET',
-        url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+        url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/`,
       })
       .then((response) => {
         const draft = response.body;
@@ -442,7 +442,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
         // Get current draft state to find who picks first
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+          url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/`,
         }).then((response) => {
           const draft = response.body;
           const firstPickTeam = draft.draft_teams.find(
@@ -471,7 +471,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
           cy.wait(500);
           cy.request({
             method: 'GET',
-            url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+            url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/events/`,
           }).then((eventsResponse) => {
             const events = eventsResponse.body;
             const selectEvent = events.find(
@@ -487,7 +487,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
       setupDraftingPhase().then(() => {
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+          url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/`,
         }).then((response) => {
           const draft = response.body;
           const firstPickTeam = draft.draft_teams.find(
@@ -527,7 +527,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
         // Complete all bans via force-timeout to get to pick phase quickly
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+          url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/`,
         }).then((response) => {
           const draft = response.body;
           const firstPickTeam = draft.draft_teams.find(
@@ -542,7 +542,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
             return cy
               .request({
                 method: 'GET',
-                url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+                url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/`,
               })
               .then((draftRes): Cypress.Chainable<Cypress.Response<unknown>> => {
                 const currentRound = draftRes.body.rounds?.find(
@@ -576,7 +576,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
             // Verify pick event when we get there
             cy.request({
               method: 'GET',
-              url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+              url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/`,
             }).then((draftResponse) => {
               const currentRound = draftResponse.body.rounds?.find(
                 (r: { state: string }) => r.state === 'active',
@@ -596,7 +596,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
                 cy.wait(500);
                 cy.request({
                   method: 'GET',
-                  url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+                  url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/events/`,
                 }).then((eventsResponse) => {
                   const events = eventsResponse.body;
                   const pickEvents = events.filter(
@@ -627,7 +627,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
           // Verify timeout event logged
           cy.request({
             method: 'GET',
-            url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+            url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/events/`,
           }).then((eventsResponse) => {
             const events = eventsResponse.body;
             const timeoutEvent = events.find(
@@ -648,7 +648,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
         // Get first pick captain
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+          url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/`,
         }).then((response) => {
           const draft = response.body;
           const firstPickTeam = draft.draft_teams.find(
@@ -677,7 +677,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
           // Check if draft recorded disconnect (via API since we left the page)
           cy.request({
             method: 'GET',
-            url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+            url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/events/`,
           }).then((eventsResponse) => {
             const events = eventsResponse.body;
             const disconnectEvent = events.find(
@@ -693,7 +693,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
       setupDraftingPhase().then(() => {
         cy.request({
           method: 'GET',
-          url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+          url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/`,
         }).then((response) => {
           const draft = response.body;
           const firstPickTeam = draft.draft_teams.find(
@@ -727,7 +727,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
           // Verify connected event
           cy.request({
             method: 'GET',
-            url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+            url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/events/`,
           }).then((eventsResponse) => {
             const events = eventsResponse.body;
             const reconnectEvents = events.filter(
@@ -754,7 +754,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
           return cy
             .request<{ state: string }>({
               method: 'GET',
-              url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+              url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/`,
             })
             .then((response): Cypress.Chainable<Cypress.Response<{ state: string }>> => {
               if (response.body.state === 'drafting') {
@@ -778,7 +778,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
           // Verify completion event logged
           cy.request({
             method: 'GET',
-            url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+            url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/events/`,
           }).then((eventsResponse) => {
             const events = eventsResponse.body;
             const completionEvent = events.find(
@@ -797,7 +797,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
           return cy
             .request<{ state: string }>({
               method: 'GET',
-              url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+              url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/`,
             })
             .then((response): Cypress.Chainable<Cypress.Response<{ state: string }>> => {
               if (response.body.state === 'drafting') {
@@ -828,7 +828,7 @@ describe('Hero Draft Full Flow (e2e)', () => {
           // Verify all 10 picks visible (5 per team)
           cy.request({
             method: 'GET',
-            url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+            url: `${Cypress.env('apiUrl')}/herodraft/${heroDraftPk}/`,
           }).then((response) => {
             const rounds = response.body.rounds || [];
             const picks = rounds.filter(
