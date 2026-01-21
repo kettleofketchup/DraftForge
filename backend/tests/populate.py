@@ -1513,7 +1513,7 @@ def populate_all(force=False):
     """Run all population functions in the correct order."""
     populate_organizations_and_leagues(force)
     populate_users(force)
+    populate_real_tournament_38(force)  # MOVED FIRST - gets pk 1
     populate_tournaments(force)
     populate_steam_matches(force)
     populate_bracket_linking_scenario(force)
-    populate_real_tournament_38(force)
