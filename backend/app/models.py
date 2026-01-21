@@ -74,6 +74,21 @@ class CustomUser(AbstractUser):
     nickname = models.TextField(null=True, blank=True)
     mmr = models.IntegerField(null=True, blank=True)
     league_mmr = models.IntegerField(null=True, blank=True)
+
+    # MMR verification tracking
+    has_active_dota_mmr = models.BooleanField(default=False)
+    dota_mmr_last_verified = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def needs_mmr_verification(self) -> bool:
+        """Check if user needs to verify their MMR (>30 days since last verification)."""
+        if not self.has_active_dota_mmr:
+            return False
+        if self.dota_mmr_last_verified is None:
+            return True
+        days_since = (timezone.now() - self.dota_mmr_last_verified).days
+        return days_since > 30
+
     # Store positions as a dict of 1-5: bool, e.g. {"1": true, "2": false, ...}
     positions = models.ForeignKey(
         PositionsModel,
