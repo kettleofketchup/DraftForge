@@ -24,7 +24,6 @@ from app.functions.herodraft_views import (
 from app.functions.tournament import (
     create_team_from_captain,
     generate_draft_rounds,
-    get_active_draft_for_user,
     get_draft_style_mmrs,
     pick_player_for_round,
     rebuild_team,
@@ -118,11 +117,6 @@ urlpatterns = [
         "api/tournaments/undo-pick",
         undo_last_pick,
         name="undo-pick",
-    ),
-    path(
-        "api/active-draft-for-user/",
-        get_active_draft_for_user,
-        name="active-draft-for-user",
     ),
     path("api/avatars/refresh/", app_views.refresh_all_avatars, name="refresh-avatars"),
     path("api/profile_update", profile_update, name="profile_update"),
