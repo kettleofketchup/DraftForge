@@ -20,13 +20,13 @@ function formatTime(ms: number): string {
  * Convert draft captain data to UserType for PlayerPopover compatibility
  */
 function captainToUser(captain: {
-  id: number;
+  pk: number;  // Backend uses 'pk' not 'id'
   username: string;
   nickname: string | null;
   avatar: string | null;
 }): UserType {
   return {
-    pk: captain.id,
+    pk: captain.pk,
     username: captain.username,
     nickname: captain.nickname,
     avatar: captain.avatar,

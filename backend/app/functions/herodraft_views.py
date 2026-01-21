@@ -52,8 +52,6 @@ def create_herodraft(request, game_pk):
 
     # Check if draft already exists - return existing draft instead of error
     if hasattr(game, "herodraft"):
-        from app.serializers import HeroDraftSerializer
-
         serializer = HeroDraftSerializer(game.herodraft)
         return Response(serializer.data, status=status.HTTP_200_OK)
 

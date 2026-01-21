@@ -72,6 +72,7 @@ function mapApiMatchToMatch(apiMatch: ApiBracketMatch, allMatches: ApiBracketMat
     winner,
     status: apiMatch.status,
     steamMatchId: apiMatch.gameid ?? undefined,
+    herodraft_id: apiMatch.herodraft_id ?? undefined,
     nextMatchId,
     nextMatchSlot: apiMatch.next_game_slot ?? undefined,
     loserNextMatchId,

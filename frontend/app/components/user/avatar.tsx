@@ -26,5 +26,9 @@ export const AvatarUrl = (
     )}`;
   }
 
-  return user.avatarUrl || '';
+  // Use avatarUrl if available, otherwise fall back to avatar field (which may be the full URL)
+  // If neither has a valid URL, generate one from username
+  return user.avatarUrl || user.avatar || `${genUrl}&length=2&name=${encodeURIComponent(
+    user.nickname || user.username,
+  )}`;
 };

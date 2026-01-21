@@ -7,6 +7,7 @@ const log = getLogger("useHeroDraftWebSocket");
 
 interface UseHeroDraftWebSocketOptions {
   draftId: number | null;
+  enabled?: boolean;  // Only connect when enabled (default: true when draftId is set)
   onStateUpdate?: (draft: HeroDraft) => void;
   onTick?: (tick: HeroDraftTick) => void;
   onEvent?: (eventType: string, draftTeam: number | null) => void;
@@ -19,6 +20,7 @@ interface UseHeroDraftWebSocketReturn {
 
 export function useHeroDraftWebSocket({
   draftId,
+  enabled = true,
   onStateUpdate,
   onTick,
   onEvent,
@@ -28,6 +30,7 @@ export function useHeroDraftWebSocket({
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const shouldConnectRef = useRef(false);
 
   // Store callbacks in refs to avoid triggering reconnects when they change
   const onStateUpdateRef = useRef(onStateUpdate);
@@ -48,7 +51,10 @@ export function useHeroDraftWebSocket({
   }, [onEvent]);
 
   const connect = useCallback(() => {
-    if (!draftId) return;
+    if (!draftId || !shouldConnectRef.current) {
+      log.debug("WebSocket connect skipped", { draftId, enabled: shouldConnectRef.current });
+      return;
+    }
 
     // Don't reconnect if already connected
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -57,7 +63,7 @@ export function useHeroDraftWebSocket({
     }
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws/herodraft/${draftId}/`;
+    const wsUrl = `${protocol}//${window.location.host}/api/herodraft/${draftId}/`;
 
     log.debug(`Connecting to HeroDraft WebSocket: ${wsUrl}`);
 
@@ -129,7 +135,7 @@ export function useHeroDraftWebSocket({
       setIsConnected(false);
 
       // Attempt reconnect after 3 seconds (only for unexpected closes)
-      if (closeEvent.code !== 1000) {
+      if (closeEvent.code !== 1000 && shouldConnectRef.current) {
         reconnectTimeoutRef.current = setTimeout(() => {
           log.debug("Attempting HeroDraft WebSocket reconnect...");
           connect();
@@ -143,10 +149,24 @@ export function useHeroDraftWebSocket({
     };
   }, [draftId]); // Only depend on draftId - callbacks are accessed via refs
 
+  // Manage connection based on enabled state
   useEffect(() => {
-    connect();
+    shouldConnectRef.current = enabled;
+
+    if (enabled && draftId) {
+      connect();
+    } else {
+      // Disconnect if disabled
+      if (wsRef.current) {
+        wsRef.current.close(1000, "Connection disabled");
+        wsRef.current = null;
+      }
+      setIsConnected(false);
+      setConnectionError(null);
+    }
 
     return () => {
+      shouldConnectRef.current = false;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
@@ -154,7 +174,7 @@ export function useHeroDraftWebSocket({
         wsRef.current.close(1000, "Component unmounting");
       }
     };
-  }, [connect]);
+  }, [connect, enabled, draftId]);
 
   return {
     isConnected,
