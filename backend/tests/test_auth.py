@@ -254,6 +254,64 @@ def login_as_user(request):
     return Response({"success": True, "user": UserSerializer(user).data})
 
 
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def login_as_discord_id(request):
+    """
+    Login as a user by their Discord ID (TEST ONLY).
+
+    This endpoint is only available when TEST_ENDPOINTS=true.
+    Discord IDs are stable across populate runs, unlike PKs.
+
+    Request body:
+        discord_id: str - The Discord ID of the user to login as
+
+    Returns:
+        200: Login successful with user data
+        404: User not found
+    """
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    discord_id = request.data.get("discord_id")
+    if not discord_id:
+        return Response(
+            {"error": "discord_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = CustomUser.objects.filter(discordId=discord_id).first()
+    if not user:
+        return Response(
+            {"error": f"User with Discord ID {discord_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+
+    response = Response(
+        {
+            "success": True,
+            "user": {
+                "pk": user.pk,
+                "username": user.username,
+                "discordUsername": user.discordUsername,
+                "discordId": user.discordId,
+                "mmr": user.mmr,
+            },
+        },
+        status=status.HTTP_200_OK,
+    )
+
+    # Set cookies in response headers for Cypress
+    response["CookieSessionId"] = request.session.session_key
+    response["CookieCsrfToken"] = request.META.get("CSRF_COOKIE", "")
+
+    return response
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def get_tournament_by_key(request, key: str):
