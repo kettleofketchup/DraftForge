@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const DraftTeamCaptainSchema = z.object({
-  id: z.number(),
+  pk: z.number(),  // Backend uses 'pk' not 'id'
   username: z.string(),
   nickname: z.string().nullable(),
   avatar: z.string().nullable(),

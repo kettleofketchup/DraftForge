@@ -25,9 +25,33 @@ website/
 
 ## Tech Stack
 
-**Backend**: Django, Django REST Framework, django-social-auth (Discord OAuth), Redis (cacheops)
+**Backend**: Django, Django REST Framework, Django Channels (Daphne), django-social-auth (Discord OAuth), Redis (cacheops)
 **Frontend**: React, TypeScript, Vite, React Router, TailwindCSS, Shadcn UI, Zustand, Zod
 **Infrastructure**: Docker, Nginx, GitHub Container Registry
+
+## WebSocket Architecture
+
+**IMPORTANT**: This project uses Daphne (Django Channels) which handles both HTTP and WebSocket connections on the same URL paths.
+
+- **DO NOT** create separate `/ws/` URL paths for WebSocket endpoints
+- WebSocket routes should use the same `/api/` prefix as HTTP endpoints
+- Daphne's `ProtocolTypeRouter` automatically routes based on connection protocol
+- Example: `/api/herodraft/<id>/` handles both HTTP GET requests AND WebSocket connections
+
+WebSocket routing is defined in `backend/app/routing.py`:
+```python
+websocket_urlpatterns = [
+    path("api/draft/<int:draft_id>/", DraftConsumer.as_asgi()),
+    path("api/tournament/<int:tournament_id>/", TournamentConsumer.as_asgi()),
+    path("api/herodraft/<int:draft_id>/", HeroDraftConsumer.as_asgi()),
+]
+```
+
+Frontend connects via:
+```typescript
+const wsUrl = `${protocol}//${host}/api/herodraft/${draftId}/`;
+const ws = new WebSocket(wsUrl);
+```
 
 ## Quick Start
 

@@ -220,7 +220,31 @@ This pattern ensures only one tick broadcaster runs per draft, even with multipl
 
 ## Real-Time WebSocket Broadcasting
 
-Django Channels provides WebSocket support for real-time features.
+Django Channels provides WebSocket support for real-time features via Daphne ASGI server.
+
+### URL Routing Convention
+
+**IMPORTANT**: Daphne handles both HTTP and WebSocket on the same URL paths. Do NOT create separate `/ws/` prefixed routes.
+
+| ❌ Wrong | ✅ Correct |
+|----------|------------|
+| `/ws/herodraft/<id>/` | `/api/herodraft/<id>/` |
+| `/ws/draft/<id>/` | `/api/draft/<id>/` |
+
+The `ProtocolTypeRouter` in `backend/asgi.py` automatically routes connections based on protocol:
+- HTTP requests → Django URL router (`backend/urls.py`)
+- WebSocket connections → Channels URL router (`app/routing.py`)
+
+```python
+# backend/app/routing.py
+websocket_urlpatterns = [
+    path("api/draft/<int:draft_id>/", DraftConsumer.as_asgi()),
+    path("api/tournament/<int:tournament_id>/", TournamentConsumer.as_asgi()),
+    path("api/herodraft/<int:draft_id>/", HeroDraftConsumer.as_asgi()),
+]
+```
+
+This works because nginx proxies `/api/` to the backend, and Daphne distinguishes HTTP from WebSocket by the `Upgrade: websocket` header.
 
 ### HeroDraft Tick Broadcaster
 

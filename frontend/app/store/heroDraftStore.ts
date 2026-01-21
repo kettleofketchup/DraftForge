@@ -48,7 +48,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
 
   isMyTurn: (userId: number) => {
     const currentTeam = get().getCurrentTeam();
-    return currentTeam?.captain?.id === userId;
+    return currentTeam?.captain?.pk === userId;
   },
 
   getUsedHeroIds: () => {

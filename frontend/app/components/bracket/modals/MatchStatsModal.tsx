@@ -76,6 +76,10 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId }: Matc
         // Create new draft
         const draft = await createHeroDraft(match.gameId);
         draftIdToOpen = draft.id;
+        // Reload bracket to update herodraft_id in the match
+        if (tournament?.pk) {
+          loadBracket(tournament.pk);
+        }
       }
 
       if (draftIdToOpen) {

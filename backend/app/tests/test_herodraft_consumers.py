@@ -80,7 +80,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         return URLRouter(
             [
                 re_path(
-                    r"ws/herodraft/(?P<draft_id>\d+)/$",
+                    r"api/herodraft/(?P<draft_id>\d+)/$",
                     HeroDraftConsumer.as_asgi(),
                 ),
             ]
@@ -90,7 +90,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         """Test successful connection to valid draft."""
         communicator = WebsocketCommunicator(
             self.get_application(),
-            f"/ws/herodraft/{self.draft.id}/",
+            f"/api/herodraft/{self.draft.id}/",
         )
         communicator.scope["user"] = self.spectator
 
@@ -109,7 +109,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         """Test connection to non-existent draft is rejected."""
         communicator = WebsocketCommunicator(
             self.get_application(),
-            "/ws/herodraft/99999/",
+            "/api/herodraft/99999/",
         )
         communicator.scope["user"] = self.spectator
 
@@ -121,7 +121,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         """Test captain is marked connected when they join."""
         communicator = WebsocketCommunicator(
             self.get_application(),
-            f"/ws/herodraft/{self.draft.id}/",
+            f"/api/herodraft/{self.draft.id}/",
         )
         communicator.scope["user"] = self.captain1
 
@@ -146,7 +146,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         """Test captain is marked disconnected when they leave."""
         communicator = WebsocketCommunicator(
             self.get_application(),
-            f"/ws/herodraft/{self.draft.id}/",
+            f"/api/herodraft/{self.draft.id}/",
         )
         communicator.scope["user"] = self.captain1
 
@@ -183,7 +183,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         communicator = WebsocketCommunicator(
             self.get_application(),
-            f"/ws/herodraft/{self.draft.id}/",
+            f"/api/herodraft/{self.draft.id}/",
         )
         communicator.scope["user"] = self.captain1
 
@@ -210,7 +210,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         # First connect captain
         captain_communicator = WebsocketCommunicator(
             self.get_application(),
-            f"/ws/herodraft/{self.draft.id}/",
+            f"/api/herodraft/{self.draft.id}/",
         )
         captain_communicator.scope["user"] = self.captain1
         await captain_communicator.connect()
@@ -219,7 +219,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         # Connect spectator
         spectator_communicator = WebsocketCommunicator(
             self.get_application(),
-            f"/ws/herodraft/{self.draft.id}/",
+            f"/api/herodraft/{self.draft.id}/",
         )
         spectator_communicator.scope["user"] = self.spectator
         await spectator_communicator.connect()
@@ -243,7 +243,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         """Test herodraft_event messages are forwarded to clients."""
         communicator = WebsocketCommunicator(
             self.get_application(),
-            f"/ws/herodraft/{self.draft.id}/",
+            f"/api/herodraft/{self.draft.id}/",
         )
         communicator.scope["user"] = self.spectator
 
@@ -281,7 +281,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         """Test herodraft_tick messages are forwarded to clients."""
         communicator = WebsocketCommunicator(
             self.get_application(),
-            f"/ws/herodraft/{self.draft.id}/",
+            f"/api/herodraft/{self.draft.id}/",
         )
         communicator.scope["user"] = self.spectator
 

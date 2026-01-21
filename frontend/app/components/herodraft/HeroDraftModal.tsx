@@ -1,7 +1,8 @@
 // frontend/app/components/herodraft/HeroDraftModal.tsx
 import { useCallback, useState, useMemo } from "react";
 import { toast } from "sonner";
-import { Dialog, DialogContent } from "~/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "~/components/ui/dialog";
+import { VisuallyHidden } from "~/components/ui/visually-hidden";
 import { Button } from "~/components/ui/button";
 import { useHeroDraftStore } from "~/store/heroDraftStore";
 import { useHeroDraftWebSocket } from "./hooks/useHeroDraftWebSocket";
@@ -73,6 +74,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
   const { isConnected } = useHeroDraftWebSocket({
     draftId,
+    enabled: open,  // Only connect when modal is open
     onStateUpdate: handleStateUpdate,
     onTick: handleTick,
     onEvent: handleEvent,
@@ -81,7 +83,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
   const handleHeroClick = (heroId: number) => {
     if (!draft || !currentUser?.pk) return;
 
-    const myTeam = draft.draft_teams.find((t) => t.captain?.id === currentUser.pk);
+    const myTeam = draft.draft_teams.find((t) => t.captain?.pk === currentUser.pk);
     if (!myTeam) return;
 
     // Find current round from rounds array using current_round index
@@ -168,11 +170,11 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
   const isMyTurn = currentRoundData
     ? draft?.draft_teams.find((t) => t.id === currentRoundData.draft_team)
-        ?.captain?.id === currentUser?.pk
+        ?.captain?.pk === currentUser?.pk
     : false;
 
-  const isCaptain = draft?.draft_teams.some((t) => t.captain?.id === currentUser?.pk);
-  const myTeam = draft?.draft_teams.find((t) => t.captain?.id === currentUser?.pk);
+  const isCaptain = draft?.draft_teams.some((t) => t.captain?.pk === currentUser?.pk);
+  const myTeam = draft?.draft_teams.find((t) => t.captain?.pk === currentUser?.pk);
   // roll_winner is already the full DraftTeam object from the backend
   const rollWinnerTeam = draft?.roll_winner ?? null;
 
@@ -182,6 +184,10 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     <>
       <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
         <DialogContent className="max-w-[100vw] max-h-[100vh] w-screen h-screen p-0 gap-0" data-testid="herodraft-modal">
+          <VisuallyHidden>
+            <DialogTitle>Hero Draft</DialogTitle>
+            <DialogDescription>Captain's Mode hero draft interface</DialogDescription>
+          </VisuallyHidden>
           {draft && (
             <div className="flex flex-col h-full bg-gray-900" data-testid="herodraft-container">
               {/* Top Bar */}

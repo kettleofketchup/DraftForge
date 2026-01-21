@@ -262,7 +262,7 @@ export function LinkSteamMatchModal({
                         tierSuggestions[0]?.tier_display || tier.replace('_', ' ');
 
                       return (
-                        <div key={`${dayLabel}-${tier}`} data-testid={`tier-${tier}`}>
+                        <div key={`${dateKey}-${tier}`} data-testid={`tier-${tier}`}>
                           <div
                             className={cn(
                               'px-3 py-1 rounded-t-lg border-b text-xs',
