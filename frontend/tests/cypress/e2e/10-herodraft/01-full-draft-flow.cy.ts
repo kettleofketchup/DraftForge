@@ -353,4 +353,264 @@ describe('Hero Draft Full Flow (e2e)', () => {
       });
     });
   });
+
+  // Helper to quickly get draft to drafting state
+  const setupDraftingPhase = () => {
+    cy.loginAdmin();
+    cy.request({
+      method: 'POST',
+      url: `${Cypress.env('apiUrl')}/tests/herodraft/${heroDraftPk}/reset/`,
+    });
+
+    // Both ready
+    switchToCaptainRadiant(cy);
+    visitAndWaitForHydration(
+      `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+    );
+    waitForHeroDraftModal(cy);
+    clickReadyButton(cy);
+
+    switchToCaptainDire(cy);
+    visitAndWaitForHydration(
+      `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+    );
+    waitForHeroDraftModal(cy);
+    clickReadyButton(cy);
+    waitForDraftState(cy, 'rolling');
+
+    // Roll
+    clickFlipCoinButton(cy);
+    waitForDraftState(cy, 'choosing');
+
+    // Make choices - get draft state to determine winner
+    return cy
+      .request({
+        method: 'GET',
+        url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+      })
+      .then((response) => {
+        const draft = response.body;
+        const rollWinnerDiscordId =
+          draft.roll_winner?.tournament_team?.captain?.discordId;
+        const isRadiantWinner =
+          rollWinnerDiscordId === CAPTAIN_RADIANT.discordId;
+
+        // Winner chooses first_pick
+        if (isRadiantWinner) {
+          switchToCaptainRadiant(cy);
+        } else {
+          switchToCaptainDire(cy);
+        }
+        visitAndWaitForHydration(
+          `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+        );
+        waitForHeroDraftModal(cy);
+        selectWinnerChoice(cy, 'first_pick');
+
+        // Loser chooses radiant
+        if (isRadiantWinner) {
+          switchToCaptainDire(cy);
+        } else {
+          switchToCaptainRadiant(cy);
+        }
+        visitAndWaitForHydration(
+          `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+        );
+        waitForHeroDraftModal(cy);
+        selectLoserChoice(cy, 'radiant');
+
+        waitForDraftState(cy, 'drafting');
+
+        return { isRadiantWinner };
+      });
+  };
+
+  describe('Drafting Phase - Bans', () => {
+    it('should show ban phase UI for first pick captain', () => {
+      setupDraftingPhase().then(() => {
+        assertDraftingPhase(cy);
+        // First action should be a ban
+        cy.get('[data-testid="herodraft-current-action"]').should(
+          'contain.text',
+          'Ban',
+        );
+      });
+    });
+
+    it('should allow captain to ban a hero (logged to events)', () => {
+      setupDraftingPhase().then(() => {
+        // Get current draft state to find who picks first
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+        }).then((response) => {
+          const draft = response.body;
+          const firstPickTeam = draft.draft_teams.find(
+            (t: { is_first_pick: boolean }) => t.is_first_pick,
+          );
+          const firstPickCaptainDiscordId =
+            firstPickTeam?.tournament_team?.captain?.discordId;
+
+          // Switch to first pick captain
+          if (firstPickCaptainDiscordId === CAPTAIN_RADIANT.discordId) {
+            switchToCaptainRadiant(cy);
+          } else {
+            switchToCaptainDire(cy);
+          }
+
+          visitAndWaitForHydration(
+            `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+          );
+          waitForHeroDraftModal(cy);
+
+          // Ban Anti-Mage (hero_id: 1)
+          clickHero(cy, 1);
+          confirmHeroSelection(cy);
+
+          // Verify hero_selected event logged
+          cy.wait(500);
+          cy.request({
+            method: 'GET',
+            url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+          }).then((eventsResponse) => {
+            const events = eventsResponse.body;
+            const selectEvent = events.find(
+              (e: { event_type: string }) => e.event_type === 'hero_selected',
+            );
+            expect(selectEvent).to.exist;
+          });
+        });
+      });
+    });
+
+    it('should mark banned hero as unavailable', () => {
+      setupDraftingPhase().then(() => {
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+        }).then((response) => {
+          const draft = response.body;
+          const firstPickTeam = draft.draft_teams.find(
+            (t: { is_first_pick: boolean }) => t.is_first_pick,
+          );
+          const firstPickCaptainDiscordId =
+            firstPickTeam?.tournament_team?.captain?.discordId;
+
+          if (firstPickCaptainDiscordId === CAPTAIN_RADIANT.discordId) {
+            switchToCaptainRadiant(cy);
+          } else {
+            switchToCaptainDire(cy);
+          }
+
+          visitAndWaitForHydration(
+            `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+          );
+          waitForHeroDraftModal(cy);
+
+          // Ban Axe (hero_id: 2)
+          clickHero(cy, 2);
+          confirmHeroSelection(cy);
+
+          // Wait for update
+          cy.wait(500);
+
+          // Verify Axe is now unavailable
+          assertHeroUnavailable(cy, 2);
+        });
+      });
+    });
+  });
+
+  describe('Drafting Phase - Picks', () => {
+    it('should allow captain to pick a hero (logged to events)', () => {
+      setupDraftingPhase().then(() => {
+        // Complete all bans via force-timeout to get to pick phase quickly
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+        }).then((response) => {
+          const draft = response.body;
+          const firstPickTeam = draft.draft_teams.find(
+            (t: { is_first_pick: boolean }) => t.is_first_pick,
+          );
+          const firstPickDiscordId =
+            firstPickTeam?.tournament_team?.captain?.discordId;
+
+          // Complete several ban rounds via timeout to get to pick phase
+          // In Captain's Mode, first 4 rounds are bans (2 each)
+          const forceBanRounds = (): Cypress.Chainable<Cypress.Response<unknown>> => {
+            return cy
+              .request({
+                method: 'GET',
+                url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+              })
+              .then((draftRes): Cypress.Chainable<Cypress.Response<unknown>> => {
+                const currentRound = draftRes.body.rounds?.find(
+                  (r: { state: string }) => r.state === 'active',
+                );
+                if (currentRound?.action_type === 'ban') {
+                  return cy
+                    .request({
+                      method: 'POST',
+                      url: `${Cypress.env('apiUrl')}/tests/herodraft/${heroDraftPk}/force-timeout/`,
+                    })
+                    .then((): Cypress.Chainable<Cypress.Response<unknown>> => forceBanRounds());
+                }
+                return cy.wrap(draftRes);
+              });
+          };
+
+          forceBanRounds().then(() => {
+            // Now we should be in pick phase
+            if (firstPickDiscordId === CAPTAIN_RADIANT.discordId) {
+              switchToCaptainRadiant(cy);
+            } else {
+              switchToCaptainDire(cy);
+            }
+
+            visitAndWaitForHydration(
+              `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+            );
+            waitForHeroDraftModal(cy);
+
+            // Verify pick event when we get there
+            cy.request({
+              method: 'GET',
+              url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+            }).then((draftResponse) => {
+              const currentRound = draftResponse.body.rounds?.find(
+                (r: { state: string }) => r.state === 'active',
+              );
+              if (currentRound?.action_type === 'pick') {
+                // We're in pick phase
+                cy.get('[data-testid="herodraft-current-action"]').should(
+                  'contain.text',
+                  'Pick',
+                );
+
+                // Pick a hero (Juggernaut: hero_id 8)
+                clickHero(cy, 8);
+                confirmHeroSelection(cy);
+
+                // Verify pick event logged
+                cy.wait(500);
+                cy.request({
+                  method: 'GET',
+                  url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+                }).then((eventsResponse) => {
+                  const events = eventsResponse.body;
+                  const pickEvents = events.filter(
+                    (e: { event_type: string; metadata?: { action_type?: string } }) =>
+                      e.event_type === 'hero_selected' &&
+                      e.metadata?.action_type === 'pick',
+                  );
+                  expect(pickEvents.length).to.be.greaterThan(0);
+                });
+              }
+            });
+          });
+        });
+      });
+    });
+  });
 });
