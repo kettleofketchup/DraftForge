@@ -14,6 +14,7 @@ import { SharedPopoverRenderer } from '~/components/ui/shared-popover-renderer';
 import { getLogger } from '~/lib/logger';
 import type { Route } from './+types/root';
 import './app.css';
+import { ActiveDraftBanner } from './components/draft/ActiveDraftBanner';
 import { FloatingDraftIndicator } from './components/draft/FloatingDraftIndicator';
 import ResponsiveAppBar from './components/navbar/navbar';
 
@@ -78,6 +79,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <SharedPopoverProvider>
             <div className="flex flex-col w-screen h-screen justify-between">
               <ResponsiveAppBar />
+              <ActiveDraftBanner />
               <div id="outlet_root" className="flex-grow overflow-x-hidden">
                 {children}
               </div>
