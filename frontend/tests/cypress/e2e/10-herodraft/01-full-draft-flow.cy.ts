@@ -182,4 +182,175 @@ describe('Hero Draft Full Flow (e2e)', () => {
       assertRollingPhase(cy);
     });
   });
+
+  describe('Rolling Phase', () => {
+    beforeEach(() => {
+      // Setup: get both captains ready
+      cy.loginAdmin();
+      cy.request({
+        method: 'POST',
+        url: `${Cypress.env('apiUrl')}/tests/herodraft/${heroDraftPk}/reset/`,
+      });
+
+      // Both captains ready up
+      switchToCaptainRadiant(cy);
+      visitAndWaitForHydration(
+        `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+      );
+      waitForHeroDraftModal(cy);
+      clickReadyButton(cy);
+
+      switchToCaptainDire(cy);
+      visitAndWaitForHydration(
+        `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+      );
+      waitForHeroDraftModal(cy);
+      clickReadyButton(cy);
+      waitForDraftState(cy, 'rolling');
+    });
+
+    it('should show coin flip UI in rolling phase', () => {
+      assertRollingPhase(cy);
+      cy.get('[data-testid="herodraft-flip-coin-button"]').should('be.visible');
+    });
+
+    it('should allow captain to trigger coin flip (logged to events)', () => {
+      clickFlipCoinButton(cy);
+
+      // Wait for roll result
+      cy.wait(1000); // Allow animation
+
+      // Verify roll events logged
+      cy.request({
+        method: 'GET',
+        url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+      }).then((response) => {
+        const events = response.body;
+        const rollEvent = events.find(
+          (e: { event_type: string }) =>
+            e.event_type === 'roll_triggered' || e.event_type === 'roll_result',
+        );
+        expect(rollEvent).to.exist;
+      });
+
+      // Should transition to choosing phase
+      waitForDraftState(cy, 'choosing');
+    });
+  });
+
+  describe('Choosing Phase', () => {
+    beforeEach(() => {
+      // Setup: get to choosing phase
+      cy.loginAdmin();
+      cy.request({
+        method: 'POST',
+        url: `${Cypress.env('apiUrl')}/tests/herodraft/${heroDraftPk}/reset/`,
+      });
+
+      // Both ready
+      switchToCaptainRadiant(cy);
+      visitAndWaitForHydration(
+        `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+      );
+      waitForHeroDraftModal(cy);
+      clickReadyButton(cy);
+
+      switchToCaptainDire(cy);
+      visitAndWaitForHydration(
+        `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+      );
+      waitForHeroDraftModal(cy);
+      clickReadyButton(cy);
+      waitForDraftState(cy, 'rolling');
+
+      // Trigger roll
+      clickFlipCoinButton(cy);
+      waitForDraftState(cy, 'choosing');
+    });
+
+    it('should show choosing phase UI', () => {
+      assertChoosingPhase(cy);
+    });
+
+    it('should allow roll winner to choose first pick (logged to events)', () => {
+      // Get current draft to find roll winner
+      cy.request({
+        method: 'GET',
+        url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+      }).then((response) => {
+        const draft = response.body;
+        const rollWinnerDiscordId =
+          draft.roll_winner?.tournament_team?.captain?.discordId;
+
+        // Switch to roll winner
+        if (rollWinnerDiscordId === CAPTAIN_RADIANT.discordId) {
+          switchToCaptainRadiant(cy);
+        } else {
+          switchToCaptainDire(cy);
+        }
+
+        visitAndWaitForHydration(
+          `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+        );
+        waitForHeroDraftModal(cy);
+
+        // Winner chooses first pick
+        selectWinnerChoice(cy, 'first_pick');
+
+        // Verify choice logged
+        cy.request({
+          method: 'GET',
+          url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/events/`,
+        }).then((eventsResponse) => {
+          const events = eventsResponse.body;
+          const choiceEvent = events.find(
+            (e: { event_type: string }) => e.event_type === 'choice_made',
+          );
+          expect(choiceEvent).to.exist;
+        });
+      });
+    });
+
+    it('should transition to drafting after both choices made', () => {
+      // Get roll winner
+      cy.request({
+        method: 'GET',
+        url: `${Cypress.env('apiUrl')}/api/herodraft/${heroDraftPk}/`,
+      }).then((response) => {
+        const draft = response.body;
+        const rollWinnerDiscordId =
+          draft.roll_winner?.tournament_team?.captain?.discordId;
+        const isRadiantWinner =
+          rollWinnerDiscordId === CAPTAIN_RADIANT.discordId;
+
+        // Winner chooses
+        if (isRadiantWinner) {
+          switchToCaptainRadiant(cy);
+        } else {
+          switchToCaptainDire(cy);
+        }
+        visitAndWaitForHydration(
+          `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+        );
+        waitForHeroDraftModal(cy);
+        selectWinnerChoice(cy, 'first_pick');
+
+        // Loser chooses remaining
+        if (isRadiantWinner) {
+          switchToCaptainDire(cy);
+        } else {
+          switchToCaptainRadiant(cy);
+        }
+        visitAndWaitForHydration(
+          `/tournament/${tournamentPk}/bracket/draft/${heroDraftPk}`,
+        );
+        waitForHeroDraftModal(cy);
+        selectLoserChoice(cy, 'radiant');
+
+        // Should now be in drafting phase
+        waitForDraftState(cy, 'drafting');
+        assertDraftingPhase(cy);
+      });
+    });
+  });
 });
