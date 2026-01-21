@@ -518,11 +518,61 @@ class UserCreateView(generics.CreateAPIView):
 @api_view(["GET"])
 @permission_classes((AllowAny,))
 def current_user(request):
-
     user = request.user
     if request.user.is_authenticated:
-
         data = UserSerializer(user).data
+
+        # Add active drafts info
+        active_drafts = []
+
+        # Team drafts: user is captain with pending pick in in_progress tournament
+        from app.models import DraftTeam, HeroDraft
+
+        pending_team_round = (
+            DraftRound.objects.filter(
+                captain=user,
+                choice__isnull=True,
+                draft__tournament__state="in_progress",
+            )
+            .select_related("draft__tournament")
+            .order_by("pick_number")
+            .first()
+        )
+
+        if pending_team_round:
+            active_drafts.append(
+                {
+                    "type": "team_draft",
+                    "tournament_pk": pending_team_round.draft.tournament.pk,
+                    "draft_state": pending_team_round.draft.tournament.state,
+                }
+            )
+
+        # Hero drafts: user is captain of a DraftTeam in an active HeroDraft
+        active_hero_states = [
+            "waiting_for_captains",
+            "rolling",
+            "choosing",
+            "drafting",
+        ]
+        hero_draft_teams = DraftTeam.objects.filter(
+            tournament_team__captain=user,
+            draft__state__in=active_hero_states,
+        ).select_related("draft__game__tournament")
+
+        for draft_team in hero_draft_teams:
+            hero_draft = draft_team.draft
+            active_drafts.append(
+                {
+                    "type": "hero_draft",
+                    "tournament_pk": hero_draft.game.tournament.pk,
+                    "game_pk": hero_draft.game.pk,
+                    "herodraft_pk": hero_draft.pk,
+                    "draft_state": hero_draft.state,
+                }
+            )
+
+        data["active_drafts"] = active_drafts
         return Response(data, 201)
 
     else:
