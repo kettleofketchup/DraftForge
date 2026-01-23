@@ -112,8 +112,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
     setIsSubmitting(true);
     try {
-      const updated = await submitPick(draft.id, confirmHeroId);
-      setDraft(updated);
+      // Don't call setDraft - WebSocket broadcasts state to all clients
+      await submitPick(draft.id, confirmHeroId);
       setConfirmHeroId(null);
       setSelectedHeroId(null);
     } catch (error: unknown) {
@@ -128,8 +128,10 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     if (!draft || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const updated = await setReady(draft.id);
-      setDraft(updated);
+      // Don't call setDraft here - WebSocket will broadcast the updated state
+      // to all clients. Calling setDraft with API response can cause race conditions
+      // where stale API data overwrites fresher WebSocket data.
+      await setReady(draft.id);
       toast.success("You are ready!");
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
@@ -143,8 +145,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     if (!draft || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const updated = await triggerRoll(draft.id);
-      setDraft(updated);
+      // Don't call setDraft - WebSocket broadcasts state to all clients
+      await triggerRoll(draft.id);
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       toast.error(axiosError.response?.data?.error || "Failed to trigger roll");
@@ -160,12 +162,12 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     if (!draft || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const updated = await submitChoice(
+      // Don't call setDraft - WebSocket broadcasts state to all clients
+      await submitChoice(
         draft.id,
         choiceType,
         value as "first" | "second" | "radiant" | "dire"
       );
-      setDraft(updated);
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       toast.error(axiosError.response?.data?.error || "Failed to submit choice");
@@ -195,16 +197,20 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     <>
       <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
         <DialogContent
-          className="!fixed !inset-0 !translate-x-0 !translate-y-0 !top-0 !left-0 !max-w-none !sm:max-w-none !w-screen !h-screen !p-0 !gap-0 !rounded-none !border-0 bg-gray-900"
+          className="!fixed !inset-0 !translate-x-0 !translate-y-0 !top-0 !left-0 !max-w-none !w-full !h-full !p-0 !gap-0 !rounded-none !border-0 bg-gray-900 overflow-hidden"
           showCloseButton={false}
           data-testid="herodraft-modal"
+          // Prevent closing from backdrop clicks or escape key - only close via the Close button
+          // This prevents issues with AlertDialog interactions triggering Dialog close
+          onInteractOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <VisuallyHidden>
             <DialogTitle>Hero Draft</DialogTitle>
             <DialogDescription>Captain's Mode hero draft interface</DialogDescription>
           </VisuallyHidden>
           {draft && (
-            <div className="flex flex-col h-full bg-gray-900" data-testid="herodraft-container">
+            <div className="flex flex-col h-full w-full bg-gray-900 overflow-hidden" data-testid="herodraft-container">
               {/* Top Bar */}
               <DraftTopBar draft={draft} tick={tick} />
 
@@ -348,11 +354,24 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                 </div>
               )}
 
-              {/* Main draft area - mobile: stacked, desktop: side-by-side */}
+              {/* Small screen message - shown below sm breakpoint */}
               {(draft.state === "drafting" || draft.state === "paused" || draft.state === "completed") && (
-                <div className="flex-1 flex flex-col lg:flex-row overflow-hidden" data-testid="herodraft-main-area">
-                  {/* Hero Grid - full width on mobile, flex-1 on desktop */}
-                  <div className="flex-1 min-h-0 border-b lg:border-b-0 lg:border-r border-gray-800" data-testid="herodraft-hero-grid-container">
+                <div className="flex-1 flex sm:hidden items-start justify-start p-6" data-testid="herodraft-small-screen-message">
+                  <div className="text-left space-y-2 max-w-xs">
+                    <div className="text-3xl">🚧</div>
+                    <h2 className="text-lg font-bold text-white">Mobile View Under Construction</h2>
+                    <p className="text-gray-400 text-sm">
+                      The mobile draft view is coming soon. Please view this on a tablet or desktop browser for now.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Main draft area - hidden on small screens, side-by-side on sm+ */}
+              {(draft.state === "drafting" || draft.state === "paused" || draft.state === "completed") && (
+                <div className="flex-1 hidden sm:flex flex-row overflow-hidden" data-testid="herodraft-main-area">
+                  {/* Hero Grid - 50% sm/md, 58% lg, 80% xl */}
+                  <div className="basis-1/2 md:basis-1/2 lg:basis-7/12 xl:basis-4/5 h-full min-w-0 overflow-hidden" data-testid="herodraft-hero-grid-container">
                     <HeroGrid
                       onHeroClick={handleHeroClick}
                       disabled={!isMyTurn || draft.state !== "drafting"}
@@ -360,8 +379,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                     />
                   </div>
 
-                  {/* Draft Panel - full width on mobile, fixed width on desktop */}
-                  <div className="h-48 lg:h-auto lg:w-80 overflow-auto" data-testid="herodraft-panel-container">
+                  {/* Draft Panel - 50% sm/md, 42% lg, 20% xl */}
+                  <div className="basis-1/2 md:basis-1/2 lg:basis-5/12 xl:basis-1/5 h-full min-w-0 overflow-auto border-l border-gray-800" data-testid="herodraft-panel-container">
                     <DraftPanel
                       draft={draft}
                       currentRound={tick?.current_round ?? null}
@@ -371,11 +390,11 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
               )}
 
               {/* Bottom toolbar with chat and controls */}
-              <div className="h-16 border-t border-gray-800 flex items-center px-4 gap-4" data-testid="herodraft-bottom-toolbar">
-                {/* Chat input - left side, takes remaining space */}
+              <div className="h-12 sm:h-14 md:h-16 shrink-0 border-t border-gray-800 flex items-center px-2 sm:px-4 gap-2 sm:gap-4" data-testid="herodraft-bottom-toolbar">
+                {/* Chat input - hidden on small screens */}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex-1 flex items-center gap-2">
+                    <div className="hidden md:flex flex-1 items-center gap-2">
                       <Input
                         placeholder="Team chat..."
                         value={chatMessage}
@@ -398,19 +417,22 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                   <TooltipContent>Under Construction</TooltipContent>
                 </Tooltip>
 
+                {/* Spacer on small screens */}
+                <div className="flex-1 md:hidden" />
+
                 {/* Right side controls */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setShowHistoryModal(true)}
-                        className="text-white border-gray-600 hover:bg-gray-800"
+                        className="text-white border-gray-600 hover:bg-gray-800 text-xs sm:text-sm"
                         data-testid="herodraft-history-btn"
                       >
-                        <History className="h-4 w-4 mr-2" />
-                        History
+                        <History className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                        <span className="hidden sm:inline">History</span>
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Draft Events</TooltipContent>
@@ -420,10 +442,10 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                     size="sm"
                     onClick={onClose}
                     data-testid="herodraft-close-btn"
-                    className="flex items-center justify-start"
+                    className="flex items-center justify-start text-xs sm:text-sm"
                   >
-                    <X className="h-4 w-4 mr-2" />
-                    Close
+                    <X className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Close</span>
                   </Button>
                 </div>
               </div>
