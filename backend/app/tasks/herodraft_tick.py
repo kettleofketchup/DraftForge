@@ -139,7 +139,8 @@ async def broadcast_tick(draft_id: int):
 
         return {
             "type": "herodraft.tick",
-            "current_round": current_round.round_number,
+            "current_round": current_round.round_number
+            - 1,  # 0-indexed to match state serializer
             "active_team_id": active_team_id,
             "grace_time_remaining_ms": grace_remaining,
             # Include team IDs so frontend can match reserve times correctly

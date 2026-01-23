@@ -522,42 +522,83 @@ test.describe('Two Captains Full Draft', () => {
       `   Initial timers - Grace: ${startGraceA}s, Reserve A: ${startReserveA}s`
     );
 
-    // Helper to determine which captain should pick based on the "PICKING" indicator
-    // Team A in topbar = first team in draft_teams = Captain A's team (based on test setup order)
-    const getCurrentPicker = async (): Promise<CaptainContext> => {
-      // Wait for either team's picking indicator to become visible
-      // This handles race conditions where state hasn't updated yet
+    // Captain's Mode sequence: (is_first_pick_team, action_type)
+    // This matches the backend CAPTAINS_MODE_SEQUENCE exactly
+    const DRAFT_SEQUENCE: Array<[boolean, string]> = [
+      [true, 'ban'], [true, 'ban'], [false, 'ban'], [false, 'ban'],
+      [true, 'ban'], [false, 'ban'], [false, 'ban'],  // Ban Phase 1
+      [true, 'pick'], [false, 'pick'],  // Pick Phase 1
+      [false, 'ban'], [true, 'ban'], [false, 'ban'],  // Ban Phase 2
+      [true, 'pick'], [false, 'pick'], [true, 'pick'], [false, 'pick'],
+      [true, 'pick'], [false, 'pick'],  // Pick Phase 2
+      [true, 'ban'], [false, 'ban'], [true, 'ban'], [false, 'ban'],  // Ban Phase 3
+      [true, 'pick'], [false, 'pick'],  // Pick Phase 3
+    ];
+
+    // Determine first pick team - this is set during the choosing phase
+    // Winner chooses first_pick or side, loser gets the remainder
+    // We'll determine this dynamically by checking the active round's team at round 1
+    let firstPickCaptain: CaptainContext = captainA; // Will be updated
+    let secondPickCaptain: CaptainContext = captainB;
+    let firstPickDetermined = false;
+
+    // Helper to determine which captain should pick based on round number
+    const getCurrentPicker = async (roundNum: number): Promise<CaptainContext> => {
+      // First try visual indicator (more reliable when visible)
       const teamAIndicator = captainA.page.locator('[data-testid="herodraft-team-a-picking"]');
       const teamBIndicator = captainA.page.locator('[data-testid="herodraft-team-b-picking"]');
 
-      // Wait up to 5s for either indicator to appear
-      try {
-        await expect(teamAIndicator.or(teamBIndicator)).toBeVisible({ timeout: 5000 });
-      } catch {
-        console.log('[getCurrentPicker] WARNING: No picking indicator visible after 5s');
+      // Quick check for visual indicator (500ms max)
+      const startTime = Date.now();
+      while (Date.now() - startTime < 500) {
+        const teamAPicking = await teamAIndicator.isVisible().catch(() => false);
+        const teamBPicking = await teamBIndicator.isVisible().catch(() => false);
+
+        if (teamAPicking || teamBPicking) {
+          const visualPicker = teamAPicking ? captainA : captainB;
+
+          // On round 1, determine which captain is first pick
+          if (roundNum === 1 && !firstPickDetermined) {
+            // Round 1 is always first pick team (DRAFT_SEQUENCE[0] = [true, 'ban'])
+            firstPickCaptain = visualPicker;
+            secondPickCaptain = visualPicker === captainA ? captainB : captainA;
+            firstPickDetermined = true;
+            console.log(`[getCurrentPicker] Determined first pick: ${firstPickCaptain.username}`);
+          }
+
+          console.log(`[getCurrentPicker] Round ${roundNum}: Visual indicator - picker: ${visualPicker.username}`);
+          return visualPicker;
+        }
+        await captainA.page.waitForTimeout(50);
       }
 
-      const teamAPicking = await teamAIndicator.isVisible().catch(() => false);
-      const teamBPicking = await teamBIndicator.isVisible().catch(() => false);
+      // Fallback: Use draft sequence to determine picker (only works after round 1)
+      if (!firstPickDetermined) {
+        throw new Error(`[getCurrentPicker] Round ${roundNum}: Cannot determine picker - visual indicator not found and first pick not yet determined`);
+      }
 
-      console.log(`[getCurrentPicker] Team A picking: ${teamAPicking}, Team B picking: ${teamBPicking}`);
-
-      // In test setup, Captain A is assigned to first team slot (Team A in topbar)
-      return teamAPicking ? captainA : captainB;
+      const [isFirstPickTeam] = DRAFT_SEQUENCE[roundNum - 1];
+      const picker = isFirstPickTeam ? firstPickCaptain : secondPickCaptain;
+      console.log(`[getCurrentPicker] Round ${roundNum}: Sequence fallback - picker: ${picker.username}`);
+      return picker;
     };
 
-    // Use different hero IDs for picks to avoid conflicts
-    // Hero IDs 1-130 are valid Dota 2 hero IDs
-    // Captain's Mode has 22 rounds: 12 bans + 10 picks
-    const heroIds = Array.from({ length: 30 }, (_, i) => i + 1); // [1, 2, 3, ..., 30]
+    // Use valid Dota 2 hero IDs - note: ID 24 doesn't exist (skips from 23 to 25)
+    // Captain's Mode has 24 rounds: 14 bans + 10 picks
+    const heroIds = [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+      21, 22, 23, 25, 26, 27, 28, 29, 30, 31  // Skip 24 - it doesn't exist!
+    ];
     let heroIndex = 0;
 
     // Full Captain's Mode draft (24 rounds: 14 bans + 10 picks)
     const maxRounds = 24;
 
     for (let round = 1; round <= maxRounds; round++) {
+      console.log(`\n   === ROUND ${round}/${maxRounds} ===`);
+
       // Determine who should pick at the START of each round
-      const currentPicker = await getCurrentPicker();
+      const currentPicker = await getCurrentPicker(round);
       const currentRound = await currentPicker.draftPage.getCurrentRound();
       const action = await currentPicker.draftPage.getCurrentAction();
 
@@ -571,21 +612,45 @@ test.describe('Two Captains Full Draft', () => {
 
       console.log(`   ${currentPicker.username} completed ${action}`);
 
-      // Wait for the pick to propagate to both clients
-      await Promise.all([
-        captainA.draftPage.waitForDraftUpdate(2000),
-        captainB.draftPage.waitForDraftUpdate(2000),
-      ]);
+      // Wait for round completion with actual state verification (not just timeout)
+      const roundCompletedA = captainA.page.locator(`[data-testid="herodraft-round-${currentRound}"][data-round-state="completed"]`);
+      const roundCompletedB = captainB.page.locator(`[data-testid="herodraft-round-${currentRound}"][data-round-state="completed"]`);
 
-      // Verify the round is completed on both sides
-      await Promise.all([
-        captainA.draftPage.assertRoundCompleted(currentRound),
-        captainB.draftPage.assertRoundCompleted(currentRound),
-      ]);
+      try {
+        await Promise.all([
+          roundCompletedA.waitFor({ state: 'attached', timeout: 5000 }),
+          roundCompletedB.waitFor({ state: 'attached', timeout: 5000 }),
+        ]);
+        console.log(`   Round ${currentRound} confirmed completed on both clients`);
+      } catch (err) {
+        // Gather debug info on failure
+        const stateA = await captainA.draftPage.getCurrentState();
+        const stateB = await captainB.draftPage.getCurrentState();
+        const roundStateA = await captainA.page.locator(`[data-testid="herodraft-round-${currentRound}"]`).getAttribute('data-round-state').catch(() => 'not-found');
+        const roundStateB = await captainB.page.locator(`[data-testid="herodraft-round-${currentRound}"]`).getAttribute('data-round-state').catch(() => 'not-found');
+        throw new Error(
+          `Round ${currentRound} completion timeout!\n` +
+          `  Captain A state: ${stateA}, round-${currentRound} state: ${roundStateA}\n` +
+          `  Captain B state: ${stateB}, round-${currentRound} state: ${roundStateB}`
+        );
+      }
 
-      // Brief pause between rounds for visibility (skip on last round)
+      // Wait for NEXT round to become active (except on last round)
       if (round < maxRounds) {
-        await captainA.page.waitForTimeout(300);
+        const nextRoundIndex = currentRound + 1;
+        const nextRoundActiveA = captainA.page.locator(`[data-testid="herodraft-round-${nextRoundIndex}"][data-round-active="true"]`);
+        const nextRoundActiveB = captainB.page.locator(`[data-testid="herodraft-round-${nextRoundIndex}"][data-round-active="true"]`);
+
+        try {
+          await Promise.all([
+            nextRoundActiveA.waitFor({ state: 'attached', timeout: 3000 }),
+            nextRoundActiveB.waitFor({ state: 'attached', timeout: 3000 }),
+          ]);
+          console.log(`   Round ${nextRoundIndex} is now active`);
+        } catch {
+          // Don't fail - the sequence fallback will handle this
+          console.log(`   Round ${nextRoundIndex} not yet active, continuing with sequence fallback`);
+        }
       }
     }
 

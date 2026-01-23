@@ -43,7 +43,15 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
   const teamA = draft.draft_teams?.[0] ?? null;
   const teamB = draft.draft_teams?.[1] ?? null;
 
-  const activeTeamId = tick?.active_team_id;
+  // Derive active team from tick first, then fall back to state
+  // This prevents race conditions where state updates but tick hasn't arrived yet
+  const currentRoundIndex = draft.current_round;
+  const currentRound = currentRoundIndex !== null ? draft.rounds[currentRoundIndex] : null;
+
+  // Only show picking indicator during drafting state
+  const activeTeamId = draft.state === "drafting"
+    ? (tick?.active_team_id ?? currentRound?.draft_team ?? null)
+    : null;
   const graceRemaining = tick?.grace_time_remaining_ms ?? 0;
 
   // Match reserve times by team ID for correctness
@@ -57,10 +65,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
   const teamAReserve = getTeamReserve(teamA);
   const teamBReserve = getTeamReserve(teamB);
 
-  // Find current round from rounds array using current_round index
-  const currentRoundIndex = draft.current_round;
-  const currentRound =
-    currentRoundIndex !== null ? draft.rounds[currentRoundIndex] : null;
+  // Get current action type from round data
   const currentAction = currentRound?.action_type ?? "pick";
 
   // Memoize progress counts to avoid filtering on every tick update
