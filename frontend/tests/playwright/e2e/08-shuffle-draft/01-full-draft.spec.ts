@@ -20,9 +20,22 @@ import {
   type TournamentData,
 } from '../../fixtures';
 
-const TOURNAMENT_PK = 1;
-
 test.describe('Shuffle Draft - Full Flow', () => {
+  let tournamentPk: number;
+  let tournamentName: string;
+
+  test.beforeAll(async ({ browser }) => {
+    // Get the tournament dynamically
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    const tournament = await getTournamentByKey(context, 'completed_bracket');
+    if (!tournament) {
+      throw new Error('Could not find completed_bracket tournament');
+    }
+    tournamentPk = tournament.pk;
+    tournamentName = tournament.name;
+    await context.close();
+  });
+
   test.beforeEach(async ({ context }) => {
     // Clear cookies to prevent stale user data
     await context.clearCookies();
@@ -35,17 +48,16 @@ test.describe('Shuffle Draft - Full Flow', () => {
     await loginAdmin();
 
     // Navigate to tournament
-    await visitAndWaitForHydration(page, `/tournament/${TOURNAMENT_PK}`);
+    await visitAndWaitForHydration(page, `/tournament/${tournamentPk}`);
 
     // Wait for page content to load
-    await expect(page.locator('h1')).toContainText('Completed Bracket Test', {
+    await expect(page.locator('h1')).toContainText(tournamentName, {
       timeout: 10000,
     });
 
     // Click on Teams tab
     const teamsTab = page.locator('[data-testid="teamsTab"]');
     await teamsTab.click();
-    await page.waitForTimeout(1000);
 
     // Verify teams exist (check for team headers)
     await expect(page.locator('text=Team Alpha')).toBeVisible();
@@ -58,20 +70,19 @@ test.describe('Shuffle Draft - Full Flow', () => {
   }) => {
     await loginAdmin();
 
-    await visitAndWaitForHydration(page, `/tournament/${TOURNAMENT_PK}`);
+    await visitAndWaitForHydration(page, `/tournament/${tournamentPk}`);
 
     // Wait for page to load
-    await expect(page.locator('h1')).toContainText('Completed Bracket Test', {
+    await expect(page.locator('h1')).toContainText(tournamentName, {
       timeout: 10000,
     });
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Click Start Draft button to open the draft modal
     await page.locator('button:has-text("Start Draft")').click({ force: true });
-    await page.waitForTimeout(1000);
 
     // The draft modal should open
     const dialog = page.locator('[role="dialog"]');
@@ -79,7 +90,6 @@ test.describe('Shuffle Draft - Full Flow', () => {
 
     // Look for "Draft Style" button and click it
     await page.locator('button:has-text("Draft Style")').click({ force: true });
-    await page.waitForTimeout(500);
 
     // Now look for shuffle option in the style selector
     const shuffleButton = page.locator('button:has-text("Shuffle")');
@@ -94,8 +104,6 @@ test.describe('Shuffle Draft - Full Flow', () => {
       await shuffleText.first().click({ force: true });
     }
 
-    await page.waitForTimeout(500);
-
     // Confirm the style selection if there's a confirm button
     const confirmButton = page.locator('button:has-text("Confirm")');
     const applyButton = page.locator('button:has-text("Apply")');
@@ -106,11 +114,10 @@ test.describe('Shuffle Draft - Full Flow', () => {
       await applyButton.click({ force: true });
     }
 
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Now click Restart Draft to initialize the draft with shuffle style
     await page.locator('button:has-text("Restart Draft")').click({ force: true });
-    await page.waitForTimeout(500);
 
     // Confirm if there's a confirmation dialog
     const alertDialog = page.locator('[role="alertdialog"]');
@@ -121,7 +128,7 @@ test.describe('Shuffle Draft - Full Flow', () => {
       await confirmBtn.first().click({ force: true });
     }
 
-    await page.waitForTimeout(2000);
+    await page.waitForLoadState('networkidle');
 
     // Verify draft is now showing - should see pick order or captain info
     await expect(page.locator('[role="dialog"]')).toBeVisible();
@@ -133,27 +140,25 @@ test.describe('Shuffle Draft - Full Flow', () => {
   }) => {
     await loginAdmin();
 
-    await visitAndWaitForHydration(page, `/tournament/${TOURNAMENT_PK}`);
+    await visitAndWaitForHydration(page, `/tournament/${tournamentPk}`);
 
     // Wait for page to load
-    await expect(page.locator('h1')).toContainText('Completed Bracket Test', {
+    await expect(page.locator('h1')).toContainText(tournamentName, {
       timeout: 10000,
     });
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Open draft modal
     await page.locator('button:has-text("Start Draft")').click({ force: true });
-    await page.waitForTimeout(1000);
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
 
     // Set draft style to shuffle
     await page.locator('button:has-text("Draft Style")').click({ force: true });
-    await page.waitForTimeout(500);
 
     const shuffleButton = page.locator('button:has-text("Shuffle")');
     const shuffleValue = page.locator('[value="shuffle"]');
@@ -166,8 +171,6 @@ test.describe('Shuffle Draft - Full Flow', () => {
       await page.locator('text=/shuffle/i').first().click({ force: true });
     }
 
-    await page.waitForTimeout(500);
-
     // Confirm style
     const confirmButton = page.locator('button:has-text("Confirm")');
     const applyButton = page.locator('button:has-text("Apply")');
@@ -178,11 +181,10 @@ test.describe('Shuffle Draft - Full Flow', () => {
       await applyButton.click({ force: true });
     }
 
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Initialize draft
     await page.locator('button:has-text("Restart Draft")').click({ force: true });
-    await page.waitForTimeout(500);
 
     const alertDialog = page.locator('[role="alertdialog"]');
     if (await alertDialog.isVisible().catch(() => false)) {
@@ -192,7 +194,7 @@ test.describe('Shuffle Draft - Full Flow', () => {
       await confirmBtn.first().click({ force: true });
     }
 
-    await page.waitForTimeout(2000);
+    await page.waitForLoadState('networkidle');
 
     // Now the draft should be active
     await expect(page.locator('[role="dialog"]')).toBeVisible();
@@ -206,7 +208,6 @@ test.describe('Shuffle Draft - Full Flow', () => {
 
       if (pickCount > 0) {
         await pickButtons.first().click({ force: true });
-        await page.waitForTimeout(500);
 
         // Handle confirmation dialog if it appears
         const confirmDialog = page.locator('[role="alertdialog"]');
@@ -219,7 +220,7 @@ test.describe('Shuffle Draft - Full Flow', () => {
           }
         }
 
-        await page.waitForTimeout(1500);
+        await page.waitForLoadState('networkidle');
       }
     };
 
@@ -282,7 +283,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Open draft modal
     const liveDraftButton = page.locator('button:has-text("Live Draft")');
@@ -294,7 +295,6 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
       await startDraftButton.click({ force: true });
     }
 
-    await page.waitForTimeout(1000);
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
 
@@ -341,7 +341,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Open draft modal
     const liveDraftButton = page.locator('button:has-text("Live Draft")');
@@ -353,7 +353,6 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
       await startDraftButton.click({ force: true });
     }
 
-    await page.waitForTimeout(1000);
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
 
@@ -388,7 +387,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Open draft modal
     const liveDraftButton = page.locator('button:has-text("Live Draft")');
@@ -400,7 +399,6 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
       await startDraftButton.click({ force: true });
     }
 
-    await page.waitForTimeout(1000);
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
 
@@ -413,7 +411,6 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
       // Click the first available pick button
       await pickButtons.first().click({ force: true });
-      await page.waitForTimeout(500);
 
       // Handle confirmation dialog
       const alertDialog = page.locator('[role="alertdialog"]');
@@ -423,7 +420,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
         );
         if (await confirmBtn.isVisible().catch(() => false)) {
           await confirmBtn.first().click({ force: true });
-          await page.waitForTimeout(1500);
+          await page.waitForLoadState('networkidle');
           console.log('Pick confirmed successfully');
         }
       }
@@ -451,7 +448,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Open draft modal
     const liveDraftButton = page.locator('button:has-text("Live Draft")');
@@ -463,7 +460,6 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
       await startDraftButton.click({ force: true });
     }
 
-    await page.waitForTimeout(1000);
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
 
@@ -477,7 +473,6 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     if (pickCount > 0) {
       await pickButtons.first().click({ force: true });
-      await page.waitForTimeout(500);
 
       // Confirm the pick
       const alertDialog = page.locator('[role="alertdialog"]');
@@ -490,7 +485,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
         }
       }
 
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState('networkidle');
 
       // Verify state has changed after pick
       const afterText = await dialog.textContent();

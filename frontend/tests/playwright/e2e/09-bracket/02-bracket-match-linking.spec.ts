@@ -89,7 +89,7 @@ test.describe('Bracket Match Linking (e2e)', () => {
         await page.locator('button:has-text("Save Bracket")').click();
 
         // Wait for save to complete
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
       }
 
       // Verify bracket container is now visible
@@ -262,10 +262,7 @@ test.describe('Bracket Match Linking (e2e)', () => {
           const searchInput = page.locator('[data-testid="match-search-input"]');
           await searchInput.fill(matchId);
 
-          // Wait for debounced search
-          await page.waitForTimeout(500);
-
-          // Should show fewer or same number of results
+          // Should show fewer or same number of results (expect waits for condition)
           await expect(matchCards.first()).toBeAttached();
         }
       });
@@ -277,10 +274,7 @@ test.describe('Bracket Match Linking (e2e)', () => {
         const searchInput = page.locator('[data-testid="match-search-input"]');
         await searchInput.fill('9999999999999');
 
-        // Wait for debounced search
-        await page.waitForTimeout(500);
-
-        // Should show "No matches found" message
+        // Should show "No matches found" message (expect waits for condition)
         await expect(page.locator('text=No matches found')).toBeVisible({ timeout: 5000 });
       });
     });
@@ -308,7 +302,7 @@ test.describe('Bracket Match Linking (e2e)', () => {
         const unlinkButton = page.locator('[data-testid="unlink-btn"]');
         if (await unlinkButton.isVisible().catch(() => false)) {
           await unlinkButton.click();
-          await page.waitForTimeout(500);
+          await page.waitForLoadState('networkidle');
         }
 
         // Get the match ID before linking
@@ -365,7 +359,7 @@ test.describe('Bracket Match Linking (e2e)', () => {
         const unlinkButton = page.locator('[data-testid="unlink-btn"]');
         if (await unlinkButton.isVisible().catch(() => false)) {
           await unlinkButton.click();
-          await page.waitForTimeout(500);
+          await page.waitForLoadState('networkidle');
         }
 
         // Link a match
@@ -407,7 +401,7 @@ test.describe('Bracket Match Linking (e2e)', () => {
         const unlinkButton = page.locator('[data-testid="unlink-btn"]');
         if (await unlinkButton.isVisible().catch(() => false)) {
           await unlinkButton.click();
-          await page.waitForTimeout(500);
+          await page.waitForLoadState('networkidle');
         }
 
         // Link a match first
@@ -421,6 +415,7 @@ test.describe('Bracket Match Linking (e2e)', () => {
 
         // Click unlink button
         await page.locator('[data-testid="unlink-btn"]').click();
+        await page.waitForLoadState('networkidle');
 
         // Currently linked section should disappear
         await expect(
@@ -462,9 +457,6 @@ test.describe('Bracket Match Linking (e2e)', () => {
           .locator('[data-testid="view-details-btn"]')
           .first()
           .click({ force: true });
-
-        // Wait for a moment for the modal to open
-        await page.waitForTimeout(500);
 
         // Dota match stats modal should open (look for match stats content)
         // The DotaMatchStatsModal shows player stats in a dialog

@@ -61,11 +61,24 @@ export const HeroDraftTickSchema = z.object({
   draft_state: z.string(),
 });
 
+// Metadata schema for hero_selected events
+export const HeroDraftEventMetadataSchema = z.object({
+  hero_id: z.number().optional(),
+  action_type: z.enum(["ban", "pick"]).optional(),
+  round_number: z.number().optional(),
+  time_elapsed_ms: z.number().optional(),
+  reserve_used_ms: z.number().optional(),
+}).passthrough();  // Allow additional fields
+
 export const HeroDraftEventSchema = z.object({
   type: z.literal("herodraft_event"),
   event_type: z.string(),
-  draft_team: z.number().nullable().optional(),
+  event_id: z.number().optional(),
+  // Backend sends full DraftTeam object via DraftTeamSerializerFull, or null
+  draft_team: DraftTeamSchema.nullable().optional(),
+  metadata: HeroDraftEventMetadataSchema.optional(),
   draft_state: HeroDraftSchema.optional(),
+  timestamp: z.string().optional(),
 });
 
 export const InitialStateMessageSchema = z.object({

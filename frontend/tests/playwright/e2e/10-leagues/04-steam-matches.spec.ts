@@ -4,7 +4,7 @@
  * Tests the Steam-linked match functionality on league pages.
  * Verifies that Steam match data is displayed and filtered correctly.
  *
- * Uses a test league from the database (league PK 1).
+ * Uses the first available league from the database.
  *
  * Ported from Cypress: frontend/tests/cypress/e2e/10-leagues/04-steam-matches.cy.ts
  */
@@ -13,25 +13,37 @@ import {
   test,
   expect,
   LeaguePage,
+  getFirstLeague,
 } from '../../fixtures';
 
-// Test league ID - uses the first league in the database
-const TEST_LEAGUE_ID = 1;
+// Will be set dynamically in beforeAll
+let testLeagueId: number;
 
 test.describe('League Steam Matches (e2e)', () => {
+  test.beforeAll(async ({ browser }) => {
+    // Get the first available league dynamically
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    const league = await getFirstLeague(context);
+    if (!league) {
+      throw new Error('No leagues found in database. Run inv db.populate.all first.');
+    }
+    testLeagueId = league.pk;
+    await context.close();
+  });
+
   test.beforeEach(async ({ loginAdmin }) => {
     await loginAdmin();
   });
 
   test('should display matches tab on league page', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'info');
+    await leaguePage.goto(testLeagueId, 'info');
 
     // Navigate to matches tab
     await leaguePage.clickMatchesTab();
 
     // Verify URL updated
-    await expect(page).toHaveURL(new RegExp(`/leagues/${TEST_LEAGUE_ID}/matches`));
+    await expect(page).toHaveURL(new RegExp(`/leagues/${testLeagueId}/matches`));
 
     // Verify matches section exists
     await expect(page.locator('text=Matches')).toBeVisible({ timeout: 10000 });
@@ -39,7 +51,7 @@ test.describe('League Steam Matches (e2e)', () => {
 
   test('should display match data when matches exist', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'matches');
+    await leaguePage.goto(testLeagueId, 'matches');
 
     // If matches exist, verify they display properly
     const matchCardCount = await leaguePage.getMatchCardCount();
@@ -53,7 +65,7 @@ test.describe('League Steam Matches (e2e)', () => {
 
   test('should filter matches by Steam linked status', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'matches');
+    await leaguePage.goto(testLeagueId, 'matches');
 
     // Verify Steam linked filter exists
     await expect(leaguePage.steamLinkedFilterButton).toBeVisible({ timeout: 10000 });
@@ -75,7 +87,7 @@ test.describe('League Steam Matches (e2e)', () => {
 
   test('should display Steam match details when Steam data is linked', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'matches');
+    await leaguePage.goto(testLeagueId, 'matches');
 
     // Check if any matches have Steam data
     const steamMatchIdLocator = page.locator('[data-testid="steam-match-id"]');

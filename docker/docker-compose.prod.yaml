@@ -2,6 +2,7 @@ services:
   frontend:
     env_file: "./docker/.env.prod"
     image: ghcr.io/kettleofketchup/dota_tournament/frontend:latest
+    user: "1000:1000"
     restart: always
 
   backend:

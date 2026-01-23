@@ -176,7 +176,10 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
             )
 
             # Start tick broadcaster if draft is in drafting state
-            if initial_state.get("state") == "drafting":
+            # Compare against enum value since initial_state is serialized JSON
+            from app.models import HeroDraftState
+
+            if initial_state.get("state") == HeroDraftState.DRAFTING.value:
                 await self.maybe_start_tick_broadcaster()
 
         except Exception as e:
@@ -304,7 +307,8 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
     def mark_captain_connected(self, draft_id, user, is_connected):
         from django.db import transaction
 
-        from app.models import HeroDraft, HeroDraftEvent
+        from app.broadcast import broadcast_herodraft_state
+        from app.models import HeroDraft, HeroDraftEvent, HeroDraftState
 
         try:
             with transaction.atomic():
@@ -328,28 +332,47 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                         metadata={"user_id": user.id},
                     )
 
-                    # Handle pause/resume on disconnect
-                    if not is_connected and draft.state == "drafting":
-                        draft.state = "paused"
+                    # Handle pause/resume on disconnect - only during DRAFTING phase
+                    # (when timers are running and picks matter)
+                    state_changed = False
+                    if not is_connected and draft.state == HeroDraftState.DRAFTING:
+                        draft.state = HeroDraftState.PAUSED
                         draft.save()
+                        state_changed = True
                         HeroDraftEvent.objects.create(
                             draft=draft,
                             event_type="draft_paused",
                             draft_team=draft_team,
                             metadata={"reason": "captain_disconnected"},
                         )
-                    elif is_connected and draft.state == "paused":
+                        log.info(
+                            f"HeroDraft {draft_id} paused: captain {user.username} disconnected"
+                        )
+                    elif is_connected and draft.state == HeroDraftState.PAUSED:
                         # Check if both captains connected
                         all_connected = all(
                             t.is_connected for t in draft.draft_teams.all()
                         )
                         if all_connected:
-                            draft.state = "drafting"
+                            draft.state = HeroDraftState.DRAFTING
                             draft.save()
+                            state_changed = True
                             HeroDraftEvent.objects.create(
                                 draft=draft,
                                 event_type="draft_resumed",
                                 metadata={},
                             )
+                            log.info(
+                                f"HeroDraft {draft_id} resumed: all captains connected"
+                            )
+
+                    # Broadcast state change to all clients
+                    if state_changed:
+                        broadcast_event_type = (
+                            "draft_paused"
+                            if draft.state == HeroDraftState.PAUSED
+                            else "draft_resumed"
+                        )
+                        broadcast_herodraft_state(draft, broadcast_event_type)
         except HeroDraft.DoesNotExist:
             return

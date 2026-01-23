@@ -78,7 +78,7 @@ def get_connection_count(draft_id: int) -> int:
 
 async def broadcast_tick(draft_id: int):
     """Broadcast current timing state to all connected clients."""
-    from app.models import HeroDraft
+    from app.models import HeroDraft, HeroDraftState
 
     channel_layer = get_channel_layer()
     if channel_layer is None:
@@ -93,7 +93,7 @@ async def broadcast_tick(draft_id: int):
         except HeroDraft.DoesNotExist:
             return None
 
-        if draft.state != "drafting":
+        if draft.state != HeroDraftState.DRAFTING:
             return None
 
         current_round = draft.rounds.filter(state="active").first()
@@ -105,24 +105,48 @@ async def broadcast_tick(draft_id: int):
         team_a = teams[0] if teams else None
         team_b = teams[1] if len(teams) > 1 else None
 
-        # Calculate grace time remaining
+        # Calculate grace time remaining and reserve time being consumed
         now = timezone.now()
+        elapsed_ms = 0
+        grace_remaining = current_round.grace_time_ms
+
         if current_round.started_at:
             elapsed_ms = int((now - current_round.started_at).total_seconds() * 1000)
             grace_remaining = max(0, current_round.grace_time_ms - elapsed_ms)
-        else:
-            grace_remaining = current_round.grace_time_ms
+
+        # Calculate how much reserve time has been consumed (time past grace period)
+        reserve_consumed_ms = max(0, elapsed_ms - current_round.grace_time_ms)
+
+        # Calculate real-time reserve time for each team
+        # Only the active team's reserve is being consumed
+        active_team_id = current_round.draft_team_id
+        team_a_reserve = team_a.reserve_time_remaining if team_a else 0
+        team_b_reserve = team_b.reserve_time_remaining if team_b else 0
+
+        # Calculate remaining reserve for the active team (for broadcast only)
+        # Database is updated when pick is submitted in herodraft.py
+        if team_a and team_a.id == active_team_id:
+            team_a_reserve = max(0, team_a_reserve - reserve_consumed_ms)
+        elif team_b and team_b.id == active_team_id:
+            team_b_reserve = max(0, team_b_reserve - reserve_consumed_ms)
+
+        log.debug(
+            f"Tick draft {draft_id}: round={current_round.round_number}, "
+            f"elapsed={elapsed_ms}ms, grace_remaining={grace_remaining}ms, "
+            f"reserve_consumed={reserve_consumed_ms}ms, "
+            f"team_a_reserve={team_a_reserve}ms, team_b_reserve={team_b_reserve}ms"
+        )
 
         return {
             "type": "herodraft.tick",
             "current_round": current_round.round_number,
-            "active_team_id": current_round.draft_team_id,
+            "active_team_id": active_team_id,
             "grace_time_remaining_ms": grace_remaining,
             # Include team IDs so frontend can match reserve times correctly
             "team_a_id": team_a.id if team_a else None,
-            "team_a_reserve_ms": team_a.reserve_time_remaining if team_a else 0,
+            "team_a_reserve_ms": team_a_reserve,
             "team_b_id": team_b.id if team_b else None,
-            "team_b_reserve_ms": team_b.reserve_time_remaining if team_b else 0,
+            "team_b_reserve_ms": team_b_reserve,
             "draft_state": draft.state,
         }
 
@@ -139,7 +163,7 @@ async def check_timeout(draft_id: int):
     from django.db import transaction
 
     from app.functions.herodraft import auto_random_pick
-    from app.models import DraftTeam, HeroDraft
+    from app.models import DraftTeam, HeroDraft, HeroDraftState
 
     @sync_to_async
     def check_and_auto_pick():
@@ -150,7 +174,7 @@ async def check_timeout(draft_id: int):
             except HeroDraft.DoesNotExist:
                 return None
 
-            if draft.state != "drafting":
+            if draft.state != HeroDraftState.DRAFTING:
                 return None
 
             current_round = (
@@ -190,7 +214,7 @@ def should_continue_ticking(draft_id: int, r: redis.Redis) -> tuple[bool, str]:
     Returns:
         tuple: (should_continue, reason_if_stopping)
     """
-    from app.models import HeroDraft
+    from app.models import HeroDraft, HeroDraftState
 
     # Check connection count
     conn_count = get_connection_count(draft_id)
@@ -200,7 +224,7 @@ def should_continue_ticking(draft_id: int, r: redis.Redis) -> tuple[bool, str]:
     # Check draft state
     try:
         draft = HeroDraft.objects.get(id=draft_id)
-        if draft.state != "drafting":
+        if draft.state != HeroDraftState.DRAFTING:
             return False, f"draft_state_{draft.state}"
     except HeroDraft.DoesNotExist:
         return False, "draft_not_found"

@@ -110,6 +110,13 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton }: HeroGridPr
                           type="button"
                           style={{ padding: 0, margin: 0, lineHeight: 0 }}
                           onClick={() => {
+                            console.log(`[HeroGrid] Hero clicked:`, {
+                              heroId: hero.id,
+                              heroName: hero.name,
+                              disabled,
+                              available,
+                              willHandle: !disabled && available,
+                            });
                             if (!disabled && available) {
                               setSelectedHeroId(hero.id);
                               onHeroClick(hero.id);

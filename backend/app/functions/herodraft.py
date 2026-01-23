@@ -6,7 +6,13 @@ import random
 from django.db import transaction
 from django.utils import timezone
 
-from app.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftRound
+from app.models import (
+    DraftTeam,
+    HeroDraft,
+    HeroDraftEvent,
+    HeroDraftRound,
+    HeroDraftState,
+)
 
 log = logging.getLogger(__name__)
 
@@ -86,7 +92,7 @@ def trigger_roll(draft: HeroDraft, actor_team: DraftTeam) -> DraftTeam:
         winner = random.choice(teams)
 
         draft.roll_winner = winner
-        draft.state = "choosing"
+        draft.state = HeroDraftState.CHOOSING
         draft.save()
 
         HeroDraftEvent.objects.create(
@@ -148,7 +154,7 @@ def submit_choice(draft: HeroDraft, team: DraftTeam, choice_type: str, value: st
             second_team = next(t for t in teams if not t.is_first_pick)
             build_draft_rounds(draft, first_team, second_team)
 
-            draft.state = "drafting"
+            draft.state = HeroDraftState.DRAFTING
             draft.save()
 
             # Activate first round
@@ -227,7 +233,7 @@ def submit_pick(draft: HeroDraft, team: DraftTeam, hero_id: int) -> HeroDraftRou
                 },
             )
         else:
-            draft.state = "completed"
+            draft.state = HeroDraftState.COMPLETED
             draft.save()
 
             HeroDraftEvent.objects.create(

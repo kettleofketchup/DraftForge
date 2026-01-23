@@ -91,10 +91,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
         await regenerateButton.click();
       }
 
-      // Wait for bracket to regenerate
-      await page.waitForTimeout(500);
-
-      // Should show unsaved changes indicator
+      // Should show unsaved changes indicator (expect waits for condition)
       await expect(page.locator('text=Unsaved changes')).toBeVisible();
 
       // Save button should be enabled and clickable
@@ -169,10 +166,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
         // Click to set winner
         await winButtons.first().click();
 
-        // Wait for UI update
-        await page.waitForTimeout(500);
-
-        // Should show unsaved changes (winner was set locally)
+        // Should show unsaved changes (winner was set locally - expect waits for condition)
         await expect(page.locator('text=Unsaved changes')).toBeVisible();
       } else {
         // Log and skip if no teams
@@ -194,21 +188,21 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await reseedButton.click();
       await page.locator('text=Random Seeding').click();
 
-      // Confirm if dialog appears - wait for it to potentially appear
-      await page.waitForTimeout(500);
+      // Confirm if dialog appears
       const regenerateButton = page.locator('button:has-text("Regenerate")');
+      await regenerateButton.waitFor({ state: 'visible', timeout: 2000 }).catch(() => {});
       if (await regenerateButton.isVisible().catch(() => false)) {
         await regenerateButton.click({ force: true });
       }
 
-      await page.waitForTimeout(1000);
+      // Wait for network to settle after regeneration
+      await page.waitForLoadState('networkidle');
 
       // Click on first match
       const matchNode = page.locator('.react-flow__node').filter({ has: page.locator(':visible') }).first();
       await matchNode.click({ force: true });
 
-      // Wait for modal - give more time
-      await page.waitForTimeout(500);
+      // Wait for modal
       const dialog = page.locator('[role="dialog"]');
       await expect(dialog).toBeVisible({ timeout: 10000 });
 
@@ -220,10 +214,8 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
         // Click second button (dire wins, so radiant is loser)
         await winButtons.nth(1).click({ force: true });
 
-        await page.waitForTimeout(500);
-
         // The loser should now be in the losers bracket
-        // But we can verify unsaved changes is shown
+        // But we can verify unsaved changes is shown (expect waits for condition)
         await expect(page.locator('text=Unsaved changes')).toBeVisible();
       } else {
         console.log('Match does not have two teams - skipping loser advancement check');
@@ -243,17 +235,17 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await reseedButton.click();
       await page.locator('text=Random Seeding').click();
 
-      // Confirm if dialog appears - wait for it
-      await page.waitForTimeout(500);
+      // Confirm if dialog appears
       const regenerateButton = page.locator('button:has-text("Regenerate")');
+      await regenerateButton.waitFor({ state: 'visible', timeout: 2000 }).catch(() => {});
       if (await regenerateButton.isVisible().catch(() => false)) {
         await regenerateButton.click({ force: true });
       }
 
-      // Wait for dialog to close and bracket to regenerate
-      await page.waitForTimeout(1000);
+      // Wait for network to settle after regeneration
+      await page.waitForLoadState('networkidle');
 
-      // Should show unsaved changes
+      // Should show unsaved changes (expect waits for condition)
       await expect(page.locator('text=Unsaved changes')).toBeVisible();
 
       // Save the bracket - use force to handle any overlays
@@ -261,9 +253,9 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await saveButton.click({ force: true });
 
       // Wait for save to complete
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState('networkidle');
 
-      // Unsaved changes should disappear
+      // Unsaved changes should disappear (expect waits for condition)
       await expect(page.locator('text=Unsaved changes')).not.toBeVisible();
     });
   });

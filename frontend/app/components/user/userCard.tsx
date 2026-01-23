@@ -19,10 +19,12 @@ interface Props {
   saveFunc?: string;
   compact?: boolean;
   deleteButtonType?: 'tournament' | 'normal';
+  /** Animation delay index for staggered loading */
+  animationIndex?: number;
 }
 
 export const UserCard: React.FC<Props> = memo(
-  ({ user, edit, saveFunc, compact, deleteButtonType }) => {
+  ({ user, edit, saveFunc, compact, deleteButtonType, animationIndex = 0 }) => {
     const [editMode, setEditMode] = useState(edit || false);
     const form = useForm<UserType>();
 
@@ -247,15 +249,10 @@ export const UserCard: React.FC<Props> = memo(
         [content-visibility: auto] [contain-intrinsic-size: 400px 220px]"
       >
         <motion.div
-          initial={{ opacity: 0 }}
-          exit={{ opacity: 0 }}
-          whileInView={{
-            opacity: 1,
-            transition: { delay: 0.05, duration: 0.5 },
-          }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
           whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          whileFocus={{ scale: 1.05 }}
           key={`usercard:${getKeyName()} basediv`}
           className="justify-between p-2 h-full card bg-base-200 shadow-md w-full
             max-w-sm hover:bg-violet-900 . focus:outline-2

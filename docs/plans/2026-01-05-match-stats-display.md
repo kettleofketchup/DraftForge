@@ -1,5 +1,7 @@
 # Match Stats Display Implementation Plan
 
+**Status:** Completed
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Display hero icons on bracket match nodes and Dotabuff-style stats tables in a modal when clicked.

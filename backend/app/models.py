@@ -276,6 +276,7 @@ class Organization(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="", max_length=10000)
     logo = models.URLField(blank=True, default="")
+    discord_link = models.URLField(blank=True, default="")
     rules_template = models.TextField(blank=True, default="", max_length=50000)
     admins = models.ManyToManyField(
         "CustomUser",
@@ -1315,24 +1316,28 @@ class DraftEvent(models.Model):
         return f"{self.event_type} - Draft {self.draft_id} at {self.created_at}"
 
 
+class HeroDraftState(models.TextChoices):
+    """State machine states for Captain's Mode hero draft."""
+
+    WAITING_FOR_CAPTAINS = "waiting_for_captains", "Waiting for Captains"
+    ROLLING = "rolling", "Rolling"
+    CHOOSING = "choosing", "Choosing"
+    DRAFTING = "drafting", "Drafting"
+    PAUSED = "paused", "Paused"
+    COMPLETED = "completed", "Completed"
+    ABANDONED = "abandoned", "Abandoned"
+
+
 class HeroDraft(models.Model):
     """Captain's Mode hero draft for a tournament game."""
-
-    STATE_CHOICES = [
-        ("waiting_for_captains", "Waiting for Captains"),
-        ("rolling", "Rolling"),
-        ("choosing", "Choosing"),
-        ("drafting", "Drafting"),
-        ("paused", "Paused"),
-        ("completed", "Completed"),
-        ("abandoned", "Abandoned"),
-    ]
 
     game = models.OneToOneField(
         "app.Game", on_delete=models.CASCADE, related_name="herodraft"
     )
     state = models.CharField(
-        max_length=32, choices=STATE_CHOICES, default="waiting_for_captains"
+        max_length=32,
+        choices=HeroDraftState.choices,
+        default=HeroDraftState.WAITING_FOR_CAPTAINS,
     )
     roll_winner = models.ForeignKey(
         "DraftTeam",

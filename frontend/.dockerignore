@@ -1,9 +1,39 @@
+# Build artifacts
 .react-router
 build
 node_modules
-README.md
+
+# Docker files
 Dockerfile
+Dockerfile.*
 .dockerignore
+
+# Git
 .git
+.gitignore
+
+# Test artifacts
 cypress/videos/
 cypress/screenshots/
+tests/playwright/test-results/
+tests/playwright/playwright-report/
+playwright-report/
+test-results/
+
+# IDE/Editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs and caches
+*.log
+npm-debug.log*
+.npm
+.cache
+.vite
+
+# Misc
+README.md
+*.md
+.env*

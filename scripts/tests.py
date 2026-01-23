@@ -265,19 +265,27 @@ def playwright_install(c):
 
 
 @task
-def playwright_headless(c):
-    """Run all Playwright tests headless."""
+def playwright_headless(c, args=""):
+    """Run all Playwright tests headless.
+
+    Args:
+        args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
+    """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run("npx playwright test")
+        c.run(f"npx playwright test {args}".strip())
 
 
 @task
-def playwright_headed(c):
-    """Run all Playwright tests headed (visible browser)."""
+def playwright_headed(c, args=""):
+    """Run all Playwright tests headed (visible browser).
+
+    Args:
+        args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
+    """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run("npx playwright test --headed")
+        c.run(f"npx playwright test --headed {args}".strip())
 
 
 @task
@@ -297,19 +305,24 @@ def playwright_debug(c):
 
 
 @task
-def playwright_spec(c, spec=""):
+def playwright_spec(c, spec="", args=""):
     """Run Playwright tests for a specific spec pattern.
 
     Usage:
         inv test.playwright.spec --spec herodraft  # Runs herodraft tests
         inv test.playwright.spec --spec navigation # Runs navigation tests
+        inv test.playwright.spec --spec herodraft --args "--shard=1/4"
+
+    Args:
+        spec: Grep pattern to filter tests
+        args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
         if spec:
-            c.run(f'npx playwright test --grep "{spec}"')
+            c.run(f'npx playwright test --grep "{spec}" {args}'.strip())
         else:
-            c.run("npx playwright test")
+            c.run(f"npx playwright test {args}".strip())
 
 
 @task
@@ -320,67 +333,120 @@ def playwright_report(c):
 
 
 @task
-def playwright_navigation(c):
-    """Run Playwright navigation tests."""
+def playwright_navigation(c, args=""):
+    """Run Playwright navigation tests.
+
+    Args:
+        args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
+    """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run("npx playwright test tests/playwright/e2e/navigation/")
+        c.run(
+            f"npx playwright test tests/playwright/e2e/00-hydration-handling.spec.ts tests/playwright/e2e/01-navigation.spec.ts {args}".strip()
+        )
 
 
 @task
-def playwright_tournament(c):
-    """Run Playwright tournament tests."""
+def playwright_tournament(c, args=""):
+    """Run Playwright tournament tests.
+
+    Args:
+        args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
+    """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run("npx playwright test tests/playwright/e2e/tournament/")
+        c.run(
+            f"npx playwright test tests/playwright/e2e/03-tournaments/ tests/playwright/e2e/04-tournament/ {args}".strip()
+        )
 
 
 @task
-def playwright_draft(c):
-    """Run Playwright draft tests."""
+def playwright_draft(c, args=""):
+    """Run Playwright draft tests.
+
+    Args:
+        args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
+    """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run("npx playwright test tests/playwright/e2e/draft/")
+        c.run(
+            f"npx playwright test tests/playwright/e2e/07-draft/ tests/playwright/e2e/08-shuffle-draft/ {args}".strip()
+        )
 
 
 @task
-def playwright_bracket(c):
-    """Run Playwright bracket tests."""
+def playwright_bracket(c, args=""):
+    """Run Playwright bracket tests.
+
+    Args:
+        args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
+    """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run("npx playwright test tests/playwright/e2e/bracket/")
+        c.run(f"npx playwright test tests/playwright/e2e/09-bracket/ {args}".strip())
 
 
 @task
-def playwright_league(c):
-    """Run Playwright league tests."""
+def playwright_league(c, args=""):
+    """Run Playwright league tests.
+
+    Args:
+        args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
+    """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run("npx playwright test tests/playwright/e2e/league/")
+        c.run(f"npx playwright test tests/playwright/e2e/10-leagues/ {args}".strip())
 
 
 @task
-def playwright_herodraft(c):
-    """Run Playwright herodraft tests."""
+def playwright_herodraft(c, args=""):
+    """Run Playwright herodraft tests (headless).
+
+    Args:
+        args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
+    """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run("npx playwright test tests/playwright/e2e/herodraft/")
+        c.run(f"npx playwright test tests/playwright/e2e/herodraft/ {args}".strip())
 
 
 @task
-def playwright_mobile(c):
-    """Run Playwright mobile tests with mobile-chrome project."""
+def playwright_herodraft_headed(c):
+    """Run Playwright herodraft tests with visible browsers.
+
+    Opens two browser windows side-by-side to watch captains draft simultaneously.
+    """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run("npx playwright test --project=mobile-chrome")
+        c.run(
+            "HERODRAFT_HEADED=true npx playwright test tests/playwright/e2e/herodraft/ --project=herodraft"
+        )
 
 
 @task
-def playwright_all(c):
-    """Run all Playwright tests."""
+def playwright_mobile(c, args=""):
+    """Run Playwright mobile tests with mobile-chrome project.
+
+    Args:
+        args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
+    """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run("npx playwright test")
+        c.run(
+            f"npx playwright test tests/playwright/e2e/06-mobile/ --project=mobile-chrome {args}".strip()
+        )
+
+
+@task
+def playwright_all(c, args=""):
+    """Run all Playwright tests.
+
+    Args:
+        args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
+    """
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run(f"npx playwright test {args}".strip())
 
 
 # Add tasks to playwright collection
@@ -397,6 +463,7 @@ ns_playwright.add_task(playwright_draft, "draft")
 ns_playwright.add_task(playwright_bracket, "bracket")
 ns_playwright.add_task(playwright_league, "league")
 ns_playwright.add_task(playwright_herodraft, "herodraft")
+ns_playwright.add_task(playwright_herodraft_headed, "herodraft-headed")
 ns_playwright.add_task(playwright_mobile, "mobile")
 ns_playwright.add_task(playwright_all, "all")
 

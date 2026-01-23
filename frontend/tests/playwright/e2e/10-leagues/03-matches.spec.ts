@@ -4,7 +4,7 @@
  * Tests the matches tab functionality on league pages.
  * Verifies that matches display correctly and filtering works.
  *
- * Uses a test league from the database (league PK 1).
+ * Uses the first available league from the database.
  *
  * Ported from Cypress: frontend/tests/cypress/e2e/10-leagues/03-matches.cy.ts
  */
@@ -13,19 +13,31 @@ import {
   test,
   expect,
   LeaguePage,
+  getFirstLeague,
 } from '../../fixtures';
 
-// Test league ID - uses the first league in the database
-const TEST_LEAGUE_ID = 1;
+// Will be set dynamically in beforeAll
+let testLeagueId: number;
 
 test.describe('League Page - Matches Tab (e2e)', () => {
+  test.beforeAll(async ({ browser }) => {
+    // Get the first available league dynamically
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    const league = await getFirstLeague(context);
+    if (!league) {
+      throw new Error('No leagues found in database. Run inv db.populate.all first.');
+    }
+    testLeagueId = league.pk;
+    await context.close();
+  });
+
   test.beforeEach(async ({ loginAdmin }) => {
     await loginAdmin();
   });
 
   test('should display matches list', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'matches');
+    await leaguePage.goto(testLeagueId, 'matches');
 
     // Should show matches heading with count
     await expect(page.locator('text=Matches')).toBeVisible({ timeout: 10000 });
@@ -33,7 +45,7 @@ test.describe('League Page - Matches Tab (e2e)', () => {
 
   test('should have Steam linked filter button', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'matches');
+    await leaguePage.goto(testLeagueId, 'matches');
 
     // Filter button should be visible
     await expect(leaguePage.steamLinkedFilterButton).toBeVisible({ timeout: 10000 });
@@ -41,7 +53,7 @@ test.describe('League Page - Matches Tab (e2e)', () => {
 
   test('should toggle Steam linked filter', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'matches');
+    await leaguePage.goto(testLeagueId, 'matches');
 
     // Click filter button
     await leaguePage.toggleSteamLinkedFilter();
@@ -61,7 +73,7 @@ test.describe('League Page - Matches Tab (e2e)', () => {
   test('should show empty state when no matches', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
     // This test will pass if there are no matches - checking the empty state
-    await leaguePage.goto(TEST_LEAGUE_ID, 'matches');
+    await leaguePage.goto(testLeagueId, 'matches');
 
     // Either matches are shown or empty state is shown
     const matchCardCount = await leaguePage.getMatchCardCount();
@@ -74,11 +86,11 @@ test.describe('League Page - Matches Tab (e2e)', () => {
   test('should load matches via API', async ({ page }) => {
     // Set up request interception
     const matchesRequestPromise = page.waitForRequest(
-      (request) => request.url().includes(`/leagues/${TEST_LEAGUE_ID}/matches/`) && request.method() === 'GET'
+      (request) => request.url().includes(`/leagues/${testLeagueId}/matches/`) && request.method() === 'GET'
     );
 
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'matches');
+    await leaguePage.goto(testLeagueId, 'matches');
 
     // API should be called
     const request = await matchesRequestPromise;
@@ -86,13 +98,13 @@ test.describe('League Page - Matches Tab (e2e)', () => {
 
     // Also verify response
     const responsePromise = page.waitForResponse(
-      (response) => response.url().includes(`/leagues/${TEST_LEAGUE_ID}/matches/`) && response.status() === 200 || response.status() === 304
+      (response) => response.url().includes(`/leagues/${testLeagueId}/matches/`) && response.status() === 200 || response.status() === 304
     );
 
     // Wait for the response (may already be fulfilled)
     const response = await responsePromise.catch(() => null);
     // Response should have been received (test passes if request was made)
-    expect(request.url()).toContain(`/leagues/${TEST_LEAGUE_ID}/matches/`);
+    expect(request.url()).toContain(`/leagues/${testLeagueId}/matches/`);
   });
 });
 
@@ -100,7 +112,7 @@ test.describe('League Match Card (e2e)', () => {
   test.beforeEach(async ({ page, loginAdmin }) => {
     await loginAdmin();
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'matches');
+    await leaguePage.goto(testLeagueId, 'matches');
   });
 
   test('should display match cards if matches exist', async ({ page }) => {

@@ -53,21 +53,19 @@ test.describe('Undo Pick', () => {
 
       // Click on Teams tab
       await page.locator('text=Teams (4)').click({ force: true });
-      await page.waitForTimeout(1000);
+      await page.waitForLoadState('networkidle');
 
       // Open draft modal
       const draftButton = page.locator('button', { hasText: /Live Draft|Start Draft/i });
       await draftButton.click({ force: true });
-      await page.waitForTimeout(1000);
 
       const dialog = page.locator('[role="dialog"]');
-      await expect(dialog).toBeVisible();
+      await dialog.waitFor({ state: 'visible' });
 
       // Initialize draft if needed
       const restartButton = page.locator('button', { hasText: 'Restart Draft' });
       if (await restartButton.isVisible().catch(() => false)) {
         await restartButton.click({ force: true });
-        await page.waitForTimeout(500);
 
         // Confirm if dialog appears
         const alertDialog = page.locator('[role="alertdialog"]');
@@ -78,17 +76,17 @@ test.describe('Undo Pick', () => {
           await confirmButton.click({ force: true });
         }
 
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
       }
 
       // Make a pick first
       const pickButtons = dialog.locator('button', { hasText: 'Pick' });
       if (await pickButtons.count() > 0) {
         await pickButtons.first().click({ force: true });
-        await page.waitForTimeout(500);
 
         // Confirm pick
         const alertDialog = page.locator('[role="alertdialog"]');
+        await alertDialog.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
         if (await alertDialog.isVisible().catch(() => false)) {
           const confirmButton = alertDialog.locator('button', {
             hasText: /Confirm|Yes|Pick/i,
@@ -96,13 +94,13 @@ test.describe('Undo Pick', () => {
           await confirmButton.click({ force: true });
         }
 
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
 
         // After making a pick, the draft advances to the next round
         // Navigate back to the previous round to see the Undo button
         const navButtons = dialog.locator('button:has(svg)');
         await navButtons.first().click({ force: true }); // Prev button
-        await page.waitForTimeout(500);
+        await page.waitForLoadState('networkidle');
       }
 
       // Now check for undo button
@@ -126,15 +124,14 @@ test.describe('Undo Pick', () => {
 
       // Click on Teams tab
       await page.locator('text=Teams (4)').click({ force: true });
-      await page.waitForTimeout(1000);
+      await page.waitForLoadState('networkidle');
 
       // Open draft modal
       const draftButton = page.locator('button', { hasText: /Live Draft|Start Draft/i });
       await draftButton.click({ force: true });
-      await page.waitForTimeout(1000);
 
       const dialog = page.locator('[role="dialog"]');
-      await expect(dialog).toBeVisible();
+      await dialog.waitFor({ state: 'visible' });
 
       // Undo button should not be visible for non-staff
       await expect(dialog.locator('button', { hasText: 'Undo' })).not.toBeVisible();
@@ -156,24 +153,23 @@ test.describe('Undo Pick', () => {
 
       // Click on Teams tab
       await page.locator('text=Teams (4)').click({ force: true });
-      await page.waitForTimeout(1000);
+      await page.waitForLoadState('networkidle');
 
       // Open draft modal
       const draftButton = page.locator('button', { hasText: /Live Draft|Start Draft/i });
       await draftButton.click({ force: true });
-      await page.waitForTimeout(1000);
 
       const dialog = page.locator('[role="dialog"]');
-      await expect(dialog).toBeVisible();
+      await dialog.waitFor({ state: 'visible' });
 
       // Restart draft to reset all picks
       const restartButton = page.locator('button', { hasText: 'Restart Draft' });
       if (await restartButton.isVisible().catch(() => false)) {
         await restartButton.click({ force: true });
-        await page.waitForTimeout(500);
 
         // Confirm if dialog appears
         const alertDialog = page.locator('[role="alertdialog"]');
+        await alertDialog.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
         if (await alertDialog.isVisible().catch(() => false)) {
           const confirmButton = alertDialog.locator('button', {
             hasText: /Confirm|Yes|Continue|Restart/i,
@@ -181,7 +177,7 @@ test.describe('Undo Pick', () => {
           await confirmButton.click({ force: true });
         }
 
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
       }
 
       // After restart, no picks should exist, so undo should not be visible
@@ -207,23 +203,22 @@ test.describe('Undo Pick', () => {
 
       // Click on Teams tab
       await page.locator('text=Teams (4)').click({ force: true });
-      await page.waitForTimeout(1000);
+      await page.waitForLoadState('networkidle');
 
       // Open draft modal
       const draftButton = page.locator('button', { hasText: /Live Draft|Start Draft/i });
       await draftButton.click({ force: true });
-      await page.waitForTimeout(1000);
 
       const dialog = page.locator('[role="dialog"]');
-      await expect(dialog).toBeVisible();
+      await dialog.waitFor({ state: 'visible' });
 
       // Restart draft to start fresh
       const restartButton = page.locator('button', { hasText: 'Restart Draft' });
       if (await restartButton.isVisible().catch(() => false)) {
         await restartButton.click({ force: true });
-        await page.waitForTimeout(500);
 
         const alertDialog = page.locator('[role="alertdialog"]');
+        await alertDialog.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
         if (await alertDialog.isVisible().catch(() => false)) {
           const confirmButton = alertDialog.locator('button', {
             hasText: /Confirm|Yes|Continue|Restart/i,
@@ -231,7 +226,7 @@ test.describe('Undo Pick', () => {
           await confirmButton.click({ force: true });
         }
 
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
       }
 
       // Get the username of a player before picking
@@ -243,10 +238,10 @@ test.describe('Undo Pick', () => {
       // Make a pick
       const pickButton = dialog.locator('button', { hasText: 'Pick' }).first();
       await pickButton.click({ force: true });
-      await page.waitForTimeout(500);
 
       // Confirm pick
       const alertDialog = page.locator('[role="alertdialog"]');
+      await alertDialog.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
       if (await alertDialog.isVisible().catch(() => false)) {
         const confirmButton = alertDialog.locator('button', {
           hasText: /Confirm|Yes|Pick/i,
@@ -254,13 +249,13 @@ test.describe('Undo Pick', () => {
         await confirmButton.click({ force: true });
       }
 
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState('networkidle');
 
       // After making a pick, the draft advances to the next round
       // Navigate back to the previous round to see the Undo button
       const navButtons = dialog.locator('button:has(svg)');
       await navButtons.first().click({ force: true }); // Prev button
-      await page.waitForTimeout(500);
+      await page.waitForLoadState('networkidle');
 
       // Now undo the pick - wait for button to appear first (confirms pick was recorded)
       const undoButton = dialog.locator('button', { hasText: 'Undo' });
@@ -272,7 +267,7 @@ test.describe('Undo Pick', () => {
       await expect(undoDialog).toBeVisible({ timeout: 10000 });
       await undoDialog.locator('button', { hasText: 'Undo Pick' }).click({ force: true });
 
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState('networkidle');
 
       // Verify success toast
       await expect(page.locator('text=/Pick undone|successfully/i')).toBeVisible({
@@ -301,24 +296,23 @@ test.describe('Undo Pick', () => {
 
       // Click on Teams tab
       await page.locator('text=Teams (4)').click({ force: true });
-      await page.waitForTimeout(1000);
+      await page.waitForLoadState('networkidle');
 
       // Open draft modal
       const draftButton = page.locator('button', { hasText: /Live Draft|Start Draft/i });
       await draftButton.click({ force: true });
-      await page.waitForTimeout(1000);
 
       const dialog = page.locator('[role="dialog"]');
-      await expect(dialog).toBeVisible();
+      await dialog.waitFor({ state: 'visible' });
 
       // Make a pick first
       const pickButtons = dialog.locator('button', { hasText: 'Pick' });
       if (await pickButtons.count() > 0) {
         await pickButtons.first().click({ force: true });
-        await page.waitForTimeout(500);
 
         // Confirm pick
         const alertDialog = page.locator('[role="alertdialog"]');
+        await alertDialog.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
         if (await alertDialog.isVisible().catch(() => false)) {
           const confirmButton = alertDialog.locator('button', {
             hasText: /Confirm|Yes|Pick/i,
@@ -326,26 +320,23 @@ test.describe('Undo Pick', () => {
           await confirmButton.click({ force: true });
         }
 
-        await page.waitForTimeout(2000);
+        await page.waitForLoadState('networkidle');
 
         // After making a pick, the draft advances to the next round
         // Navigate back to the previous round to see the Undo button
         const navButtons = dialog.locator('button:has(svg)');
         await navButtons.first().click({ force: true }); // Prev button
-        await page.waitForTimeout(500);
+        await page.waitForLoadState('networkidle');
       }
 
       // Click undo button
       const undoButton = dialog.locator('button', { hasText: 'Undo' });
       await undoButton.click({ force: true });
-      await page.waitForTimeout(500);
 
       // Click cancel in the alert dialog
       const alertDialog = page.locator('[role="alertdialog"]');
-      await expect(alertDialog).toBeVisible();
+      await alertDialog.waitFor({ state: 'visible' });
       await alertDialog.locator('button', { hasText: 'Cancel' }).click({ force: true });
-
-      await page.waitForTimeout(500);
 
       // Alert dialog should be closed
       await expect(page.locator('[role="alertdialog"]')).not.toBeVisible();

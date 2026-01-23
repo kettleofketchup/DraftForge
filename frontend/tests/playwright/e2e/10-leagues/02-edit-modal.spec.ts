@@ -4,7 +4,7 @@
  * Tests the edit modal functionality on league pages.
  * Verifies that admin users can edit leagues and form validation works.
  *
- * Uses a test league from the database (league PK 1).
+ * Uses the first available league from the database.
  *
  * Ported from Cypress: frontend/tests/cypress/e2e/10-leagues/02-edit-modal.cy.ts
  */
@@ -13,10 +13,11 @@ import {
   test,
   expect,
   LeaguePage,
+  getFirstLeague,
 } from '../../fixtures';
 
-// Test league ID - uses the first league in the database
-const TEST_LEAGUE_ID = 1;
+// Will be set dynamically in beforeAll
+let testLeagueId: number;
 
 // Edited name for testing the edit modal
 const EDITED_LEAGUE_NAME = `Playwright Test League ${Date.now()}`;
@@ -26,6 +27,17 @@ const TEST_PRIZE_POOL = '$5,000';
 const TEST_DESCRIPTION = 'Updated description from Playwright test';
 
 test.describe('League Page - Edit Modal (e2e)', () => {
+  test.beforeAll(async ({ browser }) => {
+    // Get the first available league dynamically
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    const league = await getFirstLeague(context);
+    if (!league) {
+      throw new Error('No leagues found in database. Run inv db.populate.all first.');
+    }
+    testLeagueId = league.pk;
+    await context.close();
+  });
+
   test.beforeEach(async ({ loginAdmin }) => {
     // Login as admin to have edit permissions
     await loginAdmin();
@@ -33,7 +45,7 @@ test.describe('League Page - Edit Modal (e2e)', () => {
 
   test('should show edit button for admin users', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'info');
+    await leaguePage.goto(testLeagueId, 'info');
 
     // Edit button should be visible
     await leaguePage.assertEditButtonVisible();
@@ -42,7 +54,7 @@ test.describe('League Page - Edit Modal (e2e)', () => {
 
   test('should open edit modal when clicking edit button', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'info');
+    await leaguePage.goto(testLeagueId, 'info');
 
     // Click edit button
     await leaguePage.openEditModal();
@@ -58,7 +70,7 @@ test.describe('League Page - Edit Modal (e2e)', () => {
 
   test('should close modal when clicking cancel', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'info');
+    await leaguePage.goto(testLeagueId, 'info');
 
     // Open modal
     await leaguePage.openEditModal();
@@ -72,7 +84,7 @@ test.describe('League Page - Edit Modal (e2e)', () => {
 
   test('should populate form with current league data', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'info');
+    await leaguePage.goto(testLeagueId, 'info');
 
     // Open modal
     await leaguePage.openEditModal();
@@ -84,7 +96,7 @@ test.describe('League Page - Edit Modal (e2e)', () => {
 
   test('should validate required fields', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'info');
+    await leaguePage.goto(testLeagueId, 'info');
 
     // Open modal
     await leaguePage.openEditModal();
@@ -101,7 +113,7 @@ test.describe('League Page - Edit Modal (e2e)', () => {
 
   test('should update league successfully', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'info');
+    await leaguePage.goto(testLeagueId, 'info');
 
     // Open modal
     await leaguePage.openEditModal();
@@ -131,7 +143,7 @@ test.describe('League Page - Edit Modal (e2e)', () => {
     await loginUser();
 
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'info');
+    await leaguePage.goto(testLeagueId, 'info');
 
     // Edit button should not be visible
     await leaguePage.assertEditButtonNotVisible();
@@ -142,7 +154,7 @@ test.describe('League Page - Edit Modal Accessibility (e2e)', () => {
   test.beforeEach(async ({ page, loginAdmin }) => {
     await loginAdmin();
     const leaguePage = new LeaguePage(page);
-    await leaguePage.goto(TEST_LEAGUE_ID, 'info');
+    await leaguePage.goto(testLeagueId, 'info');
     await leaguePage.openEditModal();
   });
 

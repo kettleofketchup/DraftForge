@@ -46,8 +46,8 @@ export function MaintainerSection() {
             </a>
           </TooltipTrigger>
           <TooltipContent>
-            Server Costs to host the site are paid for by Hurk, the guild owner,
-            DTX's founder, & glorious overlord.
+            Server costs are covered by the community. Your support helps keep
+            the site running!
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -84,11 +84,11 @@ export function MaintainerSection() {
               About Me
             </h3>
             <p className="text-base-content mb-4">
-              The driving force behind the DTX website, Kettleofketchup is
+              The driving force behind this website, KettleOfKetchup is
               responsible for maintaining, developing, and continuously
-              improving this guild management system. With a passion for both
-              Dota 2 and software development, they ensure that DTX remains a
-              cutting-edge solution for our gaming community.
+              improving this tournament and guild management system. With a passion for both
+              Dota 2 and software development, they ensure that Kettle of Tournaments remains a
+              cutting-edge solution for gaming communities.
             </p>
             <div className="flex flex-wrap gap-2">
               <Badge className="bg-indigo-800 text-white">

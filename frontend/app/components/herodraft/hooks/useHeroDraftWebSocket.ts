@@ -1,16 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getLogger } from "~/lib/logger";
-import type { HeroDraft, HeroDraftTick } from "../types";
+import type { HeroDraft, HeroDraftEvent, HeroDraftTick } from "../types";
 import { HeroDraftWebSocketMessageSchema } from "../schemas";
 
 const log = getLogger("useHeroDraftWebSocket");
+
+// Enable verbose debug logging for HeroDraft debugging
+const DEBUG = true;
+const debugLog = (...args: unknown[]) => {
+  if (DEBUG) {
+    console.log("[HeroDraftWS]", ...args);
+  }
+};
 
 interface UseHeroDraftWebSocketOptions {
   draftId: number | null;
   enabled?: boolean;  // Only connect when enabled (default: true when draftId is set)
   onStateUpdate?: (draft: HeroDraft) => void;
   onTick?: (tick: HeroDraftTick) => void;
-  onEvent?: (eventType: string, draftTeam: number | null) => void;
+  onEvent?: (event: HeroDraftEvent) => void;
 }
 
 interface UseHeroDraftWebSocketReturn {
@@ -105,27 +113,53 @@ export function useHeroDraftWebSocket({
         }
 
         const data = parseResult.data;
-        log.debug("HeroDraft WebSocket message:", data);
+        debugLog("Message received:", data.type, data);
 
         switch (data.type) {
           case "initial_state":
             // Full state replace on connect/reconnect - prevents state drift
+            debugLog("initial_state received", {
+              state: data.draft_state.state,
+              current_round: data.draft_state.current_round,
+              rounds_count: data.draft_state.rounds.length,
+              active_rounds: data.draft_state.rounds.filter(r => r.state === "active").map(r => r.round_number),
+            });
             if (onStateUpdateRef.current) {
-              log.debug("Received initial_state - replacing full draft state");
               onStateUpdateRef.current(data.draft_state);
             }
             break;
 
           case "herodraft_event":
+            debugLog("herodraft_event received", {
+              event_type: data.event_type,
+              draft_team_id: data.draft_team?.id,
+              draft_team_captain: data.draft_team?.captain?.username,
+              has_draft_state: !!data.draft_state,
+              draft_state: data.draft_state?.state,
+              current_round: data.draft_state?.current_round,
+              active_rounds: data.draft_state?.rounds.filter(r => r.state === "active").map(r => r.round_number),
+            });
             if (data.draft_state && onStateUpdateRef.current) {
+              debugLog("Calling onStateUpdate with state:", data.draft_state.state, "current_round:", data.draft_state.current_round);
               onStateUpdateRef.current(data.draft_state);
+            } else if (!data.draft_state) {
+              log.warn("herodraft_event missing draft_state - UI may not update");
             }
             if (data.event_type && onEventRef.current) {
-              onEventRef.current(data.event_type, data.draft_team ?? null);
+              // Pass full event data including draft_team object and metadata
+              onEventRef.current(data);
             }
             break;
 
           case "herodraft_tick":
+            debugLog("herodraft_tick received", {
+              current_round: data.current_round,
+              active_team_id: data.active_team_id,
+              grace_time_remaining_ms: data.grace_time_remaining_ms,
+              team_a_reserve_ms: data.team_a_reserve_ms,
+              team_b_reserve_ms: data.team_b_reserve_ms,
+              draft_state: data.draft_state,
+            });
             if (onTickRef.current) {
               onTickRef.current({
                 type: "herodraft_tick",
@@ -197,12 +231,9 @@ export function useHeroDraftWebSocket({
         clearTimeout(reconnectTimeoutRef.current);
       }
       if (wsRef.current) {
-        // Only close if actually connected - prevents StrictMode double-mount issues
-        // where WebSocket gets closed before connection is established
-        if (wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.close(1000, "Component unmounting");
-        }
-        // Clear ref regardless - let CONNECTING sockets fail naturally
+        // Close WebSocket regardless of state - don't leave orphaned CONNECTING sockets
+        // Calling close() on CONNECTING socket will abort it cleanly
+        wsRef.current.close(1000, "Component unmounting");
         wsRef.current = null;
       }
     };

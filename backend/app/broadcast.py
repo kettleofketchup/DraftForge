@@ -111,6 +111,7 @@ def broadcast_herodraft_event(draft, event_type: str, draft_team=None, metadata=
         "event_type": event_type,
         "event_id": event.id,
         "draft_team": DraftTeamSerializerFull(draft_team).data if draft_team else None,
+        "metadata": metadata or {},  # Include metadata for hero_id, action_type etc
         "timestamp": event.created_at.isoformat(),
     }
 
@@ -137,4 +138,53 @@ def broadcast_herodraft_event(draft, event_type: str, draft_team=None, metadata=
         log.warning(
             f"Failed to broadcast herodraft {event_type} to channels: {e}. "
             "WebSocket clients will not receive real-time updates for this event."
+        )
+
+
+def broadcast_herodraft_state(draft, event_type: str):
+    """
+    Broadcast the current HeroDraft state to WebSocket consumers.
+
+    Used for state changes like pause/resume where the event is already created.
+    This avoids creating duplicate events.
+
+    Args:
+        draft: HeroDraft instance (should be refreshed from DB)
+        event_type: Type of event for logging (e.g., "draft_paused", "draft_resumed")
+    """
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        log.warning("No channel layer configured, skipping herodraft state broadcast")
+        return
+
+    # Build payload with current state
+    payload = {
+        "type": "herodraft.event",
+        "event_type": event_type,
+    }
+
+    # Include full draft state with prefetched members
+    try:
+        from app.models import HeroDraft
+
+        draft = HeroDraft.objects.prefetch_related(
+            "draft_teams__tournament_team__captain",
+            "draft_teams__tournament_team__members",
+            "rounds",
+        ).get(id=draft.id)
+        payload["draft_state"] = HeroDraftSerializer(draft).data
+    except Exception as e:
+        log.warning(f"Failed to serialize herodraft state: {e}")
+        return  # Don't broadcast without state
+
+    # Send to channel group
+    room_group_name = f"herodraft_{draft.id}"
+
+    try:
+        async_to_sync(channel_layer.group_send)(room_group_name, payload)
+        log.debug(f"Broadcast herodraft state ({event_type}) to {room_group_name}")
+    except Exception as e:
+        log.warning(
+            f"Failed to broadcast herodraft state to channels: {e}. "
+            "WebSocket clients will not receive real-time updates."
         )

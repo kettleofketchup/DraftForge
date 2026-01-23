@@ -73,7 +73,14 @@ source .venv/bin/activate
 inv dev.test
 ```
 
-### Full Test Setup (with Cypress)
+### Full Test Setup (with Playwright)
+```bash
+source .venv/bin/activate
+inv test.setup
+inv test.playwright.headless  # or inv test.playwright.headed
+```
+
+### Full Test Setup (with Cypress - Legacy)
 ```bash
 source .venv/bin/activate
 inv test.setup
@@ -199,7 +206,15 @@ inv update.all         # Update everything (git, deps, images)
 inv version.set 1.2.3  # Set version
 inv version.tag        # Tag and bump version
 
-# Tests
+# Tests (Playwright - Recommended)
+inv test.playwright.install    # Install Playwright browsers
+inv test.playwright.headless   # Run all tests headless
+inv test.playwright.headed     # Run all tests headed
+inv test.playwright.ui         # Open Playwright UI mode
+inv test.playwright.debug      # Debug mode with inspector
+inv test.playwright.spec --file <path>  # Run specific test file
+
+# Tests (Cypress - Legacy)
 inv test.setup         # Full test setup
 inv test.open          # Cypress interactive
 inv test.headless      # Cypress headless
@@ -250,7 +265,50 @@ inv test.run --cmd 'python manage.py test app.tests.test_shuffle_draft -v 2'
 DISABLE_CACHE=true python manage.py test app.tests -v 2
 ```
 
-**Frontend E2E**: Cypress tests in `frontend/tests/cypress/`
+**Frontend E2E (Playwright - Recommended)**:
+```bash
+source .venv/bin/activate
+
+# Run all Playwright tests headless
+inv test.playwright.headless
+
+# Run tests in headed mode (visible browser)
+inv test.playwright.headed
+
+# Open Playwright UI for interactive debugging
+inv test.playwright.ui
+
+# Run specific test file
+inv test.playwright.spec --file tests/playwright/e2e/01-navigation.spec.ts
+```
+
+### Playwright Performance
+
+**Local parallel execution:**
+```bash
+# Run with default workers (50% of CPUs)
+inv test.playwright.headless
+
+# Run with specific worker count
+inv test.playwright.headless --args="--workers=4"
+
+# Run specific shard locally (for debugging CI issues)
+inv test.playwright.headless --args="--shard=1/4"
+```
+
+**CI sharding:**
+Tests are automatically sharded across 4 parallel runners in CI for ~4x speedup.
+Each shard runs approximately 1/4 of the test suite.
+
+**Running specific test suites:**
+```bash
+inv test.playwright.navigation    # Navigation tests only
+inv test.playwright.tournament    # Tournament tests only
+inv test.playwright.league        # League tests only
+inv test.playwright.herodraft     # HeroDraft tests only
+```
+
+**Frontend E2E (Cypress - Legacy)**: Cypress tests in `frontend/tests/cypress/`
 
 ## Documentation
 

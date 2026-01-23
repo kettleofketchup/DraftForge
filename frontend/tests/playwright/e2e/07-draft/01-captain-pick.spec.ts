@@ -100,18 +100,19 @@ test.describe('Captain Draft Pick', () => {
 
       await visitAndWaitForHydration(page, '/');
 
-      // Wait for the active draft API to complete before asserting
-      await page.waitForTimeout(1000);
+      // Wait for the page to fully load before asserting
+      await page.waitForLoadState('networkidle');
 
-      // Check if this user happens to be a captain (test data can assign any user as captain)
+      // Check if this user happens to be a captain via current_user response
+      // The active_drafts array is included in the current_user API response
       const response = await context.request.get(
-        `${API_URL}/active-draft-for-user/`,
+        `${API_URL}/current_user/`,
         { failOnStatusCode: false }
       );
 
       if (response.ok()) {
         const data = await response.json();
-        if (data.has_active_turn) {
+        if (data.active_drafts && data.active_drafts.length > 0) {
           // This user is actually a captain - skip the assertion
           console.log('User is a captain in test data - skipping floating indicator check');
           return;

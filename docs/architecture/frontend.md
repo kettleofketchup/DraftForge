@@ -31,7 +31,8 @@ frontend/
 │   ├── routes/               # Route definitions
 │   └── lib/                  # Utilities
 ├── tests/
-│   └── cypress/              # E2E tests
+│   ├── cypress/              # E2E tests (legacy)
+│   └── playwright/           # E2E tests (primary)
 └── public/                   # Static assets
 ```
 
@@ -122,19 +123,26 @@ The draft system includes notification components to alert captains when it's th
 | `DraftNotificationBadge` | `components/draft/` | Pulsing red dot on user avatar |
 | `TurnIndicator` | `components/draft/roundView/` | Shows whose turn in draft modal |
 
-### useActiveDraft Hook
+### Active Draft Data
 
-Polls for active draft turns:
+Active draft information is provided via the user's session data. When the user is logged in, the `current_user` API response includes an `active_drafts` array containing any drafts where the user has a pending turn.
 
 ```typescript
-import { useActiveDraft } from '~/hooks/useActiveDraft'
+import { useUserStore } from '~/stores/userStore'
 
-const { activeDraft, hasActiveTurn, loading, refresh } = useActiveDraft()
+const { user } = useUserStore()
+
+// Check if user has any active draft turns
+const hasActiveTurn = user?.active_drafts?.length > 0
 
 if (hasActiveTurn) {
-  // Show notification, activeDraft has tournament info
+  // Show notification, active_drafts contains tournament info
+  const firstDraft = user.active_drafts[0]
+  console.log(firstDraft.tournament_pk, firstDraft.tournament_name)
 }
 ```
+
+This data is automatically refreshed when the user store fetches the current user.
 
 ### Auto-Open Draft Modal
 

@@ -15,31 +15,47 @@ from app.serializers import HeroDraftSerializer
 from common.utils import isTestEnvironment
 
 # Test key to tournament/game mapping for herodraft scenarios
+# Uses existing bracket games from Real Tournament 38:
+# - Winners Final (round 2, winners): vrm.mtl's Team vs ethan0688_'s Team
 HERODRAFT_TEST_KEYS = {
     # Use Real Tournament 38's Winners Final (round 2, winners bracket)
+    # vrm.mtl's Team vs ethan0688_'s Team
     "waiting_phase": {
         "tournament_name": "Real Tournament 38",
         "round": 2,
         "bracket_type": "winners",
+        "position": 0,
         "initial_state": "waiting_for_captains",
     },
     "rolling_phase": {
         "tournament_name": "Real Tournament 38",
         "round": 2,
         "bracket_type": "winners",
+        "position": 0,
         "initial_state": "rolling",
     },
     "choosing_phase": {
         "tournament_name": "Real Tournament 38",
         "round": 2,
         "bracket_type": "winners",
+        "position": 0,
         "initial_state": "choosing",
     },
     "drafting_phase": {
         "tournament_name": "Real Tournament 38",
         "round": 2,
         "bracket_type": "winners",
+        "position": 0,
         "initial_state": "drafting",
+    },
+    # Two-captain full draft test - uses Winners Final game
+    # vrm.mtl's Team vs ethan0688_'s Team (both have captains)
+    "two_captain_test": {
+        "tournament_name": "Real Tournament 38",
+        "round": 2,
+        "bracket_type": "winners",
+        "position": 0,
+        "initial_state": "waiting_for_captains",
     },
 }
 
@@ -186,11 +202,34 @@ def get_herodraft_by_key(request, key: str):
         )
 
     # Find the game
-    game = Game.objects.filter(
-        tournament=tournament,
-        round=config["round"],
-        bracket_type=config["bracket_type"],
-    ).first()
+    game_filter = {
+        "tournament": tournament,
+        "round": config["round"],
+        "bracket_type": config["bracket_type"],
+    }
+
+    # Add position filter if specified (for specific game lookup)
+    if "position" in config:
+        game_filter["position"] = config["position"]
+
+    # If specific teams are required, find game with those teams
+    if "teams" in config:
+        from app.models import Team
+
+        team_names = config["teams"]
+        teams = Team.objects.filter(tournament=tournament, name__in=team_names)
+        if teams.count() >= 2:
+            team_list = list(teams)
+            # Find game where these teams are radiant/dire
+            game = Game.objects.filter(
+                **game_filter,
+                radiant_team__in=team_list,
+                dire_team__in=team_list,
+            ).first()
+        else:
+            game = None
+    else:
+        game = Game.objects.filter(**game_filter).first()
 
     if not game:
         return Response(
@@ -237,6 +276,15 @@ def get_herodraft_by_key(request, key: str):
 
     # Return with extra fields for test setup
     data = HeroDraftSerializer(draft).data
+
+    # Add game and tournament info for URL construction
+    data["game"] = {
+        "pk": game.pk,
+        "tournament_pk": game.tournament.pk if game.tournament else None,
+        "radiant_team_name": game.radiant_team.name if game.radiant_team else None,
+        "dire_team_name": game.dire_team.name if game.dire_team else None,
+    }
+
     data["draft_teams"] = [
         {
             "id": dt.pk,

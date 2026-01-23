@@ -13,7 +13,8 @@ import { HeroGrid } from "./HeroGrid";
 import { DraftPanel } from "./DraftPanel";
 import { HeroDraftHistoryModal } from "./HeroDraftHistoryModal";
 import { submitPick, setReady, triggerRoll, submitChoice } from "./api";
-import type { HeroDraft } from "./types";
+import type { HeroDraft, HeroDraftEvent } from "./types";
+import { heroes } from "dotaconstants";
 import { DisplayName } from "~/components/user/avatar";
 import { X, Send, History } from "lucide-react";
 import {
@@ -66,17 +67,38 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     [setTick]
   );
 
-  const handleEvent = useCallback((eventType: string, _draftTeam: number | null) => {
-    switch (eventType) {
+  const handleEvent = useCallback((event: HeroDraftEvent) => {
+    console.log("[HeroDraftModal] handleEvent:", event.event_type, event);
+
+    // Get hero name helper
+    const getHeroName = (heroId: number | undefined): string => {
+      if (!heroId) return "Unknown Hero";
+      const hero = Object.values(heroes).find((h: { id: number }) => h.id === heroId);
+      return (hero as { localized_name: string } | undefined)?.localized_name ?? `Hero ${heroId}`;
+    };
+
+    // Get captain display name
+    const draftTeam = event.draft_team;
+    const captainName = draftTeam?.captain
+      ? (draftTeam.captain.nickname || draftTeam.captain.username)
+      : "Unknown";
+
+    switch (event.event_type) {
       case "captain_ready":
-        toast.info("Captain is ready");
+        toast.info(`${captainName} is ready`);
         break;
       case "roll_result":
-        toast.success("Coin flip complete!");
+        toast.success(`${captainName} won the coin flip!`);
         break;
-      case "hero_selected":
-        toast.info("Hero selected");
+      case "hero_selected": {
+        // Get hero_id and action_type from metadata
+        const heroId = event.metadata?.hero_id;
+        const actionType = event.metadata?.action_type;
+        const heroName = getHeroName(heroId);
+        const action = actionType === "ban" ? "banned" : "picked";
+        toast.info(`${captainName} ${action} ${heroName}`);
         break;
+      }
       case "draft_completed":
         toast.success("Draft completed!");
         break;
@@ -92,31 +114,77 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
   });
 
   const handleHeroClick = (heroId: number) => {
-    if (!draft || !currentUser?.pk) return;
+    console.log("[HeroDraftModal] handleHeroClick:", {
+      heroId,
+      draft_state: draft?.state,
+      draft_current_round: draft?.current_round,
+      currentUser_pk: currentUser?.pk,
+    });
+
+    if (!draft || !currentUser?.pk) {
+      console.log("[HeroDraftModal] handleHeroClick - early return: no draft or user");
+      return;
+    }
 
     const myTeam = draft.draft_teams.find((t) => t.captain?.pk === currentUser.pk);
-    if (!myTeam) return;
+    console.log("[HeroDraftModal] handleHeroClick:", {
+      myTeam_id: myTeam?.id,
+      myTeam_captain: myTeam?.captain?.username,
+    });
+
+    if (!myTeam) {
+      console.log("[HeroDraftModal] handleHeroClick - early return: not a captain");
+      return;
+    }
 
     // Find current round from rounds array using current_round index
     const currentRound = draft.current_round !== null ? draft.rounds[draft.current_round] : null;
+    console.log("[HeroDraftModal] handleHeroClick:", {
+      currentRound_number: currentRound?.round_number,
+      currentRound_draft_team: currentRound?.draft_team,
+      currentRound_state: currentRound?.state,
+      currentRound_action_type: currentRound?.action_type,
+      isMyTurn: currentRound?.draft_team === myTeam.id,
+    });
+
     if (!currentRound || currentRound.draft_team !== myTeam.id) {
+      console.log("[HeroDraftModal] handleHeroClick - not your turn!");
       toast.error("It's not your turn");
       return;
     }
 
+    console.log("[HeroDraftModal] handleHeroClick - setting confirmHeroId:", heroId);
     setConfirmHeroId(heroId);
   };
 
   const handleConfirmPick = async () => {
-    if (!confirmHeroId || !draft || isSubmitting) return;
+    console.log("[HeroDraftModal] handleConfirmPick:", {
+      confirmHeroId,
+      draft_id: draft?.id,
+      draft_state: draft?.state,
+      draft_current_round: draft?.current_round,
+      isSubmitting,
+    });
+
+    if (!confirmHeroId || !draft || isSubmitting) {
+      console.log("[HeroDraftModal] handleConfirmPick - early return:", {
+        no_confirmHeroId: !confirmHeroId,
+        no_draft: !draft,
+        isSubmitting,
+      });
+      return;
+    }
 
     setIsSubmitting(true);
+    console.log("[HeroDraftModal] handleConfirmPick - calling submitPick...");
     try {
       // Don't call setDraft - WebSocket broadcasts state to all clients
       await submitPick(draft.id, confirmHeroId);
+      console.log("[HeroDraftModal] handleConfirmPick - submitPick completed successfully");
       setConfirmHeroId(null);
       setSelectedHeroId(null);
     } catch (error: unknown) {
+      console.error("[HeroDraftModal] handleConfirmPick - submitPick failed:", error);
       const axiosError = error as { response?: { data?: { error?: string } } };
       toast.error(axiosError.response?.data?.error || "Failed to submit pick");
     } finally {

@@ -12,9 +12,23 @@ import {
   test,
   expect,
   visitAndWaitForHydration,
+  getTournamentByKey,
 } from '../../fixtures';
 
 test.describe('Shuffle Draft - Roll Results Display', () => {
+  let tournamentPk: number;
+
+  test.beforeAll(async ({ browser }) => {
+    // Get the tournament dynamically
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    const tournament = await getTournamentByKey(context, 'completed_bracket');
+    if (!tournament) {
+      throw new Error('Could not find completed_bracket tournament');
+    }
+    tournamentPk = tournament.pk;
+    await context.close();
+  });
+
   test.beforeEach(async ({ context, loginAdmin }) => {
     // Clear cookies to prevent stale user data
     await context.clearCookies();
@@ -24,8 +38,8 @@ test.describe('Shuffle Draft - Roll Results Display', () => {
   });
 
   test('should display draft event FAB with event count', async ({ page }) => {
-    // Use the shuffle_draft_captain_turn tournament which has an active draft
-    await visitAndWaitForHydration(page, '/tournament/1');
+    // Use the completed_bracket tournament which has draft data
+    await visitAndWaitForHydration(page, `/tournament/${tournamentPk}`);
     await page.locator('h1').waitFor({ state: 'visible', timeout: 10000 });
 
     // The draft event FAB should be visible if there are events
@@ -45,7 +59,7 @@ test.describe('Shuffle Draft - Roll Results Display', () => {
   test('should show tie roll event in modal when FAB has events', async ({
     page,
   }) => {
-    await visitAndWaitForHydration(page, '/tournament/1');
+    await visitAndWaitForHydration(page, `/tournament/${tournamentPk}`);
     await page.locator('h1').waitFor({ state: 'visible', timeout: 10000 });
 
     // Try to find and click the draft event FAB
@@ -97,7 +111,7 @@ test.describe('Shuffle Draft - Roll Results Display', () => {
     page,
   }) => {
     // Use a tournament config that has equal MMR captains
-    await visitAndWaitForHydration(page, '/tournament/1');
+    await visitAndWaitForHydration(page, `/tournament/${tournamentPk}`);
     await page.locator('h1').waitFor({ state: 'visible', timeout: 10000 });
 
     const fab = page.locator('[data-testid="draft-event-fab"]');
@@ -138,7 +152,7 @@ test.describe('Shuffle Draft - Roll Results Display', () => {
   test('should update event FAB badge when new events occur', async ({
     page,
   }) => {
-    await visitAndWaitForHydration(page, '/tournament/1');
+    await visitAndWaitForHydration(page, `/tournament/${tournamentPk}`);
     await page.locator('h1').waitFor({ state: 'visible', timeout: 10000 });
 
     const fab = page.locator('[data-testid="draft-event-fab"]');
@@ -165,7 +179,7 @@ test.describe('Shuffle Draft - Roll Results Display', () => {
   });
 
   test('should show all event types in history modal', async ({ page }) => {
-    await visitAndWaitForHydration(page, '/tournament/1');
+    await visitAndWaitForHydration(page, `/tournament/${tournamentPk}`);
     await page.locator('h1').waitFor({ state: 'visible', timeout: 10000 });
 
     const fab = page.locator('[data-testid="draft-event-fab"]');
@@ -199,7 +213,7 @@ test.describe('Shuffle Draft - Roll Results Display', () => {
   });
 
   test('should handle modal close gracefully', async ({ page }) => {
-    await visitAndWaitForHydration(page, '/tournament/1');
+    await visitAndWaitForHydration(page, `/tournament/${tournamentPk}`);
     await page.locator('h1').waitFor({ state: 'visible', timeout: 10000 });
 
     const fab = page.locator('[data-testid="draft-event-fab"]');

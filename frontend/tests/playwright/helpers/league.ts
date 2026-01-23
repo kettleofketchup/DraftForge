@@ -460,3 +460,35 @@ export async function getLeagueByPk(
 
   return response.json();
 }
+
+/**
+ * Fetch the first available league from the database.
+ * Used for tests that need any valid league ID without hardcoding.
+ *
+ * @param context - Playwright BrowserContext for making API requests
+ * @returns First league data or null if no leagues exist
+ */
+export async function getFirstLeague(
+  context: BrowserContext
+): Promise<LeagueData | null> {
+  const response = await context.request.get(
+    `${API_URL}/leagues/`,
+    { failOnStatusCode: false }
+  );
+
+  if (!response.ok()) {
+    return null;
+  }
+
+  const leagues = await response.json();
+  if (Array.isArray(leagues) && leagues.length > 0) {
+    return leagues[0];
+  }
+
+  // Handle paginated response
+  if (leagues.results && Array.isArray(leagues.results) && leagues.results.length > 0) {
+    return leagues.results[0];
+  }
+
+  return null;
+}

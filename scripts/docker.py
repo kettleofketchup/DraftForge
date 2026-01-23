@@ -34,8 +34,9 @@ def docker_build(
     target: str = "runtime",
 ):
     img_str = f"{image}:{version}"
+    # Use BuildKit for better layer caching
     cmd = (
-        f"docker build -f {str(dockerfile)} "
+        f"DOCKER_BUILDKIT=1 docker build -f {str(dockerfile)} "
         f"{str(context)} -t {img_str} --target {target}"
     )
     crun(c, cmd)
@@ -112,12 +113,24 @@ def get_nginx():
 
 
 @task
-def docker_frontend_build(c):
+def docker_frontend_build_prod(c):
+    """Build production frontend image only."""
     version, image, dockerfile, context = get_frontend()
     docker_build(c, image, version, dockerfile, context, "runtime")
-    # frontend-dev needed for Cypress tests in CI
+
+
+@task
+def docker_frontend_build_dev(c):
+    """Build dev frontend image with Cypress/Playwright (slower)."""
     version, image, dockerfile, context = get_frontend_dev()
     docker_build(c, image, version, dockerfile, context, "runtime-dev")
+
+
+@task
+def docker_frontend_build(c):
+    """Build both production and dev frontend images."""
+    docker_frontend_build_prod(c)
+    docker_frontend_build_dev(c)
 
 
 @task
@@ -243,6 +256,8 @@ def docker_pull_all(c):
 
 
 ns_docker_frontend.add_task(docker_frontend_build, "build")
+ns_docker_frontend.add_task(docker_frontend_build_prod, "build-prod")
+ns_docker_frontend.add_task(docker_frontend_build_dev, "build-dev")
 ns_docker_backend.add_task(docker_backend_build, "build")
 ns_docker_nginx.add_task(docker_nginx_build, "build")
 

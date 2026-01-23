@@ -15,7 +15,7 @@ from app.functions.herodraft import (
     submit_pick,
     trigger_roll,
 )
-from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent
+from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent, HeroDraftState
 from app.serializers import HeroDraftEventSerializer, HeroDraftSerializer
 
 log = logging.getLogger(__name__)
@@ -79,7 +79,9 @@ def create_herodraft(request, game_pk):
         )
 
     # Create the draft
-    draft = HeroDraft.objects.create(game=game, state="waiting_for_captains")
+    draft = HeroDraft.objects.create(
+        game=game, state=HeroDraftState.WAITING_FOR_CAPTAINS
+    )
 
     # Create draft teams
     DraftTeam.objects.create(draft=draft, tournament_team=game.radiant_team)
@@ -132,7 +134,7 @@ def set_ready(request, draft_pk):
     """
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
 
-    if draft.state != "waiting_for_captains":
+    if draft.state != HeroDraftState.WAITING_FOR_CAPTAINS:
         return Response(
             {"error": f"Cannot set ready in state '{draft.state}'"},
             status=status.HTTP_400_BAD_REQUEST,
@@ -159,7 +161,7 @@ def set_ready(request, draft_pk):
     # Check if both teams are ready
     all_ready = all(t.is_ready for t in draft.draft_teams.all())
     if all_ready:
-        draft.state = "rolling"
+        draft.state = HeroDraftState.ROLLING
         draft.save()
         log.info(f"HeroDraft {draft.pk} transitioning to rolling state")
 
@@ -186,7 +188,7 @@ def do_trigger_roll(request, draft_pk):
     """
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
 
-    if draft.state != "rolling":
+    if draft.state != HeroDraftState.ROLLING:
         return Response(
             {"error": f"Cannot trigger roll in state '{draft.state}'"},
             status=status.HTTP_400_BAD_REQUEST,
@@ -234,7 +236,7 @@ def do_submit_choice(request, draft_pk):
     """
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
 
-    if draft.state != "choosing":
+    if draft.state != HeroDraftState.CHOOSING:
         return Response(
             {"error": f"Cannot submit choice in state '{draft.state}'"},
             status=status.HTTP_400_BAD_REQUEST,
@@ -322,7 +324,7 @@ def do_submit_choice(request, draft_pk):
     draft = _get_draft_with_prefetch(draft.pk)
 
     # Start tick broadcaster if draft just entered drafting state
-    if draft.state == "drafting":
+    if draft.state == HeroDraftState.DRAFTING:
         from app.tasks.herodraft_tick import start_tick_broadcaster
 
         start_tick_broadcaster(draft.id)
@@ -347,7 +349,7 @@ def do_submit_pick(request, draft_pk):
     """
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
 
-    if draft.state != "drafting":
+    if draft.state != HeroDraftState.DRAFTING:
         return Response(
             {"error": f"Cannot submit pick in state '{draft.state}'"},
             status=status.HTTP_400_BAD_REQUEST,
@@ -445,7 +447,7 @@ def abandon_draft(request, draft_pk):
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
 
     # Check if draft is already in a terminal state
-    if draft.state in ("completed", "abandoned"):
+    if draft.state in (HeroDraftState.COMPLETED, HeroDraftState.ABANDONED):
         return Response(
             {"error": f"Cannot abandon draft in state '{draft.state}'"},
             status=status.HTTP_400_BAD_REQUEST,
@@ -462,7 +464,7 @@ def abandon_draft(request, draft_pk):
         )
 
     # Transition to abandoned state
-    draft.state = "abandoned"
+    draft.state = HeroDraftState.ABANDONED
     draft.save()
 
     log.info(

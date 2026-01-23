@@ -1,5 +1,7 @@
 # Hero Draft Cypress E2E Test Design
 
+**Status:** Completed
+
 ## Overview
 
 This test suite validates the complete hero draft (Captain's Mode) flow using Real Tournament 38's Winners Final game. It uses `cy.session()` for fast captain identity switching and tests all draft phases including edge cases like timeouts and disconnects.

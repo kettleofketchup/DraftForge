@@ -69,4 +69,5 @@ export {
   clickLeagueTab,
   getLeagueEditModal,
   openLeagueEditModal,
+  getFirstLeague,
 } from '../helpers/league';

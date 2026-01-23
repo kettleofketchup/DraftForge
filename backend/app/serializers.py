@@ -147,6 +147,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "logo",
+            "discord_link",
             "rules_template",
             "admins",
             "staff",
