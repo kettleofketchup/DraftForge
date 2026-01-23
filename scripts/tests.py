@@ -251,6 +251,159 @@ ns_test.add_collection(ns_cypress, "cypress")
 
 
 # =============================================================================
+# Playwright Test Collections
+# =============================================================================
+
+ns_playwright = Collection("playwright")
+
+
+@task
+def playwright_install(c):
+    """Install Playwright browsers."""
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright install")
+
+
+@task
+def playwright_headless(c):
+    """Run all Playwright tests headless."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright test")
+
+
+@task
+def playwright_headed(c):
+    """Run all Playwright tests headed (visible browser)."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright test --headed")
+
+
+@task
+def playwright_ui(c):
+    """Open Playwright UI mode for interactive test development."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright test --ui")
+
+
+@task
+def playwright_debug(c):
+    """Run Playwright tests in debug mode."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright test --debug")
+
+
+@task
+def playwright_spec(c, spec=""):
+    """Run Playwright tests for a specific spec pattern.
+
+    Usage:
+        inv test.playwright.spec --spec herodraft  # Runs herodraft tests
+        inv test.playwright.spec --spec navigation # Runs navigation tests
+    """
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        if spec:
+            c.run(f'npx playwright test --grep "{spec}"')
+        else:
+            c.run("npx playwright test")
+
+
+@task
+def playwright_report(c):
+    """Show Playwright HTML report."""
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright show-report")
+
+
+@task
+def playwright_navigation(c):
+    """Run Playwright navigation tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright test tests/playwright/e2e/navigation/")
+
+
+@task
+def playwright_tournament(c):
+    """Run Playwright tournament tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright test tests/playwright/e2e/tournament/")
+
+
+@task
+def playwright_draft(c):
+    """Run Playwright draft tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright test tests/playwright/e2e/draft/")
+
+
+@task
+def playwright_bracket(c):
+    """Run Playwright bracket tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright test tests/playwright/e2e/bracket/")
+
+
+@task
+def playwright_league(c):
+    """Run Playwright league tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright test tests/playwright/e2e/league/")
+
+
+@task
+def playwright_herodraft(c):
+    """Run Playwright herodraft tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright test tests/playwright/e2e/herodraft/")
+
+
+@task
+def playwright_mobile(c):
+    """Run Playwright mobile tests with mobile-chrome project."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright test --project=mobile-chrome")
+
+
+@task
+def playwright_all(c):
+    """Run all Playwright tests."""
+    flush_test_redis(c)
+    with c.cd(paths.FRONTEND_PATH):
+        c.run("npx playwright test")
+
+
+# Add tasks to playwright collection
+ns_playwright.add_task(playwright_install, "install")
+ns_playwright.add_task(playwright_headless, "headless")
+ns_playwright.add_task(playwright_headed, "headed")
+ns_playwright.add_task(playwright_ui, "ui")
+ns_playwright.add_task(playwright_debug, "debug")
+ns_playwright.add_task(playwright_spec, "spec")
+ns_playwright.add_task(playwright_report, "report")
+ns_playwright.add_task(playwright_navigation, "navigation")
+ns_playwright.add_task(playwright_tournament, "tournament")
+ns_playwright.add_task(playwright_draft, "draft")
+ns_playwright.add_task(playwright_bracket, "bracket")
+ns_playwright.add_task(playwright_league, "league")
+ns_playwright.add_task(playwright_herodraft, "herodraft")
+ns_playwright.add_task(playwright_mobile, "mobile")
+ns_playwright.add_task(playwright_all, "all")
+
+ns_test.add_collection(ns_playwright, "playwright")
+
+
+# =============================================================================
 # Backend Test Collections
 # =============================================================================
 
