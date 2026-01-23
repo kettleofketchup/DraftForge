@@ -93,7 +93,7 @@ export function HeroDraftHistoryModal({
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">
                           {round.action_type === "ban" ? "Ban" : "Pick"}{" "}
-                          {round.round_number + 1}: {getHeroName(round.hero_id)}
+                          {round.round_number - 1}: {getHeroName(round.hero_id)}
                         </p>
                         <p className="text-xs text-muted-foreground truncate">
                           {getTeamName(round.draft_team)}

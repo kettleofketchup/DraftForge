@@ -99,7 +99,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
   ) => (
     <PlayerPopover key={`player-${player.pk}`} player={captainToUser(player)}>
       <button
-        className="flex flex-col items-center hover:bg-white/10 rounded p-1 min-w-[48px]"
+        className="flex flex-col items-center hover:bg-white/10 rounded p-0.5 sm:p-1 min-w-[32px] sm:min-w-[48px]"
         data-testid={`${testIdPrefix}-button`}
       >
         <img
@@ -107,13 +107,15 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
           alt={player.username}
           className={cn(
             "rounded-full",
-            isCaptain ? "w-10 h-10 ring-2 ring-yellow-500" : "w-8 h-8 opacity-80 hover:opacity-100"
+            isCaptain
+              ? "w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 ring-2 ring-yellow-500"
+              : "w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 opacity-80 hover:opacity-100"
           )}
           data-testid={`${testIdPrefix}-avatar`}
         />
         <span
           className={cn(
-            "text-xs truncate max-w-[56px] mt-1",
+            "text-[10px] sm:text-xs truncate max-w-[40px] sm:max-w-[56px] mt-0.5 sm:mt-1 hidden sm:block",
             isCaptain ? "font-semibold text-yellow-400" : "text-muted-foreground"
           )}
           data-testid={`${testIdPrefix}-name`}
@@ -125,81 +127,89 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
   );
 
   return (
-    <div className="bg-black/90 border-b border-gray-800" data-testid="herodraft-topbar">
+    <div className="bg-black/90 border-b border-gray-800 shrink-0" data-testid="herodraft-topbar">
       {/* Row 1: Teams - Captain on outer edges, members flowing inward */}
-      <div className="flex items-center justify-between p-2" data-testid="herodraft-teams-row">
+      <div className="flex items-center justify-between p-1 sm:p-2" data-testid="herodraft-teams-row">
         {/* Team A: Captain on left, members flowing right */}
-        <div className="flex items-center gap-1" data-testid="herodraft-team-a">
-          {/* Captain - outer edge */}
-          {teamA?.captain && renderPlayer(teamA.captain, true, "herodraft-team-a-captain")}
-          {/* Team members */}
-          {teamAMembers.map((member, idx) => renderPlayer(member, false, `herodraft-team-a-member-${idx}`))}
+        <div className="flex items-center gap-0.5 sm:gap-1" data-testid="herodraft-team-a">
+          {/* Captain - hidden below md */}
+          <div className="hidden md:block">
+            {teamA?.captain && renderPlayer(teamA.captain, true, "herodraft-team-a-captain")}
+          </div>
+          {/* Team members - hidden on small screens */}
+          <div className="hidden lg:flex items-center gap-0.5 sm:gap-1">
+            {teamAMembers.map((member, idx) => renderPlayer(member, false, `herodraft-team-a-member-${idx}`))}
+          </div>
           {activeTeamId === teamA?.id && (
-            <span className="text-yellow-400 text-sm animate-pulse ml-2" data-testid="herodraft-team-a-picking">
-              ◀ PICKING
+            <span className="text-yellow-400 text-[10px] sm:text-sm animate-pulse ml-1 sm:ml-2" data-testid="herodraft-team-a-picking">
+              <span className="hidden sm:inline">◀ </span>PICK
             </span>
           )}
         </div>
 
         {/* Center: VS and progress (only show progress during drafting) */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           {draft.state === "drafting" || draft.state === "completed" ? (
             <>
-              <div className="text-center text-xs text-muted-foreground" data-testid="herodraft-team-a-progress">
+              <div className="text-center text-[10px] sm:text-xs text-muted-foreground" data-testid="herodraft-team-a-progress">
                 {teamAProgress.completed}/{teamAProgress.total}
               </div>
               <div className="text-center" data-testid="herodraft-vs-section">
-                <span className="text-2xl font-bold text-muted-foreground">VS</span>
+                <span className="text-lg sm:text-2xl font-bold text-muted-foreground">VS</span>
               </div>
-              <div className="text-center text-xs text-muted-foreground" data-testid="herodraft-team-b-progress">
+              <div className="text-center text-[10px] sm:text-xs text-muted-foreground" data-testid="herodraft-team-b-progress">
                 {teamBProgress.completed}/{teamBProgress.total}
               </div>
             </>
           ) : (
             <div className="text-center" data-testid="herodraft-vs-section">
-              <span className="text-2xl font-bold text-muted-foreground">VS</span>
+              <span className="text-lg sm:text-2xl font-bold text-muted-foreground">VS</span>
             </div>
           )}
         </div>
 
         {/* Team B: Members flowing left, Captain on right */}
-        <div className="flex items-center gap-1" data-testid="herodraft-team-b">
+        <div className="flex items-center gap-0.5 sm:gap-1" data-testid="herodraft-team-b">
           {activeTeamId === teamB?.id && (
-            <span className="text-yellow-400 text-sm animate-pulse mr-2" data-testid="herodraft-team-b-picking">
-              PICKING ▶
+            <span className="text-yellow-400 text-[10px] sm:text-sm animate-pulse mr-1 sm:mr-2" data-testid="herodraft-team-b-picking">
+              PICK<span className="hidden sm:inline"> ▶</span>
             </span>
           )}
-          {/* Team members (reversed order so they flow toward center) */}
-          {[...teamBMembers].reverse().map((member, idx) => renderPlayer(member, false, `herodraft-team-b-member-${idx}`))}
-          {/* Captain - outer edge */}
-          {teamB?.captain && renderPlayer(teamB.captain, true, "herodraft-team-b-captain")}
+          {/* Team members (reversed order so they flow toward center) - hidden below lg */}
+          <div className="hidden lg:flex items-center gap-0.5 sm:gap-1">
+            {[...teamBMembers].reverse().map((member, idx) => renderPlayer(member, false, `herodraft-team-b-member-${idx}`))}
+          </div>
+          {/* Captain - hidden below md */}
+          <div className="hidden md:block">
+            {teamB?.captain && renderPlayer(teamB.captain, true, "herodraft-team-b-captain")}
+          </div>
         </div>
       </div>
 
       {/* Row 2: Timers */}
-      <div className="grid grid-cols-5 items-center p-2 border-t border-gray-800" data-testid="herodraft-timers-row">
+      <div className="grid grid-cols-3 sm:grid-cols-5 items-center p-1 sm:p-2 border-t border-gray-800" data-testid="herodraft-timers-row">
         {/* Team A Reserve */}
         <div
           className={cn(
-            "text-center font-mono text-lg",
+            "text-center font-mono text-sm sm:text-lg",
             teamAReserve < 30000 && "text-red-400"
           )}
           data-testid="herodraft-team-a-reserve"
         >
-          <span className="text-xs text-muted-foreground block">Reserve</span>
+          <span className="text-[10px] sm:text-xs text-muted-foreground block">Reserve</span>
           <span data-testid="herodraft-team-a-reserve-time">{formatTime(teamAReserve)}</span>
         </div>
 
-        <div />
+        <div className="hidden sm:block" />
 
         {/* Current pick timer */}
         <div className="text-center" data-testid="herodraft-grace-timer">
-          <span className="text-xs text-muted-foreground block uppercase" data-testid="herodraft-current-action">
-            {currentAction} Time
+          <span className="text-[10px] sm:text-xs text-muted-foreground block uppercase" data-testid="herodraft-current-action">
+            {currentAction}
           </span>
           <span
             className={cn(
-              "font-mono text-2xl font-bold",
+              "font-mono text-xl sm:text-2xl font-bold",
               graceRemaining < 10000 ? "text-red-400" : "text-yellow-400"
             )}
             data-testid="herodraft-grace-time"
@@ -208,17 +218,17 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
           </span>
         </div>
 
-        <div />
+        <div className="hidden sm:block" />
 
         {/* Team B Reserve */}
         <div
           className={cn(
-            "text-center font-mono text-lg",
+            "text-center font-mono text-sm sm:text-lg",
             teamBReserve < 30000 && "text-red-400"
           )}
           data-testid="herodraft-team-b-reserve"
         >
-          <span className="text-xs text-muted-foreground block">Reserve</span>
+          <span className="text-[10px] sm:text-xs text-muted-foreground block">Reserve</span>
           <span data-testid="herodraft-team-b-reserve-time">{formatTime(teamBReserve)}</span>
         </div>
       </div>
