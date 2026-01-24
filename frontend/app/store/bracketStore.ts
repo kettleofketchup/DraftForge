@@ -72,6 +72,7 @@ function mapApiMatchToMatch(apiMatch: ApiBracketMatch, allMatches: ApiBracketMat
     winner,
     status: apiMatch.status,
     steamMatchId: apiMatch.gameid ?? undefined,
+    herodraft_id: apiMatch.herodraft_id ?? undefined,
     nextMatchId,
     nextMatchSlot: apiMatch.next_game_slot ?? undefined,
     loserNextMatchId,
@@ -228,6 +229,12 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
     try {
       const response = await api.get(`/bracket/tournaments/${tournamentId}/`);
       const data = BracketResponseSchema.parse(response.data);
+
+      // Check if user made changes during fetch - don't overwrite their work
+      if (get().isDirty) {
+        log.debug('Skipping bracket load - user has unsaved changes');
+        return;
+      }
 
       if (data.matches.length > 0) {
         // Pass all matches to mapper so it can resolve next_game references

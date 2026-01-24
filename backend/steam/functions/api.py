@@ -2,11 +2,13 @@ import logging
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
+from app.permissions_org import can_manage_game
 from steam.constants import LEAGUE_ID
 from steam.functions.game_linking import (
+    auto_assign_matches_by_time,
     auto_link_matches_for_tournament,
     confirm_suggestion,
     dismiss_suggestion,
@@ -272,9 +274,12 @@ def get_game_match_suggestions(request, game_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def link_game_match(request, game_id):
-    """Link a bracket game to a Steam match."""
+    """Link a bracket game to a Steam match.
+
+    Requires league staff access.
+    """
     from cacheops import invalidate_obj
 
     from app.models import Game
@@ -286,11 +291,18 @@ def link_game_match(request, game_id):
     match_id = serializer.validated_data["match_id"]
 
     try:
-        game = Game.objects.select_related("tournament").get(pk=game_id)
+        game = Game.objects.select_related("tournament", "league").get(pk=game_id)
     except Game.DoesNotExist:
         return Response(
             {"error": "Game not found"},
             status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Check permission
+    if not can_manage_game(request.user, game):
+        return Response(
+            {"error": "You do not have permission to link matches for this game"},
+            status=status.HTTP_403_FORBIDDEN,
         )
 
     # Verify match exists
@@ -312,19 +324,29 @@ def link_game_match(request, game_id):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def unlink_game_match(request, game_id):
-    """Unlink a bracket game from its Steam match."""
+    """Unlink a bracket game from its Steam match.
+
+    Requires league staff access.
+    """
     from cacheops import invalidate_obj
 
     from app.models import Game
 
     try:
-        game = Game.objects.select_related("tournament").get(pk=game_id)
+        game = Game.objects.select_related("tournament", "league").get(pk=game_id)
     except Game.DoesNotExist:
         return Response(
             {"error": "Game not found"},
             status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Check permission
+    if not can_manage_game(request.user, game):
+        return Response(
+            {"error": "You do not have permission to unlink matches for this game"},
+            status=status.HTTP_403_FORBIDDEN,
         )
 
     game.gameid = None
@@ -338,3 +360,72 @@ def unlink_game_match(request, game_id):
         invalidate_obj(game.tournament)
 
     return Response({"status": "unlinked"})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def auto_assign_matches(request):
+    """
+    Auto-assign Steam matches to tournament bracket games based on time order.
+
+    Uses tournament date_played to filter matches to that day only,
+    then assigns matches to games based on bracket order (winners first,
+    then losers, sorted by round/position) and player overlap.
+
+    Requires league staff access.
+
+    Body params:
+    - tournament_id: Tournament to auto-assign matches for
+    - preview: If true (default), returns assignments without applying them
+    - min_overlap: Minimum player overlap required (default 4)
+    - apply: If true, applies the assignments (overrides preview)
+    """
+    from app.models import Tournament
+    from app.permissions_org import has_league_staff_access
+
+    tournament_id = request.data.get("tournament_id")
+    if not tournament_id:
+        return Response(
+            {"error": "tournament_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Check permission
+    try:
+        tournament = Tournament.objects.select_related("league").get(pk=tournament_id)
+    except Tournament.DoesNotExist:
+        return Response(
+            {"error": "Tournament not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if tournament.league and not has_league_staff_access(
+        request.user, tournament.league
+    ):
+        return Response(
+            {
+                "error": "You do not have permission to auto-assign matches for this tournament"
+            },
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    preview = request.data.get("preview", True)
+    apply_assignments = request.data.get("apply", False)
+    min_overlap = request.data.get("min_overlap", 4)
+
+    # apply=True overrides preview
+    if apply_assignments:
+        preview = False
+
+    try:
+        min_overlap = int(min_overlap)
+    except (TypeError, ValueError):
+        min_overlap = 4
+
+    result = auto_assign_matches_by_time(
+        tournament_id=tournament_id,
+        preview=preview,
+        min_overlap=min_overlap,
+    )
+
+    return Response(result)

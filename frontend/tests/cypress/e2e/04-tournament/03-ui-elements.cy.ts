@@ -7,10 +7,17 @@ import { getAddPlayerButton } from 'tests/cypress/helpers/tournament';
 import { getUserCard, getUserRemoveButton } from 'tests/cypress/helpers/users';
 
 describe('Tournament UI Elements (e2e)', () => {
+  let tournamentPk: number;
+
+  before(() => {
+    cy.getTournamentByKey('completed_bracket').then((response) => {
+      tournamentPk = response.body.pk;
+    });
+  });
+
   beforeEach(() => {
     cy.loginAdmin();
-
-    visitAndWaitForHydration('/tournament/1/players');
+    visitAndWaitForHydration(`/tournament/${tournamentPk}/players`);
     suppressHydrationErrors();
   });
 
@@ -23,7 +30,7 @@ describe('Tournament UI Elements (e2e)', () => {
     cy.get('[data-testid="tournamentTabsList"]').should('be.visible');
     cy.get('[data-testid="playersTab"]').should('be.visible');
     cy.get('[data-testid="teamsTab"]').should('be.visible');
-    cy.get('[data-testid="gamesTab"]').should('be.visible');
+    cy.get('[data-testid="bracketTab"]').should('be.visible');
 
     // Default should be players tab
     cy.get('[data-testid="playersTabContent"]').should('be.visible');

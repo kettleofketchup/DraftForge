@@ -154,6 +154,17 @@ class GameMatchSuggestionSerializer(serializers.Serializer):
 # =============================================================================
 
 
+class MatchedPlayerSerializer(serializers.Serializer):
+    steam_id = serializers.IntegerField()
+    user_id = serializers.IntegerField(allow_null=True)
+    username = serializers.CharField(allow_null=True)
+    avatar = serializers.CharField(allow_null=True)
+    hero_id = serializers.IntegerField()
+    player_slot = serializers.IntegerField()
+    is_radiant = serializers.BooleanField()
+    is_captain = serializers.BooleanField()
+
+
 class MatchSuggestionDetailSerializer(serializers.Serializer):
     match_id = serializers.IntegerField()
     start_time = serializers.IntegerField()
@@ -164,6 +175,7 @@ class MatchSuggestionDetailSerializer(serializers.Serializer):
     player_overlap = serializers.IntegerField()
     radiant_captain = serializers.DictField(allow_null=True)
     dire_captain = serializers.DictField(allow_null=True)
+    matched_players = MatchedPlayerSerializer(many=True)
 
 
 class MatchSuggestionsResponseSerializer(serializers.Serializer):

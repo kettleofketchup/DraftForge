@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
+import { AdminTeamSection } from '~/components/admin-team';
 import { updateLeague } from '~/components/api/api';
 import { Button } from '~/components/ui/button';
 import {
@@ -24,6 +25,7 @@ import {
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
 import { DIALOG_CSS } from '~/components/reusable/modal';
+import { useIsLeagueAdmin } from '~/hooks/usePermissions';
 import { EditLeagueSchema, type EditLeagueInput, type LeagueType } from './schemas';
 
 interface EditLeagueModalProps {
@@ -40,6 +42,7 @@ export function EditLeagueModal({
   onSuccess,
 }: EditLeagueModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isLeagueAdmin = useIsLeagueAdmin(league);
 
   const form = useForm<EditLeagueInput>({
     resolver: zodResolver(EditLeagueSchema),
@@ -165,6 +168,14 @@ export function EditLeagueModal({
                 </FormItem>
               )}
             />
+
+            {/* Admin Team Section */}
+            {isLeagueAdmin && (
+              <AdminTeamSection
+                league={league}
+                onUpdate={onSuccess}
+              />
+            )}
 
             <DialogFooter>
               <Button

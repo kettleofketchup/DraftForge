@@ -40,8 +40,13 @@ from .models import (
 )
 from .permissions import IsStaff
 from .permissions_org import (
+    CanEditTournament,
+    CanManageGame,
     IsLeagueAdmin,
+    IsLeagueStaff,
     IsOrgAdmin,
+    can_edit_tournament,
+    can_manage_game,
     has_league_admin_access,
     has_org_admin_access,
 )
@@ -244,7 +249,7 @@ class TournamentView(viewsets.ModelViewSet):
         org_id = self.request.query_params.get("organization")
         league_id = self.request.query_params.get("league")
         if org_id:
-            queryset = queryset.filter(league__organization_id=org_id)
+            queryset = queryset.filter(league__organizations__pk=org_id)
         if league_id:
             queryset = queryset.filter(league_id=league_id)
         return queryset
@@ -294,16 +299,36 @@ class TournamentView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    @permission_classes((IsStaff,))
     def patch(self, request, *args, **kwargs):
-        print(request.data)
         return self.partial_update(request, *args, **kwargs)
 
     def get_permissions(self):
-        self.permission_classes = [IsStaff]
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
+        elif self.action in ["update", "partial_update", "destroy"]:
+            # Use object-level permission check for league admin
+            self.permission_classes = [CanEditTournament]
+        else:
+            # For create, require at least league admin on some league
+            # This is checked in perform_create
+            self.permission_classes = [IsAuthenticated]
         return super(TournamentView, self).get_permissions()
+
+    def perform_create(self, serializer):
+        """Check that user can create tournament in the specified league."""
+        league_id = self.request.data.get("league")
+        if league_id:
+            try:
+                league = League.objects.get(pk=league_id)
+                if not has_league_admin_access(self.request.user, league):
+                    from rest_framework.exceptions import PermissionDenied
+
+                    raise PermissionDenied(
+                        "You do not have permission to create tournaments in this league."
+                    )
+            except League.DoesNotExist:
+                pass
+        serializer.save()
 
 
 @permission_classes((IsStaff,))
@@ -518,11 +543,61 @@ class UserCreateView(generics.CreateAPIView):
 @api_view(["GET"])
 @permission_classes((AllowAny,))
 def current_user(request):
-
     user = request.user
     if request.user.is_authenticated:
-
         data = UserSerializer(user).data
+
+        # Add active drafts info
+        active_drafts = []
+
+        # Team drafts: user is captain with pending pick in in_progress tournament
+        from app.models import DraftTeam, HeroDraft
+
+        pending_team_round = (
+            DraftRound.objects.filter(
+                captain=user,
+                choice__isnull=True,
+                draft__tournament__state="in_progress",
+            )
+            .select_related("draft__tournament")
+            .order_by("pick_number")
+            .first()
+        )
+
+        if pending_team_round:
+            active_drafts.append(
+                {
+                    "type": "team_draft",
+                    "tournament_pk": pending_team_round.draft.tournament.pk,
+                    "draft_state": pending_team_round.draft.tournament.state,
+                }
+            )
+
+        # Hero drafts: user is captain of a DraftTeam in an active HeroDraft
+        active_hero_states = [
+            "waiting_for_captains",
+            "rolling",
+            "choosing",
+            "drafting",
+        ]
+        hero_draft_teams = DraftTeam.objects.filter(
+            tournament_team__captain=user,
+            draft__state__in=active_hero_states,
+        ).select_related("draft__game__tournament")
+
+        for draft_team in hero_draft_teams:
+            hero_draft = draft_team.draft
+            active_drafts.append(
+                {
+                    "type": "hero_draft",
+                    "tournament_pk": hero_draft.game.tournament.pk,
+                    "game_pk": hero_draft.game.pk,
+                    "herodraft_pk": hero_draft.pk,
+                    "draft_state": hero_draft.state,
+                }
+            )
+
+        data["active_drafts"] = active_drafts
         return Response(data, 201)
 
     else:
@@ -533,11 +608,50 @@ from django.core.cache import cache
 
 
 class GameCreateView(generics.CreateAPIView):
+    """Create a new game - requires league staff access."""
+
     serializer_class = GameSerializer
-    permission_classes = [IsStaff]
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        """Check that user can create game in the specified tournament/league."""
+        tournament_id = self.request.data.get("tournament")
+        league_id = self.request.data.get("league")
+
+        # Check tournament's league
+        if tournament_id:
+            try:
+                tournament = Tournament.objects.get(pk=tournament_id)
+                if tournament.league:
+                    from .permissions_org import has_league_staff_access
+
+                    if not has_league_staff_access(
+                        self.request.user, tournament.league
+                    ):
+                        from rest_framework.exceptions import PermissionDenied
+
+                        raise PermissionDenied(
+                            "You do not have permission to create games in this tournament."
+                        )
+            except Tournament.DoesNotExist:
+                pass
+        # Check direct league reference
+        elif league_id:
+            try:
+                league = League.objects.get(pk=league_id)
+                from .permissions_org import has_league_staff_access
+
+                if not has_league_staff_access(self.request.user, league):
+                    from rest_framework.exceptions import PermissionDenied
+
+                    raise PermissionDenied(
+                        "You do not have permission to create games in this league."
+                    )
+            except League.DoesNotExist:
+                pass
+        serializer.save()
 
 
-@permission_classes((IsStaff,))
 class GameView(viewsets.ModelViewSet):
     serializer_class = GameSerializer
     queryset = Game.objects.all()
@@ -591,31 +705,62 @@ class GameView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    @permission_classes((IsStaff,))
     def patch(self, request, *args, **kwargs):
-        print(request.data)
         return self.partial_update(request, *args, **kwargs)
 
     def get_permissions(self):
-        self.permission_classes = [IsStaff]
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
+        elif self.action in ["update", "partial_update", "destroy"]:
+            # Use object-level permission check for league staff
+            self.permission_classes = [CanManageGame]
+        else:
+            # For create, require league staff access
+            # This is checked in perform_create
+            self.permission_classes = [IsAuthenticated]
         return super(GameView, self).get_permissions()
 
+    def perform_create(self, serializer):
+        """Check that user can create game in the specified tournament/league."""
+        tournament_id = self.request.data.get("tournament")
+        league_id = self.request.data.get("league")
 
-class GameView(viewsets.ModelViewSet):
-    serializer_class = GameSerializer
-    queryset = Game.objects.all()
-    http_method_names = [
-        "get",
-        "post",
-        "put",
-        "patch",
-        "delete",
-        "head",
-        "options",
-        "trace",
-    ]
+        # Check tournament's league
+        if tournament_id:
+            try:
+                tournament = Tournament.objects.get(pk=tournament_id)
+                if tournament.league and not can_manage_game(
+                    self.request.user,
+                    type(
+                        "Game",
+                        (),
+                        {"league": tournament.league, "tournament": tournament},
+                    )(),
+                ):
+                    from rest_framework.exceptions import PermissionDenied
+
+                    raise PermissionDenied(
+                        "You do not have permission to create games in this tournament."
+                    )
+            except Tournament.DoesNotExist:
+                pass
+        # Check direct league reference
+        elif league_id:
+            try:
+                from .models import League
+
+                league = League.objects.get(pk=league_id)
+                from .permissions_org import has_league_staff_access
+
+                if not has_league_staff_access(self.request.user, league):
+                    from rest_framework.exceptions import PermissionDenied
+
+                    raise PermissionDenied(
+                        "You do not have permission to create games in this league."
+                    )
+            except League.DoesNotExist:
+                pass
+        serializer.save()
 
 
 # for tournaments page
@@ -719,8 +864,7 @@ class LeagueView(viewsets.ModelViewSet):
     def get_queryset(self):
         """Optimize with select_related, prefetch_related, and annotations."""
         queryset = (
-            League.objects.select_related("organization")
-            .prefetch_related("admins", "staff")
+            League.objects.prefetch_related("organizations", "admins", "staff")
             .annotate(
                 tournament_count=Count("tournaments", distinct=True),
             )
@@ -729,7 +873,7 @@ class LeagueView(viewsets.ModelViewSet):
 
         org_id = self.request.query_params.get("organization")
         if org_id:
-            queryset = queryset.filter(organization_id=org_id)
+            queryset = queryset.filter(organizations__pk=org_id)
         return queryset
 
     def get_permissions(self):
@@ -742,20 +886,22 @@ class LeagueView(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def create(self, request, *args, **kwargs):
-        org_id = request.data.get("organization")
-        if org_id:
-            try:
-                org = Organization.objects.get(pk=org_id)
-                if not has_org_admin_access(request.user, org):
+        # Check permission for any provided organizations
+        org_ids = request.data.get("organization_ids", [])
+        if org_ids:
+            for org_id in org_ids:
+                try:
+                    org = Organization.objects.get(pk=org_id)
+                    if not has_org_admin_access(request.user, org):
+                        return Response(
+                            {"detail": "Must be organization admin to create league"},
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
+                except Organization.DoesNotExist:
                     return Response(
-                        {"detail": "Must be organization admin to create league"},
-                        status=status.HTTP_403_FORBIDDEN,
+                        {"detail": f"Organization {org_id} not found"},
+                        status=status.HTTP_404_NOT_FOUND,
                     )
-            except Organization.DoesNotExist:
-                return Response(
-                    {"detail": "Organization not found"},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
         return super().create(request, *args, **kwargs)
 
     def list(self, request, *args, **kwargs):

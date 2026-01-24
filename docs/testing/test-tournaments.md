@@ -167,24 +167,45 @@ reset_match_id_tracker()
 
 ## Running Tests by Feature
 
+### Playwright (Recommended)
+
 ```bash
 # All tests
-inv test.run
+inv test.playwright.headless
 
 # Draft tests only
-inv test.run --spec drafts
+inv test.playwright.spec --spec draft
 
 # Bracket tests only
-inv test.run --spec bracket
+inv test.playwright.spec --spec bracket
 
 # Mobile tests only
-inv test.run --spec mobile
+inv test.playwright.spec --spec mobile
 
 # Match stats tests only
-inv test.run --spec match
+inv test.playwright.spec --spec match
+```
+
+### Cypress (Legacy)
+
+```bash
+# All tests
+inv test.headless
+
+# Draft tests only
+inv test.spec --spec drafts
+
+# Bracket tests only
+inv test.spec --spec bracket
+
+# Mobile tests only
+inv test.spec --spec mobile
+
+# Match stats tests only
+inv test.spec --spec match
 
 # Specific test file
-inv test.run --spec "tests/cypress/e2e/07-draft/01-captain-pick.cy.ts"
+cd frontend && npx cypress run --spec "tests/cypress/e2e/07-draft/01-captain-pick.cy.ts"
 ```
 
 ## Test User Conventions

@@ -199,15 +199,14 @@ def db_populate_bracket_linking(
 def db_populate_real_tournament(
     c,
     path: Path = paths.TEST_ENV_FILE,
-    tournament_id: int = 38,
-    include_draft: bool = True,
+    force: bool = False,
 ):
-    """Populate database with real tournament data from production."""
+    """Populate database with real tournament 38 data."""
     load_dotenv(path)
 
     with c.cd(paths.BACKEND_PATH.absolute()):
-        draft_flag = "--include-draft" if include_draft else ""
-        cmd = f"DISABLE_CACHE=true python manage.py import_prod_tournament {tournament_id} {draft_flag}"
+        force_arg = "True" if force else "False"
+        cmd = f'DISABLE_CACHE=true python manage.py shell -c "from tests.populate import populate_real_tournament_38; populate_real_tournament_38(force={force_arg})"'
         c.run(cmd, pty=True)
 
 
@@ -222,6 +221,7 @@ def populate_all(c):
     db_populate_steam_mock(c, paths.TEST_ENV_FILE)
     db_populate_test_tournaments(c, paths.TEST_ENV_FILE)
     db_populate_bracket_linking(c, paths.TEST_ENV_FILE)
+    db_populate_real_tournament(c, paths.TEST_ENV_FILE)
 
 
 ns_db.add_task(db_makemigrations, "makemigrations")

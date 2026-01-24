@@ -44,9 +44,9 @@ export function TechnologyStack() {
           <motion.div whileHover={{ scale: 1.05 }} key={tech.name}>
             <div
               key={tech.name}
-              className="card bg-base-200 shadow-sm h-full align-middle"
+              className="card bg-base-200/50 backdrop-blur border border-primary/10 h-full"
             >
-              <div className="card-body items-center text-center p-4 ">
+              <div className="card-body items-center text-center p-4">
                 <h4 className={`font-semibold ${tech.colorClass}`}>
                   {tech.name}
                 </h4>

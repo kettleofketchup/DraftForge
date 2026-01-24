@@ -6,6 +6,7 @@ import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { useLeague, LeagueTabs, EditLeagueModal } from '~/components/league';
 import { useUserStore } from '~/store/userStore';
+import { useIsLeagueAdmin } from '~/hooks/usePermissions';
 
 export default function LeaguePage() {
   const { leagueId, tab } = useParams<{ leagueId: string; tab?: string }>();
@@ -43,10 +44,8 @@ export default function LeaguePage() {
     (t) => t.league === pk
   ) || [];
 
-  // Permission check for edit
-  const canEdit = currentUser?.is_staff ||
-    currentUser?.is_superuser ||
-    (league?.admin_ids && currentUser?.pk && league.admin_ids.includes(currentUser.pk));
+  // Permission check for edit - includes org admins via useIsLeagueAdmin
+  const canEdit = useIsLeagueAdmin(league);
 
   if (isLoading) {
     return (

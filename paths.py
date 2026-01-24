@@ -22,7 +22,7 @@ CERTBOT_WORK: Path = CERTBOT_DIR / "work"
 CERTBOT_CONFIGS: Path = CERTBOT_DIR / "configs"
 CERTBOT_LOGS: Path = CERTBOT_DIR / "logs"
 
-REGISTRY: str = "ghcr.io/kettleofketchup/dota_tournament"
+REGISTRY: str = "ghcr.io/kettleofketchup/draftforge"
 BACKEND_TAG: str = f"{REGISTRY}/backend"
 FRONTEND_TAG: str = f"{REGISTRY}/frontend"
 NGINX_TAG: str = f"{REGISTRY}/nginx"

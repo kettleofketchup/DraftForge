@@ -2,6 +2,7 @@ import { toast } from 'sonner';
 import { PickPlayerForRound } from '~/components/api/api';
 import type { PickPlayerForRoundAPI } from '~/components/api/types';
 import type { UserType } from '~/components/user/types';
+import { DisplayName } from '~/components/user/avatar';
 import type { DraftRoundType, DraftType, TournamentType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import type { TieResolution } from '../types';
@@ -44,7 +45,7 @@ export const choosePlayerHook = async ({
   }
 
   log.debug(
-    `Choosing player ${player.nickname || player.username} for captain ${curDraftRound.captain?.nickname || curDraftRound.captain?.username}`,
+    `Choosing player ${DisplayName(player)} for captain ${curDraftRound.captain ? DisplayName(curDraftRound.captain) : 'unknown'}`,
   );
 
   const dataRoundUpdate: PickPlayerForRoundAPI = {
@@ -61,7 +62,7 @@ export const choosePlayerHook = async ({
     );
   };
   toast.promise(PickPlayerForRound(dataRoundUpdate), {
-    loading: `Choosing ${player.nickname || player.username} for ${curDraftRound.captain?.nickname || curDraftRound.captain?.username} in round ${curDraftRound.pick_number}`,
+    loading: `Choosing ${DisplayName(player)} for ${curDraftRound.captain ? DisplayName(curDraftRound.captain) : 'captain'} in round ${curDraftRound.pick_number}`,
     success: (data) => {
       setTournament(data);
       if (!data.draft) {

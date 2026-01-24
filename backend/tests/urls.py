@@ -5,9 +5,15 @@ from common.utils import isTestEnvironment
 from .test_auth import (
     get_tournament_by_key,
     login_admin,
+    login_as_discord_id,
     login_as_user,
     login_staff,
     login_user,
+)
+from .test_herodraft import (
+    force_herodraft_timeout,
+    get_herodraft_by_key,
+    reset_herodraft,
 )
 from .test_steam import create_test_match
 
@@ -33,6 +39,11 @@ urlpatterns = [
         name="login-as-user",
     ),
     path(
+        "login-as-discord/",
+        login_as_discord_id,
+        name="test-login-as-discord",
+    ),
+    path(
         "tournament-by-key/<str:key>/",
         get_tournament_by_key,
         name="tournament-by-key",
@@ -41,5 +52,20 @@ urlpatterns = [
         "create-match/",
         create_test_match,
         name="create-test-match",
+    ),
+    path(
+        "herodraft/<int:draft_pk>/force-timeout/",
+        force_herodraft_timeout,
+        name="test-herodraft-force-timeout",
+    ),
+    path(
+        "herodraft/<int:draft_pk>/reset/",
+        reset_herodraft,
+        name="test-herodraft-reset",
+    ),
+    path(
+        "herodraft-by-key/<str:key>/",
+        get_herodraft_by_key,
+        name="test-herodraft-by-key",
     ),
 ]

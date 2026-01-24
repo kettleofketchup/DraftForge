@@ -74,6 +74,21 @@ class CustomUser(AbstractUser):
     nickname = models.TextField(null=True, blank=True)
     mmr = models.IntegerField(null=True, blank=True)
     league_mmr = models.IntegerField(null=True, blank=True)
+
+    # MMR verification tracking
+    has_active_dota_mmr = models.BooleanField(default=False)
+    dota_mmr_last_verified = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def needs_mmr_verification(self) -> bool:
+        """Check if user needs to verify their MMR (>30 days since last verification)."""
+        if not self.has_active_dota_mmr:
+            return False
+        if self.dota_mmr_last_verified is None:
+            return True
+        days_since = (timezone.now() - self.dota_mmr_last_verified).days
+        return days_since > 30
+
     # Store positions as a dict of 1-5: bool, e.g. {"1": true, "2": false, ...}
     positions = models.ForeignKey(
         PositionsModel,
@@ -94,6 +109,25 @@ class CustomUser(AbstractUser):
         blank=True,
         related_name="default_for_users",
     )
+
+    # Steam ID conversion constant
+    # Steam64 (Friend ID) = 76561197960265728 + Steam32 (Account ID)
+    STEAM_ID_64_BASE = 76561197960265728
+
+    @property
+    def steam_account_id(self):
+        """
+        Returns the 32-bit Steam Account ID computed from the 64-bit Friend ID.
+
+        Steam uses two ID formats:
+        - Steam64/Friend ID: Used in Steam Community URLs (e.g., 76561198012345678)
+        - Steam32/Account ID: Used in match data from Steam API (e.g., 52079950)
+
+        Conversion: Account ID = Friend ID - 76561197960265728
+        """
+        if self.steamid is None:
+            return None
+        return self.steamid - self.STEAM_ID_64_BASE
 
     def createFromDiscordData(self, data):
         self.username = data["user"]["username"]
@@ -235,6 +269,13 @@ class CustomUser(AbstractUser):
 
         return f"https://cdn.discordapp.com/embed/avatars/0.png"  # Fallback
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["discordNickname"]),
+            models.Index(fields=["guildNickname"]),
+            models.Index(fields=["discordUsername"]),
+        ]
+
 
 class Organization(models.Model):
     """Organization that owns leagues and tournaments."""
@@ -242,7 +283,15 @@ class Organization(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="", max_length=10000)
     logo = models.URLField(blank=True, default="")
+    discord_link = models.URLField(blank=True, default="")
     rules_template = models.TextField(blank=True, default="", max_length=50000)
+    owner = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.PROTECT,
+        related_name="owned_organizations",
+        null=True,  # Nullable initially for migration, will be required
+        blank=True,
+    )
     admins = models.ManyToManyField(
         "CustomUser",
         related_name="admin_organizations",
@@ -284,12 +333,12 @@ class Organization(models.Model):
 
 
 class League(models.Model):
-    """League that belongs to an organization, 1:1 with Steam league."""
+    """League that can belong to multiple organizations, 1:1 with Steam league."""
 
-    organization = models.ForeignKey(
+    organizations = models.ManyToManyField(
         Organization,
-        on_delete=models.CASCADE,
         related_name="leagues",
+        blank=True,
     )
     steam_league_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=255)
@@ -309,6 +358,58 @@ class League(models.Model):
     last_synced = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Rating system configuration
+    RATING_SYSTEM_CHOICES = [
+        ("elo", "Elo"),
+        ("fixed_delta", "Fixed Delta"),
+    ]
+    rating_system = models.CharField(
+        max_length=20,
+        choices=RATING_SYSTEM_CHOICES,
+        default="elo",
+        help_text="Rating calculation method",
+    )
+    k_factor_default = models.FloatField(
+        default=32.0,
+        help_text="Default K-factor for Elo calculations",
+    )
+    k_factor_placement = models.FloatField(
+        default=64.0,
+        help_text="K-factor for players in placement games",
+    )
+    placement_games = models.PositiveIntegerField(
+        default=10,
+        help_text="Number of placement games before using default K-factor",
+    )
+    fixed_delta = models.FloatField(
+        default=25.0,
+        help_text="Fixed rating change per game (for fixed_delta system)",
+    )
+
+    # Age decay configuration
+    age_decay_enabled = models.BooleanField(
+        default=False,
+        help_text="Enable age-based decay for older matches",
+    )
+    age_decay_half_life_days = models.PositiveIntegerField(
+        default=180,
+        help_text="Half-life in days for age decay calculation",
+    )
+    age_decay_minimum = models.FloatField(
+        default=0.1,
+        help_text="Minimum decay factor (0.0-1.0)",
+    )
+
+    # Recalculation constraints
+    recalc_max_age_days = models.PositiveIntegerField(
+        default=90,
+        help_text="Maximum age in days for match recalculation",
+    )
+    recalc_mmr_threshold = models.PositiveIntegerField(
+        default=500,
+        help_text="Maximum MMR change allowed for recalculation",
+    )
 
     class Meta:
         ordering = ["name"]
@@ -1227,3 +1328,466 @@ class DraftEvent(models.Model):
 
     def __str__(self):
         return f"{self.event_type} - Draft {self.draft_id} at {self.created_at}"
+
+
+class HeroDraftState(models.TextChoices):
+    """State machine states for Captain's Mode hero draft."""
+
+    WAITING_FOR_CAPTAINS = "waiting_for_captains", "Waiting for Captains"
+    ROLLING = "rolling", "Rolling"
+    CHOOSING = "choosing", "Choosing"
+    DRAFTING = "drafting", "Drafting"
+    PAUSED = "paused", "Paused"
+    COMPLETED = "completed", "Completed"
+    ABANDONED = "abandoned", "Abandoned"
+
+
+class HeroDraft(models.Model):
+    """Captain's Mode hero draft for a tournament game."""
+
+    game = models.OneToOneField(
+        "app.Game", on_delete=models.CASCADE, related_name="herodraft"
+    )
+    state = models.CharField(
+        max_length=32,
+        choices=HeroDraftState.choices,
+        default=HeroDraftState.WAITING_FOR_CAPTAINS,
+    )
+    roll_winner = models.ForeignKey(
+        "DraftTeam",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="won_rolls",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        invalidate_model(HeroDraft)
+
+    def __str__(self):
+        return f"HeroDraft for {self.game}"
+
+
+class DraftTeam(models.Model):
+    """One of the two teams in a hero draft."""
+
+    draft = models.ForeignKey(
+        HeroDraft, on_delete=models.CASCADE, related_name="draft_teams"
+    )
+    tournament_team = models.ForeignKey(
+        "app.Team", on_delete=models.CASCADE, related_name="hero_draft_teams"
+    )
+    is_first_pick = models.BooleanField(null=True, blank=True)
+    is_radiant = models.BooleanField(null=True, blank=True)
+    reserve_time_remaining = models.IntegerField(default=90000)  # 90 seconds in ms
+    is_ready = models.BooleanField(default=False)
+    is_connected = models.BooleanField(default=False)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        invalidate_model(DraftTeam)
+
+    @property
+    def captain(self):
+        return self.tournament_team.captain
+
+    def __str__(self):
+        return f"DraftTeam: {self.tournament_team} in {self.draft}"
+
+
+class HeroDraftRound(models.Model):
+    """A single pick or ban action in the draft."""
+
+    ACTION_CHOICES = [
+        ("ban", "Ban"),
+        ("pick", "Pick"),
+    ]
+
+    STATE_CHOICES = [
+        ("planned", "Planned"),
+        ("active", "Active"),
+        ("completed", "Completed"),
+    ]
+
+    draft = models.ForeignKey(
+        HeroDraft, on_delete=models.CASCADE, related_name="rounds"
+    )
+    draft_team = models.ForeignKey(
+        DraftTeam, on_delete=models.CASCADE, related_name="rounds"
+    )
+    round_number = models.IntegerField()
+    action_type = models.CharField(max_length=8, choices=ACTION_CHOICES)
+    hero_id = models.IntegerField(null=True, blank=True)
+    state = models.CharField(max_length=16, choices=STATE_CHOICES, default="planned")
+    grace_time_ms = models.IntegerField(default=30000)  # 30 seconds
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["round_number"]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        invalidate_model(HeroDraftRound)
+
+    def __str__(self):
+        return f"Round {self.round_number}: {self.action_type} by {self.draft_team}"
+
+
+class HeroDraftEvent(models.Model):
+    """Audit log for hero draft events."""
+
+    EVENT_CHOICES = [
+        ("captain_connected", "Captain Connected"),
+        ("captain_disconnected", "Captain Disconnected"),
+        ("captain_ready", "Captain Ready"),
+        ("draft_paused", "Draft Paused"),
+        ("draft_resumed", "Draft Resumed"),
+        ("roll_triggered", "Roll Triggered"),
+        ("roll_result", "Roll Result"),
+        ("choice_made", "Choice Made"),
+        ("round_started", "Round Started"),
+        ("hero_selected", "Hero Selected"),
+        ("round_timeout", "Round Timeout"),
+        ("draft_completed", "Draft Completed"),
+    ]
+
+    draft = models.ForeignKey(
+        HeroDraft, on_delete=models.CASCADE, related_name="events"
+    )
+    event_type = models.CharField(max_length=32, choices=EVENT_CHOICES)
+    draft_team = models.ForeignKey(
+        DraftTeam,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="events",
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        invalidate_model(HeroDraftEvent)
+
+    def __str__(self):
+        return f"{self.event_type} at {self.created_at}"
+
+
+class LeagueRating(models.Model):
+    """Per-player rating within a specific league."""
+
+    league = models.ForeignKey(
+        League,
+        on_delete=models.CASCADE,
+        related_name="ratings",
+    )
+    player = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.CASCADE,
+        related_name="league_ratings",
+    )
+
+    # Base MMR at time of joining league
+    base_mmr = models.IntegerField(
+        default=0,
+        help_text="Player's MMR when joining the league",
+    )
+
+    # Separate positive and negative stats for flexibility
+    positive_stats = models.FloatField(
+        default=0.0,
+        help_text="Accumulated positive rating changes (wins)",
+    )
+    negative_stats = models.FloatField(
+        default=0.0,
+        help_text="Accumulated negative rating changes (losses)",
+    )
+
+    # Glicko-2 support (for future use)
+    rating_deviation = models.FloatField(
+        default=350.0,
+        help_text="Rating deviation (uncertainty) for Glicko-2",
+    )
+    volatility = models.FloatField(
+        default=0.06,
+        help_text="Volatility for Glicko-2",
+    )
+
+    # Tracking
+    games_played = models.PositiveIntegerField(default=0)
+    wins = models.PositiveIntegerField(default=0)
+    losses = models.PositiveIntegerField(default=0)
+    last_played = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ["league", "player"]
+        ordering = ["-positive_stats", "negative_stats"]
+        verbose_name = "League Rating"
+        verbose_name_plural = "League Ratings"
+
+    @property
+    def total_elo(self):
+        """Calculate total Elo as base_mmr + positive_stats - negative_stats."""
+        return self.base_mmr + self.positive_stats - self.negative_stats
+
+    @property
+    def net_change(self):
+        """Net rating change since joining the league."""
+        return self.positive_stats - self.negative_stats
+
+    def __str__(self):
+        return f"{self.player.username} in {self.league.name}: {self.total_elo:.0f}"
+
+
+class LeagueMatch(models.Model):
+    """A recorded match within a league for rating purposes."""
+
+    league = models.ForeignKey(
+        League,
+        on_delete=models.CASCADE,
+        related_name="matches",
+    )
+    game = models.OneToOneField(
+        "Game",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="league_match",
+        help_text="Link to Game model if applicable",
+    )
+
+    # Match metadata
+    played_at = models.DateTimeField(
+        help_text="When the match was played",
+    )
+    stage = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Tournament stage (e.g., 'quarterfinal', 'grand_final')",
+    )
+    bracket_slot = models.CharField(
+        max_length=32,
+        blank=True,
+        null=True,
+        help_text="Bracket position identifier",
+    )
+
+    # Finalization tracking
+    is_finalized = models.BooleanField(
+        default=False,
+        help_text="Whether ratings have been calculated",
+    )
+    finalized_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When ratings were calculated",
+    )
+
+    # Recalculation tracking
+    recalculation_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of times this match has been recalculated",
+    )
+    last_recalculated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When ratings were last recalculated",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-played_at"]
+        verbose_name = "League Match"
+        verbose_name_plural = "League Matches"
+
+    def __str__(self):
+        status = "finalized" if self.is_finalized else "pending"
+        return f"Match {self.pk} in {self.league.name} ({status})"
+
+
+class LeagueMatchParticipant(models.Model):
+    """A player's participation in a league match."""
+
+    TEAM_SIDE_CHOICES = [
+        ("radiant", "Radiant"),
+        ("dire", "Dire"),
+    ]
+
+    match = models.ForeignKey(
+        LeagueMatch,
+        on_delete=models.CASCADE,
+        related_name="participants",
+    )
+    player = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.CASCADE,
+        related_name="league_match_participations",
+    )
+    player_rating = models.ForeignKey(
+        LeagueRating,
+        on_delete=models.CASCADE,
+        related_name="match_participations",
+    )
+
+    # Team info
+    team_side = models.CharField(
+        max_length=8,
+        choices=TEAM_SIDE_CHOICES,
+    )
+
+    # Snapshot at match time
+    mmr_at_match = models.IntegerField(
+        help_text="Player's base MMR at time of match",
+    )
+    elo_before = models.FloatField(
+        help_text="Player's total Elo before this match",
+    )
+    elo_after = models.FloatField(
+        help_text="Player's total Elo after this match",
+    )
+
+    # Rating calculation factors
+    k_factor_used = models.FloatField(
+        help_text="K-factor used in calculation",
+    )
+    rating_deviation_used = models.FloatField(
+        default=350.0,
+        help_text="Rating deviation at time of calculation",
+    )
+    age_decay_factor = models.FloatField(
+        default=1.0,
+        help_text="Age decay factor applied (1.0 = no decay)",
+    )
+
+    # Result
+    is_winner = models.BooleanField()
+    delta = models.FloatField(
+        help_text="Rating change from this match",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["match", "player"]
+        ordering = ["team_side", "player__username"]
+        verbose_name = "League Match Participant"
+        verbose_name_plural = "League Match Participants"
+
+    def __str__(self):
+        result = "W" if self.is_winner else "L"
+        return f"{self.player.username} ({result}) in Match {self.match_id}"
+
+
+class OrgLog(models.Model):
+    """Audit log for organization admin team changes."""
+
+    ACTION_CHOICES = [
+        ("add_admin", "Add Admin"),
+        ("remove_admin", "Remove Admin"),
+        ("add_staff", "Add Staff"),
+        ("remove_staff", "Remove Staff"),
+        ("transfer_ownership", "Transfer Ownership"),
+        ("create", "Create Organization"),
+        ("update", "Update Organization"),
+        ("delete", "Delete Organization"),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="logs",
+    )
+    actor = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="org_actions_performed",
+        help_text="User who performed the action",
+    )
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    target_user = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="org_actions_received",
+        help_text="User affected by the action (if applicable)",
+    )
+    details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["organization", "-created_at"]),
+        ]
+        verbose_name = "Organization Log"
+        verbose_name_plural = "Organization Logs"
+
+    def __str__(self):
+        actor_name = self.actor.username if self.actor else "System"
+        return f"{actor_name} {self.action} on {self.organization.name}"
+
+
+class LeagueLog(models.Model):
+    """Audit log for league admin team changes."""
+
+    ACTION_CHOICES = [
+        ("add_admin", "Add Admin"),
+        ("remove_admin", "Remove Admin"),
+        ("add_staff", "Add Staff"),
+        ("remove_staff", "Remove Staff"),
+        ("link_organization", "Link Organization"),
+        ("unlink_organization", "Unlink Organization"),
+        ("create", "Create League"),
+        ("update", "Update League"),
+        ("delete", "Delete League"),
+    ]
+
+    league = models.ForeignKey(
+        League,
+        on_delete=models.CASCADE,
+        related_name="logs",
+    )
+    actor = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="league_actions_performed",
+        help_text="User who performed the action",
+    )
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    target_user = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="league_actions_received",
+        help_text="User affected by the action (if applicable)",
+    )
+    details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["league", "-created_at"]),
+        ]
+        verbose_name = "League Log"
+        verbose_name_plural = "League Logs"
+
+    def __str__(self):
+        actor_name = self.actor.username if self.actor else "System"
+        return f"{actor_name} {self.action} on {self.league.name}"

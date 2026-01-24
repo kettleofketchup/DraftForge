@@ -346,6 +346,9 @@ TEST_KEY_TO_NAME["pending_bracket"] = "Pending Bracket Test"
 TEST_KEY_TO_NAME["draft_test"] = "Draft Test"
 TEST_KEY_TO_NAME["large_tournament"] = "Large Tournament Test"
 
+# Add real tournament 38 for hero draft E2E testing
+TEST_KEY_TO_NAME["real_tournament"] = "Real Tournament 38"
+
 
 def get_tournament_config(key: str) -> TestTournamentConfig:
     """

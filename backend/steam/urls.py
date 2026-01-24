@@ -22,6 +22,7 @@ urlpatterns = [
     path("sync-status/", steam_api.get_sync_status, name="steam_sync_status"),
     # Game-Match Auto-Linking
     path("auto-link/", steam_api.auto_link_tournament, name="steam_auto_link"),
+    path("auto-assign/", steam_api.auto_assign_matches, name="steam_auto_assign"),
     path(
         "suggestions/tournament/<int:tournament_id>/",
         steam_api.get_tournament_suggestions,

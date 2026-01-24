@@ -1,5 +1,7 @@
 # Bracket Visualization Redesign
 
+**Status:** Completed
+
 ## Overview
 
 Redesign the tournament bracket visualization to use a single ReactFlow instance with ELK.js layout, supporting configurable elimination types per round and multiple tournament formats.

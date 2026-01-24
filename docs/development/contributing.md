@@ -9,6 +9,7 @@
 
 2. **Setup Environment**
    ```bash
+   python -m venv .venv
    source .venv/bin/activate
    poetry install
    cd frontend && npm install && cd ..

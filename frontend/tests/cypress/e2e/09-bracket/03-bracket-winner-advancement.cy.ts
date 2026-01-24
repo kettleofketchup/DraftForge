@@ -24,7 +24,7 @@ describe('Bracket Generation and Winner Advancement (e2e)', () => {
       visitAndWaitForHydration(`/tournament/${tournamentPk}/games`);
 
       // Wait for the games tab to load
-      cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');
+      cy.get('[data-testid="bracketTab"]', { timeout: 10000 }).should('be.visible');
 
       // Should see the bracket container
       cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(

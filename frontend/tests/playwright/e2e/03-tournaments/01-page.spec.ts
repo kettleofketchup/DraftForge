@@ -1,0 +1,23 @@
+/**
+ * Tournament Page Tests
+ *
+ * Tests for the tournaments list page API integration and display.
+ * Ported from Cypress: frontend/tests/cypress/e2e/03-tournaments/01-page.cy.ts
+ */
+
+import { test, expect, visitAndWaitForHydration } from '../../fixtures';
+
+test.describe('API Integration Tests', () => {
+  test.beforeEach(async ({ page }) => {
+    // No-op setup - tests handle their own navigation
+  });
+
+  test('should handle API requests for tournaments', async ({ page }) => {
+    // Navigate to tournaments page
+    await visitAndWaitForHydration(page, '/tournaments');
+
+    // Verify the page displays the expected test data
+    // "Partial Bracket Test" should be present in the tournaments list
+    await expect(page.locator('body')).toContainText('Partial Bracket Test');
+  });
+});

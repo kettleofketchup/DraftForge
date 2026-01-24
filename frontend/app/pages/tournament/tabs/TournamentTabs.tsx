@@ -65,8 +65,8 @@ export default function TournamentTabs() {
         <TabsTrigger className="w-full" value="teams" data-testid="teamsTab">
           Teams ({teamCount})
         </TabsTrigger>
-        <TabsTrigger value="games" data-testid="gamesTab">
-          Games ({gameCount})
+        <TabsTrigger value="bracket" data-testid="bracketTab">
+          Bracket ({gameCount})
         </TabsTrigger>
       </TabsList>
       <TabsContent value="players" data-testid="playersTabContent">
@@ -77,7 +77,7 @@ export default function TournamentTabs() {
         {' '}
         <TeamsTab />
       </TabsContent>
-      <TabsContent value="games" data-testid="gamesTabContent">
+      <TabsContent value="bracket" data-testid="bracketTabContent">
         {' '}
         <GamesTab />
       </TabsContent>

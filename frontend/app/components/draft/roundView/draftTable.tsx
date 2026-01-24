@@ -9,7 +9,7 @@ import {
   TableRow,
 } from '~/components/ui/table';
 import type { UserType } from '~/components/user/types';
-import { AvatarUrl, type TeamType } from '~/index';
+import { AvatarUrl, DisplayName, type TeamType } from '~/index';
 import { cn } from '~/lib/utils';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -163,7 +163,7 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
                           className="rounded-full hover:ring-2 hover:ring-primary transition-all"
                         />
                       </span>
-                      <span>{user.nickname || user.username}</span>
+                      <span>{DisplayName(user)}</span>
                     </div>
                   </PlayerPopover>
                 </TableCell>

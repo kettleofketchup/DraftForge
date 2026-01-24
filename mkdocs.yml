@@ -1,12 +1,14 @@
-site_name: Kettle Of Tournaments
-site_description: Documentation for Kettle Of Tournaments
+site_name: DraftForge
+site_description: Documentation for DraftForge - Dota 2 Tournament Management
 site_url: https://dota.kettle.sh/docs
 
-repo_name: kettleofketchup/dota_tournament
-repo_url: https://github.com/kettleofketchup/dota_tournament
+repo_name: kettleofketchup/draftforge
+repo_url: https://github.com/kettleofketchup/draftforge
 
 theme:
   name: material
+  icon:
+    repo: fontawesome/brands/github
   palette:
     - scheme: slate
       primary: deep purple
@@ -30,9 +32,22 @@ theme:
     - content.code.copy
     - content.code.annotate
 
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/kettleofketchup/draftforge
+      name: GitHub Repository
+    - icon: material/bug
+      link: https://github.com/kettleofketchup/draftforge/issues/new?template=bug_report.md
+      name: Report a Bug
+    - icon: material/book-open-variant
+      link: https://dota.kettle.sh/docs
+      name: Live Documentation
+
 plugins:
   - search
   - tags
+  - panzoom
 
 markdown_extensions:
   - pymdownx.highlight:
@@ -74,3 +89,7 @@ nav:
       - Contributing: development/contributing.md
   - API Reference:
       - Endpoints: api/endpoints.md
+  - Links:
+      - "Live Site": https://dota.kettle.sh/
+      - "Report Bug": https://github.com/kettleofketchup/draftforge/issues/new?template=bug_report.md
+      - "GitHub": https://github.com/kettleofketchup/draftforge

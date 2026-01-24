@@ -2,12 +2,24 @@ import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
 import { User } from 'lucide-react';
 import { cn } from '~/lib/utils';
+import { UserPopover } from '~/components/user/UserPopover';
 
 export interface CaptainInfo {
   steam_id: number;
   username: string | null;
   avatar: string | null;
   hero_id: number;
+}
+
+export interface MatchedPlayer {
+  steam_id: number;
+  user_id: number | null;
+  username: string | null;
+  avatar: string | null;
+  hero_id: number;
+  player_slot: number;
+  is_radiant: boolean;
+  is_captain: boolean;
 }
 
 export interface MatchSuggestion {
@@ -20,6 +32,7 @@ export interface MatchSuggestion {
   player_overlap: number;
   radiant_captain: CaptainInfo | null;
   dire_captain: CaptainInfo | null;
+  matched_players: MatchedPlayer[];
 }
 
 interface SteamMatchCardProps {
@@ -29,34 +42,40 @@ interface SteamMatchCardProps {
   isCurrentlyLinked: boolean;
 }
 
-function CaptainDisplay({ captain }: { captain: CaptainInfo | null }) {
-  if (!captain) {
+function PlayerDisplay({ player }: { player: MatchedPlayer }) {
+  const content = (
+    <div className="flex items-center gap-2 py-1 cursor-pointer">
+      <Avatar className={cn("h-6 w-6", player.is_captain && "ring-2 ring-yellow-500")}>
+        <AvatarImage src={player.avatar || undefined} />
+        <AvatarFallback>
+          <User className="h-3 w-3" />
+        </AvatarFallback>
+      </Avatar>
+      <span className={cn(
+        "text-xs truncate max-w-[100px]",
+        player.is_captain ? "text-yellow-500 font-medium" : "text-foreground",
+        player.user_id && "hover:underline"
+      )}>
+        {player.username || `Steam ${player.steam_id}`}
+        {player.is_captain && " (C)"}
+      </span>
+    </div>
+  );
+
+  // If player is linked to a user, wrap with popover
+  if (player.user_id && player.username) {
     return (
-      <div className="flex flex-col items-center">
-        <Avatar className="h-10 w-10">
-          <AvatarFallback>
-            <User className="h-5 w-5" />
-          </AvatarFallback>
-        </Avatar>
-        <span className="text-xs text-muted-foreground mt-1">Unknown</span>
-      </div>
+      <UserPopover
+        userId={player.user_id}
+        username={player.username}
+        avatar={player.avatar}
+      >
+        {content}
+      </UserPopover>
     );
   }
 
-  return (
-    <div className="flex flex-col items-center">
-      <Avatar className="h-10 w-10">
-        <AvatarImage src={captain.avatar || undefined} />
-        <AvatarFallback>
-          <User className="h-5 w-5" />
-        </AvatarFallback>
-      </Avatar>
-      <span className="text-xs text-foreground mt-1 max-w-[80px] truncate">
-        {captain.username || captain.steam_id}
-      </span>
-      <div className="w-6 h-6 mt-1 bg-muted rounded" title={`Hero ID: ${captain.hero_id}`} />
-    </div>
-  );
+  return content;
 }
 
 export function SteamMatchCard({
@@ -98,11 +117,39 @@ export function SteamMatchCard({
         </span>
       </div>
 
-      {/* Captains */}
-      <div className="flex items-center justify-center gap-6 py-3">
-        <CaptainDisplay captain={match.radiant_captain} />
-        <span className="text-lg font-bold text-muted-foreground">VS</span>
-        <CaptainDisplay captain={match.dire_captain} />
+      {/* Matched Players */}
+      <div className="flex justify-between gap-4 py-3">
+        {/* Radiant side */}
+        <div className="flex-1">
+          <p className="text-xs text-green-500 font-medium mb-1">Radiant</p>
+          <div className="space-y-0.5">
+            {(match.matched_players ?? [])
+              .filter(p => p.is_radiant)
+              .map(player => (
+                <PlayerDisplay key={player.steam_id} player={player} />
+              ))}
+            {(match.matched_players ?? []).filter(p => p.is_radiant).length === 0 && (
+              <span className="text-xs text-muted-foreground">No matches</span>
+            )}
+          </div>
+        </div>
+
+        <span className="text-lg font-bold text-muted-foreground self-center">VS</span>
+
+        {/* Dire side */}
+        <div className="flex-1">
+          <p className="text-xs text-red-500 font-medium mb-1">Dire</p>
+          <div className="space-y-0.5">
+            {(match.matched_players ?? [])
+              .filter(p => !p.is_radiant)
+              .map(player => (
+                <PlayerDisplay key={player.steam_id} player={player} />
+              ))}
+            {(match.matched_players ?? []).filter(p => !p.is_radiant).length === 0 && (
+              <span className="text-xs text-muted-foreground">No matches</span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Actions */}

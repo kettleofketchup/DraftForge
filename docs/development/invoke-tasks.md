@@ -18,6 +18,8 @@ This project uses [Python Invoke](https://www.pyinvoke.org/) for task automation
 | `update.*` | Dependency updates |
 | `version.*` | Version management |
 | `prod.*` | Production commands |
+| `discord.*` | Discord integration commands |
+| `docs.*` | Documentation commands |
 
 ## Development Tasks (`inv dev.*`)
 
@@ -28,6 +30,8 @@ inv dev.prod      # Run production images locally
 inv dev.release   # Run release images
 inv dev.test      # Start test environment
 inv dev.mac       # macOS M1 specific
+inv dev.sync-backend  # Sync backend files to container
+inv dev.sync-frontend # Sync frontend files to container
 ```
 
 ## Docker Tasks (`inv docker.*`)
@@ -76,15 +80,47 @@ inv db.makemigrations       # Create migrations
 # Population
 inv db.populate.users       # Populate users
 inv db.populate.tournaments # Populate tournaments
+inv db.populate.heroes      # Populate hero data
+inv db.populate.leagues     # Populate leagues
 inv db.populate.all         # Reset and populate all
 ```
 
 ## Test Tasks (`inv test.*`)
 
+### Playwright (Recommended)
+
+```bash
+inv test.playwright.install     # Install Playwright browsers
+inv test.playwright.headless    # Run all tests headless
+inv test.playwright.headed      # Run tests with visible browser
+inv test.playwright.ui          # Open Playwright UI mode
+inv test.playwright.debug       # Debug mode with inspector
+inv test.playwright.report      # View HTML test report
+inv test.playwright.spec --spec <pattern>  # Run tests matching grep pattern
+
+# Specific test suites
+inv test.playwright.navigation  # Navigation tests
+inv test.playwright.tournament  # Tournament tests
+inv test.playwright.draft       # Draft tests
+inv test.playwright.bracket     # Bracket tests
+inv test.playwright.league      # League tests
+inv test.playwright.mobile      # Mobile responsive tests
+inv test.playwright.herodraft   # HeroDraft tests
+```
+
+### Cypress (Legacy)
+
 ```bash
 inv test.setup      # Full setup
 inv test.open       # Cypress interactive
 inv test.headless   # Cypress headless
+inv test.spec --spec <shortcut>  # Run specific Cypress spec
+```
+
+### Backend Tests
+
+```bash
+inv test.run --cmd '<command>'  # Run command in test container
 ```
 
 ## Update Tasks (`inv update.*`)
@@ -111,6 +147,19 @@ inv version.tag           # Git tag and bump
 
 ```bash
 inv prod.certbot    # SSL certificate renewal
+```
+
+## Discord Tasks (`inv discord.*`)
+
+```bash
+inv discord.sync    # Sync Discord roles and members
+```
+
+## Docs Tasks (`inv docs.*`)
+
+```bash
+inv docs.serve      # Start MkDocs dev server
+inv docs.build      # Build static documentation site
 ```
 
 ## Task Files

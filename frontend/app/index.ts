@@ -6,7 +6,7 @@ import type {
   UsersType,
 } from '~/components/user';
 import { PositionEnum, User } from '~/components/user';
-import { AvatarUrl } from '~/components/user/avatar';
+import { AvatarUrl, DisplayName } from '~/components/user/avatar';
 import type { GameType, GamesType } from './components/game/types';
 import type { TeamType } from './components/team';
 import type {
@@ -15,7 +15,7 @@ import type {
   TournamentType,
   TournamentsType,
 } from './components/tournament/types';
-export { AvatarUrl, PositionEnum, User };
+export { AvatarUrl, DisplayName, PositionEnum, User };
 export type { GuildMember, GuildMembers, UserClassType, UserType, UsersType };
 
 export type {

@@ -4,7 +4,7 @@ import { Badge } from '~/components/ui/badge';
 import { Card } from '~/components/ui/card';
 import { TeamPopover } from '~/components/team';
 import { useUserStore } from '~/store/userStore';
-import { AvatarUrl, type TeamType, type UserType } from '~/index';
+import { AvatarUrl, DisplayName, type TeamType, type UserType } from '~/index';
 import type { DraftRoundType } from '../types';
 
 const MAX_TEAM_SIZE = 5;
@@ -105,7 +105,7 @@ export const ShufflePickOrder: React.FC = () => {
           <div className="flex items-center gap-2 text-red-400 text-sm">
             <AlertTriangle className="h-4 w-4" />
             <span>
-              {captainsWithMissingMmr.map((s) => s.team.captain?.nickname || s.team.captain?.username).join(', ')}
+              {captainsWithMissingMmr.map((s) => s.team.captain ? DisplayName(s.team.captain) : 'Unknown').join(', ')}
               {captainsWithMissingMmr.length === 1 ? ' has' : ' have'} no MMR set
             </span>
           </div>
@@ -141,7 +141,7 @@ export const ShufflePickOrder: React.FC = () => {
 
                       {/* Captain name */}
                       <span className="font-medium text-sm truncate text-center hover:text-primary transition-colors">
-                        {status.team.captain?.nickname || status.team.captain?.username || 'Unknown'}
+                        {status.team.captain ? DisplayName(status.team.captain) : 'Unknown'}
                       </span>
                     </>
                   ) : (

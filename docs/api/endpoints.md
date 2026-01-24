@@ -138,7 +138,69 @@ Endpoints for Steam integration and league statistics.
 }
 ```
 
-## Drafts
+## Organizations
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/organizations/` | List organizations | No |
+| POST | `/api/organizations/` | Create organization | Admin |
+| GET | `/api/organizations/{id}/` | Get organization details | No |
+| PUT | `/api/organizations/{id}/` | Update organization | Org Admin |
+| DELETE | `/api/organizations/{id}/` | Delete organization | Admin |
+
+**Query Parameters (list):**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `user` | int | Filter by user membership (admin or staff) |
+
+**Response (detail):**
+
+```json
+{
+  "id": 1,
+  "name": "DTX Gaming",
+  "description": "Dota 2 gaming organization",
+  "logo": "https://...",
+  "admins": [{ "id": 1, "username": "admin" }],
+  "staff": [{ "id": 2, "username": "staff" }],
+  "leagues": [{ "id": 1, "name": "Spring League" }],
+  "league_count": 2,
+  "tournament_count": 5
+}
+```
+
+## Leagues
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/leagues/` | List leagues | No |
+| POST | `/api/leagues/` | Create league | Yes |
+| GET | `/api/leagues/{id}/` | Get league details | No |
+| PUT | `/api/leagues/{id}/` | Update league | League Admin |
+| DELETE | `/api/leagues/{id}/` | Delete league | League Admin |
+
+**Query Parameters (list):**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `organization` | int | Filter by organization ID |
+
+**Response (detail):**
+
+```json
+{
+  "id": 1,
+  "name": "Spring League 2024",
+  "organization": { "id": 1, "name": "DTX Gaming" },
+  "admins": [{ "id": 1, "username": "admin" }],
+  "staff": [{ "id": 2, "username": "staff" }],
+  "tournaments": [{ "id": 1, "name": "Week 1" }],
+  "tournament_count": 4
+}
+```
+
+## Drafts (Player Draft)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -147,7 +209,6 @@ Endpoints for Steam integration and league statistics.
 | PUT | `/api/drafts/{id}/` | Update draft (e.g., change style) |
 | POST | `/api/tournaments/init-draft` | Initialize draft for tournament |
 | POST | `/api/tournaments/pick_player` | Pick player for draft round |
-| GET | `/api/active-draft-for-user/` | Get active draft turn for current user |
 
 ### Draft Pick (Shuffle Draft)
 
@@ -207,25 +268,206 @@ Content-Type: application/json
 !!! note "Captain Permissions"
     Captains can pick players during their turn. Staff can pick for any captain.
 
-### Active Draft for User
+## HeroDraft (Captain's Mode)
 
-Returns the user's active draft turn if they are a captain with a pending pick:
+Hero draft endpoints for Dota 2 Captain's Mode pick/ban phase. All endpoints require authentication.
 
-```bash
-GET /api/active-draft-for-user/
-```
+!!! info "WebSocket Support"
+    HeroDraft also supports real-time updates via WebSocket at `/api/herodraft/{draft_pk}/`.
+    The WebSocket broadcasts events like `draft_created`, `captain_ready`, `roll_result`, `choice_made`, `hero_selected`, and `draft_abandoned`.
 
-Response:
+### Create HeroDraft
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/games/{game_pk}/create-herodraft/` | Create a HeroDraft for a game |
+
+Creates a new hero draft for a game. Returns existing draft if one already exists.
+
+**Requirements:**
+
+- Game must have both `radiant_team` and `dire_team` assigned
+- Both teams must have captains assigned
+
+**Response (201 Created / 200 OK if exists):**
 ```json
 {
-  "has_active_turn": true,
-  "tournament_pk": 1,
-  "tournament_name": "Spring Championship",
-  "draft_pk": 5,
-  "draft_round_pk": 42,
-  "pick_number": 3
+  "id": 1,
+  "game": 5,
+  "state": "waiting_for_captains",
+  "draft_teams": [
+    {
+      "id": 1,
+      "tournament_team": { ... },
+      "is_ready": false,
+      "is_connected": false,
+      "is_first_pick": null,
+      "is_radiant": null
+    },
+    { ... }
+  ],
+  "rounds": [],
+  "roll_winner": null
 }
 ```
+
+### Get HeroDraft
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/herodraft/{draft_pk}/` | Get HeroDraft details |
+
+Returns the current state of a hero draft.
+
+### Set Captain Ready
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/herodraft/{draft_pk}/set-ready/` | Mark captain as ready |
+
+Marks the authenticated user's team as ready. When both captains are ready, the draft transitions to "rolling" state.
+
+**Requirements:**
+
+- Draft must be in `waiting_for_captains` state
+- User must be a captain in this draft
+
+**Errors:**
+
+- `403`: User is not a captain in this draft
+- `400`: Invalid state for this operation
+
+### Trigger Roll
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/herodraft/{draft_pk}/trigger-roll/` | Trigger dice roll |
+
+Triggers the coin flip to determine which team chooses first (pick order or side).
+
+**Requirements:**
+
+- Draft must be in `rolling` state
+- User must be a captain in this draft
+
+**Response:**
+Returns updated draft data with `roll_winner` set.
+
+### Submit Choice
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/herodraft/{draft_pk}/submit-choice/` | Submit first pick choice |
+
+Submit a choice for pick order or side. The roll winner chooses first, then the other team gets the remaining choice.
+
+**Request Body:**
+```json
+{
+  "choice_type": "pick_order",
+  "value": "first"
+}
+```
+
+| Field | Type | Values |
+|-------|------|--------|
+| `choice_type` | string | `"pick_order"` or `"side"` |
+| `value` | string | For pick_order: `"first"` or `"second"`. For side: `"radiant"` or `"dire"` |
+
+**Requirements:**
+
+- Draft must be in `choosing` state
+- User must be a captain in this draft
+- Roll winner must choose first
+- Choice must not already be made
+
+### Submit Pick
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/herodraft/{draft_pk}/submit-pick/` | Submit hero pick/ban |
+
+Submit a hero pick or ban for the current round.
+
+**Request Body:**
+```json
+{
+  "hero_id": 1
+}
+```
+
+**Requirements:**
+
+- Draft must be in `drafting` state
+- User must be a captain in this draft
+- Must be the user's turn to pick/ban
+- Hero must be available (not already picked or banned)
+
+**Errors:**
+
+- `403`: User is not a captain or not their turn
+- `400`: Invalid state, hero already picked, or invalid hero
+
+### List Events
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/herodraft/{draft_pk}/list-events/` | List draft events |
+
+Returns all events for a hero draft (for audit trail and replay).
+
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "event_type": "captain_connected",
+    "draft_team": null,
+    "metadata": { "created_by": 1 },
+    "created_at": "2024-01-01T00:00:00Z"
+  },
+  {
+    "id": 2,
+    "event_type": "captain_ready",
+    "draft_team": 1,
+    "metadata": { "captain_id": 1 },
+    "created_at": "2024-01-01T00:00:05Z"
+  }
+]
+```
+
+### List Available Heroes
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/herodraft/{draft_pk}/list-available-heroes/` | List available heroes |
+
+Returns all hero IDs that are still available (not picked or banned).
+
+**Response:**
+```json
+{
+  "available_heroes": [1, 2, 3, 5, 7, 8, ...]
+}
+```
+
+### Abandon Draft
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/herodraft/{draft_pk}/abandon/` | Abandon draft |
+
+Abandon a hero draft. Can be called by a captain in the draft or an admin.
+
+**Requirements:**
+
+- Draft must not be in `completed` or `abandoned` state
+- User must be a captain in this draft OR an admin
+
+**Errors:**
+
+- `403`: User not authorized to abandon this draft
+- `400`: Draft already completed or abandoned
 
 ## Response Format
 

@@ -9,7 +9,7 @@ export function AboutHero() {
     <div className="hero bg-gradient-to-br from-primary/10 to-secondary/10 py-20">
       <div className="hero-content text-center">
         <div className="max-w-4xl">
-          <h1 className="text-6xl font-bold text-primary mb-6">About DTX</h1>
+          <h1 className="text-6xl font-bold text-primary mb-6">About DraftForge</h1>
           <p className="text-xl text-base-content/80 mb-8">
             Your premier Dota 2 gaming organization management platform
           </p>

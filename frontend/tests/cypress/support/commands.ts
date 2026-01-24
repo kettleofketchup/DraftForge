@@ -42,6 +42,22 @@ declare namespace Cypress {
     }>>;
 
     /**
+     * Custom command to login as a specific user by Discord ID (TEST ONLY)
+     * Discord IDs are stable across populate runs, unlike PKs.
+     * @example cy.loginAsDiscordId('764290890617192469')
+     */
+    loginAsDiscordId(discordId: string): Chainable<Cypress.Response<{
+      success: boolean;
+      user: {
+        pk: number;
+        username: string;
+        discordUsername: string;
+        discordId: string;
+        mmr: number;
+      };
+    }>>;
+
+    /**
      * Custom command to get tournament details by test config key (TEST ONLY)
      * @example cy.getTournamentByKey('captain_draft_test')
      */
@@ -174,6 +190,32 @@ Cypress.Commands.add('loginAsUser', (userPk: number) => {
     method: 'POST',
     url: `${Cypress.env('apiUrl')}/tests/login-as/`,
     body: { user_pk: userPk },
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  }).then((response) => {
+    if (response.headers.cookiescsrftoken) {
+      window.cookieStore.set(
+        'csrftoken',
+        response.headers.cookiescsrftoken as string,
+      );
+    }
+    if (response.headers.cookiesessionid) {
+      window.cookieStore.set(
+        'sessionid',
+        response.headers.cookiesessionid as string,
+      );
+    }
+    return response;
+  });
+});
+
+// Login as specific user by Discord ID (TEST ONLY)
+Cypress.Commands.add('loginAsDiscordId', (discordId: string) => {
+  return cy.request({
+    method: 'POST',
+    url: `${Cypress.env('apiUrl')}/tests/login-as-discord/`,
+    body: { discord_id: discordId },
     headers: {
       'Content-Type': 'application/json',
     },

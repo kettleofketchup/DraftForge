@@ -1,6 +1,7 @@
 import os
 
 from celery import Celery
+from celery.schedules import crontab
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 
@@ -17,6 +18,17 @@ app.conf.beat_schedule = {
     "check-discord-scheduled-events": {
         "task": "discordbot.tasks.check_scheduled_events",
         "schedule": 60.0,  # Every 60 seconds
+    },
+    # Discord avatar refresh - check batch of users every 5 minutes
+    "refresh-discord-avatars": {
+        "task": "app.tasks.avatar_refresh.refresh_discord_avatars",
+        "schedule": 300.0,  # Every 5 minutes
+        "kwargs": {"batch_size": 50},
+    },
+    # Full Discord data refresh - run once daily at 4 AM
+    "refresh-all-discord-data-daily": {
+        "task": "app.tasks.avatar_refresh.refresh_all_discord_data",
+        "schedule": crontab(hour=4, minute=0),
     },
 }
 

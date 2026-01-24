@@ -1,22 +1,18 @@
 import { motion } from 'framer-motion';
-import { useActiveDraft } from '~/hooks/useActiveDraft';
+import { useUserStore } from '~/store/userStore';
 
 /**
- * Flashing notification badge shown when user has an active draft turn.
+ * Flashing notification badge shown when user has active drafts.
  *
  * Displays as a small red dot that pulses/flashes to draw attention.
  * Should be positioned absolutely within a relative parent (e.g., user avatar).
- *
- * @example
- * <div className="relative">
- *   <UserAvatar />
- *   <DraftNotificationBadge />
- * </div>
  */
 export const DraftNotificationBadge: React.FC = () => {
-  const { hasActiveTurn } = useActiveDraft();
+  const activeDrafts = useUserStore(
+    (state) => state.currentUser?.active_drafts,
+  );
 
-  if (!hasActiveTurn) {
+  if (!activeDrafts || activeDrafts.length === 0) {
     return null;
   }
 
@@ -33,7 +29,7 @@ export const DraftNotificationBadge: React.FC = () => {
         repeat: Infinity,
         ease: 'easeInOut',
       }}
-      aria-label="You have an active draft pick"
+      aria-label="You have active drafts"
       role="status"
     />
   );

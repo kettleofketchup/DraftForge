@@ -313,10 +313,17 @@ export const useAppState = create<AppState>((set) => ({
 
 ---
 
+## User Avatars
+
+**[📖 See dedicated guide: user-avatar.md](user-avatar.md)**
+
+---
+
 ## Summary
 
 **Common Patterns:**
 - ✅ useAuth hook for current user (id, email, roles, username)
+- ✅ AvatarUrl helper for all user avatars
 - ✅ React Hook Form + Zod for forms
 - ✅ Dialog with icon + close button
 - ✅ DataGrid wrapper contracts

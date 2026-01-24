@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -7,12 +7,15 @@ import {
 } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
 import { Button } from '~/components/ui/button';
-import { Search, Unlink } from 'lucide-react';
+import { Badge } from '~/components/ui/badge';
+import { Search, Unlink, Calendar } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '~/components/api/axios';
 import { SteamMatchCard, type MatchSuggestion } from './SteamMatchCard';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import type { BracketMatch } from '../types';
 import { cn } from '~/lib/utils';
+import { useUserStore } from '~/store/userStore';
 
 interface LinkSteamMatchModalProps {
   isOpen: boolean;
@@ -50,12 +53,25 @@ export function LinkSteamMatchModal({
   game,
   onLinkUpdated,
 }: LinkSteamMatchModalProps) {
+  const tournament = useUserStore((state) => state.tournament);
   const [search, setSearch] = useState('');
   const [suggestions, setSuggestions] = useState<MatchSuggestion[]>([]);
   const [linkedMatchId, setLinkedMatchId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [detailsMatchId, setDetailsMatchId] = useState<number | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Get tournament date for prioritizing matches on that day
+  // Use local date string (YYYY-MM-DD) for reliable comparison (avoids UTC timezone shift)
+  const tournamentDateLocal = useMemo(() => {
+    if (!tournament?.date_played) return null;
+    const date = new Date(tournament.date_played);
+    // Use local date components to avoid UTC conversion shifting the date
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`; // e.g., "2026-01-18"
+  }, [tournament?.date_played]);
 
   // Fetch suggestions when modal opens or search changes
   useEffect(() => {
@@ -90,9 +106,11 @@ export function LinkSteamMatchModal({
       });
       setLinkedMatchId(matchId);
       onLinkUpdated();
+      toast.success(`Linked to Match #${matchId}`);
       onClose();
     } catch (error) {
       console.error('Failed to link match:', error);
+      toast.error('Failed to link match. Are you logged in as staff?');
     }
   };
 
@@ -104,21 +122,50 @@ export function LinkSteamMatchModal({
       setLinkedMatchId(null);
       setRefreshKey((prev) => prev + 1);
       onLinkUpdated();
+      toast.success('Match unlinked');
     } catch (error) {
       console.error('Failed to unlink match:', error);
+      toast.error('Failed to unlink match. Are you logged in as staff?');
     }
   };
 
-  // Group suggestions by tier
-  const groupedSuggestions = suggestions.reduce(
+  // Group suggestions by day, then by tier within each day
+  const groupedByDay = suggestions.reduce(
     (acc, suggestion) => {
-      const tier = suggestion.tier;
-      if (!acc[tier]) acc[tier] = [];
-      acc[tier].push(suggestion);
+      const date = new Date(suggestion.start_time * 1000);
+      // Use local date for comparison key (avoids UTC timezone shift)
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateLocal = `${year}-${month}-${day}`;
+      // Use formatted string for display
+      const displayLabel = date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+      if (!acc[dateLocal]) {
+        acc[dateLocal] = {
+          timestamp: suggestion.start_time,
+          matches: [],
+          displayLabel,
+          isTournamentDay: dateLocal === tournamentDateLocal,
+        };
+      }
+      acc[dateLocal].matches.push(suggestion);
       return acc;
     },
-    {} as Record<string, MatchSuggestion[]>
+    {} as Record<string, { timestamp: number; matches: MatchSuggestion[]; displayLabel: string; isTournamentDay: boolean }>
   );
+
+  // Sort days: tournament day first, then most recent
+  const sortedDays = Object.entries(groupedByDay).sort(([keyA, a], [keyB, b]) => {
+    // Tournament day always comes first
+    if (a.isTournamentDay) return -1;
+    if (b.isTournamentDay) return 1;
+    // Then sort by timestamp (most recent first)
+    return b.timestamp - a.timestamp;
+  });
 
   const tierOrder = ['all_players', 'captains_plus', 'captains_only', 'partial'];
 
@@ -177,39 +224,83 @@ export function LinkSteamMatchModal({
                 No matches found
               </div>
             ) : (
-              tierOrder.map((tier) => {
-                const tierSuggestions = groupedSuggestions[tier];
-                if (!tierSuggestions?.length) return null;
-
-                const styles = TIER_STYLES[tier];
-                const tierLabel =
-                  tierSuggestions[0]?.tier_display || tier.replace('_', ' ');
+              sortedDays.map(([dateKey, { matches: dayMatches, displayLabel, isTournamentDay }]) => {
+                // Group this day's matches by tier
+                const tierGroups = dayMatches.reduce(
+                  (acc, match) => {
+                    if (!acc[match.tier]) acc[match.tier] = [];
+                    acc[match.tier].push(match);
+                    return acc;
+                  },
+                  {} as Record<string, MatchSuggestion[]>
+                );
 
                 return (
-                  <div key={tier} data-testid={`tier-${tier}`}>
-                    <div
-                      className={cn(
-                        'px-3 py-1.5 rounded-t-lg border-b',
-                        styles.bg,
-                        styles.border,
-                        styles.text
+                  <div key={dateKey} className="space-y-2">
+                    {/* Day header */}
+                    <div className={cn(
+                      "sticky top-0 backdrop-blur py-2 border-b flex items-center gap-2",
+                      isTournamentDay ? "bg-primary/10" : "bg-background/95"
+                    )}>
+                      <span className={cn(
+                        "text-sm font-semibold",
+                        isTournamentDay ? "text-primary" : "text-foreground"
+                      )}>
+                        {displayLabel}
+                      </span>
+                      {isTournamentDay && (
+                        <Badge variant="default" className="text-xs py-0">
+                          <Calendar className="h-3 w-3 mr-1" />
+                          Tournament Day
+                        </Badge>
                       )}
-                    >
-                      <span className="text-sm font-medium">{tierLabel}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({dayMatches.length} match{dayMatches.length !== 1 ? 'es' : ''})
+                      </span>
                     </div>
-                    <div className="space-y-2 p-2 border border-t-0 rounded-b-lg">
-                      {tierSuggestions.map((suggestion) => (
-                        <SteamMatchCard
-                          key={suggestion.match_id}
-                          match={suggestion}
-                          onLink={handleLink}
-                          onViewDetails={setDetailsMatchId}
-                          isCurrentlyLinked={
-                            linkedMatchId === suggestion.match_id
-                          }
-                        />
-                      ))}
-                    </div>
+
+                    {/* Tier groups within this day */}
+                    {tierOrder.map((tier) => {
+                      const tierSuggestions = tierGroups[tier];
+                      if (!tierSuggestions?.length) return null;
+
+                      // Sort matches within tier by start_time (most recent first)
+                      const sortedTierSuggestions = [...tierSuggestions].sort(
+                        (a, b) => b.start_time - a.start_time
+                      );
+
+                      const styles = TIER_STYLES[tier];
+                      const tierLabel =
+                        sortedTierSuggestions[0]?.tier_display || tier.replace('_', ' ');
+
+                      return (
+                        <div key={`${dateKey}-${tier}`} data-testid={`tier-${tier}`}>
+                          <div
+                            className={cn(
+                              'px-3 py-1 rounded-t-lg border-b text-xs',
+                              styles.bg,
+                              styles.border,
+                              styles.text
+                            )}
+                          >
+                            <span className="font-medium">{tierLabel}</span>
+                          </div>
+                          <div className="space-y-2 p-2 border border-t-0 rounded-b-lg">
+                            {sortedTierSuggestions.map((suggestion) => (
+                              <SteamMatchCard
+                                key={suggestion.match_id}
+                                match={suggestion}
+                                onLink={handleLink}
+                                onViewDetails={setDetailsMatchId}
+                                isCurrentlyLinked={
+                                  linkedMatchId === suggestion.match_id
+                                }
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })

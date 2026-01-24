@@ -14,7 +14,61 @@ This command:
 3. Populates test database
 4. Starts test containers
 
-## Cypress E2E Tests
+## Playwright E2E Tests (Recommended)
+
+Playwright is the recommended E2E testing framework with parallel execution and better performance.
+
+### Quick Start
+
+```bash
+# Install browsers (first time only)
+inv test.playwright.install
+
+# Run all tests headless
+inv test.playwright.headless
+
+# Run tests with visible browser
+inv test.playwright.headed
+
+# Open interactive UI mode
+inv test.playwright.ui
+```
+
+### Run Specific Test Suites
+
+```bash
+inv test.playwright.navigation    # Navigation tests
+inv test.playwright.tournament    # Tournament tests
+inv test.playwright.draft         # Draft tests
+inv test.playwright.bracket       # Bracket tests
+inv test.playwright.league        # League tests
+inv test.playwright.herodraft     # HeroDraft tests
+inv test.playwright.mobile        # Mobile responsive tests
+```
+
+### Performance Options
+
+```bash
+# Run with specific worker count
+inv test.playwright.headless --args="--workers=4"
+
+# Run specific shard (for debugging CI)
+inv test.playwright.headless --args="--shard=1/4"
+```
+
+### Debugging
+
+```bash
+# Debug mode with inspector
+inv test.playwright.debug
+
+# View HTML report
+inv test.playwright.report
+```
+
+See [Playwright Testing Guide](../testing/playwright.md) for comprehensive documentation.
+
+## Cypress E2E Tests (Legacy)
 
 ### Interactive Mode
 
@@ -51,6 +105,18 @@ Available spec shortcuts:
 | `mobile` | `tests/cypress/e2e/06-mobile/**/*.cy.ts` |
 
 ## Test Location
+
+### Playwright (Recommended)
+
+```
+frontend/tests/playwright/
+├── e2e/           # Test specs organized by feature
+├── fixtures/      # Test fixtures and auth helpers
+├── helpers/       # Page objects and utilities
+└── global-setup.ts # Pre-test data caching
+```
+
+### Cypress (Legacy)
 
 ```
 frontend/tests/cypress/
@@ -161,8 +227,8 @@ inv test.run --cmd 'python manage.py test app.tests -v 2'
 # 7. Start test environment
 inv test.up
 
-# 8. Run Cypress smoke tests
-inv test.headless
+# 8. Run Playwright smoke tests (recommended)
+inv test.playwright.headless
 ```
 
 ### Quick Verification (Minimum)
@@ -180,5 +246,5 @@ If full Cypress tests aren't required, at minimum:
 |-------|----------|
 | Database errors on page load | Run `inv db.migrate.test` and `inv db.populate.all` |
 | Container won't start | Run `inv test.down` then `inv test.setup` |
-| WebSocket connection failed | Check nginx config routes `/ws/` correctly |
+| WebSocket connection failed | Check nginx config routes `/api/` correctly (WebSockets use /api/ paths) |
 | Missing dependencies | Run `inv test.setup` to rebuild images |

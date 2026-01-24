@@ -1124,7 +1124,7 @@ Add this service to `docker/docker-compose.debug.yaml`:
 ```yaml
   discord_bot:
     container_name: discord_bot
-    image: ghcr.io/kettleofketchup/dota_tournament/backend-dev:latest
+    image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
     env_file: "./docker/.env.dev"
     volumes:
       - ./backend/:/app/backend

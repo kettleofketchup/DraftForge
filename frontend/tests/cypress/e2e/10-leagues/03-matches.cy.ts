@@ -53,7 +53,8 @@ describe('League Page - Matches Tab (e2e)', () => {
 
     // Either matches are shown or empty state is shown
     cy.get('body').then(($body) => {
-      const hasMatches = $body.find('[data-testid="league-match-card"]').length > 0;
+      // Match cards have data-testid like "league-match-card-123"
+      const hasMatches = $body.find('[data-testid^="league-match-card"]').length > 0;
       const hasEmptyState = $body.text().includes('No matches found');
 
       // One of these should be true

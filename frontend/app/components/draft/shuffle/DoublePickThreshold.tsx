@@ -1,7 +1,7 @@
 import { Zap } from 'lucide-react';
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
-import type { TeamType, UserType } from '~/index';
+import { DisplayName, type TeamType, type UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 
@@ -140,7 +140,7 @@ export const DoublePickThreshold: React.FC = () => {
             to pick again
             <span className="text-muted-foreground">
               {' '}
-              ({threshold.team.captain?.nickname || threshold.team.captain?.username || threshold.team.name})
+              ({threshold.team.captain ? DisplayName(threshold.team.captain) : threshold.team.name})
             </span>
           </span>
           <span className="text-muted-foreground">

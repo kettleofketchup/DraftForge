@@ -1,7 +1,7 @@
 services:
   frontend:
     container_name: frontend
-    image: ghcr.io/kettleofketchup/dota_tournament/frontend-dev:latest
+    image: ghcr.io/kettleofketchup/draftforge/frontend-dev:latest
     env_file: "./docker/.env.dev"
     build:
       context: ./frontend
@@ -13,7 +13,7 @@ services:
   backend:
     container_name: backend
     env_file: "./docker/.env.dev"
-    image: ghcr.io/kettleofketchup/dota_tournament/backend-dev:latest
+    image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
     restart: always
     volumes:
       - ./backend:/app/backend
@@ -27,7 +27,7 @@ services:
     restart: always
 
   nginx:
-    image: ghcr.io/kettleofketchup/dota_tournament/nginx:latest
+    image: ghcr.io/kettleofketchup/draftforge/nginx:latest
     container_name: nginx
     restart: always
     env_file: "./docker/.env.dev"

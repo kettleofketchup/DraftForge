@@ -89,17 +89,17 @@ describe('Captain Draft Pick', () => {
       cy.visit('/');
       cy.waitForHydration();
 
-      // Wait for the active draft API to complete before asserting
-      // The API call happens when user is logged in
+      // Wait for the page to fully load before asserting
       cy.wait(1000);
 
-      // Check if this user happens to be a captain (test data can assign any user as captain)
+      // Check if this user happens to be a captain via current_user response
+      // The active_drafts array is included in the current_user API response
       cy.request({
         method: 'GET',
-        url: `${Cypress.env('apiUrl')}/active-draft-for-user/`,
+        url: `${Cypress.env('apiUrl')}/current_user/`,
         failOnStatusCode: false,
       }).then((response) => {
-        if (response.status === 200 && response.body.has_active_turn) {
+        if (response.status === 200 && response.body.active_drafts && response.body.active_drafts.length > 0) {
           // This user is actually a captain - skip the assertion
           cy.log(
             'User is a captain in test data - skipping floating indicator check',

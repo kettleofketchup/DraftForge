@@ -30,6 +30,7 @@ export interface BracketMatch {
   winner?: 'radiant' | 'dire';
   status: MatchStatus;
   steamMatchId?: number;               // Linked Steam match
+  herodraft_id?: number;               // HeroDraft ID for this match
   nextMatchId?: string;                // Winner advances to this match
   nextMatchSlot?: 'radiant' | 'dire';  // Which slot in next match
   loserNextMatchId?: string;           // Loser advances to this match (double elim)

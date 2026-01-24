@@ -13,6 +13,7 @@ import {
 } from '~/components/ui/alert-dialog';
 import { Button } from '~/components/ui/button';
 import type { UserType } from '~/index';
+import { DisplayName } from '~/components/user/avatar';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { choosePlayerHook } from '../hooks/choosePlayerHook';
@@ -71,7 +72,7 @@ export const ChoosePlayerButton: React.FC<{
     });
 
     log.debug('updateDraftRound', {
-      user: user.username,
+      user: DisplayName(user),
       draft_round: curDraftRound.pk,
       draft: draft,
     });
@@ -88,7 +89,7 @@ export const ChoosePlayerButton: React.FC<{
 
   // If user can't pick (not staff and not captain for this round)
   if (!canPick) {
-    const captainName = curDraftRound?.captain?.nickname || curDraftRound?.captain?.username || 'captain';
+    const captainName = curDraftRound?.captain ? DisplayName(curDraftRound.captain) : 'captain';
     return (
       <>
         <AdminOnlyButton buttonTxt={`Waiting for ${captainName}`} />
@@ -108,9 +109,9 @@ export const ChoosePlayerButton: React.FC<{
           </AlertDialogTrigger>
           <AlertDialogContent className={`bg-green-900`}>
             <AlertDialogHeader>
-              <AlertDialogTitle>Choose player {user.username}</AlertDialogTitle>
+              <AlertDialogTitle>Choose player {DisplayName(user)}</AlertDialogTitle>
               <AlertDialogDescription className="text-base-700">
-                This Chooses Player {user.username}
+                This Chooses Player {DisplayName(user)}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

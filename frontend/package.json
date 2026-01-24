@@ -5,8 +5,12 @@
   "scripts": {
     "build": "react-router build",
     "dev": "react-router dev --port 3000",
+    "dev:fresh": "npm run clean:cache && VITE_FORCE_OPTIMIZE=true react-router dev --port 3000",
+    "dev:prebuild": "npm run optimize && react-router dev --port 3000",
     "start": "react-router-serve ./build/server/index.js",
     "typecheck": "react-router typegen && tsc",
+    "clean:cache": "rm -rf node_modules/.vite node_modules/.cache .react-router",
+    "optimize": "vite optimize",
     "test:e2e": "cypress run",
     "test:e2e:open": "cypress open --e2e",
     "test:e2e:headed": "cypress run --headed",
@@ -14,14 +18,21 @@
     "test:e2e:parallel": "cypress-parallel -s test:e2e:headless -t 3 -d tests/cypress/e2e",
     "test:component": "cypress run --component",
     "test:component:open": "cypress open --component ",
-    "cypress:install": "cypress install"
+    "cypress:install": "cypress install",
+    "test:playwright": "playwright test",
+    "test:playwright:headed": "playwright test --headed",
+    "test:playwright:ui": "playwright test --ui",
+    "test:playwright:debug": "playwright test --debug",
+    "test:playwright:report": "playwright show-report",
+    "test:playwright:install": "playwright install chromium",
+    "test:herodraft": "playwright test tests/playwright/e2e/herodraft",
+    "test:herodraft:debug": "playwright test tests/playwright/e2e/herodraft --debug"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
     "@headlessui/react": "^2.2.7",
     "@hookform/resolvers": "^5.2.1",
     "@iconify/react": "^6.0.0",
-    "@mui/icons-material": "^7.3.1",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -76,6 +87,7 @@
     "zustand": "^5.0.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.0",
     "@react-router/dev": "^7.7.1",
     "@tailwindcss/vite": "^4.1.11",
     "@types/node": "^24.2.0",

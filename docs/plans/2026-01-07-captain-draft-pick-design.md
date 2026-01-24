@@ -1,5 +1,7 @@
 # Captain Draft Pick Feature - Design Document
 
+**Status:** Completed
+
 **Date:** 2026-01-07
 **Status:** Draft
 **Author:** Claude (with user guidance)

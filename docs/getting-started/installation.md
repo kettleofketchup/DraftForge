@@ -10,7 +10,7 @@
 ## Clone the Repository
 
 ```bash
-git clone https://github.com/kettleofketchup/dota_tournament.git
+git clone https://github.com/kettleofketchup/draftforge.git
 cd dota_tournament
 ```
 

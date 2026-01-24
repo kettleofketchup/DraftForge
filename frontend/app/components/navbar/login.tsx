@@ -26,29 +26,68 @@ type AvatarProps = {
 const AvatarContainer: React.FC<AvatarProps> = (props) => {
   return (
     <div
-      className="w-12 p-0.25 ring-primary ring-offset-base-100 rounded-full
+      className="relative w-12 h-12 flex-shrink-0 ring-primary ring-offset-base-100 rounded-full
                      ring ring-offset-0 shadow-xl hover:shadow-indigo-500/5
-                       delay-150 duration-300 easin-in-out hover:bg-sky-100"
+                       delay-150 duration-300 ease-in-out hover:bg-sky-100"
     >
       {props.children}
     </div>
   );
 };
 export const UserAvatarImg: React.FC<UserProps> = memo(({ user }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [hasError, setHasError] = useState(false);
+
+  // Reset loading state when user changes
+  React.useEffect(() => {
+    setIsLoaded(false);
+    setHasError(false);
+  }, [user?.avatarUrl]);
+
+  if (!user) {
+    return <div className="w-full h-full skeleton rounded-full" />;
+  }
+
+  if (hasError) {
+    return (
+      <div className="w-full h-full bg-base-300 rounded-full flex items-center justify-center">
+        <span className="text-xs text-base-content/50">
+          {user.username?.charAt(0)?.toUpperCase() || '?'}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <>
-      {user && (
-        <img
-          src={user.avatarUrl}
-          alt={user.username}
-          className="w-12 h-12 rounded-full"
-        />
-      )}
+      {!isLoaded && <div className="absolute inset-0 skeleton rounded-full" />}
+      <img
+        src={user.avatarUrl}
+        alt={user.username}
+        className={`w-full h-full rounded-full ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
+        onLoad={() => setIsLoaded(true)}
+        onError={() => setHasError(true)}
+      />
     </>
   );
 });
 
 import { logout } from '~/components/api/api';
+
+// Try to get cached user from sessionStorage (client-side only)
+const getCachedUser = (): UserType | null => {
+  try {
+    const stored = sessionStorage.getItem('dtx-storage');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return parsed?.state?.currentUser || null;
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null;
+};
+
 export const ProfileButton: React.FC = () => {
   const currentUser = useUserStore((state) => state.currentUser); // Zustand user state
   const navigate = useNavigate();
@@ -77,7 +116,7 @@ export const ProfileButton: React.FC = () => {
       <DropdownMenu>
         <DropdownMenuTrigger>
           <div
-            className=" m-0 btn-circle avatar flex p-0 relative"
+            className="m-0 btn-circle avatar flex p-0 relative"
             popoverTarget="popover-3"
             style={{ anchorName: '--anchor-3' } as React.CSSProperties}
             onClick={handleClick}
@@ -143,31 +182,79 @@ export const LoginButton: React.FC = () => {
 
 type props = {};
 export const LoginWithDiscordButton: React.FC<props> = () => {
-  const currentUser = useUserStore((state) => state.currentUser); // Zustand user state
-  const hasHydrated = useUserStore((state) => state.hasHydrated); // Zustand user state
-  const getCurrentUser = useUserStore((state) => state.getCurrentUser); // Zustand setter
-  useEffect(() => {}, [currentUser]);
+  const currentUser = useUserStore((state) => state.currentUser);
+  const hasHydrated = useUserStore((state) => state.hasHydrated);
+  const getCurrentUser = useUserStore((state) => state.getCurrentUser);
+  const [mounted, setMounted] = useState(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [cachedUser, setCachedUser] = useState<UserType | null>(null);
+
+  // Read cached user after mount to avoid hydration mismatch
   useEffect(() => {
-    if (hasHydrated && currentUser.username === undefined) {
-      getCurrentUser();
+    setMounted(true);
+    setCachedUser(getCachedUser());
+  }, []);
+
+  // Use cached user after mount, then switch to store user after hydration
+  const user = hasHydrated ? currentUser : (mounted && cachedUser ? cachedUser : currentUser);
+
+  // Check auth after hydration - background refresh
+  useEffect(() => {
+    if (hasHydrated) {
+      // If we already have a user (from cache or store), just refresh in background
+      if (user?.username) {
+        setIsCheckingAuth(false);
+        getCurrentUser(); // Background refresh
+      } else {
+        // No cached user - must wait for API
+        const checkAuth = async () => {
+          await getCurrentUser();
+          setIsCheckingAuth(false);
+        };
+        checkAuth();
+      }
     }
   }, [hasHydrated]);
-  if (!hasHydrated) {
+
+  // Before mount: static placeholder to avoid Radix hydration mismatch
+  if (!mounted) {
     return (
-      <div className="p-3 m-0 btn-circle avatar flex p-0 ">
-        <AvatarContainer>
-          <div className="skeleton h-12 w-12 shrink-0 rounded-full p-2z"></div>
-        </AvatarContainer>
-      </div>
+      <button type="button" className="bg-transparent border-0 p-0">
+        <div className="m-0 btn-circle avatar flex p-0 relative">
+          <AvatarContainer>
+            <div className="w-full h-full skeleton rounded-full" />
+          </AvatarContainer>
+          <DraftNotificationBadge />
+        </div>
+      </button>
     );
   }
-  return (
-    <>
-      {(currentUser.username === undefined ||
-        currentUser.username === null) && <LoginButton />}
-      {currentUser.username !== undefined && currentUser.username !== null && (
-        <ProfileButton />
-      )}
-    </>
-  );
+
+  // If we have a user (cached or from store), show them immediately
+  const hasUser = user?.username !== undefined && user?.username !== null;
+
+  if (hasUser) {
+    return <ProfileButton />;
+  }
+
+  // No user yet - show skeleton while checking auth, then login button
+  if (!hasHydrated || isCheckingAuth) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger>
+          <div
+            className="m-0 btn-circle avatar flex p-0 relative"
+            style={{ anchorName: '--anchor-3' } as React.CSSProperties}
+          >
+            <AvatarContainer>
+              <div className="w-full h-full skeleton rounded-full" />
+            </AvatarContainer>
+            <DraftNotificationBadge />
+          </div>
+        </DropdownMenuTrigger>
+      </DropdownMenu>
+    );
+  }
+
+  return <LoginButton />;
 };

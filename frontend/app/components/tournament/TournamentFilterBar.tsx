@@ -1,5 +1,5 @@
 import { ChevronDown, Filter, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useLeagues } from '~/components/league';
 import { useOrganizations } from '~/components/organization';
@@ -19,7 +19,13 @@ import {
 
 export function TournamentFilterBar() {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Only render Radix components after mount to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const { organizations } = useOrganizations();
 
   const selectedOrgId = searchParams.get('organization');
@@ -47,6 +53,21 @@ export function TournamentFilterBar() {
 
   function clearFilters() {
     setSearchParams(new URLSearchParams());
+  }
+
+  // Show placeholder during SSR to avoid hydration mismatch with Radix IDs
+  if (!mounted) {
+    return (
+      <div className="mb-4">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" disabled>
+            <Filter className="w-4 h-4 mr-2" />
+            Filter
+            <ChevronDown className="w-4 h-4 ml-2" />
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (

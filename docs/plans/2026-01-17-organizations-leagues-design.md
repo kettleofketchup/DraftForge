@@ -1,5 +1,7 @@
 # Organizations, Leagues & Tournament Improvements Design
 
+**Status:** Completed
+
 **Date:** 2026-01-17
 **Branch:** `user-captain-pop-over`
 **Status:** Draft

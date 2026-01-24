@@ -6,8 +6,13 @@ import token
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    permission_classes,
+)
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from social_django.models import UserSocialAuth
@@ -162,7 +167,9 @@ def return_tokens(user):
 from django.test import Client
 
 
+@csrf_exempt
 @api_view(["POST"])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def login_admin(request):
     if not isTestEnvironment(request):
@@ -176,7 +183,9 @@ def login_admin(request):
     return return_tokens(user)
 
 
+@csrf_exempt
 @api_view(["POST"])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def login_staff(request):
     if not isTestEnvironment(request):
@@ -189,7 +198,9 @@ def login_staff(request):
     return return_tokens(user)
 
 
+@csrf_exempt
 @api_view(["POST"])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def login_user(request):
     if not isTestEnvironment(request):
@@ -203,7 +214,9 @@ def login_user(request):
     return return_tokens(user)
 
 
+@csrf_exempt
 @api_view(["POST"])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def login_as_user(request):
     """
@@ -239,6 +252,64 @@ def login_as_user(request):
     from app.serializers import UserSerializer
 
     return Response({"success": True, "user": UserSerializer(user).data})
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def login_as_discord_id(request):
+    """
+    Login as a user by their Discord ID (TEST ONLY).
+
+    This endpoint is only available when TEST_ENDPOINTS=true.
+    Discord IDs are stable across populate runs, unlike PKs.
+
+    Request body:
+        discord_id: str - The Discord ID of the user to login as
+
+    Returns:
+        200: Login successful with user data
+        404: User not found
+    """
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    discord_id = request.data.get("discord_id")
+    if not discord_id:
+        return Response(
+            {"error": "discord_id is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = CustomUser.objects.filter(discordId=discord_id).first()
+    if not user:
+        return Response(
+            {"error": f"User with Discord ID {discord_id} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+
+    response = Response(
+        {
+            "success": True,
+            "user": {
+                "pk": user.pk,
+                "username": user.username,
+                "discordUsername": user.discordUsername,
+                "discordId": user.discordId,
+                "mmr": user.mmr,
+            },
+        },
+        status=status.HTTP_200_OK,
+    )
+
+    # Set cookies in response headers for Cypress
+    response["CookieSessionId"] = request.session.session_key
+    response["CookieCsrfToken"] = request.META.get("CSRF_COOKIE", "")
+
+    return response
 
 
 @api_view(["GET"])

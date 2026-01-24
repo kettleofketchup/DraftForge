@@ -19,13 +19,13 @@ export function FeatureCard({
   log.debug(`Rendering FeatureCard for ${title}`);
 
   return (
-    <div className="card bg-base-200 shadow-lg h-full">
+    <div className="card bg-base-200/50 backdrop-blur border border-primary/10 hover:border-primary/30 transition-all duration-300 h-full">
       <div className="card-body">
-        <h3 className={`card-title ${colorClass}`}>
-          {icon}
-          {title}
-        </h3>
-        <p className="text-base-content">{description}</p>
+        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-2">
+          <span className={colorClass}>{icon}</span>
+        </div>
+        <h3 className="card-title text-lg">{title}</h3>
+        <p className="text-base-content/70 text-sm">{description}</p>
       </div>
     </div>
   );

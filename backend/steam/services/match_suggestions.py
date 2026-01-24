@@ -144,17 +144,22 @@ def get_match_suggestions_for_game(game: Game, search: str | None = None) -> lis
                 "player_overlap": _count_player_overlap(match, all_team_steam_ids),
                 "radiant_captain": radiant_captain_info,
                 "dire_captain": dire_captain_info,
+                "matched_players": _get_matched_players(
+                    match, all_team_steam_ids, radiant_captain_id, dire_captain_id
+                ),
             }
         )
 
-    # Sort by tier priority
+    # Sort by player overlap (most matched players first), then by tier, then by time
     tier_order = {
         SuggestionTier.ALL_PLAYERS: 0,
         SuggestionTier.CAPTAINS_PLUS: 1,
         SuggestionTier.CAPTAINS_ONLY: 2,
         SuggestionTier.PARTIAL: 3,
     }
-    suggestions.sort(key=lambda s: (tier_order[s["tier"]], -s["start_time"]))
+    suggestions.sort(
+        key=lambda s: (-s["player_overlap"], tier_order[s["tier"]], -s["start_time"])
+    )
 
     return suggestions
 
@@ -182,3 +187,46 @@ def _count_player_overlap(match: Match, all_team_steam_ids: set[int]) -> int:
         PlayerMatchStats.objects.filter(match=match).values_list("steam_id", flat=True)
     )
     return len(all_team_steam_ids & match_steam_ids)
+
+
+def _get_matched_players(
+    match: Match,
+    all_team_steam_ids: set[int],
+    radiant_captain_id: int | None = None,
+    dire_captain_id: int | None = None,
+) -> list[dict]:
+    """Get info for all matched players in the match."""
+    from app.models import CustomUser
+
+    captain_ids = {radiant_captain_id, dire_captain_id} - {None}
+
+    # Get all player stats for this match
+    stats = PlayerMatchStats.objects.filter(match=match).select_related("user")
+
+    matched = []
+    for stat in stats:
+        if stat.steam_id in all_team_steam_ids:
+            # Try to get user info
+            user = stat.user
+            if not user:
+                # Try to find by steam_id
+                user = CustomUser.objects.filter(steamid=stat.steam_id).first()
+
+            matched.append(
+                {
+                    "steam_id": stat.steam_id,
+                    "user_id": user.pk if user else None,
+                    "username": user.username if user else None,
+                    "avatar": user.avatar if user else None,
+                    "hero_id": stat.hero_id,
+                    "player_slot": stat.player_slot,
+                    "is_radiant": stat.player_slot < 128,
+                    "is_captain": stat.steam_id in captain_ids,
+                }
+            )
+
+    # Sort by team (radiant first), captain first within team, then by slot
+    matched.sort(
+        key=lambda p: (not p["is_radiant"], not p["is_captain"], p["player_slot"])
+    )
+    return matched
