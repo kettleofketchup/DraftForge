@@ -42,7 +42,7 @@ const TeamsView: React.FC<TeamsViewProps> = ({ teams }) => (
     className="flex grid grid-flow-row-dense grid-auto-rows
         align-middle content-center justify-center
          grid-cols-1 lg:grid-cols-2 2xl:grid-cols-2
-         mb-0 mt-0 p-0 bg-base-900  w-full"
+         mb-0 mt-0 p-0 bg-base-500 w-full"
   >
     {teams.map((team, idx) => (
       <TeamCard

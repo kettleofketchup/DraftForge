@@ -46,6 +46,18 @@ from app.views import (
     UserView,
     current_user,
 )
+from app.views.admin_team import (
+    add_league_admin,
+    add_league_staff,
+    add_org_admin,
+    add_org_staff,
+    remove_league_admin,
+    remove_league_staff,
+    remove_org_admin,
+    remove_org_staff,
+    search_users,
+    transfer_org_ownership,
+)
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 
@@ -83,6 +95,8 @@ urlpatterns = [
     path("country/", app_views.require_country, name="require_country"),
     path("city/", app_views.require_city, name="require_city"),
     path("", include("social_django.urls")),
+    # User search (must be before router to avoid conflict with UserView)
+    path("api/users/search/", search_users, name="search_users"),
     path("api/", include(router.urls)),
     path("api/current_user", current_user),
     path("api/user/register", UserCreateView.as_view()),
@@ -164,6 +178,53 @@ urlpatterns = [
         "api/herodraft/<int:draft_pk>/abandon/",
         abandon_draft,
         name="herodraft_abandon",
+    ),
+    # Admin Team Management - Organization
+    path(
+        "api/organizations/<int:org_id>/admins/",
+        add_org_admin,
+        name="add_org_admin",
+    ),
+    path(
+        "api/organizations/<int:org_id>/admins/<int:user_id>/",
+        remove_org_admin,
+        name="remove_org_admin",
+    ),
+    path(
+        "api/organizations/<int:org_id>/staff/",
+        add_org_staff,
+        name="add_org_staff",
+    ),
+    path(
+        "api/organizations/<int:org_id>/staff/<int:user_id>/",
+        remove_org_staff,
+        name="remove_org_staff",
+    ),
+    path(
+        "api/organizations/<int:org_id>/transfer-ownership/",
+        transfer_org_ownership,
+        name="transfer_org_ownership",
+    ),
+    # League admin team
+    path(
+        "api/leagues/<int:league_id>/admins/",
+        add_league_admin,
+        name="add_league_admin",
+    ),
+    path(
+        "api/leagues/<int:league_id>/admins/<int:user_id>/",
+        remove_league_admin,
+        name="remove_league_admin",
+    ),
+    path(
+        "api/leagues/<int:league_id>/staff/",
+        add_league_staff,
+        name="add_league_staff",
+    ),
+    path(
+        "api/leagues/<int:league_id>/staff/<int:user_id>/",
+        remove_league_staff,
+        name="remove_league_staff",
     ),
 ]
 

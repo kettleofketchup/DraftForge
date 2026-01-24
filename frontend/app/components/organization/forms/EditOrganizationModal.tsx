@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
+import { AdminTeamSection } from '~/components/admin-team';
 import { updateOrganization } from '~/components/api/api';
 import { Button } from '~/components/ui/button';
 import {
@@ -25,6 +26,7 @@ import {
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
 import { DIALOG_CSS } from '~/components/reusable/modal';
+import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import {
   EditOrganizationSchema,
   type EditOrganizationInput,
@@ -45,6 +47,7 @@ export function EditOrganizationModal({
   onSuccess,
 }: EditOrganizationModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isOrgAdmin = useIsOrganizationAdmin(organization);
 
   const form = useForm<EditOrganizationInput>({
     resolver: zodResolver(EditOrganizationSchema),
@@ -199,6 +202,14 @@ export function EditOrganizationModal({
                 </FormItem>
               )}
             />
+
+            {/* Admin Team Section */}
+            {isOrgAdmin && (
+              <AdminTeamSection
+                organization={organization}
+                onUpdate={onSuccess}
+              />
+            )}
 
             <DialogFooter>
               <Button

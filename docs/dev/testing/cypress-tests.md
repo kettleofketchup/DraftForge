@@ -1,6 +1,6 @@
 # Cypress E2E Testing Guide
 
-Comprehensive documentation for the Cypress end-to-end test suite for the DTX website.
+Comprehensive documentation for the Cypress end-to-end test suite for DraftForge.
 
 ## Overview
 

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 def save_discord(
     strategy, details, user: CustomUser = None, is_new=False, *args, **kwargs
 ):
-    social_auth = user.social_auth.get()
+    social_auth = user.social_auth.filter(provider="discord").first()
     discordId = social_auth.extra_data["id"]
     avatar = social_auth.extra_data["avatar"]
     logger.info(f"SAVE_DISCORD {social_auth.extra_data}")

@@ -285,12 +285,12 @@ export const TournamentCard: React.FC<Props> = React.memo(({
       whileHover={{ scale: 1.02 }}
     >
       <div
-        className="w-full h-full card bg-base-200 shadow-md w-full
-            max-w-sm hover:bg-violet-900 . focus:outline-2
-            hover:shadow-xl/30
-            focus:outline-offset-2 focus:outline-violet-500
-            focus:outline-offset-2 active:bg-violet-900
-            delay-700 duration-900 ease-in-out"
+        className="w-full h-full card bg-base-300 shadow-elevated w-full
+            max-w-sm hover:bg-base-200 focus:outline-2
+            shadow-hover
+            focus:outline-offset-2 focus:outline-primary
+            focus:outline-offset-2 active:bg-base-200
+            transition-all duration-300 ease-in-out"
       >
         <div className="flex flex-row items-center align-start gap-2">
           {TournamentHeader()}

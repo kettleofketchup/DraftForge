@@ -2,13 +2,13 @@ services:
 
   frontend:
     env_file: "./docker/.env.release"
-    image: ghcr.io/kettleofketchup/dota_tournament/frontend:${VERSION}
+    image: ghcr.io/kettleofketchup/draftforge/frontend:${VERSION}
     user: "1000:1000"
     restart: always
 
   backend:
     env_file: "./docker/.env.release"
-    image: ghcr.io/kettleofketchup/dota_tournament/backend:${VERSION}
+    image: ghcr.io/kettleofketchup/draftforge/backend:${VERSION}
     # No ports exposed - accessed only through nginx reverse proxy
     restart: always
     volumes:
@@ -23,7 +23,7 @@ services:
       - ./backend/.redis_data:/data
     restart: always
   nginx:
-    image: ghcr.io/kettleofketchup/dota_tournament/nginx:${VERSION}
+    image: ghcr.io/kettleofketchup/draftforge/nginx:${VERSION}
     env_file: "./docker/.env.release"
     container_name: nginx
     restart: always

@@ -269,6 +269,13 @@ class CustomUser(AbstractUser):
 
         return f"https://cdn.discordapp.com/embed/avatars/0.png"  # Fallback
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["discordNickname"]),
+            models.Index(fields=["guildNickname"]),
+            models.Index(fields=["discordUsername"]),
+        ]
+
 
 class Organization(models.Model):
     """Organization that owns leagues and tournaments."""
@@ -278,6 +285,13 @@ class Organization(models.Model):
     logo = models.URLField(blank=True, default="")
     discord_link = models.URLField(blank=True, default="")
     rules_template = models.TextField(blank=True, default="", max_length=50000)
+    owner = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.PROTECT,
+        related_name="owned_organizations",
+        null=True,  # Nullable initially for migration, will be required
+        blank=True,
+    )
     admins = models.ManyToManyField(
         "CustomUser",
         related_name="admin_organizations",
@@ -319,12 +333,12 @@ class Organization(models.Model):
 
 
 class League(models.Model):
-    """League that belongs to an organization, 1:1 with Steam league."""
+    """League that can belong to multiple organizations, 1:1 with Steam league."""
 
-    organization = models.ForeignKey(
+    organizations = models.ManyToManyField(
         Organization,
-        on_delete=models.CASCADE,
         related_name="leagues",
+        blank=True,
     )
     steam_league_id = models.IntegerField(unique=True)
     name = models.CharField(max_length=255)
@@ -1674,3 +1688,106 @@ class LeagueMatchParticipant(models.Model):
     def __str__(self):
         result = "W" if self.is_winner else "L"
         return f"{self.player.username} ({result}) in Match {self.match_id}"
+
+
+class OrgLog(models.Model):
+    """Audit log for organization admin team changes."""
+
+    ACTION_CHOICES = [
+        ("add_admin", "Add Admin"),
+        ("remove_admin", "Remove Admin"),
+        ("add_staff", "Add Staff"),
+        ("remove_staff", "Remove Staff"),
+        ("transfer_ownership", "Transfer Ownership"),
+        ("create", "Create Organization"),
+        ("update", "Update Organization"),
+        ("delete", "Delete Organization"),
+    ]
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="logs",
+    )
+    actor = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="org_actions_performed",
+        help_text="User who performed the action",
+    )
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    target_user = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="org_actions_received",
+        help_text="User affected by the action (if applicable)",
+    )
+    details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["organization", "-created_at"]),
+        ]
+        verbose_name = "Organization Log"
+        verbose_name_plural = "Organization Logs"
+
+    def __str__(self):
+        actor_name = self.actor.username if self.actor else "System"
+        return f"{actor_name} {self.action} on {self.organization.name}"
+
+
+class LeagueLog(models.Model):
+    """Audit log for league admin team changes."""
+
+    ACTION_CHOICES = [
+        ("add_admin", "Add Admin"),
+        ("remove_admin", "Remove Admin"),
+        ("add_staff", "Add Staff"),
+        ("remove_staff", "Remove Staff"),
+        ("link_organization", "Link Organization"),
+        ("unlink_organization", "Unlink Organization"),
+        ("create", "Create League"),
+        ("update", "Update League"),
+        ("delete", "Delete League"),
+    ]
+
+    league = models.ForeignKey(
+        League,
+        on_delete=models.CASCADE,
+        related_name="logs",
+    )
+    actor = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="league_actions_performed",
+        help_text="User who performed the action",
+    )
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    target_user = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="league_actions_received",
+        help_text="User affected by the action (if applicable)",
+    )
+    details = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["league", "-created_at"]),
+        ]
+        verbose_name = "League Log"
+        verbose_name_plural = "League Logs"
+
+    def __str__(self):
+        actor_name = self.actor.username if self.actor else "System"
+        return f"{actor_name} {self.action} on {self.league.name}"

@@ -1,6 +1,6 @@
 # Playwright E2E Testing
 
-This document covers Playwright end-to-end testing for the DTX Website.
+This document covers Playwright end-to-end testing for DraftForge.
 
 ## Overview
 

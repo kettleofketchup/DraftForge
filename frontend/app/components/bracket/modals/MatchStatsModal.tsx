@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -10,12 +11,12 @@ import {
 import { Button } from '~/components/ui/button';
 import { Badge } from '~/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { BarChart3, Eye, Link2, Swords } from 'lucide-react';
+import { BarChart3, Link2, Loader2, Swords } from 'lucide-react';
 import { useUserStore } from '~/store/userStore';
 import { useBracketStore } from '~/store/bracketStore';
+import { useCreateHeroDraft } from '~/hooks/useHeroDraft';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import { LinkSteamMatchModal } from './LinkSteamMatchModal';
-import { createHeroDraft } from '~/components/herodraft/api';
 import type { BracketMatch } from '../types';
 import { cn } from '~/lib/utils';
 import { DisplayName } from '~/components/user/avatar';
@@ -37,6 +38,8 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
 
+  const createDraftMutation = useCreateHeroDraft();
+
   if (!match) return null;
 
   const isGameComplete = match.status === 'completed';
@@ -55,33 +58,41 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
 
   const handleOpenDraft = async () => {
     if (!pk || !onOpenHeroDraft) {
-      console.error("Tournament pk and onOpenHeroDraft callback are required");
+      toast.error('Unable to open draft', {
+        description: 'Missing tournament context',
+      });
       return;
     }
-    try {
-      let draftIdToOpen: number | null = null;
-      if (match.herodraft_id) {
-        // Draft exists, open it
-        draftIdToOpen = match.herodraft_id;
-      } else if (match.gameId) {
-        // Create new draft
-        const draft = await createHeroDraft(match.gameId);
+
+    let draftIdToOpen: number;
+
+    if (match.herodraft_id) {
+      // Draft already exists, just open it
+      draftIdToOpen = match.herodraft_id;
+    } else if (match.gameId) {
+      // Create new draft (backend is idempotent - returns existing if race condition)
+      try {
+        const draft = await createDraftMutation.mutateAsync(match.gameId);
         draftIdToOpen = draft.id;
+        toast.success('Draft created!');
+
         // Reload bracket to update herodraft_id in the match
         if (tournament?.pk) {
           loadBracket(tournament.pk);
         }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        toast.error(`Failed to create draft: ${message}`);
+        return;
       }
-
-      if (draftIdToOpen) {
-        // Update URL to include draft
-        navigate(`/tournament/${pk}/bracket/draft/${draftIdToOpen}`, { replace: true });
-        // Open hero draft modal via parent callback (this also closes match modal)
-        onOpenHeroDraft(draftIdToOpen);
-      }
-    } catch (error) {
-      console.error("Failed to open draft:", error);
+    } else {
+      toast.error('Game not saved yet');
+      return;
     }
+
+    // Navigate and open the draft modal
+    navigate(`/tournament/${pk}/bracket/draft/${draftIdToOpen}`, { replace: true });
+    onOpenHeroDraft(draftIdToOpen);
   };
 
   return (
@@ -159,9 +170,14 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
                 variant="outline"
                 size="sm"
                 onClick={handleOpenDraft}
+                disabled={createDraftMutation.isPending}
                 data-testid="view-draft-btn"
               >
-                <Swords className="w-4 h-4 mr-1" />
+                {createDraftMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                ) : (
+                  <Swords className="w-4 h-4 mr-1" />
+                )}
                 {match.herodraft_id ? 'View Draft' : 'Start Draft'}
               </Button>
             </div>

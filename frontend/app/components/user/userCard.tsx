@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import React, { memo, useEffect } from 'react';
 import { Badge } from '~/components/ui/badge';
+import { Item, ItemContent, ItemTitle } from '~/components/ui/item';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { AvatarUrl } from '~/index';
@@ -41,7 +42,6 @@ export const UserCard: React.FC<Props> = memo(
       return false;
     };
     const avatar = () => {
-      if (!user.avatar) return null;
       return (
         <div className="relative">
           {hasError() && (
@@ -59,28 +59,6 @@ export const UserCard: React.FC<Props> = memo(
       );
     };
 
-
-    const userDetails = () => {
-      return (
-        <div className="text-xs text-text-muted space-y-0.5">
-          {user.username && (
-            <div className="truncate">
-              <span className="font-semibold">Username:</span> {user.username}
-            </div>
-          )}
-          {user.nickname && user.nickname !== user.username && (
-            <div className="truncate">
-              <span className="font-semibold">Nickname:</span> {user.nickname}
-            </div>
-          )}
-          {user.mmr && (
-            <div>
-              <span className="font-semibold">MMR:</span> {user.mmr}
-            </div>
-          )}
-        </div>
-      );
-    };
 
     const userDotabuff = () => {
       const goToDotabuff = () => {
@@ -145,13 +123,13 @@ export const UserCard: React.FC<Props> = memo(
           transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
           whileHover={{ scale: 1.02 }}
           key={`usercard:${getKeyName()} basediv`}
-          className="relative flex flex-col p-3 pb-12 card bg-base-300 shadow-elevated w-full
-            max-w-sm hover:bg-base-200 focus:outline-2
+          className="flex flex-col px-2 py-2 gap-2 card bg-base-300 shadow-elevated w-fit
+            hover:bg-base-200 focus:outline-2
             focus:outline-offset-2 focus:outline-primary
             active:bg-base-200 transition-all duration-300 ease-in-out"
         >
           {/* Header row - name and edit button */}
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
               <h2 className="card-title text-base truncate">
                 {user.nickname || user.username}
@@ -173,30 +151,75 @@ export const UserCard: React.FC<Props> = memo(
           </div>
 
           {/* 2-column layout: Avatar left, Positions right */}
-          <div className="grid grid-cols-[auto_1fr] gap-3 items-center">
+          <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
             {/* Left column - Avatar centered */}
             <div className="flex items-center justify-center">
               {avatar()}
             </div>
 
-            {/* Right column - Positions (compact mode) */}
-            <div className="flex flex-col gap-1">
-              <RolePositions user={user} compact />
+            {/* Right column - Positions and MMR */}
+            <div className="flex flex-col gap-1 w-full">
+              <Item size="sm" variant="muted" className="!p-1.5 w-full">
+                <ItemContent className="!gap-1 items-center w-full">
+                  <ItemTitle className="!text-xs text-muted-foreground">Positions</ItemTitle>
+                  <RolePositions user={user} compact />
+                </ItemContent>
+              </Item>
+              {/* MMR row */}
+              <div className="grid grid-cols-2 gap-1 w-full">
+                <Item size="sm" variant="muted" className="!p-1">
+                  <ItemContent className="!gap-0 items-center">
+                    <ItemTitle className="!text-xs text-muted-foreground">Base MMR</ItemTitle>
+                    <span className="text-sm font-semibold">{user.mmr ?? '?'}</span>
+                  </ItemContent>
+                </Item>
+                <Item size="sm" variant="muted" className="!p-1">
+                  <ItemContent className="!gap-0 items-center">
+                    <ItemTitle className="!text-xs text-muted-foreground">League MMR</ItemTitle>
+                    <span className="text-sm font-semibold">?</span>
+                  </ItemContent>
+                </Item>
+              </div>
             </div>
           </div>
 
-          {/* User details row - above footer */}
-          <div className="mt-2 mb-1 flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              {userDetails()}
-            </div>
-            <div className="flex-shrink-0">
+          {/* User info row - 2 items per row */}
+          <div className="grid grid-cols-2 gap-1">
+            {user.username && (
+              <Item size="sm" variant="muted" className="!p-1">
+                <ItemContent className="!gap-0">
+                  <ItemTitle className="!text-xs text-muted-foreground">Username</ItemTitle>
+                  <span className="text-sm">{user.username.length > 8 ? `${user.username.slice(0, 8)}...` : user.username}</span>
+                </ItemContent>
+              </Item>
+            )}
+            {user.nickname && user.nickname !== user.username && (
+              <Item size="sm" variant="muted" className="!p-1">
+                <ItemContent className="!gap-0">
+                  <ItemTitle className="!text-xs text-muted-foreground">Nickname</ItemTitle>
+                  <span className="text-sm">{user.nickname.length > 8 ? `${user.nickname.slice(0, 8)}...` : user.nickname}</span>
+                </ItemContent>
+              </Item>
+            )}
+            {user.steamid && (
+              <Item size="sm" variant="muted" className="!p-1">
+                <ItemContent className="!gap-0">
+                  <ItemTitle className="!text-xs text-muted-foreground">Steam ID</ItemTitle>
+                  <span className="text-sm">{String(user.steamid).length > 8 ? `${String(user.steamid).slice(0, 8)}...` : user.steamid}</span>
+                </ItemContent>
+              </Item>
+            )}
+          </div>
+
+          {/* Error info row */}
+          {(!user.mmr || !user.positions) && (
+            <div className="flex justify-end">
               {errorInfo()}
             </div>
-          </div>
+          )}
 
-          {/* Card Footer - fixed to bottom */}
-          <div className="absolute bottom-2 left-3 right-3 flex items-end justify-between">
+          {/* Card Footer */}
+          <div className="flex items-center justify-between mt-auto">
             {/* Dotabuff - bottom left */}
             <div className="flex-shrink-0">
               {userDotabuff()}

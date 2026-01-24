@@ -51,7 +51,7 @@ export const GamesTab: React.FC = memo(() => {
   };
 
   return (
-    <div className="py-5 px-3 mx-auto container bg-base-300 rounded-lg shadow-lg" data-testid="gamesTab">
+    <div className="py-5 px-3 mx-auto container" data-testid="gamesTab">
       {/* View mode tabs */}
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'bracket' | 'list')}>
         <div className="flex items-center justify-between mb-4">

@@ -84,11 +84,11 @@ export const TeamCard: React.FC<Props> = ({
   return (
     <div
       key={`teamCard:${getKeyName()} base`}
-      className="flex flex-grow flex-col items-center px-6 py-4 content-center justify-center w-full   justify-between p-2 h-full card bg-base-200 shadow-md w-full
-             hover:bg-violet-900  focus:outline-2
-            hover:shadow-xl/30
-            focus:outline-offset-2 focus:outline-violet-500
-            focus:outline-offset-2 active:bg-violet-900
+      className="flex flex-grow flex-col items-center px-6 py-4 content-center justify-center w-full justify-between p-2 h-full card bg-base-300 shadow-elevated w-full
+            hover:bg-base-200 shadow-hover focus:outline-2
+            focus:outline-offset-2 focus:outline-primary
+            focus:outline-offset-2 active:bg-base-200
+            transition-all duration-300 ease-in-out
             [content-visibility: auto] [contain-intrinsic-size: 400px 220px]
 
             "

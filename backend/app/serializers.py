@@ -120,6 +120,14 @@ class TournamentsSerializer(serializers.ModelSerializer):
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
+    owner = TournamentUserSerializer(read_only=True)
+    owner_id = serializers.PrimaryKeyRelatedField(
+        queryset=CustomUser.objects.all(),
+        write_only=True,
+        source="owner",
+        required=False,
+        allow_null=True,
+    )
     admins = TournamentUserSerializer(many=True, read_only=True)
     staff = TournamentUserSerializer(many=True, read_only=True)
     admin_ids = serializers.PrimaryKeyRelatedField(
@@ -149,6 +157,8 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "logo",
             "discord_link",
             "rules_template",
+            "owner",
+            "owner_id",
             "admins",
             "staff",
             "admin_ids",
@@ -192,6 +202,14 @@ class OrganizationsSerializer(serializers.ModelSerializer):
 
 
 class LeagueSerializer(serializers.ModelSerializer):
+    organizations = OrganizationsSerializer(many=True, read_only=True)
+    organization_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Organization.objects.all(),
+        many=True,
+        write_only=True,
+        source="organizations",
+        required=False,
+    )
     admins = TournamentUserSerializer(many=True, read_only=True)
     staff = TournamentUserSerializer(many=True, read_only=True)
     admin_ids = serializers.PrimaryKeyRelatedField(
@@ -209,15 +227,15 @@ class LeagueSerializer(serializers.ModelSerializer):
         required=False,
     )
     tournament_count = serializers.IntegerField(read_only=True)
-    organization_name = serializers.CharField(
-        source="organization.name", read_only=True
-    )
+    # For backwards compatibility, return first org name
+    organization_name = serializers.SerializerMethodField()
 
     class Meta:
         model = League
         fields = (
             "pk",
-            "organization",
+            "organizations",
+            "organization_ids",
             "organization_name",
             "steam_league_id",
             "name",
@@ -241,6 +259,11 @@ class LeagueSerializer(serializers.ModelSerializer):
             "organization_name",
         )
 
+    def get_organization_name(self, obj):
+        """Return first organization name for backwards compatibility."""
+        first_org = obj.organizations.first()
+        return first_org.name if first_org else None
+
     def validate_description(self, value):
         if value:
             return nh3.clean(value)
@@ -256,21 +279,30 @@ class LeaguesSerializer(serializers.ModelSerializer):
     """Lightweight serializer for league list view."""
 
     tournament_count = serializers.IntegerField(read_only=True)
-    organization_name = serializers.CharField(
-        source="organization.name", read_only=True
-    )
+    organizations = OrganizationsSerializer(many=True, read_only=True)
+    organization_name = serializers.SerializerMethodField()
 
     class Meta:
         model = League
         fields = (
             "pk",
-            "organization",
+            "organizations",
             "organization_name",
             "steam_league_id",
             "name",
             "tournament_count",
         )
-        read_only_fields = ("pk", "tournament_count", "organization_name")
+        read_only_fields = (
+            "pk",
+            "tournament_count",
+            "organization_name",
+            "organizations",
+        )
+
+    def get_organization_name(self, obj):
+        """Return first organization name for backwards compatibility."""
+        first_org = obj.organizations.first()
+        return first_org.name if first_org else None
 
 
 class DraftRoundForDraftSerializer(serializers.ModelSerializer):

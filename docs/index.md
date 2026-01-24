@@ -1,10 +1,10 @@
-# Dota Tournament Website Documentation
+# DraftForge Documentation
 
-Welcome to the DTX Website documentation. This site helps manage DTX, a Dota2 gaming organization.
+Welcome to the DraftForge documentation. DraftForge is a platform for managing Dota 2 tournaments, teams, and competitive gaming.
 
 ## Overview
 
-The DTX Website is a full-stack application for managing:
+DraftForge is a full-stack application for managing:
 
 - **Users** - Discord-integrated user management
 - **Tournaments** - Tournament creation and management

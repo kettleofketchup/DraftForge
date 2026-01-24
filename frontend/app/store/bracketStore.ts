@@ -230,6 +230,12 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
       const response = await api.get(`/bracket/tournaments/${tournamentId}/`);
       const data = BracketResponseSchema.parse(response.data);
 
+      // Check if user made changes during fetch - don't overwrite their work
+      if (get().isDirty) {
+        log.debug('Skipping bracket load - user has unsaved changes');
+        return;
+      }
+
       if (data.matches.length > 0) {
         // Pass all matches to mapper so it can resolve next_game references
         const mappedMatches = data.matches.map(m => mapApiMatchToMatch(m, data.matches));

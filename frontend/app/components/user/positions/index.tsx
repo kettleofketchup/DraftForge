@@ -27,7 +27,7 @@ const numberClasses =
   'absolute -top-1 -left-1 h-4 w-4 rounded-full p-0 border-white border-1 text-white';
 
 const compactNumberClasses =
-  'absolute -top-0.5 -left-0.5 h-3.5 w-3.5 text-[10px] rounded-full p-0 border-white border-1 text-white flex items-center justify-center';
+  'absolute -top-1 -left-1 h-3.5 w-3.5 text-[10px] rounded-full p-0 border-white border-1 text-white flex items-center justify-center';
 
 const getRankLabel = (rank: number): string => {
   switch (rank) {
@@ -74,12 +74,12 @@ export const CarryBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
         <div className="relative inline-block cursor-help">
           <Badge className={cn(
             "badge-primary !bg-rose-900 !text-white hover:!bg-rose-800 transition-colors",
-            compact && "!px-1.5 !py-0.5"
+            compact && "!px-1 !py-0.5"
           )}>
             <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-rose-800")}>
               {user.positions.carry}
             </Badge>
-            <CarrySVG className={compact ? "w-3.5 h-3.5" : undefined} />
+            <CarrySVG className={compact ? "w-4 h-4" : undefined} />
             {!compact && "Carry"}
           </Badge>
         </div>
@@ -102,12 +102,12 @@ export const MidBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
         <div className="relative inline-block cursor-help">
           <Badge className={cn(
             "badge-primary !bg-cyan-900 !text-white hover:!bg-cyan-800 transition-colors",
-            compact && "!px-1.5 !py-0.5"
+            compact && "!px-1 !py-0.5"
           )}>
             <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-cyan-800")}>
               {user.positions.mid}
             </Badge>
-            <MidSVG className={compact ? "w-3.5 h-3.5" : undefined} />
+            <MidSVG className={compact ? "w-4 h-4" : undefined} />
             {!compact && "Mid"}
           </Badge>
         </div>
@@ -130,12 +130,12 @@ export const OfflaneBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
         <div className="relative inline-block cursor-help">
           <Badge className={cn(
             "badge-primary !bg-emerald-900 !text-white hover:!bg-emerald-800 transition-colors",
-            compact && "!px-1.5 !py-0.5"
+            compact && "!px-1 !py-0.5"
           )}>
             <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-emerald-800")}>
               {user.positions.offlane}
             </Badge>
-            <OfflaneSVG className={compact ? "w-3.5 h-3.5" : undefined} />
+            <OfflaneSVG className={compact ? "w-4 h-4" : undefined} />
             {!compact && "Offlane"}
           </Badge>
         </div>
@@ -158,12 +158,12 @@ export const SoftSupportBadge: React.FC<BadgeProps> = memo(({ user, compact }) =
         <div className="relative inline-block cursor-help">
           <Badge className={cn(
             "badge-primary !bg-violet-900 !text-white hover:!bg-violet-800 transition-colors",
-            compact && "!px-1.5 !py-0.5"
+            compact && "!px-1 !py-0.5"
           )}>
             <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-violet-800")}>
               {user.positions.soft_support}
             </Badge>
-            <SoftSupportSVG className={compact ? "w-3.5 h-3.5" : undefined} />
+            <SoftSupportSVG className={compact ? "w-4 h-4" : undefined} />
             {!compact && (
               <>
                 <span className="hidden 2xl:inline">SoftSupport</span>
@@ -191,12 +191,12 @@ export const HardSupportBadge: React.FC<BadgeProps> = memo(({ user, compact }) =
         <div className="relative inline-block cursor-help">
           <Badge className={cn(
             "badge-primary !bg-indigo-900 !text-white hover:!bg-indigo-800 transition-colors",
-            compact && "!px-1.5 !py-0.5"
+            compact && "!px-1 !py-0.5"
           )}>
             <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-indigo-800")}>
               {user.positions.hard_support}
             </Badge>
-            <HardSupportSVG className={compact ? "w-3.5 h-3.5" : undefined} />
+            <HardSupportSVG className={compact ? "w-4 h-4" : undefined} />
             {!compact && (
               <>
                 <span className="hidden 2xl:inline">HardSupport</span>
@@ -224,8 +224,8 @@ export const RolePositions: React.FC<RolePositionsProps> = ({ user, compact }) =
 
   return (
     <div className={cn(
-      "flex gap-1 flex-wrap",
-      compact ? "flex-row" : "flex-col md:flex-row"
+      "flex flex-wrap justify-center",
+      compact ? "flex-row gap-2" : "flex-col md:flex-row gap-1"
     )}>
       {[
         { component: CarryBadge, value: user?.positions?.carry },
