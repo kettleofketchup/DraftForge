@@ -2,9 +2,8 @@ import React, { memo, useEffect, useState } from 'react';
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
-} from '~/components/ui/tooltip'; // Adjust path as needed
+} from '~/components/ui/tooltip';
 import type { UserClassType, UserType } from '~/components/user/types';
 
 import { useUserStore } from '~/store/userStore';
@@ -111,27 +110,22 @@ export const UserEditModalDialog: React.FC<DialogProps> = memo(
 
 export const UserEditModalButton: React.FC = memo(() => {
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DialogTrigger asChild>
-            <Button
-              size="icon"
-              variant="default"
-              className={
-                'bg-green-950 hover:bg-green-800 text-white' +
-                ' hover:shadow-sm hover:shadow-green-500/50'
-              }
-            >
-              <Edit2 color="white" className="pzs-2" />
-            </Button>
-          </DialogTrigger>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>Edit User </p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <DialogTrigger asChild>
+          <Button
+            size="icon"
+            variant="default"
+            className="bg-green-950 hover:bg-green-800 text-white hover:shadow-sm hover:shadow-green-500/50"
+          >
+            <Edit2 color="white" />
+          </Button>
+        </DialogTrigger>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>Edit User</p>
+      </TooltipContent>
+    </Tooltip>
   );
 });
 export const UserEditModal: React.FC<Props> = memo(({ user }) => {

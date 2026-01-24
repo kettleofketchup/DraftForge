@@ -237,16 +237,14 @@ export const UserCard: React.FC<Props> = memo(
           </div>
         );
     };
+    const showDeleteButton = currentUser.is_staff && saveCallback === 'save' && deleteButtonType;
+
     return (
       <div
         key={`usercard:${getKeyName()} base`}
         data-testid={`usercard-${user.username}`}
-        className="flex w-full
-        sm:gap-2 md:gap-4
-        py-4
-        justify-center
-        content-center
-        [content-visibility: auto] [contain-intrinsic-size: 400px 220px]"
+        className="flex w-full py-2 justify-center content-center
+          [content-visibility:auto] [contain-intrinsic-size:400px_180px]"
       >
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -254,34 +252,36 @@ export const UserCard: React.FC<Props> = memo(
           transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
           whileHover={{ scale: 1.02 }}
           key={`usercard:${getKeyName()} basediv`}
-          className="justify-between p-2 h-full card bg-base-200 shadow-md w-full
-            max-w-sm hover:bg-violet-900 . focus:outline-2
-            hover:shadow-xl/30
-            focus:outline-offset-2 focus:outline-violet-500
-            focus:outline-offset-2 active:bg-violet-900"
+          className="relative flex flex-col justify-between p-3 pb-10 card bg-base-300 shadow-elevated w-full
+            max-w-sm hover:bg-base-200 focus:outline-2
+            focus:outline-offset-2 focus:outline-primary
+            active:bg-base-200 transition-all duration-300 ease-in-out"
         >
           {topBar()}
 
-          <div className="mt-2 space-y-2 text-sm">
+          <div className="mt-1 space-y-1 text-sm">
             {viewMode()}
-            <div className="flex flex-col ">
-              <div className="flex items-center justify-start gap-6">
-                {userDotabuff()}
-              </div>
-              <div className="flex items-center justify-end gap-6">
-                {errorInfo()}
-                {currentUser.is_staff &&
-                  saveCallback === 'save' &&
-                  deleteButtonType === 'normal' && (
-                    <UserRemoveButton user={user} />
-                  )}
-                {currentUser.is_staff &&
-                  saveCallback === 'save' &&
-                  deleteButtonType === 'tournament' && (
-                    <PlayerRemoveButton user={user} />
-                  )}
-              </div>
+            {errorInfo()}
+          </div>
+
+          {/* Card Footer - fixed to bottom */}
+          <div className="absolute bottom-2 left-3 right-3 flex items-end justify-between">
+            {/* Dotabuff - bottom left */}
+            <div className="flex-shrink-0">
+              {userDotabuff()}
             </div>
+
+            {/* Delete button - bottom right */}
+            {showDeleteButton && (
+              <div className="flex-shrink-0">
+                {deleteButtonType === 'normal' && (
+                  <UserRemoveButton user={user} />
+                )}
+                {deleteButtonType === 'tournament' && (
+                  <PlayerRemoveButton user={user} />
+                )}
+              </div>
+            )}
           </div>
         </motion.div>
       </div>

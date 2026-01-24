@@ -1,9 +1,10 @@
 import { Loader2, Users } from 'lucide-react';
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
 import { UserCreateModal } from '~/components/user/userCard/createModal';
+import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useUserStore } from '~/store/userStore';
 
 /** Skeleton loader for user cards */
@@ -67,7 +68,7 @@ const UserGridSkeleton = ({ count = 8 }: { count?: number }) => (
     className="grid grid-flow-row-dense grid-auto-rows
     align-middle content-center justify-center
     grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4
-    mb-0 mt-0 p-0 bg-base-900 w-full gap-2 md:gap-4 lg:gap-6"
+    mb-0 mt-0 p-0 bg-background w-full gap-2 md:gap-4 lg:gap-6"
   >
     {Array.from({ length: count }).map((_, index) => (
       <UserCardSkeleton key={`skeleton-${index}`} />
@@ -118,6 +119,7 @@ export function UsersPage() {
   const users = hasHydrated ? storeUsers : (mounted && cachedUsers.length > 0 ? cachedUsers : storeUsers);
 
   const [query, setQuery] = useState('');
+  const debouncedQuery = useDebouncedValue(query, 300);
   const [createModalQuery, setCreateModalQuery] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,16 +131,15 @@ export function UsersPage() {
     }
   }, [currentUser?.pk, getCurrentUser]);
 
-  // Filter users - directly from store
-  const filteredUsers = query === ''
-    ? users
-    : users.filter((person) => {
-        const q = query.toLowerCase();
-        return (
-          person.username?.toLowerCase().includes(q) ||
-          person.nickname?.toLowerCase().includes(q)
-        );
-      });
+  // Filter users with debounced query - memoized for performance
+  const filteredUsers = useMemo(() => {
+    if (debouncedQuery === '') return users;
+    const q = debouncedQuery.toLowerCase();
+    return users.filter((person) =>
+      person.username?.toLowerCase().includes(q) ||
+      person.nickname?.toLowerCase().includes(q)
+    );
+  }, [users, debouncedQuery]);
 
   // Fetch users after hydration - show cached data immediately, refresh in background
   useEffect(() => {
@@ -186,7 +187,7 @@ export function UsersPage() {
           className="grid grid-flow-row-dense grid-auto-rows
           align-middle content-center justify-center
           grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4
-          mb-0 mt-0 p-0 bg-base-900 w-full gap-2 md:gap-4 lg:gap-6"
+          mb-0 mt-0 p-0 bg-background w-full gap-2 md:gap-4 lg:gap-6"
         >
           {filteredUsers.map((u: UserType, index: number) => (
             <UserCardWrapper
