@@ -5,10 +5,16 @@ from django.db import transaction
 from django.db.models import Max
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 
 from app.models import Game, Team, Tournament
+from app.permissions_org import (
+    can_edit_tournament,
+    can_manage_game,
+    has_league_admin_access,
+    has_league_staff_access,
+)
 from app.serializers import (
     BracketGameSerializer,
     BracketGenerateSerializer,
@@ -40,14 +46,26 @@ def get_bracket(request, tournament_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def generate_bracket(request, tournament_id):
-    """Generate bracket structure from tournament teams."""
+    """Generate bracket structure from tournament teams.
+
+    Requires league admin access to the tournament's league.
+    """
     try:
         tournament = Tournament.objects.get(pk=tournament_id)
     except Tournament.DoesNotExist:
         return Response(
             {"error": "Tournament not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Check permission
+    if not can_edit_tournament(request.user, tournament):
+        return Response(
+            {
+                "error": "You do not have permission to generate brackets for this tournament"
+            },
+            status=status.HTTP_403_FORBIDDEN,
         )
 
     serializer = BracketGenerateSerializer(data=request.data)
@@ -66,15 +84,27 @@ def generate_bracket(request, tournament_id):
 
 
 @api_view(["POST"])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 @transaction.atomic
 def save_bracket(request, tournament_id):
-    """Save bracket structure to database."""
+    """Save bracket structure to database.
+
+    Requires league admin access to the tournament's league.
+    """
     try:
         tournament = Tournament.objects.get(pk=tournament_id)
     except Tournament.DoesNotExist:
         return Response(
             {"error": "Tournament not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Check permission
+    if not can_edit_tournament(request.user, tournament):
+        return Response(
+            {
+                "error": "You do not have permission to save brackets for this tournament"
+            },
+            status=status.HTTP_403_FORBIDDEN,
         )
 
     serializer = BracketSaveSerializer(data=request.data)
@@ -187,14 +217,24 @@ def calculate_placement(game):
 
 
 @api_view(["POST"])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 @transaction.atomic
 def advance_winner(request, game_id):
-    """Mark winner and advance to next match, setting placement if eliminated."""
+    """Mark winner and advance to next match, setting placement if eliminated.
+
+    Requires league staff access.
+    """
     try:
         game = Game.objects.get(pk=game_id)
     except Game.DoesNotExist:
         return Response({"error": "Game not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Check permission
+    if not can_manage_game(request.user, game):
+        return Response(
+            {"error": "You do not have permission to manage this game"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     winner_slot = request.data.get("winner")  # 'radiant' or 'dire'
     if winner_slot not in ["radiant", "dire"]:
@@ -266,14 +306,26 @@ def advance_winner(request, game_id):
 
 
 @api_view(["PATCH"])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def set_team_placement(request, tournament_id, team_id):
-    """Manually set or clear a team's tournament placement."""
+    """Manually set or clear a team's tournament placement.
+
+    Requires league staff access.
+    """
     try:
         tournament = Tournament.objects.get(pk=tournament_id)
     except Tournament.DoesNotExist:
         return Response(
             {"error": "Tournament not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Check permission - use tournament's league for staff check
+    if not can_edit_tournament(request.user, tournament):
+        return Response(
+            {
+                "error": "You do not have permission to set placements in this tournament"
+            },
+            status=status.HTTP_403_FORBIDDEN,
         )
 
     try:
