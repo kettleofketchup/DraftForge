@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion';
-import React, { memo, useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import React, { memo, useEffect } from 'react';
 import { Badge } from '~/components/ui/badge';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
@@ -15,7 +14,6 @@ const log = getLogger('UserCard');
 
 interface Props {
   user: UserClassType;
-  edit?: boolean;
   saveFunc?: string;
   compact?: boolean;
   deleteButtonType?: 'tournament' | 'normal';
@@ -24,27 +22,16 @@ interface Props {
 }
 
 export const UserCard: React.FC<Props> = memo(
-  ({ user, edit, saveFunc, compact, deleteButtonType, animationIndex = 0 }) => {
-    const [editMode, setEditMode] = useState(edit || false);
-    const form = useForm<UserType>();
-
-    const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
-    const [isSaving, setIsSaving] = useState(false);
-    const [error, setError] = useState(false);
-    const [errorMessage, setErrorMessage] = useState<
-      Partial<Record<keyof UserType, string>>
-    >({});
+  ({ user, saveFunc = 'save', compact, deleteButtonType, animationIndex = 0 }) => {
+    const currentUser: UserType = useUserStore((state) => state.currentUser);
     const getUsers = useUserStore((state) => state.getUsers);
 
-    const delUser = useUserStore((state) => state.delUser); // Zustand setter
-
-    const [saveCallback, setSaveCallBack] = useState(saveFunc || 'save');
     useEffect(() => {
       if (!user.pk) {
         log.error('User does not have a primary key (pk)');
         getUsers();
       }
-    }, [user, user.mmr, user.pk, user.username, user.nickname, user.position]);
+    }, [user.pk, getUsers]);
 
     const hasError = () => {
       if (!user.mmr) {
@@ -54,110 +41,44 @@ export const UserCard: React.FC<Props> = memo(
       return false;
     };
     const avatar = () => {
+      if (!user.avatar) return null;
       return (
-        <>
-          {user.avatar && (
-            <div className="flex-row w-20 h-20">
-              {!hasError() && (
-                <img
-                  src={AvatarUrl(user)}
-                  alt={`${user.username}'s avatar`}
-                  className="w-16 h-16 rounded-full border border-primary"
-                />
-              )}
-
-              {hasError() && (
-                <>
-                  <span className="relative flex size-3 place-self-end mr-5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75" />
-                    <span className="relative inline-flex size-3 rounded-full bg-red-500" />
-                  </span>
-                  <img
-                    src={AvatarUrl(user)}
-                    alt={`${user.username}'s avatar`}
-                    className="flex w-16 h-16 rounded-full border border-primary"
-                  />
-                </>
-              )}
-            </div>
+        <div className="relative">
+          {hasError() && (
+            <span className="absolute -top-1 -right-1 flex size-3 z-10">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75" />
+              <span className="relative inline-flex size-3 rounded-full bg-red-500" />
+            </span>
           )}
-        </>
+          <img
+            src={AvatarUrl(user)}
+            alt={`${user.username}'s avatar`}
+            className="w-14 h-14 rounded-full border-2 border-primary"
+          />
+        </div>
       );
     };
 
-    const userHeader = () => {
-      return (
-        <>
-          {!editMode && (
-            <div className="flex-1">
-              <h2 className="card-title text-lg">
-                {user.nickname || user.username}
-              </h2>
-              {!compact && (
-                <div className="flex gap-2 mt-1">
-                  {user.is_staff && (
-                    <Badge className="bg-blue-700 text-white">Staff</Badge>
-                  )}
-                  {user.is_superuser && (
-                    <Badge className="bg-red-700 text-white">Admin</Badge>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      );
-    };
 
-    const viewMode = () => {
-      if (compact) {
-        return (
-          <>
-            {user.mmr && (
-              <div>
-                <span className="font-semibold">MMR:</span> {user.mmr}
-              </div>
-            )}
-            {user.username && (
-              <div>
-                <span className="font-semibold">Username:</span> {user.username}
-              </div>
-            )}
-            {user.nickname && (
-              <div>
-                <span className="font-semibold">Nickname:</span> {user.nickname}
-              </div>
-            )}
-            <RolePositions user={user} />
-          </>
-        );
-      }
+    const userDetails = () => {
       return (
-        <>
+        <div className="text-xs text-text-muted space-y-0.5">
           {user.username && (
-            <div>
+            <div className="truncate">
               <span className="font-semibold">Username:</span> {user.username}
             </div>
           )}
-          {user.nickname && (
-            <div>
+          {user.nickname && user.nickname !== user.username && (
+            <div className="truncate">
               <span className="font-semibold">Nickname:</span> {user.nickname}
             </div>
           )}
-
           {user.mmr && (
             <div>
               <span className="font-semibold">MMR:</span> {user.mmr}
             </div>
           )}
-
-          <RolePositions user={user} />
-          {user.steamid && (
-            <div>
-              <span className="font-semibold">Steam ID:</span> {user.steamid}
-            </div>
-          )}
-        </>
+        </div>
       );
     };
 
@@ -209,42 +130,14 @@ export const UserCard: React.FC<Props> = memo(
         </div>
       );
     };
-    const topBar = () => {
-      if (compact) {
-        return (
-          <>
-            <div className="flex items-center gap-2 justify-center">
-              {userHeader()}
-              <div className="flex justify-end">
-                {(currentUser.is_staff || currentUser.is_superuser) && (
-                  <UserEditModal user={new User(user)} />
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2 py-4 justify-center">
-              {avatar()}
-            </div>
-          </>
-        );
-      } else
-        return (
-          <div className="flex items-center gap-2 justify-start">
-            {avatar()}
-            {userHeader()}
-            {(currentUser.is_staff || currentUser.is_superuser) && (
-              <UserEditModal user={new User(user)} />
-            )}
-          </div>
-        );
-    };
-    const showDeleteButton = currentUser.is_staff && saveCallback === 'save' && deleteButtonType;
+    const showDeleteButton = currentUser.is_staff && saveFunc === 'save' && deleteButtonType;
 
     return (
       <div
         key={`usercard:${getKeyName()} base`}
         data-testid={`usercard-${user.username}`}
         className="flex w-full py-2 justify-center content-center
-          [content-visibility:auto] [contain-intrinsic-size:400px_180px]"
+          [content-visibility:auto] [contain-intrinsic-size:400px_160px]"
       >
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -252,15 +145,49 @@ export const UserCard: React.FC<Props> = memo(
           transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
           whileHover={{ scale: 1.02 }}
           key={`usercard:${getKeyName()} basediv`}
-          className="relative flex flex-col justify-between p-3 pb-10 card bg-base-300 shadow-elevated w-full
+          className="relative flex flex-col p-3 pb-10 card bg-base-300 shadow-elevated w-full
             max-w-sm hover:bg-base-200 focus:outline-2
             focus:outline-offset-2 focus:outline-primary
             active:bg-base-200 transition-all duration-300 ease-in-out"
         >
-          {topBar()}
+          {/* Header row - name and edit button */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex-1 min-w-0">
+              <h2 className="card-title text-base truncate">
+                {user.nickname || user.username}
+              </h2>
+              {!compact && (user.is_staff || user.is_superuser) && (
+                <div className="flex gap-1 mt-0.5">
+                  {user.is_staff && (
+                    <Badge className="bg-blue-700 text-white text-[10px] px-1.5 py-0">Staff</Badge>
+                  )}
+                  {user.is_superuser && (
+                    <Badge className="bg-red-700 text-white text-[10px] px-1.5 py-0">Admin</Badge>
+                  )}
+                </div>
+              )}
+            </div>
+            {(currentUser.is_staff || currentUser.is_superuser) && (
+              <UserEditModal user={new User(user)} />
+            )}
+          </div>
 
-          <div className="mt-1 space-y-1 text-sm">
-            {viewMode()}
+          {/* 2-column layout: Avatar left, Positions right */}
+          <div className="grid grid-cols-[auto_1fr] gap-3 items-center">
+            {/* Left column - Avatar centered */}
+            <div className="flex items-center justify-center">
+              {avatar()}
+            </div>
+
+            {/* Right column - Positions */}
+            <div className="flex flex-col gap-1">
+              <RolePositions user={user} />
+            </div>
+          </div>
+
+          {/* User details row - above footer */}
+          <div className="mt-2 flex items-center justify-between">
+            {userDetails()}
             {errorInfo()}
           </div>
 
