@@ -239,13 +239,14 @@ def populate_organizations_and_leagues(force=False):
     dtx_league, created = League.objects.update_or_create(
         steam_league_id=DTX_STEAM_LEAGUE_ID,
         defaults={
-            "organization": dtx_org,
             "name": DTX_LEAGUE_NAME,
             "description": "Main DTX League for in-house tournaments.",
             "rules": "Standard DTX tournament rules apply.",
             "prize_pool": "",
         },
     )
+    # Add organization to league (ManyToMany)
+    dtx_league.organizations.add(dtx_org)
     action = "Created" if created else "Updated"
     print(
         f"  {action} league: {DTX_LEAGUE_NAME} (steam_league_id={DTX_STEAM_LEAGUE_ID})"
