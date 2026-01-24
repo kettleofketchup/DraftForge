@@ -145,7 +145,7 @@ export const UserCard: React.FC<Props> = memo(
           transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
           whileHover={{ scale: 1.02 }}
           key={`usercard:${getKeyName()} basediv`}
-          className="relative flex flex-col p-3 pb-10 card bg-base-300 shadow-elevated w-full
+          className="relative flex flex-col p-3 pb-12 card bg-base-300 shadow-elevated w-full
             max-w-sm hover:bg-base-200 focus:outline-2
             focus:outline-offset-2 focus:outline-primary
             active:bg-base-200 transition-all duration-300 ease-in-out"
@@ -179,16 +179,20 @@ export const UserCard: React.FC<Props> = memo(
               {avatar()}
             </div>
 
-            {/* Right column - Positions */}
+            {/* Right column - Positions (compact mode) */}
             <div className="flex flex-col gap-1">
-              <RolePositions user={user} />
+              <RolePositions user={user} compact />
             </div>
           </div>
 
           {/* User details row - above footer */}
-          <div className="mt-2 flex items-center justify-between">
-            {userDetails()}
-            {errorInfo()}
+          <div className="mt-2 mb-1 flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              {userDetails()}
+            </div>
+            <div className="flex-shrink-0">
+              {errorInfo()}
+            </div>
           </div>
 
           {/* Card Footer - fixed to bottom */}
