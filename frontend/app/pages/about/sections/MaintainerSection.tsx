@@ -62,7 +62,7 @@ export function MaintainerSection() {
       whileHover={{ scale: 1.01 }}
       whileFocus={{ scale: 1.01 }}
     >
-      <div className="card bg-gradient-to-r from-primary/5 to-accent/5 border border-primary/20 shadow-lg ">
+      <div className="card bg-base-200/50 backdrop-blur border border-primary/10 hover:border-primary/30 transition-all duration-300">
         <div className="card-body">
           <div className="flex items-center gap-4 mb-6">
             <div className="avatar hover:animate-spin">
@@ -79,7 +79,7 @@ export function MaintainerSection() {
             </div>
           </div>
 
-          <div className="bg-base-100 rounded-lg p-6 border border-primary/10">
+          <div className="bg-base-content/5 rounded-lg p-6 border border-base-content/10">
             <h3 className="text-xl font-semibold text-red-600 mb-3">
               About Me
             </h3>
@@ -87,7 +87,7 @@ export function MaintainerSection() {
               The driving force behind this website, KettleOfKetchup is
               responsible for maintaining, developing, and continuously
               improving this tournament and guild management system. With a passion for both
-              Dota 2 and software development, they ensure that Kettle of Tournaments remains a
+              Dota 2 and software development, they ensure that DraftForge remains a
               cutting-edge solution for gaming communities.
             </p>
             <div className="flex flex-wrap gap-2">

@@ -249,7 +249,7 @@ class TournamentView(viewsets.ModelViewSet):
         org_id = self.request.query_params.get("organization")
         league_id = self.request.query_params.get("league")
         if org_id:
-            queryset = queryset.filter(league__organization_id=org_id)
+            queryset = queryset.filter(league__organizations__pk=org_id)
         if league_id:
             queryset = queryset.filter(league_id=league_id)
         return queryset
@@ -864,8 +864,7 @@ class LeagueView(viewsets.ModelViewSet):
     def get_queryset(self):
         """Optimize with select_related, prefetch_related, and annotations."""
         queryset = (
-            League.objects.select_related("organization")
-            .prefetch_related("admins", "staff")
+            League.objects.prefetch_related("organizations", "admins", "staff")
             .annotate(
                 tournament_count=Count("tournaments", distinct=True),
             )
@@ -874,7 +873,7 @@ class LeagueView(viewsets.ModelViewSet):
 
         org_id = self.request.query_params.get("organization")
         if org_id:
-            queryset = queryset.filter(organization_id=org_id)
+            queryset = queryset.filter(organizations__pk=org_id)
         return queryset
 
     def get_permissions(self):
@@ -887,20 +886,22 @@ class LeagueView(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def create(self, request, *args, **kwargs):
-        org_id = request.data.get("organization")
-        if org_id:
-            try:
-                org = Organization.objects.get(pk=org_id)
-                if not has_org_admin_access(request.user, org):
+        # Check permission for any provided organizations
+        org_ids = request.data.get("organization_ids", [])
+        if org_ids:
+            for org_id in org_ids:
+                try:
+                    org = Organization.objects.get(pk=org_id)
+                    if not has_org_admin_access(request.user, org):
+                        return Response(
+                            {"detail": "Must be organization admin to create league"},
+                            status=status.HTTP_403_FORBIDDEN,
+                        )
+                except Organization.DoesNotExist:
                     return Response(
-                        {"detail": "Must be organization admin to create league"},
-                        status=status.HTTP_403_FORBIDDEN,
+                        {"detail": f"Organization {org_id} not found"},
+                        status=status.HTTP_404_NOT_FOUND,
                     )
-            except Organization.DoesNotExist:
-                return Response(
-                    {"detail": "Organization not found"},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
         return super().create(request, *args, **kwargs)
 
     def list(self, request, *args, **kwargs):

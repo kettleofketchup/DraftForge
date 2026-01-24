@@ -1,119 +1,73 @@
-## Building and Pushing Docker Images (using paths.py)
+# Draftforge
 
-This project provides a `paths.py` utility to help manage Docker image tags and paths for backend, frontend, and nginx.
+A tournament management platform for Dota 2 gaming communities.
 
-### 1. Authenticate to GitHub Container Registry
+**Website:** [dota.kettle.sh](https://dota.kettle.sh)
 
-See the section above for Docker login instructions.
+**Documentation:** [kettleofketchup.github.io/draftforge](https://kettleofketchup.github.io/draftforge/)
 
-### 2. Build Docker Images
+## Features
 
-You can use the Dockerfiles and tags defined in `paths.py` to build images:
+- **Tournament Management** - Create and manage tournaments with customizable formats
+- **Draft System** - Three draft styles: Snake, Normal, and Shuffle (MMR-balanced)
+- **Hero Draft** - Captains Mode hero picking with real-time WebSocket updates
+- **Team Organization** - Captain-based team drafting with live updates
+- **Match Tracking** - Steam API integration for match statistics
+- **League System** - Player ratings and league standings
+- **Discord Integration** - OAuth authentication and bot notifications
 
-```sh
-# Example for backend
-inv docker.backend.build
+## Tech Stack
 
-# Example for frontend
-inv docker.frontend.build
+| Layer | Technologies |
+|-------|--------------|
+| Frontend | React 19, TypeScript, Vite, TailwindCSS, Radix UI |
+| Backend | Django 5, Django REST Framework, Daphne (WebSockets), Celery |
+| Infrastructure | Docker, Nginx, Redis (caching) |
+| Auth | Discord OAuth |
 
-# Example for nginx
-inv docker.nginx.build
+## Quick Start
 
-#or
+```bash
+# Clone the repository
+git clone https://github.com/kettleofketchup/draftforge.git
+cd draftforge
 
-inv docker.all.build
+# Setup Python environment
+python -m venv .venv
+source .venv/bin/activate
+poetry install
+
+# Start development environment
+inv dev.debug
 ```
 
-### 3. Push Docker Images
+## Development
 
-```sh
-# Example for backend
-inv docker.backend.push
+Full development documentation is available at [kettleofketchup.github.io/draftforge](https://kettleofketchup.github.io/draftforge/), including:
 
-# Example for frontend
-inv docker.frontend.push
+- [Installation Guide](https://kettleofketchup.github.io/draftforge/getting-started/installation/)
+- [Quick Start](https://kettleofketchup.github.io/draftforge/getting-started/quick-start/)
+- [Architecture Overview](https://kettleofketchup.github.io/draftforge/architecture/overview/)
+- [API Reference](https://kettleofketchup.github.io/draftforge/api/endpoints/)
 
-# Example for nginx
-inv docker.nginx.push
+### Docker Images
 
-#or
+Build and push Docker images using Invoke tasks:
 
+```bash
+# Build all images
+inv docker.all.build
+
+# Push all images
 inv docker.all.push
 ```
 
-Refer to your `paths.py` for tag and path variables to use in your scripts or CI/CD.
+Version is managed in `pyproject.toml`.
 
-and Update the pyproject.toml version as that will match the tag versions
----
+### GitHub Container Registry
 
-# Update Version in docker compose
+Authenticate to push images:
 
-when you want to update the version for pyproject and docker ocmpose, run the following
-
-
----
-
-## Publishing Docker Images to GitHub Container Registry
-
-To push Docker images to a private GitHub Container Registry (ghcr.io):
-
-1. **Authenticate to GitHub Container Registry:**
-   - Create a GitHub Personal Access Token (PAT) with `write:packages` and `read:packages` scopes.
-   - Login to the registry:
-
-     ```sh
-     echo YOUR_GITHUB_PAT | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-     ```
-
-2. **Tag your Docker image:**
-
-     ```sh
-     docker tag local-image:tag ghcr.io/OWNER/REPO/IMAGE_NAME:TAG
-     ```
-     - `OWNER` is your GitHub username or org.
-     - `REPO` is the repository name.
-     - `IMAGE_NAME` is the image name (can be same as repo or custom).
-     - `TAG` is the version/tag.
-
-3. **Push the image:**
-
-     ```sh
-     docker push ghcr.io/OWNER/REPO/IMAGE_NAME:TAG
-     ```
-
-**Example:**
-
-### 1. Login
-
-```sh
-# 1. Login
-echo <pat>... | docker login ghcr.io -u myusername --password-stdin
+```bash
+echo YOUR_GITHUB_PAT | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
 ```
-
-
-# 2. Tag
-See building instructions above for building
-Version is grabbed from pyproject.toml
-
-
-# 3. Push
-See pushing instructions above for building
-Version is grabbed from pyproject.tom
-```
-
----
-
-# React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-
-# Github action locally
-
-act -W .github/workflows/test.yml -s GITHUB_TOKEN=<YOUR_H_TOKEN>

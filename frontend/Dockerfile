@@ -59,7 +59,7 @@ RUN npm run build
 
 # ---- Runtime (production) ----
 FROM deps AS runtime
-LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/dota_tournament"
+LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/draftforge"
 WORKDIR /app
 ENV PROD=false
 ENV NODE_ENV="dev"
@@ -72,7 +72,7 @@ CMD ["npm", "run", "start"]
 
 # ---- Dev/Test Runtime (with Cypress and Playwright) ----
 FROM deps-build AS runtime-dev
-LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/dota_tournament"
+LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/draftforge"
 WORKDIR /app
 
 # Copy system browsers and deps from browsers stage

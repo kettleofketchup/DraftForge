@@ -1,6 +1,6 @@
-# DTX Website - Claude Code Configuration
+# DraftForge - Claude Code Configuration
 
-Website for managing DTX, a Dota2 gaming organization.
+DraftForge is a platform for managing Dota 2 tournaments, teams, and competitive gaming.
 
 ## First Things First
 

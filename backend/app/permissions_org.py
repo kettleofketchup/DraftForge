@@ -3,15 +3,26 @@
 from rest_framework import permissions
 
 
-def has_org_admin_access(user, organization):
-    """Check if user is org admin or superuser."""
+def is_org_owner(user, organization):
+    """Check if user is the org owner."""
     if not user.is_authenticated:
         return False
-    return user.is_superuser or organization.admins.filter(pk=user.pk).exists()
+    return organization.owner_id == user.pk
+
+
+def has_org_admin_access(user, organization):
+    """Check if user is org owner, org admin, or superuser."""
+    if not user.is_authenticated:
+        return False
+    return (
+        user.is_superuser
+        or is_org_owner(user, organization)
+        or organization.admins.filter(pk=user.pk).exists()
+    )
 
 
 def has_org_staff_access(user, organization):
-    """Check if user has staff access to org (admin or staff)."""
+    """Check if user has staff access to org (owner, admin, or staff)."""
     if not user.is_authenticated:
         return False
     return (
@@ -21,25 +32,56 @@ def has_org_staff_access(user, organization):
 
 
 def has_league_admin_access(user, league):
-    """Check if user is league admin, org admin, or superuser."""
+    """Check if user is league admin, admin of any linked org, or superuser."""
     if not user.is_authenticated:
         return False
-    return (
-        user.is_superuser
-        or league.organization.admins.filter(pk=user.pk).exists()
-        or league.admins.filter(pk=user.pk).exists()
-    )
+
+    # Superuser has access
+    if user.is_superuser:
+        return True
+
+    # Check if user is a league-specific admin
+    if league.admins.filter(pk=user.pk).exists():
+        return True
+
+    # Check if user is admin (or owner) of ANY linked organization
+    for org in league.organizations.all():
+        if has_org_admin_access(user, org):
+            return True
+
+    return False
 
 
 def has_league_staff_access(user, league):
     """Check if user has staff access to league."""
     if not user.is_authenticated:
         return False
-    return (
-        has_league_admin_access(user, league)
-        or league.organization.staff.filter(pk=user.pk).exists()
-        or league.staff.filter(pk=user.pk).exists()
-    )
+
+    # League admin has staff access
+    if has_league_admin_access(user, league):
+        return True
+
+    # Check if user is a league-specific staff
+    if league.staff.filter(pk=user.pk).exists():
+        return True
+
+    # Check if user is staff of ANY linked organization
+    for org in league.organizations.all():
+        if has_org_staff_access(user, org):
+            return True
+
+    return False
+
+
+class IsOrgOwner(permissions.BasePermission):
+    """Permission check for organization owner access."""
+
+    def has_permission(self, request, view):
+        """Allow authenticated users to proceed to object-level check."""
+        return request.user and request.user.is_authenticated
+
+    def has_object_permission(self, request, view, obj):
+        return is_org_owner(request.user, obj) or request.user.is_superuser
 
 
 class IsOrgAdmin(permissions.BasePermission):

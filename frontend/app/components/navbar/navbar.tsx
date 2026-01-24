@@ -10,7 +10,7 @@ import {
   TooltipTrigger,
 } from '../ui/tooltip';
 
-const GITHUB_REPO_URL = 'https://github.com/kettleofketchup/dota_tournament';
+const GITHUB_REPO_URL = 'https://github.com/kettleofketchup/draftforge';
 const DOCS_URL = 'https://kettleofketchup.github.io/dota_tournament/';
 const BUG_REPORT_URL = `${GITHUB_REPO_URL}/issues/new?template=bug_report.md`;
 
@@ -116,7 +116,7 @@ const useGitHubStars = () => {
       setIsLoading(true);
       try {
         const response = await fetch(
-          'https://api.github.com/repos/kettleofketchup/dota_tournament'
+          'https://api.github.com/repos/kettleofketchup/draftforge'
         );
         if (response.ok) {
           const data = await response.json();
@@ -453,7 +453,7 @@ const SiteLogo = () => {
         >
           <img
             src="/logo512.png"
-            alt="Kettle of Tournaments"
+            alt="DraftForge"
             className="h-10 w-10 aspect-square object-contain rounded-full flex-shrink-0"
           />
         </a>

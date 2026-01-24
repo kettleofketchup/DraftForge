@@ -314,9 +314,9 @@ button:focus-visible {
   /* Muted: slate-800 */
   --muted: oklch(0.279 0.041 260);
   --muted-foreground: oklch(0.704 0.04 257);
-  /* Accent: sky-400 (esports glow) */
-  --accent: oklch(0.746 0.16 233);
-  --accent-foreground: oklch(0.129 0.042 265);
+  /* Accent: sky-600 (darker for readability) */
+  --accent: oklch(0.52 0.14 233);
+  --accent-foreground: oklch(0.95 0.02 233);
   /* Destructive: rose-500 */
   --destructive: oklch(0.645 0.246 16);
   --destructive-foreground: oklch(0.968 0.007 248);

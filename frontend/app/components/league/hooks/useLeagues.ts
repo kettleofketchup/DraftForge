@@ -23,7 +23,7 @@ export function useLeagues(organizationId?: number) {
   const filteredLeagues = useMemo(
     () =>
       organizationId
-        ? leagues.filter((l) => l.organization === organizationId)
+        ? leagues.filter((l) => l.organizations?.some((org) => org.pk === organizationId))
         : leagues,
     [leagues, organizationId],
   );

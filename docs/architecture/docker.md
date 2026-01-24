@@ -68,7 +68,7 @@ The project provides multiple Docker Compose configurations for different enviro
 
 ```yaml
 frontend:
-  image: ghcr.io/kettleofketchup/dota_tournament/frontend:latest
+  image: ghcr.io/kettleofketchup/draftforge/frontend:latest
   # Development: mounts ./frontend/ for hot reload
   volumes:
     - ./frontend/:/app
@@ -81,7 +81,7 @@ frontend:
 
 ```yaml
 backend:
-  image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
+  image: ghcr.io/kettleofketchup/draftforge/backend:latest
   depends_on:
     - redis
   volumes:
@@ -106,7 +106,7 @@ Persistent data storage for cache across restarts.
 
 ```yaml
 nginx:
-  image: ghcr.io/kettleofketchup/dota_tournament/nginx:latest
+  image: ghcr.io/kettleofketchup/draftforge/nginx:latest
   ports:
     - "80:80"
     - "443:443"
@@ -119,7 +119,7 @@ nginx:
 
 ```yaml
 celery-worker:
-  image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
+  image: ghcr.io/kettleofketchup/draftforge/backend:latest
   command: celery -A config worker -l info
   depends_on:
     - redis
@@ -132,7 +132,7 @@ Processes background tasks from the Redis queue. Uses the same image as the back
 
 ```yaml
 celery-beat:
-  image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
+  image: ghcr.io/kettleofketchup/draftforge/backend:latest
   command: celery -A config beat -l info
   depends_on:
     - redis
@@ -150,12 +150,42 @@ Scheduler that triggers periodic tasks (e.g., league match sync every 60 seconds
 | `docker/.env.prod` | Production environment variables |
 | `docker/.env.release` | Release version and settings |
 
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NODE_ENV` | Environment mode (dev/test/prod/release) | - |
+| `DOMAIN` | Site domain | `localhost` |
+| `FRONTEND_HOST` | Frontend host | `localhost` |
+| `FRONTEND_PORT` | Frontend port | `3000` |
+| `BACKEND_HOST` | Backend host | `localhost` |
+| `BACKEND_PORT` | Backend port | `8000` |
+| `SSR_API_URL` | Backend URL for SSR requests | `http://backend:8000/api` |
+
+### SSR_API_URL
+
+The frontend uses Server-Side Rendering (SSR). During SSR, the Node.js server needs to reach the backend API. Since it runs inside Docker, it uses the Docker service name.
+
+```bash
+# Default - uses Docker Compose service name
+SSR_API_URL=http://backend:8000/api
+
+# Kubernetes example
+SSR_API_URL=http://backend-service:8000/api
+
+# External backend
+SSR_API_URL=https://api.example.com/api
+```
+
+!!! info "Why not /api?"
+    On the client (browser), requests to `/api` are proxied by Nginx. But during SSR, the Node.js server makes requests directly - it needs the full internal URL to reach the backend container.
+
 ## Image Registry
 
 All images are hosted on GitHub Container Registry:
 
 ```
-ghcr.io/kettleofketchup/dota_tournament/
+ghcr.io/kettleofketchup/draftforge/
 ├── frontend:latest
 ├── frontend-dev:latest
 ├── backend:latest

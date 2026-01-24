@@ -1,11 +1,25 @@
 import { z } from 'zod';
 import type { UserType } from '~/components/user/types';
 import { UserSchema } from '~/components/user/schemas';
+import {
+  OrganizationSchema,
+  type OrganizationType,
+} from '~/components/organization/schemas';
+
+// Lightweight org schema for league list view
+const LeagueOrganizationSchema = z.object({
+  pk: z.number(),
+  name: z.string(),
+  logo: z.string().optional(),
+  league_count: z.number().optional(),
+  created_at: z.string().optional(),
+});
 
 export const LeagueSchema = z.object({
   pk: z.number().optional(),
-  organization: z.number(),
-  organization_name: z.string().optional(),
+  organizations: z.array(LeagueOrganizationSchema).optional(),
+  organization_ids: z.array(z.number()).optional(),
+  organization_name: z.string().nullable().optional(), // Backwards compatibility
   steam_league_id: z.number().min(1, 'Steam League ID is required'),
   name: z.string().min(1, 'Name is required').max(255),
   description: z.string().optional().default(''),
@@ -20,7 +34,7 @@ export const LeagueSchema = z.object({
 });
 
 export const CreateLeagueSchema = z.object({
-  organization: z.number(),
+  organization_ids: z.array(z.number()).min(1, 'At least one organization is required'),
   steam_league_id: z.number().min(1, 'Steam League ID is required'),
   name: z.string().min(1, 'Name is required').max(255),
   description: z.string().max(10000),

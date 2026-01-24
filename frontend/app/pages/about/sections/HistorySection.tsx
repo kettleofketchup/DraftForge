@@ -13,7 +13,7 @@ export function HistorySection() {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, delay: 0.2 }}
     >
-      <div className="card bg-base-200 shadow-lg mb-12">
+      <div className="card bg-base-200/50 backdrop-blur border border-primary/10 mb-12">
         <div className="card-body">
           <h2 className="card-title text-2xl text-primary mb-6">
             <GitBranch className="w-6 h-6" />
@@ -31,7 +31,7 @@ export function HistorySection() {
               <div>
                 <h3 className="font-semibold text-lg mb-1">Born from DTX</h3>
                 <p className="text-base-content/80">
-                  Kettle of Tournaments started as an internal tool for DTX, a competitive
+                  DraftForge started as an internal tool for DTX, a competitive
                   Dota 2 guild ranked #1 on US East. Built to coordinate rosters, manage
                   scrims, track stats, and keep the community aligned through Discord integration.
                 </p>
@@ -50,14 +50,14 @@ export function HistorySection() {
                 <p className="text-base-content/80">
                   We realized other Dota 2 communities could benefit from the same tools,
                   so we open sourced the project. Now any guild, team, or tournament organizer
-                  can use Kettle of Tournaments to manage their community.
+                  can use DraftForge to manage their community.
                 </p>
               </div>
             </div>
           </div>
 
           {/* Thank you note */}
-          <div className="mt-6 p-4 bg-base-300 rounded-lg">
+          <div className="mt-6 p-4 bg-base-content/5 rounded-lg border border-base-content/10">
             <p className="text-sm text-base-content/70 italic">
               Special thanks to DTX and its members for supporting the development of this
               platform from the beginning. Your feedback and enthusiasm made this possible.

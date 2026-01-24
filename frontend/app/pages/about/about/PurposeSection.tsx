@@ -26,14 +26,14 @@ export function PurposeSection() {
         </h2>
         <div className="prose max-w-none">
           <p className="text-lg text-base-content mb-4">
-            DTX is dedicated to providing a comprehensive management solution for our Dota 2 gaming organization.
+            DraftForge is dedicated to providing a comprehensive management solution for Dota 2 gaming organizations.
             This platform serves as the central hub for all guild-related activities, offering tools and features
             that enhance our community experience.
           </p>
           <p className="text-base-content">
             Our mission is to streamline guild operations, facilitate better communication among members,
             and provide valuable insights into team performance and statistics. Whether you're a casual player
-            or a competitive esports enthusiast, DTX offers the tools you need to succeed.
+            or a competitive esports enthusiast, DraftForge offers the tools you need to succeed.
           </p>
         </div>
       </div>
