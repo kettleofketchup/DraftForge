@@ -1,5 +1,5 @@
 import { Plus, Trophy } from 'lucide-react';
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import {
   CreateLeagueModal,
@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { useUserStore } from '~/store/userStore';
+import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 
 /** Skeleton loader for league cards */
 const LeagueCardSkeleton = () => (
@@ -95,6 +96,13 @@ export default function LeaguesPage() {
   const hasHydrated = useUserStore((state) => state.hasHydrated);
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
+  // Get selected organization for permission checks
+  const selectedOrg = useMemo(
+    () => organizations.find((o) => o.pk === selectedOrgIdNum) || null,
+    [organizations, selectedOrgIdNum]
+  );
+  const isOrgAdmin = useIsOrganizationAdmin(selectedOrg);
+
   // Read cached leagues after mount to avoid hydration mismatch
   const [mounted, setMounted] = useState(false);
   const [cachedLeagues, setCachedLeagues] = useState<LeagueType[]>([]);
@@ -105,17 +113,13 @@ export default function LeaguesPage() {
   }, []);
 
   // Use cached leagues after mount, then switch to store after hydration
-  // Apply org filter to cached leagues too
-  const rawLeagues = hasHydrated
+  // Note: useLeagues hook already filters by organizationId, so no additional filtering needed
+  const leagues = hasHydrated
     ? storeLeagues
     : (mounted && cachedLeagues.length > 0 ? cachedLeagues : storeLeagues);
 
-  const leagues = selectedOrgIdNum
-    ? rawLeagues.filter((l) => l.organization === selectedOrgIdNum)
-    : rawLeagues;
-
-  // Can only create leagues when an organization is selected
-  const canCreate = (currentUser?.is_staff || currentUser?.is_superuser) && selectedOrgIdNum;
+  // Can create leagues when org is selected AND user is org admin (includes owner, superuser)
+  const canCreate = isOrgAdmin && selectedOrgIdNum;
 
   function setOrgFilter(value: string | null) {
     const newParams = new URLSearchParams(searchParams);

@@ -29,6 +29,7 @@ export default function OrganizationDetailPage() {
 
   const isOrgAdmin =
     currentUser?.is_superuser ||
+    organization?.owner?.pk === currentUser?.pk ||
     organization?.admins?.some((a) => a.pk === currentUser?.pk);
 
   if (orgLoading) {
