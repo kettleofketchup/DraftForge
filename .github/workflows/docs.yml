@@ -3,6 +3,7 @@ name: Deploy Docs
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -36,7 +37,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .venv
-          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}-v2
           restore-keys: |
             poetry-${{ runner.os }}-
 
