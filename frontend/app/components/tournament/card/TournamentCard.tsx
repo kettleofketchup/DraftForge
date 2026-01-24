@@ -285,12 +285,10 @@ export const TournamentCard: React.FC<Props> = React.memo(({
       whileHover={{ scale: 1.02 }}
     >
       <div
-        className="w-full h-full card bg-base-300 shadow-elevated w-full
-            max-w-sm hover:bg-base-200 focus:outline-2
-            shadow-hover
+        className="card bg-base-300 shadow-elevated w-full max-w-sm p-4
+            hover:bg-base-200 focus:outline-2 shadow-hover
             focus:outline-offset-2 focus:outline-primary
-            focus:outline-offset-2 active:bg-base-200
-            transition-all duration-300 ease-in-out"
+            active:bg-base-200 transition-all duration-300 ease-in-out"
       >
         <div className="flex flex-row items-center align-start gap-2">
           {TournamentHeader()}
@@ -300,7 +298,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         <div className="mt-4 space-y-2 text-sm">
           {editMode ? editModeView() : viewMode()}
         </div>
-        <div className="flex flex-row mt-5 justify-end h-full items-end">
+        <div className="flex flex-row mt-4 justify-end">
           <TournamentRemoveButton tournament={tournament} />
         </div>
       </div>
