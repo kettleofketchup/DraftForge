@@ -19,14 +19,17 @@ interface Props {
   tournament: TournamentType;
   edit?: boolean;
   saveFunc?: string;
-  onEditModeChange?: (isEditing: boolean) => void; // Added new prop
+  onEditModeChange?: (isEditing: boolean) => void;
+  /** Animation delay index for staggered loading */
+  animationIndex?: number;
 }
 
-export const TournamentCard: React.FC<Props> = ({
+export const TournamentCard: React.FC<Props> = React.memo(({
   tournament,
   edit,
   saveFunc,
   onEditModeChange,
+  animationIndex = 0,
 }) => {
   let navigate = useNavigate();
   const [editMode, setEditMode] = useState(edit || false);
@@ -89,9 +92,10 @@ export const TournamentCard: React.FC<Props> = ({
   const [saveCallback, setSaveCallBack] = useState(saveFunc || 'save');
 
   useEffect(() => {
-    log.debug('reset form', tournament);
+    log.debug('reset form', tournament.pk);
     setForm(tournament);
-  }, [tournament]);
+    // Only reset form when tournament pk changes, not on every object reference change
+  }, [tournament.pk]);
 
   useEffect(() => {
     // Added useEffect to call onEditModeChange
@@ -271,9 +275,9 @@ export const TournamentCard: React.FC<Props> = ({
   };
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.2 }}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
       key={`Tournamentcard:${getKeyName()} base`}
       className={
         'flex items-center justify-center p-4 gap-6 content-center w-full h-full'
@@ -281,12 +285,12 @@ export const TournamentCard: React.FC<Props> = ({
       whileHover={{ scale: 1.02 }}
     >
       <div
-        className="w-full h-full card bg-base-200 shadow-md w-full
-            max-w-sm hover:bg-violet-900 . focus:outline-2
-            hover:shadow-xl/30
-            focus:outline-offset-2 focus:outline-violet-500
-            focus:outline-offset-2 active:bg-violet-900
-            delay-700 duration-900 ease-in-out"
+        className="w-full h-full card bg-base-300 shadow-elevated w-full
+            max-w-sm hover:bg-base-200 focus:outline-2
+            shadow-hover
+            focus:outline-offset-2 focus:outline-primary
+            focus:outline-offset-2 active:bg-base-200
+            transition-all duration-300 ease-in-out"
       >
         <div className="flex flex-row items-center align-start gap-2">
           {TournamentHeader()}
@@ -302,4 +306,15 @@ export const TournamentCard: React.FC<Props> = ({
       </div>
     </motion.div>
   );
-};
+}, (prevProps, nextProps) => {
+  // Custom comparison - only re-render if these values actually change
+  return (
+    prevProps.tournament.pk === nextProps.tournament.pk &&
+    prevProps.tournament.name === nextProps.tournament.name &&
+    prevProps.tournament.state === nextProps.tournament.state &&
+    prevProps.tournament.date_played === nextProps.tournament.date_played &&
+    prevProps.animationIndex === nextProps.animationIndex &&
+    prevProps.edit === nextProps.edit &&
+    prevProps.saveFunc === nextProps.saveFunc
+  );
+});

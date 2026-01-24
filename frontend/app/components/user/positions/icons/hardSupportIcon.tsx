@@ -1,5 +1,9 @@
-export const HardSupportSVG: React.FC = () => (
-  <svg viewBox="0 0 24 24" className="tw-size-4">
+interface IconProps {
+  className?: string;
+}
+
+export const HardSupportSVG: React.FC<IconProps> = ({ className = "w-4 h-4" }) => (
+  <svg viewBox="0 0 24 24" className={className}>
     <path
       fillRule="evenodd"
       clipRule="evenodd"

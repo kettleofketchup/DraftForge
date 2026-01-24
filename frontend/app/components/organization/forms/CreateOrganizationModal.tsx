@@ -42,6 +42,7 @@ export function CreateOrganizationModal({
       name: '',
       description: '',
       logo: '',
+      discord_link: '',
       rules_template: '',
     },
   });
@@ -112,6 +113,23 @@ export function CreateOrganizationModal({
                   <FormControl>
                     <Input
                       placeholder="https://example.com/logo.png"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="discord_link"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Discord Invite Link</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="https://discord.gg/your-invite"
                       {...field}
                     />
                   </FormControl>

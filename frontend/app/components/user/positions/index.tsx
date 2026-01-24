@@ -1,6 +1,12 @@
 import { memo } from 'react';
 import type { UserType } from '~/index';
+import { cn } from '~/lib/utils';
 import { Badge } from '../../ui/badge';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '../../ui/tooltip';
 import {
   CarrySVG,
   HardSupportSVG,
@@ -8,14 +14,37 @@ import {
   OfflaneSVG,
   SoftSupportSVG,
 } from './icons';
+
 interface BadgeProps {
   user: UserType;
+  /** Compact mode: icon + rank only, no text label */
+  compact?: boolean;
 }
 
 import { getLogger } from '~/lib/logger';
 
 const numberClasses =
   'absolute -top-1 -left-1 h-4 w-4 rounded-full p-0 border-white border-1 text-white';
+
+const compactNumberClasses =
+  'absolute -top-1 -left-1 h-3.5 w-3.5 text-[10px] rounded-full p-0 border-white border-1 text-white flex items-center justify-center';
+
+const getRankLabel = (rank: number): string => {
+  switch (rank) {
+    case 1:
+      return '1st choice';
+    case 2:
+      return '2nd choice';
+    case 3:
+      return '3rd choice';
+    case 4:
+      return '4th choice';
+    case 5:
+      return '5th choice';
+    default:
+      return `${rank}th choice`;
+  }
+};
 
 const log = getLogger('userPositionsBadge');
 export const useBadgeGuard = (user: UserType): boolean => {
@@ -34,109 +63,170 @@ export const useBadgeGuard = (user: UserType): boolean => {
   return true;
 };
 
-export const CarryBadge: React.FC<BadgeProps> = memo(({ user }) => {
+export const CarryBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
   const shouldShowBadge = useBadgeGuard(user);
 
   if (!shouldShowBadge) return null;
   if (!user.positions?.carry) return null;
   return (
-    <div className="relative inline-block">
-      <div className="flex flex-row">
-        <Badge className="badge-primary bg-red-900 text-white">
-          <Badge className={`${numberClasses} bg-red-900/80`}>
-            {user.positions.carry}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="relative inline-block cursor-help">
+          <Badge className={cn(
+            "badge-primary !bg-rose-900 !text-white hover:!bg-rose-800 transition-colors",
+            compact && "!px-1 !py-0.5"
+          )}>
+            <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-rose-800")}>
+              {user.positions.carry}
+            </Badge>
+            <CarrySVG className={compact ? "w-4 h-4" : undefined} />
+            {!compact && "Carry"}
           </Badge>
-          <CarrySVG />
-          Carry
-        </Badge>
-      </div>
-    </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent className="bg-rose-900 text-white">
+        <p className="font-semibold">Position 1: Carry</p>
+        <p className="text-rose-200">{getRankLabel(user.positions.carry)}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 });
 
-export const MidBadge: React.FC<{ user: UserType }> = ({ user }) => {
+export const MidBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
   if (!user.positions?.mid) return null;
   return (
-    <div className="relative inline-block">
-      <div className="flex flex-row">
-        <Badge className="badge-primary bg-cyan-900 text-white">
-          <Badge className={`${numberClasses} bg-cyan-900/80`}>
-            {user.positions.mid}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="relative inline-block cursor-help">
+          <Badge className={cn(
+            "badge-primary !bg-cyan-900 !text-white hover:!bg-cyan-800 transition-colors",
+            compact && "!px-1 !py-0.5"
+          )}>
+            <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-cyan-800")}>
+              {user.positions.mid}
+            </Badge>
+            <MidSVG className={compact ? "w-4 h-4" : undefined} />
+            {!compact && "Mid"}
           </Badge>
-          <MidSVG />
-          Mid
-        </Badge>
-      </div>
-    </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent className="bg-cyan-900 text-white">
+        <p className="font-semibold">Position 2: Mid</p>
+        <p className="text-cyan-200">{getRankLabel(user.positions.mid)}</p>
+      </TooltipContent>
+    </Tooltip>
   );
-};
+});
 
-export const OfflaneBadge: React.FC<{ user: UserType }> = ({ user }) => {
+export const OfflaneBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
-
   if (!user.positions?.offlane) return null;
   return (
-    <div className="relative inline-block">
-      <div className="flex flex-row">
-        <Badge className="badge-primary badge-primary bg-green-900 text-white">
-          <Badge className={`${numberClasses} bg-green-900/80`}>
-            {user.positions.offlane}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="relative inline-block cursor-help">
+          <Badge className={cn(
+            "badge-primary !bg-emerald-900 !text-white hover:!bg-emerald-800 transition-colors",
+            compact && "!px-1 !py-0.5"
+          )}>
+            <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-emerald-800")}>
+              {user.positions.offlane}
+            </Badge>
+            <OfflaneSVG className={compact ? "w-4 h-4" : undefined} />
+            {!compact && "Offlane"}
           </Badge>
-          <OfflaneSVG />
-          Offlane
-        </Badge>
-      </div>
-    </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent className="bg-emerald-900 text-white">
+        <p className="font-semibold">Position 3: Offlane</p>
+        <p className="text-emerald-200">{getRankLabel(user.positions.offlane)}</p>
+      </TooltipContent>
+    </Tooltip>
   );
-};
+});
 
-export const SoftSupportBadge: React.FC<{ user: UserType }> = ({ user }) => {
+export const SoftSupportBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
   if (!user.positions?.soft_support) return null;
   return (
-    <div className="relative inline-block">
-      <div className="flex flex-row">
-        <Badge className="badge-primary bg-purple-900 text-white">
-          <Badge className={`${numberClasses} bg-purple-900/80`}>
-            {user.positions.soft_support}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="relative inline-block cursor-help">
+          <Badge className={cn(
+            "badge-primary !bg-violet-900 !text-white hover:!bg-violet-800 transition-colors",
+            compact && "!px-1 !py-0.5"
+          )}>
+            <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-violet-800")}>
+              {user.positions.soft_support}
+            </Badge>
+            <SoftSupportSVG className={compact ? "w-4 h-4" : undefined} />
+            {!compact && (
+              <>
+                <span className="hidden 2xl:inline">SoftSupport</span>
+                <span className="inline 2xl:hidden">Pos4</span>
+              </>
+            )}
           </Badge>
-          <SoftSupportSVG />
-          <span className="hidden 2xl:inline">SoftSupport</span>
-          <span className="inline 2xl:hidden">SoftSup</span>
-        </Badge>
-      </div>
-    </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent className="bg-violet-900 text-white">
+        <p className="font-semibold">Position 4: Soft Support</p>
+        <p className="text-violet-200">{getRankLabel(user.positions.soft_support)}</p>
+      </TooltipContent>
+    </Tooltip>
   );
-};
+});
 
-export const HardSupportBadge: React.FC<{ user: UserType }> = ({ user }) => {
+export const HardSupportBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
   if (!user.positions?.hard_support) return null;
   return (
-    <div className="relative inline-block">
-      <div className="flex flex-row">
-        <Badge className="badge-primary bg-blue-900 text-white">
-          <Badge className={`${numberClasses} bg-blue-900/80`}>
-            {user.positions.hard_support}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="relative inline-block cursor-help">
+          <Badge className={cn(
+            "badge-primary !bg-indigo-900 !text-white hover:!bg-indigo-800 transition-colors",
+            compact && "!px-1 !py-0.5"
+          )}>
+            <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-indigo-800")}>
+              {user.positions.hard_support}
+            </Badge>
+            <HardSupportSVG className={compact ? "w-4 h-4" : undefined} />
+            {!compact && (
+              <>
+                <span className="hidden 2xl:inline">HardSupport</span>
+                <span className="inline 2xl:hidden">Pos5</span>
+              </>
+            )}
           </Badge>
-          <HardSupportSVG />
-          <span className="hidden 2xl:inline">HardSupport</span>
-          <span className="inline 2xl:hidden">HardSup</span>
-        </Badge>
-      </div>
-    </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent className="bg-indigo-900 text-white">
+        <p className="font-semibold">Position 5: Hard Support</p>
+        <p className="text-indigo-200">{getRankLabel(user.positions.hard_support)}</p>
+      </TooltipContent>
+    </Tooltip>
   );
-};
-export const RolePositions: React.FC<{ user: UserType }> = ({ user }) => {
+});
+interface RolePositionsProps {
+  user: UserType;
+  /** Compact mode: icon + rank only, no text labels */
+  compact?: boolean;
+}
+
+export const RolePositions: React.FC<RolePositionsProps> = ({ user, compact }) => {
   if (!user.positions) return null;
 
   return (
-    <div className="flex flex-col md:flex-row gap-1 flex-wrap">
+    <div className={cn(
+      "flex flex-wrap justify-center",
+      compact ? "flex-row gap-2" : "flex-col md:flex-row gap-1"
+    )}>
       {[
         { component: CarryBadge, value: user?.positions?.carry },
         { component: MidBadge, value: user?.positions?.mid },
@@ -147,7 +237,7 @@ export const RolePositions: React.FC<{ user: UserType }> = ({ user }) => {
         .filter(({ value }) => value != null)
         .sort((a, b) => a.value - b.value)
         .map(({ component: Component }, index) => (
-          <Component key={index} user={user} />
+          <Component key={index} user={user} compact={compact} />
         ))}
     </div>
   );

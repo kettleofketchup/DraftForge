@@ -11,9 +11,11 @@ import {
 import { Toaster } from '~/components/ui/sonner';
 import { SharedPopoverProvider } from '~/components/ui/shared-popover-context';
 import { SharedPopoverRenderer } from '~/components/ui/shared-popover-renderer';
+import { TooltipProvider } from '~/components/ui/tooltip';
 import { getLogger } from '~/lib/logger';
 import type { Route } from './+types/root';
 import './app.css';
+import { ActiveDraftBanner } from './components/draft/ActiveDraftBanner';
 import { FloatingDraftIndicator } from './components/draft/FloatingDraftIndicator';
 import ResponsiveAppBar from './components/navbar/navbar';
 
@@ -75,9 +77,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <QueryClientProvider client={queryClient}>
+          <TooltipProvider delayDuration={300}>
           <SharedPopoverProvider>
             <div className="flex flex-col w-screen h-screen justify-between">
               <ResponsiveAppBar />
+              <ActiveDraftBanner />
               <div id="outlet_root" className="flex-grow overflow-x-hidden">
                 {children}
               </div>
@@ -86,6 +90,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <FloatingDraftIndicator />
             <SharedPopoverRenderer />
           </SharedPopoverProvider>
+          </TooltipProvider>
         </QueryClientProvider>
 
         <ScrollRestoration />

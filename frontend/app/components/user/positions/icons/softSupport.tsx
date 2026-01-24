@@ -1,6 +1,10 @@
-export const SoftSupportSVG: React.FC = () => {
+interface IconProps {
+  className?: string;
+}
+
+export const SoftSupportSVG: React.FC<IconProps> = ({ className = "w-4 h-4" }) => {
   return (
-    <svg viewBox="0 0 24 24" className="tw-size-4">
+    <svg viewBox="0 0 24 24" className={className}>
       <path
         fillRule="evenodd"
         clipRule="evenodd"

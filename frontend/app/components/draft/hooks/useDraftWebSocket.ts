@@ -104,7 +104,7 @@ export function useDraftWebSocket({
     }
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws/draft/${draftId}/`;
+    const wsUrl = `${protocol}//${window.location.host}/api/draft/${draftId}/`;
 
     log.debug(`Connecting to WebSocket: ${wsUrl}`);
 

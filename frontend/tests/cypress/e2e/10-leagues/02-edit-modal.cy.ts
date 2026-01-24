@@ -70,9 +70,7 @@ describe('League Page - Edit Modal (e2e)', () => {
     // Open modal
     openEditModal(cy);
 
-    // Form should have current league data
-    getNameInput(cy).should('have.value');
-    // At minimum, name should not be empty
+    // Form should have current league data - name should not be empty
     getNameInput(cy).invoke('val').should('not.be.empty');
   });
 

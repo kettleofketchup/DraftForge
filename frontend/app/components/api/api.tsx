@@ -356,3 +356,62 @@ export async function getLeagueMatches(
   );
   return response.data;
 }
+
+// Admin Team API
+export async function searchUsers(query: string): Promise<UserType[]> {
+  const response = await axios.get<UserType[]>(`/users/search/?q=${encodeURIComponent(query)}`);
+  return response.data;
+}
+
+interface AddUserResponse {
+  status: string;
+  user: UserType;
+}
+
+interface TransferOwnershipResponse {
+  status: string;
+  new_owner: UserType;
+}
+
+// Organization Admin Team
+export async function addOrgAdmin(orgId: number, userId: number): Promise<UserType> {
+  const response = await axios.post<AddUserResponse>(`/organizations/${orgId}/admins/`, { user_id: userId });
+  return response.data.user;
+}
+
+export async function removeOrgAdmin(orgId: number, userId: number): Promise<void> {
+  await axios.delete(`/organizations/${orgId}/admins/${userId}/`);
+}
+
+export async function addOrgStaff(orgId: number, userId: number): Promise<UserType> {
+  const response = await axios.post<AddUserResponse>(`/organizations/${orgId}/staff/`, { user_id: userId });
+  return response.data.user;
+}
+
+export async function removeOrgStaff(orgId: number, userId: number): Promise<void> {
+  await axios.delete(`/organizations/${orgId}/staff/${userId}/`);
+}
+
+export async function transferOrgOwnership(orgId: number, userId: number): Promise<UserType> {
+  const response = await axios.post<TransferOwnershipResponse>(`/organizations/${orgId}/transfer-ownership/`, { user_id: userId });
+  return response.data.new_owner;
+}
+
+// League Admin Team
+export async function addLeagueAdmin(leagueId: number, userId: number): Promise<UserType> {
+  const response = await axios.post<AddUserResponse>(`/leagues/${leagueId}/admins/`, { user_id: userId });
+  return response.data.user;
+}
+
+export async function removeLeagueAdmin(leagueId: number, userId: number): Promise<void> {
+  await axios.delete(`/leagues/${leagueId}/admins/${userId}/`);
+}
+
+export async function addLeagueStaff(leagueId: number, userId: number): Promise<UserType> {
+  const response = await axios.post<AddUserResponse>(`/leagues/${leagueId}/staff/`, { user_id: userId });
+  return response.data.user;
+}
+
+export async function removeLeagueStaff(leagueId: number, userId: number): Promise<void> {
+  await axios.delete(`/leagues/${leagueId}/staff/${userId}/`);
+}

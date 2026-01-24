@@ -72,18 +72,14 @@ export const UserEditForm: React.FC<Props> = ({ user, form, setForm }) => {
     });
   };
 
+  // Note: Form state is initialized by the parent component (UserEditModal)
+  // Only reset if the user pk changes (different user being edited)
   useEffect(() => {
-    setForm(user as UserClassType); // Initialize form with user data
-
-    if (
-      user.username !== form.username ||
-      user.discordId !== form.discordId ||
-      user.nickname !== form.nickname
-    ) {
-      log.debug('User data changed, resetting form');
-      setForm(user as UserClassType); // Ensure form is set to the user data
+    if (user.pk && user.pk !== form.pk) {
+      log.debug('User changed, resetting form to new user data');
+      setForm(user as UserType);
     }
-  }, [user, form.discordId, form.username]);
+  }, [user.pk]);
 
   useEffect(() => {}, [user]);
   if (!currentUser || (!currentUser.is_staff && !currentUser.is_superuser)) {

@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
-import React, { memo, useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import React, { memo, useEffect } from 'react';
 import { Badge } from '~/components/ui/badge';
+import { Item, ItemContent, ItemTitle } from '~/components/ui/item';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { AvatarUrl } from '~/index';
@@ -15,34 +15,24 @@ const log = getLogger('UserCard');
 
 interface Props {
   user: UserClassType;
-  edit?: boolean;
   saveFunc?: string;
   compact?: boolean;
   deleteButtonType?: 'tournament' | 'normal';
+  /** Animation delay index for staggered loading */
+  animationIndex?: number;
 }
 
 export const UserCard: React.FC<Props> = memo(
-  ({ user, edit, saveFunc, compact, deleteButtonType }) => {
-    const [editMode, setEditMode] = useState(edit || false);
-    const form = useForm<UserType>();
-
-    const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
-    const [isSaving, setIsSaving] = useState(false);
-    const [error, setError] = useState(false);
-    const [errorMessage, setErrorMessage] = useState<
-      Partial<Record<keyof UserType, string>>
-    >({});
+  ({ user, saveFunc = 'save', compact, deleteButtonType, animationIndex = 0 }) => {
+    const currentUser: UserType = useUserStore((state) => state.currentUser);
     const getUsers = useUserStore((state) => state.getUsers);
 
-    const delUser = useUserStore((state) => state.delUser); // Zustand setter
-
-    const [saveCallback, setSaveCallBack] = useState(saveFunc || 'save');
     useEffect(() => {
       if (!user.pk) {
         log.error('User does not have a primary key (pk)');
         getUsers();
       }
-    }, [user, user.mmr, user.pk, user.username, user.nickname, user.position]);
+    }, [user.pk, getUsers]);
 
     const hasError = () => {
       if (!user.mmr) {
@@ -53,111 +43,22 @@ export const UserCard: React.FC<Props> = memo(
     };
     const avatar = () => {
       return (
-        <>
-          {user.avatar && (
-            <div className="flex-row w-20 h-20">
-              {!hasError() && (
-                <img
-                  src={AvatarUrl(user)}
-                  alt={`${user.username}'s avatar`}
-                  className="w-16 h-16 rounded-full border border-primary"
-                />
-              )}
-
-              {hasError() && (
-                <>
-                  <span className="relative flex size-3 place-self-end mr-5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75" />
-                    <span className="relative inline-flex size-3 rounded-full bg-red-500" />
-                  </span>
-                  <img
-                    src={AvatarUrl(user)}
-                    alt={`${user.username}'s avatar`}
-                    className="flex w-16 h-16 rounded-full border border-primary"
-                  />
-                </>
-              )}
-            </div>
+        <div className="relative">
+          {hasError() && (
+            <span className="absolute -top-1 -right-1 flex size-3 z-10">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-sky-400 opacity-75" />
+              <span className="relative inline-flex size-3 rounded-full bg-red-500" />
+            </span>
           )}
-        </>
+          <img
+            src={AvatarUrl(user)}
+            alt={`${user.username}'s avatar`}
+            className="w-14 h-14 rounded-full border-2 border-primary"
+          />
+        </div>
       );
     };
 
-    const userHeader = () => {
-      return (
-        <>
-          {!editMode && (
-            <div className="flex-1">
-              <h2 className="card-title text-lg">
-                {user.nickname || user.username}
-              </h2>
-              {!compact && (
-                <div className="flex gap-2 mt-1">
-                  {user.is_staff && (
-                    <Badge className="bg-blue-700 text-white">Staff</Badge>
-                  )}
-                  {user.is_superuser && (
-                    <Badge className="bg-red-700 text-white">Admin</Badge>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      );
-    };
-
-    const viewMode = () => {
-      if (compact) {
-        return (
-          <>
-            {user.mmr && (
-              <div>
-                <span className="font-semibold">MMR:</span> {user.mmr}
-              </div>
-            )}
-            {user.username && (
-              <div>
-                <span className="font-semibold">Username:</span> {user.username}
-              </div>
-            )}
-            {user.nickname && (
-              <div>
-                <span className="font-semibold">Nickname:</span> {user.nickname}
-              </div>
-            )}
-            <RolePositions user={user} />
-          </>
-        );
-      }
-      return (
-        <>
-          {user.username && (
-            <div>
-              <span className="font-semibold">Username:</span> {user.username}
-            </div>
-          )}
-          {user.nickname && (
-            <div>
-              <span className="font-semibold">Nickname:</span> {user.nickname}
-            </div>
-          )}
-
-          {user.mmr && (
-            <div>
-              <span className="font-semibold">MMR:</span> {user.mmr}
-            </div>
-          )}
-
-          <RolePositions user={user} />
-          {user.steamid && (
-            <div>
-              <span className="font-semibold">Steam ID:</span> {user.steamid}
-            </div>
-          )}
-        </>
-      );
-    };
 
     const userDotabuff = () => {
       const goToDotabuff = () => {
@@ -207,84 +108,134 @@ export const UserCard: React.FC<Props> = memo(
         </div>
       );
     };
-    const topBar = () => {
-      if (compact) {
-        return (
-          <>
-            <div className="flex items-center gap-2 justify-center">
-              {userHeader()}
-              <div className="flex justify-end">
-                {(currentUser.is_staff || currentUser.is_superuser) && (
-                  <UserEditModal user={new User(user)} />
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2 py-4 justify-center">
-              {avatar()}
-            </div>
-          </>
-        );
-      } else
-        return (
-          <div className="flex items-center gap-2 justify-start">
-            {avatar()}
-            {userHeader()}
-            {(currentUser.is_staff || currentUser.is_superuser) && (
-              <UserEditModal user={new User(user)} />
-            )}
-          </div>
-        );
-    };
+    const showDeleteButton = currentUser.is_staff && saveFunc === 'save' && deleteButtonType;
+
     return (
       <div
         key={`usercard:${getKeyName()} base`}
         data-testid={`usercard-${user.username}`}
-        className="flex w-full
-        sm:gap-2 md:gap-4
-        py-4
-        justify-center
-        content-center
-        [content-visibility: auto] [contain-intrinsic-size: 400px 220px]"
+        className="flex w-full py-2 justify-center content-center
+          [content-visibility:auto] [contain-intrinsic-size:400px_160px]"
       >
         <motion.div
-          initial={{ opacity: 0 }}
-          exit={{ opacity: 0 }}
-          whileInView={{
-            opacity: 1,
-            transition: { delay: 0.05, duration: 0.5 },
-          }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
           whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          whileFocus={{ scale: 1.05 }}
           key={`usercard:${getKeyName()} basediv`}
-          className="justify-between p-2 h-full card bg-base-200 shadow-md w-full
-            max-w-sm hover:bg-violet-900 . focus:outline-2
-            hover:shadow-xl/30
-            focus:outline-offset-2 focus:outline-violet-500
-            focus:outline-offset-2 active:bg-violet-900"
+          className="flex flex-col px-2 py-2 gap-2 card bg-base-300 shadow-elevated w-fit
+            hover:bg-base-200 focus:outline-2
+            focus:outline-offset-2 focus:outline-primary
+            active:bg-base-200 transition-all duration-300 ease-in-out"
         >
-          {topBar()}
+          {/* Header row - name and edit button */}
+          <div className="flex items-center justify-between">
+            <div className="flex-1 min-w-0">
+              <h2 className="card-title text-base truncate">
+                {user.nickname || user.username}
+              </h2>
+              {!compact && (user.is_staff || user.is_superuser) && (
+                <div className="flex gap-1 mt-0.5">
+                  {user.is_staff && (
+                    <Badge className="bg-blue-700 text-white text-[10px] px-1.5 py-0">Staff</Badge>
+                  )}
+                  {user.is_superuser && (
+                    <Badge className="bg-red-700 text-white text-[10px] px-1.5 py-0">Admin</Badge>
+                  )}
+                </div>
+              )}
+            </div>
+            {(currentUser.is_staff || currentUser.is_superuser) && (
+              <UserEditModal user={new User(user)} />
+            )}
+          </div>
 
-          <div className="mt-2 space-y-2 text-sm">
-            {viewMode()}
-            <div className="flex flex-col ">
-              <div className="flex items-center justify-start gap-6">
-                {userDotabuff()}
-              </div>
-              <div className="flex items-center justify-end gap-6">
-                {errorInfo()}
-                {currentUser.is_staff &&
-                  saveCallback === 'save' &&
-                  deleteButtonType === 'normal' && (
-                    <UserRemoveButton user={user} />
-                  )}
-                {currentUser.is_staff &&
-                  saveCallback === 'save' &&
-                  deleteButtonType === 'tournament' && (
-                    <PlayerRemoveButton user={user} />
-                  )}
+          {/* 2-column layout: Avatar left, Positions right */}
+          <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
+            {/* Left column - Avatar centered */}
+            <div className="flex items-center justify-center">
+              {avatar()}
+            </div>
+
+            {/* Right column - Positions and MMR */}
+            <div className="flex flex-col gap-1 w-full">
+              <Item size="sm" variant="muted" className="!p-1.5 w-full">
+                <ItemContent className="!gap-1 items-center w-full">
+                  <ItemTitle className="!text-xs text-muted-foreground">Positions</ItemTitle>
+                  <RolePositions user={user} compact />
+                </ItemContent>
+              </Item>
+              {/* MMR row */}
+              <div className="grid grid-cols-2 gap-1 w-full">
+                <Item size="sm" variant="muted" className="!p-1">
+                  <ItemContent className="!gap-0 items-center">
+                    <ItemTitle className="!text-xs text-muted-foreground">Base MMR</ItemTitle>
+                    <span className="text-sm font-semibold">{user.mmr ?? '?'}</span>
+                  </ItemContent>
+                </Item>
+                <Item size="sm" variant="muted" className="!p-1">
+                  <ItemContent className="!gap-0 items-center">
+                    <ItemTitle className="!text-xs text-muted-foreground">League MMR</ItemTitle>
+                    <span className="text-sm font-semibold">?</span>
+                  </ItemContent>
+                </Item>
               </div>
             </div>
+          </div>
+
+          {/* User info row - 2 items per row */}
+          <div className="grid grid-cols-2 gap-1">
+            {user.username && (
+              <Item size="sm" variant="muted" className="!p-1">
+                <ItemContent className="!gap-0">
+                  <ItemTitle className="!text-xs text-muted-foreground">Username</ItemTitle>
+                  <span className="text-sm">{user.username.length > 8 ? `${user.username.slice(0, 8)}...` : user.username}</span>
+                </ItemContent>
+              </Item>
+            )}
+            {user.nickname && user.nickname !== user.username && (
+              <Item size="sm" variant="muted" className="!p-1">
+                <ItemContent className="!gap-0">
+                  <ItemTitle className="!text-xs text-muted-foreground">Nickname</ItemTitle>
+                  <span className="text-sm">{user.nickname.length > 8 ? `${user.nickname.slice(0, 8)}...` : user.nickname}</span>
+                </ItemContent>
+              </Item>
+            )}
+            {user.steamid && (
+              <Item size="sm" variant="muted" className="!p-1">
+                <ItemContent className="!gap-0">
+                  <ItemTitle className="!text-xs text-muted-foreground">Steam ID</ItemTitle>
+                  <span className="text-sm">{String(user.steamid).length > 8 ? `${String(user.steamid).slice(0, 8)}...` : user.steamid}</span>
+                </ItemContent>
+              </Item>
+            )}
+          </div>
+
+          {/* Error info row */}
+          {(!user.mmr || !user.positions) && (
+            <div className="flex justify-end">
+              {errorInfo()}
+            </div>
+          )}
+
+          {/* Card Footer */}
+          <div className="flex items-center justify-between mt-auto">
+            {/* Dotabuff - bottom left */}
+            <div className="flex-shrink-0">
+              {userDotabuff()}
+            </div>
+
+            {/* Delete button - bottom right */}
+            {showDeleteButton && (
+              <div className="flex-shrink-0">
+                {deleteButtonType === 'normal' && (
+                  <UserRemoveButton user={user} />
+                )}
+                {deleteButtonType === 'tournament' && (
+                  <PlayerRemoveButton user={user} />
+                )}
+              </div>
+            )}
           </div>
         </motion.div>
       </div>

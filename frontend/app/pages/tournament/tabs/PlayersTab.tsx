@@ -119,7 +119,7 @@ export const PlayersTab: React.FC = memo(() => {
 
   const renderGames = () => {};
   return (
-    <div className="py-5 px-3 mx-auto container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out">
+    <div className="py-5 px-3 mx-auto container">
       {hasErrors()}
 
       <div className="grid grid-cols-2 gap-5 items-start pt-5  ">

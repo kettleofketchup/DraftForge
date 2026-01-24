@@ -3,7 +3,6 @@ import type { FormEvent } from 'react';
 import React, { useCallback } from 'react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
-import { DeleteButtonTooltip } from '~/components/reusable/deleteButton';
 import { Button } from '~/components/ui/button';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -13,9 +12,9 @@ const log = getLogger('deleteButton');
 
 import {
   Tooltip,
-  TooltipProvider,
+  TooltipContent,
   TooltipTrigger,
-} from '~/components/ui/tooltip'; // Adjust path as needed
+} from '~/components/ui/tooltip';
 
 import type { UserType } from '~/components/user/types';
 
@@ -76,24 +75,23 @@ export const UserRemoveButton: React.FC<PropsRemoveButton> = ({
     },
     [tournament],
   );
-  // Find all users not already in the tournament
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={removeUser}
-            disabled={disabled}
-            aria-label="Delete"
-            className="bg-red-950 hover:bg-red-600 text-white"
-          >
-            <Trash2 className="h-4 w-4" color="red" />
-          </Button>
-        </TooltipTrigger>
-        <DeleteButtonTooltip tooltipText="Delete user" />
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="default"
+          size="icon"
+          onClick={removeUser}
+          disabled={disabled}
+          aria-label="Delete user"
+          className="bg-red-950 hover:bg-red-600 text-white hover:shadow-sm hover:shadow-red-500/50"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>Delete user</p>
+      </TooltipContent>
+    </Tooltip>
   );
 };

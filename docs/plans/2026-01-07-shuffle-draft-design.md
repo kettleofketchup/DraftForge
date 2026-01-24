@@ -1,5 +1,7 @@
 # Shuffle Draft Design
 
+**Status:** Completed
+
 ## Overview
 
 Add a new "Shuffle Draft" style where the team with the lowest total MMR always picks first. After each pick, team MMRs are recalculated and pick order is re-determined. Ties are resolved with dice rolls.

@@ -68,7 +68,7 @@ export const TeamsTab: React.FC = memo(() => {
   };
 
   return (
-    <div className="p-5 container bg-base-300 rounded-lg shadow-lg hover:bg-base-400 transition-shadow duration-300 ease-in-out">
+    <div className="p-5 container">
       {hasErrors()}
       {teamButtonsView()}
       <div className="w-full">

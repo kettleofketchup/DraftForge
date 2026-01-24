@@ -1,79 +1,82 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { UserClassType, UserType } from '~/components/user';
 import UserEditModal from '~/components/user/userCard/editModal';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 const log = getLogger('hasErrors');
 
+interface UserIssue {
+  user: UserType;
+  issues: string[];
+}
+
+function hasNoPositions(user: UserType): boolean {
+  const positions = user.positions;
+  if (!positions) return true;
+  // Check if all position values are 0 or undefined
+  const totalPreference =
+    (positions.carry || 0) +
+    (positions.mid || 0) +
+    (positions.offlane || 0) +
+    (positions.soft_support || 0) +
+    (positions.hard_support || 0);
+  return totalPreference === 0;
+}
+
 export const hasErrors = () => {
-  const allUsers = useUserStore((state) => state.users); // Zustand setter
-  const [badUsers, setBadUsers] = useState([] as UserType[]);
   const tournament = useUserStore((state) => state.tournament);
-  const getCurrentTournament = useUserStore(
-    (state) => state.getCurrentTournament,
-  ); // Zustand setter
 
-  const createBadUsers = useCallback(async () => {
-      log.debug("useCallback: Tournament.users' length changed");
+  // Compute users with issues
+  const usersWithIssues = useMemo(() => {
+    if (!tournament?.users) return [];
 
-    setBadUsers([]); // Reset bad users
+    const issues: UserIssue[] = [];
 
-    var newBadUsers = [] as UserType[];
+    for (const user of tournament.users) {
+      const userIssues: string[] = [];
 
-    for (const user of tournament.users || []) {
       if (!user.mmr) {
-        newBadUsers.push(user);
+        userIssues.push('No MMR');
+      }
+      if (!user.steamid) {
+        userIssues.push('No Steam ID');
+      }
+      if (hasNoPositions(user)) {
+        userIssues.push('No positions');
+      }
+
+      if (userIssues.length > 0) {
+        issues.push({ user, issues: userIssues });
       }
     }
-    setBadUsers(newBadUsers);
-    log.debug('Getting bad users', newBadUsers, tournament.users);
-  }, [tournament?.users?.length]);
 
-  useEffect(() => {
-
-    log.debug("Rerender: Tournament.users' length changed")
-    if (!tournament || !tournament.users) {
-      return;
-    }
-    createBadUsers();
-  }, [tournament?.users?.length]);
+    log.debug('Users with issues:', issues.length, issues);
+    return issues;
+  }, [tournament?.users]);
 
   return (
     <>
-      {badUsers.length > 0 && (
-        <div className="flex flex-col  items-start justify-center align-centerzs p-4 h-full bg-red-950 rounded-lg shadow-md w-full mb-4 content-center">
-          <div className="flex flex-col sm:flex-row gap-5 w-full ">
+      {usersWithIssues.length > 0 && (
+        <div className="flex flex-col items-start justify-center p-4 bg-red-950 rounded-lg shadow-md w-full mb-4">
+          <div className="flex flex-col sm:flex-row gap-5 w-full">
             <div className="text-red-500 font-bold text-center w-full pb-5">
-              <span className="text-lg">⚠️</span> Some players have no MMR.
+              <span className="text-lg">⚠️</span> {usersWithIssues.length} player{usersWithIssues.length !== 1 ? 's have' : ' has'} incomplete profiles
             </div>
           </div>
 
-          <div
-            className="flex
-        align-middle content-center justify-center
-       grid-cols-4
-         w-full "
-          >
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-5 w-full items-center justify-center content-center align-center">
-              {badUsers.map((user: UserType) => (
-                <div className="bg-red-500 p-2 rounded-lg" key={user.pk}>
-                  <span key={user.pk} className="text-white-500">
-                    {!user.mmr && (
-                      <>
-                        <div
-                          key={user.pk}
-                          className="text-white-500 text-center underline  underline-offset-2 font-bold "
-                        >
-                          {user.nickname || user.username}
-                        </div>
-
-                        <div className="flex w-full justify-center text-center">
-                          <pre>Has no MMR.</pre>
-                        </div>
-                      </>
-                    )}
-                  </span>
-                  <div className="flex self-center content-center align-middle justify-center mt-2">
+          <div className="w-full">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 w-full">
+              {usersWithIssues.map(({ user, issues }) => (
+                <div className="bg-red-500/80 p-3 rounded-lg" key={user.pk}>
+                  <div className="text-white text-center underline underline-offset-2 font-bold mb-2">
+                    {user.nickname || user.username}
+                  </div>
+                  <div className="flex flex-col gap-1 text-center text-sm text-red-100">
+                    {issues.map((issue) => (
+                      <span key={issue}>{issue}</span>
+                    ))}
+                  </div>
+                  <div className="flex justify-center mt-3">
                     <UserEditModal
                       user={user as UserClassType}
                       key={`UserEditModal-${user.pk}`}

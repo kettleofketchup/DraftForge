@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router';
 import {
   ReactFlow,
   Background,
@@ -16,6 +17,7 @@ import './bracket-styles.css';
 
 import { useBracketStore } from '~/store/bracketStore';
 import { useUserStore } from '~/store/userStore';
+import { useTournamentStore } from '~/store/tournamentStore';
 import { useElkLayout, type MatchNodeType } from './hooks/useElkLayout';
 import { MatchNode } from './nodes/MatchNode';
 import { EmptySlotNode } from './nodes/EmptySlotNode';
@@ -23,6 +25,7 @@ import { DividerNode, type DividerNodeData } from './nodes/DividerNode';
 import { BracketEdge } from './edges/BracketEdge';
 import { BracketToolbar } from './controls/BracketToolbar';
 import { MatchStatsModal } from './modals/MatchStatsModal';
+import { HeroDraftModal } from '~/components/herodraft/HeroDraftModal';
 import type { BracketMatch, MatchNodeData, BadgeMapping } from './types';
 import { buildBadgeMapping } from './utils/badgeUtils';
 
@@ -116,8 +119,13 @@ function createStructuralEdges(matches: BracketMatch[]): Edge[] {
 }
 
 function BracketFlowInner({ tournamentId }: BracketViewProps) {
+  const navigate = useNavigate();
   const isStaff = useUserStore((state) => state.isStaff());
   const tournament = useUserStore((state) => state.tournament);
+  const pendingDraftId = useTournamentStore((state) => state.pendingDraftId);
+  const setPendingDraftId = useTournamentStore((state) => state.setPendingDraftId);
+  const pendingMatchId = useTournamentStore((state) => state.pendingMatchId);
+  const setPendingMatchId = useTournamentStore((state) => state.setPendingMatchId);
 
   const {
     matches,
@@ -140,6 +148,51 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   // Selected match for stats modal
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const selectedMatch = matches.find((m) => m.id === selectedMatchId) ?? null;
+
+  // Track the draftId to auto-open from deep link
+  const [initialDraftId, setInitialDraftId] = useState<number | null>(null);
+
+  // Hero draft modal state (lifted from MatchStatsModal to allow independent modal)
+  const [heroDraftId, setHeroDraftId] = useState<number | null>(null);
+  const [showHeroDraftModal, setShowHeroDraftModal] = useState(false);
+
+  // Deep-linking: auto-open hero draft modal when pendingDraftId is set
+  useEffect(() => {
+    if (pendingDraftId && matches.length > 0) {
+      const matchWithDraft = matches.find((m) => m.herodraft_id === pendingDraftId);
+      if (matchWithDraft) {
+        // Open hero draft modal directly instead of going through match modal
+        setHeroDraftId(pendingDraftId);
+        setShowHeroDraftModal(true);
+        // Clear the pending draft ID after processing
+        setPendingDraftId(null);
+      }
+    }
+  }, [pendingDraftId, matches, setPendingDraftId]);
+
+  // Deep-linking: auto-open match modal when pendingMatchId is set
+  useEffect(() => {
+    if (pendingMatchId && matches.length > 0) {
+      // Try to parse as numeric gameId first, then fall back to string id
+      const numericId = parseInt(pendingMatchId, 10);
+      let matchToOpen: BracketMatch | undefined;
+
+      if (!isNaN(numericId)) {
+        // Numeric ID - look up by gameId (backend ID)
+        matchToOpen = matches.find((m) => m.gameId === numericId);
+      }
+      if (!matchToOpen) {
+        // Fall back to string id (temporary frontend ID like "w-2-0")
+        matchToOpen = matches.find((m) => m.id === pendingMatchId);
+      }
+
+      if (matchToOpen) {
+        setSelectedMatchId(matchToOpen.id);
+        // Clear the pending match ID after processing
+        setPendingMatchId(null);
+      }
+    }
+  }, [pendingMatchId, matches, setPendingMatchId]);
 
   // Pre-compute badge mapping for all matches
   const badgeMapping = useMemo(() => buildBadgeMapping(matches), [matches]);
@@ -399,7 +452,11 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
 
   const handleNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedMatchId(node.id);
-  }, []);
+    // Update URL to shareable match URL - prefer gameId (backend ID) over temporary id
+    const match = matches.find(m => m.id === node.id);
+    const urlId = match?.gameId ?? node.id;
+    navigate(`/tournament/${tournamentId}/bracket/match/${urlId}`, { replace: true });
+  }, [navigate, tournamentId, matches]);
 
   if (isLoading && matches.length === 0) {
     return (
@@ -478,8 +535,35 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       <MatchStatsModal
         match={selectedMatch}
         isOpen={!!selectedMatchId}
-        onClose={() => setSelectedMatchId(null)}
+        onClose={() => {
+          setSelectedMatchId(null);
+          setInitialDraftId(null);
+          // Restore URL without match
+          navigate(`/tournament/${tournamentId}/bracket`, { replace: true });
+        }}
+        initialDraftId={initialDraftId}
+        onOpenHeroDraft={(draftId) => {
+          setHeroDraftId(draftId);
+          setShowHeroDraftModal(true);
+          // Close match modal when opening hero draft
+          setSelectedMatchId(null);
+          setInitialDraftId(null);
+        }}
       />
+
+      {/* Hero Draft Modal - rendered at bracket level for independent lifecycle */}
+      {heroDraftId && (
+        <HeroDraftModal
+          draftId={heroDraftId}
+          open={showHeroDraftModal}
+          onClose={() => {
+            setShowHeroDraftModal(false);
+            setHeroDraftId(null);
+            // Restore URL without draft
+            navigate(`/tournament/${tournamentId}/bracket`, { replace: true });
+          }}
+        />
+      )}
     </div>
   );
 }

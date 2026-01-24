@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -9,26 +11,34 @@ import {
 import { Button } from '~/components/ui/button';
 import { Badge } from '~/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { BarChart3, Link2 } from 'lucide-react';
+import { BarChart3, Link2, Loader2, Swords } from 'lucide-react';
 import { useUserStore } from '~/store/userStore';
 import { useBracketStore } from '~/store/bracketStore';
+import { useCreateHeroDraft } from '~/hooks/useHeroDraft';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import { LinkSteamMatchModal } from './LinkSteamMatchModal';
 import type { BracketMatch } from '../types';
 import { cn } from '~/lib/utils';
+import { DisplayName } from '~/components/user/avatar';
 
 interface MatchStatsModalProps {
   match: BracketMatch | null;
   isOpen: boolean;
   onClose: () => void;
+  initialDraftId?: number | null;
+  onOpenHeroDraft?: (draftId: number) => void;
 }
 
-export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps) {
+export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpenHeroDraft }: MatchStatsModalProps) {
+  const navigate = useNavigate();
+  const { pk } = useParams<{ pk: string }>();
   const isStaff = useUserStore((state) => state.isStaff());
   const tournament = useUserStore((state) => state.tournament);
   const { setMatchWinner, advanceWinner, loadBracket } = useBracketStore();
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
+
+  const createDraftMutation = useCreateHeroDraft();
 
   if (!match) return null;
 
@@ -44,6 +54,45 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
     if (tournament?.pk) {
       loadBracket(tournament.pk);
     }
+  };
+
+  const handleOpenDraft = async () => {
+    if (!pk || !onOpenHeroDraft) {
+      toast.error('Unable to open draft', {
+        description: 'Missing tournament context',
+      });
+      return;
+    }
+
+    let draftIdToOpen: number;
+
+    if (match.herodraft_id) {
+      // Draft already exists, just open it
+      draftIdToOpen = match.herodraft_id;
+    } else if (match.gameId) {
+      // Create new draft (backend is idempotent - returns existing if race condition)
+      try {
+        const draft = await createDraftMutation.mutateAsync(match.gameId);
+        draftIdToOpen = draft.id;
+        toast.success('Draft created!');
+
+        // Reload bracket to update herodraft_id in the match
+        if (tournament?.pk) {
+          loadBracket(tournament.pk);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        toast.error(`Failed to create draft: ${message}`);
+        return;
+      }
+    } else {
+      toast.error('Game not saved yet');
+      return;
+    }
+
+    // Navigate and open the draft modal
+    navigate(`/tournament/${pk}/bracket/draft/${draftIdToOpen}`, { replace: true });
+    onOpenHeroDraft(draftIdToOpen);
   };
 
   return (
@@ -101,16 +150,36 @@ export function MatchStatsModal({ match, isOpen, onClose }: MatchStatsModalProps
                   className="flex-1"
                   onClick={() => handleSetWinner('radiant')}
                 >
-                  {match.radiantTeam.captain?.username ?? match.radiantTeam.name} Wins
+                  {match.radiantTeam.captain ? DisplayName(match.radiantTeam.captain) : match.radiantTeam.name} Wins
                 </Button>
                 <Button
                   variant="outline"
                   className="flex-1"
                   onClick={() => handleSetWinner('dire')}
                 >
-                  {match.direTeam.captain?.username ?? match.direTeam.name} Wins
+                  {match.direTeam.captain ? DisplayName(match.direTeam.captain) : match.direTeam.name} Wins
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Hero Draft button - show for staff or if both teams are set */}
+          {match.radiantTeam && match.direTeam && (
+            <div className="border-t pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleOpenDraft}
+                disabled={createDraftMutation.isPending}
+                data-testid="view-draft-btn"
+              >
+                {createDraftMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                ) : (
+                  <Swords className="w-4 h-4 mr-1" />
+                )}
+                {match.herodraft_id ? 'View Draft' : 'Start Draft'}
+              </Button>
             </div>
           )}
 
@@ -189,7 +258,7 @@ function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
     );
   }
 
-  const displayName = team.captain?.username ?? team.name;
+  const displayName = team.captain ? DisplayName(team.captain) : team.name;
   const initials = displayName.substring(0, 2).toUpperCase();
 
   return (

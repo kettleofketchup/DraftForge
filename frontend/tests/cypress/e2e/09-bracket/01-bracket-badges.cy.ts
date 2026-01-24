@@ -4,17 +4,34 @@ import {
 } from 'tests/cypress/support/utils';
 
 describe('Bracket Badges (e2e)', () => {
+  let completedBracketPk: number;
+  let partialBracketPk: number;
+  let pendingBracketPk: number;
+
+  before(() => {
+    // Get tournament PKs by key (stable across populate changes)
+    cy.getTournamentByKey('completed_bracket').then((response) => {
+      completedBracketPk = response.body.pk;
+    });
+    cy.getTournamentByKey('partial_bracket').then((response) => {
+      partialBracketPk = response.body.pk;
+    });
+    cy.getTournamentByKey('pending_bracket').then((response) => {
+      pendingBracketPk = response.body.pk;
+    });
+  });
+
   beforeEach(() => {
     cy.loginStaff();
     suppressHydrationErrors();
   });
 
   it('should display bracket with completed games', () => {
-    // Completed Bracket Test (Tournament 1) has all 6 games completed
-    visitAndWaitForHydration('/tournament/1/games');
+    // Completed Bracket Test has all 6 games completed
+    visitAndWaitForHydration(`/tournament/${completedBracketPk}/games`);
 
     // Wait for the games tab to load
-    cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');
+    cy.get('[data-testid="bracketTab"]', { timeout: 10000 }).should('be.visible');
 
     // Default view should be bracket view
     cy.contains('Bracket View').should('be.visible');
@@ -27,7 +44,7 @@ describe('Bracket Badges (e2e)', () => {
 
   it('should display bracket badges on winners bracket matches', () => {
     // Completed Bracket Test has completed bracket with badges
-    visitAndWaitForHydration('/tournament/1/games');
+    visitAndWaitForHydration(`/tournament/${completedBracketPk}/games`);
 
     // Wait for bracket to load
     cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
@@ -45,7 +62,7 @@ describe('Bracket Badges (e2e)', () => {
   });
 
   it('should display corresponding badges on losers bracket slots', () => {
-    visitAndWaitForHydration('/tournament/1/games');
+    visitAndWaitForHydration(`/tournament/${completedBracketPk}/games`);
 
     cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
       'be.visible',
@@ -62,7 +79,7 @@ describe('Bracket Badges (e2e)', () => {
   });
 
   it('should show badge letters with distinct colors', () => {
-    visitAndWaitForHydration('/tournament/1/games');
+    visitAndWaitForHydration(`/tournament/${completedBracketPk}/games`);
 
     cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
       'be.visible',
@@ -80,7 +97,7 @@ describe('Bracket Badges (e2e)', () => {
   });
 
   it('should show Winners Bracket label', () => {
-    visitAndWaitForHydration('/tournament/1/games');
+    visitAndWaitForHydration(`/tournament/${completedBracketPk}/games`);
 
     cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
       'be.visible',
@@ -91,7 +108,7 @@ describe('Bracket Badges (e2e)', () => {
   });
 
   it('should show Losers Bracket divider', () => {
-    visitAndWaitForHydration('/tournament/1/games');
+    visitAndWaitForHydration(`/tournament/${completedBracketPk}/games`);
 
     cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
       'be.visible',
@@ -102,10 +119,10 @@ describe('Bracket Badges (e2e)', () => {
   });
 
   it('should handle tournament with partial bracket', () => {
-    // Partial Bracket Test (Tournament 2) has 2 games completed, 4 pending
-    visitAndWaitForHydration('/tournament/2/games');
+    // Partial Bracket Test has 2 games completed, 4 pending
+    visitAndWaitForHydration(`/tournament/${partialBracketPk}/games`);
 
-    cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');
+    cy.get('[data-testid="bracketTab"]', { timeout: 10000 }).should('be.visible');
 
     // Should still show bracket container
     cy.get('[data-testid="bracketContainer"]', { timeout: 15000 }).should(
@@ -117,10 +134,10 @@ describe('Bracket Badges (e2e)', () => {
   });
 
   it('should handle tournament with no bracket games', () => {
-    // Pending Bracket Test (Tournament 3) has 0 games completed
-    visitAndWaitForHydration('/tournament/3/games');
+    // Pending Bracket Test has 0 games completed
+    visitAndWaitForHydration(`/tournament/${pendingBracketPk}/games`);
 
-    cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');
+    cy.get('[data-testid="bracketTab"]', { timeout: 10000 }).should('be.visible');
 
     // May show bracket container with pending games or empty state
     // The bracket structure should still exist
@@ -130,9 +147,9 @@ describe('Bracket Badges (e2e)', () => {
   });
 
   it('can switch between bracket and list view', () => {
-    visitAndWaitForHydration('/tournament/1/games');
+    visitAndWaitForHydration(`/tournament/${completedBracketPk}/games`);
 
-    cy.get('[data-testid="gamesTab"]', { timeout: 10000 }).should('be.visible');
+    cy.get('[data-testid="bracketTab"]', { timeout: 10000 }).should('be.visible');
 
     // Click on List View tab
     cy.contains('List View').click();

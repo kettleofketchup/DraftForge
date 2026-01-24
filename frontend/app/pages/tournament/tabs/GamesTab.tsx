@@ -1,17 +1,29 @@
 import { memo, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { Button } from '~/components/ui/button';
+import { Wand2 } from 'lucide-react';
 import { BracketView } from '~/components/bracket';
+import { AutoAssignModal } from '~/components/bracket/modals';
 import { GameCreateModal } from '~/components/game/create/createGameModal';
 import { GameCard } from '~/components/game/gameCard/gameCard';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
+import { useBracketStore } from '~/store/bracketStore';
 
 const log = getLogger('GamesTab');
 
 export const GamesTab: React.FC = memo(() => {
   const tournament = useUserStore((state) => state.tournament);
   const isStaff = useUserStore((state) => state.isStaff());
+  const { loadBracket } = useBracketStore();
   const [viewMode, setViewMode] = useState<'bracket' | 'list'>('bracket');
+  const [showAutoAssign, setShowAutoAssign] = useState(false);
+
+  const handleAutoAssignComplete = () => {
+    if (tournament?.pk) {
+      loadBracket(tournament.pk);
+    }
+  };
 
   const renderNoGames = () => {
     return (
@@ -39,7 +51,7 @@ export const GamesTab: React.FC = memo(() => {
   };
 
   return (
-    <div className="py-5 px-3 mx-auto container bg-base-300 rounded-lg shadow-lg" data-testid="gamesTab">
+    <div className="py-5 px-3 mx-auto container" data-testid="gamesTab">
       {/* View mode tabs */}
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'bracket' | 'list')}>
         <div className="flex items-center justify-between mb-4">
@@ -48,9 +60,22 @@ export const GamesTab: React.FC = memo(() => {
             <TabsTrigger value="list">List View</TabsTrigger>
           </TabsList>
 
-          {isStaff && viewMode === 'list' && (
-            <GameCreateModal data-testid="gameCreateModalBtn" />
-          )}
+          <div className="flex items-center gap-2">
+            {isStaff && viewMode === 'bracket' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAutoAssign(true)}
+                data-testid="auto-assign-btn"
+              >
+                <Wand2 className="h-4 w-4 mr-1" />
+                Auto-Assign Matches
+              </Button>
+            )}
+            {isStaff && viewMode === 'list' && (
+              <GameCreateModal data-testid="gameCreateModalBtn" />
+            )}
+          </div>
         </div>
 
         <TabsContent value="bracket">
@@ -69,6 +94,16 @@ export const GamesTab: React.FC = memo(() => {
             : renderGamesList()}
         </TabsContent>
       </Tabs>
+
+      {/* Auto-Assign Modal */}
+      {tournament?.pk && (
+        <AutoAssignModal
+          isOpen={showAutoAssign}
+          onClose={() => setShowAutoAssign(false)}
+          tournamentId={tournament.pk}
+          onAssignComplete={handleAutoAssignComplete}
+        />
+      )}
     </div>
   );
 });

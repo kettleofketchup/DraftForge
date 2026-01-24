@@ -1,12 +1,13 @@
 services:
   frontend:
     env_file: "./docker/.env.prod"
-    image: ghcr.io/kettleofketchup/dota_tournament/frontend:latest
+    image: ghcr.io/kettleofketchup/draftforge/frontend:latest
+    user: "1000:1000"
     restart: always
 
   backend:
     env_file: "./docker/.env.prod"
-    image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
+    image: ghcr.io/kettleofketchup/draftforge/backend:latest
     restart: always
     volumes:
       - ./backend/db.sqlite3:/app/backend/prod.db.sqlite3
@@ -21,7 +22,7 @@ services:
       - ./backend/.redis_data:/data
     restart: always
   nginx:
-    image: ghcr.io/kettleofketchup/dota_tournament/nginx:latest
+    image: ghcr.io/kettleofketchup/draftforge/nginx:latest
     container_name: nginx
     restart: always
     env_file: "./docker/.env.prod"
@@ -44,7 +45,7 @@ services:
       - backend
 
   celery-worker:
-    image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
+    image: ghcr.io/kettleofketchup/draftforge/backend:latest
     user: "1000:1000"
     entrypoint: ["celery"]
     command: ["-A", "config", "worker", "-l", "info"]
@@ -55,7 +56,7 @@ services:
     restart: always
 
   celery-beat:
-    image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
+    image: ghcr.io/kettleofketchup/draftforge/backend:latest
     user: "1000:1000"
     entrypoint: ["celery"]
     command: ["-A", "config", "beat", "-l", "info"]
@@ -66,7 +67,7 @@ services:
     restart: always
 
   discord-bot:
-    image: ghcr.io/kettleofketchup/dota_tournament/backend:latest
+    image: ghcr.io/kettleofketchup/draftforge/backend:latest
     user: "1000:1000"
     entrypoint: ["python", "manage.py", "run_discord_bot"]
     env_file: "./docker/.env.prod"

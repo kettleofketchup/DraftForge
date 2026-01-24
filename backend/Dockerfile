@@ -1,6 +1,6 @@
 # ---- Builder (production deps only) ----
 FROM python:3.12-bookworm AS poetry
-LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/dota_tournament"
+LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/draftforge"
 WORKDIR /app
 
 RUN pip install poetry==2.1.2
@@ -29,7 +29,7 @@ RUN --mount=type=cache,target=$POETRY_CACHE_DIR poetry install --no-root --with 
 
 # ---- Runtime (production) ----
 FROM deps AS runtime
-LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/dota_tournament"
+LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/draftforge"
 WORKDIR /app
 
 # Copy with ownership set directly (avoids slow recursive chown)
@@ -44,7 +44,7 @@ ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "backend.asgi:application"]
 
 # ---- Runtime for dev/test ----
 FROM deps-dev AS runtime-dev
-LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/dota_tournament"
+LABEL org.opencontainers.image.source "https://github.com/kettleofketchup/draftforge"
 WORKDIR /app
 
 # Copy with ownership set directly (avoids slow recursive chown)

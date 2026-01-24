@@ -1,5 +1,5 @@
 import type { UserType } from '~/index';
-import { AvatarUrl } from '~/index';
+import { AvatarUrl, DisplayName } from '~/components/user/avatar';
 
 export const captainView = ({ user }: { user: UserType }) => {
   return (
@@ -11,7 +11,7 @@ export const captainView = ({ user }: { user: UserType }) => {
       />
       <span>
         Current Captain:
-        {user?.nickname || user?.username || 'No captain selected'}
+        {user ? DisplayName(user) : 'No captain selected'}
       </span>
     </div>
   );

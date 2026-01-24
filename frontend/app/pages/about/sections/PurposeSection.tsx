@@ -57,7 +57,7 @@ export function PurposeSection() {
         },
       }}
     >
-      <div className="card bg-base-200 shadow-lg mb-12">
+      <div className="card bg-base-200/50 backdrop-blur border border-primary/10 mb-12">
         <div className="card-body">
           <h2 className="card-title text-3xl text-primary mb-6">
             <div className="flex flex-row items-center gap-2">

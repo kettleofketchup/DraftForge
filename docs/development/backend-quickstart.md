@@ -1,6 +1,6 @@
 # Backend Quickstart
 
-Quick reference for Django backend development in the DTX website project.
+Quick reference for Django backend development in the DraftForge project.
 
 ## Prerequisites
 

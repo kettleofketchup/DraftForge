@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from '~/components/ui/card';
 import type { DraftRoundType } from '~/index';
-import { AvatarUrl } from '~/index';
+import { AvatarUrl, DisplayName } from '~/index';
 import { useUserStore } from '~/store/userStore';
 
 export const DraftRoundCard = memo(
@@ -42,9 +42,7 @@ export const DraftRoundCard = memo(
           <CardHeader>
             <CardTitle className="flex justify-center">
               {isCur ? 'Current Captain: ' : 'Next Captain: '}
-              {draftRound?.captain?.nickname ||
-                draftRound?.captain?.username ||
-                'No captain selected'}
+              {draftRound?.captain ? DisplayName(draftRound.captain) : 'No captain selected'}
             </CardTitle>
           </CardHeader>
           <CardContent>

@@ -10,10 +10,20 @@ log = logging.getLogger(__name__)
 from django.views.generic.base import RedirectView
 
 from app import views_main as app_views
+from app.functions.herodraft_views import (
+    abandon_draft,
+    create_herodraft,
+    do_submit_choice,
+    do_submit_pick,
+    do_trigger_roll,
+    get_herodraft,
+    list_available_heroes,
+    list_events,
+    set_ready,
+)
 from app.functions.tournament import (
     create_team_from_captain,
     generate_draft_rounds,
-    get_active_draft_for_user,
     get_draft_style_mmrs,
     pick_player_for_round,
     rebuild_team,
@@ -35,6 +45,18 @@ from app.views import (
     UserCreateView,
     UserView,
     current_user,
+)
+from app.views.admin_team import (
+    add_league_admin,
+    add_league_staff,
+    add_org_admin,
+    add_org_staff,
+    remove_league_admin,
+    remove_league_staff,
+    remove_org_admin,
+    remove_org_staff,
+    search_users,
+    transfer_org_ownership,
 )
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
@@ -73,6 +95,8 @@ urlpatterns = [
     path("country/", app_views.require_country, name="require_country"),
     path("city/", app_views.require_city, name="require_city"),
     path("", include("social_django.urls")),
+    # User search (must be before router to avoid conflict with UserView)
+    path("api/users/search/", search_users, name="search_users"),
     path("api/", include(router.urls)),
     path("api/current_user", current_user),
     path("api/user/register", UserCreateView.as_view()),
@@ -108,11 +132,6 @@ urlpatterns = [
         undo_last_pick,
         name="undo-pick",
     ),
-    path(
-        "api/active-draft-for-user/",
-        get_active_draft_for_user,
-        name="active-draft-for-user",
-    ),
     path("api/avatars/refresh/", app_views.refresh_all_avatars, name="refresh-avatars"),
     path("api/profile_update", profile_update, name="profile_update"),
     path("api/jokes/tangoes/", get_tangoes, name="get-tangoes"),
@@ -120,6 +139,93 @@ urlpatterns = [
     path("api/steam/", include("steam.urls")),
     path("api/bracket/", include("bracket.urls")),
     path("api/discord/", include("discordbot.urls")),
+    # HeroDraft (Captain's Mode) endpoints
+    path(
+        "api/games/<int:game_pk>/create-herodraft/",
+        create_herodraft,
+        name="create_herodraft",
+    ),
+    path("api/herodraft/<int:draft_pk>/", get_herodraft, name="get_herodraft"),
+    path(
+        "api/herodraft/<int:draft_pk>/set-ready/", set_ready, name="herodraft_set_ready"
+    ),
+    path(
+        "api/herodraft/<int:draft_pk>/trigger-roll/",
+        do_trigger_roll,
+        name="herodraft_trigger_roll",
+    ),
+    path(
+        "api/herodraft/<int:draft_pk>/submit-choice/",
+        do_submit_choice,
+        name="herodraft_submit_choice",
+    ),
+    path(
+        "api/herodraft/<int:draft_pk>/submit-pick/",
+        do_submit_pick,
+        name="herodraft_submit_pick",
+    ),
+    path(
+        "api/herodraft/<int:draft_pk>/list-events/",
+        list_events,
+        name="herodraft_list_events",
+    ),
+    path(
+        "api/herodraft/<int:draft_pk>/list-available-heroes/",
+        list_available_heroes,
+        name="herodraft_list_available_heroes",
+    ),
+    path(
+        "api/herodraft/<int:draft_pk>/abandon/",
+        abandon_draft,
+        name="herodraft_abandon",
+    ),
+    # Admin Team Management - Organization
+    path(
+        "api/organizations/<int:org_id>/admins/",
+        add_org_admin,
+        name="add_org_admin",
+    ),
+    path(
+        "api/organizations/<int:org_id>/admins/<int:user_id>/",
+        remove_org_admin,
+        name="remove_org_admin",
+    ),
+    path(
+        "api/organizations/<int:org_id>/staff/",
+        add_org_staff,
+        name="add_org_staff",
+    ),
+    path(
+        "api/organizations/<int:org_id>/staff/<int:user_id>/",
+        remove_org_staff,
+        name="remove_org_staff",
+    ),
+    path(
+        "api/organizations/<int:org_id>/transfer-ownership/",
+        transfer_org_ownership,
+        name="transfer_org_ownership",
+    ),
+    # League admin team
+    path(
+        "api/leagues/<int:league_id>/admins/",
+        add_league_admin,
+        name="add_league_admin",
+    ),
+    path(
+        "api/leagues/<int:league_id>/admins/<int:user_id>/",
+        remove_league_admin,
+        name="remove_league_admin",
+    ),
+    path(
+        "api/leagues/<int:league_id>/staff/",
+        add_league_staff,
+        name="add_league_staff",
+    ),
+    path(
+        "api/leagues/<int:league_id>/staff/<int:user_id>/",
+        remove_league_staff,
+        name="remove_league_staff",
+    ),
 ]
 
 log.warning(f"Test Environ:  {isTestEnvironment()}")
