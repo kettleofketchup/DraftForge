@@ -5,8 +5,13 @@ These endpoints are only available when TEST_ENDPOINTS=true in settings.
 """
 
 from django.shortcuts import get_object_or_404
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    permission_classes,
+)
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
@@ -61,6 +66,8 @@ HERODRAFT_TEST_KEYS = {
 
 
 @api_view(["POST"])
+@authentication_classes([])  # Disable authentication to bypass CSRF
+@permission_classes([AllowAny])
 def force_herodraft_timeout(request, draft_pk):
     """
     Force a timeout on the current active round (TEST ONLY).
@@ -97,22 +104,27 @@ def force_herodraft_timeout(request, draft_pk):
         )
 
     # Import and call the timeout handler
+    from app.broadcast import broadcast_herodraft_state
     from app.functions.herodraft import auto_random_pick
 
     try:
-        auto_random_pick(draft, current_round.draft_team)
+        completed_round = auto_random_pick(draft, current_round.draft_team)
     except Exception as e:
         return Response(
             {"error": f"Timeout handling failed: {str(e)}"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-    # Refresh and return updated draft
+    # Refresh and broadcast the state update to WebSocket clients
     draft.refresh_from_db()
+    broadcast_herodraft_state(draft, "round_timeout")
+
     return Response(HeroDraftSerializer(draft).data)
 
 
 @api_view(["POST"])
+@authentication_classes([])  # Disable authentication to bypass CSRF
+@permission_classes([AllowAny])
 def reset_herodraft(request, draft_pk):
     """
     Reset a hero draft back to waiting_for_captains state (TEST ONLY).
