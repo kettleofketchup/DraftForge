@@ -33,7 +33,8 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
         className={cn(
           'flex items-center gap-2 rounded-md px-2 py-1.5 h-9',
           'text-sm font-medium',
-          'hover:bg-accent hover:text-accent-foreground',
+          'text-text-primary',
+          'hover:bg-base-400/50',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           'transition-colors',
           className
@@ -42,15 +43,15 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
       >
         {icon && <span className="shrink-0">{icon}</span>}
         <div className={cn(
-          'flex flex-col min-w-0 items-center',
+          'flex min-w-0 items-center xl:flex-col xl:items-center',
           hideTextOnSmall && 'hidden lg:flex'
         )}>
           <div className="flex items-center justify-center gap-1">
-            <span className="text-xs font-medium leading-normal truncate text-center">{title}</span>
+            <span className="text-xs font-bold leading-normal truncate text-center text-outline-sm">{title}</span>
             {badge}
           </div>
           {subtitle && (
-            <span className="text-[10px] text-muted-foreground leading-normal truncate hidden xl:block text-center">
+            <span className="text-[10px] text-text-muted leading-normal truncate hidden xl:block text-center">
               {subtitle}
             </span>
           )}
@@ -283,12 +284,12 @@ const AboutIcon = () => (
 const StarBadge = ({ count, isLoading }: { count: number | null; isLoading?: boolean }) => {
   if (isLoading) {
     return (
-      <span className="inline-flex items-center gap-0.5 text-[10px] bg-base-200 rounded px-1 py-0.5 leading-none">
+      <span className="inline-flex items-center gap-0.5 text-[10px] bg-base-400 text-text-primary rounded px-1 py-0.5 leading-none">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
           fill="currentColor"
-          className="h-3 w-3 animate-pulse"
+          className="h-3 w-3 animate-pulse text-warning"
           aria-hidden="true"
         >
           <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -299,12 +300,12 @@ const StarBadge = ({ count, isLoading }: { count: number | null; isLoading?: boo
   }
   if (count === null) return null;
   return (
-    <span className="inline-flex items-center gap-0.5 text-[10px] bg-base-200 rounded px-1 py-0.5 leading-none">
+    <span className="inline-flex items-center gap-0.5 text-[10px] bg-base-400 text-text-primary font-semibold rounded px-1 py-0.5 leading-none">
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"
         fill="currentColor"
-        className="h-3 w-3"
+        className="h-3 w-3 text-warning"
         aria-hidden="true"
       >
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -331,6 +332,7 @@ const ExternalLinks = () => {
         badge={<StarBadge count={stars} isLoading={isLoading} />}
         aria-label="Star us on GitHub"
         hideTextOnSmall
+        className="[&_svg]:text-text-primary"
       />
       <NavItem
         href={DOCS_URL}
@@ -341,6 +343,7 @@ const ExternalLinks = () => {
         subtitle="Secret Sauce"
         aria-label="Documentation"
         hideTextOnSmall
+        className="[&_svg]:text-info"
       />
       <NavItem
         href={BUG_REPORT_URL}
@@ -349,7 +352,7 @@ const ExternalLinks = () => {
         icon={<BugIcon />}
         title="Report Issue"
         subtitle="Help us fix it"
-        className="text-warning hover:text-warning"
+        className="[&_svg]:text-destructive text-destructive hover:text-destructive hover:[&_svg]:text-red-400"
         aria-label="Report a Bug"
         hideTextOnSmall
       />
@@ -370,6 +373,7 @@ const NavLinks = () => {
         title="About"
         subtitle="Who we are"
         hideTextOnSmall
+        className="[&_svg]:text-info"
       />
       <NavItem
         href="/tournaments"
@@ -377,6 +381,7 @@ const NavLinks = () => {
         title="Tournaments"
         subtitle="Compete & win"
         hideTextOnSmall
+        className="[&_svg]:text-warning"
       />
       <NavItem
         href="/users"
@@ -384,6 +389,7 @@ const NavLinks = () => {
         title="Users"
         subtitle="Find players"
         hideTextOnSmall
+        className="[&_svg]:text-interactive"
       />
       <NavItem
         href="/organizations"
@@ -391,6 +397,7 @@ const NavLinks = () => {
         title="Organizations"
         subtitle="Communities"
         hideTextOnSmall
+        className="[&_svg]:text-secondary"
       />
       <NavItem
         href="/leagues"
@@ -398,6 +405,7 @@ const NavLinks = () => {
         title="Leagues"
         subtitle="Ranked play"
         hideTextOnSmall
+        className="[&_svg]:text-primary"
       />
       {currentUser?.is_staff && (
         <NavItem
@@ -406,6 +414,7 @@ const NavLinks = () => {
           title="Admin"
           subtitle="Manage site"
           hideTextOnSmall
+          className="[&_svg]:text-success"
         />
       )}
     </div>
@@ -437,7 +446,7 @@ export const ResponsiveAppBar: React.FC = memo(() => {
   return (
     <header>
       <nav
-        className="sticky z-50 top-0 navbar bg-base-100 shadow-sm p-0"
+        className="sticky z-50 top-0 navbar bg-base-600 shadow-elevated border-b border-border p-0"
         role="navigation"
         aria-label="Main navigation"
       >
