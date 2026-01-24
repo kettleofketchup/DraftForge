@@ -22,12 +22,15 @@ interface NavItemProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   badge?: React.ReactNode;
   asChild?: boolean;
   hideTextOnSmall?: boolean;
+  /** Show subtitle as tooltip on small screens (below xl) */
+  showSubtitleTooltip?: boolean;
 }
 
 const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
-  ({ className, icon, title, subtitle, badge, asChild = false, hideTextOnSmall = false, ...props }, ref) => {
+  ({ className, icon, title, subtitle, badge, asChild = false, hideTextOnSmall = false, showSubtitleTooltip = false, ...props }, ref) => {
     const Comp = asChild ? Slot : 'a';
-    return (
+
+    const navContent = (
       <Comp
         ref={ref}
         className={cn(
@@ -58,6 +61,23 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
         </div>
       </Comp>
     );
+
+    // Wrap with tooltip for small screens if enabled
+    if (showSubtitleTooltip && subtitle) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {navContent}
+          </TooltipTrigger>
+          <TooltipContent className="xl:hidden">
+            <p className="font-medium">{title}</p>
+            <p className="text-xs opacity-80">{subtitle}</p>
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    return navContent;
   }
 );
 NavItem.displayName = 'NavItem';
@@ -343,6 +363,7 @@ const ExternalLinks = () => {
         subtitle="Secret Sauce"
         aria-label="Documentation"
         hideTextOnSmall
+        showSubtitleTooltip
         className="[&_svg]:text-info"
       />
       <NavItem
