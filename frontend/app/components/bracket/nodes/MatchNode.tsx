@@ -27,22 +27,22 @@ const statusConfig = {
 const bracketTypeStyles = {
   winners: {
     bg: 'bg-background',
-    border: 'border-border',
+    border: 'border-white/80',
     headerBg: '',
   },
   losers: {
     bg: 'bg-red-950/30',
-    border: 'border-red-800/60',
+    border: 'border-white/60',
     headerBg: 'bg-red-900/30',
   },
   grand_finals: {
     bg: 'bg-purple-950/20',
-    border: 'border-purple-700/50',
+    border: 'border-white/70',
     headerBg: 'bg-purple-900/20',
   },
   swiss: {
     bg: 'bg-blue-950/20',
-    border: 'border-blue-700/50',
+    border: 'border-white/70',
     headerBg: 'bg-blue-900/20',
   },
 };
