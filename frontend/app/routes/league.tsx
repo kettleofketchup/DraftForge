@@ -65,58 +65,58 @@ export default function LeaguePage() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <Trophy className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold">{league.name}</h1>
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <Trophy className="h-8 w-8 text-primary" />
+              <h1 className="text-3xl font-bold">{league.name}</h1>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              {league.organization_name && (
+                <Badge variant="outline" className="flex items-center gap-1">
+                  <Building2 className="h-3 w-3" />
+                  {league.organization_name}
+                </Badge>
+              )}
+              {league.steam_league_id && (
+                <Badge variant="secondary">
+                  Steam ID: {league.steam_league_id}
+                </Badge>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2 text-muted-foreground">
-            {league.organization_name && (
-              <Badge variant="outline" className="flex items-center gap-1">
-                <Building2 className="h-3 w-3" />
-                {league.organization_name}
-              </Badge>
-            )}
-            {league.steam_league_id && (
-              <Badge variant="secondary">
-                Steam ID: {league.steam_league_id}
-              </Badge>
-            )}
-          </div>
+
+          {canEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditModalOpen(true)}
+              data-testid="edit-league-button"
+            >
+              <Pencil className="h-4 w-4 mr-2" />
+              Edit League
+            </Button>
+          )}
         </div>
 
-        {canEdit && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEditModalOpen(true)}
-            data-testid="edit-league-button"
-          >
-            <Pencil className="h-4 w-4 mr-2" />
-            Edit League
-          </Button>
-        )}
-      </div>
-
-      {/* Tabs */}
-      <LeagueTabs
-        league={league}
-        tournaments={leagueTournaments}
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-      />
-
-      {/* Edit Modal */}
-      {canEdit && league && (
-        <EditLeagueModal
-          open={editModalOpen}
-          onOpenChange={setEditModalOpen}
+        {/* Tabs */}
+        <LeagueTabs
           league={league}
-          onSuccess={refetch}
+          tournaments={leagueTournaments}
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
         />
-      )}
+
+        {/* Edit Modal */}
+        {canEdit && league && (
+          <EditLeagueModal
+            open={editModalOpen}
+            onOpenChange={setEditModalOpen}
+            league={league}
+            onSuccess={refetch}
+          />
+        )}
     </div>
   );
 }
