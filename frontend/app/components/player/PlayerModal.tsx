@@ -1,20 +1,19 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { Badge } from '~/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '~/components/ui/dialog';
+import { Button } from '~/components/ui/button';
+import { InfoDialog } from '~/components/ui/dialogs';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
 import { AvatarUrl } from '~/index';
 import { useUserStore } from '~/store/userStore';
-import { PlayerUnderConstruction } from './PlayerUnderConstruction';
+import { LeagueStatsCard } from '~/components/user/LeagueStatsCard';
+import { useUserLeagueStats } from '~/features/leaderboard/queries';
 import { fetchUser } from '~/components/api/api';
 import { getLogger } from '~/lib/logger';
+import { ExternalLink } from 'lucide-react';
 
 const log = getLogger('PlayerModal');
 
@@ -22,12 +21,16 @@ interface PlayerModalProps {
   player: UserType;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  leagueId?: number;
+  organizationId?: number;
 }
 
 export const PlayerModal: React.FC<PlayerModalProps> = ({
   player,
   open,
   onOpenChange,
+  leagueId,
+  organizationId,
 }) => {
   const currentUser = useUserStore((state) => state.currentUser);
   const canEdit = currentUser?.is_staff || currentUser?.is_superuser;
@@ -35,6 +38,12 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   // Fetch full user data for editing (player prop may have partial data from herodraft)
   const [fullUserData, setFullUserData] = useState<UserType | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
+
+  // Fetch league stats if leagueId is provided
+  // TODO: Update useUserLeagueStats to accept leagueId parameter when backend supports it
+  const { data: leagueStats, isLoading: isLoadingStats } = useUserLeagueStats(
+    leagueId && player.pk ? player.pk : null
+  );
 
   // Fetch full user data when modal opens
   useEffect(() => {
@@ -69,65 +78,105 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Player Profile</DialogTitle>
-        </DialogHeader>
-
-        {/* User Card Section */}
-        <div className="space-y-4">
-          {/* Header with avatar and name */}
-          <div className="flex items-center gap-4">
-            <img
-              src={AvatarUrl(displayPlayer)}
-              alt={`${playerName}'s avatar`}
-              className="w-16 h-16 rounded-full border border-primary"
-            />
-            <div className="flex-1">
-              <h2 className="text-xl font-semibold">{playerName}</h2>
-              <div className="flex gap-2 mt-1">
-                {displayPlayer.is_staff && (
-                  <Badge className="bg-blue-700 text-white">Staff</Badge>
-                )}
-                {displayPlayer.is_superuser && (
-                  <Badge className="bg-red-700 text-white">Admin</Badge>
-                )}
-              </div>
+    <InfoDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Player Profile"
+      size="md"
+      showClose={false}
+    >
+      {/* User Card Section */}
+      <div className="space-y-4">
+        {/* Header with avatar and name */}
+        <div className="flex items-center gap-4">
+          <img
+            src={AvatarUrl(displayPlayer)}
+            alt={`${playerName}'s avatar`}
+            className="w-16 h-16 rounded-full border border-primary"
+          />
+          <div className="flex-1">
+            <h2 className="text-xl font-semibold">{playerName}</h2>
+            <div className="flex gap-2 mt-1">
+              {displayPlayer.is_staff && (
+                <Badge className="bg-blue-700 text-white">Staff</Badge>
+              )}
+              {displayPlayer.is_superuser && (
+                <Badge className="bg-red-700 text-white">Admin</Badge>
+              )}
             </div>
-            {canEdit && displayPlayer.pk && (
-              isLoadingUser ? (
-                <span className="text-xs text-muted-foreground">Loading...</span>
-              ) : (
-                <UserEditModal user={new User(fullUserData || displayPlayer)} />
-              )
-            )}
           </div>
+          {canEdit && displayPlayer.pk && (
+            isLoadingUser ? (
+              <span className="text-xs text-muted-foreground">Loading...</span>
+            ) : (
+              <UserEditModal user={new User(fullUserData || displayPlayer)} />
+            )
+          )}
+        </div>
 
-          {/* Player info */}
-          <div className="space-y-2 text-sm">
-            {displayPlayer.username && (
-              <div>
-                <span className="font-semibold">Username:</span> {displayPlayer.username}
-              </div>
-            )}
-            {displayPlayer.nickname && (
-              <div>
-                <span className="font-semibold">Nickname:</span> {displayPlayer.nickname}
-              </div>
-            )}
-            {displayPlayer.mmr && (
-              <div>
-                <span className="font-semibold">MMR:</span> {displayPlayer.mmr}
-              </div>
-            )}
-            <RolePositions user={displayPlayer} />
-            {displayPlayer.steamid && (
-              <div>
-                <span className="font-semibold">Steam ID:</span> {displayPlayer.steamid}
-              </div>
+        {/* Player info */}
+        <div className="space-y-2 text-sm">
+          {displayPlayer.username && (
+            <div>
+              <span className="font-semibold">Username:</span> {displayPlayer.username}
+            </div>
+          )}
+          {displayPlayer.nickname && (
+            <div>
+              <span className="font-semibold">Nickname:</span> {displayPlayer.nickname}
+            </div>
+          )}
+          {displayPlayer.mmr && (
+            <div>
+              <span className="font-semibold">MMR:</span> {displayPlayer.mmr}
+            </div>
+          )}
+          <RolePositions user={displayPlayer} />
+          {displayPlayer.steamid && (
+            <div>
+              <span className="font-semibold">Steam ID:</span> {displayPlayer.steamid}
+            </div>
+          )}
+        </div>
+
+        {/* League Stats (if context provided) */}
+        {leagueId && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-muted-foreground">League Stats</h3>
+            {isLoadingStats ? (
+              <div className="text-sm text-muted-foreground">Loading stats...</div>
+            ) : leagueStats ? (
+              <LeagueStatsCard
+                stats={leagueStats}
+                baseMmr={leagueStats.base_mmr}
+                leagueMmr={leagueStats.league_mmr}
+                compact
+              />
+            ) : (
+              <div className="text-sm text-muted-foreground">No league stats available</div>
             )}
           </div>
+        )}
+
+        {/* Organization Stats placeholder (if context provided) */}
+        {organizationId && !leagueId && (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-muted-foreground">Organization Stats</h3>
+            <div className="text-sm text-muted-foreground">Organization stats coming soon</div>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex flex-col gap-2">
+          {/* View Full Profile */}
+          {displayPlayer.pk && (
+            <Button asChild variant="default" className="w-full">
+              <Link to={`/user/${displayPlayer.pk}`} onClick={() => onOpenChange(false)}>
+                <ExternalLink className="w-4 h-4 mr-2" />
+                View Full Profile
+              </Link>
+            </Button>
+          )}
 
           {/* Dotabuff link */}
           {displayPlayer.steamid && (
@@ -145,11 +194,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
               Dotabuff Profile
             </a>
           )}
-
-          {/* Extended Profile (Under Construction) */}
-          <PlayerUnderConstruction playerName={playerName} />
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </InfoDialog>
   );
 };
