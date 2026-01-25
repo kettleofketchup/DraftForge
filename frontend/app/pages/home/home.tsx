@@ -11,12 +11,8 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import {
-  getGames,
-  getLeagues,
-  getOrganizations,
-  getTournaments,
-} from '~/components/api/api';
+import { Link } from 'react-router';
+import { getHomeStats } from '~/components/api/api';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 
@@ -80,42 +76,24 @@ const StatsSection = () => {
   // Only fetch on client side to avoid SSR issues with auth
   const isClient = typeof window !== 'undefined';
 
-  const { data: tournaments, isLoading: tournamentsLoading } = useQuery({
-    queryKey: ['tournaments'],
-    queryFn: () => getTournaments(),
+  // Use the optimized home-stats endpoint that returns only counts
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ['home-stats'],
+    queryFn: () => getHomeStats(),
     enabled: isClient,
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
   });
 
-  const { data: games, isLoading: gamesLoading } = useQuery({
-    queryKey: ['games'],
-    queryFn: () => getGames(),
-    enabled: isClient,
-  });
-
-  const { data: organizations, isLoading: orgsLoading } = useQuery({
-    queryKey: ['organizations'],
-    queryFn: () => getOrganizations(),
-    enabled: isClient,
-  });
-
-  const { data: leagues, isLoading: leaguesLoading } = useQuery({
-    queryKey: ['leagues'],
-    queryFn: () => getLeagues(),
-    enabled: isClient,
-  });
-
-  const isLoading = tournamentsLoading || gamesLoading || orgsLoading || leaguesLoading;
-
-  if (isLoading || !tournaments || !games || !organizations || !leagues) {
+  if (isLoading || !stats) {
     return <StatsSkeleton />;
   }
 
   return (
     <>
-      <StatCard value={tournaments.length} label="Tournaments" delay={0.6} />
-      <StatCard value={games.length} label="Games Played" delay={0.7} />
-      <StatCard value={organizations.length} label="Organizations" delay={0.8} />
-      <StatCard value={leagues.length} label="Leagues" delay={0.9} />
+      <StatCard value={stats.tournament_count} label="Tournaments" delay={0.6} />
+      <StatCard value={stats.game_count} label="Games Played" delay={0.7} />
+      <StatCard value={stats.organization_count} label="Organizations" delay={0.8} />
+      <StatCard value={stats.league_count} label="Leagues" delay={0.9} />
     </>
   );
 };
@@ -191,10 +169,10 @@ export default function HomePage() {
             className="flex flex-col sm:flex-row gap-4 justify-center"
           >
             <Button size="lg" className="!text-black" asChild>
-              <a href="/tournaments">
+              <Link to="/tournaments">
                 Browse Tournaments
                 <ChevronRight className="w-4 h-4" />
-              </a>
+              </Link>
             </Button>
             <Button size="lg" variant="outline" className="shadow-md border-2 border-emerald-500 text-emerald-400 hover:bg-emerald-500/20" asChild>
               <a href="https://discord.gg/dtx" target="_blank" rel="noopener noreferrer">
@@ -294,10 +272,10 @@ export default function HomePage() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button size="lg" className="!text-black" asChild>
-                  <a href="/tournaments">Get Started</a>
+                  <Link to="/tournaments">Get Started</Link>
                 </Button>
                 <Button size="lg" variant="outline" className="shadow-md border-2 border-violet-500 text-violet-400 hover:bg-violet-500/20" asChild>
-                  <a href="/about">Learn More</a>
+                  <Link to="/about">Learn More</Link>
                 </Button>
               </div>
             </div>
