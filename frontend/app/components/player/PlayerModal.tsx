@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { useNavigate } from 'react-router';
 import { Badge } from '~/components/ui/badge';
-import { Button } from '~/components/ui/button';
+import { ViewIconButton } from '~/components/ui/buttons';
 import { InfoDialog } from '~/components/ui/dialogs';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
@@ -13,7 +13,6 @@ import { LeagueStatsCard } from '~/components/user/LeagueStatsCard';
 import { useUserLeagueStats } from '~/features/leaderboard/queries';
 import { fetchUser } from '~/components/api/api';
 import { getLogger } from '~/lib/logger';
-import { ExternalLink } from 'lucide-react';
 
 const log = getLogger('PlayerModal');
 
@@ -32,6 +31,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   leagueId,
   organizationId,
 }) => {
+  const navigate = useNavigate();
   const currentUser = useUserStore((state) => state.currentUser);
   const canEdit = currentUser?.is_staff || currentUser?.is_superuser;
 
@@ -72,6 +72,13 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   const displayPlayer = fullUserData || player;
   const playerName = displayPlayer.nickname || displayPlayer.username || 'Unknown';
 
+  const handleViewFullProfile = () => {
+    if (displayPlayer.pk) {
+      onOpenChange(false);
+      navigate(`/user/${displayPlayer.pk}`);
+    }
+  };
+
   const goToDotabuff = () => {
     if (!displayPlayer.steamid) return '#';
     return `https://www.dotabuff.com/players/${encodeURIComponent(String(displayPlayer.steamid))}`;
@@ -105,13 +112,22 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
               )}
             </div>
           </div>
-          {canEdit && displayPlayer.pk && (
-            isLoadingUser ? (
-              <span className="text-xs text-muted-foreground">Loading...</span>
-            ) : (
-              <UserEditModal user={new User(fullUserData || displayPlayer)} />
-            )
-          )}
+          {/* Action buttons */}
+          <div className="flex items-center gap-2">
+            {canEdit && displayPlayer.pk && (
+              isLoadingUser ? (
+                <span className="text-xs text-muted-foreground">Loading...</span>
+              ) : (
+                <UserEditModal user={new User(fullUserData || displayPlayer)} />
+              )
+            )}
+            {displayPlayer.pk && (
+              <ViewIconButton
+                onClick={handleViewFullProfile}
+                tooltip="View Full Profile"
+              />
+            )}
+          </div>
         </div>
 
         {/* Player info */}
@@ -166,20 +182,9 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
           </div>
         )}
 
-        {/* Action buttons */}
-        <div className="flex flex-col gap-2">
-          {/* View Full Profile */}
-          {displayPlayer.pk && (
-            <Button asChild variant="default" className="w-full">
-              <Link to={`/user/${displayPlayer.pk}`} onClick={() => onOpenChange(false)}>
-                <ExternalLink className="w-4 h-4 mr-2" />
-                View Full Profile
-              </Link>
-            </Button>
-          )}
-
-          {/* Dotabuff link */}
-          {displayPlayer.steamid && (
+        {/* Dotabuff link */}
+        {displayPlayer.steamid && (
+          <div className="pt-2">
             <a
               className="flex items-center justify-center btn btn-sm btn-outline w-full"
               href={goToDotabuff()}
@@ -193,8 +198,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
               />
               Dotabuff Profile
             </a>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </InfoDialog>
   );

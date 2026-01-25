@@ -111,7 +111,7 @@ export function EditProfileModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Profile</DialogTitle>
           <DialogDescription>
@@ -160,10 +160,12 @@ export function EditProfileModal({
                         const val = e.target.value;
                         field.onChange(val ? parseInt(val, 10) : null);
                       }}
+                      disabled
+                      className="bg-muted text-muted-foreground"
                     />
                   </FormControl>
-                  <FormDescription>
-                    Your Dota 2 matchmaking rating
+                  <FormDescription className="text-amber-600">
+                    ⚠️ Only provide your last ranked MMR. Contact an admin to update.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

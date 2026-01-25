@@ -17,7 +17,12 @@ import {
 
 interface BadgeProps {
   user: UserType;
-  /** Compact mode: icon + rank only, no text label */
+  /**
+   * Compact mode: icon + rank only, no text label.
+   * - `true`: Always compact
+   * - `false`: Always full (with text)
+   * - `undefined`: Responsive - compact on mobile (<sm), full on larger screens
+   */
   compact?: boolean;
 }
 
@@ -68,19 +73,33 @@ export const CarryBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
 
   if (!shouldShowBadge) return null;
   if (!user.positions?.carry) return null;
+
+  // Responsive: compact on mobile, full on sm+ (unless explicitly set)
+  const isResponsive = compact === undefined;
+  const forceCompact = compact === true;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="relative inline-block cursor-help">
           <Badge className={cn(
             "badge-primary !bg-rose-900 !text-white hover:!bg-rose-800 transition-colors",
-            compact && "!px-1 !py-0.5"
+            forceCompact && "!px-1 !py-0.5",
+            isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
           )}>
-            <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-rose-800")}>
+            <Badge className={cn(
+              "!bg-rose-800",
+              forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
+            )}>
               {user.positions.carry}
             </Badge>
-            <CarrySVG className={compact ? "w-4 h-4" : undefined} />
-            {!compact && "Carry"}
+            <CarrySVG className={cn(
+              forceCompact && "w-4 h-4",
+              isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
+            )} />
+            {!forceCompact && (
+              <span className={isResponsive ? "hidden sm:inline" : undefined}>Carry</span>
+            )}
           </Badge>
         </div>
       </TooltipTrigger>
@@ -96,19 +115,32 @@ export const MidBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
   if (!user.positions?.mid) return null;
+
+  const isResponsive = compact === undefined;
+  const forceCompact = compact === true;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="relative inline-block cursor-help">
           <Badge className={cn(
             "badge-primary !bg-cyan-900 !text-white hover:!bg-cyan-800 transition-colors",
-            compact && "!px-1 !py-0.5"
+            forceCompact && "!px-1 !py-0.5",
+            isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
           )}>
-            <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-cyan-800")}>
+            <Badge className={cn(
+              "!bg-cyan-800",
+              forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
+            )}>
               {user.positions.mid}
             </Badge>
-            <MidSVG className={compact ? "w-4 h-4" : undefined} />
-            {!compact && "Mid"}
+            <MidSVG className={cn(
+              forceCompact && "w-4 h-4",
+              isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
+            )} />
+            {!forceCompact && (
+              <span className={isResponsive ? "hidden sm:inline" : undefined}>Mid</span>
+            )}
           </Badge>
         </div>
       </TooltipTrigger>
@@ -124,19 +156,32 @@ export const OfflaneBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
   if (!user.positions?.offlane) return null;
+
+  const isResponsive = compact === undefined;
+  const forceCompact = compact === true;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="relative inline-block cursor-help">
           <Badge className={cn(
             "badge-primary !bg-emerald-900 !text-white hover:!bg-emerald-800 transition-colors",
-            compact && "!px-1 !py-0.5"
+            forceCompact && "!px-1 !py-0.5",
+            isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
           )}>
-            <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-emerald-800")}>
+            <Badge className={cn(
+              "!bg-emerald-800",
+              forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
+            )}>
               {user.positions.offlane}
             </Badge>
-            <OfflaneSVG className={compact ? "w-4 h-4" : undefined} />
-            {!compact && "Offlane"}
+            <OfflaneSVG className={cn(
+              forceCompact && "w-4 h-4",
+              isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
+            )} />
+            {!forceCompact && (
+              <span className={isResponsive ? "hidden sm:inline" : undefined}>Offlane</span>
+            )}
           </Badge>
         </div>
       </TooltipTrigger>
@@ -152,23 +197,34 @@ export const SoftSupportBadge: React.FC<BadgeProps> = memo(({ user, compact }) =
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
   if (!user.positions?.soft_support) return null;
+
+  const isResponsive = compact === undefined;
+  const forceCompact = compact === true;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="relative inline-block cursor-help">
           <Badge className={cn(
             "badge-primary !bg-violet-900 !text-white hover:!bg-violet-800 transition-colors",
-            compact && "!px-1 !py-0.5"
+            forceCompact && "!px-1 !py-0.5",
+            isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
           )}>
-            <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-violet-800")}>
+            <Badge className={cn(
+              "!bg-violet-800",
+              forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
+            )}>
               {user.positions.soft_support}
             </Badge>
-            <SoftSupportSVG className={compact ? "w-4 h-4" : undefined} />
-            {!compact && (
-              <>
+            <SoftSupportSVG className={cn(
+              forceCompact && "w-4 h-4",
+              isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
+            )} />
+            {!forceCompact && (
+              <span className={isResponsive ? "hidden sm:inline" : undefined}>
                 <span className="hidden 2xl:inline">SoftSupport</span>
                 <span className="inline 2xl:hidden">Pos4</span>
-              </>
+              </span>
             )}
           </Badge>
         </div>
@@ -185,23 +241,34 @@ export const HardSupportBadge: React.FC<BadgeProps> = memo(({ user, compact }) =
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
   if (!user.positions?.hard_support) return null;
+
+  const isResponsive = compact === undefined;
+  const forceCompact = compact === true;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="relative inline-block cursor-help">
           <Badge className={cn(
             "badge-primary !bg-indigo-900 !text-white hover:!bg-indigo-800 transition-colors",
-            compact && "!px-1 !py-0.5"
+            forceCompact && "!px-1 !py-0.5",
+            isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
           )}>
-            <Badge className={cn(compact ? compactNumberClasses : numberClasses, "!bg-indigo-800")}>
+            <Badge className={cn(
+              "!bg-indigo-800",
+              forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
+            )}>
               {user.positions.hard_support}
             </Badge>
-            <HardSupportSVG className={compact ? "w-4 h-4" : undefined} />
-            {!compact && (
-              <>
+            <HardSupportSVG className={cn(
+              forceCompact && "w-4 h-4",
+              isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
+            )} />
+            {!forceCompact && (
+              <span className={isResponsive ? "hidden sm:inline" : undefined}>
                 <span className="hidden 2xl:inline">HardSupport</span>
                 <span className="inline 2xl:hidden">Pos5</span>
-              </>
+              </span>
             )}
           </Badge>
         </div>
@@ -215,17 +282,25 @@ export const HardSupportBadge: React.FC<BadgeProps> = memo(({ user, compact }) =
 });
 interface RolePositionsProps {
   user: UserType;
-  /** Compact mode: icon + rank only, no text labels */
+  /**
+   * Compact mode: icon + rank only, no text labels.
+   * - `true`: Always compact
+   * - `false`: Always full (with text)
+   * - `undefined`: Responsive - compact on mobile (<sm), full on larger screens
+   */
   compact?: boolean;
 }
 
 export const RolePositions: React.FC<RolePositionsProps> = ({ user, compact }) => {
   if (!user.positions) return null;
 
+  const isResponsive = compact === undefined;
+  const forceCompact = compact === true;
+
   return (
     <div className={cn(
       "flex flex-wrap justify-center",
-      compact ? "flex-row gap-2" : "flex-col md:flex-row gap-1"
+      forceCompact ? "flex-row gap-2" : isResponsive ? "flex-row gap-1 sm:gap-1" : "flex-col md:flex-row gap-1"
     )}>
       {[
         { component: CarryBadge, value: user?.positions?.carry },

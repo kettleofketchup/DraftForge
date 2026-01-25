@@ -1,13 +1,11 @@
 import { motion } from 'framer-motion';
 import type { FormEvent } from 'react';
-import React, { useEffect, useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import type { TeamType } from '~/components/tournament/types';
-import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import type { UserType } from '../user/types';
 import TeamEditModal from './teamCard/editModal';
 import { TeamTable } from './teamTable/teamTable';
-const log = getLogger('teamCard');
 
 interface Props {
   team: TeamType;
@@ -17,7 +15,8 @@ interface Props {
   removeCallBack?: (e: FormEvent, user: UserType) => void;
   removeToolTip?: string;
 }
-export const TeamCard: React.FC<Props> = ({
+
+export const TeamCard: React.FC<Props> = memo(({
   team,
   edit,
   saveFunc,
@@ -26,22 +25,16 @@ export const TeamCard: React.FC<Props> = ({
   removeToolTip = 'Delete the user',
 }) => {
   const [editMode, setEditMode] = useState(edit || false);
+  const currentUser: UserType = useUserStore((state) => state.currentUser);
 
-  const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
-
-  useEffect(() => {
-    if (team) {
-      log.debug(`UserCard: user updated ${team.name}`);
-    }
-  }, [team.pk, team.captain?.pk, team.members?.length, team.draft_order]);
-
-  const getAverageMMR = () => {
+  // Memoize average MMR calculation
+  const averageMMR = useMemo(() => {
     if (!team.members || team.members.length === 0) return 'N/A';
     const totalMMR = team.members.reduce((acc: number, member: UserType) => {
       return acc + (member.mmr || 0);
     }, 0);
     return (totalMMR / team.members.length).toFixed(2);
-  };
+  }, [team.members]);
   const teamHeader = () => {
     return (
       <>
@@ -49,7 +42,7 @@ export const TeamCard: React.FC<Props> = ({
           <div className="flex-1 justify-between text-center">
             <h2 className="card-title text-lg">{team.name}</h2>
 
-            <h3 className="card-title text-lg">Avg MMR: {getAverageMMR()}</h3>
+            <h3 className="card-title text-lg">Avg MMR: {averageMMR}</h3>
           </div>
         )}
       </>
@@ -119,4 +112,4 @@ export const TeamCard: React.FC<Props> = ({
       </motion.div>
     </div>
   );
-};
+});
