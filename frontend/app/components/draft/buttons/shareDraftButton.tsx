@@ -2,6 +2,7 @@ import { Share2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '~/components/ui/button';
+import { PrimaryButton } from '~/components/ui/buttons';
 import { InfoDialog } from '~/components/ui/dialogs';
 import { Input } from '~/components/ui/input';
 import { useUserStore } from '~/store/userStore';
@@ -20,9 +21,9 @@ export const ShareDraftButton = () => {
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
+      <PrimaryButton onClick={() => setOpen(true)}>
         <Share2 className="mr-2 h-4 w-4" /> Share
-      </Button>
+      </PrimaryButton>
       <InfoDialog
         open={open}
         onOpenChange={setOpen}

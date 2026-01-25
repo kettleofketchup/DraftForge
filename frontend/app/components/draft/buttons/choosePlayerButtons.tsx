@@ -12,6 +12,7 @@ import {
   AlertDialogTrigger,
 } from '~/components/ui/alert-dialog';
 import { Button } from '~/components/ui/button';
+import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
 import type { UserType } from '~/index';
 import { DisplayName } from '~/components/user/avatar';
 import { getLogger } from '~/lib/logger';
@@ -107,17 +108,19 @@ export const ChoosePlayerButton: React.FC<{
           <AlertDialogTrigger asChild>
             <Button>Pick</Button>
           </AlertDialogTrigger>
-          <AlertDialogContent className={`bg-green-900`}>
+          <AlertDialogContent className="bg-green-900 border-green-700">
             <AlertDialogHeader>
               <AlertDialogTitle>Choose player {DisplayName(user)}</AlertDialogTitle>
-              <AlertDialogDescription className="text-base-700">
-                This Chooses Player {DisplayName(user)}
+              <AlertDialogDescription className="text-green-100">
+                This will add {DisplayName(user)} to your team.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleChange}>
-                Confirm Pick
+              <AlertDialogCancel asChild>
+                <CancelButton variant="destructive">Cancel</CancelButton>
+              </AlertDialogCancel>
+              <AlertDialogAction asChild onClick={handleChange}>
+                <ConfirmButton>Confirm Pick</ConfirmButton>
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

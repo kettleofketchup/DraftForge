@@ -16,6 +16,15 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   globalSetup: './tests/playwright/global-setup.ts',
   testDir: './tests/playwright',
+  // Only match *.spec.ts files in e2e directory (exclude fixtures/helpers)
+  testMatch: /e2e\/.*\.spec\.ts$/,
+  // Ignore non-test files (fixtures, helpers, constants, types)
+  testIgnore: [
+    '**/fixtures/**',
+    '**/helpers/**',
+    '**/constants.ts',
+    '**/*.d.ts',
+  ],
 
   // Enable parallel execution by default (projects can override)
   fullyParallel: true,

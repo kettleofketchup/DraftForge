@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { TournamentType } from '~/components/tournament/types';
 import { STATE_CHOICES } from '../constants';
 
-import { Building2, Calendar, Crown, Swords, Trophy, Users } from 'lucide-react';
+import { Building2, Calendar, Clock, Crown, Swords, Trophy, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router';
 import { useUserStore } from '~/store/userStore';
@@ -21,6 +21,12 @@ interface Props {
   /** Animation delay index for staggered loading */
   animationIndex?: number;
 }
+
+/** Truncate text to max 12 characters with ellipsis */
+const truncateText = (text: string, maxLength = 12): string => {
+  if (!text) return '';
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+};
 
 export const TournamentCard: React.FC<Props> = React.memo(({
   tournament,
@@ -65,7 +71,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         </ItemMedia>
         <ItemContent className="!gap-0">
           <ItemTitle className="!text-xs text-muted-foreground">League</ItemTitle>
-          <span className={`text-sm font-medium truncate ${!hasLeague ? 'text-red-500' : ''}`}>{leagueName}</span>
+          <span className={`text-sm font-medium ${!hasLeague ? 'text-red-500' : ''}`} title={leagueName}>{truncateText(leagueName)}</span>
         </ItemContent>
       </Item>
     );
@@ -87,16 +93,35 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         </ItemMedia>
         <ItemContent className="!gap-0">
           <ItemTitle className="!text-xs text-muted-foreground">Organization</ItemTitle>
-          <span className={`text-sm font-medium truncate ${!hasOrg ? 'text-red-500' : ''}`}>{orgName || 'None'}</span>
+          <span className={`text-sm font-medium ${!hasOrg ? 'text-red-500' : ''}`} title={orgName || 'None'}>{truncateText(orgName || 'None')}</span>
         </ItemContent>
       </Item>
     );
   };
 
+  // Helper to extract time from date_played (ISO datetime string)
+  const getTimeFromDate = (dateStr: string | null): string => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    } catch {
+      return '';
+    }
+  };
+
+  // Helper to format timezone for display
+  const formatTimezone = (tz: string | undefined): string => {
+    if (!tz) return 'UTC';
+    // Extract the last part after '/' for cleaner display
+    const parts = tz.split('/');
+    return parts[parts.length - 1].replace('_', ' ');
+  };
+
   const viewMode = () => {
     return (
       <div className="flex flex-col gap-1.5">
-        {/* Top row: Date and Style */}
+        {/* Top row: Date and Time/Timezone */}
         <div className="grid grid-cols-2 gap-1">
           {tournament.date_played && (
             <Item size="sm" variant="muted" className="!p-1.5">
@@ -105,22 +130,35 @@ export const TournamentCard: React.FC<Props> = React.memo(({
               </ItemMedia>
               <ItemContent className="!gap-0">
                 <ItemTitle className="!text-xs text-muted-foreground">Date</ItemTitle>
-                <span className="text-sm">{tournament.date_played}</span>
+                <span className="text-sm" title={tournament.date_played}>{truncateText(tournament.date_played)}</span>
               </ItemContent>
             </Item>
           )}
-          {tournament.tournament_type && (
-            <Item size="sm" variant="muted" className="!p-1.5">
-              <ItemMedia variant="icon" className="!size-6 bg-orange-500/20 border-orange-500/30">
-                <Swords className="h-3 w-3 text-orange-500" />
-              </ItemMedia>
-              <ItemContent className="!gap-0">
-                <ItemTitle className="!text-xs text-muted-foreground">Style</ItemTitle>
-                <span className="text-sm capitalize">{tournament.tournament_type.replace('_', ' ')}</span>
-              </ItemContent>
-            </Item>
-          )}
+          <Item size="sm" variant="muted" className="!p-1.5">
+            <ItemMedia variant="icon" className="!size-6 bg-indigo-500/20 border-indigo-500/30">
+              <Clock className="h-3 w-3 text-indigo-500" />
+            </ItemMedia>
+            <ItemContent className="!gap-0">
+              <ItemTitle className="!text-xs text-muted-foreground">Time</ItemTitle>
+              <span className="text-sm" title={`${getTimeFromDate(tournament.date_played)} (${tournament.timezone || 'UTC'})`}>
+                {truncateText(`${getTimeFromDate(tournament.date_played)} ${formatTimezone(tournament.timezone)}`)}
+              </span>
+            </ItemContent>
+          </Item>
         </div>
+
+        {/* Second row: Style */}
+        {tournament.tournament_type && (
+          <Item size="sm" variant="muted" className="!p-1.5">
+            <ItemMedia variant="icon" className="!size-6 bg-orange-500/20 border-orange-500/30">
+              <Swords className="h-3 w-3 text-orange-500" />
+            </ItemMedia>
+            <ItemContent className="!gap-0">
+              <ItemTitle className="!text-xs text-muted-foreground">Style</ItemTitle>
+              <span className="text-sm capitalize" title={tournament.tournament_type.replace('_', ' ')}>{truncateText(tournament.tournament_type.replace('_', ' '))}</span>
+            </ItemContent>
+          </Item>
+        )}
 
         {/* Second row: League and Organization */}
         <div className="grid grid-cols-2 gap-1">
@@ -128,29 +166,31 @@ export const TournamentCard: React.FC<Props> = React.memo(({
           <OrganizationItem />
         </div>
 
-        {/* Third row: State */}
-        {tournament.state && (
+        {/* Third row: State and Players */}
+        <div className="grid grid-cols-2 gap-1">
+          {tournament.state && (
+            <Item size="sm" variant="muted" className="!p-1.5">
+              <ItemMedia variant="icon" className="!size-6 bg-emerald-500/20 border-emerald-500/30">
+                <Crown className="h-3 w-3 text-emerald-500" />
+              </ItemMedia>
+              <ItemContent className="!gap-0">
+                <ItemTitle className="!text-xs text-muted-foreground">State</ItemTitle>
+                <span className="text-sm capitalize" title={STATE_CHOICES[tournament.state] || tournament.state}>{truncateText(STATE_CHOICES[tournament.state] || tournament.state)}</span>
+              </ItemContent>
+            </Item>
+          )}
+
+          {/* Players count */}
           <Item size="sm" variant="muted" className="!p-1.5">
-            <ItemMedia variant="icon" className="!size-6 bg-emerald-500/20 border-emerald-500/30">
-              <Crown className="h-3 w-3 text-emerald-500" />
+            <ItemMedia variant="icon" className="!size-6 bg-cyan-500/20 border-cyan-500/30">
+              <Users className="h-3 w-3 text-cyan-500" />
             </ItemMedia>
             <ItemContent className="!gap-0">
-              <ItemTitle className="!text-xs text-muted-foreground">State</ItemTitle>
-              <span className="text-sm capitalize">{STATE_CHOICES[tournament.state] || tournament.state}</span>
+              <ItemTitle className="!text-xs text-muted-foreground">Players</ItemTitle>
+              <span className="text-sm font-medium">{tournament.users?.length ?? 0}</span>
             </ItemContent>
           </Item>
-        )}
-
-        {/* Players count */}
-        <Item size="sm" variant="muted" className="!p-1.5">
-          <ItemMedia variant="icon" className="!size-6 bg-cyan-500/20 border-cyan-500/30">
-            <Users className="h-3 w-3 text-cyan-500" />
-          </ItemMedia>
-          <ItemContent className="!gap-0">
-            <ItemTitle className="!text-xs text-muted-foreground">Players</ItemTitle>
-            <span className="text-sm font-medium">{tournament.users?.length ?? 0}</span>
-          </ItemContent>
-        </Item>
+        </div>
       </div>
     );
   };

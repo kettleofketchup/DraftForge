@@ -77,20 +77,19 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const { pk } = useParams<{ pk: string }>();
 
   // Sync URL with modal open/close state
+  // Note: Don't call setLive here - TournamentDetailPage handles live state based on URL
   const handleOpenChange = useCallback((isOpen: boolean) => {
     setOpen(isOpen);
     if (pk) {
       if (isOpen) {
-        // Add /draft to URL when opening
-        navigate(`/tournament/${pk}/${activeTab}/draft`, { replace: true });
-        setLive(true);
+        // Add /draft to URL when opening - TournamentDetailPage will set live=true
+        navigate(`/tournament/${pk}/teams/draft`, { replace: true });
       } else {
-        // Remove /draft from URL when closing
-        navigate(`/tournament/${pk}/${activeTab}`, { replace: true });
-        setLive(false);
+        // Remove /draft from URL when closing - TournamentDetailPage will set live=false
+        navigate(`/tournament/${pk}/teams`, { replace: true });
       }
     }
-  }, [pk, activeTab, navigate, setLive]);
+  }, [pk, navigate]);
 
   // Auto-open modal when ?draft=open is in URL (from share URL)
   useEffect(() => {
@@ -328,11 +327,14 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     log.debug('Current round after update:', curDraftRound);
   };
 
+  // Initialize draft data when tournament.draft becomes available
   useEffect(() => {
-    log.debug(
-      'rerender: Tournament Modal Initialized draft data:',
-      tournament?.draft,
-    );
+    // Skip initialization if tournament or draft not loaded yet
+    if (!tournament?.pk) {
+      return;
+    }
+
+    log.debug('Initializing draft data from tournament:', tournament?.draft?.pk);
 
     if (tournament?.draft) {
       setDraft(tournament.draft);
@@ -348,15 +350,13 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
         setCurDraftRound(tournament.draft.draft_rounds[0]);
         log.debug('Set initial draft round:', tournament.draft.draft_rounds[0]);
       } else {
-        log.warn('No draft rounds available');
+        log.debug('No draft rounds available yet');
         setCurDraftRound({} as DraftRoundType);
       }
     } else {
-      log.warn('No draft data available in tournament');
-      setDraft({} as DraftType);
-      setCurDraftRound({} as DraftRoundType);
+      log.debug('No draft data in tournament yet');
     }
-  }, []);
+  }, [tournament?.pk, tournament?.draft?.pk]);
 
   // Log modal state changes for debugging live updates
   useEffect(() => {
