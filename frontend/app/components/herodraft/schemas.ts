@@ -36,6 +36,7 @@ export const HeroDraftRoundSchema = z.object({
 });
 
 export const HeroDraftSchema = z.object({
+  pk: z.number().optional(), // Backend sends both pk and id (same value)
   id: z.number(),
   game: z.number(),
   state: z.enum(["waiting_for_captains", "rolling", "choosing", "drafting", "paused", "completed", "abandoned"]),
@@ -73,12 +74,14 @@ export const HeroDraftEventMetadataSchema = z.object({
 export const HeroDraftEventSchema = z.object({
   type: z.literal("herodraft_event"),
   event_type: z.string(),
-  event_id: z.number().optional(),
+  // Use .nullable().optional() to accept null, undefined, or actual values
+  // Backend may send null for missing fields via .get() default behavior
+  event_id: z.number().nullable().optional(),
   // Backend sends full DraftTeam object via DraftTeamSerializerFull, or null
   draft_team: DraftTeamSchema.nullable().optional(),
-  metadata: HeroDraftEventMetadataSchema.optional(),
-  draft_state: HeroDraftSchema.optional(),
-  timestamp: z.string().optional(),
+  metadata: HeroDraftEventMetadataSchema.nullable().optional(),
+  draft_state: HeroDraftSchema.nullable().optional(),
+  timestamp: z.string().nullable().optional(),
 });
 
 export const InitialStateMessageSchema = z.object({
