@@ -1,6 +1,5 @@
-// import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
 import { GamesTab } from './GamesTab';
 import { PlayersTab } from './PlayersTab';
 import { TeamsTab } from './TeamsTab';
@@ -49,26 +48,37 @@ export default function TournamentTabs() {
     <Tabs
       value={activeTab}
       onValueChange={setActiveTab}
-      className="flex justify-center rounded-full  align-middle gap-4 sm:-p1 sm:gap-2 sm:w-full"
+      className="w-full"
     >
-      <TabsList
-        className="container content-center flex w-full justify-center gap-2 rounded-full "
-        data-testid="tournamentTabsList"
-      >
-        <TabsTrigger
-          className="w-full active:p-1"
-          value="players"
-          data-testid="playersTab"
+      <ScrollArea className="w-full whitespace-nowrap pb-2">
+        <TabsList
+          className="inline-flex w-full min-w-max gap-1 sm:gap-2 p-1"
+          data-testid="tournamentTabsList"
         >
-          Players ({playerCount})
-        </TabsTrigger>
-        <TabsTrigger className="w-full" value="teams" data-testid="teamsTab">
-          Teams ({teamCount})
-        </TabsTrigger>
-        <TabsTrigger value="bracket" data-testid="bracketTab">
-          Bracket ({gameCount})
-        </TabsTrigger>
-      </TabsList>
+          <TabsTrigger
+            className="flex-1 min-w-[100px] min-h-11"
+            value="players"
+            data-testid="playersTab"
+          >
+            Players ({playerCount})
+          </TabsTrigger>
+          <TabsTrigger
+            className="flex-1 min-w-[100px] min-h-11"
+            value="teams"
+            data-testid="teamsTab"
+          >
+            Teams ({teamCount})
+          </TabsTrigger>
+          <TabsTrigger
+            className="flex-1 min-w-[100px] min-h-11"
+            value="bracket"
+            data-testid="bracketTab"
+          >
+            Bracket ({gameCount})
+          </TabsTrigger>
+        </TabsList>
+        <ScrollBar orientation="horizontal" className="h-1.5" />
+      </ScrollArea>
       <TabsContent value="players" data-testid="playersTabContent">
         {' '}
         <PlayersTab />
