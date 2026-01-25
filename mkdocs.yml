@@ -78,6 +78,11 @@ nav:
       - Quick Start: getting-started/quick-start.md
   - Features:
       - Draft System: features/draft.md
+      - Planned:
+          - Overview: features/planned/index.md
+          - League Rating: features/planned/league-rating.md
+          - Dota 2 Lobbies: features/planned/dota-lobbies.md
+          - Discord Integration: features/planned/discord-integration.md
   - Architecture:
       - Overview: architecture/overview.md
       - Docker Setup: architecture/docker.md
