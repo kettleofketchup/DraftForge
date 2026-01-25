@@ -9,7 +9,6 @@ from scripts.docker import docker_build_all
 ns_test = Collection("test")
 ns_runner = Collection("runner")
 ns_cicd = Collection("cicd")
-ns_cypress = Collection("cypress")
 ns_backend = Collection("backend")
 ns_test.add_collection(ns_dbtest, "db")
 ns_test.add_collection(ns_runner, "runner")
@@ -65,189 +64,7 @@ def setup(c):
     dev_test(c)
 
 
-@task(pre=[setup])
-def cypress_open(c):
-    # Flush Redis cache before running tests to ensure fresh bracket data
-    flush_test_redis(c)
-
-    with c.cd(paths.FRONTEND_PATH):
-        cmd = " npm run test:e2e:open"
-        c.run(cmd)
-
-
-@task
-def cypress_headless(c):
-    # Flush Redis cache before running tests to ensure fresh bracket data
-    flush_test_redis(c)
-
-    with c.cd(paths.FRONTEND_PATH):
-        cmd = " npm run test:e2e:headless"
-        c.run(cmd)
-
-
-@task(pre=[setup])
-def cicd_headless(c):
-    cypress_headless(c)
-
-
-@task
-def cypress_parallel(c, threads=3):
-    flush_test_redis(c)
-
-    with c.cd(paths.FRONTEND_PATH):
-        cmd = f"npm run test:e2e:parallel"
-        c.run(cmd)
-
-
-@task(pre=[setup])
-def cicd_parallel(c, threads=3):
-    """Run Cypress tests in parallel using multiple threads.
-
-    Usage:
-        inv test.parallel           # Run with 3 threads (default)
-        inv test.parallel --threads 4  # Run with 4 threads
-    """
-    # Flush Redis cache before running tests to ensure fresh bracket data
-    cypress_parallel(c, threads)
-
-
-@task
-def cypress_spec(c, spec=""):
-    """Run Cypress tests for a specific spec pattern.
-
-    Usage:
-        inv test.spec --spec drafts     # Runs 07-draft/*.cy.ts
-        inv test.spec --spec tournament # Runs 04-tournament/*.cy.ts
-        inv test.spec --spec 01         # Runs 01-*.cy.ts
-    """
-    # Flush Redis cache before running tests
-    flush_test_redis(c)
-
-    with c.cd(paths.FRONTEND_PATH):
-        if spec:
-            # Map common names to spec patterns
-            spec_patterns = {
-                "drafts": "tests/cypress/e2e/07-draft/**/*.cy.ts",
-                "draft": "tests/cypress/e2e/07-draft/**/*.cy.ts",
-                "tournament": "tests/cypress/e2e/04-tournament/**/*.cy.ts",
-                "tournaments": "tests/cypress/e2e/03-tournaments/**/*.cy.ts",
-                "navigation": "tests/cypress/e2e/01-*.cy.ts",
-                "mobile": "tests/cypress/e2e/06-mobile/**/*.cy.ts",
-            }
-            pattern = spec_patterns.get(spec, f"tests/cypress/e2e/**/*{spec}*.cy.ts")
-            cmd = f'npx cypress run --spec "{pattern}"'
-        else:
-            cmd = "npm run test:e2e:headless"
-        c.run(cmd)
-
-
-ns_test.add_task(cypress_headless, "headless")
-ns_test.add_task(cypress_parallel, "parallel")
-
-ns_test.add_task(cypress_spec, "spec")
-
-
-ns_test.add_task(cypress_open, "open")
-
 ns_test.add_task(setup, "setup")
-ns_cicd.add_task(cicd_headless, "headless")
-
-ns_cicd.add_task(cicd_parallel, "run")
-
-ns_test.add_task(cypress_parallel, "parallel")
-
-ns_runner.add_task(cypress_headless, "headless")
-ns_runner.add_task(cypress_parallel, "run")
-
-ns_test.add_task(cicd_headless, "headless")
-
-
-# =============================================================================
-# Cypress Test Collections
-# =============================================================================
-
-
-@task
-def cypress_draft(c):
-    """Run draft-related Cypress tests."""
-    flush_test_redis(c)
-    with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            'npx cypress run --spec "tests/cypress/e2e/07-draft/**/*.cy.ts,tests/cypress/e2e/08-shuffle-draft/**/*.cy.ts"'
-        )
-
-
-@task
-def cypress_tournament(c):
-    """Run tournament creation Cypress tests."""
-    flush_test_redis(c)
-    with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            'npx cypress run --spec "tests/cypress/e2e/03-tournaments/**/*.cy.ts,tests/cypress/e2e/04-tournament/**/*.cy.ts"'
-        )
-
-
-@task
-def cypress_bracket(c):
-    """Run bracket-related Cypress tests."""
-    flush_test_redis(c)
-    with c.cd(paths.FRONTEND_PATH):
-        c.run('npx cypress run --spec "tests/cypress/e2e/09-bracket/**/*.cy.ts"')
-
-
-@task
-def cypress_league(c):
-    """Run league-related Cypress tests."""
-    flush_test_redis(c)
-    with c.cd(paths.FRONTEND_PATH):
-        c.run('npx cypress run --spec "tests/cypress/e2e/10-leagues/**/*.cy.ts"')
-
-
-@task
-def cypress_navigation(c):
-    """Run navigation/hydration Cypress tests."""
-    flush_test_redis(c)
-    with c.cd(paths.FRONTEND_PATH):
-        c.run('npx cypress run --spec "tests/cypress/e2e/0[01]-*.cy.ts"')
-
-
-@task
-def cypress_mobile(c):
-    """Run mobile/responsive Cypress tests."""
-    flush_test_redis(c)
-    with c.cd(paths.FRONTEND_PATH):
-        c.run('npx cypress run --spec "tests/cypress/e2e/06-mobile/**/*.cy.ts"')
-
-
-@task
-def cypress_league_steam(c):
-    """Run league steam matching Cypress tests."""
-    flush_test_redis(c)
-    with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            'npx cypress run --spec "tests/cypress/e2e/10-leagues/04-steam-matches.cy.ts"'
-        )
-
-
-@task
-def cypress_all(c):
-    """Run all Cypress tests."""
-    flush_test_redis(c)
-    with c.cd(paths.FRONTEND_PATH):
-        c.run("npm run test:e2e:headless")
-
-
-# Add tasks to cypress collection
-ns_cypress.add_task(cypress_draft, "draft")
-ns_cypress.add_task(cypress_tournament, "tournament")
-ns_cypress.add_task(cypress_bracket, "bracket")
-ns_cypress.add_task(cypress_league, "league")
-ns_cypress.add_task(cypress_league_steam, "league-steam")
-ns_cypress.add_task(cypress_navigation, "navigation")
-ns_cypress.add_task(cypress_mobile, "mobile")
-ns_cypress.add_task(cypress_all, "all")
-
-ns_test.add_collection(ns_cypress, "cypress")
 
 
 # =============================================================================
@@ -514,10 +331,10 @@ ns_test.add_collection(ns_backend, "backend")
 
 
 @task
-def cicd_cypress(c):
-    """Run Cypress tests for CI/CD (with setup)."""
+def cicd_playwright(c):
+    """Run Playwright tests for CI/CD (with setup)."""
     setup(c)
-    cypress_all(c)
+    playwright_all(c)
 
 
 @task
@@ -530,10 +347,10 @@ def cicd_backend(c):
 def cicd_all(c):
     """Run all tests for CI/CD."""
     cicd_backend(c)
-    cicd_cypress(c)
+    cicd_playwright(c)
 
 
-ns_cicd.add_task(cicd_cypress, "cypress")
+ns_cicd.add_task(cicd_playwright, "playwright")
 ns_cicd.add_task(cicd_backend, "backend")
 ns_cicd.add_task(cicd_all, "all")
 
