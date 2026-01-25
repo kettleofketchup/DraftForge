@@ -4,7 +4,7 @@
 
 1. **Fork & Clone**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/dota_tournament.git
+   git clone https://github.com/YOUR_USERNAME/draftforge.git
    ```
 
 2. **Setup Environment**
