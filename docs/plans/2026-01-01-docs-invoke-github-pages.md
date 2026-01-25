@@ -242,7 +242,7 @@ Docs auto-deploy to GitHub Pages on push to `main` when changes are made to:
 - `docs/**`
 - `mkdocs.yml`
 
-**URL:** https://kettleofketchup.github.io/draftforge/
+**URL:** https://kettleofketchup.github.io/DraftForge/
 ```
 
 **Step 2: Commit**
