@@ -213,43 +213,75 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
       await api.post(`/bracket/tournaments/${tournamentId}/save/`, {
         matches: get().matches,
       });
-      set({ isDirty: false, isVirtual: false });
+      // Combine all state updates into one call to prevent timing issues
+      set({ isDirty: false, isVirtual: false, isLoading: false });
       log.debug('Bracket saved successfully');
     } catch (error) {
       log.error('Failed to save bracket', error);
+      set({ isLoading: false }); // Ensure loading is reset on error
       throw error;
-    } finally {
-      set({ isLoading: false });
     }
   },
 
   loadBracket: async (tournamentId) => {
-    log.debug('Loading bracket', { tournamentId });
-    set({ isLoading: true });
+    // Skip if already loading to prevent concurrent requests
+    if (get().isLoading) {
+      return;
+    }
+
+    // Track if we need to update isLoading state
+    let shouldUpdateLoading = false;
+    const currentMatches = get().matches;
+
+    // Only show loading state on initial load (no matches yet)
+    if (currentMatches.length === 0) {
+      shouldUpdateLoading = true;
+      set({ isLoading: true });
+    }
+
     try {
       const response = await api.get(`/bracket/tournaments/${tournamentId}/`);
       const data = BracketResponseSchema.parse(response.data);
 
       // Check if user made changes during fetch - don't overwrite their work
       if (get().isDirty) {
-        log.debug('Skipping bracket load - user has unsaved changes');
         return;
       }
 
-      if (data.matches.length > 0) {
-        // Pass all matches to mapper so it can resolve next_game references
-        const mappedMatches = data.matches.map(m => mapApiMatchToMatch(m, data.matches));
-        set({
-          matches: mappedMatches,
-          isDirty: false,
-          isVirtual: false,
-        });
-        log.debug('Bracket loaded', { matchCount: mappedMatches.length });
+      // Skip update if no matches returned
+      if (data.matches.length === 0) {
+        return;
       }
+
+      // Pass all matches to mapper so it can resolve next_game references
+      const mappedMatches = data.matches.map(m => mapApiMatchToMatch(m, data.matches));
+
+      // Compare with current matches to avoid unnecessary rerenders
+      if (currentMatches.length === mappedMatches.length) {
+        // Quick comparison using match IDs and key fields
+        const currentKey = currentMatches.map(m => `${m.id}-${m.winner}-${m.status}-${m.radiantTeam?.pk}-${m.direTeam?.pk}`).join('|');
+        const newKey = mappedMatches.map(m => `${m.id}-${m.winner}-${m.status}-${m.radiantTeam?.pk}-${m.direTeam?.pk}`).join('|');
+
+        if (currentKey === newKey) {
+          return;
+        }
+      }
+
+      set({
+        matches: mappedMatches,
+        isDirty: false,
+        isVirtual: false,
+        isLoading: false,
+      });
+      shouldUpdateLoading = false; // Already updated in the set above
+      log.debug('Bracket updated', { matchCount: mappedMatches.length });
     } catch (error) {
       log.error('Failed to load bracket', error);
     } finally {
-      set({ isLoading: false });
+      // Only update isLoading if we set it to true earlier and haven't updated yet
+      if (shouldUpdateLoading) {
+        set({ isLoading: false });
+      }
     }
   },
 
