@@ -280,11 +280,12 @@ class CustomUser(AbstractUser):
 class Organization(models.Model):
     """Organization that owns leagues and tournaments."""
 
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, db_index=True)
     description = models.TextField(blank=True, default="", max_length=10000)
     logo = models.URLField(blank=True, default="")
     discord_link = models.URLField(blank=True, default="")
     rules_template = models.TextField(blank=True, default="", max_length=50000)
+    timezone = models.CharField(max_length=50, default="America/New_York")
     owner = models.ForeignKey(
         "CustomUser",
         on_delete=models.PROTECT,
@@ -316,6 +317,9 @@ class Organization(models.Model):
         ordering = ["name"]
         verbose_name = "Organization"
         verbose_name_plural = "Organizations"
+        indexes = [
+            models.Index(fields=["created_at"]),
+        ]
 
     def __str__(self):
         return self.name
@@ -345,6 +349,7 @@ class League(models.Model):
     description = models.TextField(blank=True, default="", max_length=10000)
     rules = models.TextField(blank=True, default="", max_length=50000)
     prize_pool = models.CharField(max_length=100, blank=True, default="")
+    timezone = models.CharField(max_length=50, default="America/New_York")
     admins = models.ManyToManyField(
         "CustomUser",
         related_name="admin_leagues",
@@ -415,6 +420,10 @@ class League(models.Model):
         ordering = ["name"]
         verbose_name = "League"
         verbose_name_plural = "Leagues"
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["created_at"]),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.steam_league_id})"
@@ -497,6 +506,14 @@ class Tournament(models.Model):
         invalidate_model(League)
         invalidate_model(Organization)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["-date_played"]),
+            models.Index(fields=["state"]),
+            models.Index(fields=["league"]),
+        ]
+
     @property
     def captains(self):
         """
@@ -546,6 +563,13 @@ class Team(models.Model):
         blank=True,
         help_text="Final tournament placement (1=winner, 2=runner-up, etc.)",
     )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["tournament"]),
+            models.Index(fields=["name"]),
+            models.Index(fields=["captain"]),
+        ]
 
     def __str__(self):
         return self.name
@@ -679,6 +703,16 @@ class Game(models.Model):
     @property
     def teams(self):
         return [self.radiant_team, self.dire_team]
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["tournament"]),
+            models.Index(fields=["league"]),
+            models.Index(fields=["status"]),
+            models.Index(fields=["gameid"]),
+            models.Index(fields=["radiant_team"]),
+            models.Index(fields=["dire_team"]),
+        ]
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
