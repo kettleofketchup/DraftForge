@@ -1,7 +1,10 @@
 import { motion } from 'framer-motion';
+import { Eye } from 'lucide-react';
 import React, { memo, useEffect } from 'react';
 import { Badge } from '~/components/ui/badge';
+import { Button } from '~/components/ui/button';
 import { Item, ItemContent, ItemTitle } from '~/components/ui/item';
+import { useSharedPopover } from '~/components/ui/shared-popover-context';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { AvatarUrl } from '~/index';
@@ -20,12 +23,21 @@ interface Props {
   deleteButtonType?: 'tournament' | 'normal';
   /** Animation delay index for staggered loading */
   animationIndex?: number;
+  /** Optional league ID for context-specific stats in mini profile */
+  leagueId?: number;
+  /** Optional organization ID for context-specific stats in mini profile */
+  organizationId?: number;
 }
 
 export const UserCard: React.FC<Props> = memo(
-  ({ user, saveFunc = 'save', compact, deleteButtonType, animationIndex = 0 }) => {
+  ({ user, saveFunc = 'save', compact, deleteButtonType, animationIndex = 0, leagueId, organizationId }) => {
     const currentUser: UserType = useUserStore((state) => state.currentUser);
     const getUsers = useUserStore((state) => state.getUsers);
+    const { openPlayerModal } = useSharedPopover();
+
+    const handleViewProfile = () => {
+      openPlayerModal(user, { leagueId, organizationId });
+    };
 
     useEffect(() => {
       if (!user.pk) {
@@ -220,8 +232,18 @@ export const UserCard: React.FC<Props> = memo(
 
           {/* Card Footer */}
           <div className="flex items-center justify-between mt-auto">
-            {/* Dotabuff - bottom left */}
-            <div className="flex-shrink-0">
+            {/* Action buttons - bottom left */}
+            <div className="flex items-center gap-1">
+              {/* View Profile button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleViewProfile}
+                className="h-8 w-8 p-0"
+                title="View Profile"
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
               {userDotabuff()}
             </div>
 
