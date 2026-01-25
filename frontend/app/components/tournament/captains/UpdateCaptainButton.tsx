@@ -12,6 +12,7 @@ import {
   AlertDialogTrigger,
 } from '~/components/ui/alert-dialog';
 import { Button } from '~/components/ui/button';
+import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
 import type { TeamType, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -78,15 +79,23 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
               {msg()} Captain? Are You Sure? This will affect already created
               teams and drafts
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-base-700">
+            <AlertDialogDescription className="text-slate-200">
               This action cannot be undone. Drafts started must be deleted and
               recreated.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleChange}>
-              {msg()} Captain
+            <AlertDialogCancel asChild>
+              <CancelButton variant={isCaptain ? 'default' : 'destructive'} depth={false}>Cancel</CancelButton>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <ConfirmButton
+                onClick={handleChange}
+                variant={isCaptain ? 'destructive' : 'default'}
+                depth={false}
+              >
+                {msg()} Captain
+              </ConfirmButton>
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

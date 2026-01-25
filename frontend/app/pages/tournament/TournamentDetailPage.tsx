@@ -23,7 +23,11 @@ export const TournamentDetailPage: React.FC = () => {
 
   useEffect(() => {
     const parts = slug?.split('/') || [];
-    const tab = parts[0] || 'players';
+    // Map legacy "games" URL to "bracket" tab
+    let tab = parts[0] || 'players';
+    if (tab === 'games') {
+      tab = 'bracket';
+    }
     const isLive = parts[1] === 'draft';
     // Parse draftId from URL: /tournament/:pk/bracket/draft/:draftId
     const draftId = parts[1] === 'draft' && parts[2] ? parseInt(parts[2], 10) : null;

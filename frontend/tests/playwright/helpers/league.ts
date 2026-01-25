@@ -116,7 +116,9 @@ export class LeaguePage {
    */
   async waitForPageLoad(): Promise<void> {
     await this.page.locator('body').waitFor({ state: 'visible' });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
+    // Wait for league title to appear (indicates data is loaded)
+    await this.leagueTitle.waitFor({ state: 'visible', timeout: 30000 });
   }
 
   // ============================================================================

@@ -241,20 +241,6 @@ def playwright_herodraft_headed(c):
 
 
 @task
-def playwright_mobile(c, args=""):
-    """Run Playwright mobile tests with mobile-chrome project.
-
-    Args:
-        args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
-    """
-    flush_test_redis(c)
-    with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f"npx playwright test tests/playwright/e2e/06-mobile/ --project=mobile-chrome {args}".strip()
-        )
-
-
-@task
 def playwright_all(c, args=""):
     """Run all Playwright tests.
 
@@ -281,7 +267,6 @@ ns_playwright.add_task(playwright_bracket, "bracket")
 ns_playwright.add_task(playwright_league, "league")
 ns_playwright.add_task(playwright_herodraft, "herodraft")
 ns_playwright.add_task(playwright_herodraft_headed, "herodraft-headed")
-ns_playwright.add_task(playwright_mobile, "mobile")
 ns_playwright.add_task(playwright_all, "all")
 
 ns_test.add_collection(ns_playwright, "playwright")
