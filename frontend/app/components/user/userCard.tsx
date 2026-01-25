@@ -1,8 +1,7 @@
 import { motion } from 'framer-motion';
-import { Eye } from 'lucide-react';
 import React, { memo, useEffect } from 'react';
 import { Badge } from '~/components/ui/badge';
-import { Button } from '~/components/ui/button';
+import { ViewIconButton } from '~/components/ui/buttons';
 import { Item, ItemContent, ItemTitle } from '~/components/ui/item';
 import { useSharedPopover } from '~/components/ui/shared-popover-context';
 import type { UserClassType, UserType } from '~/components/user/types';
@@ -135,12 +134,12 @@ export const UserCard: React.FC<Props> = memo(
           transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
           whileHover={{ scale: 1.02 }}
           key={`usercard:${getKeyName()} basediv`}
-          className="flex flex-col px-2 py-2 gap-2 card bg-base-300 shadow-elevated w-fit
+          className="flex flex-col gap-2 card card-compact bg-base-300 shadow-elevated w-fit
             hover:bg-base-200 focus:outline-2
             focus:outline-offset-2 focus:outline-primary
             active:bg-base-200 transition-all duration-300 ease-in-out"
         >
-          {/* Header row - name and edit button */}
+          {/* Header row - name and action buttons */}
           <div className="flex items-center justify-between">
             <div className="flex-1 min-w-0">
               <h2 className="card-title text-base truncate">
@@ -157,9 +156,15 @@ export const UserCard: React.FC<Props> = memo(
                 </div>
               )}
             </div>
-            {(currentUser.is_staff || currentUser.is_superuser) && (
-              <UserEditModal user={new User(user)} />
-            )}
+            <div className="flex items-center gap-1">
+              {(currentUser.is_staff || currentUser.is_superuser) && (
+                <UserEditModal user={new User(user)} />
+              )}
+              <ViewIconButton
+                onClick={handleViewProfile}
+                tooltip="View Profile"
+              />
+            </div>
           </div>
 
           {/* 2-column layout: Avatar left, Positions right */}
@@ -232,18 +237,8 @@ export const UserCard: React.FC<Props> = memo(
 
           {/* Card Footer */}
           <div className="flex items-center justify-between mt-auto">
-            {/* Action buttons - bottom left */}
-            <div className="flex items-center gap-1">
-              {/* View Profile button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleViewProfile}
-                className="h-8 w-8 p-0"
-                title="View Profile"
-              >
-                <Eye className="h-4 w-4" />
-              </Button>
+            {/* Dotabuff - bottom left */}
+            <div className="flex-shrink-0">
               {userDotabuff()}
             </div>
 
