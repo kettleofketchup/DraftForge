@@ -64,6 +64,36 @@ def create_herodraft(request, game_pk):
         draft = _get_draft_with_prefetch(game.herodraft.pk)
         return Response(HeroDraftSerializer(draft).data, status=status.HTTP_200_OK)
 
+    # If teams not assigned to game but provided in request, assign them
+    radiant_team_id = request.data.get("radiant_team_id")
+    dire_team_id = request.data.get("dire_team_id")
+
+    if not game.radiant_team and radiant_team_id:
+        try:
+            from app.models import Team
+
+            game.radiant_team = Team.objects.get(pk=radiant_team_id)
+        except Team.DoesNotExist:
+            return Response(
+                {"error": f"Radiant team with id {radiant_team_id} not found"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    if not game.dire_team and dire_team_id:
+        try:
+            from app.models import Team
+
+            game.dire_team = Team.objects.get(pk=dire_team_id)
+        except Team.DoesNotExist:
+            return Response(
+                {"error": f"Dire team with id {dire_team_id} not found"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    # Save game if teams were updated
+    if radiant_team_id or dire_team_id:
+        game.save()
+
     # Check game has both teams
     if not game.radiant_team or not game.dire_team:
         return Response(

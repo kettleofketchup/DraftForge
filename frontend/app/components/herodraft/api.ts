@@ -1,8 +1,19 @@
 import api from '~/components/api/axios';
 import type { HeroDraft } from './types';
 
-export async function createHeroDraft(gameId: number): Promise<HeroDraft> {
-  const response = await api.post(`/games/${gameId}/create-herodraft/`);
+export interface CreateHeroDraftOptions {
+  radiantTeamId?: number;
+  direTeamId?: number;
+}
+
+export async function createHeroDraft(
+  gameId: number,
+  options?: CreateHeroDraftOptions
+): Promise<HeroDraft> {
+  const response = await api.post(`/games/${gameId}/create-herodraft/`, {
+    radiant_team_id: options?.radiantTeamId,
+    dire_team_id: options?.direTeamId,
+  });
   return response.data;
 }
 

@@ -71,8 +71,15 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
       draftIdToOpen = match.herodraft_id;
     } else if (match.gameId) {
       // Create new draft (backend is idempotent - returns existing if race condition)
+      // Pass team IDs so backend can assign them if not already set
       try {
-        const draft = await createDraftMutation.mutateAsync(match.gameId);
+        const draft = await createDraftMutation.mutateAsync({
+          gameId: match.gameId,
+          options: {
+            radiantTeamId: match.radiantTeam?.pk,
+            direTeamId: match.direTeam?.pk,
+          },
+        });
         draftIdToOpen = draft.id;
         toast.success('Draft created!');
 
