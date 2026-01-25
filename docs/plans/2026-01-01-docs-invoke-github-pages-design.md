@@ -30,7 +30,7 @@ Add invoke commands for building MkDocs documentation and create a GitHub Action
 4. Build docs with `mkdocs build`
 5. Deploy to GitHub Pages using `actions/deploy-pages`
 
-**Resulting URL:** `https://kettleofketchup.github.io/draftforge/`
+**Resulting URL:** `https://kettleofketchup.github.io/DraftForge/`
 
 **GitHub Pages setup required:**
 - Repository Settings → Pages → Source: "GitHub Actions"
