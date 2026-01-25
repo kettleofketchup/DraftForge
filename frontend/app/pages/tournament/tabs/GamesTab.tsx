@@ -1,6 +1,6 @@
 import { memo, useState, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { Button } from '~/components/ui/button';
+import { SecondaryButton } from '~/components/ui/buttons';
 import { Wand2 } from 'lucide-react';
 import { BracketView } from '~/components/bracket';
 import { AutoAssignModal } from '~/components/bracket/modals';
@@ -63,15 +63,15 @@ export const GamesTab: React.FC = memo(() => {
 
           <div className="flex items-center gap-2">
             {isStaff && viewMode === 'bracket' && (
-              <Button
-                variant="outline"
+              <SecondaryButton
+                color="purple"
                 size="sm"
                 onClick={() => setShowAutoAssign(true)}
                 data-testid="auto-assign-btn"
               >
                 <Wand2 className="h-4 w-4 mr-1" />
                 Auto-Assign Matches
-              </Button>
+              </SecondaryButton>
             )}
             {isStaff && viewMode === 'list' && (
               <GameCreateModal data-testid="gameCreateModalBtn" />

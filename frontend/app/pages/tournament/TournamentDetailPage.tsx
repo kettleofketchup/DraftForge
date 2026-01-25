@@ -56,7 +56,7 @@ export const TournamentDetailPage: React.FC = () => {
       fetchTournament();
     }
   }, [pk]);
-  useEffect(() => {}, [tournament.users]);
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">

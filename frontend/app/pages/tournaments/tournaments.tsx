@@ -1,5 +1,5 @@
 import { Loader2, Trophy } from 'lucide-react';
-import { memo, useEffect, useState, useTransition } from 'react';
+import { memo, useEffect, useTransition, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { getTournaments } from '~/components/api/api';
 import { TournamentCard } from '~/components/tournament/card/TournamentCard';
@@ -52,20 +52,10 @@ const TournamentCardWrapper = memo(({
   tournamentData: TournamentType;
   animationIndex: number;
 }) => {
-  const [isCardEditing, setIsCardEditing] = useState(false);
-
-  const wrapperClassName = isCardEditing
-    ? ' col-span-2'
-    : ' col-span-1';
-
-  const cssClassNames = wrapperClassName + 'flex gap-4 content-center h-full';
-
   return (
-    <div className={cssClassNames} key={tournamentData.pk}>
+    <div className="col-span-1 flex gap-4 content-center h-full" key={tournamentData.pk}>
       <TournamentCard
         tournament={tournamentData as TournamentClassType}
-        saveFunc={'save'}
-        onEditModeChange={setIsCardEditing}
         animationIndex={animationIndex}
       />
     </div>
@@ -76,7 +66,7 @@ const TournamentGridSkeleton = ({ count = 8 }: { count?: number }) => (
   <div
     className="grid grid-flow-row-dense grid-auto-rows
     align-middle content-center justify-center
-    grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4
+    grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5
     mb-0 mt-0 p-0 bg-background w-full"
   >
     {Array.from({ length: count }).map((_, index) => (
@@ -171,7 +161,7 @@ export default function Tournament() {
       <div
         className={`grid grid-flow-row-dense grid-auto-rows
         align-middle content-center justify-center
-        grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4
+        grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5
         mb-0 mt-0 p-0 bg-background w-full
         ${isPending ? 'opacity-70 transition-opacity' : ''}`}
       >
@@ -187,18 +177,16 @@ export default function Tournament() {
   };
 
   return (
-    <>
-      <div className="flex flex-col items-start p-4 h-full">
-        {/* Header with Create button - NOT affected by transitions */}
-        <div className="flex w-full justify-end mb-4">
-          <TournamentCreateModal />
-        </div>
-
-        <TournamentFilterBar />
-
-        {/* Tournament grid - affected by transitions */}
-        {renderTournamentGrid()}
+    <div className="flex flex-col items-start p-4">
+      {/* Header with Create button - NOT affected by transitions */}
+      <div className="flex w-full justify-end mb-4">
+        <TournamentCreateModal />
       </div>
-    </>
+
+      <TournamentFilterBar />
+
+      {/* Tournament grid - affected by transitions */}
+      {renderTournamentGrid()}
+    </div>
   );
 }

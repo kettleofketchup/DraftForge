@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { TeamCard } from '~/components/team/teamCard';
 import type { TeamType } from '~/components/tournament/types';
 import { Button } from '~/components/ui/button';
+import { CancelButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import {
   Tooltip,
   TooltipContent,
@@ -83,14 +84,14 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
         <Tooltip>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
-              <Button
-                className={`w-[${TEAMS_BUTTONS_WIDTH}] btn btn-primary flex w-200px sm:w-auto`}
+              <PrimaryButton
+                className={`w-[${TEAMS_BUTTONS_WIDTH}] flex w-200px sm:w-auto`}
                 data-testid="createTeamsBtn"
                 aria-label="Open create teams modal"
               >
                 <UsersRound className="mr-2" />
                 Create Teams
-              </Button>
+              </PrimaryButton>
             </DialogTrigger>
           </TooltipTrigger>
           <TooltipContent>
@@ -113,14 +114,14 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-row items-center gap-4 mb-4">
-            <Button
-              className="btn btn-info"
+            <SecondaryButton
+              color="sky"
               onClick={handleRegenerate}
               data-testid="regenerateTeamsBtn"
               aria-label="Regenerate teams with new randomization"
             >
               Regenerate Teams
-            </Button>
+            </SecondaryButton>
           </div>
           <div className="overflow-y-auto max-h-[70vh] pr-2">
             <TeamsView teams={teams} key={`teams-${tournament.pk}`} />
@@ -134,9 +135,9 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
             setDialogOpen={setOpen}
           />
           <DialogClose asChild>
-            <Button variant="outline" data-testid="closeTeamsModalBtn">
+            <CancelButton data-testid="closeTeamsModalBtn">
               Close
-            </Button>
+            </CancelButton>
           </DialogClose>
         </DialogFooter>
       </DialogContent>

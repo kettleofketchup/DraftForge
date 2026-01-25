@@ -1,19 +1,8 @@
-import { Trash2 } from 'lucide-react';
-import React from 'react';
+import React, { useState } from 'react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '~/components/ui/alert-dialog';
-import { Button } from '~/components/ui/button';
+import { ConfirmDialog } from '~/components/ui/dialogs';
+import { TrashIconButton } from '~/components/ui/buttons';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 
@@ -24,7 +13,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '~/components/ui/tooltip'; // Adjust path as needed
+} from '~/components/ui/tooltip';
 
 import { deleteTournament } from '~/components/api/api';
 import type { TournamentType } from '../types';
@@ -38,6 +27,7 @@ export const TournamentRemoveButton: React.FC<PropsRemoveButton> = ({
   tournament,
   disabled,
 }) => {
+  const [open, setOpen] = useState(false);
   const delTournamentStore = useUserStore(
     useShallow((state) => state.delTournament),
   );
@@ -54,6 +44,7 @@ export const TournamentRemoveButton: React.FC<PropsRemoveButton> = ({
       success: (data) => {
         log.debug('Tournament deleted successfully');
         delTournamentStore(tournament);
+        setOpen(false);
         return `${tournament.pk} has been deleted`;
       },
       error: (err) => {
@@ -62,49 +53,34 @@ export const TournamentRemoveButton: React.FC<PropsRemoveButton> = ({
       },
     });
   };
-  // Find all users not already in the tournament
-  const deleteConfirmation = () => {
-    return (
-      <div className="flex flex-row items-center gap-4">
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={disabled}
-              aria-label="Delete"
-              className="bg-red-950 hover:bg-red-600 text-white"
-            >
-              <Trash2 className="h-4 w-4" color="red" />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent className={`bg-green-900`}>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Tournament?</AlertDialogTitle>
-              <AlertDialogDescription className="text-base-700">
-                This removes tournament {tournament.pk}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleChange}>
-                Confirm Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-    );
-  };
+
   if (!isStaff()) return <> </>;
+
   return (
     <TooltipProvider>
       <Tooltip>
-        <TooltipTrigger asChild>{deleteConfirmation()}</TooltipTrigger>
+        <TooltipTrigger asChild>
+          <div className="flex flex-row items-center gap-4">
+            <TrashIconButton
+              size="sm"
+              disabled={disabled}
+              onClick={() => setOpen(true)}
+            />
+          </div>
+        </TooltipTrigger>
         <TooltipContent>
           <p>Delete tournament</p>
         </TooltipContent>
       </Tooltip>
+      <ConfirmDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Delete Tournament?"
+        description={`This removes tournament ${tournament.pk}`}
+        confirmLabel="Confirm Delete"
+        variant="destructive"
+        onConfirm={handleChange}
+      />
     </TooltipProvider>
   );
 };
