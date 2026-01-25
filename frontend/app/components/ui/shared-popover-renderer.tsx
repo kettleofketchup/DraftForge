@@ -244,6 +244,8 @@ export const SharedPopoverRenderer: React.FC = () => {
             player={playerModalState.player}
             open={playerModalState.open}
             onOpenChange={setPlayerModalOpen}
+            leagueId={playerModalState.context?.leagueId}
+            organizationId={playerModalState.context?.organizationId}
           />
         )}
         {teamModalState.team?.captain && (
@@ -294,6 +296,8 @@ export const SharedPopoverRenderer: React.FC = () => {
           player={playerModalState.player}
           open={playerModalState.open}
           onOpenChange={setPlayerModalOpen}
+          leagueId={playerModalState.context?.leagueId}
+          organizationId={playerModalState.context?.organizationId}
         />
       )}
       {teamModalState.team?.captain && (
