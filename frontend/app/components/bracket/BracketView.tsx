@@ -127,15 +127,14 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   const pendingMatchId = useTournamentStore((state) => state.pendingMatchId);
   const setPendingMatchId = useTournamentStore((state) => state.setPendingMatchId);
 
-  const {
-    matches,
-    isDirty,
-    isVirtual,
-    isLoading,
-    loadBracket,
-    startPolling,
-    stopPolling,
-  } = useBracketStore();
+  // Use individual selectors to prevent unnecessary re-renders
+  const matches = useBracketStore((state) => state.matches);
+  const isDirty = useBracketStore((state) => state.isDirty);
+  const isLoading = useBracketStore((state) => state.isLoading);
+  // Actions are stable references, but use selectors for consistency
+  const loadBracket = useBracketStore((state) => state.loadBracket);
+  const startPolling = useBracketStore((state) => state.startPolling);
+  const stopPolling = useBracketStore((state) => state.stopPolling);
 
   const { getLayoutedElements } = useElkLayout();
   const { setViewport, getViewport } = useReactFlow();
@@ -197,11 +196,13 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   // Pre-compute badge mapping for all matches
   const badgeMapping = useMemo(() => buildBadgeMapping(matches), [matches]);
 
-  // Load bracket on mount
+  // Load bracket on mount - only depends on tournamentId
+  // (Zustand actions are stable references)
   useEffect(() => {
     loadBracket(tournamentId);
     return () => stopPolling();
-  }, [tournamentId, loadBracket, stopPolling]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournamentId]);
 
   // Start polling for live updates (when not editing)
   useEffect(() => {
@@ -211,7 +212,8 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       stopPolling();
     }
     return () => stopPolling();
-  }, [isDirty, tournamentId, startPolling, stopPolling]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty, tournamentId]);
 
   // Layout matches using ELK when matches change
   useEffect(() => {
