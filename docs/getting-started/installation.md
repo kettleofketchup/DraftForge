@@ -11,7 +11,7 @@
 
 ```bash
 git clone https://github.com/kettleofketchup/draftforge.git
-cd dota_tournament
+cd draftforge
 ```
 
 ## Python Environment Setup
