@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { TEAMS_BUTTONS_WIDTH } from '~/components/constants';
 import { DIALOG_CSS } from '~/components/reusable/modal';
 import { Button } from '~/components/ui/button';
+import { CancelButton, PrimaryButton } from '~/components/ui/buttons';
 import {
   Dialog,
   DialogClose,
@@ -35,12 +36,30 @@ import { getLogger } from '~/lib/logger';
 import { updateDraftStyleHook } from '../hooks/updateDraftStyleHook';
 import type { DraftType } from '../types';
 const log = getLogger('DraftStyleModal');
-export const DraftStyleModal: React.FC = () => {
+
+interface DraftStyleModalProps {
+  /** External open state control (optional) */
+  externalOpen?: boolean;
+  /** External open state change handler (optional) */
+  onExternalOpenChange?: (open: boolean) => void;
+  /** Whether to show the trigger button (default: true) */
+  showTrigger?: boolean;
+}
+
+export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
+  externalOpen,
+  onExternalOpenChange,
+  showTrigger = true,
+}) => {
   const isStaff = useUserStore((state) => state.isStaff);
   const draft = useUserStore((state) => state.draft);
 
   const setDraft = useUserStore((state) => state.setDraft);
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+
+  // Use external open state if provided, otherwise use internal state
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setOpen = onExternalOpenChange || setInternalOpen;
   const [selectedStyle, setSelectedStyle] = useState<'snake' | 'normal' | 'shuffle'>(
     draft?.draft_style || 'snake',
   );
@@ -105,13 +124,13 @@ export const DraftStyleModal: React.FC = () => {
         <Tooltip>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
-              <Button
-                className={`w-[${TEAMS_BUTTONS_WIDTH}] bg-blue-500 hover:bg-blue-600 text-white`}
-                variant="default"
+              <PrimaryButton
+                color="blue"
+                className={`w-[${TEAMS_BUTTONS_WIDTH}]`}
               >
                 <Settings className="mr-2 h-4 w-4" />
                 Draft Style
-              </Button>
+              </PrimaryButton>
             </DialogTrigger>
           </TooltipTrigger>
           <TooltipContent>
@@ -151,7 +170,7 @@ export const DraftStyleModal: React.FC = () => {
   };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {dialogButton()}
+      {showTrigger && dialogButton()}
       <DialogContent className={`${DIALOG_CSS} max-w-2xl`}>
         <DialogHeader>
           <DialogTitle>Draft Style Configuration</DialogTitle>
@@ -316,7 +335,7 @@ export const DraftStyleModal: React.FC = () => {
 
         <DialogFooter className="gap-2">
           <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
+            <CancelButton />
           </DialogClose>
           {getButtons()}
         </DialogFooter>

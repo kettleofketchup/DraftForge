@@ -1,10 +1,4 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "~/components/ui/dialog";
-import { ScrollArea } from "~/components/ui/scroll-area";
+import { InfoDialog } from "~/components/ui/dialogs";
 import type { DraftEvent, PlayerPickedPayload, CaptainAssignedPayload } from "~/types/draftEvent";
 import { formatDistanceToNow } from "date-fns";
 
@@ -115,46 +109,45 @@ function EventAvatarDisplay({ avatars }: { avatars: EventAvatars }) {
 
 export function DraftEventModal({ open, onOpenChange, events }: DraftEventModalProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Draft Event History</DialogTitle>
-        </DialogHeader>
-        <ScrollArea className="h-[400px] pr-4">
-          {events.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
-              No events yet
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {events.map((event) => {
-                const avatars = getEventAvatars(event);
-                return (
-                  <div
-                    key={event.pk}
-                    className="flex items-start gap-3 p-2 rounded-lg bg-muted/50"
-                  >
-                    <span className="text-lg">{getEventIcon(event.event_type)}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <EventAvatarDisplay avatars={avatars} />
-                        <p className="text-sm font-medium">
-                          {getEventDescription(event)}
-                        </p>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(new Date(event.created_at), {
-                          addSuffix: true,
-                        })}
-                      </p>
-                    </div>
+    <InfoDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Draft Event History"
+      size="md"
+      showClose={false}
+    >
+      {events.length === 0 ? (
+        <p className="text-center text-muted-foreground py-8">
+          No events yet
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {events.map((event) => {
+            const avatars = getEventAvatars(event);
+            return (
+              <div
+                key={event.pk}
+                className="flex items-start gap-3 p-2 rounded-lg bg-muted/50"
+              >
+                <span className="text-lg">{getEventIcon(event.event_type)}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <EventAvatarDisplay avatars={avatars} />
+                    <p className="text-sm font-medium">
+                      {getEventDescription(event)}
+                    </p>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(event.created_at), {
+                      addSuffix: true,
+                    })}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </InfoDialog>
   );
 }
