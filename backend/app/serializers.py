@@ -157,6 +157,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "logo",
             "discord_link",
             "rules_template",
+            "timezone",
             "owner",
             "owner_id",
             "admins",
@@ -242,6 +243,7 @@ class LeagueSerializer(serializers.ModelSerializer):
             "description",
             "rules",
             "prize_pool",
+            "timezone",
             "admins",
             "staff",
             "admin_ids",
@@ -608,6 +610,33 @@ class TournamentSerializer(serializers.ModelSerializer):
             "league",
             "league_id_write",
         )
+
+    def update(self, instance, validated_data):
+        """
+        Override update to handle captain removal when users are removed.
+        If a user is removed from the tournament and they are a captain,
+        delete their team.
+        """
+        # Check if users are being updated
+        if "users" in validated_data:
+            new_users = set(validated_data["users"])
+            current_users = set(instance.users.all())
+            removed_users = current_users - new_users
+
+            # For each removed user, check if they're a captain and remove their team
+            if removed_users:
+                for user in removed_users:
+                    # Find teams where this user is captain in this tournament
+                    captain_teams = Team.objects.filter(
+                        tournament=instance, captain=user
+                    )
+                    if captain_teams.exists():
+                        log.info(
+                            f"Removing captain {user.username}'s team(s) from tournament {instance.name}"
+                        )
+                        captain_teams.delete()
+
+        return super().update(instance, validated_data)
 
 
 class UserSerializer(serializers.ModelSerializer):
