@@ -61,14 +61,18 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
 }) => {
   const tournament = useUserStore((state) => state.tournament);
 
-  const [teams, setTeams] = useState<TeamType[]>(() =>
-    createTeams(users, teamSize),
-  );
+  // Don't run createTeams until modal is opened - it's expensive (O(n²) with 100 iterations)
+  const [teams, setTeams] = useState<TeamType[]>([]);
   const [open, setOpen] = useState(false);
-  // Regenerate teams when users or teamSize changes
-  React.useEffect(() => {
-    setTeams(createTeams(users, teamSize));
-  }, []);
+
+  // Generate teams when modal opens (not on every tab render)
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    // Generate teams when opening the modal (fresh generation each time)
+    if (isOpen && users.length > 0) {
+      setTeams(createTeams(users, teamSize));
+    }
+  };
 
   const handleRegenerate = () => {
     setTeams(createTeams(users, teamSize));
@@ -97,7 +101,7 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
     );
   };
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       {dialogButton()}
       <DialogContent className={`${DIALOG_CSS}`}>
         <ScrollArea className={`${SCROLLAREA_CSS}`}>
