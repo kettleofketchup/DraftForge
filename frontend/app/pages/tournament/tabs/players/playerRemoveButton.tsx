@@ -1,21 +1,13 @@
-import { Trash2 } from 'lucide-react';
 import type { FormEvent } from 'react';
 import React, { useCallback } from 'react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 import { updateTournament } from '~/components/api/api';
-import { DeleteButtonTooltip } from '~/components/reusable/deleteButton';
-import { Button } from '~/components/ui/button';
+import { TrashIconButton } from '~/components/ui/buttons';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('playerRemoveButton');
-
-import {
-  Tooltip,
-  TooltipProvider,
-  TooltipTrigger,
-} from '~/components/ui/tooltip'; // Adjust path as needed
 
 import type { UserType } from '~/components/user/types';
 
@@ -101,23 +93,12 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
   );
   // Find all users not already in the tournament
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={removeUser}
-            disabled={disabled}
-            aria-label="Delete"
-            className="bg-red-950 hover:bg-red-600 text-white"
-            data-testid={`removePlayerBtn-${user.username}`}
-          >
-            <Trash2 className="h-4 w-4" color="red" />
-          </Button>
-        </TooltipTrigger>
-        <DeleteButtonTooltip tooltipText="Remove User From Tournament" />
-      </Tooltip>
-    </TooltipProvider>
+    <TrashIconButton
+      size="sm"
+      onClick={removeUser}
+      disabled={disabled}
+      tooltip="Remove User From Tournament"
+      data-testid={`removePlayerBtn-${user.username}`}
+    />
   );
 };

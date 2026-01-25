@@ -1,4 +1,4 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
 import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
 import { GamesTab } from './GamesTab';
 import { PlayersTab } from './PlayersTab';
@@ -6,15 +6,13 @@ import { TeamsTab } from './TeamsTab';
 
 import { useEffect, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
 
 export default function TournamentTabs() {
-  const users = useUserStore((state) => state.users); // Zustand setter
-  const activeTab = useTournamentStore((state) => state.activeTab);
-  const setActiveTab = useTournamentStore((state) => state.setActiveTab);
+  const users = useUserStore((state) => state.users);
+  const [activeTab, setActiveTab] = useUrlTabs('players', 'tab');
 
-  const getUsers = useUserStore((state) => state.getUsers); // Zustand setter
+  const getUsers = useUserStore((state) => state.getUsers);
   useEffect(() => {
     getUsers();
   }, []);

@@ -41,12 +41,14 @@ export const TournamentCreateModal: React.FC<Props> = () => {
                 size="lg"
                 variant="default"
                 className={
-                  'bg-green-950 hover:bg-green-800 text-white' +
-                  ' hover:shadow-sm hover:shadow-green-500/50'
+                  'bg-emerald-600 hover:bg-emerald-500 text-white' +
+                  ' shadow-lg shadow-emerald-900/50 border-b-4 border-b-emerald-800' +
+                  ' active:border-b-0 active:translate-y-1 transition-all duration-75' +
+                  ' hover:shadow-emerald-500/50'
                 }
                 data-testid="tournament-create-button"
               >
-                <PlusCircleIcon color="white" className="" />
+                <PlusCircleIcon className="text-white" />
                 Create Tournament
               </Button>
             </DialogTrigger>
