@@ -230,6 +230,7 @@ def populate_organizations_and_leagues(force=False):
             "description": "DTX - A Dota 2 amateur tournament organization.",
             "logo": "",
             "rules_template": "Standard DTX tournament rules apply.",
+            "timezone": "America/New_York",  # US East default
         },
     )
     action = "Created" if created else "Updated"
@@ -243,6 +244,7 @@ def populate_organizations_and_leagues(force=False):
             "description": "Main DTX League for in-house tournaments.",
             "rules": "Standard DTX tournament rules apply.",
             "prize_pool": "",
+            "timezone": "America/New_York",  # US East default
         },
     )
     # Add organization to league (ManyToMany)
@@ -265,6 +267,7 @@ def populate_organizations_and_leagues(force=False):
             "description": "Test organization for Cypress E2E tests.",
             "logo": "",
             "rules_template": "Test rules template.",
+            "timezone": "America/New_York",  # US East default
         },
     )
     action = "Created" if created else "Updated"
@@ -274,13 +277,14 @@ def populate_organizations_and_leagues(force=False):
     test_league, created = League.objects.update_or_create(
         steam_league_id=TEST_STEAM_LEAGUE_ID,
         defaults={
-            "organization": test_org,
             "name": TEST_LEAGUE_NAME,
             "description": "Test league for Cypress E2E tests.",
             "rules": "Test rules.",
             "prize_pool": "",
+            "timezone": "America/New_York",  # US East default
         },
     )
+    test_league.organizations.add(test_org)
     action = "Created" if created else "Updated"
     print(
         f"  {action} league: {TEST_LEAGUE_NAME} (steam_league_id={TEST_STEAM_LEAGUE_ID})"
