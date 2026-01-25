@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useState, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Button } from '~/components/ui/button';
 import { Wand2 } from 'lucide-react';
@@ -15,15 +15,16 @@ const log = getLogger('GamesTab');
 export const GamesTab: React.FC = memo(() => {
   const tournament = useUserStore((state) => state.tournament);
   const isStaff = useUserStore((state) => state.isStaff());
-  const { loadBracket } = useBracketStore();
+  // Use getState() for actions to avoid subscribing to entire store
   const [viewMode, setViewMode] = useState<'bracket' | 'list'>('bracket');
   const [showAutoAssign, setShowAutoAssign] = useState(false);
 
-  const handleAutoAssignComplete = () => {
+  const handleAutoAssignComplete = useCallback(() => {
     if (tournament?.pk) {
-      loadBracket(tournament.pk);
+      // Access loadBracket via getState to avoid subscription
+      useBracketStore.getState().loadBracket(tournament.pk);
     }
-  };
+  }, [tournament?.pk]);
 
   const renderNoGames = () => {
     return (
