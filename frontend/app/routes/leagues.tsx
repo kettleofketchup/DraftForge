@@ -155,55 +155,55 @@ export default function LeaguesPage() {
 
   return (
     <div className="container mx-auto p-4">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Trophy className="h-8 w-8 text-primary" />
-          <h1 className="text-2xl font-bold">Leagues</h1>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Trophy className="h-8 w-8 text-primary" />
+            <h1 className="text-2xl font-bold">Leagues</h1>
+          </div>
+          {canCreate && (
+            <Button onClick={() => setCreateModalOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create League
+            </Button>
+          )}
         </div>
-        {canCreate && (
-          <Button onClick={() => setCreateModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Create League
-          </Button>
+
+        {/* Organization Filter */}
+        <div className="mb-6">
+          <div className="w-64">
+            <label className="text-sm font-medium mb-1 block">
+              Filter by Organization
+            </label>
+            <Select
+              value={selectedOrgId || 'all'}
+              onValueChange={(v) => setOrgFilter(v === 'all' ? null : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All organizations" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All organizations</SelectItem>
+                {organizations
+                  .filter((org) => org.pk != null)
+                  .map((org) => (
+                    <SelectItem key={org.pk} value={org.pk!.toString()}>
+                      {org.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {renderLeagueGrid()}
+
+        {selectedOrgIdNum && (
+          <CreateLeagueModal
+            open={createModalOpen}
+            onOpenChange={setCreateModalOpen}
+            organizationId={selectedOrgIdNum}
+          />
         )}
-      </div>
-
-      {/* Organization Filter */}
-      <div className="mb-6">
-        <div className="w-64">
-          <label className="text-sm font-medium mb-1 block">
-            Filter by Organization
-          </label>
-          <Select
-            value={selectedOrgId || 'all'}
-            onValueChange={(v) => setOrgFilter(v === 'all' ? null : v)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="All organizations" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All organizations</SelectItem>
-              {organizations
-                .filter((org) => org.pk != null)
-                .map((org) => (
-                  <SelectItem key={org.pk} value={org.pk!.toString()}>
-                    {org.name}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {renderLeagueGrid()}
-
-      {selectedOrgIdNum && (
-        <CreateLeagueModal
-          open={createModalOpen}
-          onOpenChange={setCreateModalOpen}
-          organizationId={selectedOrgIdNum}
-        />
-      )}
     </div>
   );
 }

@@ -112,25 +112,25 @@ export default function OrganizationsPage() {
 
   return (
     <div className="container mx-auto p-4">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Building2 className="h-8 w-8 text-primary" />
-          <h1 className="text-2xl font-bold">Organizations</h1>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Building2 className="h-8 w-8 text-primary" />
+            <h1 className="text-2xl font-bold">Organizations</h1>
+          </div>
+          {currentUser?.is_superuser && (
+            <Button onClick={() => setCreateModalOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create Organization
+            </Button>
+          )}
         </div>
-        {currentUser?.is_superuser && (
-          <Button onClick={() => setCreateModalOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Create Organization
-          </Button>
-        )}
-      </div>
 
-      {renderOrganizationGrid()}
+        {renderOrganizationGrid()}
 
-      <CreateOrganizationModal
-        open={createModalOpen}
-        onOpenChange={setCreateModalOpen}
-      />
+        <CreateOrganizationModal
+          open={createModalOpen}
+          onOpenChange={setCreateModalOpen}
+        />
     </div>
   );
 }
