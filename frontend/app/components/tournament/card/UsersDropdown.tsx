@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import type { UserType } from '~/components/user/types';
 
 import { AvatarUrl } from '~/index';
@@ -17,12 +18,12 @@ export const UsersDropdown: React.FC<Props> = ({ users }) => {
             <img src={AvatarUrl(user)} alt={user.nickname || user.username} />
           </div>
         </div>
-        <a
-          href={`/users/${user.pk ?? user.username}`}
+        <Link
+          to={`/users/${user.pk ?? user.username}`}
           className="link link-primary"
         >
           {user.nickname || user.username}
-        </a>
+        </Link>
       </li>
     );
   };
