@@ -318,6 +318,19 @@ export async function getLeagues(organizationId?: number): Promise<LeaguesType> 
   return response.data;
 }
 
+// Home page stats - optimized endpoint returning only counts
+export interface HomeStats {
+  tournament_count: number;
+  game_count: number;
+  organization_count: number;
+  league_count: number;
+}
+
+export async function getHomeStats(): Promise<HomeStats> {
+  const response = await axios.get<HomeStats>('/home-stats/');
+  return response.data;
+}
+
 export async function fetchLeague(pk: number): Promise<LeagueType> {
   const response = await axios.get<LeagueType>(`/leagues/${pk}/`);
   return response.data;
