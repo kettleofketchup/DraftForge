@@ -1,4 +1,5 @@
 import { Menu } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '~/components/ui/button';
 import {
@@ -152,6 +153,19 @@ const MobileNavLink: React.FC<MobileNavLinkProps> = ({
 
 export function MobileNav() {
   const currentUser = useUserStore((state) => state.currentUser);
+  // Render client-side only to avoid Radix UI hydration mismatch with special characters in IDs
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Return placeholder with same dimensions to prevent layout shift
+  if (!mounted) {
+    return (
+      <div className="md:hidden mr-1 h-10 w-10" aria-hidden="true" />
+    );
+  }
 
   return (
     <Sheet>
