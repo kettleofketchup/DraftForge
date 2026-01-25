@@ -1,6 +1,7 @@
 import { Slot } from '@radix-ui/react-slot';
 import * as React from 'react';
 import { memo } from 'react';
+import { Link } from 'react-router';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '../../store/userStore';
 import { LoginWithDiscordButton } from './login';
@@ -15,7 +16,7 @@ const DOCS_URL = 'https://kettleofketchup.github.io/dota_tournament/';
 const BUG_REPORT_URL = `${GITHUB_REPO_URL}/issues/new?template=bug_report.md`;
 
 // NavItem component following shadcn sidebar patterns
-interface NavItemProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
+interface NavItemProps extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
   icon?: React.ReactNode;
   title: string;
   subtitle?: string;
@@ -24,11 +25,17 @@ interface NavItemProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   hideTextOnSmall?: boolean;
   /** Show subtitle as tooltip on small screens (below xl) */
   showSubtitleTooltip?: boolean;
+  /** Use for internal routes (uses React Router Link) */
+  to?: string;
+  /** Use for external links (uses <a> tag) */
+  href?: string;
 }
 
 const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
-  ({ className, icon, title, subtitle, badge, asChild = false, hideTextOnSmall = false, showSubtitleTooltip = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : 'a';
+  ({ className, icon, title, subtitle, badge, asChild = false, hideTextOnSmall = false, showSubtitleTooltip = false, to, href, ...props }, ref) => {
+    // Determine the component: Slot for asChild, Link for internal routes, 'a' for external
+    const Comp = asChild ? Slot : (to ? Link : 'a');
+    const linkProps = to ? { to } : { href };
 
     const navContent = (
       <Comp
@@ -42,6 +49,7 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
           'transition-colors',
           className
         )}
+        {...linkProps}
         {...props}
       >
         {icon && <span className="shrink-0">{icon}</span>}
@@ -389,7 +397,7 @@ const NavLinks = () => {
   return (
     <div className="flex items-center gap-0.5 lg:gap-1">
       <NavItem
-        href="/about"
+        to="/about"
         icon={<AboutIcon />}
         title="About"
         subtitle="Who we are"
@@ -397,7 +405,7 @@ const NavLinks = () => {
         className="[&_svg]:text-info"
       />
       <NavItem
-        href="/tournaments"
+        to="/tournaments"
         icon={<TrophyIcon />}
         title="Tournaments"
         subtitle="Compete & win"
@@ -405,7 +413,7 @@ const NavLinks = () => {
         className="[&_svg]:text-warning"
       />
       <NavItem
-        href="/users"
+        to="/users"
         icon={<UsersIcon />}
         title="Users"
         subtitle="Find players"
@@ -413,7 +421,7 @@ const NavLinks = () => {
         className="[&_svg]:text-interactive"
       />
       <NavItem
-        href="/organizations"
+        to="/organizations"
         icon={<BuildingIcon />}
         title="Organizations"
         subtitle="Communities"
@@ -421,7 +429,7 @@ const NavLinks = () => {
         className="[&_svg]:text-secondary"
       />
       <NavItem
-        href="/leagues"
+        to="/leagues"
         icon={<LeagueIcon />}
         title="Leagues"
         subtitle="Ranked play"
@@ -430,7 +438,7 @@ const NavLinks = () => {
       />
       {currentUser?.is_staff && (
         <NavItem
-          href="/admin"
+          to="/admin"
           icon={<AdminIcon />}
           title="Admin"
           subtitle="Manage site"
@@ -446,9 +454,9 @@ const SiteLogo = () => {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <a
+        <Link
           className="p-2 flex-shrink-0"
-          href="/"
+          to="/"
           aria-label="Home"
         >
           <img
@@ -456,7 +464,7 @@ const SiteLogo = () => {
             alt="DraftForge"
             className="h-10 w-10 aspect-square object-contain rounded-full flex-shrink-0"
           />
-        </a>
+        </Link>
       </TooltipTrigger>
       <TooltipContent>Home</TooltipContent>
     </Tooltip>
