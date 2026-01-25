@@ -52,8 +52,6 @@ export const CreateUserButton = () => {
           />
           <UserCard
             user={selectedDiscordUser}
-            edit={true}
-            saveFunc={'create'}
             key="modal_usercard"
           />
           <label className="modal-backdrop" htmlFor="my_modal_7">

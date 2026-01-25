@@ -63,12 +63,12 @@ const UserCardWrapper = memo(({
 });
 
 /** Grid of skeleton cards for initial loading */
-const UserGridSkeleton = ({ count = 8 }: { count?: number }) => (
+const UserGridSkeleton = ({ count = 12 }: { count?: number }) => (
   <div
     className="grid grid-flow-row-dense grid-auto-rows
     align-middle content-center justify-center
-    grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4
-    mb-0 mt-0 p-0 bg-background w-full gap-2 md:gap-4 lg:gap-6"
+    grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6
+    mb-0 mt-0 p-0 bg-background w-full gap-2 md:gap-3 lg:gap-4"
   >
     {Array.from({ length: count }).map((_, index) => (
       <UserCardSkeleton key={`skeleton-${index}`} />
@@ -186,8 +186,8 @@ export function UsersPage() {
         <div
           className="grid grid-flow-row-dense grid-auto-rows
           align-middle content-center justify-center
-          grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4
-          mb-0 mt-0 p-0 bg-background w-full gap-2 md:gap-4 lg:gap-6"
+          grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6
+          mb-0 mt-0 p-0 bg-background w-full gap-2 md:gap-3 lg:gap-4"
         >
           {filteredUsers.map((u: UserType, index: number) => (
             <UserCardWrapper
@@ -210,32 +210,45 @@ export function UsersPage() {
   };
 
   return (
-    <>
-      <div className="flex flex-col items-start p-4 h-full">
-        {/* Header with search and create button - NOT affected by transitions */}
-        <div
-          className="grid grid-flow-row-dense grid-auto-rows
-          align-middle content-center justify-center
-          grid-cols-4 w-full"
-        >
-          <div className="flex col-span-2 w-full content-center">
-            <SearchUserDropdown
-              users={users}
-              query={query}
-              setQuery={setQuery}
-            />
-          </div>
-          <div className="flex col-start-4 align-end content-end justify-end">
-            <UserCreateModal
-              query={createModalQuery}
-              setQuery={setCreateModalQuery}
-            />
-          </div>
-        </div>
-
-        {/* User grid - affected by transitions */}
-        {renderUserGrid()}
+    <div className="flex flex-col items-start p-4">
+      {/* Page title with user count */}
+      <div className="flex items-center gap-2 mb-4 w-full">
+        <Users className="w-6 h-6 text-primary" />
+        <h1 className="text-xl font-semibold">Users</h1>
+        <span className="text-sm text-muted-foreground">
+          {debouncedQuery ? (
+            <>
+              {filteredUsers.length} of {users.length}
+            </>
+          ) : (
+            <>{users.length} total</>
+          )}
+        </span>
       </div>
-    </>
+
+      {/* Header with search and create button - NOT affected by transitions */}
+      <div
+        className="grid grid-flow-row-dense grid-auto-rows
+        align-middle content-center justify-center
+        grid-cols-4 w-full mb-4"
+      >
+        <div className="flex col-span-2 w-full content-center">
+          <SearchUserDropdown
+            users={users}
+            query={query}
+            setQuery={setQuery}
+          />
+        </div>
+        <div className="flex col-start-4 align-end content-end justify-end">
+          <UserCreateModal
+            query={createModalQuery}
+            setQuery={setCreateModalQuery}
+          />
+        </div>
+      </div>
+
+      {/* User grid - affected by transitions */}
+      {renderUserGrid()}
+    </div>
   );
 }

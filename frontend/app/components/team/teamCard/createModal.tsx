@@ -3,6 +3,7 @@ import { getLogger } from '~/lib/logger';
 import { PlusCircleIcon } from 'lucide-react';
 import React, { useState } from 'react';
 import { Button } from '~/components/ui/button';
+import { FormDialog } from '~/components/ui/dialogs';
 import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
 import { User } from '~/components/user/user';
 import { UserEditForm } from '~/components/user/userCard/editForm';
@@ -13,7 +14,7 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '~/components/ui/tooltip'; // Adjust path as needed
+} from '~/components/ui/tooltip';
 
 import type {
   GuildMember,
@@ -21,94 +22,90 @@ import type {
   UserType,
 } from '~/components/user/types';
 
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '~/components/ui/dialog';
 const log = getLogger('createModal');
 
 interface Props {}
-export const TeamCreateModal: React.FC<Props> = (props) => {
-  const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
-  const users: UserType[] = useUserStore((state) => state.users); // Zustand setter
 
+export const TeamCreateModal: React.FC<Props> = (props) => {
+  const currentUser: UserType = useUserStore((state) => state.currentUser);
+  const users: UserType[] = useUserStore((state) => state.users);
+
+  const [open, setOpen] = useState(false);
   const [selectedDiscordUser, setSelectedDiscordUser] = useState<User>(
     new User({} as UserClassType),
   );
   const [form, setForm] = useState<UserType>({} as UserType);
+  const [query, setQuery] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleDiscordUserSelect = (user: GuildMember) => {
     setForm({} as UserType);
     log.debug(selectedDiscordUser);
     selectedDiscordUser.setFromGuildMember(user);
-    //This is necessary because we need a new instance of user to trigger a re-render
     setSelectedDiscordUser(new User(selectedDiscordUser as UserType));
     setForm(selectedDiscordUser as UserType);
   };
 
-  const [query, setQuery] = useState<string>('');
+  const handleSubmit = async () => {
+    // Form submission is handled by UserEditForm internally
+    // This is a placeholder for proper form integration
+  };
+
   if (!currentUser || (!currentUser.is_staff && !currentUser.is_superuser)) {
     return <></>;
   }
+
   return (
-    <Dialog>
-      <form>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DialogTrigger asChild>
-                <Button
-                  size="lg"
-                  variant="default"
-                  className={
-                    'bg-green-950 hover:bg-green-800 text-white' +
-                    ' hover:shadow-sm hover:shadow-green-500/50'
-                  }
-                >
-                  <PlusCircleIcon size="lg" color="white" className="p-2" />
-                  Create Team
-                </Button>
-              </DialogTrigger>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Create Team </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+    <>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="lg"
+              variant="default"
+              className={
+                'bg-emerald-600 hover:bg-emerald-500 text-white' +
+                ' shadow-lg shadow-emerald-900/50 border-b-4 border-b-emerald-800' +
+                ' active:border-b-0 active:translate-y-1 transition-all duration-75' +
+                ' hover:shadow-emerald-500/50'
+              }
+              onClick={() => setOpen(true)}
+            >
+              <PlusCircleIcon size="lg" className="text-white p-2" />
+              Create Team
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Create Team</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
 
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Create User</DialogTitle>
-            <DialogDescription>
-              Please fill in the details below to create a new teamzs.
-            </DialogDescription>
-          </DialogHeader>
-          <DiscordUserDropdown
-            query={query}
-            setQuery={setQuery}
-            discrimUsers={users}
-            onSelect={handleDiscordUserSelect}
-          />
+      <FormDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Create Team"
+        description="Please fill in the details below to create a new team."
+        submitLabel="Create"
+        isSubmitting={isSubmitting}
+        onSubmit={handleSubmit}
+        size="md"
+        showFooter={false}
+      >
+        <DiscordUserDropdown
+          query={query}
+          setQuery={setQuery}
+          discrimUsers={users}
+          onSelect={handleDiscordUserSelect}
+        />
 
-          <UserEditForm
-            user={selectedDiscordUser}
-            form={form}
-            setForm={setForm}
-          />
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </form>
-    </Dialog>
+        <UserEditForm
+          user={selectedDiscordUser}
+          form={form}
+          setForm={setForm}
+        />
+      </FormDialog>
+    </>
   );
 };
 

@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Edit2, ExternalLink, Trophy, Users, Gamepad2, Award } from 'lucide-react';
+import { ExternalLink, Trophy, Users, Gamepad2, Award } from 'lucide-react';
 
 import { fetchUser } from '~/components/api/api';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { Button } from '~/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
+import { EditIconButton } from '~/components/ui/buttons';
 import { Badge } from '~/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
@@ -26,15 +26,16 @@ export function UserProfilePage() {
   const navigate = useNavigate();
   const currentUser = useUserStore((state) => state.currentUser);
 
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useUrlTabs('overview', 'tab');
   const [editModalOpen, setEditModalOpen] = useState(false);
 
   // Check if edit modal should open (from /edit-profile redirect)
   useEffect(() => {
     if (searchParams.get('edit') === 'true') {
       setEditModalOpen(true);
-      // Clean up URL
-      navigate(`/user/${pk}`, { replace: true });
+      // Clean up URL but preserve tab
+      const tab = searchParams.get('tab');
+      navigate(`/user/${pk}${tab ? `?tab=${tab}` : ''}`, { replace: true });
     }
   }, [searchParams, pk, navigate]);
 
@@ -98,15 +99,11 @@ export function UserProfilePage() {
                     {user.nickname || user.username}
                   </h1>
                   {isOwnProfile && (
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <EditIconButton
                       onClick={() => setEditModalOpen(true)}
+                      tooltip="Edit Profile"
                       className="self-center sm:self-auto"
-                    >
-                      <Edit2 className="h-4 w-4 mr-1" />
-                      Edit Profile
-                    </Button>
+                    />
                   )}
                 </div>
 

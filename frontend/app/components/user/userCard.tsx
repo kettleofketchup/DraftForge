@@ -2,6 +2,12 @@ import { motion } from 'framer-motion';
 import React, { memo, useEffect } from 'react';
 import { Badge } from '~/components/ui/badge';
 import { ViewIconButton } from '~/components/ui/buttons';
+import {
+  CardAction,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '~/components/ui/card';
 import { Item, ItemContent, ItemTitle } from '~/components/ui/item';
 import { useSharedPopover } from '~/components/ui/shared-popover-context';
 import type { UserClassType, UserType } from '~/components/user/types';
@@ -134,29 +140,27 @@ export const UserCard: React.FC<Props> = memo(
           transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
           whileHover={{ scale: 1.02 }}
           key={`usercard:${getKeyName()} basediv`}
-          className="flex flex-col gap-2 card card-compact bg-base-300 shadow-elevated w-fit
+          className="flex flex-col gap-2 card card-compact bg-base-300 rounded-2xl w-fit
             hover:bg-base-200 focus:outline-2
             focus:outline-offset-2 focus:outline-primary
-            active:bg-base-200 transition-all duration-300 ease-in-out"
+            active:bg-base-200"
         >
-          {/* Header row - name and action buttons */}
-          <div className="flex items-center justify-between">
-            <div className="flex-1 min-w-0">
-              <h2 className="card-title text-base truncate">
-                {user.nickname || user.username}
-              </h2>
-              {!compact && (user.is_staff || user.is_superuser) && (
-                <div className="flex gap-1 mt-0.5">
-                  {user.is_staff && (
-                    <Badge className="bg-blue-700 text-white text-[10px] px-1.5 py-0">Staff</Badge>
-                  )}
-                  {user.is_superuser && (
-                    <Badge className="bg-red-700 text-white text-[10px] px-1.5 py-0">Admin</Badge>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-1">
+          {/* Header: 2-col layout with name/badges left, actions right */}
+          <CardHeader className="p-0 gap-0.5">
+            <CardTitle className="text-base truncate">
+              {user.nickname || user.username}
+            </CardTitle>
+            {!compact && (user.is_staff || user.is_superuser) && (
+              <CardDescription className="flex gap-1">
+                {user.is_staff && (
+                  <Badge className="bg-blue-700 text-white text-[10px] px-1.5 py-0">Staff</Badge>
+                )}
+                {user.is_superuser && (
+                  <Badge className="bg-red-700 text-white text-[10px] px-1.5 py-0">Admin</Badge>
+                )}
+              </CardDescription>
+            )}
+            <CardAction className="flex items-center gap-1">
               {(currentUser.is_staff || currentUser.is_superuser) && (
                 <UserEditModal user={new User(user)} />
               )}
@@ -164,8 +168,8 @@ export const UserCard: React.FC<Props> = memo(
                 onClick={handleViewProfile}
                 tooltip="View Profile"
               />
-            </div>
-          </div>
+            </CardAction>
+          </CardHeader>
 
           {/* 2-column layout: Avatar left, Positions right */}
           <div className="grid grid-cols-[auto_1fr] gap-2 items-center">
