@@ -24,6 +24,7 @@ interface UseHeroDraftWebSocketOptions {
 interface UseHeroDraftWebSocketReturn {
   isConnected: boolean;
   connectionError: string | null;
+  reconnect: () => void;
 }
 
 export function useHeroDraftWebSocket({
@@ -104,11 +105,14 @@ export function useHeroDraftWebSocket({
       try {
         const rawData = JSON.parse(messageEvent.data);
 
+        // Debug: Log raw data before validation
+        debugLog("Raw message data:", typeof rawData, Array.isArray(rawData) ? `Array(${rawData.length})` : rawData?.type, rawData);
+
         // Validate with Zod for runtime type safety
         const parseResult = HeroDraftWebSocketMessageSchema.safeParse(rawData);
         if (!parseResult.success) {
           log.warn("Invalid WebSocket message format:", parseResult.error.issues);
-          log.debug("Raw message:", rawData);
+          log.warn("Raw message that failed validation:", JSON.stringify(rawData, null, 2));
           return;
         }
 
@@ -239,8 +243,36 @@ export function useHeroDraftWebSocket({
     };
   }, [connect, enabled, draftId]);
 
+  // Manual reconnect function
+  const reconnect = useCallback(() => {
+    log.info("Manual reconnect requested");
+
+    // Close existing connection if any
+    if (wsRef.current) {
+      wsRef.current.close(1000, "Manual reconnect");
+      wsRef.current = null;
+    }
+
+    // Clear any pending reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    setIsConnected(false);
+    setConnectionError(null);
+
+    // Attempt reconnect after a brief delay
+    setTimeout(() => {
+      if (shouldConnectRef.current && draftId) {
+        connect();
+      }
+    }, 100);
+  }, [connect, draftId]);
+
   return {
     isConnected,
     connectionError,
+    reconnect,
   };
 }
