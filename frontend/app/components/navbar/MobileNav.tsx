@@ -13,7 +13,7 @@ import { cn } from '~/lib/utils';
 import { useUserStore } from '../../store/userStore';
 
 const GITHUB_REPO_URL = 'https://github.com/kettleofketchup/draftforge';
-const DOCS_URL = 'https://kettleofketchup.github.io/dota_tournament/';
+const DOCS_URL = 'https://kettleofketchup.github.io/DraftForge/';
 const BUG_REPORT_URL = `${GITHUB_REPO_URL}/issues/new?template=bug_report.md`;
 
 // Icons (duplicated from navbar.tsx - could be extracted to shared file)

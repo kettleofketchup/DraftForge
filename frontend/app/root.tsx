@@ -8,6 +8,7 @@ import {
   Scripts,
   ScrollRestoration,
 } from 'react-router';
+import { ScrollArea } from '~/components/ui/scroll-area';
 import { Toaster } from '~/components/ui/sonner';
 import { SharedPopoverProvider } from '~/components/ui/shared-popover-context';
 import { SharedPopoverRenderer } from '~/components/ui/shared-popover-renderer';
@@ -82,9 +83,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div className="flex flex-col w-screen h-screen justify-between">
               <ResponsiveAppBar />
               <ActiveDraftBanner />
-              <div id="outlet_root" className="flex-grow overflow-x-hidden">
+              <ScrollArea id="outlet_root" className="flex-grow h-0">
                 {children}
-              </div>
+              </ScrollArea>
             </div>
             <Toaster richColors closeButton position="top-center" />
             <FloatingDraftIndicator />

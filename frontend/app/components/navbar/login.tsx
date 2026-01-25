@@ -15,6 +15,7 @@ import { useUserStore } from '../../store/userStore';
 import type { UserType } from '../user/types';
 
 import { Button } from '~/components/ui/button';
+import { DestructiveButton } from '~/components/ui/buttons';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('login');
 type UserProps = {
@@ -139,10 +140,10 @@ export const ProfileButton: React.FC = () => {
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem>
-            <Button className="" onClick={logoutClick} variant={'destructive'}>
+            <DestructiveButton onClick={logoutClick}>
               <LogOutIcon />
               Logout
-            </Button>
+            </DestructiveButton>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
