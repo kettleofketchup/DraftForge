@@ -5,13 +5,13 @@ import type { Route } from './+types/home';
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: 'Profile' },
-    { name: 'description', content: 'Your profile' },
+    { title: 'Edit Profile' },
+    { name: 'description', content: 'Edit your profile' },
   ];
 }
 
-// Redirect /profile to /user/{currentUserId}
-function ProfileRedirect() {
+// Redirect /edit-profile to /user/{currentUserId}?edit=true
+function EditProfileRedirect() {
   const navigate = useNavigate();
   const currentUser = useUserStore((state) => state.currentUser);
   const hasHydrated = useUserStore((state) => state.hasHydrated);
@@ -19,7 +19,7 @@ function ProfileRedirect() {
   useEffect(() => {
     if (hasHydrated) {
       if (currentUser?.pk) {
-        navigate(`/user/${currentUser.pk}`, { replace: true });
+        navigate(`/user/${currentUser.pk}?edit=true`, { replace: true });
       } else {
         // Not logged in - redirect to home
         navigate('/', { replace: true });
@@ -34,4 +34,4 @@ function ProfileRedirect() {
   );
 }
 
-export default ProfileRedirect;
+export default EditProfileRedirect;

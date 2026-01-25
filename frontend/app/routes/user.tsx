@@ -1,7 +1,7 @@
-import UserPage from '~/pages/user/user';
+import { UserProfilePage } from '~/pages/user/UserProfilePage';
 import type { Route } from './+types/home';
 
 export function meta({}: Route.MetaArgs) {
-  return [{ title: 'User' }, { name: 'description', content: 'User Details!' }];
+  return [{ title: 'User Profile' }, { name: 'description', content: 'User Profile' }];
 }
-export default UserPage;
+export default UserProfilePage;
