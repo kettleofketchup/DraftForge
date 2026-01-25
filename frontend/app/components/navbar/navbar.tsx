@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '../../store/userStore';
 import { LoginWithDiscordButton } from './login';
+import { MobileNav } from './MobileNav';
 import {
   Tooltip,
   TooltipContent,
@@ -33,25 +34,18 @@ interface NavItemProps extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement
 
 const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
   ({ className, icon, title, subtitle, badge, asChild = false, hideTextOnSmall = false, showSubtitleTooltip = false, to, href, ...props }, ref) => {
-    // Determine the component: Slot for asChild, Link for internal routes, 'a' for external
-    const Comp = asChild ? Slot : (to ? Link : 'a');
-    const linkProps = to ? { to } : { href };
+    const baseClassName = cn(
+      'flex items-center gap-2 rounded-md px-2 py-1.5 h-9',
+      'text-sm font-medium',
+      'text-text-primary',
+      'hover:bg-base-400/50',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+      'transition-colors',
+      className
+    );
 
-    const navContent = (
-      <Comp
-        ref={ref}
-        className={cn(
-          'flex items-center gap-2 rounded-md px-2 py-1.5 h-9',
-          'text-sm font-medium',
-          'text-text-primary',
-          'hover:bg-base-400/50',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          'transition-colors',
-          className
-        )}
-        {...linkProps}
-        {...props}
-      >
+    const content = (
+      <>
         {icon && <span className="shrink-0">{icon}</span>}
         <div className={cn(
           'flex min-w-0 items-center xl:flex-col xl:items-center',
@@ -67,8 +61,30 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
             </span>
           )}
         </div>
-      </Comp>
+      </>
     );
+
+    // Render the appropriate component based on props
+    let navContent: React.ReactElement;
+    if (asChild) {
+      navContent = (
+        <Slot ref={ref} className={baseClassName} {...props}>
+          {content}
+        </Slot>
+      );
+    } else if (to) {
+      navContent = (
+        <Link ref={ref} to={to} className={baseClassName} {...props}>
+          {content}
+        </Link>
+      );
+    } else {
+      navContent = (
+        <a ref={ref} href={href} className={baseClassName} {...props}>
+          {content}
+        </a>
+      );
+    }
 
     // Wrap with tooltip for small screens if enabled
     if (showSubtitleTooltip && subtitle) {
@@ -345,11 +361,11 @@ const StarBadge = ({ count, isLoading }: { count: number | null; isLoading?: boo
 
 // External links (GitHub, Docs, Bug Report) using NavItem
 // Icons always visible, text hidden on small screens
-const ExternalLinks = () => {
+const ExternalLinks = ({ className }: { className?: string }) => {
   const { stars, isLoading } = useGitHubStars();
 
   return (
-    <div className="flex items-center gap-0.5 lg:gap-1 mr-1 lg:mr-2">
+    <div className={cn("flex items-center gap-0.5 lg:gap-1 mr-1 lg:mr-2", className)}>
       <NavItem
         href={GITHUB_REPO_URL}
         target="_blank"
@@ -391,11 +407,11 @@ const ExternalLinks = () => {
 
 // Main navigation with icons + text using NavItem
 // Icons always visible, text hidden on small screens
-const NavLinks = () => {
+const NavLinks = ({ className }: { className?: string }) => {
   const currentUser = useUserStore((state) => state.currentUser);
 
   return (
-    <div className="flex items-center gap-0.5 lg:gap-1">
+    <div className={cn("flex items-center gap-0.5 lg:gap-1", className)}>
       <NavItem
         to="/about"
         icon={<AboutIcon />}
@@ -450,12 +466,29 @@ const NavLinks = () => {
   );
 };
 
+const HomeIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className="h-5 w-5"
+    aria-hidden="true"
+  >
+    <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+    <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+  </svg>
+);
+
 const SiteLogo = () => {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Link
-          className="p-2 flex-shrink-0"
+          className="p-2 flex-shrink-0 hidden md:flex items-center"
           to="/"
           aria-label="Home"
         >
@@ -464,6 +497,24 @@ const SiteLogo = () => {
             alt="DraftForge"
             className="h-10 w-10 aspect-square object-contain rounded-full flex-shrink-0"
           />
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent>Home</TooltipContent>
+    </Tooltip>
+  );
+};
+
+// Mobile home link - shown only on small screens, integrated into MobileNav
+const MobileHomeLink = () => {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          className="p-2 flex-shrink-0 md:hidden flex items-center"
+          to="/"
+          aria-label="Home"
+        >
+          <HomeIcon />
         </Link>
       </TooltipTrigger>
       <TooltipContent>Home</TooltipContent>
@@ -480,11 +531,13 @@ export const ResponsiveAppBar: React.FC = memo(() => {
         aria-label="Main navigation"
       >
         <div className="navbar-start flex-1">
+          <MobileNav />
+          <MobileHomeLink />
           <SiteLogo />
-          <NavLinks />
+          <NavLinks className="hidden md:flex" />
         </div>
         <div className="navbar-end">
-          <ExternalLinks />
+          <ExternalLinks className="hidden md:flex" />
           <LoginWithDiscordButton />
         </div>
       </nav>
