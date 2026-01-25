@@ -1,16 +1,10 @@
 import React, { memo, useEffect, useState } from 'react';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '~/components/ui/tooltip';
 import type { UserClassType, UserType } from '~/components/user/types';
 
 import { useUserStore } from '~/store/userStore';
 
-import { Edit2 } from 'lucide-react';
-
 import { Button } from '~/components/ui/button';
+import { CancelButton, EditIconButton, SubmitButton } from '~/components/ui/buttons';
 import {
   Dialog,
   DialogClose,
@@ -72,10 +66,9 @@ export const UserEditModalDialog: React.FC<DialogProps> = memo(
         <DialogFooter>
           <div className="flex flex-row justify-center align-center items-center w-full gap-4">
             <DialogClose asChild>
-              <Button
-                type="submit"
-                className="bg-green-950 hover:bg-green-800 text-white hover:shadow-sm hover:shadow-green-500/50"
-                disabled={isSaving}
+              <SubmitButton
+                loading={isSaving}
+                loadingText="Saving..."
                 onClick={(e) => {
                   e.preventDefault();
                   handleSave(e, {
@@ -89,17 +82,11 @@ export const UserEditModalDialog: React.FC<DialogProps> = memo(
                   });
                 }}
               >
-                {user && user.pk
-                  ? isSaving
-                    ? 'Saving...'
-                    : 'Save Changes'
-                  : isSaving
-                    ? 'Saving...'
-                    : 'Create User'}
-              </Button>
+                {user && user.pk ? 'Save Changes' : 'Create User'}
+              </SubmitButton>
             </DialogClose>
             <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <CancelButton />
             </DialogClose>
           </div>
         </DialogFooter>
@@ -110,22 +97,9 @@ export const UserEditModalDialog: React.FC<DialogProps> = memo(
 
 export const UserEditModalButton: React.FC = memo(() => {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <DialogTrigger asChild>
-          <Button
-            size="icon"
-            variant="default"
-            className="bg-green-950 hover:bg-green-800 text-white hover:shadow-sm hover:shadow-green-500/50"
-          >
-            <Edit2 color="white" />
-          </Button>
-        </DialogTrigger>
-      </TooltipTrigger>
-      <TooltipContent>
-        <p>Edit User</p>
-      </TooltipContent>
-    </Tooltip>
+    <DialogTrigger asChild>
+      <EditIconButton tooltip="Edit User" />
+    </DialogTrigger>
   );
 });
 export const UserEditModal: React.FC<Props> = memo(({ user }) => {
