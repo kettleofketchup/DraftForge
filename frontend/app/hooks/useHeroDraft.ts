@@ -7,6 +7,7 @@ import {
   triggerRoll,
   submitChoice,
   submitPick,
+  type CreateHeroDraftOptions,
 } from '~/components/herodraft/api';
 import type { HeroDraft } from '~/components/herodraft/types';
 
@@ -26,7 +27,13 @@ export function useHeroDraft(draftId: number | null) {
 export function useCreateHeroDraft() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: createHeroDraft,
+    mutationFn: ({
+      gameId,
+      options,
+    }: {
+      gameId: number;
+      options?: CreateHeroDraftOptions;
+    }) => createHeroDraft(gameId, options),
     onSuccess: (data) => {
       queryClient.setQueryData(['herodraft', data.id], data);
       log.debug('Created hero draft', data.id);
