@@ -7,7 +7,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '~/components/ui/dialog';
-import { Button } from '~/components/ui/button';
+import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
 import { Badge } from '~/components/ui/badge';
 import { Loader2, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -221,25 +221,18 @@ export function AutoAssignModal({
         </div>
 
         <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={onClose}>
+          <CancelButton onClick={onClose}>
             Cancel
-          </Button>
-          <Button
+          </CancelButton>
+          <ConfirmButton
             onClick={applyAssignments}
             disabled={isApplying || !result?.assignments.length}
+            loading={isApplying}
+            loadingText="Applying..."
           >
-            {isApplying ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Applying...
-              </>
-            ) : (
-              <>
-                <Wand2 className="h-4 w-4 mr-2" />
-                Apply {result?.assignments.length || 0} Assignments
-              </>
-            )}
-          </Button>
+            <Wand2 className="h-4 w-4 mr-2" />
+            Apply {result?.assignments.length || 0} Assignments
+          </ConfirmButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

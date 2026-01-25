@@ -1,5 +1,5 @@
 import { UserLock } from 'lucide-react';
-import { Button } from '~/components/ui/button';
+import { DestructiveButton } from '~/components/ui/buttons';
 import {
   Tooltip,
   TooltipContent,
@@ -28,10 +28,10 @@ export const AdminOnlyButton: React.FC<AdminOnlyButtonProps> = ({
             whileHover={{ scale: 1.1 }}
             whileFocus={{ scale: 1.05 }}
           >
-            <Button className="btn btn-danger bg-red-900 text-white">
+            <DestructiveButton>
               <UserLock className="mr-2" />
               {buttonTxt}
-            </Button>
+            </DestructiveButton>
           </motion.div>
         </TooltipTrigger>
         <TooltipContent className="bg-red-900 text-white rounded-lg">
