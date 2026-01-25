@@ -985,6 +985,34 @@ class DraftRoundCreateView(generics.CreateAPIView):
     permission_classes = [IsStaff]
 
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def home_stats(request):
+    """
+    Cached endpoint for home page statistics.
+    Returns counts only, much more efficient than fetching full objects.
+    """
+    cache_key = "home_stats"
+
+    @cached_as(
+        Tournament,
+        Game,
+        Organization,
+        League,
+        extra=cache_key,
+        timeout=60 * 5,  # 5 minutes cache
+    )
+    def get_stats():
+        return {
+            "tournament_count": Tournament.objects.count(),
+            "game_count": Game.objects.count(),
+            "organization_count": Organization.objects.count(),
+            "league_count": League.objects.count(),
+        }
+
+    return Response(get_stats())
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def refresh_avatar(request):

@@ -19,6 +19,7 @@ from app.views_main import (  # ViewSets; Create views; Functions
     current_user,
     done,
     home,
+    home_stats,
     logout,
     refresh_all_avatars,
     refresh_avatar,
@@ -51,6 +52,7 @@ __all__ = [
     # Functions
     "logout",
     "home",
+    "home_stats",
     "done",
     "validation_sent",
     "require_email",
