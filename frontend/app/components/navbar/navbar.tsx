@@ -4,25 +4,48 @@ import { memo } from 'react';
 import { Link } from 'react-router';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '../../store/userStore';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { LoginWithDiscordButton } from './login';
 import { MobileNav } from './MobileNav';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '../ui/tooltip';
 
 const GITHUB_REPO_URL = 'https://github.com/kettleofketchup/draftforge';
-const DOCS_URL = 'https://kettleofketchup.github.io/dota_tournament/';
+const DOCS_URL = 'https://kettleofketchup.github.io/DraftForge/';
 const BUG_REPORT_URL = `${GITHUB_REPO_URL}/issues/new?template=bug_report.md`;
 
-// NavItem component following shadcn sidebar patterns
-interface NavItemProps extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
+/**
+ * NavItem - Navigation item with responsive display states
+ *
+ * BREAKPOINT LAYOUT (for non-mobile nav, visible at md/768px+):
+ * ┌─────────────────────────────────────────────────────────────────────────┐
+ * │ SMALL (md to 1099px: 768px - 1099px)                                    │
+ * │ - Icons only                                                            │
+ * │ - Tooltip on hover shows title + subtitle (if showSubtitleTooltip)      │
+ * │ - Controlled by: hideTextOnSmall && 'hidden min-[1100px]:flex'          │
+ * ├─────────────────────────────────────────────────────────────────────────┤
+ * │ MEDIUM (1100px to xl: 1100px - 1279px)                                  │
+ * │ - Icons + title text (horizontal layout)                                │
+ * │ - Subtitle still hidden                                                 │
+ * │ - Controlled by: min-[1100px]:flex shows text                           │
+ * ├─────────────────────────────────────────────────────────────────────────┤
+ * │ LARGE (xl+: 1280px+)                                                    │
+ * │ - Icons + title + subtitle (vertical/stacked layout)                    │
+ * │ - Full content display                                                  │
+ * │ - Controlled by: xl:flex-col xl:items-center, subtitle xl:block         │
+ * └─────────────────────────────────────────────────────────────────────────┘
+ *
+ * BREAKPOINTS USED:
+ * - md: 768px  (NavLinks becomes visible, MobileNav hamburger hidden)
+ * - 1100px: Custom breakpoint (Text appears if hideTextOnSmall=true)
+ * - xl: 1280px (Subtitle appears, layout becomes vertical)
+ */
+interface NavItemProps
+  extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
   icon?: React.ReactNode;
   title: string;
   subtitle?: string;
   badge?: React.ReactNode;
   asChild?: boolean;
+  /** When true: hides text below 1100px, shows icons only with tooltip */
   hideTextOnSmall?: boolean;
   /** Show subtitle as tooltip on small screens (below xl) */
   showSubtitleTooltip?: boolean;
@@ -33,28 +56,59 @@ interface NavItemProps extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement
 }
 
 const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
-  ({ className, icon, title, subtitle, badge, asChild = false, hideTextOnSmall = false, showSubtitleTooltip = false, to, href, ...props }, ref) => {
+  (
+    {
+      className,
+      icon,
+      title,
+      subtitle,
+      badge,
+      asChild = false,
+      hideTextOnSmall = false,
+      showSubtitleTooltip = false,
+      to,
+      href,
+      ...props
+    },
+    ref,
+  ) => {
     const baseClassName = cn(
-      'flex items-center gap-2 rounded-md px-2 py-1.5 h-9',
+      // Base layout with responsive gap: tight at medium (1100px+), expanded at xl
+      'flex items-center gap-1 xl:gap-2 rounded-md px-1.5 xl:px-2 py-1.5 h-9',
       'text-sm font-medium',
       'text-text-primary',
       'hover:bg-base-400/50',
       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
       'transition-colors',
-      className
+      className,
     );
 
     const content = (
       <>
+        {/* Icon - always visible */}
         {icon && <span className="shrink-0">{icon}</span>}
-        <div className={cn(
-          'flex min-w-0 items-center xl:flex-col xl:items-center',
-          hideTextOnSmall && 'hidden lg:flex'
-        )}>
+
+        {/* Text container - visibility controlled by hideTextOnSmall */}
+        <div
+          className={cn(
+            // Base: horizontal layout
+            'flex min-w-0 items-center',
+            // LARGE (xl+): switch to vertical/stacked layout
+            'xl:flex-col xl:items-center',
+            // hideTextOnSmall: hidden below 1100px, visible at 1100px+
+            // This creates: icons-only (md-1099px) → icons+text (1100px+)
+            hideTextOnSmall && 'hidden min-[1100px]:flex',
+          )}
+        >
+          {/* Title + badge row */}
           <div className="flex items-center justify-center gap-1">
-            <span className="text-xs font-bold leading-normal truncate text-center text-outline-sm">{title}</span>
+            <span className="text-xs font-bold leading-normal truncate text-center text-outline-sm">
+              {title}
+            </span>
             {badge}
           </div>
+
+          {/* Subtitle - only visible at xl+ */}
           {subtitle && (
             <span className="text-[10px] text-text-muted leading-normal truncate hidden xl:block text-center">
               {subtitle}
@@ -90,9 +144,7 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
     if (showSubtitleTooltip && subtitle) {
       return (
         <Tooltip>
-          <TooltipTrigger asChild>
-            {navContent}
-          </TooltipTrigger>
+          <TooltipTrigger asChild>{navContent}</TooltipTrigger>
           <TooltipContent className="xl:hidden">
             <p className="font-medium">{title}</p>
             <p className="text-xs opacity-80">{subtitle}</p>
@@ -102,7 +154,7 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
     }
 
     return navContent;
-  }
+  },
 );
 NavItem.displayName = 'NavItem';
 
@@ -140,7 +192,7 @@ const useGitHubStars = () => {
       setIsLoading(true);
       try {
         const response = await fetch(
-          'https://api.github.com/repos/kettleofketchup/draftforge'
+          'https://api.github.com/repos/kettleofketchup/draftforge',
         );
         if (response.ok) {
           const data = await response.json();
@@ -325,7 +377,13 @@ const AboutIcon = () => (
 );
 
 // Star badge component for GitHub (compact, right-aligned)
-const StarBadge = ({ count, isLoading }: { count: number | null; isLoading?: boolean }) => {
+const StarBadge = ({
+  count,
+  isLoading,
+}: {
+  count: number | null;
+  isLoading?: boolean;
+}) => {
   if (isLoading) {
     return (
       <span className="inline-flex items-center gap-0.5 text-[10px] bg-base-400 text-text-primary rounded px-1 py-0.5 leading-none">
@@ -365,7 +423,12 @@ const ExternalLinks = ({ className }: { className?: string }) => {
   const { stars, isLoading } = useGitHubStars();
 
   return (
-    <div className={cn("flex items-center gap-0.5 lg:gap-1 mr-1 lg:mr-2", className)}>
+    <div
+      className={cn(
+        'flex items-center gap-0.5 lg:gap-1 mr-1 lg:mr-2',
+        className,
+      )}
+    >
       <NavItem
         href={GITHUB_REPO_URL}
         target="_blank"
@@ -411,7 +474,7 @@ const NavLinks = ({ className }: { className?: string }) => {
   const currentUser = useUserStore((state) => state.currentUser);
 
   return (
-    <div className={cn("flex items-center gap-0.5 lg:gap-1", className)}>
+    <div className={cn('flex items-center gap-0.5 lg:gap-1', className)}>
       <NavItem
         to="/about"
         icon={<AboutIcon />}
@@ -496,11 +559,7 @@ const SiteLogo = () => {
           to="/"
           aria-label="Home"
         >
-          <img
-            src="/logo512.png"
-            alt="DraftForge"
-            className="h-10 w-10 aspect-square object-contain rounded-full flex-shrink-0"
-          />
+          <HomeIcon />
         </Link>
       </TooltipTrigger>
       <TooltipContent>Home</TooltipContent>
