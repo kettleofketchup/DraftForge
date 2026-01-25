@@ -133,10 +133,10 @@ test.describe('Match Stats Modal - UI Integration', () => {
     await visitAndWaitForHydration(page, '/tournament/1');
     await expect(page.locator('body')).toBeVisible();
 
-    // Click on Games tab
-    await page.getByRole('tab', { name: 'Games' }).click();
+    // Click on Bracket tab (renamed from Games)
+    await page.getByRole('tab', { name: /Bracket/i }).click();
 
-    // Games tab defaults to Bracket View - verify it's visible
+    // Bracket tab defaults to Bracket View - verify it's visible
     await expect(page.getByText('Bracket View')).toBeVisible();
 
     // Switch to List View to see games

@@ -8,7 +8,7 @@ import {
   AlertDialogTitle,
 } from '~/components/ui/alert-dialog';
 import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
-import type { ConfirmButtonVariant } from '~/components/ui/buttons';
+import type { CancelButtonVariant, ConfirmButtonVariant } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
 export interface ConfirmDialogProps {
@@ -26,6 +26,8 @@ export interface ConfirmDialogProps {
   cancelLabel?: string;
   /** Visual variant - affects styling */
   variant?: 'default' | 'destructive' | 'warning';
+  /** Cancel button variant - overrides default variant-based logic */
+  cancelVariant?: CancelButtonVariant;
   /** Whether the action is in progress */
   isLoading?: boolean;
   /** Callback when confirm is clicked */
@@ -79,6 +81,7 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
       confirmLabel = 'Confirm',
       cancelLabel = 'Cancel',
       variant = 'default',
+      cancelVariant,
       isLoading = false,
       onConfirm,
     },
@@ -114,7 +117,7 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
             <CancelButton
               onClick={handleCancel}
               disabled={isLoading}
-              variant={variant === 'warning' ? 'success' : 'default'}
+              variant={cancelVariant ?? (variant === 'warning' ? 'success' : 'default')}
             >
               {cancelLabel}
             </CancelButton>

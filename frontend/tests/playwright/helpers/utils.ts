@@ -53,19 +53,12 @@ export async function visitAndWaitForHydration(
   // Wait for the body to be visible
   await page.locator('body').waitFor({ state: 'visible' });
 
-  // Wait for React to be available and hydrated by checking for React markers
-  const hasReact = await page.evaluate(() => {
-    const win = window as Window & {
-      React?: unknown;
-      __REACT_DEVTOOLS_GLOBAL_HOOK__?: unknown;
-    };
-    return !!(win.React || win.__REACT_DEVTOOLS_GLOBAL_HOOK__);
-  });
+  // Wait for DOMContentLoaded which indicates initial HTML is parsed
+  await page.waitForLoadState('domcontentloaded');
 
-  if (hasReact) {
-    // Wait for network to be idle, which indicates hydration is likely complete
-    await page.waitForLoadState('networkidle');
-  }
+  // Give React a moment to hydrate (short timeout instead of networkidle
+  // since the app may have polling/websockets that keep network active)
+  await page.waitForTimeout(500);
 
   // Final check that body is still visible after hydration
   await page.locator('body').waitFor({ state: 'visible' });

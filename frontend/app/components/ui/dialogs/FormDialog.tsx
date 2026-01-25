@@ -37,6 +37,10 @@ export interface FormDialogProps {
   size?: FormDialogSize;
   /** Whether to show the footer (default true) */
   showFooter?: boolean;
+  /** Additional class name for the dialog content */
+  className?: string;
+  /** Test ID for testing */
+  'data-testid'?: string;
 }
 
 const sizeClasses: Record<FormDialogSize, string> = {
@@ -78,6 +82,8 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       onSubmit,
       size = 'md',
       showFooter = true,
+      className,
+      'data-testid': dataTestId,
     },
     ref
   ) => {
@@ -90,7 +96,8 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           ref={ref}
-          className={cn('max-w-[calc(100%-2rem)]', sizeClasses[size])}
+          className={cn('max-w-[calc(100%-2rem)]', sizeClasses[size], className)}
+          data-testid={dataTestId}
         >
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>

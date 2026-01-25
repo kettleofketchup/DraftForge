@@ -1,16 +1,25 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
 import { GamesTab } from './GamesTab';
 import { PlayersTab } from './PlayersTab';
 import { TeamsTab } from './TeamsTab';
 
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
+import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
 
 export default function TournamentTabs() {
+  const { pk } = useParams<{ pk: string }>();
+  const navigate = useNavigate();
   const users = useUserStore((state) => state.users);
-  const [activeTab, setActiveTab] = useUrlTabs('players', 'tab');
+  const activeTab = useTournamentStore((state) => state.activeTab);
+
+  const handleTabChange = useCallback((tab: string) => {
+    // Navigate using URL path, which will update the store via TournamentDetailPage
+    navigate(`/tournament/${pk}/${tab}`, { replace: true });
+  }, [pk, navigate]);
 
   const getUsers = useUserStore((state) => state.getUsers);
   useEffect(() => {
@@ -45,7 +54,7 @@ export default function TournamentTabs() {
   return (
     <Tabs
       value={activeTab}
-      onValueChange={setActiveTab}
+      onValueChange={handleTabChange}
       className="w-full"
     >
       <ScrollArea className="w-full whitespace-nowrap pb-2">

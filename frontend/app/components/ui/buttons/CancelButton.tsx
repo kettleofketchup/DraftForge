@@ -3,7 +3,7 @@ import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import { button3DVariants } from './styles';
 
-export type CancelButtonVariant = 'default' | 'success';
+export type CancelButtonVariant = 'default' | 'success' | 'destructive';
 
 export interface CancelButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
@@ -24,6 +24,9 @@ export interface CancelButtonProps
  * // Green cancel button for warning dialogs
  * <CancelButton variant="success">Cancel</CancelButton>
  *
+ * // Red cancel button for destructive emphasis
+ * <CancelButton variant="destructive">Cancel</CancelButton>
+ *
  * // With DialogClose
  * <DialogClose asChild>
  *   <CancelButton>Cancel</CancelButton>
@@ -35,6 +38,7 @@ const CancelButton = React.forwardRef<HTMLButtonElement, CancelButtonProps>(
     const variantStyles = {
       default: depth ? button3DVariants.outline : '',
       success: depth ? button3DVariants.success : 'bg-green-600 text-white hover:bg-green-500',
+      destructive: depth ? button3DVariants.destructive : 'bg-red-600 text-white hover:bg-red-500',
     };
 
     return (

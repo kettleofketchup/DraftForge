@@ -111,13 +111,13 @@ test.describe('Bracket Badges (e2e)', () => {
     const bracketContainer = page.locator('[data-testid="bracketContainer"]');
     await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
-    // Verify badge A shows letter A
-    const badgeLetterA = page.locator('[data-testid="bracket-badge-letter-A"]');
+    // Verify badge A shows letter A (use first() since there may be multiple badges)
+    const badgeLetterA = page.locator('[data-testid="bracket-badge-letter-A"]').first();
     await expect(badgeLetterA).toBeAttached();
     await expect(badgeLetterA).toContainText('A');
 
-    // Verify badge B shows letter B
-    const badgeLetterB = page.locator('[data-testid="bracket-badge-letter-B"]');
+    // Verify badge B shows letter B (use first() since there may be multiple badges)
+    const badgeLetterB = page.locator('[data-testid="bracket-badge-letter-B"]').first();
     await expect(badgeLetterB).toBeAttached();
     await expect(badgeLetterB).toContainText('B');
   });

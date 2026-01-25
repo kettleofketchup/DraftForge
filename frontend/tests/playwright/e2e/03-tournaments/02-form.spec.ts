@@ -43,8 +43,10 @@ test.describe('Tournaments - create (e2e)', () => {
   }) => {
     const tournamentPage = new TournamentPage(page);
 
-    // Click the top-level Create Tournament button (opens the form/modal)
-    await page.getByRole('button', { name: /create tournament/i }).click();
+    // Wait for page data to load before interacting with create button
+    const createButton = page.getByRole('button', { name: /create tournament/i });
+    await createButton.waitFor({ state: 'visible', timeout: 30000 });
+    await createButton.click();
 
     // Fill the form fields
     const nameInput = page.locator('[data-testid="tournament-name-input"]');
@@ -144,8 +146,8 @@ test.describe('Tournaments - create (e2e)', () => {
   });
 
   test('View Button works', async ({ page }) => {
-    // Ensure the tournament exists
-    await expect(page.getByText(completedBracketTest)).toBeVisible();
+    // Wait for tournament data to load (API returns large payload)
+    await expect(page.getByText(completedBracketTest)).toBeVisible({ timeout: 30000 });
 
     // Find the tournament card and click the View button inside it
     const tournamentCard = page

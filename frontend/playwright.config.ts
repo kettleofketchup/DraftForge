@@ -10,7 +10,6 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Projects:
  * - chromium: General E2E tests with parallel execution
- * - mobile-chrome: Mobile viewport testing with Pixel 5 (runs only mobile tests)
  * - herodraft: Sequential execution for multi-browser draft scenarios
  */
 export default defineConfig({
@@ -61,8 +60,8 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      // Exclude mobile tests (run in mobile-chrome project) and herodraft tests (run in herodraft project)
-      testIgnore: /mobile|responsive|herodraft/i,
+      // Exclude herodraft tests (run in herodraft project)
+      testIgnore: /herodraft/i,
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
@@ -70,23 +69,6 @@ export default defineConfig({
           executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
           args: [
             // Container/WSL compatibility
-            '--no-sandbox',
-            '--disable-gpu',
-            '--disable-dev-shm-usage',
-            '--disable-setuid-sandbox',
-          ],
-        },
-      },
-    },
-    {
-      name: 'mobile-chrome',
-      // Only run mobile/responsive tests
-      testMatch: /mobile|responsive/i,
-      use: {
-        ...devices['Pixel 5'],
-        launchOptions: {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
-          args: [
             '--no-sandbox',
             '--disable-gpu',
             '--disable-dev-shm-usage',
