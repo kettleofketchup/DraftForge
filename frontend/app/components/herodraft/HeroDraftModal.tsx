@@ -87,6 +87,18 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
       case "captain_ready":
         toast.info(`${captainName} is ready`);
         break;
+      case "captain_connected":
+        toast.success(`${captainName} connected`);
+        break;
+      case "captain_disconnected":
+        toast.warning(`${captainName} disconnected`);
+        break;
+      case "draft_paused":
+        toast.warning("Draft paused - waiting for captain to reconnect");
+        break;
+      case "draft_resumed":
+        toast.success("Draft resumed - all captains connected");
+        break;
       case "roll_result":
         toast.success(`${captainName} won the coin flip!`);
         break;
@@ -105,7 +117,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     }
   }, []);
 
-  const { isConnected } = useHeroDraftWebSocket({
+  const { isConnected, reconnect } = useHeroDraftWebSocket({
     draftId,
     enabled: open,  // Only connect when modal is open
     onStateUpdate: handleStateUpdate,
@@ -521,21 +533,38 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
               {/* Paused overlay */}
               {draft.state === "paused" && (
                 <div className="absolute inset-0 bg-black/70 flex items-center justify-center" data-testid="herodraft-paused-overlay">
-                  <div className="text-center">
+                  <div className="text-center space-y-4">
                     <h2 className="text-3xl font-bold text-yellow-400" data-testid="herodraft-paused-title">
                       Draft Paused
                     </h2>
                     <p className="text-muted-foreground" data-testid="herodraft-paused-message">
                       Waiting for captain to reconnect...
                     </p>
+                    <Button
+                      variant="outline"
+                      onClick={reconnect}
+                      className="text-white border-yellow-400 hover:bg-yellow-400/20"
+                      data-testid="herodraft-reconnect-btn"
+                    >
+                      Reconnect
+                    </Button>
                   </div>
                 </div>
               )}
 
               {/* Connection status */}
               {!isConnected && (
-                <div className="absolute top-2 right-2 bg-red-500/80 text-white px-2 py-1 rounded text-sm" data-testid="herodraft-reconnecting">
-                  Reconnecting...
+                <div className="absolute top-2 right-2 bg-red-500/80 text-white px-3 py-2 rounded text-sm flex items-center gap-2" data-testid="herodraft-reconnecting">
+                  <span>Reconnecting...</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={reconnect}
+                    className="h-6 px-2 text-xs hover:bg-red-600"
+                    data-testid="herodraft-reconnect-inline-btn"
+                  >
+                    Retry
+                  </Button>
                 </div>
               )}
             </div>

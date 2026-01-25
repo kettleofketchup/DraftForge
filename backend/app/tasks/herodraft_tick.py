@@ -163,12 +163,15 @@ async def check_timeout(draft_id: int):
     """Check if current round has timed out and auto-pick if needed."""
     from django.db import transaction
 
+    from app.broadcast import broadcast_herodraft_state
     from app.functions.herodraft import auto_random_pick
     from app.models import DraftTeam, HeroDraft, HeroDraftState
 
     @sync_to_async
     def check_and_auto_pick():
         # Use transaction with select_for_update to prevent race conditions
+        completed_round = None
+
         with transaction.atomic():
             try:
                 draft = HeroDraft.objects.select_for_update().get(id=draft_id)
@@ -201,9 +204,25 @@ async def check_timeout(draft_id: int):
                 log.info(
                     f"Timeout reached for draft {draft_id}, round {current_round.round_number}"
                 )
-                return auto_random_pick(draft, team)
+                completed_round = auto_random_pick(draft, team)
 
-            return None
+        # Broadcast AFTER transaction commits so clients see the updated state
+        # Use broadcast_herodraft_state to avoid creating duplicate events
+        # (submit_pick already creates the hero_selected event)
+        if completed_round:
+            try:
+                # Re-fetch draft to get committed state with prefetched relations
+                draft = HeroDraft.objects.prefetch_related(
+                    "draft_teams__tournament_team__captain",
+                    "draft_teams__tournament_team__members",
+                    "rounds",
+                ).get(id=draft_id)
+                broadcast_herodraft_state(draft, "hero_selected")
+                log.debug(f"Broadcast auto-pick state for draft {draft_id}")
+            except Exception as e:
+                log.error(f"Failed to broadcast auto-pick for draft {draft_id}: {e}")
+
+        return completed_round
 
     return await check_and_auto_pick()
 
