@@ -254,18 +254,26 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
 
     async def herodraft_event(self, event):
         """Handle herodraft.event messages from channel layer."""
-        await self.send(
-            text_data=json.dumps(
-                {
-                    "type": "herodraft_event",
-                    "event_type": event.get("event_type"),
-                    "event_id": event.get("event_id"),
-                    "draft_team": event.get("draft_team"),
-                    "draft_state": event.get("draft_state"),
-                    "timestamp": event.get("timestamp"),
-                }
-            )
-        )
+        # Build message with only fields that have actual values
+        # Using .get() with missing keys returns None, which serializes to null
+        # and fails Zod validation where .optional() expects undefined, not null
+        message = {
+            "type": "herodraft_event",
+            "event_type": event.get("event_type"),
+        }
+        # Only include optional fields if they have values
+        if "event_id" in event and event["event_id"] is not None:
+            message["event_id"] = event["event_id"]
+        if "draft_team" in event and event["draft_team"] is not None:
+            message["draft_team"] = event["draft_team"]
+        if "draft_state" in event and event["draft_state"] is not None:
+            message["draft_state"] = event["draft_state"]
+        if "timestamp" in event and event["timestamp"] is not None:
+            message["timestamp"] = event["timestamp"]
+        if "metadata" in event and event["metadata"] is not None:
+            message["metadata"] = event["metadata"]
+
+        await self.send(text_data=json.dumps(message))
 
     async def herodraft_tick(self, event):
         """Handle tick updates during active drafting."""
