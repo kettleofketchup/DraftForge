@@ -70,7 +70,7 @@ class DraftStyles(StrEnum):
 
 
 class CustomUser(AbstractUser):
-    steamid = models.IntegerField(null=True, unique=True, blank=True)
+    steamid = models.BigIntegerField(null=True, unique=True, blank=True)
     nickname = models.TextField(null=True, blank=True)
     mmr = models.IntegerField(null=True, blank=True)
     league_mmr = models.IntegerField(null=True, blank=True)
