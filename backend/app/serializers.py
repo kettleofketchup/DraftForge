@@ -119,6 +119,42 @@ class TournamentsSerializer(serializers.ModelSerializer):
         )
 
 
+class LeagueMinimalSerializer(serializers.ModelSerializer):
+    """Minimal league info for tournament list cards."""
+
+    organization_name = serializers.CharField(
+        source="organization.name", read_only=True, default=None
+    )
+
+    class Meta:
+        model = League
+        fields = ("pk", "name", "organization_name")
+
+
+class TournamentListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for tournament list page.
+
+    Only includes basic scalar fields and minimal league info.
+    No nested team/user data for fast performance.
+    """
+
+    league = LeagueMinimalSerializer(read_only=True)
+    user_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Tournament
+        fields = (
+            "pk",
+            "name",
+            "date_played",
+            "timezone",
+            "tournament_type",
+            "state",
+            "league",
+            "user_count",
+        )
+
+
 class OrganizationSerializer(serializers.ModelSerializer):
     owner = TournamentUserSerializer(read_only=True)
     owner_id = serializers.PrimaryKeyRelatedField(

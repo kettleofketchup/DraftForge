@@ -60,6 +60,7 @@ from .serializers import (
     OrganizationSerializer,
     OrganizationsSerializer,
     TeamSerializer,
+    TournamentListSerializer,
     TournamentSerializer,
     TournamentsSerializer,
     UserSerializer,
@@ -783,6 +784,53 @@ class TournamentsBasicView(viewsets.ModelViewSet):
             Team,
             CustomUser,
             Game,
+            extra=cache_key,
+            timeout=60 * 10,
+        )
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+
+@permission_classes((AllowAny,))
+class TournamentListView(viewsets.ReadOnlyModelViewSet):
+    """Lightweight view for tournament list page.
+
+    Returns minimal tournament data without nested teams/users for fast loading.
+    Supports filtering by organization and league query params.
+    """
+
+    serializer_class = TournamentListSerializer
+
+    def get_queryset(self):
+        """Annotate user_count and select_related league for efficiency."""
+        qs = (
+            Tournament.objects.select_related("league", "league__organization")
+            .annotate(user_count=Count("users", distinct=True))
+            .order_by("-date_played")
+        )
+
+        # Filter by organization
+        org_id = self.request.query_params.get("organization")
+        if org_id:
+            qs = qs.filter(league__organization_id=org_id)
+
+        # Filter by league
+        league_id = self.request.query_params.get("league")
+        if league_id:
+            qs = qs.filter(league_id=league_id)
+
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f"tournaments_list_v2:{request.get_full_path()}"
+
+        @cached_as(
+            Tournament.objects.all(),
             extra=cache_key,
             timeout=60 * 10,
         )
