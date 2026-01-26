@@ -31,9 +31,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
 
-  // Workers: Use 50% of CPUs locally for speed, 2 in CI (shared database)
+  // Workers: Use 2 workers locally to reduce CPU load, 2 in CI (shared database)
   // Can override with --workers flag or PLAYWRIGHT_WORKERS env var
-  workers: process.env.CI ? 2 : '50%',
+  workers: 2,
 
   // Reporters: html + list locally, add github reporter in CI
   reporter: [
