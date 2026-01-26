@@ -41,3 +41,41 @@ services:
     depends_on:
       - frontend
       - backend
+
+  celery-worker:
+    image: ghcr.io/kettleofketchup/draftforge/backend:${VERSION}
+    user: "1000:1000"
+    entrypoint: ["celery"]
+    command: ["-A", "config", "worker", "-l", "info"]
+    env_file: "./docker/.env.release"
+    volumes:
+      - ./backend/.env:/app/backend/.env
+    depends_on:
+      - redis
+      - backend
+    restart: always
+
+  celery-beat:
+    image: ghcr.io/kettleofketchup/draftforge/backend:${VERSION}
+    user: "1000:1000"
+    entrypoint: ["celery"]
+    command: ["-A", "config", "beat", "-l", "info"]
+    env_file: "./docker/.env.release"
+    volumes:
+      - ./backend/.env:/app/backend/.env
+    depends_on:
+      - redis
+      - celery-worker
+    restart: always
+
+  discord-bot:
+    image: ghcr.io/kettleofketchup/draftforge/backend:${VERSION}
+    user: "1000:1000"
+    entrypoint: ["python", "manage.py", "run_discord_bot"]
+    env_file: "./docker/.env.release"
+    volumes:
+      - ./backend/.env:/app/backend/.env
+    depends_on:
+      - redis
+      - backend
+    restart: always
