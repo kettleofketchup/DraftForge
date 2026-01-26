@@ -95,15 +95,12 @@ def refresh_all_discord_data():
         for user in users:
             try:
                 total_checked += 1
-                old_avatar = user.avatar
 
-                # get_avatar_url() checks and updates the avatar
-                new_url = user.get_avatar_url(force_refresh=True)
+                # check_and_update_avatar() checks and updates the avatar
+                updated = user.check_and_update_avatar()
 
-                if new_url and old_avatar != user.avatar:
+                if updated:
                     total_updated += 1
-                elif not new_url:
-                    total_failed += 1
 
             except Exception as e:
                 total_failed += 1
