@@ -2,7 +2,7 @@ import logging
 
 import nh3
 import requests
-from cacheops import cached_as, invalidate_model
+from cacheops import cached_as, invalidate_obj
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models
@@ -47,10 +47,10 @@ class PositionsModel(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate CustomUser cache since positions are embedded in user serializations
-        from cacheops import invalidate_model
+        # Invalidate the user(s) that own this position preference
 
-        invalidate_model(CustomUser)
+        for user in self.customuser_set.all():
+            invalidate_obj(user)
 
 
 # Enum for Dota2 positions
@@ -240,10 +240,9 @@ class CustomUser(AbstractUser):
 
         super().save(*args, **kwargs)
 
-        # Invalidate caches that depend on CustomUser
-        from cacheops import invalidate_model
+        # Invalidate this specific user's cache
 
-        invalidate_model(CustomUser)
+        invalidate_obj(self)
 
     @property
     def avatarUrl(self):
@@ -322,13 +321,15 @@ class Organization(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate Organization cache when modified
-        invalidate_model(Organization)
+        # Invalidate this specific organization's cache
+
+        invalidate_obj(self)
 
     def delete(self, *args, **kwargs):
-        # Invalidate caches before deletion
-        invalidate_model(Organization)
-        invalidate_model(League)
+        # Invalidate related leagues before deletion
+
+        for league in self.leagues.all():
+            invalidate_obj(league)
         super().delete(*args, **kwargs)
 
 
@@ -426,15 +427,17 @@ class League(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate League cache and Organization cache
-        # (Organization has league_count annotation that depends on leagues)
-        invalidate_model(League)
-        invalidate_model(Organization)
+        # Invalidate this specific league and its related organizations
+
+        invalidate_obj(self)
+        for org in self.organizations.all():
+            invalidate_obj(org)
 
     def delete(self, *args, **kwargs):
-        # Invalidate caches before deletion
-        invalidate_model(League)
-        invalidate_model(Organization)
+        # Invalidate related organizations before deletion
+
+        for org in self.organizations.all():
+            invalidate_obj(org)
         super().delete(*args, **kwargs)
 
 
@@ -498,7 +501,6 @@ class Tournament(models.Model):
         super().save(*args, **kwargs)
         # Invalidate this specific tournament and its related league/org
         # Use invalidate_obj() to avoid invalidating ALL tournaments
-        from cacheops import invalidate_obj
 
         invalidate_obj(self)
         if self.league:
@@ -716,14 +718,13 @@ class Game(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate tournament, league, and team caches when games are modified
-        from cacheops import invalidate_model, invalidate_obj
+        # Invalidate this team and related tournament/league caches
 
+        invalidate_obj(self)
         if self.tournament_id:
             invalidate_obj(self.tournament)
         if self.league_id:
             invalidate_obj(self.league)
-        invalidate_model(Team)
 
 
 from cacheops import cached_as
@@ -756,9 +757,7 @@ class Draft(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate tournament cache when draft are made
-        from cacheops import invalidate_model, invalidate_obj
-
+        # Invalidate tournament cache when draft is modified
         invalidate_obj(self.tournament)
 
     def _simulate_draft(self, draft_style="snake"):
@@ -1251,7 +1250,6 @@ class DraftRound(models.Model):
         super().save(*args, **kwargs)
         # Invalidate specific tournament and draft when picks are made
         # Use invalidate_obj() to avoid invalidating ALL tournaments/drafts
-        from cacheops import invalidate_obj
 
         if self.draft:
             invalidate_obj(self.draft)
@@ -1398,7 +1396,8 @@ class HeroDraft(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        invalidate_model(HeroDraft)
+
+        invalidate_obj(self)
 
     def __str__(self):
         return f"HeroDraft for {self.game}"
@@ -1421,7 +1420,10 @@ class DraftTeam(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        invalidate_model(DraftTeam)
+
+        invalidate_obj(self)
+        if self.draft_id:
+            invalidate_obj(self.draft)
 
     @property
     def captain(self):
@@ -1464,7 +1466,10 @@ class HeroDraftRound(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        invalidate_model(HeroDraftRound)
+
+        invalidate_obj(self)
+        if self.draft_id:
+            invalidate_obj(self.draft)
 
     def __str__(self):
         return f"Round {self.round_number}: {self.action_type} by {self.draft_team}"
@@ -1507,7 +1512,9 @@ class HeroDraftEvent(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        invalidate_model(HeroDraftEvent)
+        invalidate_obj(self)
+        if self.draft_id:
+            invalidate_obj(self.draft)
 
     def __str__(self):
         return f"{self.event_type} at {self.created_at}"
