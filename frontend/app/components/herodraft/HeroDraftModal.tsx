@@ -117,7 +117,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     }
   }, []);
 
-  const { isConnected, reconnect } = useHeroDraftWebSocket({
+  const { isConnected, connectionError, reconnect } = useHeroDraftWebSocket({
     draftId,
     enabled: open,  // Only connect when modal is open
     onStateUpdate: handleStateUpdate,
@@ -555,7 +555,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
               {/* Connection status */}
               {!isConnected && (
                 <div className="absolute top-2 right-2 bg-red-500/80 text-white px-3 py-2 rounded text-sm flex items-center gap-2" data-testid="herodraft-reconnecting">
-                  <span>Reconnecting...</span>
+                  <span>{connectionError || "Reconnecting..."}</span>
                   <Button
                     variant="ghost"
                     size="sm"
