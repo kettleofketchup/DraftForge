@@ -62,20 +62,13 @@ class Command(BaseCommand):
                             )
                         )
                 else:
-                    # Get avatar URL (this will update if needed)
-                    old_avatar = user.avatar
-                    new_url = user.get_avatar_url(force_refresh=force_refresh)
+                    # check_and_update_avatar() checks and updates the avatar
+                    updated = user.check_and_update_avatar()
 
-                    if new_url and (force_refresh or old_avatar != user.avatar):
+                    if updated:
                         updated_count += 1
                         self.stdout.write(
                             self.style.SUCCESS(f"Updated avatar for {user.username}")
-                        )
-                    elif not new_url:
-                        self.stdout.write(
-                            self.style.WARNING(
-                                f"Failed to get avatar for {user.username}"
-                            )
                         )
 
             except Exception as e:
