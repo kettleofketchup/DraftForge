@@ -40,6 +40,7 @@ from app.views import (
     TeamCreateView,
     TeamView,
     TournamentCreateView,
+    TournamentListView,
     TournamentsBasicView,
     TournamentView,
     UserCreateView,
@@ -82,6 +83,7 @@ router.register(r"organizations", app_views.OrganizationView, basename="organiza
 router.register(r"leagues", app_views.LeagueView, basename="league")
 
 router.register(r"tournaments-basic", TournamentsBasicView, "tournaments-basic")
+router.register(r"tournaments-list", TournamentListView, "tournaments-list")
 urlpatterns = [
     path("done/", RedirectView.as_view(url="http://localhost:5173")),
     path("", app_views.home),

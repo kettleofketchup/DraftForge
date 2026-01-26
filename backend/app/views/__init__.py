@@ -11,6 +11,7 @@ from app.views_main import (  # ViewSets; Create views; Functions
     TeamCreateView,
     TeamView,
     TournamentCreateView,
+    TournamentListView,
     TournamentsBasicView,
     TournamentView,
     UserCreateView,
@@ -37,6 +38,7 @@ __all__ = [
     # ViewSets
     "UserView",
     "TournamentView",
+    "TournamentListView",
     "TeamView",
     "DraftView",
     "DraftRoundView",

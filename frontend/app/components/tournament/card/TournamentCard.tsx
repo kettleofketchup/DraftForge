@@ -187,7 +187,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
             </ItemMedia>
             <ItemContent className="!gap-0">
               <ItemTitle className="!text-xs text-muted-foreground">Players</ItemTitle>
-              <span className="text-sm font-medium">{tournament.users?.length ?? 0}</span>
+              <span className="text-sm font-medium">{tournament.user_count ?? tournament.users?.length ?? 0}</span>
             </ItemContent>
           </Item>
         </div>
@@ -273,13 +273,20 @@ export const TournamentCard: React.FC<Props> = React.memo(({
   );
 }, (prevProps, nextProps) => {
   // Custom comparison - only re-render if these values actually change
+  const prevLeagueId = typeof prevProps.tournament.league === 'object'
+    ? prevProps.tournament.league?.pk
+    : prevProps.tournament.league;
+  const nextLeagueId = typeof nextProps.tournament.league === 'object'
+    ? nextProps.tournament.league?.pk
+    : nextProps.tournament.league;
   return (
     prevProps.tournament.pk === nextProps.tournament.pk &&
     prevProps.tournament.name === nextProps.tournament.name &&
     prevProps.tournament.state === nextProps.tournament.state &&
     prevProps.tournament.date_played === nextProps.tournament.date_played &&
     prevProps.tournament.tournament_type === nextProps.tournament.tournament_type &&
-    prevProps.tournament.league === nextProps.tournament.league &&
+    prevLeagueId === nextLeagueId &&
+    prevProps.tournament.user_count === nextProps.tournament.user_count &&
     prevProps.animationIndex === nextProps.animationIndex
   );
 });

@@ -90,7 +90,8 @@ export async function getTournaments(filters?: {
     params.append('league', filters.leagueId.toString());
   }
   const queryString = params.toString() ? `?${params.toString()}` : '';
-  const response = await axios.get<TournamentsType>(`/tournaments/${queryString}`);
+  // Use lightweight endpoint for list view (no nested teams/users)
+  const response = await axios.get<TournamentsType>(`/tournaments-list/${queryString}`);
   return response.data as TournamentsType;
 }
 
