@@ -44,6 +44,28 @@ services:
       - frontend
       - backend
 
+  celery-worker:
+    image: ghcr.io/kettleofketchup/draftforge/backend:latest
+    user: "1000:1000"
+    entrypoint: ["celery"]
+    command: ["-A", "config", "worker", "-l", "info"]
+    env_file: "./docker/.env.prod"
+    depends_on:
+      - redis
+      - backend
+    restart: always
+
+  celery-beat:
+    image: ghcr.io/kettleofketchup/draftforge/backend:latest
+    user: "1000:1000"
+    entrypoint: ["celery"]
+    command: ["-A", "config", "beat", "-l", "info"]
+    env_file: "./docker/.env.prod"
+    depends_on:
+      - redis
+      - celery-worker
+    restart: always
+
   discord-bot:
     image: ghcr.io/kettleofketchup/draftforge/backend:latest
     user: "1000:1000"
