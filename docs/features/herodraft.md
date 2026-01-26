@@ -210,32 +210,196 @@ POST /api/herodraft/<draft_id>/choose/
 }
 ```
 
-## Frontend Components
+## Frontend Implementation
+
+### File Structure
+
+```
+frontend/app/
+├── components/herodraft/
+│   ├── HeroDraftModal.tsx      # Main modal container (612 lines)
+│   ├── DraftTopBar.tsx         # Team info, avatars, timers
+│   ├── HeroGrid.tsx            # Hero selection with search
+│   ├── DraftPanel.tsx          # Draft timeline visualization
+│   ├── HeroDraftHistoryModal.tsx # Event history display
+│   ├── hooks/
+│   │   └── useHeroDraftWebSocket.ts  # WebSocket connection hook
+│   ├── api.ts                  # HTTP API functions
+│   ├── schemas.ts              # Zod runtime validation
+│   └── types.ts                # TypeScript type definitions
+├── store/
+│   └── heroDraftStore.ts       # Zustand state store
+└── pages/herodraft/
+    └── HeroDraftPage.tsx       # Page component
+```
 
 ### Key Components
 
 | Component | Purpose |
 |-----------|---------|
 | `HeroDraftModal` | Main container for draft UI |
-| `HeroDraftTopBar` | Timer display, team info, turn indicator |
-| `HeroDraftHeroGrid` | Hero selection grid with filtering |
-| `HeroDraftPanel` | Pick/ban slots display |
-| `HeroDraftPauseOverlay` | Pause state UI with countdown |
+| `DraftTopBar` | Timer display, team info, turn indicator |
+| `HeroGrid` | Hero selection grid with filtering |
+| `DraftPanel` | Pick/ban slots display |
 
-### State Management
+### WebSocket Hook (`useHeroDraftWebSocket`)
 
-The frontend uses Zustand store (`useHeroDraftStore`) to manage:
-- Draft state from server
-- Local UI state (selected hero, search filter)
-- WebSocket connection status
-- Pause/countdown state
+Manages WebSocket connection with automatic reconnection:
+
+```typescript
+interface UseHeroDraftWebSocketOptions {
+  draftId: number | null;
+  enabled?: boolean;  // Only connect when enabled
+  onStateUpdate?: (draft: HeroDraft) => void;
+  onTick?: (tick: HeroDraftTick) => void;
+  onEvent?: (event: HeroDraftEvent) => void;
+}
+
+interface UseHeroDraftWebSocketReturn {
+  isConnected: boolean;
+  connectionError: string | null;
+  reconnectAttempts: number;
+  reconnect: () => void;
+}
+```
+
+**Reconnection Strategy:**
+- Base delay: 1000ms
+- Max delay: 30,000ms (30s)
+- Max attempts: 10
+- Exponential backoff: 1s → 2s → 4s → 8s → 16s → 30s...
+
+**Message Types Handled:**
+- `initial_state` - Full state on connect/reconnect
+- `herodraft_event` - Events with optional state update
+- `herodraft_tick` - Timer updates every second
+
+### State Management (Zustand)
+
+```typescript
+interface HeroDraftState {
+  draft: HeroDraft | null;
+  tick: HeroDraftTick | null;
+  selectedHeroId: number | null;
+  searchQuery: string;
+
+  // Actions
+  setDraft: (draft: HeroDraft) => void;
+  setTick: (tick: HeroDraftTick) => void;
+  setSelectedHeroId: (heroId: number | null) => void;
+  setSearchQuery: (query: string) => void;
+  reset: () => void;
+
+  // Computed helpers
+  getCurrentTeam: () => DraftTeam | null;
+  getOtherTeam: () => DraftTeam | null;
+  isMyTurn: (userId: number) => boolean;
+  getUsedHeroIds: () => number[];
+}
+```
+
+### Event Handling
+
+Events are processed in `HeroDraftModal.handleEvent()`:
+
+```typescript
+switch (event.event_type) {
+  case "captain_ready":
+    toast.info(`${captainName} is ready`);
+    break;
+  case "captain_connected":
+    toast.success(`${captainName} connected`);
+    break;
+  case "captain_disconnected":
+    toast.warning(`${captainName} disconnected`);
+    break;
+  case "draft_paused":
+    toast.warning("Draft paused - waiting for captain to reconnect");
+    setResumeCountdown(null); // Cancel any active countdown
+    break;
+  case "resume_countdown":
+    const seconds = event.metadata?.countdown_seconds ?? 3;
+    setResumeCountdown(seconds);
+    toast.info(`Resuming in ${seconds}...`);
+    break;
+  case "draft_resumed":
+    toast.success("Draft resumed - all captains connected");
+    setResumeCountdown(null);
+    break;
+  // ... more event types
+}
+```
+
+### Pause Overlay Implementation
+
+The pause overlay shows in two states:
+1. **Waiting** - When `draft.state === "paused"` and no countdown
+2. **Countdown** - When `resumeCountdown` is active
+
+```tsx
+{(draft.state === "paused" || resumeCountdown !== null) && (
+  <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+    {resumeCountdown !== null && resumeCountdown > 0 ? (
+      // Countdown state - green text
+      <>
+        <h2 className="text-3xl font-bold text-green-400">
+          Resuming in {resumeCountdown}...
+        </h2>
+        <p>All captains connected</p>
+      </>
+    ) : (
+      // Waiting state - yellow text
+      <>
+        <h2 className="text-3xl font-bold text-yellow-400">
+          Draft Paused
+        </h2>
+        <p>Waiting for captain to reconnect...</p>
+        <Button onClick={reconnect}>Reconnect</Button>
+      </>
+    )}
+  </div>
+)}
+```
+
+**Countdown Timer Effect:**
+
+```typescript
+useEffect(() => {
+  if (resumeCountdown === null || resumeCountdown <= 0) return;
+
+  const timer = setTimeout(() => {
+    setResumeCountdown((prev) =>
+      prev !== null && prev > 0 ? prev - 1 : null
+    );
+  }, 1000);
+
+  return () => clearTimeout(timer);
+}, [resumeCountdown]);
+```
 
 ### Pause Overlay Behavior
 
-1. **On `draft_paused`:** Show overlay immediately with "Waiting for opponent to reconnect..."
-2. **On `resume_countdown`:** Show "Resuming in 3...2...1..." countdown
-3. **On `draft_resumed`:** Hide overlay after countdown completes
-4. **On `draft_paused` during countdown:** Cancel countdown, show waiting message
+| Event | Action |
+|-------|--------|
+| `draft_paused` | Show overlay with "Waiting..." message, cancel any countdown |
+| `resume_countdown` | Start countdown from received seconds (usually 3) |
+| `draft_resumed` | Clear countdown, overlay hides when state changes to "drafting" |
+| `draft_paused` during countdown | Cancel countdown, show waiting message |
+
+### Test IDs
+
+All components have `data-testid` attributes for Playwright testing:
+
+| Test ID | Element |
+|---------|---------|
+| `herodraft-modal` | Main modal container |
+| `herodraft-paused-overlay` | Pause/countdown overlay |
+| `herodraft-paused-title` | "Draft Paused" heading |
+| `herodraft-countdown-title` | "Resuming in X..." heading |
+| `herodraft-reconnect-btn` | Reconnect button |
+| `herodraft-reconnecting` | Connection status indicator |
+| `herodraft-hero-{id}` | Hero buttons in grid |
+| `herodraft-confirm-dialog` | Pick confirmation dialog |
 
 ## Testing
 
