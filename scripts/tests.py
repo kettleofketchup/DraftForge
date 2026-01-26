@@ -340,3 +340,205 @@ ns_cicd.add_task(cicd_backend, "backend")
 ns_cicd.add_task(cicd_all, "all")
 
 ns_test.add_collection(ns_cicd, "cicd")
+
+
+# =============================================================================
+# Demo Video Recording Collection
+# =============================================================================
+
+ns_demo = Collection("demo")
+
+
+@task
+def demo_create(c, spec=""):
+    """Record demo videos for documentation.
+
+    Runs Playwright demo tests with video recording enabled.
+    Videos are saved to docs/assets/videos/ and can be committed to git.
+
+    Usage:
+        inv demo.create                  # Record all demos
+        inv demo.create --spec shuffle   # Record only shuffle draft demo
+        inv demo.create --spec snake     # Record only snake draft demo
+        inv demo.create --spec herodraft # Record only herodraft demo
+
+    Args:
+        spec: Optional pattern to filter which demo to record
+    """
+    import shutil
+    from pathlib import Path
+
+    flush_test_redis(c)
+
+    # Create output directories
+    demo_results = paths.FRONTEND_PATH / "demo-results"
+    videos_dir = demo_results / "videos"
+    docs_videos = paths.PROJECT_PATH / "docs" / "assets" / "videos"
+
+    docs_videos.mkdir(parents=True, exist_ok=True)
+
+    # Run demo tests with video recording
+    with c.cd(paths.FRONTEND_PATH):
+        grep_arg = f'--grep "{spec}"' if spec else ""
+        c.run(
+            f"npx playwright test --config=playwright.demo.config.ts {grep_arg}".strip(),
+            warn=True,
+        )
+
+    # Copy videos to docs/assets/videos/
+    if videos_dir.exists():
+        print("\nCopying demo videos to docs/assets/videos/...")
+        for video_file in videos_dir.glob("*.webm"):
+            dest = docs_videos / video_file.name
+            shutil.copy2(video_file, dest)
+            print(f"  Copied: {video_file.name}")
+
+        # Also copy from test-results if any exist there
+        test_results = paths.FRONTEND_PATH / "demo-results"
+        for test_dir in test_results.glob("*"):
+            if test_dir.is_dir():
+                for video_file in test_dir.glob("*.webm"):
+                    # Create descriptive name from test
+                    dest_name = f"{test_dir.name}.webm"
+                    dest = docs_videos / dest_name
+                    shutil.copy2(video_file, dest)
+                    print(f"  Copied: {dest_name}")
+
+    print(f"\nDemo videos saved to: {docs_videos}")
+    print("Commit these videos to git for documentation.")
+
+
+@task
+def demo_shuffle(c):
+    """Record shuffle draft demo video."""
+    demo_create(c, spec="shuffle")
+
+
+@task
+def demo_snake(c):
+    """Record snake draft demo video."""
+    demo_create(c, spec="snake")
+
+
+@task
+def demo_herodraft(c):
+    """Record herodraft with bracket demo video."""
+    demo_create(c, spec="herodraft")
+
+
+@task
+def demo_clean(c):
+    """Clean demo output directories."""
+    import shutil
+
+    demo_results = paths.FRONTEND_PATH / "demo-results"
+    if demo_results.exists():
+        shutil.rmtree(demo_results)
+        print(f"Cleaned: {demo_results}")
+
+
+@task
+def demo_gifs(c, duration=10, fps=12, width=400):
+    """Convert demo videos to GIFs (first N seconds only).
+
+    Creates lightweight GIF previews from demo videos for documentation.
+    Uses FFmpeg with palette optimization for high-quality output.
+
+    Usage:
+        inv demo.gifs                    # Convert all videos to GIFs
+        inv demo.gifs --duration 5       # Only first 5 seconds
+        inv demo.gifs --fps 15           # Higher framerate (larger files)
+        inv demo.gifs --width 300        # Smaller width (smaller files)
+
+    Args:
+        duration: Number of seconds to capture (default: 10)
+        fps: Frames per second (default: 12, lower = smaller file)
+        width: Output width in pixels (default: 400, height auto-scaled)
+
+    Requires: FFmpeg (install via: sudo apt install ffmpeg)
+    """
+    import shutil
+
+    # Check if ffmpeg is available
+    if not shutil.which("ffmpeg"):
+        print("ERROR: FFmpeg is not installed.")
+        print("")
+        print("Install FFmpeg:")
+        print("  Ubuntu/Debian: sudo apt install ffmpeg")
+        print("  macOS:         brew install ffmpeg")
+        print("  Windows:       choco install ffmpeg")
+        return
+
+    docs_videos = paths.PROJECT_PATH / "docs" / "assets" / "videos"
+    docs_gifs = paths.PROJECT_PATH / "docs" / "assets" / "gifs"
+    docs_gifs.mkdir(parents=True, exist_ok=True)
+
+    # Find all webm videos
+    videos = list(docs_videos.glob("*.webm"))
+    if not videos:
+        print("No demo videos found in docs/assets/videos/")
+        print("Run 'inv demo.create' first to record demo videos.")
+        return
+
+    print(f"Converting {len(videos)} videos to GIFs...")
+    print(f"  Duration: {duration}s, FPS: {fps}, Width: {width}px\n")
+
+    for video in videos:
+        gif_name = video.stem + ".gif"
+        gif_path = docs_gifs / gif_name
+
+        print(f"Converting: {video.name} -> {gif_name}")
+
+        # FFmpeg two-pass GIF with palette optimization
+        # This produces much better quality than single-pass
+        ffmpeg_cmd = (
+            f'ffmpeg -y -t {duration} -i "{video}" '
+            f'-vf "fps={fps},scale={width}:-1:flags=lanczos,'
+            f"split[s0][s1];[s0]palettegen=stats_mode=diff[p];"
+            f'[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" '
+            f'-loop 0 "{gif_path}"'
+        )
+
+        result = c.run(ffmpeg_cmd, warn=True, hide=True)
+        if result.ok:
+            # Get file size
+            size_kb = gif_path.stat().st_size / 1024
+            print(f"  Created: {gif_name} ({size_kb:.1f} KB)")
+        else:
+            print(f"  FAILED: {gif_name}")
+            print(
+                f"  Error: {result.stderr[:200] if result.stderr else 'Unknown error'}"
+            )
+
+    print(f"\nGIFs saved to: {docs_gifs}")
+
+
+@task
+def demo_quick(c, duration=10, fps=12, width=400):
+    """Record demos and create GIF previews in one step.
+
+    Combines demo.create and demo.gifs for convenience.
+    Creates both full videos and 10-second GIF previews.
+
+    Usage:
+        inv demo.quick                   # Record all demos + create GIFs
+        inv demo.quick --duration 5      # 5-second GIF previews
+
+    Args:
+        duration: GIF duration in seconds (default: 10)
+        fps: GIF frames per second (default: 12)
+        width: GIF width in pixels (default: 400)
+    """
+    demo_create(c)
+    demo_gifs(c, duration=duration, fps=fps, width=width)
+
+
+ns_demo.add_task(demo_create, "create")
+ns_demo.add_task(demo_shuffle, "shuffle")
+ns_demo.add_task(demo_snake, "snake")
+ns_demo.add_task(demo_herodraft, "herodraft")
+ns_demo.add_task(demo_gifs, "gifs")
+ns_demo.add_task(demo_quick, "quick")
+ns_demo.add_task(demo_clean, "clean")
+
+ns_test.add_collection(ns_demo, "demo")
