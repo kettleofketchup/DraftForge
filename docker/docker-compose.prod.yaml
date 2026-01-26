@@ -50,6 +50,9 @@ services:
     entrypoint: ["celery"]
     command: ["-A", "config", "worker", "-l", "info"]
     env_file: "./docker/.env.prod"
+    volumes:
+      - ./backend/db.sqlite3:/app/backend/prod.db.sqlite3
+      - ./backend/.env:/app/backend/.env
     depends_on:
       - redis
       - backend
@@ -61,6 +64,9 @@ services:
     entrypoint: ["celery"]
     command: ["-A", "config", "beat", "-l", "info"]
     env_file: "./docker/.env.prod"
+    volumes:
+      - ./backend/db.sqlite3:/app/backend/prod.db.sqlite3
+      - ./backend/.env:/app/backend/.env
     depends_on:
       - redis
       - celery-worker
@@ -71,6 +77,9 @@ services:
     user: "1000:1000"
     entrypoint: ["python", "manage.py", "run_discord_bot"]
     env_file: "./docker/.env.prod"
+    volumes:
+      - ./backend/db.sqlite3:/app/backend/prod.db.sqlite3
+      - ./backend/.env:/app/backend/.env
     depends_on:
       - redis
       - backend
