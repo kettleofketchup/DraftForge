@@ -8,6 +8,7 @@ import logging
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.core.exceptions import ObjectDoesNotExist
+from django.utils import timezone
 
 log = logging.getLogger(__name__)
 
@@ -349,6 +350,7 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                     # (when timers are running and picks matter)
                     if not is_connected and draft.state == HeroDraftState.DRAFTING:
                         draft.state = HeroDraftState.PAUSED
+                        draft.paused_at = timezone.now()
                         draft.save()
                         HeroDraftEvent.objects.create(
                             draft=draft,
@@ -368,7 +370,23 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                             draft_id=draft_id, is_connected=False
                         ).exists()
                         if all_connected:
+                            # Calculate pause duration and adjust active round timing
+                            pause_duration = None
+                            if draft.paused_at:
+                                pause_duration = timezone.now() - draft.paused_at
+                                current_round = draft.rounds.filter(
+                                    state="active"
+                                ).first()
+                                if current_round and current_round.started_at:
+                                    current_round.started_at += pause_duration
+                                    current_round.save(update_fields=["started_at"])
+                                    log.info(
+                                        f"HeroDraft {draft_id} adjusted round {current_round.round_number} "
+                                        f"started_at by {pause_duration.total_seconds():.2f}s"
+                                    )
+
                             draft.state = HeroDraftState.DRAFTING
+                            draft.paused_at = None
                             draft.save()
                             HeroDraftEvent.objects.create(
                                 draft=draft,
