@@ -4,6 +4,7 @@ WebSocket consumers for draft event broadcasting.
 
 import json
 import logging
+from datetime import timedelta
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -370,6 +371,13 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                             draft_id=draft_id, is_connected=False
                         ).exists()
                         if all_connected:
+                            # Broadcast countdown before changing state
+                            broadcast_herodraft_state(
+                                draft,
+                                "resume_countdown",
+                                metadata={"countdown_seconds": 3},
+                            )
+
                             # Calculate pause duration and adjust active round timing
                             pause_duration = None
                             if draft.paused_at:
@@ -378,11 +386,15 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                                     state="active"
                                 ).first()
                                 if current_round and current_round.started_at:
-                                    current_round.started_at += pause_duration
+                                    # Add 3 seconds for countdown to total adjustment
+                                    total_adjustment = pause_duration + timedelta(
+                                        seconds=3
+                                    )
+                                    current_round.started_at += total_adjustment
                                     current_round.save(update_fields=["started_at"])
                                     log.info(
                                         f"HeroDraft {draft_id} adjusted round {current_round.round_number} "
-                                        f"started_at by {pause_duration.total_seconds():.2f}s"
+                                        f"started_at by {total_adjustment.total_seconds():.2f}s (includes 3s countdown)"
                                     )
 
                             draft.state = HeroDraftState.DRAFTING
