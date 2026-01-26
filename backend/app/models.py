@@ -496,11 +496,15 @@ class Tournament(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate Tournament cache and related caches
-        # (Organization has tournament_count annotation that depends on tournaments via leagues)
-        invalidate_model(Tournament)
-        invalidate_model(League)
-        invalidate_model(Organization)
+        # Invalidate this specific tournament and its related league/org
+        # Use invalidate_obj() to avoid invalidating ALL tournaments
+        from cacheops import invalidate_obj
+
+        invalidate_obj(self)
+        if self.league:
+            invalidate_obj(self.league)
+            if self.league.organization:
+                invalidate_obj(self.league.organization)
 
     class Meta:
         indexes = [
@@ -1245,15 +1249,14 @@ class DraftRound(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate tournament cache when draft picks are made
-        from cacheops import invalidate_model, invalidate_obj
+        # Invalidate specific tournament and draft when picks are made
+        # Use invalidate_obj() to avoid invalidating ALL tournaments/drafts
+        from cacheops import invalidate_obj
 
-        invalidate_obj(self.draft.tournament)
-        invalidate_obj(self.draft)
-
-        invalidate_model(Tournament)
-        invalidate_model(Draft)
-        invalidate_model(Team)
+        if self.draft:
+            invalidate_obj(self.draft)
+            if self.draft.tournament:
+                invalidate_obj(self.draft.tournament)
 
     @property
     def team(self):

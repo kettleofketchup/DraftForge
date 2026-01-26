@@ -42,7 +42,7 @@ class PickPlayerForRound(serializers.Serializer):
     user_pk = serializers.IntegerField(required=True)
 
 
-from cacheops import invalidate_model
+from cacheops import invalidate_obj
 
 
 @api_view(["POST"])
@@ -147,9 +147,10 @@ def pick_player_for_round(request):
     if tie_data:
         response_data["tie_resolution"] = tie_data
 
-    invalidate_model(Tournament)
-    invalidate_model(Draft)
-    invalidate_model(Team)
+    # Invalidate specific objects, not entire model caches
+    invalidate_obj(tournament)
+    if draft:
+        invalidate_obj(draft)
     return Response(response_data, status=201)
 
 
@@ -219,9 +220,9 @@ def create_team_from_captain(request):
     )
     team.members.add(user)
 
-    # Invalidate caches after team creation
-    invalidate_model(Tournament)
-    invalidate_model(Team)
+    # Invalidate specific tournament after team creation
+    invalidate_obj(tournament)
+    invalidate_obj(team)
 
     return Response(TournamentSerializer(tournament).data, status=201)
 
@@ -263,9 +264,9 @@ def generate_draft_rounds(request):
     tournament.draft = draft
     tournament.save()
 
-    invalidate_model(Draft)
-    invalidate_model(Tournament)
-    invalidate_model(Team)
+    # Invalidate specific objects
+    invalidate_obj(draft)
+    invalidate_obj(tournament)
 
     return Response(TournamentSerializer(tournament).data, status=201)
 
@@ -318,11 +319,9 @@ def rebuild_team(request):
     data = TournamentSerializer(tournament).data
     log.debug(data)
 
-    # Invalidate caches after rebuilding teams
-    invalidate_model(Draft)
-    invalidate_model(Tournament)
-    invalidate_model(Team)
-    invalidate_model(DraftRound)
+    # Invalidate specific objects after rebuilding teams
+    invalidate_obj(draft)
+    invalidate_obj(tournament)
 
     return Response(data, status=201)
 
@@ -453,9 +452,8 @@ def undo_last_pick(request):
 
     tournament = draft.tournament
 
-    invalidate_model(Tournament)
-    invalidate_model(Draft)
-    invalidate_model(Team)
-    invalidate_model(DraftRound)
+    # Invalidate specific objects
+    invalidate_obj(tournament)
+    invalidate_obj(draft)
 
     return Response(TournamentSerializer(tournament).data, status=200)
