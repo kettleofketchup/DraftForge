@@ -403,8 +403,8 @@ export function TournamentEditModal({
             <FormItem>
               <FormLabel>League</FormLabel>
               <Select
-                onValueChange={(value) => field.onChange(value ? Number(value) : null)}
-                value={field.value?.toString() ?? ''}
+                onValueChange={(value) => field.onChange(value === "none" ? null : Number(value))}
+                value={field.value?.toString() ?? "none"}
               >
                 <FormControl>
                   <SelectTrigger data-testid="tournament-league-select">
@@ -412,7 +412,7 @@ export function TournamentEditModal({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="">No League</SelectItem>
+                  <SelectItem value="none">No League</SelectItem>
                   {leagues?.filter((league: LeagueType) => league.pk != null).map((league: LeagueType) => (
                     <SelectItem key={league.pk} value={league.pk!.toString()}>
                       {league.name}
