@@ -13,6 +13,11 @@ const debugLog = (...args: unknown[]) => {
   }
 };
 
+// Reconnection configuration
+const RECONNECT_BASE_DELAY_MS = 1000;  // Start with 1 second
+const RECONNECT_MAX_DELAY_MS = 30000;  // Max 30 seconds
+const RECONNECT_MAX_ATTEMPTS = 10;     // Give up after 10 attempts
+
 interface UseHeroDraftWebSocketOptions {
   draftId: number | null;
   enabled?: boolean;  // Only connect when enabled (default: true when draftId is set)
@@ -24,6 +29,7 @@ interface UseHeroDraftWebSocketOptions {
 interface UseHeroDraftWebSocketReturn {
   isConnected: boolean;
   connectionError: string | null;
+  reconnectAttempts: number;
   reconnect: () => void;
 }
 
@@ -36,11 +42,13 @@ export function useHeroDraftWebSocket({
 }: UseHeroDraftWebSocketOptions): UseHeroDraftWebSocketReturn {
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const shouldConnectRef = useRef(false);
   const connectionIdRef = useRef(0); // Track connection ID to ignore stale callbacks
+  const intentionalCloseRef = useRef(false); // Track if we intentionally closed the connection
 
   // Store callbacks in refs to avoid triggering reconnects when they change
   const onStateUpdateRef = useRef(onStateUpdate);
@@ -88,12 +96,14 @@ export function useHeroDraftWebSocket({
       // Ignore if this is a stale connection (component remounted)
       if (connectionIdRef.current !== thisConnectionId) {
         log.debug("Ignoring stale WebSocket open");
+        intentionalCloseRef.current = true;
         ws.close(1000, "Stale connection");
         return;
       }
       log.debug("HeroDraft WebSocket connected");
       setIsConnected(true);
       setConnectionError(null);
+      setReconnectAttempts(0); // Reset reconnect attempts on successful connection
     };
 
     ws.onmessage = (messageEvent) => {
@@ -193,12 +203,42 @@ export function useHeroDraftWebSocket({
       log.debug("HeroDraft WebSocket closed:", closeEvent.code, closeEvent.reason);
       setIsConnected(false);
 
-      // Attempt reconnect after 3 seconds (only for unexpected closes)
-      if (closeEvent.code !== 1000 && shouldConnectRef.current) {
-        reconnectTimeoutRef.current = setTimeout(() => {
-          log.debug("Attempting HeroDraft WebSocket reconnect...");
-          connect();
-        }, 3000);
+      // Check if this was an intentional close (we called close() ourselves)
+      const wasIntentional = intentionalCloseRef.current;
+      intentionalCloseRef.current = false; // Reset for next connection
+
+      // Attempt reconnect if:
+      // 1. We didn't intentionally close it
+      // 2. We should still be connected (component is mounted and enabled)
+      // 3. We haven't exceeded max reconnect attempts
+      if (!wasIntentional && shouldConnectRef.current) {
+        setReconnectAttempts(prev => {
+          const newAttempts = prev + 1;
+
+          if (newAttempts > RECONNECT_MAX_ATTEMPTS) {
+            log.error(`Max reconnect attempts (${RECONNECT_MAX_ATTEMPTS}) exceeded, giving up`);
+            setConnectionError(`Connection lost. Max reconnection attempts exceeded.`);
+            return newAttempts;
+          }
+
+          // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s, 30s...
+          const delay = Math.min(
+            RECONNECT_BASE_DELAY_MS * Math.pow(2, newAttempts - 1),
+            RECONNECT_MAX_DELAY_MS
+          );
+
+          log.debug(`Scheduling reconnect attempt ${newAttempts}/${RECONNECT_MAX_ATTEMPTS} in ${delay}ms`);
+          setConnectionError(`Connection lost. Reconnecting in ${Math.round(delay / 1000)}s...`);
+
+          reconnectTimeoutRef.current = setTimeout(() => {
+            log.debug(`Attempting HeroDraft WebSocket reconnect (attempt ${newAttempts})...`);
+            connect();
+          }, delay);
+
+          return newAttempts;
+        });
+      } else if (wasIntentional) {
+        log.debug("WebSocket closed intentionally, not reconnecting");
       }
     };
 
@@ -222,11 +262,13 @@ export function useHeroDraftWebSocket({
     } else {
       // Disconnect if disabled
       if (wsRef.current) {
+        intentionalCloseRef.current = true; // Mark as intentional close
         wsRef.current.close(1000, "Connection disabled");
         wsRef.current = null;
       }
       setIsConnected(false);
       setConnectionError(null);
+      setReconnectAttempts(0);
     }
 
     return () => {
@@ -237,6 +279,7 @@ export function useHeroDraftWebSocket({
       if (wsRef.current) {
         // Close WebSocket regardless of state - don't leave orphaned CONNECTING sockets
         // Calling close() on CONNECTING socket will abort it cleanly
+        intentionalCloseRef.current = true; // Mark as intentional close
         wsRef.current.close(1000, "Component unmounting");
         wsRef.current = null;
       }
@@ -249,6 +292,7 @@ export function useHeroDraftWebSocket({
 
     // Close existing connection if any
     if (wsRef.current) {
+      intentionalCloseRef.current = true; // Mark as intentional close
       wsRef.current.close(1000, "Manual reconnect");
       wsRef.current = null;
     }
@@ -261,6 +305,7 @@ export function useHeroDraftWebSocket({
 
     setIsConnected(false);
     setConnectionError(null);
+    setReconnectAttempts(0); // Reset attempts on manual reconnect
 
     // Attempt reconnect after a brief delay
     setTimeout(() => {
@@ -273,6 +318,7 @@ export function useHeroDraftWebSocket({
   return {
     isConnected,
     connectionError,
+    reconnectAttempts,
     reconnect,
   };
 }
