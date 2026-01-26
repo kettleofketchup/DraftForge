@@ -807,17 +807,18 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
     serializer_class = TournamentListSerializer
 
     def get_queryset(self):
-        """Annotate user_count and select_related league for efficiency."""
+        """Annotate user_count and prefetch league/orgs for efficiency."""
         qs = (
-            Tournament.objects.select_related("league", "league__organization")
+            Tournament.objects.select_related("league")
+            .prefetch_related("league__organizations")
             .annotate(user_count=Count("users", distinct=True))
             .order_by("-date_played")
         )
 
-        # Filter by organization
+        # Filter by organization (League has M2M to Organization)
         org_id = self.request.query_params.get("organization")
         if org_id:
-            qs = qs.filter(league__organization_id=org_id)
+            qs = qs.filter(league__organizations__id=org_id)
 
         # Filter by league
         league_id = self.request.query_params.get("league")
