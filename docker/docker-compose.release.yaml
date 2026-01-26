@@ -48,6 +48,7 @@ services:
     entrypoint: ["python", "manage.py", "run_discord_bot"]
     env_file: "./docker/.env.release"
     volumes:
+      - ./backend/prod.db.sqlite3:/app/backend/prod.db.sqlite3
       - ./backend/.env:/app/backend/.env
     depends_on:
       - redis
