@@ -4,6 +4,7 @@ import { heroes } from 'dotaconstants';
 import { Input } from '~/components/ui/input';
 import { useHeroDraftStore } from '~/store/heroDraftStore';
 import { cn } from '~/lib/utils';
+import { heroMatchesSearch } from '~/lib/dota/heroes';
 import {
   Tooltip,
   TooltipContent,
@@ -61,8 +62,8 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton }: HeroGridPr
   }, []);
 
   const filteredHeroes = useMemo(() => {
-    const query = searchQuery.toLowerCase();
-    return heroList.filter((hero) => hero.name.toLowerCase().includes(query));
+    // Use heroMatchesSearch to match against all aliases (short names, nicknames, DotA 1 names)
+    return heroList.filter((hero) => heroMatchesSearch(hero.id, searchQuery));
   }, [heroList, searchQuery]);
 
   const isHeroAvailable = (heroId: number) => !usedHeroIds.includes(heroId);

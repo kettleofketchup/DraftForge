@@ -33,169 +33,195 @@ export function getHeroName(heroId: number): string {
 }
 
 /**
- * Common short names/abbreviations for Dota 2 heroes.
- * Used for compact display in draft panels, tooltips, etc.
- * Maps hero ID to short name.
+ * Hero aliases for search and display.
+ * First alias is the primary short name for display.
+ * All aliases are searchable (case-insensitive).
+ * Includes: abbreviations, nicknames, legacy DotA 1 names.
  */
-const HERO_SHORT_NAMES: Record<number, string> = {
+const HERO_ALIASES: Record<number, string[]> = {
   // Strength
-  102: 'Abaddon',
-  73: 'Alch',
-  2: 'Axe',
-  38: 'BM',        // Beastmaster
-  78: 'Brew',
-  99: 'BB',        // Bristleback
-  96: 'Cent',
-  81: 'CK',        // Chaos Knight
-  51: 'Clock',
-  135: 'Dawn',
-  69: 'Doom',
-  49: 'DK',        // Dragon Knight
-  107: 'ES',       // Earth Spirit (context: Earth)
-  7: 'Shaker',     // Earthshaker
-  103: 'ET',       // Elder Titan
-  59: 'Huskar',
-  23: 'Kunkka',
-  155: 'Largo',
-  104: 'LC',       // Legion Commander
-  54: 'LS',        // Lifestealer
-  77: 'Lycan',
-  129: 'Mars',
-  60: 'NS',        // Night Stalker
-  84: 'Ogre',
-  57: 'Omni',
-  110: 'Phoenix',
-  137: 'PB',       // Primal Beast
-  14: 'Pudge',
-  28: 'Slardar',
-  71: 'SB',        // Spirit Breaker
-  18: 'Sven',
-  29: 'Tide',
-  98: 'Timber',
-  19: 'Tiny',
-  83: 'Treant',
-  100: 'Tusk',
-  108: 'Underlord',
-  85: 'Undying',
-  42: 'WK',        // Wraith King
+  102: ['Aba', 'Abaddon'],
+  73: ['Alch', 'Alchemist'],
+  2: ['Axe'],
+  38: ['BM', 'Beast', 'Beastmaster'],
+  78: ['Brew', 'Panda', 'Brewmaster'],
+  99: ['BB', 'Bristle', 'Bristleback'],
+  96: ['Cent', 'Centaur'],
+  81: ['CK', 'Chaos'],
+  51: ['Clock', 'Clockwerk', 'Rattletrap'],
+  135: ['Dawn', 'Dawnbreaker'],
+  69: ['Doom', 'Lucifer'],
+  49: ['DK', 'Dragon', 'Davion'],
+  107: ['Earth', 'ES', 'Kaolin'],
+  7: ['Shaker', 'ES', 'Earthshaker', 'Raigor'],
+  103: ['ET', 'Elder', 'Titan'],
+  59: ['Huskar', 'Husk'],
+  23: ['Kunkka', 'Admiral', 'Coco'],
+  155: ['Largo'],
+  104: ['LC', 'Legion', 'Tresdin'],
+  54: ['LS', 'Naix', 'Lifestealer'],
+  77: ['Lycan', 'Banehallow'],
+  129: ['Mars'],
+  60: ['NS', 'Balanar', 'Nightstalker'],
+  84: ['Ogre', 'OM'],
+  57: ['Omni', 'Omniknight', 'Purist'],
+  110: ['Phoenix', 'Icarus'],
+  137: ['PB', 'Primal', 'Beast'],
+  14: ['Pudge', 'Butcher'],
+  28: ['Slardar'],
+  71: ['SB', 'Bara', 'Barathrum', 'Spirit Breaker'],
+  18: ['Sven', 'Rogue'],
+  29: ['Tide', 'Tidehunter', 'Leviathan'],
+  98: ['Timber', 'Shredder', 'Rizzrack'],
+  19: ['Tiny', 'Stone'],
+  83: ['Treant', 'Tree', 'Rooftrellen'],
+  100: ['Tusk', 'Ymir'],
+  108: ['Underlord', 'Pitlord', 'Abyssal'],
+  85: ['Undying', 'Dirge'],
+  42: ['WK', 'Leoric', 'Skeleton King', 'SK'],
 
   // Agility
-  1: 'AM',         // Anti-Mage
-  4: 'BS',         // Bloodseeker
-  62: 'BH',        // Bounty Hunter
-  61: 'Brood',
-  56: 'Clinkz',
-  6: 'Drow',
-  106: 'Ember',
-  41: 'FV',        // Faceless Void
-  72: 'Gyro',
-  123: 'Hood',
-  8: 'Jug',        // Juggernaut
-  145: 'Kez',
-  80: 'LD',        // Lone Druid
-  48: 'Luna',
-  94: 'Dusa',      // Medusa
-  82: 'Meepo',
-  9: 'Mirana',
-  114: 'MK',       // Monkey King
-  10: 'Morph',
-  89: 'Naga',
-  44: 'PA',        // Phantom Assassin
-  12: 'PL',        // Phantom Lancer
-  15: 'Razor',
-  32: 'Riki',
-  11: 'SF',        // Shadow Fiend
-  93: 'Slark',
-  35: 'Sniper',
-  67: 'Spec',      // Spectre
-  46: 'TA',        // Templar Assassin
-  109: 'TB',       // Terrorblade
-  95: 'Troll',
-  70: 'Ursa',
-  20: 'VS',        // Vengeful Spirit
-  47: 'Viper',
-  63: 'Weaver',
+  1: ['AM', 'Magina', 'Anti-Mage', 'Antimage'],
+  4: ['BS', 'Blood', 'Strygwyr', 'Bloodseeker'],
+  62: ['BH', 'Gondar', 'Bounty'],
+  61: ['Brood', 'BM', 'Broodmother'],
+  56: ['Clinkz', 'Bone'],
+  6: ['Drow', 'DR', 'Traxex'],
+  106: ['Ember', 'Xin'],
+  41: ['FV', 'Void', 'Faceless', 'Darkterror'],
+  72: ['Gyro', 'Gyrocopter', 'Aurel'],
+  123: ['Hood', 'Hoodwink'],
+  8: ['Jug', 'Jugg', 'Yurnero', 'Juggernaut'],
+  145: ['Kez'],
+  80: ['LD', 'Lone', 'Druid', 'Syllabear', 'Sylla'],
+  48: ['Luna', 'Moon'],
+  94: ['Dusa', 'Medusa'],
+  82: ['Meepo', 'Geomancer', 'Geo'],
+  9: ['Mirana', 'Potm', 'PotM', 'Priestess'],
+  114: ['MK', 'Monkey', 'Wukong'],
+  10: ['Morph', 'Morphling'],
+  89: ['Naga', 'Slithice'],
+  44: ['PA', 'Mortred', 'Phantom'],
+  12: ['PL', 'Lancer', 'Azwraith'],
+  15: ['Razor', 'Lightning'],
+  32: ['Riki', 'Rikimaru', 'SA'],
+  11: ['SF', 'Nevermore', 'Shadow Fiend'],
+  93: ['Slark', 'Fish'],
+  35: ['Sniper', 'Kardel', 'Dwarf'],
+  67: ['Spec', 'Spectre', 'Mercurial'],
+  46: ['TA', 'Lanaya', 'Templar'],
+  109: ['TB', 'Terror', 'Terrorblade'],
+  95: ['Troll', 'TW', 'Jah\'rakal'],
+  70: ['Ursa', 'Fuzzy', 'Ulfsaar'],
+  20: ['VS', 'Venge', 'Shendelzare'],
+  47: ['Viper', 'Netherdrake'],
+  63: ['Weaver', 'Anub\'seran', 'Bug'],
 
   // Intelligence
-  68: 'AA',        // Ancient Apparition
-  66: 'Chen',
-  5: 'CM',         // Crystal Maiden
-  55: 'DS',        // Dark Seer
-  119: 'Willow',
-  87: 'Disruptor',
-  58: 'Ench',
-  121: 'Grim',
-  74: 'Invoker',
-  64: 'Jak',       // Jakiro
-  90: 'KOTL',      // Keeper of the Light
-  52: 'Lesh',
-  31: 'Lich',
-  25: 'Lina',
-  26: 'Lion',
-  138: 'Muerta',
-  36: 'Necro',
-  111: 'Oracle',
-  76: 'OD',        // Outworld Devourer
-  13: 'Puck',
-  45: 'Pugna',
-  39: 'QoP',       // Queen of Pain
-  131: 'RM',       // Ring Master
-  86: 'Rubick',
-  79: 'SD',        // Shadow Demon
-  27: 'Shaman',
-  75: 'Silencer',
-  101: 'Sky',      // Skywrath Mage
-  17: 'Storm',
-  34: 'Tinker',
-  37: 'Warlock',
-  112: 'WW',       // Winter Wyvern
-  30: 'WD',        // Witch Doctor
-  22: 'Zeus',
+  68: ['AA', 'Apparition', 'Kaldr', 'Ancient'],
+  66: ['Chen', 'Holy'],
+  5: ['CM', 'Crystal', 'Rylai', 'Maiden'],
+  55: ['DS', 'Ish\'kafel', 'Dark Seer'],
+  119: ['Willow', 'DW', 'Mireska'],
+  87: ['Disruptor', 'Thrall', 'Dis'],
+  58: ['Ench', 'Aiushtha', 'Enchantress', 'Deer'],
+  121: ['Grim', 'Grimstroke'],
+  74: ['Invoker', 'Invo', 'Voker', 'Carl', 'Kael'],
+  64: ['Jak', 'Jakiro', 'THD', 'Twin'],
+  90: ['KOTL', 'Ezalor', 'Keeper', 'Gandalf'],
+  52: ['Lesh', 'Leshrac', 'Disco', 'Pony'],
+  31: ['Lich', 'Kel\'Thuzad'],
+  25: ['Lina', 'Slayer'],
+  26: ['Lion', 'Demon'],
+  138: ['Muerta'],
+  36: ['Necro', 'Rotund\'jere', 'Necrophos'],
+  111: ['Oracle', 'Nerif'],
+  76: ['OD', 'Obsidian', 'Harbinger', 'Outworld'],
+  13: ['Puck', 'Faerie'],
+  45: ['Pugna', 'Oblivion'],
+  39: ['QoP', 'Queen', 'Akasha'],
+  131: ['RM', 'Ring', 'Ringmaster'],
+  86: ['Rubick', 'Grand'],
+  79: ['SD', 'Shadow Demon', 'Eredar'],
+  27: ['Shaman', 'SS', 'Rhasta', 'Shadow Shaman'],
+  75: ['Silencer', 'Nortrom'],
+  101: ['Sky', 'Skywrath', 'Dragonus', 'SM'],
+  17: ['Storm', 'SS', 'Raijin', 'Storm Spirit'],
+  34: ['Tinker', 'Boush'],
+  37: ['Warlock', 'Demnok'],
+  112: ['WW', 'Wyvern', 'Auroth', 'Winter'],
+  30: ['WD', 'Doc', 'Witch', 'Zharvakko'],
+  22: ['Zeus', 'Lord'],
 
   // Universal
-  113: 'AW',       // Arc Warden
-  3: 'Bane',
-  65: 'Bat',       // Batrider
-  50: 'Dazzle',
-  43: 'DP',        // Death Prophet
-  33: 'Enigma',
-  91: 'Io',
-  97: 'Mag',       // Magnus
-  136: 'Marci',
-  53: 'NP',        // Nature's Prophet (Furion)
-  88: 'Nyx',
-  120: 'Pango',
-  16: 'SK',        // Sand King
-  128: 'Snap',
-  105: 'Techies',
-  40: 'Veno',
-  92: 'Visage',
-  126: 'Void',     // Void Spirit
-  21: 'WR',        // Windranger
+  113: ['AW', 'Arc', 'Zet'],
+  3: ['Bane', 'Atropos'],
+  65: ['Bat', 'Batrider', 'Rider'],
+  50: ['Dazzle', 'Shadow'],
+  43: ['DP', 'Krobelus', 'Death Prophet'],
+  33: ['Enigma', 'Darchrow'],
+  91: ['Io', 'Wisp'],
+  97: ['Mag', 'Magnus', 'Magnataur'],
+  136: ['Marci'],
+  53: ['NP', 'Furion', 'Prophet', 'Tequoia', 'Nature'],
+  88: ['Nyx', 'NA', 'Anub\'arak'],
+  120: ['Pango', 'Pangolier', 'Donté'],
+  16: ['SK', 'Sand', 'Crixalis', 'Sand King'],
+  128: ['Snap', 'Snapfire', 'Beatrix', 'Grandma'],
+  105: ['Techies', 'Squee', 'Spleen', 'Spoon'],
+  40: ['Veno', 'Venomancer', 'Lesale'],
+  92: ['Visage', 'Necro\'lic'],
+  126: ['Void', 'VS', 'Inai', 'Void Spirit'],
+  21: ['WR', 'Windrunner', 'Lyralei', 'Windranger'],
 };
 
 /**
- * Get the short/abbreviated name for a hero.
- * Falls back to the first word of the localized name if no short name is defined.
+ * Get the primary short name for a hero (first alias).
+ * Falls back to the first word of the localized name if no aliases defined.
  */
 export function getHeroShortName(heroId: number): string {
-  // Check for custom short name first
-  if (HERO_SHORT_NAMES[heroId]) {
-    return HERO_SHORT_NAMES[heroId];
+  const aliases = HERO_ALIASES[heroId];
+  if (aliases && aliases.length > 0) {
+    return aliases[0];
   }
 
   // Fall back to first word of localized name
   const hero = heroes[heroId];
   if (!hero) return '?';
 
-  const localizedName = hero.localized_name;
-  const firstWord = localizedName.split(' ')[0];
+  const firstWord = hero.localized_name.split(' ')[0];
+  return firstWord.length <= 8 ? firstWord : firstWord.substring(0, 6);
+}
 
-  // If the first word is short enough, use it
-  if (firstWord.length <= 8) {
-    return firstWord;
+/**
+ * Get all searchable aliases for a hero.
+ * Returns array of lowercase strings for matching.
+ */
+export function getHeroAliases(heroId: number): string[] {
+  const aliases = HERO_ALIASES[heroId] || [];
+  const hero = heroes[heroId];
+
+  // Combine custom aliases with localized name and internal name
+  const allAliases = [...aliases];
+  if (hero) {
+    allAliases.push(hero.localized_name);
+    // Add internal name without prefix (e.g., "antimage" from "npc_dota_hero_antimage")
+    const internalName = hero.name.replace('npc_dota_hero_', '');
+    allAliases.push(internalName);
   }
 
-  // Otherwise truncate
-  return firstWord.substring(0, 6);
+  return allAliases.map(a => a.toLowerCase());
+}
+
+/**
+ * Check if a search query matches a hero by any of its aliases.
+ * Case-insensitive partial match.
+ */
+export function heroMatchesSearch(heroId: number, query: string): boolean {
+  if (!query) return true;
+
+  const lowerQuery = query.toLowerCase();
+  const aliases = getHeroAliases(heroId);
+
+  return aliases.some(alias => alias.includes(lowerQuery));
 }
