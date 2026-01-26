@@ -1,5 +1,5 @@
 // frontend/app/components/herodraft/HeroDraftModal.tsx
-import { useCallback, useState, useMemo } from "react";
+import { useCallback, useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "~/components/ui/dialog";
 import { VisuallyHidden } from "~/components/ui/visually-hidden";
@@ -52,6 +52,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
+  const [resumeCountdown, setResumeCountdown] = useState<number | null>(null);
 
   const handleStateUpdate = useCallback(
     (newDraft: HeroDraft) => {
@@ -95,9 +96,18 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
         break;
       case "draft_paused":
         toast.warning("Draft paused - waiting for captain to reconnect");
+        setResumeCountdown(null); // Cancel any active countdown
         break;
+      case "resume_countdown": {
+        // Start countdown before draft resumes
+        const countdownSeconds = (event.metadata as { countdown_seconds?: number })?.countdown_seconds ?? 3;
+        setResumeCountdown(countdownSeconds);
+        toast.info(`Resuming in ${countdownSeconds}...`);
+        break;
+      }
       case "draft_resumed":
         toast.success("Draft resumed - all captains connected");
+        setResumeCountdown(null); // Clear countdown
         break;
       case "roll_result":
         toast.success(`${captainName} won the coin flip!`);
@@ -116,6 +126,17 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
         break;
     }
   }, []);
+
+  // Countdown timer effect - decrements every second
+  useEffect(() => {
+    if (resumeCountdown === null || resumeCountdown <= 0) return;
+
+    const timer = setTimeout(() => {
+      setResumeCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : null));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [resumeCountdown]);
 
   const { isConnected, connectionError, reconnect } = useHeroDraftWebSocket({
     draftId,
@@ -530,24 +551,37 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                 </div>
               </div>
 
-              {/* Paused overlay */}
-              {draft.state === "paused" && (
+              {/* Paused overlay - shows during pause and countdown */}
+              {(draft.state === "paused" || resumeCountdown !== null) && (
                 <div className="absolute inset-0 bg-black/70 flex items-center justify-center" data-testid="herodraft-paused-overlay">
                   <div className="text-center space-y-4">
-                    <h2 className="text-3xl font-bold text-yellow-400" data-testid="herodraft-paused-title">
-                      Draft Paused
-                    </h2>
-                    <p className="text-muted-foreground" data-testid="herodraft-paused-message">
-                      Waiting for captain to reconnect...
-                    </p>
-                    <Button
-                      variant="outline"
-                      onClick={reconnect}
-                      className="text-white border-yellow-400 hover:bg-yellow-400/20"
-                      data-testid="herodraft-reconnect-btn"
-                    >
-                      Reconnect
-                    </Button>
+                    {resumeCountdown !== null && resumeCountdown > 0 ? (
+                      <>
+                        <h2 className="text-3xl font-bold text-green-400" data-testid="herodraft-countdown-title">
+                          Resuming in {resumeCountdown}...
+                        </h2>
+                        <p className="text-muted-foreground" data-testid="herodraft-countdown-message">
+                          All captains connected
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <h2 className="text-3xl font-bold text-yellow-400" data-testid="herodraft-paused-title">
+                          Draft Paused
+                        </h2>
+                        <p className="text-muted-foreground" data-testid="herodraft-paused-message">
+                          Waiting for captain to reconnect...
+                        </p>
+                        <Button
+                          variant="outline"
+                          onClick={reconnect}
+                          className="text-white border-yellow-400 hover:bg-yellow-400/20"
+                          data-testid="herodraft-reconnect-btn"
+                        >
+                          Reconnect
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
