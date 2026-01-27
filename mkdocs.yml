@@ -87,6 +87,14 @@ nav:
       - Invoke Tasks: development/invoke-tasks.md
       - Testing: development/testing.md
       - Contributing: development/contributing.md
+      - Telemetry:
+        - Overview: dev/telemetry/index.md
+        - Architecture: dev/telemetry/architecture.md
+        - Logging Guide: dev/telemetry/logging.md
+        - Tracing Guide: dev/telemetry/tracing.md
+        - Context Guide: dev/telemetry/context.md
+        - Local Observability: dev/telemetry/local-observability.md
+        - Reference: dev/telemetry/reference.md
   - API Reference:
       - Endpoints: api/endpoints.md
   - Links:
