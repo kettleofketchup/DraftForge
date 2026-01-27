@@ -1,0 +1,24 @@
+# Optional local observability stack for development
+# Usage: docker compose -f docker/docker-compose.observability.yaml up -d
+#
+# Then set in your environment or .env (use localhost, not container name):
+#   OTEL_ENABLED=true
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+#
+# Jaeger UI: http://localhost:16686
+
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: dtx-jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC
+      - "4318:4318"    # OTLP HTTP
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    restart: unless-stopped
+
+networks:
+  default:
+    name: observability

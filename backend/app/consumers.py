@@ -11,13 +11,16 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
+from telemetry.websocket import TelemetryConsumerMixin
+
 log = logging.getLogger(__name__)
 
 
-class DraftConsumer(AsyncWebsocketConsumer):
+class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
     """WebSocket consumer for draft-specific events."""
 
     async def connect(self):
+        await self.telemetry_connect()
         self.draft_id = self.scope["url_route"]["kwargs"]["draft_id"]
         self.room_group_name = f"draft_{self.draft_id}"
 
@@ -43,6 +46,7 @@ class DraftConsumer(AsyncWebsocketConsumer):
         )
 
     async def disconnect(self, close_code):
+        await self.telemetry_disconnect(close_code)
         # Leave draft group
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
@@ -76,10 +80,11 @@ class DraftConsumer(AsyncWebsocketConsumer):
         return DraftEventSerializer(events, many=True).data
 
 
-class TournamentConsumer(AsyncWebsocketConsumer):
+class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
     """WebSocket consumer for tournament-wide events."""
 
     async def connect(self):
+        await self.telemetry_connect()
         self.tournament_id = self.scope["url_route"]["kwargs"]["tournament_id"]
         self.room_group_name = f"tournament_{self.tournament_id}"
 
@@ -105,6 +110,7 @@ class TournamentConsumer(AsyncWebsocketConsumer):
         )
 
     async def disconnect(self, close_code):
+        await self.telemetry_disconnect(close_code)
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
     async def receive(self, text_data):
