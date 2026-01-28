@@ -20,7 +20,9 @@ import paths
 def flush_test_redis(c):
     """Flush Redis cache in test environment to ensure fresh data."""
     print("Flushing Redis cache...")
-    c.run("docker exec test-redis redis-cli FLUSHALL", warn=True)
+    result = c.run("docker exec test-redis redis-cli FLUSHALL", warn=True, hide=True)
+    if not result.ok:
+        c.run("docker exec redis redis-cli FLUSHALL", warn=True, hide=True)
 
 
 @task
@@ -349,81 +351,208 @@ ns_test.add_collection(ns_cicd, "cicd")
 ns_demo = Collection("demo")
 
 
-@task
-def demo_create(c, spec=""):
-    """Record demo videos for documentation.
+# Named demo video outputs
+DEMO_VIDEO_NAMES = [
+    "captain1_herodraft.webm",
+    "captain2_herodraft.webm",
+    "shuffle_draft.webm",
+    "snake_draft.webm",
+]
 
-    Runs Playwright demo tests with video recording enabled.
-    Videos are saved to docs/assets/videos/ and can be committed to git.
+# Demo tournament reset keys
+DEMO_RESET_KEYS = {
+    "herodraft": "demo_herodraft",
+    "shuffle": "demo_captaindraft",
+    "snake": "demo_captaindraft",
+}
 
-    Usage:
-        inv demo.create                  # Record all demos
-        inv demo.create --spec shuffle   # Record only shuffle draft demo
-        inv demo.create --spec snake     # Record only snake draft demo
-        inv demo.create --spec herodraft # Record only herodraft demo
+
+def _reset_demo_data(c, demo_key):
+    """Reset demo tournament data via API.
 
     Args:
-        spec: Optional pattern to filter which demo to record
+        c: Invoke context
+        demo_key: Demo key (herodraft, shuffle, snake)
+
+    Returns:
+        bool: True if reset successful
     """
+    import requests
+
+    reset_key = DEMO_RESET_KEYS.get(demo_key)
+    if not reset_key:
+        print(f"  Warning: No reset key for demo '{demo_key}'")
+        return False
+
+    # Use localhost since we're calling from host to Docker container
+    url = f"https://localhost/api/tests/demo/{reset_key}/reset/"
+
+    print(f"  Resetting demo data: {reset_key}...")
+    try:
+        response = requests.post(url, verify=False, timeout=10)
+        if response.ok:
+            data = response.json()
+            print(f"  Reset successful: {data.get('tournament', 'unknown')}")
+            return True
+        else:
+            print(f"  Reset failed: {response.status_code} - {response.text[:100]}")
+            return False
+    except Exception as e:
+        print(f"  Reset failed: {e}")
+        return False
+
+
+def _run_demo_in_docker(c, spec="", workers=1):
+    """Run Playwright demo tests inside frontend Docker container.
+
+    Args:
+        c: Invoke context
+        spec: Optional grep pattern to filter demos
+        workers: Number of parallel workers (default: 1 for sequential)
+    """
+    flush_test_redis(c)
+
+    # Build the Playwright command
+    grep_arg = f'--grep "{spec}"' if spec else ""
+    playwright_cmd = (
+        f"npx playwright test --config=playwright.demo.config.ts "
+        f"--workers={workers} {grep_arg}"
+    ).strip()
+
+    print(f"  Running in Docker: {playwright_cmd}")
+
+    # Execute inside the frontend container
+    c.run(
+        f'docker exec frontend sh -c "cd /app && {playwright_cmd}"',
+        warn=True,
+    )
+
+
+def _copy_demo_videos(c):
+    """Copy demo videos from frontend container to docs/assets/videos/."""
     import shutil
     from pathlib import Path
 
-    flush_test_redis(c)
-
-    # Create output directories
+    # Copy from container to host
     demo_results = paths.FRONTEND_PATH / "demo-results"
     videos_dir = demo_results / "videos"
     docs_videos = paths.PROJECT_PATH / "docs" / "assets" / "videos"
 
     docs_videos.mkdir(parents=True, exist_ok=True)
 
-    # Run demo tests with video recording
-    with c.cd(paths.FRONTEND_PATH):
-        grep_arg = f'--grep "{spec}"' if spec else ""
-        c.run(
-            f"npx playwright test --config=playwright.demo.config.ts {grep_arg}".strip(),
-            warn=True,
-        )
-
-    # Copy videos to docs/assets/videos/
+    # The videos are created by mounted volume, so they should be on host
     if videos_dir.exists():
         print("\nCopying demo videos to docs/assets/videos/...")
-        for video_file in videos_dir.glob("*.webm"):
-            dest = docs_videos / video_file.name
-            shutil.copy2(video_file, dest)
-            print(f"  Copied: {video_file.name}")
+        copied_count = 0
+        for video_name in DEMO_VIDEO_NAMES:
+            video_file = videos_dir / video_name
+            if video_file.exists():
+                dest = docs_videos / video_name
+                shutil.copy2(video_file, dest)
+                print(f"  Copied: {video_name}")
+                copied_count += 1
 
-        # Also copy from test-results if any exist there
-        test_results = paths.FRONTEND_PATH / "demo-results"
-        for test_dir in test_results.glob("*"):
-            if test_dir.is_dir():
-                for video_file in test_dir.glob("*.webm"):
-                    # Create descriptive name from test
-                    dest_name = f"{test_dir.name}.webm"
-                    dest = docs_videos / dest_name
-                    shutil.copy2(video_file, dest)
-                    print(f"  Copied: {dest_name}")
+        if copied_count == 0:
+            print("  No named demo videos found. Check test output for errors.")
+        else:
+            print(f"\n{copied_count} demo videos saved to: {docs_videos}")
+            print("Commit these videos to git for documentation.")
+    else:
+        print(f"  Warning: Video directory not found: {videos_dir}")
 
-    print(f"\nDemo videos saved to: {docs_videos}")
-    print("Commit these videos to git for documentation.")
+
+@task
+def demo_create(c, spec=""):
+    """Record demo videos for documentation (runs in Docker).
+
+    Resets demo data, runs Playwright demo tests headless in Docker,
+    and copies videos to docs/assets/videos/.
+
+    Named outputs:
+    - captain1_herodraft.webm, captain2_herodraft.webm (HeroDraft)
+    - shuffle_draft.webm (Shuffle Draft)
+    - snake_draft.webm (Snake Draft)
+
+    Usage:
+        inv demo.create                  # Record all demos
+        inv demo.create --spec shuffle   # Record only shuffle draft demo
+        inv demo.create --spec herodraft # Record only herodraft demo
+
+    Args:
+        spec: Optional pattern to filter which demo to record
+    """
+    print("=== Demo Recording ===")
+
+    # Reset all demo data
+    if spec:
+        _reset_demo_data(c, spec)
+    else:
+        for demo_key in DEMO_RESET_KEYS:
+            _reset_demo_data(c, demo_key)
+
+    # Run demos in Docker
+    _run_demo_in_docker(c, spec=spec, workers=1)
+
+    # Copy videos
+    _copy_demo_videos(c)
 
 
 @task
 def demo_shuffle(c):
-    """Record shuffle draft demo video."""
-    demo_create(c, spec="shuffle")
+    """Record shuffle draft demo video.
+
+    Resets demo_captaindraft tournament, records shuffle draft demo.
+    """
+    print("=== Shuffle Draft Demo ===")
+    _reset_demo_data(c, "shuffle")
+    _run_demo_in_docker(c, spec="shuffle")
+    _copy_demo_videos(c)
 
 
 @task
 def demo_snake(c):
-    """Record snake draft demo video."""
-    demo_create(c, spec="snake")
+    """Record snake draft demo video.
+
+    Resets demo_captaindraft tournament, records snake draft demo.
+    """
+    print("=== Snake Draft Demo ===")
+    _reset_demo_data(c, "snake")
+    _run_demo_in_docker(c, spec="snake")
+    _copy_demo_videos(c)
 
 
 @task
 def demo_herodraft(c):
-    """Record herodraft with bracket demo video."""
-    demo_create(c, spec="herodraft")
+    """Record herodraft with bracket demo video.
+
+    Resets demo_herodraft tournament, records hero draft demo.
+    """
+    print("=== HeroDraft Demo ===")
+    _reset_demo_data(c, "herodraft")
+    _run_demo_in_docker(c, spec="herodraft")
+    _copy_demo_videos(c)
+
+
+@task
+def demo_all(c):
+    """Record all demos in parallel.
+
+    Resets all demo data, then runs all demos with 3 workers.
+    """
+    print("=== Recording All Demos (Parallel) ===")
+
+    # Reset all demo tournaments (deduplicated)
+    reset_keys_done = set()
+    for demo_key, reset_key in DEMO_RESET_KEYS.items():
+        if reset_key not in reset_keys_done:
+            _reset_demo_data(c, demo_key)
+            reset_keys_done.add(reset_key)
+
+    # Run all demos in parallel
+    _run_demo_in_docker(c, workers=3)
+
+    # Copy videos
+    _copy_demo_videos(c)
 
 
 @task
@@ -437,23 +566,44 @@ def demo_clean(c):
         print(f"Cleaned: {demo_results}")
 
 
-@task
-def demo_gifs(c, duration=10, fps=12, width=400):
-    """Convert demo videos to GIFs (first N seconds only).
+def _get_video_duration(c, video_path):
+    """Get video duration in seconds using ffprobe."""
+    result = c.run(
+        f"ffprobe -v error -show_entries format=duration "
+        f'-of default=noprint_wrappers=1:nokey=1 "{video_path}"',
+        warn=True,
+        hide=True,
+    )
+    if result.ok and result.stdout.strip():
+        return float(result.stdout.strip())
+    return None
 
-    Creates lightweight GIF previews from demo videos for documentation.
+
+@task
+def demo_gifs(c, duration=10, fps=12, width=400, start_from_middle=True):
+    """Convert demo videos to GIFs from the middle of the video.
+
+    Creates lightweight GIF previews from named demo videos for documentation.
     Uses FFmpeg with palette optimization for high-quality output.
+    By default, starts from the middle of the video to avoid white screen.
+
+    Named outputs:
+    - captain1_herodraft.gif, captain2_herodraft.gif (HeroDraft)
+    - shuffle_draft.gif (Shuffle Draft)
+    - snake_draft.gif (Snake Draft)
 
     Usage:
-        inv demo.gifs                    # Convert all videos to GIFs
-        inv demo.gifs --duration 5       # Only first 5 seconds
+        inv demo.gifs                    # Convert from middle of videos
+        inv demo.gifs --duration 5       # Only 5 seconds of content
         inv demo.gifs --fps 15           # Higher framerate (larger files)
         inv demo.gifs --width 300        # Smaller width (smaller files)
+        inv demo.gifs --no-start-from-middle  # Start from beginning
 
     Args:
         duration: Number of seconds to capture (default: 10)
         fps: Frames per second (default: 12, lower = smaller file)
         width: Output width in pixels (default: 400, height auto-scaled)
+        start_from_middle: Start from middle of video (default: True)
 
     Requires: FFmpeg (install via: sudo apt install ffmpeg)
     """
@@ -473,26 +623,50 @@ def demo_gifs(c, duration=10, fps=12, width=400):
     docs_gifs = paths.PROJECT_PATH / "docs" / "assets" / "gifs"
     docs_gifs.mkdir(parents=True, exist_ok=True)
 
-    # Find all webm videos
-    videos = list(docs_videos.glob("*.webm"))
+    # Only process named demo videos
+    videos = []
+    for video_name in DEMO_VIDEO_NAMES:
+        video_path = docs_videos / video_name
+        if video_path.exists():
+            videos.append(video_path)
+
     if not videos:
-        print("No demo videos found in docs/assets/videos/")
+        print("No named demo videos found in docs/assets/videos/")
+        print("Expected files: " + ", ".join(DEMO_VIDEO_NAMES))
         print("Run 'inv demo.create' first to record demo videos.")
         return
 
     print(f"Converting {len(videos)} videos to GIFs...")
-    print(f"  Duration: {duration}s, FPS: {fps}, Width: {width}px\n")
+    print(f"  Duration: {duration}s, FPS: {fps}, Width: {width}px")
+    print(f"  Start from middle: {start_from_middle}\n")
 
     for video in videos:
         gif_name = video.stem + ".gif"
         gif_path = docs_gifs / gif_name
 
-        print(f"Converting: {video.name} -> {gif_name}")
+        # Calculate start position
+        start_seconds = 0
+        if start_from_middle:
+            video_duration = _get_video_duration(c, video)
+            if video_duration:
+                # Start from middle, but ensure we have enough content
+                start_seconds = max(0, (video_duration - duration) / 2)
+                print(
+                    f"Converting: {video.name} -> {gif_name} (from {start_seconds:.1f}s)"
+                )
+            else:
+                print(
+                    f"Converting: {video.name} -> {gif_name} (couldn't get duration, using start)"
+                )
+        else:
+            print(f"Converting: {video.name} -> {gif_name}")
 
         # FFmpeg two-pass GIF with palette optimization
+        # -ss before -i for fast seeking
         # This produces much better quality than single-pass
+        seek_opt = f"-ss {start_seconds} " if start_seconds > 0 else ""
         ffmpeg_cmd = (
-            f'ffmpeg -y -t {duration} -i "{video}" '
+            f'ffmpeg -y {seek_opt}-t {duration} -i "{video}" '
             f'-vf "fps={fps},scale={width}:-1:flags=lanczos,'
             f"split[s0][s1];[s0]palettegen=stats_mode=diff[p];"
             f'[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" '
@@ -514,11 +688,97 @@ def demo_gifs(c, duration=10, fps=12, width=400):
 
 
 @task
+def demo_trim(c, trim_start=3):
+    """Trim initial white screen from demo videos.
+
+    Removes the first N seconds from each video to eliminate the white
+    screen that appears while the page loads. Videos are replaced in place.
+
+    Usage:
+        inv demo.trim                    # Trim first 3 seconds (default)
+        inv demo.trim --trim-start 5     # Trim first 5 seconds
+
+    Args:
+        trim_start: Seconds to trim from the beginning (default: 3)
+
+    Requires: FFmpeg (install via: sudo apt install ffmpeg)
+    """
+    import shutil
+
+    # Check if ffmpeg is available
+    if not shutil.which("ffmpeg"):
+        print("ERROR: FFmpeg is not installed.")
+        print("")
+        print("Install FFmpeg:")
+        print("  Ubuntu/Debian: sudo apt install ffmpeg")
+        print("  macOS:         brew install ffmpeg")
+        print("  Windows:       choco install ffmpeg")
+        return
+
+    docs_videos = paths.PROJECT_PATH / "docs" / "assets" / "videos"
+
+    # Only process named demo videos
+    videos = []
+    for video_name in DEMO_VIDEO_NAMES:
+        video_path = docs_videos / video_name
+        if video_path.exists():
+            videos.append(video_path)
+
+    if not videos:
+        print("No named demo videos found in docs/assets/videos/")
+        print("Expected files: " + ", ".join(DEMO_VIDEO_NAMES))
+        print("Run 'inv demo.create' first to record demo videos.")
+        return
+
+    print(f"Trimming {len(videos)} videos (removing first {trim_start}s)...\n")
+
+    for video in videos:
+        video_duration = _get_video_duration(c, video)
+        if not video_duration:
+            print(f"  SKIPPED: {video.name} (couldn't get duration)")
+            continue
+
+        if video_duration <= trim_start:
+            print(f"  SKIPPED: {video.name} (too short: {video_duration:.1f}s)")
+            continue
+
+        # Create temp file for output
+        temp_path = video.with_suffix(".tmp.webm")
+
+        print(
+            f"Trimming: {video.name} ({video_duration:.1f}s -> {video_duration - trim_start:.1f}s)"
+        )
+
+        # FFmpeg: seek to trim_start and copy to new file
+        # Using -c copy for fast processing (no re-encoding)
+        ffmpeg_cmd = (
+            f'ffmpeg -y -ss {trim_start} -i "{video}" ' f'-c copy "{temp_path}"'
+        )
+
+        result = c.run(ffmpeg_cmd, warn=True, hide=True)
+        if result.ok:
+            # Replace original with trimmed version
+            temp_path.replace(video)
+            new_size_kb = video.stat().st_size / 1024
+            print(f"  Trimmed: {video.name} ({new_size_kb:.1f} KB)")
+        else:
+            # Clean up temp file on failure
+            if temp_path.exists():
+                temp_path.unlink()
+            print(f"  FAILED: {video.name}")
+            print(
+                f"  Error: {result.stderr[:200] if result.stderr else 'Unknown error'}"
+            )
+
+    print(f"\nTrimmed videos saved to: {docs_videos}")
+
+
+@task
 def demo_quick(c, duration=10, fps=12, width=400):
     """Record demos and create GIF previews in one step.
 
     Combines demo.create and demo.gifs for convenience.
-    Creates both full videos and 10-second GIF previews.
+    Creates both full videos and GIF previews from the middle of each video.
 
     Usage:
         inv demo.quick                   # Record all demos + create GIFs
@@ -537,7 +797,9 @@ ns_demo.add_task(demo_create, "create")
 ns_demo.add_task(demo_shuffle, "shuffle")
 ns_demo.add_task(demo_snake, "snake")
 ns_demo.add_task(demo_herodraft, "herodraft")
+ns_demo.add_task(demo_all, "all")
 ns_demo.add_task(demo_gifs, "gifs")
+ns_demo.add_task(demo_trim, "trim")
 ns_demo.add_task(demo_quick, "quick")
 ns_demo.add_task(demo_clean, "clean")
 

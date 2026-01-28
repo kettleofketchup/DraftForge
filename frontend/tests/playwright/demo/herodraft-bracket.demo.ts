@@ -5,6 +5,7 @@
  * accessed from the tournament bracket. Shows both captains' perspectives.
  *
  * Video output: 1:1 aspect ratio (800x800) for docs and social media.
+ * Named outputs: captain1_herodraft.webm, captain2_herodraft.webm
  *
  * Flow:
  * 1. Navigate to tournament bracket
@@ -26,9 +27,13 @@ import {
 } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../fixtures/auth';
 import { HeroDraftPage } from '../helpers/HeroDraftPage';
+import * as path from 'path';
 
-const API_URL = 'https://localhost/api';
-const BASE_URL = 'https://localhost';
+// Use nginx hostname inside Docker containers, localhost for local runs
+const DOCKER_HOST = process.env.DOCKER_HOST || 'nginx';
+const API_URL = `https://${DOCKER_HOST}/api`;
+const BASE_URL = `https://${DOCKER_HOST}`;
+const VIDEO_OUTPUT_DIR = 'demo-results/videos';
 
 interface CaptainContext {
   browser: Browser;
@@ -65,10 +70,13 @@ test.describe('HeroDraft with Bracket Demo', () => {
   let browserB: Browser | null = null;
 
   test.beforeAll(async () => {
-    // Demo always runs headed for video quality
+    // Headless for CI/automated recording - video still captures screen
+    // Use system chromium in Docker (Alpine) since Playwright's bundled chromium requires glibc
+    const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || '/usr/bin/chromium';
     const browserOptions = {
-      headless: false,
+      headless: true,
       slowMo: 100, // Slow for demo visibility
+      executablePath,
       args: [
         '--disable-web-security',
         '--ignore-certificate-errors',
@@ -84,34 +92,29 @@ test.describe('HeroDraft with Bracket Demo', () => {
     // 1:1 aspect ratio for demo videos
     const windowSize = 800;
 
-    const contextA = await browserA.newContext({
+    // =========================================================================
+    // PHASE 1: Setup (no video recording yet)
+    // =========================================================================
+
+    // Create setup contexts WITHOUT video recording
+    const setupContextA = await browserA.newContext({
       ignoreHTTPSErrors: true,
       viewport: { width: windowSize, height: windowSize },
-      recordVideo: {
-        dir: 'demo-results/videos/',
-        size: { width: windowSize, height: windowSize },
-      },
     });
-
-    const contextB = await browserB.newContext({
+    const setupContextB = await browserB.newContext({
       ignoreHTTPSErrors: true,
       viewport: { width: windowSize, height: windowSize },
-      recordVideo: {
-        dir: 'demo-results/videos/',
-        size: { width: windowSize, height: windowSize },
-      },
     });
-
-    const pageA = await contextA.newPage();
-    const pageB = await contextB.newPage();
 
     // Fetch draft info
-    const response = await contextA.request.get(
+    const response = await setupContextA.request.get(
       `${API_URL}/tests/herodraft-by-key/two_captain_test/`,
       { failOnStatusCode: false, timeout: 10000 }
     );
 
     if (!response.ok()) {
+      await setupContextA.close();
+      await setupContextB.close();
       throw new Error(
         `Failed to get HeroDraft test data. Run 'inv db.populate.all' first.`
       );
@@ -120,16 +123,99 @@ test.describe('HeroDraft with Bracket Demo', () => {
     testInfo = await response.json();
 
     // Reset the draft
-    await contextA.request.post(
+    await setupContextA.request.post(
       `${API_URL}/tests/herodraft/${testInfo.pk}/reset/`,
       { failOnStatusCode: false }
     );
 
     const teams = testInfo.draft_teams;
+    const tournamentPk = testInfo.game?.tournament_pk;
+    const gamePk = testInfo.game?.pk;
+    const matchUrl = `${BASE_URL}/tournament/${tournamentPk}/bracket/match/${gamePk}`;
 
-    // Login both captains
-    await loginAsDiscordId(contextA, teams[0].captain.discordId);
-    await loginAsDiscordId(contextB, teams[1].captain.discordId);
+    // Login both captains in setup contexts
+    await loginAsDiscordId(setupContextA, teams[0].captain.discordId);
+    await loginAsDiscordId(setupContextB, teams[1].captain.discordId);
+
+    // Navigate to match page and wait for full content to be visible
+    // This warms the browser cache so the video context loads much faster
+    const setupPageA = await setupContextA.newPage();
+    const setupPageB = await setupContextB.newPage();
+
+    await Promise.all([setupPageA.goto(matchUrl), setupPageB.goto(matchUrl)]);
+    await Promise.all([waitForHydration(setupPageA), waitForHydration(setupPageB)]);
+
+    // Wait for the "Start Draft" button to be visible - this ensures:
+    // 1. Page is fully loaded
+    // 2. Match modal auto-opened (URL has /match/ID)
+    // 3. Browser has cached all assets
+    const startDraftSelector = 'button:has-text("Start Draft"), button:has-text("View Draft"), button:has-text("Live Draft")';
+    await Promise.all([
+      setupPageA.locator(startDraftSelector).first().waitFor({ state: 'visible', timeout: 30000 }),
+      setupPageB.locator(startDraftSelector).first().waitFor({ state: 'visible', timeout: 30000 }),
+    ]);
+    console.log('Setup: Start Draft button visible on both pages (cache warmed)');
+
+    // Save storage state (cookies, localStorage) for video contexts
+    const storageStateA = await setupContextA.storageState();
+    const storageStateB = await setupContextB.storageState();
+
+    // Close setup contexts
+    await setupPageA.close();
+    await setupPageB.close();
+    await setupContextA.close();
+    await setupContextB.close();
+
+    // =========================================================================
+    // PHASE 2: Create video-recording contexts with pre-loaded state
+    // =========================================================================
+
+    // Create contexts WITH video recording AND pre-loaded storage state
+    const contextA = await browserA.newContext({
+      ignoreHTTPSErrors: true,
+      viewport: { width: windowSize, height: windowSize },
+      storageState: storageStateA,
+      recordVideo: {
+        dir: VIDEO_OUTPUT_DIR,
+        size: { width: windowSize, height: windowSize },
+      },
+    });
+
+    const contextB = await browserB.newContext({
+      ignoreHTTPSErrors: true,
+      viewport: { width: windowSize, height: windowSize },
+      storageState: storageStateB,
+      recordVideo: {
+        dir: VIDEO_OUTPUT_DIR,
+        size: { width: windowSize, height: windowSize },
+      },
+    });
+
+    // Inject playwright marker to disable react-scan in demos
+    await contextA.addInitScript(() => {
+      (window as Window & { playwright?: boolean }).playwright = true;
+    });
+    await contextB.addInitScript(() => {
+      (window as Window & { playwright?: boolean }).playwright = true;
+    });
+
+    const pageA = await contextA.newPage();
+    const pageB = await contextB.newPage();
+
+    // Navigate to match page - video recording starts here
+    // Browser cache is warm from setup phase, so this should load fast
+    await Promise.all([pageA.goto(matchUrl), pageB.goto(matchUrl)]);
+
+    // Wait for page to fully load and Start Draft button to be visible
+    // This ensures the video shows loaded content, not loading screens
+    await Promise.all([waitForHydration(pageA), waitForHydration(pageB)]);
+
+    // Reuse startDraftSelector from setup phase
+    await Promise.all([
+      pageA.locator(startDraftSelector).first().waitFor({ state: 'visible', timeout: 30000 }),
+      pageB.locator(startDraftSelector).first().waitFor({ state: 'visible', timeout: 30000 }),
+    ]);
+    console.log('Video: Start Draft button visible - demo ready');
 
     captainA = {
       browser: browserA!,
@@ -156,43 +242,58 @@ test.describe('HeroDraft with Bracket Demo', () => {
   });
 
   test.afterAll(async () => {
-    // Save videos before closing
-    if (captainA?.context) {
-      await captainA.context.close();
+    const fs = await import('fs/promises');
+
+    // Get video paths before closing pages (path() returns a promise)
+    const videoPathA = await captainA?.page?.video()?.path();
+    const videoPathB = await captainB?.page?.video()?.path();
+
+    // Close pages first to finalize video files
+    try {
+      if (captainA?.page) await captainA.page.close();
+      if (captainB?.page) await captainB.page.close();
+    } catch (e) {
+      console.error('Error closing pages:', e);
     }
-    if (captainB?.context) {
-      await captainB.context.close();
+
+    // Close contexts
+    try {
+      if (captainA?.context) await captainA.context.close();
+      if (captainB?.context) await captainB.context.close();
+    } catch (e) {
+      console.error('Error closing contexts:', e);
     }
-    await browserA?.close();
-    await browserB?.close();
+
+    // Close browsers
+    try {
+      await browserA?.close();
+      await browserB?.close();
+    } catch (e) {
+      console.error('Error closing browsers:', e);
+    }
+
+    // Copy videos to named outputs after everything is closed
+    try {
+      if (videoPathA) {
+        const destA = path.join(VIDEO_OUTPUT_DIR, 'captain1_herodraft.webm');
+        await fs.copyFile(videoPathA, destA);
+        console.log(`Saved: captain1_herodraft.webm`);
+      }
+      if (videoPathB) {
+        const destB = path.join(VIDEO_OUTPUT_DIR, 'captain2_herodraft.webm');
+        await fs.copyFile(videoPathB, destB);
+        console.log(`Saved: captain2_herodraft.webm`);
+      }
+    } catch (e) {
+      console.error('Error copying videos:', e);
+    }
   });
 
   test('Complete HeroDraft from Tournament Bracket', async () => {
     test.setTimeout(600_000); // 10 minutes for full draft
 
-    const tournamentPk = testInfo.game?.tournament_pk;
-    const gamePk = testInfo.game?.pk;
-
-    if (!tournamentPk || !gamePk) {
-      throw new Error('Tournament or Game PK not available');
-    }
-
-    // Navigate to match page from bracket
-    const matchUrl = `${BASE_URL}/tournament/${tournamentPk}/bracket/match/${gamePk}`;
-
     console.log('=== DEMO START ===');
-    console.log(`Match URL: ${matchUrl}`);
-
-    // Navigate both captains to match page
-    await Promise.all([
-      captainA.page.goto(matchUrl),
-      captainB.page.goto(matchUrl),
-    ]);
-
-    await Promise.all([
-      waitForHydration(captainA.page),
-      waitForHydration(captainB.page),
-    ]);
+    console.log(`Match URL: ${captainA.page.url()}`);
 
     // Pause to show match page
     await captainA.page.waitForTimeout(2000);
@@ -249,122 +350,109 @@ test.describe('HeroDraft with Bracket Demo', () => {
     ]);
 
     console.log('Both ready, rolling phase started');
-    await captainA.page.waitForTimeout(1500);
 
     // =========================================================================
     // ROLLING PHASE
     // =========================================================================
     console.log('=== ROLLING PHASE ===');
 
-    await captainA.draftPage.flipCoinButton.waitFor({
-      state: 'visible',
-      timeout: 5000,
-    });
-    await captainA.draftPage.clickFlipCoin();
-    console.log('Coin flipped!');
+    // Either captain can click the flip coin button
+    await captainA.page.waitForTimeout(1000); // Pause for video
+    const flipCoinButton = captainA.page.locator('[data-testid="herodraft-flip-coin-button"]');
+    await expect(flipCoinButton).toBeVisible({ timeout: 10000 });
+    await flipCoinButton.click();
+    console.log('Coin flip triggered!');
+
+    await captainA.page.waitForTimeout(1500); // Let transition happen
 
     // Wait for choosing phase
     await Promise.all([
-      captainA.draftPage.waitForPhaseTransition('choosing', 10000),
-      captainB.draftPage.waitForPhaseTransition('choosing', 10000),
+      captainA.draftPage.waitForPhaseTransition('choosing', 15000),
+      captainB.draftPage.waitForPhaseTransition('choosing', 15000),
     ]);
 
     console.log('Choosing phase started');
-    await captainA.page.waitForTimeout(1500);
 
     // =========================================================================
     // CHOOSING PHASE
     // =========================================================================
     console.log('=== CHOOSING PHASE ===');
 
-    const winnerChoices = captainA.page.locator(
-      '[data-testid="herodraft-winner-choices"]'
-    );
-    const isAWinner = await winnerChoices.isVisible().catch(() => false);
+    // Determine who won the flip
+    const winnerText = await captainA.page
+      .locator('[data-testid="herodraft-flip-winner"]')
+      .textContent();
+    console.log(`Winner text: "${winnerText}"`);
+    console.log(`Captain A username: "${captainA.username}", Captain B username: "${captainB.username}"`);
 
-    if (isAWinner) {
-      console.log(`${captainA.username} won the flip!`);
-      await captainA.draftPage.selectWinnerChoice('first_pick');
-      await captainA.page.waitForTimeout(1000);
+    const winnerIsA = winnerText?.includes(captainA.username);
+    const winner = winnerIsA ? captainA : captainB;
 
-      const loserChoices = captainB.page.locator(
-        '[data-testid="herodraft-loser-choices"]'
-      );
-      await loserChoices.waitFor({ state: 'visible', timeout: 5000 });
-      await captainB.draftPage.selectLoserChoice('radiant');
-    } else {
-      console.log(`${captainB.username} won the flip!`);
-      await captainB.draftPage.selectWinnerChoice('first_pick');
-      await captainB.page.waitForTimeout(1000);
+    console.log(`${winner.username} won the flip!`);
 
-      const loserChoices = captainA.page.locator(
-        '[data-testid="herodraft-loser-choices"]'
-      );
-      await loserChoices.waitFor({ state: 'visible', timeout: 5000 });
-      await captainA.draftPage.selectLoserChoice('radiant');
-    }
+    // Wait a moment for UI to update
+    await winner.page.waitForTimeout(1000);
+
+    // Winner chooses first pick
+    const firstPickButton = winner.page.locator('[data-testid="herodraft-choice-first-pick"]');
+    await expect(firstPickButton).toBeVisible({ timeout: 10000 });
+    console.log('Winner clicking First Pick...');
+    await winner.page.waitForTimeout(1000);
+    await firstPickButton.click();
+    console.log('Winner chose First Pick');
+
+    // Wait for loser to see remaining choices
+    const loser = winner === captainA ? captainB : captainA;
+    await loser.page.waitForTimeout(1500);
+
+    // Loser chooses side (Radiant or Dire) from remaining options
+    const radiantButton = loser.page.locator('[data-testid="herodraft-remaining-radiant"]');
+    await expect(radiantButton).toBeVisible({ timeout: 10000 });
+    console.log('Loser clicking Radiant...');
+    await loser.page.waitForTimeout(1000);
+    await radiantButton.click();
+    console.log('Loser chose Radiant');
 
     // Wait for drafting phase
     await Promise.all([
-      captainA.draftPage.waitForPhaseTransition('drafting', 10000),
-      captainB.draftPage.waitForPhaseTransition('drafting', 10000),
+      captainA.draftPage.waitForPhaseTransition('drafting', 15000),
+      captainB.draftPage.waitForPhaseTransition('drafting', 15000),
     ]);
 
     console.log('Drafting phase started');
-    await captainA.page.waitForTimeout(2000);
 
     // =========================================================================
-    // DRAFTING PHASE - 24 rounds
+    // DRAFTING PHASE
     // =========================================================================
     console.log('=== DRAFTING PHASE ===');
 
-    // Valid Dota 2 hero IDs (skip 24 as it doesn't exist)
-    const heroIds = [
-      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
-      22, 23, 25, 26, 27, 28, 29, 30, 31,
-    ];
+    const maxRounds = 24;
     let heroIndex = 0;
 
-    // Captain's Mode: 14 bans + 10 picks = 24 rounds
-    const maxRounds = 24;
+    // Get hero IDs from the grid (first 30 heroes)
+    const heroGrid = captainA.page.locator('[data-testid="herodraft-hero-grid"]');
+    await expect(heroGrid).toBeVisible();
 
-    // Determine first pick captain from visual indicator
-    let firstPickCaptain: CaptainContext = captainA;
-    let secondPickCaptain: CaptainContext = captainB;
-    let firstPickDetermined = false;
+    const heroButtons = heroGrid.locator('[data-hero-id]');
+    const heroCount = await heroButtons.count();
 
-    const getCurrentPicker = async (
-      roundNum: number
-    ): Promise<CaptainContext> => {
-      const teamAIndicator = captainA.page.locator(
-        '[data-testid="herodraft-team-a-picking"]'
-      );
-      const teamBIndicator = captainA.page.locator(
-        '[data-testid="herodraft-team-b-picking"]'
-      );
+    const heroIds: number[] = [];
+    for (let i = 0; i < Math.min(heroCount, 30); i++) {
+      const heroId = await heroButtons.nth(i).getAttribute('data-hero-id');
+      if (heroId) heroIds.push(parseInt(heroId));
+    }
 
-      const startTime = Date.now();
-      while (Date.now() - startTime < 1000) {
-        const teamAPicking = await teamAIndicator.isVisible().catch(() => false);
-        const teamBPicking = await teamBIndicator.isVisible().catch(() => false);
+    // Winner chose "First Pick", so they are the first pick captain
+    const firstPickCaptain = winner;
+    const secondPickCaptain = winner === captainA ? captainB : captainA;
 
-        if (teamAPicking || teamBPicking) {
-          const picker = teamAPicking ? captainA : captainB;
+    console.log(`First pick: ${firstPickCaptain.username}`);
 
-          if (roundNum === 1 && !firstPickDetermined) {
-            firstPickCaptain = picker;
-            secondPickCaptain = picker === captainA ? captainB : captainA;
-            firstPickDetermined = true;
-            console.log(`First pick: ${firstPickCaptain.username}`);
-          }
-
-          return picker;
-        }
-        await captainA.page.waitForTimeout(100);
-      }
-
-      // Fallback to sequence
-      const DRAFT_SEQUENCE: Array<[boolean, string]> = [
+    // Draft sequence helper
+    const getCurrentPicker = async (roundNum: number) => {
+      // Captain's Mode draft order (first picker perspective):
+      // B B B B B B B P P B B B P P P P P P B B B B P P
+      const DRAFT_SEQUENCE: [boolean, string][] = [
         [true, 'ban'],
         [true, 'ban'],
         [false, 'ban'],

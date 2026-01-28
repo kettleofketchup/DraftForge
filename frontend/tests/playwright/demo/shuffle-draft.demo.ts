@@ -6,13 +6,16 @@
  * the team with lowest total MMR picks next.
  *
  * Video output: 1:1 aspect ratio (800x800) for docs and social media.
+ * Named output: shuffle_draft.webm
  */
 
 import { test, expect } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../fixtures/auth';
+import * as path from 'path';
 
 const API_URL = 'https://localhost/api';
 const BASE_URL = 'https://localhost';
+const VIDEO_OUTPUT_DIR = 'demo-results/videos';
 
 interface TournamentData {
   pk: number;
@@ -69,8 +72,7 @@ test.describe('Shuffle Draft Demo', () => {
     // Click Teams tab
     const teamsTab = page.locator('[data-testid="teamsTab"]');
     await teamsTab.click();
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
 
     // Open draft modal
     const startDraftButton = page.locator(
@@ -102,7 +104,7 @@ test.describe('Shuffle Draft Demo', () => {
       if (await confirmBtn.isVisible().catch(() => false)) {
         await confirmBtn.click();
       }
-      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
     }
 
     // Start/Restart draft
@@ -118,7 +120,7 @@ test.describe('Shuffle Draft Demo', () => {
         );
         await confirmBtn.first().click();
       }
-      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
     }
 
     await page.waitForTimeout(1500);
@@ -152,7 +154,7 @@ test.describe('Shuffle Draft Demo', () => {
         }
       }
 
-      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
       await page.waitForTimeout(800); // Pause between picks for video
 
       picksMade++;
@@ -175,8 +177,12 @@ test.describe('Shuffle Draft Demo', () => {
     // Final pause to show completed draft
     await page.waitForTimeout(3000);
 
-    console.log(
-      `Shuffle Draft Demo complete! Made ${picksMade} picks.`
-    );
+    // Save video with named output
+    const video = page.video();
+    if (video) {
+      await video.saveAs(path.join(VIDEO_OUTPUT_DIR, 'shuffle_draft.webm'));
+    }
+
+    console.log(`Shuffle Draft Demo complete! Made ${picksMade} picks.`);
   });
 });

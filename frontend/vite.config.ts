@@ -17,7 +17,7 @@ export default defineConfig({
     },
   },
   server: {
-    allowedHosts: ['localhost', 'dota.kettle.sh'],
+    allowedHosts: ['localhost', 'dota.kettle.sh', 'nginx'],
     // Warm up frequently used files for faster initial loads
     warmup: {
       clientFiles: [
