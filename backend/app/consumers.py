@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 
 class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
-    """WebSocket consumer for draft-specific events."""
+    """WebSocket consumer for draft-specific events (read-only, no auth required)."""
 
     async def connect(self):
         await self.telemetry_connect()
@@ -60,6 +60,9 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             "type": "draft_event",
             "event": event["payload"],
         }
+        # Include sequence number for message ordering
+        if "sequence" in event:
+            message["sequence"] = event["sequence"]
         # Include draft state if available (allows clients to update without API calls)
         if "draft_state" in event:
             message["draft_state"] = event["draft_state"]
@@ -81,7 +84,7 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
 
 class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
-    """WebSocket consumer for tournament-wide events."""
+    """WebSocket consumer for tournament-wide events (read-only, no auth required)."""
 
     async def connect(self):
         await self.telemetry_connect()
@@ -123,6 +126,9 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             "type": "draft_event",
             "event": event["payload"],
         }
+        # Include sequence number for message ordering
+        if "sequence" in event:
+            message["sequence"] = event["sequence"]
         # Include draft state if available (allows clients to update without API calls)
         if "draft_state" in event:
             message["draft_state"] = event["draft_state"]
@@ -270,6 +276,8 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
             "event_type": event.get("event_type"),
         }
         # Only include optional fields if they have values
+        if "sequence" in event and event["sequence"] is not None:
+            message["sequence"] = event["sequence"]
         if "event_id" in event and event["event_id"] is not None:
             message["event_id"] = event["event_id"]
         if "draft_team" in event and event["draft_team"] is not None:
@@ -377,11 +385,14 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                             draft_id=draft_id, is_connected=False
                         ).exists()
                         if all_connected:
-                            # Broadcast countdown before changing state
+                            # Broadcast countdown immediately before changing state
+                            # use_on_commit=False intentionally - this is a UI notification
+                            # that should appear before the state change, not after commit
                             broadcast_herodraft_state(
                                 draft,
                                 "resume_countdown",
                                 metadata={"countdown_seconds": 3},
+                                use_on_commit=False,
                             )
 
                             # Calculate pause duration and adjust active round timing
@@ -438,7 +449,10 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                     "draft_teams__tournament_team__members",
                     "rounds",
                 ).get(id=draft_id)
-                broadcast_herodraft_state(draft, broadcast_event_type)
+                # use_on_commit=False since we're already outside the transaction
+                broadcast_herodraft_state(
+                    draft, broadcast_event_type, use_on_commit=False
+                )
                 log.debug(
                     f"HeroDraft {draft_id} broadcast {broadcast_event_type} after transaction commit"
                 )

@@ -217,7 +217,8 @@ async def check_timeout(draft_id: int):
                     "draft_teams__tournament_team__members",
                     "rounds",
                 ).get(id=draft_id)
-                broadcast_herodraft_state(draft, "hero_selected")
+                # use_on_commit=False since we're already outside the transaction
+                broadcast_herodraft_state(draft, "hero_selected", use_on_commit=False)
                 log.debug(f"Broadcast auto-pick state for draft {draft_id}")
             except Exception as e:
                 log.error(f"Failed to broadcast auto-pick for draft {draft_id}: {e}")

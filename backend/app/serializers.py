@@ -62,6 +62,153 @@ class TournamentUserSerializer(serializers.ModelSerializer):
         )
 
 
+# =============================================================================
+# Lightweight Serializers for Selective Endpoints
+# Used by TournamentViewSet @action methods for progressive loading
+# =============================================================================
+
+
+class TournamentMetadataSerializer(serializers.ModelSerializer):
+    """Lightweight tournament metadata without nested objects.
+
+    Used by: GET /api/tournaments/{pk}/metadata/
+    Purpose: Fast initial page load with minimal data transfer.
+    """
+
+    draft_id = serializers.SerializerMethodField()
+    bracket_exists = serializers.SerializerMethodField()
+    user_count = serializers.SerializerMethodField()
+    team_count = serializers.SerializerMethodField()
+    league_id = serializers.SerializerMethodField()
+    league_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Tournament
+        fields = (
+            "pk",
+            "name",
+            "state",
+            "date_played",
+            "timezone",
+            "tournament_type",
+            "winning_team",
+            "draft_id",
+            "bracket_exists",
+            "user_count",
+            "team_count",
+            "league_id",
+            "league_name",
+        )
+
+    def get_draft_id(self, obj):
+        return obj.draft.pk if hasattr(obj, "draft") and obj.draft else None
+
+    def get_bracket_exists(self, obj):
+        return obj.games.exists()
+
+    def get_user_count(self, obj):
+        return obj.users.count()
+
+    def get_team_count(self, obj):
+        return obj.teams.count()
+
+    def get_league_id(self, obj):
+        return obj.league.pk if obj.league else None
+
+    def get_league_name(self, obj):
+        return obj.league.name if obj.league else None
+
+
+class TeamDraftStateSerializer(serializers.Serializer):
+    """Current state of team draft for WebSocket/API.
+
+    Used by: GET /api/tournaments/{pk}/draft_state/
+    Purpose: Real-time draft state without full history.
+
+    Includes:
+    - current_round: The active draft round (who's picking)
+    - available_players: Players not yet picked
+    - team_rosters: Map of team_id -> [player_ids]
+    - pick_order: Sequence of captain IDs for picking
+    - status: pending/in_progress/completed
+    - sequence: Monotonic counter for message ordering
+    """
+
+    current_round = serializers.SerializerMethodField()
+    available_players = serializers.SerializerMethodField()
+    team_rosters = serializers.SerializerMethodField()
+    pick_order = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+    draft_style = serializers.CharField(read_only=True)
+    sequence = serializers.SerializerMethodField()
+    latest_round = serializers.IntegerField(read_only=True)
+
+    def get_current_round(self, draft):
+        """Get the current/latest draft round."""
+        if not draft.draft_rounds.exists():
+            return None
+        # Get the most recent round that hasn't been picked yet, or the latest one
+        current = (
+            draft.draft_rounds.filter(choice__isnull=True)
+            .order_by("pick_number")
+            .first()
+        )
+        if not current:
+            # All rounds complete, return the last one
+            current = draft.draft_rounds.order_by("-pick_number").first()
+        if not current:
+            return None
+        return {
+            "pk": current.pk,
+            "pick_number": current.pick_number,
+            "pick_phase": current.pick_phase,
+            "captain": (
+                TournamentUserSerializer(current.captain).data
+                if current.captain
+                else None
+            ),
+            "team_id": current.team.pk if current.team else None,
+            "choice": (
+                TournamentUserSerializer(current.choice).data
+                if current.choice
+                else None
+            ),
+        }
+
+    def get_available_players(self, draft):
+        """Get players not yet picked."""
+        return TournamentUserSerializer(draft.users_remaining, many=True).data
+
+    def get_team_rosters(self, draft):
+        """Get map of team_id -> [player_ids]."""
+        rosters = {}
+        for team in draft.tournament.teams.all():
+            rosters[team.pk] = list(team.members.values_list("pk", flat=True))
+        return rosters
+
+    def get_pick_order(self, draft):
+        """Get sequence of captain IDs in picking order."""
+        return list(
+            draft.tournament.teams.order_by("draft_order").values_list(
+                "captain__pk", flat=True
+            )
+        )
+
+    def get_status(self, draft):
+        """Get draft status: pending, in_progress, completed."""
+        if not draft.draft_rounds.exists():
+            return "pending"
+        all_picked = not draft.draft_rounds.filter(choice__isnull=True).exists()
+        if all_picked:
+            return "completed"
+        return "in_progress"
+
+    def get_sequence(self, draft):
+        """Get sequence number for message ordering."""
+        # Use the count of picked rounds as a simple sequence
+        return draft.draft_rounds.filter(choice__isnull=False).count()
+
+
 class TournamentSerializerBase(serializers.ModelSerializer):
     users = TournamentUserSerializer(many=True, read_only=True)
     captains = TournamentUserSerializer(many=True, read_only=True)

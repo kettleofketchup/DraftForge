@@ -54,15 +54,20 @@ from .serializers import (
     DraftRoundSerializer,
     DraftSerializer,
     GameSerializer,
+    GameSerializerForTournament,
     LeagueMatchSerializer,
     LeagueSerializer,
     LeaguesSerializer,
     OrganizationSerializer,
     OrganizationsSerializer,
+    TeamDraftStateSerializer,
     TeamSerializer,
+    TeamSerializerForTournament,
     TournamentListSerializer,
+    TournamentMetadataSerializer,
     TournamentSerializer,
     TournamentsSerializer,
+    TournamentUserSerializer,
     UserSerializer,
 )
 
@@ -330,6 +335,113 @@ class TournamentView(viewsets.ModelViewSet):
             except League.DoesNotExist:
                 pass
         serializer.save()
+
+    # =========================================================================
+    # Selective Endpoints for Progressive Loading
+    # These @action methods provide lightweight data for frontend stores
+    # =========================================================================
+
+    @action(detail=True, methods=["get"])
+    def metadata(self, request, pk=None):
+        """GET /api/tournaments/{pk}/metadata/
+
+        Returns lightweight tournament metadata without nested objects.
+        Use this for initial page load before fetching full data.
+        """
+        cache_key = f"tournament_metadata:{pk}"
+
+        @cached_as(
+            Tournament.objects.filter(pk=pk),
+            extra=cache_key,
+            timeout=60 * 60,
+        )
+        def get_data():
+            tournament = self.get_object()
+            return TournamentMetadataSerializer(tournament).data
+
+        return Response(get_data())
+
+    @action(detail=True, methods=["get"])
+    def users(self, request, pk=None):
+        """GET /api/tournaments/{pk}/users/
+
+        Returns players in this tournament.
+        """
+        cache_key = f"tournament_users:{pk}"
+
+        @cached_as(
+            Tournament.objects.filter(pk=pk),
+            CustomUser,
+            extra=cache_key,
+            timeout=60 * 60,
+        )
+        def get_data():
+            tournament = self.get_object()
+            return TournamentUserSerializer(tournament.users.all(), many=True).data
+
+        return Response(get_data())
+
+    @action(detail=True, methods=["get"])
+    def teams(self, request, pk=None):
+        """GET /api/tournaments/{pk}/teams/
+
+        Returns teams with members for this tournament.
+        """
+        cache_key = f"tournament_teams:{pk}"
+
+        @cached_as(
+            Tournament.objects.filter(pk=pk),
+            Team,
+            CustomUser,
+            extra=cache_key,
+            timeout=60 * 60,
+        )
+        def get_data():
+            tournament = self.get_object()
+            return TeamSerializerForTournament(tournament.teams.all(), many=True).data
+
+        return Response(get_data())
+
+    @action(detail=True, methods=["get"])
+    def games(self, request, pk=None):
+        """GET /api/tournaments/{pk}/games/
+
+        Returns games/matches for this tournament.
+        """
+        cache_key = f"tournament_games:{pk}"
+
+        @cached_as(
+            Tournament.objects.filter(pk=pk),
+            Game,
+            Team,
+            extra=cache_key,
+            timeout=60 * 60,
+        )
+        def get_data():
+            tournament = self.get_object()
+            return GameSerializerForTournament(tournament.games.all(), many=True).data
+
+        return Response(get_data())
+
+    @action(detail=True, methods=["get"])
+    def draft_state(self, request, pk=None):
+        """GET /api/tournaments/{pk}/draft_state/
+
+        Returns current draft state (not full history).
+        Optimized for real-time draft updates.
+        """
+        tournament = self.get_object()
+
+        if not hasattr(tournament, "draft") or not tournament.draft:
+            return Response(
+                {"error": "No draft exists for this tournament"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Don't cache draft_state - it changes frequently during active drafts
+        # WebSocket is the primary source for live data
+        serializer = TeamDraftStateSerializer(tournament.draft)
+        return Response(serializer.data)
 
 
 @permission_classes((IsStaff,))

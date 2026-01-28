@@ -499,14 +499,15 @@ class Tournament(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate this specific tournament and its related league/org
+        # Invalidate this specific tournament and its related league/orgs
         # Use invalidate_obj() to avoid invalidating ALL tournaments
 
         invalidate_obj(self)
         if self.league:
             invalidate_obj(self.league)
-            if self.league.organization:
-                invalidate_obj(self.league.organization)
+            # League has ManyToMany with organizations
+            for org in self.league.organizations.all():
+                invalidate_obj(org)
 
     class Meta:
         indexes = [
@@ -575,6 +576,13 @@ class Team(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Invalidate team and cascade to tournament
+        invalidate_obj(self)
+        if self.tournament_id:
+            invalidate_obj(self.tournament)
 
     @property
     def games(self):
