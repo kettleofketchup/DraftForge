@@ -4,7 +4,7 @@ A tournament management platform for Dota 2 gaming communities.
 
 **Website:** [dota.kettle.sh](https://dota.kettle.sh)
 
-**Documentation:** [kettleofketchup.github.io/draftforge](https://kettleofketchup.github.io/draftforge/)
+**Documentation:** [kettleofketchup.github.io/DraftForge](https://kettleofketchup.github.io/DraftForge/)
 
 ## Features
 
@@ -15,6 +15,35 @@ A tournament management platform for Dota 2 gaming communities.
 - **Match Tracking** - Steam API integration for match statistics
 - **League System** - Player ratings and league standings
 - **Discord Integration** - OAuth authentication and bot notifications
+- **Telemetry** - Structured logging with structlog and optional OpenTelemetry tracing
+
+## Screenshots
+
+| Home | Tournaments | Tournament Detail |
+|------|-------------|-------------------|
+| ![Home](docs/assets/site_snapshots/home.png) | ![Tournaments](docs/assets/site_snapshots/tournaments.png) | ![Tournament](docs/assets/site_snapshots/tournament.png) |
+
+| Player Draft | Bracket | Hero Draft |
+|--------------|---------|------------|
+| ![Draft](docs/assets/site_snapshots/draft.png) | ![Bracket](docs/assets/site_snapshots/bracket.png) | ![Hero Draft](docs/assets/site_snapshots/HeroDraft.png) |
+
+## Demo Videos
+
+Automated demo recordings are available for key features. Generate them locally:
+
+```bash
+source .venv/bin/activate
+
+# Record all demos and generate GIFs
+inv demo.quick
+
+# Or record individually
+inv demo.shuffle     # Shuffle draft
+inv demo.snake       # Snake draft
+inv demo.herodraft   # Hero draft with bracket
+```
+
+Outputs are saved to `docs/assets/videos/` (full recordings) and `docs/assets/gifs/` (preview clips).
 
 ## Tech Stack
 
@@ -23,6 +52,7 @@ A tournament management platform for Dota 2 gaming communities.
 | Frontend | React 19, TypeScript, Vite, TailwindCSS, Radix UI |
 | Backend | Django 5, Django REST Framework, Daphne (WebSockets), Celery |
 | Infrastructure | Docker, Nginx, Redis (caching) |
+| Observability | structlog, OpenTelemetry (opt-in) |
 | Auth | Discord OAuth |
 
 ## Quick Start
@@ -43,12 +73,15 @@ inv dev.debug
 
 ## Development
 
-Full development documentation is available at [kettleofketchup.github.io/draftforge](https://kettleofketchup.github.io/draftforge/), including:
+Full development documentation is available at [kettleofketchup.github.io/DraftForge](https://kettleofketchup.github.io/DraftForge/), including:
 
-- [Installation Guide](https://kettleofketchup.github.io/draftforge/getting-started/installation/)
-- [Quick Start](https://kettleofketchup.github.io/draftforge/getting-started/quick-start/)
-- [Architecture Overview](https://kettleofketchup.github.io/draftforge/architecture/overview/)
-- [API Reference](https://kettleofketchup.github.io/draftforge/api/endpoints/)
+- [Installation Guide](https://kettleofketchup.github.io/DraftForge/getting-started/installation/)
+- [Quick Start](https://kettleofketchup.github.io/DraftForge/getting-started/quick-start/)
+- [Architecture Overview](https://kettleofketchup.github.io/DraftForge/architecture/overview/)
+- [API Reference](https://kettleofketchup.github.io/DraftForge/api/endpoints/)
+- [Draft System](https://kettleofketchup.github.io/DraftForge/features/draft/)
+- [Hero Draft](https://kettleofketchup.github.io/DraftForge/features/herodraft/)
+- [Telemetry](https://kettleofketchup.github.io/DraftForge/dev/telemetry/)
 
 ### Docker Images
 
