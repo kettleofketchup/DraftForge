@@ -84,15 +84,19 @@ function mapApiMatchToMatch(apiMatch: ApiBracketMatch, allMatches: ApiBracketMat
 
 interface BracketStore {
   // State
+  tournamentId: number | null;
   matches: BracketMatch[];
   nodes: Node[];
   edges: Edge[];
   isDirty: boolean;
   isVirtual: boolean;
   isLoading: boolean;
+  error: string | null;
   pollInterval: ReturnType<typeof setInterval> | null;
+  lastUpdated: Date | null;
 
   // Actions
+  setTournamentId: (id: number | null) => void;
   setMatches: (matches: BracketMatch[]) => void;
   setNodes: (nodes: Node[]) => void;
   setEdges: (edges: Edge[]) => void;
@@ -110,19 +114,52 @@ interface BracketStore {
   loadBracket: (tournamentId: number) => Promise<void>;
   resetBracket: () => void;
 
-  // Polling
+  // Polling - uses HTTP polling instead of WebSocket for bracket updates
+  // Bracket changes are less frequent and don't need real-time streaming
   startPolling: (tournamentId: number, intervalMs?: number) => void;
   stopPolling: () => void;
+  isPolling: () => boolean;
 }
 
 export const useBracketStore = create<BracketStore>()((set, get) => ({
+  tournamentId: null,
   matches: [],
   nodes: [],
   edges: [],
   isDirty: false,
   isVirtual: true,
   isLoading: false,
+  error: null,
   pollInterval: null,
+  lastUpdated: null,
+
+  setTournamentId: (id) => {
+    const currentId = get().tournamentId;
+    if (currentId === id) return;
+
+    // Stop polling for previous tournament
+    if (currentId !== null) {
+      get().stopPolling();
+    }
+
+    // Reset state and set new ID
+    set({
+      tournamentId: id,
+      matches: [],
+      nodes: [],
+      edges: [],
+      isDirty: false,
+      isVirtual: true,
+      error: null,
+      lastUpdated: null,
+    });
+
+    // Start polling for new tournament
+    if (id !== null) {
+      get().loadBracket(id);
+      get().startPolling(id);
+    }
+  },
 
   setMatches: (matches) => set({ matches, isDirty: true }),
   setNodes: (nodes) => set({ nodes }),
@@ -272,10 +309,14 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
         isDirty: false,
         isVirtual: false,
         isLoading: false,
+        error: null,
+        lastUpdated: new Date(),
       });
       shouldUpdateLoading = false; // Already updated in the set above
       log.debug('Bracket updated', { matchCount: mappedMatches.length });
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to load bracket';
+      set({ error: message });
       log.error('Failed to load bracket', error);
     } finally {
       // Only update isLoading if we set it to true earlier and haven't updated yet
@@ -317,5 +358,9 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
       clearInterval(interval);
       set({ pollInterval: null });
     }
+  },
+
+  isPolling: () => {
+    return get().pollInterval !== null;
   },
 }));

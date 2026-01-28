@@ -139,6 +139,37 @@ export async function fetchTournament(pk: number): Promise<TournamentType> {
   const response = await axios.get<TournamentType>(`/tournaments/${pk}`);
   return response.data as TournamentType;
 }
+
+// Tournament @action endpoints for selective loading
+export async function fetchTournamentMetadata(pk: number): Promise<unknown> {
+  log.debug(`Fetching tournament metadata for pk: ${pk}`);
+  const response = await axios.get(`/tournaments/${pk}/metadata/`);
+  return response.data;
+}
+
+export async function fetchTournamentUsers(pk: number): Promise<UsersType> {
+  log.debug(`Fetching tournament users for pk: ${pk}`);
+  const response = await axios.get<UsersType>(`/tournaments/${pk}/users/`);
+  return response.data;
+}
+
+export async function fetchTournamentTeams(pk: number): Promise<TeamsType> {
+  log.debug(`Fetching tournament teams for pk: ${pk}`);
+  const response = await axios.get<TeamsType>(`/tournaments/${pk}/teams/`);
+  return response.data;
+}
+
+export async function fetchTournamentGames(pk: number): Promise<GamesType> {
+  log.debug(`Fetching tournament games for pk: ${pk}`);
+  const response = await axios.get<GamesType>(`/tournaments/${pk}/games/`);
+  return response.data;
+}
+
+export async function fetchTournamentDraftState(pk: number): Promise<unknown> {
+  log.debug(`Fetching tournament draft state for pk: ${pk}`);
+  const response = await axios.get(`/tournaments/${pk}/draft_state/`);
+  return response.data;
+}
 export async function fetchGame(pk: number): Promise<GameType> {
   const response = await axios.get<GameType>(`/games/${pk}`);
   return response.data as GameType;
