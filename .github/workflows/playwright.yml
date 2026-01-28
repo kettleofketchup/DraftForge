@@ -124,6 +124,36 @@ jobs:
         restore-keys: |
           buildx-${{ runner.os }}-
 
+    - name: Build Docker images
+      run: |
+        poetry run inv docker.all.build
+      env:
+        DOCKER_BUILDKIT: 1
+        COMPOSE_DOCKER_CLI_BUILD: 1
+
+    - name: Populate test database
+      run: |
+        poetry run inv db.populate.all
+
+    - name: Start test services
+      run: |
+        poetry run inv dev.test
+
+    - name: Wait for services to be ready
+      run: |
+        echo "Waiting for services to be ready..."
+        for i in $(seq 1 60); do
+          if curl -ks https://localhost/api/ -o /dev/null 2>&1; then
+            echo "Services are ready!"
+            exit 0
+          fi
+          echo "  Attempt $i/60 - waiting..."
+          sleep 2
+        done
+        echo "WARNING: Services may not be fully ready after 120s"
+        docker compose --project-directory . -f docker/docker-compose.test.yaml ps
+        docker compose --project-directory . -f docker/docker-compose.test.yaml logs --tail=20
+
     - name: Run Playwright tests
       run: |
         poetry run inv test.playwright.headless --args="--shard=${{ matrix.shard }}/4"

@@ -129,7 +129,7 @@ Docs auto-deploy to GitHub Pages on push to `main` when changes are made to:
 - `docs/**`
 - `mkdocs.yml`
 
-**URL:** https://kettleofketchup.github.io/dota_tournament/
+**URL:** https://kettleofketchup.github.io/DraftForge/
 
 ## Agent Collaboration
 
