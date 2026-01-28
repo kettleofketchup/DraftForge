@@ -70,8 +70,8 @@ export default defineConfig({
       testMatch: /herodraft.*\.demo\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        // Headed mode for herodraft (two browsers)
-        headless: false,
+        // Headless for CI/automated recording
+        headless: true,
         launchOptions: {
           slowMo: 150,
           args: [

@@ -1,6 +1,8 @@
 import { test as base, expect, BrowserContext, Page } from '@playwright/test';
 
-const API_URL = 'https://localhost/api';
+// Use nginx hostname inside Docker containers, localhost for local runs
+const DOCKER_HOST = process.env.DOCKER_HOST || 'nginx';
+const API_URL = `https://${DOCKER_HOST}/api`;
 
 /**
  * Authentication utilities for Playwright tests.
@@ -130,7 +132,7 @@ async function setSessionCookies(
         {
           name: name.trim(),
           value: value.trim(),
-          domain: 'localhost',
+          domain: DOCKER_HOST,
           path: '/',
           secure: true,
           httpOnly: name.trim() === 'sessionid',
@@ -179,6 +181,15 @@ export const test = base.extend<{
   waitForHydration: () => Promise<void>;
   visitAndWait: (url: string) => Promise<void>;
 }>({
+  // Override context to inject playwright marker (disables react-scan)
+  context: async ({ context }, use) => {
+    // Add init script that runs before any page content loads
+    // This sets window.playwright = true which react-scan checks
+    await context.addInitScript(() => {
+      (window as Window & { playwright?: boolean }).playwright = true;
+    });
+    await use(context);
+  },
   loginAsUser: async ({ context }, use) => {
     await use((userPk: number) => loginAsUser(context, userPk));
   },

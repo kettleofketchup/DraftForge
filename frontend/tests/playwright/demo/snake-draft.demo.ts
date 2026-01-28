@@ -5,13 +5,16 @@
  * Snake draft has a predictable pattern where pick order reverses each round.
  *
  * Video output: 1:1 aspect ratio (800x800) for docs and social media.
+ * Named output: snake_draft.webm
  */
 
 import { test, expect } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../fixtures/auth';
+import * as path from 'path';
 
 const API_URL = 'https://localhost/api';
 const BASE_URL = 'https://localhost';
+const VIDEO_OUTPUT_DIR = 'demo-results/videos';
 
 interface TournamentData {
   pk: number;
@@ -68,8 +71,7 @@ test.describe('Snake Draft Demo', () => {
     // Click Teams tab
     const teamsTab = page.locator('[data-testid="teamsTab"]');
     await teamsTab.click();
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1500);
 
     // Open draft modal
     const startDraftButton = page.locator(
@@ -101,7 +103,7 @@ test.describe('Snake Draft Demo', () => {
       if (await confirmBtn.isVisible().catch(() => false)) {
         await confirmBtn.click();
       }
-      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
     }
 
     // Start/Restart draft
@@ -117,7 +119,7 @@ test.describe('Snake Draft Demo', () => {
         );
         await confirmBtn.first().click();
       }
-      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
     }
 
     await page.waitForTimeout(1500);
@@ -165,7 +167,7 @@ test.describe('Snake Draft Demo', () => {
         }
       }
 
-      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1000);
 
       // Longer pause at round boundaries
       if (pickInRound === 4) {
@@ -179,6 +181,12 @@ test.describe('Snake Draft Demo', () => {
 
     // Final pause to show completed draft
     await page.waitForTimeout(3000);
+
+    // Save video with named output
+    const video = page.video();
+    if (video) {
+      await video.saveAs(path.join(VIDEO_OUTPUT_DIR, 'snake_draft.webm'));
+    }
 
     console.log(
       `Snake Draft Demo complete! Made ${picksMade} picks across ${currentRound} rounds.`
