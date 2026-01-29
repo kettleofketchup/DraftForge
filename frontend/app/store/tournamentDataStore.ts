@@ -113,6 +113,9 @@ interface TournamentDataState {
 
   // Cleanup
   reset: () => void;
+
+  // Internal state (not for external use)
+  _wsUnsubscribe: (() => void) | null;
 }
 
 // Initial states
@@ -132,9 +135,6 @@ const initialErrorState: ErrorState = {
   full: null,
 };
 
-// WebSocket unsubscribe function holder
-let wsUnsubscribe: (() => void) | null = null;
-
 export const useTournamentDataStore = create<TournamentDataState>((set, get) => ({
   // Initial state
   tournamentId: null,
@@ -147,6 +147,7 @@ export const useTournamentDataStore = create<TournamentDataState>((set, get) => 
   errors: { ...initialErrorState },
   wsState: "disconnected",
   lastSequence: 0,
+  _wsUnsubscribe: null,
 
   // Set tournament ID and trigger initial load
   setTournamentId: (id) => {
@@ -171,9 +172,11 @@ export const useTournamentDataStore = create<TournamentDataState>((set, get) => 
       lastSequence: 0,
     });
 
-    // Connect to new tournament's WebSocket
+    // Connect to new tournament's WebSocket and auto-load data
     if (id !== null) {
       get().connectWebSocket();
+      // Auto-trigger progressive loading (Issue #6 fix)
+      get().loadAll();
     }
   },
 
@@ -394,21 +397,22 @@ export const useTournamentDataStore = create<TournamentDataState>((set, get) => 
 
     const channel = `tournament/${id}`;
 
-    wsUnsubscribe = WebSocketManager.subscribe(
+    const unsubscribe = WebSocketManager.subscribe(
       channel,
       (data) => get().updateFromWebSocket(data),
       (state) => set({ wsState: state })
     );
 
+    set({ _wsUnsubscribe: unsubscribe });
     log.debug(`Subscribed to WebSocket channel: ${channel}`);
   },
 
   // Disconnect from WebSocket
   disconnectWebSocket: () => {
-    if (wsUnsubscribe) {
-      wsUnsubscribe();
-      wsUnsubscribe = null;
-      set({ wsState: "disconnected" });
+    const unsubscribe = get()._wsUnsubscribe;
+    if (unsubscribe) {
+      unsubscribe();
+      set({ _wsUnsubscribe: null, wsState: "disconnected" });
       log.debug("Unsubscribed from tournament WebSocket");
     }
   },
@@ -427,6 +431,7 @@ export const useTournamentDataStore = create<TournamentDataState>((set, get) => 
       errors: { ...initialErrorState },
       wsState: "disconnected",
       lastSequence: 0,
+      _wsUnsubscribe: null,
     });
   },
 }));
