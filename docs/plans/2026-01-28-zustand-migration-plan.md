@@ -29,6 +29,187 @@ This document details the migration from the monolithic `useUserStore` (440 line
 
 ---
 
+## Agent Review Findings
+
+This migration plan was reviewed by 5 specialized agents. Below are their findings and the resolution status.
+
+### Review Summary
+
+| Agent | Focus Area | Key Findings |
+|-------|------------|--------------|
+| **React Patterns** | Selector patterns, cleanup | Load trigger missing, cleanup patterns needed |
+| **WebSocket** | Real-time communication | Tick handler bug (critical), race conditions, missing hasNewEvent |
+| **Risk Assessment** | Dependencies, rollback | Hidden WebSocketManager deps, feature flags recommendation |
+| **Performance** | Memory, optimization | Module-level variable leak, polling optimization, heartbeat needed |
+| **Backend** | API, caching | Cache dependency gaps, sequence numbers missing from HTTP, N+1 risks |
+
+### Critical Issues (Fixed)
+
+#### 1. Tick Handler Corrupts Draft State
+- **Agent**: WebSocket
+- **Severity**: CRITICAL
+- **File**: `heroDraftStore.ts:215-218`
+- **Problem**: `data.draft_state` in tick messages is a string enum (e.g., "drafting"), NOT a full HeroDraft object. The code `set({ draft: data.draft_state })` would corrupt the store.
+- **Fix Applied**: Removed the line. Tick messages only update the `tick` state, not `draft`.
+
+#### 2. HTTP/WebSocket Race Condition
+- **Agent**: WebSocket
+- **Severity**: CRITICAL
+- **File**: `teamDraftStore.ts:137-140`
+- **Problem**: Both `connectWebSocket()` and `loadDraft()` called simultaneously. HTTP response can arrive after WebSocket updates, overwriting newer state.
+- **Fix Applied**: Added sequence check in `loadDraft()` - skip HTTP update if WebSocket already provided data.
+
+#### 3. Module-Level Variable Memory Leak
+- **Agent**: Performance
+- **Severity**: HIGH
+- **Files**: `heroDraftStore.ts`, `teamDraftStore.ts`
+- **Problem**: `let wsUnsubscribe` at module level causes memory leaks with HMR or concurrent instances.
+- **Fix Applied**: Moved `wsUnsubscribe` into store state as `_wsUnsubscribe`.
+
+### Medium Issues (Partially Fixed)
+
+#### 4. Missing hasNewEvent Flag
+- **Agent**: WebSocket
+- **Severity**: MEDIUM
+- **Status**: ✅ FIXED in `teamDraftStore.ts`
+- **Problem**: UI needs indicator for new events (visual feedback, sound notifications).
+- **Fix Applied**: Added `hasNewEvent: boolean` and `clearNewEvent()` action.
+
+#### 5. N+1 Query Risks
+- **Agent**: Backend
+- **Severity**: MEDIUM
+- **Status**: ✅ FIXED in Phase 2G
+- **Problem**: New `@action` endpoints cause N+1 queries without prefetching.
+- **Fix Applied**: Added `select_related` and `prefetch_related` to all endpoints.
+
+### Open Issues (To Be Addressed)
+
+#### 6. Load Trigger Missing in useTournamentDataStore
+- **Agent**: React Patterns
+- **Severity**: MEDIUM
+- **Status**: ⏳ PENDING (Phase 2A)
+- **Problem**: `setTournamentId()` doesn't automatically trigger data loading.
+- **Recommendation**: Add auto-load in `setTournamentId()` or document that consumers must call `loadFull()`.
+
+```typescript
+// Option A: Auto-load in setTournamentId
+setTournamentId: (id) => {
+  if (id !== get().tournamentId) {
+    set({ tournamentId: id });
+    if (id !== null) {
+      get().loadFull();  // Auto-trigger load
+    }
+  }
+},
+```
+
+#### 7. Missing Toast Notifications
+- **Agent**: WebSocket
+- **Severity**: MEDIUM
+- **Status**: ⏳ PENDING (Phase 2C)
+- **Problem**: Current `useDraftWebSocket` shows toast on new events. New store doesn't.
+- **Recommendation**: Add toast in component layer using `hasNewEvent`:
+
+```typescript
+// In draft component
+useEffect(() => {
+  if (hasNewEvent) {
+    toast.info("New draft event");
+    clearNewEvent();
+  }
+}, [hasNewEvent]);
+```
+
+#### 8. Sequence Numbers Missing from HTTP Responses
+- **Agent**: Backend
+- **Severity**: LOW
+- **Status**: ⏳ PENDING
+- **Problem**: HTTP responses don't include sequence numbers, making it hard to compare freshness with WebSocket data.
+- **Recommendation**: Add sequence to HTTP serializers for draft endpoints.
+
+#### 9. WebSocket Heartbeat Mechanism
+- **Agent**: Performance
+- **Severity**: LOW
+- **Status**: ⏳ PENDING
+- **Problem**: No ping/pong heartbeat to detect stale connections.
+- **Recommendation**: Add heartbeat to WebSocketManager:
+
+```typescript
+// In WebSocketManager
+startHeartbeat() {
+  this.heartbeatInterval = setInterval(() => {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'ping' }));
+    }
+  }, 30000);
+}
+```
+
+#### 10. Feature Flags for Rollback
+- **Agent**: Risk Assessment
+- **Severity**: LOW
+- **Status**: ⏳ OPTIONAL
+- **Problem**: No feature flags to toggle between old and new stores.
+- **Recommendation**: Consider adding flags for high-risk migrations:
+
+```typescript
+// Feature flag approach
+const USE_NEW_DRAFT_STORE = true;
+
+export function useDraft() {
+  if (USE_NEW_DRAFT_STORE) {
+    return useTeamDraftStore();
+  }
+  return useLegacyDraftFromUserStore();
+}
+```
+
+#### 11. Polling Optimization for Bracket
+- **Agent**: Performance
+- **Severity**: LOW
+- **Status**: ⏳ PENDING
+- **Problem**: Fixed 5-second polling interval regardless of activity.
+- **Recommendation**: Implement adaptive polling:
+
+```typescript
+// Adaptive polling based on page visibility
+startPolling: (tournamentId, intervalMs = 5000) => {
+  const getInterval = () => document.hidden ? 30000 : intervalMs;
+
+  const poll = () => {
+    get().loadBracket(tournamentId);
+    get().pollTimeout = setTimeout(poll, getInterval());
+  };
+  poll();
+}
+```
+
+#### 12. Cache Dependency Gaps
+- **Agent**: Backend
+- **Severity**: LOW
+- **Status**: ⏳ PENDING
+- **Problem**: `tournament_metadata` cache doesn't invalidate when related data changes.
+- **Recommendation**: Add cache invalidation signals or reduce TTL for metadata.
+
+### Resolution Tracking
+
+| Issue | Status | Commit/Phase |
+|-------|--------|--------------|
+| Tick handler bug | ✅ Fixed | `c2cb177` |
+| HTTP/WS race condition | ✅ Fixed | `c2cb177` |
+| Module-level variable | ✅ Fixed | `c2cb177` |
+| hasNewEvent flag | ✅ Fixed | `c2cb177` |
+| N+1 queries | ✅ Fixed | `69900a4` |
+| Load trigger | ⏳ Pending | Phase 2A |
+| Toast notifications | ⏳ Pending | Phase 2C |
+| HTTP sequence numbers | ⏳ Pending | Phase 2G |
+| Heartbeat mechanism | ⏳ Pending | Future |
+| Feature flags | ⏳ Optional | - |
+| Adaptive polling | ⏳ Pending | Future |
+| Cache dependencies | ⏳ Pending | Future |
+
+---
+
 ## Migration Phases
 
 ### Phase 2A: Create Compatibility Layer (Week 1)
