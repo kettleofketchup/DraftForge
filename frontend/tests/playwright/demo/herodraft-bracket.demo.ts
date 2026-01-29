@@ -26,7 +26,7 @@ import {
   type Page,
 } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../fixtures/auth';
-import { waitForDemoReady, waitForHeroDraftReady, waitForMatchModalReady } from '../fixtures/demo-utils';
+import { waitForDemoReady, waitForMatchModalReady } from '../fixtures/demo-utils';
 import { HeroDraftPage } from '../helpers/HeroDraftPage';
 import * as path from 'path';
 import * as fs from 'fs/promises';
@@ -42,6 +42,7 @@ const API_URL = `https://${DOCKER_HOST}/api`;
 const BASE_URL = `https://${DOCKER_HOST}`;
 const VIDEO_OUTPUT_DIR = 'demo-results/videos';
 const DOCS_VIDEO_DIR = path.resolve(__dirname, '../../../docs/assets/videos');
+const DEMO_METADATA_FILE = path.join(VIDEO_OUTPUT_DIR, 'herodraft.demo.yaml');
 
 interface CaptainContext {
   browser: Browser;
@@ -174,9 +175,9 @@ test.describe('HeroDraft with Bracket Demo', () => {
       (window as Window & { playwright?: boolean }).playwright = true;
     });
 
-    // Fetch draft info
+    // Fetch draft info from Demo HeroDraft Tournament
     const response = await setupContextA.request.get(
-      `${API_URL}/tests/herodraft-by-key/two_captain_test/`,
+      `${API_URL}/tests/herodraft-by-key/demo_herodraft/`,
       { failOnStatusCode: false, timeout: 10000 }
     );
 
@@ -202,17 +203,8 @@ test.describe('HeroDraft with Bracket Demo', () => {
     console.log(`Captain B: ${teams[1].captain.username} (${teams[1].team_name})`);
 
     // Login both captains
-    console.log(`Login: Captain A Discord ID: ${teams[0].captain.discordId}`);
-    const loginResultA = await loginAsDiscordId(setupContextA, teams[0].captain.discordId);
-    console.log(`Login: Captain A result:`, JSON.stringify(loginResultA));
-    const cookiesA = await setupContextA.cookies();
-    console.log(`Login: Captain A cookies:`, JSON.stringify(cookiesA, null, 2));
-
-    console.log(`Login: Captain B Discord ID: ${teams[1].captain.discordId}`);
-    const loginResultB = await loginAsDiscordId(setupContextB, teams[1].captain.discordId);
-    console.log(`Login: Captain B result:`, JSON.stringify(loginResultB));
-    const cookiesB = await setupContextB.cookies();
-    console.log(`Login: Captain B cookies:`, JSON.stringify(cookiesB, null, 2));
+    await loginAsDiscordId(setupContextA, teams[0].captain.discordId);
+    await loginAsDiscordId(setupContextB, teams[1].captain.discordId);
 
     const setupPageA = await setupContextA.newPage();
     const setupPageB = await setupContextB.newPage();
@@ -238,26 +230,21 @@ test.describe('HeroDraft with Bracket Demo', () => {
     ]);
 
     // Dismiss any active drafts banners that may block interaction
-    // Use Escape key repeatedly until no dialogs/banners are visible
     const dismissAllOverlays = async (page: Page, name: string) => {
-      // First try clicking dismiss banner buttons
-      let attempts = 0;
-      while (attempts < 5) {
-        const dismissBtn = page.locator('button:has-text("Dismiss banner")');
-        const dialog = page.locator('[role="dialog"], [role="alertdialog"]');
+      // Try clicking dismiss banner button if visible
+      const dismissBtn = page.locator('button:has-text("Dismiss banner")');
+      if (await dismissBtn.isVisible().catch(() => false)) {
+        console.log(`Setup: Dismissing banner for ${name}...`);
+        await dismissBtn.click({ force: true });
+        await page.waitForTimeout(300);
+      }
 
-        if (await dismissBtn.isVisible().catch(() => false)) {
-          console.log(`Setup: Dismissing banner for ${name}...`);
-          await dismissBtn.click({ force: true });
-          await page.waitForTimeout(300);
-        } else if (await dialog.isVisible().catch(() => false)) {
-          console.log(`Setup: Closing dialog for ${name} with Escape...`);
-          await page.keyboard.press('Escape');
-          await page.waitForTimeout(300);
-        } else {
-          break;
-        }
-        attempts++;
+      // Check for alert dialogs (NOT the herodraft modal itself)
+      const alertDialog = page.locator('[role="alertdialog"]');
+      if (await alertDialog.isVisible().catch(() => false)) {
+        console.log(`Setup: Closing alert dialog for ${name}...`);
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
       }
     };
 
@@ -362,11 +349,18 @@ test.describe('HeroDraft with Bracket Demo', () => {
     await setupContextB.close();
 
     // =========================================================================
-    // PHASE 2: Video recording - start with both at rolling phase
+    // PHASE 2: Video Recording with timestamp tracking for auto-trim
     // =========================================================================
-    console.log('=== PHASE 2: Video Recording (synchronized start) ===');
+    // Playwright doesn't support dynamic start/stop of video recording.
+    // Solution: Record everything, track when draft UI appears, save timestamp
+    // to YAML file, then use ffmpeg to trim the beginning in post-processing.
+    console.log('=== PHASE 2: Video Recording ===');
 
-    // Create video contexts with storage state
+    // Create recording contexts
+    // IMPORTANT: Video recording starts when context is created, not when page is created
+    // Capture timestamp BEFORE creating context to account for encoder initialization
+    const recordingStartTime = Date.now();
+
     const contextA = await browserA.newContext({
       ignoreHTTPSErrors: true,
       viewport: { width: windowSize, height: windowSize },
@@ -387,7 +381,6 @@ test.describe('HeroDraft with Bracket Demo', () => {
       },
     });
 
-    // Inject playwright marker
     await contextA.addInitScript(() => {
       (window as Window & { playwright?: boolean }).playwright = true;
     });
@@ -395,26 +388,71 @@ test.describe('HeroDraft with Bracket Demo', () => {
       (window as Window & { playwright?: boolean }).playwright = true;
     });
 
+    // Create pages
     const pageA = await contextA.newPage();
     const pageB = await contextB.newPage();
+    console.log('Video: Recording started');
 
-    // Navigate both to herodraft page simultaneously - VIDEO STARTS HERE
-    console.log('Video: Starting synchronized navigation...');
+    // Navigate to herodraft
+    console.log('Video: Navigating to herodraft...');
     await Promise.all([pageA.goto(herodraftUrl), pageB.goto(herodraftUrl)]);
     await Promise.all([waitForHydration(pageA), waitForHydration(pageB)]);
 
-    // Wait for hero grid to load on both
+    // Wait for loading to complete
+    console.log('Video: Waiting for "Loading draft..." to finish...');
     await Promise.all([
-      waitForHeroDraftReady(pageA, { timeout: 30000 }),
-      waitForHeroDraftReady(pageB, { timeout: 30000 }),
+      pageA.locator('[data-testid="herodraft-loading"]').waitFor({ state: 'hidden', timeout: 60000 }),
+      pageB.locator('[data-testid="herodraft-loading"]').waitFor({ state: 'hidden', timeout: 60000 }),
+    ]);
+    console.log('Video: Loading screen hidden');
+
+    // Wait for rolling phase UI - THIS is the actual trim point (what we want to show)
+    console.log('Video: Waiting for rolling phase UI...');
+    await Promise.all([
+      pageA.locator('[data-testid="herodraft-rolling-phase"]').waitFor({ state: 'visible', timeout: 30000 }),
+      pageB.locator('[data-testid="herodraft-rolling-phase"]').waitFor({ state: 'visible', timeout: 30000 }),
     ]);
 
-    // Wait for flip coin button on both
+    // Calculate trim time when rolling phase appears (the actual content we want)
+    const contentVisibleTime = Date.now();
+    const trimStartSeconds = (contentVisibleTime - recordingStartTime) / 1000;
+    console.log(`Video: Rolling phase visible (trim first ${trimStartSeconds.toFixed(2)}s)`);
+
+    // Save trim metadata to YAML file
+    const trimMetadata = {
+      captain1: {
+        video: 'captain1_herodraft.webm',
+        trim_start_seconds: trimStartSeconds,
+      },
+      captain2: {
+        video: 'captain2_herodraft.webm',
+        trim_start_seconds: trimStartSeconds,
+      },
+      recorded_at: new Date().toISOString(),
+    };
+    await fs.mkdir(VIDEO_OUTPUT_DIR, { recursive: true });
+    await fs.writeFile(
+      DEMO_METADATA_FILE,
+      `# Auto-generated by herodraft demo test\n# Use 'inv demo.trim' to apply these trim values\n\n` +
+      Object.entries(trimMetadata)
+        .map(([key, value]) => {
+          if (typeof value === 'object') {
+            return `${key}:\n` + Object.entries(value)
+              .map(([k, v]) => `  ${k}: ${typeof v === 'number' ? v.toFixed(2) : v}`)
+              .join('\n');
+          }
+          return `${key}: ${value}`;
+        })
+        .join('\n\n') + '\n'
+    );
+    console.log(`Video: Saved trim metadata to ${DEMO_METADATA_FILE}`);
+
+    // Wait for flip coin button
     await Promise.all([
       pageA.locator(flipCoinSelector).waitFor({ state: 'visible', timeout: 10000 }),
       pageB.locator(flipCoinSelector).waitFor({ state: 'visible', timeout: 10000 }),
     ]);
-    console.log('Video: Both pages loaded at rolling phase - recording synced');
+    console.log('Video: Draft ready - recording in progress');
 
     captainA = {
       browser: browserA!,
@@ -486,27 +524,67 @@ test.describe('HeroDraft with Bracket Demo', () => {
     // Wait a moment for UI to update
     await winner.page.waitForTimeout(1000);
 
-    // Winner chooses first pick
+    // Winner chooses first pick - click button to open confirmation dialog
     const firstPickButton = winner.page.locator('[data-testid="herodraft-choice-first-pick"]');
     await expect(firstPickButton).toBeVisible({ timeout: 10000 });
     console.log('Winner clicking First Pick...');
-    await winner.page.waitForTimeout(1000);
+    await winner.page.waitForTimeout(1500); // Longer pause for visibility
+
+    // Click the choice button to open confirmation dialog
     await firstPickButton.click();
-    console.log('Winner chose First Pick');
+
+    // Wait for confirmation dialog to appear
+    const confirmChoiceDialog = winner.page.locator('[data-testid="herodraft-confirm-choice-dialog"]');
+    await expect(confirmChoiceDialog).toBeVisible({ timeout: 5000 });
+    console.log('Confirmation dialog opened');
+    await winner.page.waitForTimeout(1500); // Pause to show dialog
+
+    // Set up response listener before confirming
+    const firstPickResponsePromise = winner.page.waitForResponse(
+      (response) => response.url().includes('/submit-choice/') && response.status() === 200,
+      { timeout: 15000 }
+    );
+
+    // Click confirm button
+    const confirmButton = winner.page.locator('[data-testid="herodraft-confirm-choice-submit"]');
+    await confirmButton.click();
+    await firstPickResponsePromise;
+    console.log('Winner chose First Pick (API confirmed)');
 
     // Wait for loser to see remaining choices
     const loser = winner === captainA ? captainB : captainA;
-    await loser.page.waitForTimeout(1500);
+    await loser.page.waitForTimeout(2000); // Longer pause for transition
 
     // Loser chooses side (Radiant or Dire) from remaining options
     const radiantButton = loser.page.locator('[data-testid="herodraft-remaining-radiant"]');
     await expect(radiantButton).toBeVisible({ timeout: 10000 });
     console.log('Loser clicking Radiant...');
-    await loser.page.waitForTimeout(1000);
-    await radiantButton.click();
-    console.log('Loser chose Radiant');
+    await loser.page.waitForTimeout(1500); // Longer pause for visibility
 
-    // Wait for drafting phase
+    // Click the choice button to open confirmation dialog
+    await radiantButton.click();
+
+    // Wait for confirmation dialog to appear
+    const loserConfirmDialog = loser.page.locator('[data-testid="herodraft-confirm-choice-dialog"]');
+    await expect(loserConfirmDialog).toBeVisible({ timeout: 5000 });
+    console.log('Loser confirmation dialog opened');
+    await loser.page.waitForTimeout(1500); // Pause to show dialog
+
+    // Set up response listener before confirming
+    const radiantResponsePromise = loser.page.waitForResponse(
+      (response) => response.url().includes('/submit-choice/') && response.status() === 200,
+      { timeout: 15000 }
+    );
+
+    // Click confirm button
+    const loserConfirmButton = loser.page.locator('[data-testid="herodraft-confirm-choice-submit"]');
+    await loserConfirmButton.click();
+    const radiantResponse = await radiantResponsePromise;
+    const responseData = await radiantResponse.json();
+    console.log(`Loser chose Radiant (API confirmed, new state: ${responseData.state})`);
+
+    // Wait for drafting phase UI to appear on both pages
+    console.log('Waiting for drafting phase UI...');
     await Promise.all([
       captainA.draftPage.waitForPhaseTransition('drafting', 15000),
       captainB.draftPage.waitForPhaseTransition('drafting', 15000),

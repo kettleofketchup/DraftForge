@@ -39,6 +39,7 @@ export const HeroDraftSchema = z.object({
   pk: z.number().optional(), // Backend sends both pk and id (same value)
   id: z.number(),
   game: z.number(),
+  tournament_id: z.number().nullable().optional(), // Tournament for "Return to Bracket" navigation
   state: z.enum(["waiting_for_captains", "rolling", "choosing", "drafting", "paused", "completed", "abandoned"]),
   roll_winner: DraftTeamSchema.nullable(), // Backend returns full DraftTeam object
   draft_teams: z.array(DraftTeamSchema),

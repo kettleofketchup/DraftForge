@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { UserType } from '~/components/user/types';
 
 import { PlusIconButton } from '~/components/ui/buttons';
@@ -32,6 +32,15 @@ export const AddPlayerModal: React.FC<Props> = ({
   const [open, setOpen] = useState(false);
   const currentUser = useUserStore((state) => state.currentUser);
   const isStaff = useUserStore((state) => state.isStaff);
+  const users = useUserStore((state) => state.users);
+  const getUsers = useUserStore((state) => state.getUsers);
+
+  // Lazy load users when modal opens (only if not already loaded)
+  useEffect(() => {
+    if (open && users.length === 0) {
+      getUsers();
+    }
+  }, [open, users.length, getUsers]);
 
   if (!isStaff()) {
     return (

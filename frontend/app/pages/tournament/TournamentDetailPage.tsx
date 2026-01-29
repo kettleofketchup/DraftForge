@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
 import axios from '~/components/api/axios'; // Assuming axios is configured for your API
 import { useTournamentStore } from '~/store/tournamentStore';
@@ -10,6 +10,7 @@ import { getLogger } from '~/lib/logger';
 const log = getLogger('TournamentDetailPage');
 export const TournamentDetailPage: React.FC = () => {
   const { pk, '*': slug } = useParams<{ pk: string; '*': string }>();
+  const navigate = useNavigate();
   const tournament = useUserStore(useShallow((state) => state.tournament));
   const setTournament = useUserStore((state) => state.setTournament);
   const setLive = useTournamentStore((state) => state.setLive);
@@ -34,6 +35,12 @@ export const TournamentDetailPage: React.FC = () => {
     // Parse matchId from URL: /tournament/:pk/bracket/match/:matchId
     const matchId = parts[1] === 'match' && parts[2] ? parts[2] : null;
 
+    // Redirect /tournament/:pk/bracket/draft/:draftId to /herodraft/:draftId
+    if (draftId && !Number.isNaN(draftId)) {
+      navigate(`/herodraft/${draftId}`, { replace: true });
+      return;
+    }
+
     // Batch state updates using unstable_batchedUpdates pattern via setTimeout
     // This prevents multiple rerenders from sequential state updates
     setActiveTab(tab);
@@ -45,7 +52,7 @@ export const TournamentDetailPage: React.FC = () => {
     if (isLive) {
       setAutoAdvance(true);
     }
-  }, [slug, setActiveTab, setLive, setAutoAdvance, setPendingDraftId, setPendingMatchId]);
+  }, [slug, setActiveTab, setLive, setAutoAdvance, setPendingDraftId, setPendingMatchId, navigate]);
   useEffect(() => {
     if (pk) {
       const fetchTournament = async () => {

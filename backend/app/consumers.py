@@ -350,7 +350,7 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                         draft=draft,
                         event_type=event_type,
                         draft_team=draft_team,
-                        metadata={"user_id": user.id},
+                        metadata={"user_id": user.id, "username": user.username},
                     )
 
                     # Handle pause/resume on disconnect - only during DRAFTING phase
@@ -438,7 +438,18 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                     "draft_teams__tournament_team__members",
                     "rounds",
                 ).get(id=draft_id)
-                broadcast_herodraft_state(draft, broadcast_event_type)
+                # Get fresh draft_team from prefetched data (filter() bypasses prefetch cache)
+                # Use DraftTeam.captain property which accesses tournament_team.captain
+                fresh_draft_team = None
+                for dt in draft.draft_teams.all():
+                    # DraftTeam.captain property returns tournament_team.captain
+                    if dt.captain and dt.captain.id == user.id:
+                        fresh_draft_team = dt
+                        break
+
+                broadcast_herodraft_state(
+                    draft, broadcast_event_type, draft_team=fresh_draft_team
+                )
                 log.debug(
                     f"HeroDraft {draft_id} broadcast {broadcast_event_type} after transaction commit"
                 )

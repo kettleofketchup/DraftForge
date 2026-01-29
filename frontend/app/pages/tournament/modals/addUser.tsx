@@ -1,5 +1,5 @@
 import { Suspense, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import type { TournamentType } from '~/components/tournament/types'; // Adjust the import path as necessary
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { User } from '~/components/user/user';

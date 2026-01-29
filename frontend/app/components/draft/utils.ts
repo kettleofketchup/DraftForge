@@ -7,7 +7,7 @@ export function getDraftUrl(draft: ActiveDraftType): string {
   if (draft.type === 'team_draft') {
     return `/tournament/${draft.tournament_pk}/teams/draft`;
   }
-  return `/tournament/${draft.tournament_pk}/bracket/draft/${draft.herodraft_pk}`;
+  return `/herodraft/${draft.herodraft_pk}`;
 }
 
 /**

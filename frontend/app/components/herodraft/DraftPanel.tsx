@@ -1,5 +1,5 @@
 // frontend/app/components/herodraft/DraftPanel.tsx
-import { useMemo } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { heroes } from 'dotaconstants';
 import { cn } from '~/lib/utils';
 import type { HeroDraft, HeroDraftRound } from '~/components/herodraft/types';
@@ -9,6 +9,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
+import { ScrollArea } from '~/components/ui/scroll-area';
 
 interface DraftPanelProps {
   draft: HeroDraft;
@@ -36,6 +37,8 @@ function getHeroName(heroId: number | null): string {
 }
 
 export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
+  const activeRoundRef = useRef<HTMLDivElement>(null);
+
   // Memoize team lookups
   const { radiantTeam, direTeam } = useMemo(() => {
     const radiant = draft.draft_teams.find((t) => t.is_radiant);
@@ -47,6 +50,16 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
   const sortedRounds = useMemo(() => {
     return [...draft.rounds].sort((a, b) => a.round_number - b.round_number);
   }, [draft.rounds]);
+
+  // Autoscroll to active round when it changes
+  useEffect(() => {
+    if (currentRound !== null && activeRoundRef.current) {
+      activeRoundRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  }, [currentRound]);
 
   return (
     <div className="h-full flex flex-col bg-black/90 overflow-hidden" data-testid="herodraft-panel">
@@ -68,8 +81,8 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
       </div>
 
       {/* Draft timeline */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="flex flex-col">
+      <ScrollArea className="flex-1 min-h-0" type="always">
+        <div className="flex flex-col py-4">
           {sortedRounds.map((round) => {
             const team = draft.draft_teams.find((t) => t.id === round.draft_team);
             const isRadiant = team?.is_radiant;
@@ -144,6 +157,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
             return (
               <div
                 key={round.id}
+                ref={isActive ? activeRoundRef : undefined}
                 className={cn('flex items-center', slotHeight)}
                 data-testid={`herodraft-round-${round.round_number - 1}`}
                 data-round-active={isActive}
@@ -191,7 +205,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
             );
           })}
         </div>
-      </div>
+      </ScrollArea>
     </div>
   );
 }
