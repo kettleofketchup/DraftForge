@@ -505,8 +505,8 @@ class Tournament(models.Model):
         invalidate_obj(self)
         if self.league:
             invalidate_obj(self.league)
-            if self.league.organization:
-                invalidate_obj(self.league.organization)
+            for org in self.league.organizations.all():
+                invalidate_obj(org)
 
     class Meta:
         indexes = [
@@ -545,6 +545,14 @@ class Team(models.Model):
         blank=True,
         null=True,
     )
+    deputy_captain = models.ForeignKey(
+        User,
+        related_name="teams_as_deputy_captain",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        help_text="Next in line for captain if captain is removed",
+    )
     draft_order = models.PositiveSmallIntegerField(
         default=0,
         blank=True,
@@ -571,7 +579,36 @@ class Team(models.Model):
             models.Index(fields=["tournament"]),
             models.Index(fields=["name"]),
             models.Index(fields=["captain"]),
+            models.Index(fields=["deputy_captain"]),
         ]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        super().clean()
+
+        # Skip ManyToMany validation if team has no pk yet (being created)
+        if not self.pk:
+            return
+
+        # Captain must be a member
+        if self.captain and not self.members.filter(pk=self.captain.pk).exists():
+            raise ValidationError({"captain": "Captain must be a member of the team."})
+
+        # Deputy must be a member
+        if (
+            self.deputy_captain
+            and not self.members.filter(pk=self.deputy_captain.pk).exists()
+        ):
+            raise ValidationError(
+                {"deputy_captain": "Deputy captain must be a member of the team."}
+            )
+
+        # Deputy cannot be the same as captain
+        if self.captain and self.deputy_captain and self.captain == self.deputy_captain:
+            raise ValidationError(
+                {"deputy_captain": "Deputy captain cannot be the same as captain."}
+            )
 
     def __str__(self):
         return self.name

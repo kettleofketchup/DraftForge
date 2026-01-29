@@ -3,7 +3,7 @@ import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import { button3DBase, button3DDisabled, buttonTextShadow } from './styles';
 
-export type BorderColor = 'green' | 'blue' | 'purple' | 'orange' | 'red' | 'sky' | 'cyan';
+export type BorderColor = 'green' | 'blue' | 'purple' | 'orange' | 'red' | 'sky' | 'cyan' | 'lime';
 
 export interface SecondaryButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
@@ -23,6 +23,7 @@ const borderColorClasses: Record<BorderColor, string> = {
   red: 'border border-red-600',
   sky: 'border border-sky-600',
   cyan: 'border border-cyan-600',
+  lime: 'border border-lime-500',
 };
 
 const bgColorClasses: Record<BorderColor, string> = {
@@ -33,6 +34,7 @@ const bgColorClasses: Record<BorderColor, string> = {
   red: 'bg-red-800 hover:bg-red-700 text-white border-b-red-950 shadow-red-900/50',
   sky: 'bg-sky-800 hover:bg-sky-700 text-white border-b-sky-950 shadow-sky-900/50',
   cyan: 'bg-cyan-700 hover:bg-cyan-600 text-white border-b-cyan-900 shadow-cyan-900/50',
+  lime: 'bg-lime-700 hover:bg-lime-600 text-white border-b-lime-900 shadow-lime-900/50',
 };
 
 /**

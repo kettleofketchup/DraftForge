@@ -45,12 +45,17 @@ export function DevScripts() {
       process.env.NODE_ENV,
     );
 
-    if (process.env.NODE_ENV === 'dev' || process.env.NODE_ENV === 'test') {
+    // Skip react-scan during Playwright tests or when explicitly disabled
+    // Playwright tests inject window.playwright = true via addInitScript
+    const isPlaywright = typeof window !== 'undefined' && 'playwright' in window;
+    const disableReactScan = import.meta.env.VITE_DISABLE_REACT_SCAN === 'true';
+
+    if (import.meta.env.DEV && !isPlaywright && !disableReactScan) {
       import('react-scan').then((module) => {
         module.scan({
-          enabled: import.meta.env.DEV === true,
-          trackUnnecessaryRenders: import.meta.env.DEV === true,
-          showToolbar: import.meta.env.DEV === true,
+          enabled: true,
+          trackUnnecessaryRenders: true,
+          showToolbar: true,
         });
       });
     }

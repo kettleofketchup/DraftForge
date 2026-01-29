@@ -14,7 +14,7 @@ export function About() {
     <div className="min-h-screen">
       <AboutHero />
 
-      <div className="container mx-auto px-6 py-16 max-w-4xl">
+      <div className="container mx-auto px-6 py-16 max-w-4xl space-y-16">
         <MaintainerSection />
         <HistorySection />
         <FeaturesSection />

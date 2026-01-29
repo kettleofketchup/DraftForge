@@ -15,6 +15,9 @@ export type { DestructiveButtonProps } from './DestructiveButton';
 export { EditButton } from './EditButton';
 export type { EditButtonProps } from './EditButton';
 
+export { HistoryButton } from './HistoryButton';
+export type { HistoryButtonProps } from './HistoryButton';
+
 export { NavButton } from './NavButton';
 export type { NavButtonProps, NavDirection } from './NavButton';
 

@@ -132,6 +132,7 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton }: HeroGridPr
                             disabled && 'cursor-not-allowed'
                           )}
                           data-testid={`herodraft-hero-${hero.id}`}
+                          data-hero-id={hero.id}
                           data-hero-name={hero.name}
                           data-hero-available={available}
                           data-hero-selected={isSelected}
