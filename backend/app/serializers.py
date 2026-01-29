@@ -1015,6 +1015,7 @@ class HeroDraftSerializer(serializers.ModelSerializer):
     rounds = HeroDraftRoundSerializerFull(many=True, read_only=True)
     roll_winner = DraftTeamSerializerFull(read_only=True)
     current_round = serializers.SerializerMethodField()
+    tournament_id = serializers.SerializerMethodField()
 
     class Meta:
         model = HeroDraft
@@ -1022,6 +1023,7 @@ class HeroDraftSerializer(serializers.ModelSerializer):
             "pk",
             "id",
             "game",
+            "tournament_id",
             "state",
             "roll_winner",
             "draft_teams",
@@ -1036,6 +1038,11 @@ class HeroDraftSerializer(serializers.ModelSerializer):
         if active_round:
             # Return index (0-based) into rounds array for frontend compatibility
             return active_round.round_number - 1
+        return None
+
+    def get_tournament_id(self, obj):
+        if obj.game and obj.game.tournament:
+            return obj.game.tournament.id
         return None
 
 

@@ -2,16 +2,13 @@
  * Shared button style constants for 3D effects and variants
  */
 
-// Text shadow for 3D pop effect on button text
-export const buttonTextShadow = '[text-shadow:_1px_1px_2px_rgb(0_0_0_/_60%),_0_1px_3px_rgb(0_0_0_/_40%)]';
-
 // Base 3D button effect classes (active state removed for disabled buttons via CSS)
 export const button3DBase =
-  `shadow-lg shadow-black/30 border-b-4 active:border-b-0 active:translate-y-1 transition-all duration-75 ${buttonTextShadow}`;
+  'shadow-lg shadow-black/30 border-b-4 active:border-b-0 active:translate-y-1 transition-all duration-75';
 
 // Disabled state styling - removes 3D effects and uses muted colors
 export const button3DDisabled =
-  'disabled:shadow-none disabled:border-b-0 disabled:translate-y-0 disabled:bg-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed disabled:opacity-70 disabled:[text-shadow:none]';
+  'disabled:shadow-none disabled:border-b-0 disabled:translate-y-0 disabled:bg-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed disabled:opacity-70';
 
 // Icon styling to ensure icons inherit text color
 const iconWhite = '[&_svg]:text-white [&_svg]:fill-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]';

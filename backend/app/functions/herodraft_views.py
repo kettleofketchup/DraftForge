@@ -5,7 +5,7 @@ import logging
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from app.broadcast import broadcast_herodraft_event
@@ -134,10 +134,12 @@ def create_herodraft(request, game_pk):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def get_herodraft(request, draft_pk):
     """
     Get the current state of a hero draft.
+
+    This endpoint is public to allow spectators to view live drafts.
 
     Returns:
         200: Draft data

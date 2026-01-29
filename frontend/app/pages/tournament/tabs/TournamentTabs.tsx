@@ -5,7 +5,7 @@ import { PlayersTab } from './PlayersTab';
 import { TeamsTab } from './TeamsTab';
 
 import { useCallback, useEffect, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
@@ -21,10 +21,6 @@ export default function TournamentTabs() {
     navigate(`/tournament/${pk}/${tab}`, { replace: true });
   }, [pk, navigate]);
 
-  const getUsers = useUserStore((state) => state.getUsers);
-  useEffect(() => {
-    getUsers();
-  }, []);
 
   const tournament = useUserStore(useShallow((state) => state.tournament)); // Zustand setter
 

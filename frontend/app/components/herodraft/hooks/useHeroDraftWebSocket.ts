@@ -46,6 +46,7 @@ export function useHeroDraftWebSocket({
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectDelayRef = useRef<NodeJS.Timeout | null>(null); // Debounce for StrictMode
   const shouldConnectRef = useRef(false);
   const connectionIdRef = useRef(0); // Track connection ID to ignore stale callbacks
   const intentionalCloseRef = useRef(false); // Track if we intentionally closed the connection
@@ -254,11 +255,16 @@ export function useHeroDraftWebSocket({
   }, [draftId]); // Only depend on draftId - callbacks are accessed via refs
 
   // Manage connection based on enabled state
+  // Uses a small delay to debounce React StrictMode's double-mount cycle
   useEffect(() => {
     shouldConnectRef.current = enabled;
 
     if (enabled && draftId) {
-      connect();
+      // Debounce connection to avoid StrictMode double-connect
+      // StrictMode unmounts/remounts quickly - the cleanup will cancel this timeout
+      connectDelayRef.current = setTimeout(() => {
+        connect();
+      }, 50);
     } else {
       // Disconnect if disabled
       if (wsRef.current) {
@@ -273,6 +279,11 @@ export function useHeroDraftWebSocket({
 
     return () => {
       shouldConnectRef.current = false;
+      // Cancel pending connect (handles StrictMode double-mount)
+      if (connectDelayRef.current) {
+        clearTimeout(connectDelayRef.current);
+        connectDelayRef.current = null;
+      }
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }

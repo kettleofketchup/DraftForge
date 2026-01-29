@@ -97,9 +97,8 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
       return;
     }
 
-    // Navigate and open the draft modal
-    navigate(`/tournament/${pk}/bracket/draft/${draftIdToOpen}`, { replace: true });
-    onOpenHeroDraft(draftIdToOpen);
+    // Navigate directly to the herodraft page
+    navigate(`/herodraft/${draftIdToOpen}`);
   };
 
   return (

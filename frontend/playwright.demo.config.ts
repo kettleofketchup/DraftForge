@@ -22,8 +22,8 @@ export default defineConfig({
   retries: 0,
   forbidOnly: true,
 
-  // Reporters
-  reporter: [['list'], ['html', { open: 'never' }]],
+  // Reporters - use line reporter for clean output without ANSI escapes
+  reporter: [['line'], ['html', { open: 'never' }]],
 
   use: {
     baseURL: 'https://localhost',
@@ -51,6 +51,8 @@ export default defineConfig({
   projects: [
     {
       name: 'demo-chromium',
+      // Exclude herodraft tests (run in demo-herodraft project)
+      testIgnore: /herodraft/i,
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {

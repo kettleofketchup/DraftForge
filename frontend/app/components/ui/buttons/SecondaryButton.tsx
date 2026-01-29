@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { button3DBase, button3DDisabled, buttonTextShadow } from './styles';
+import { button3DBase, button3DDisabled } from './styles';
 
 export type BorderColor = 'green' | 'blue' | 'purple' | 'orange' | 'red' | 'sky' | 'cyan' | 'lime';
 
@@ -67,7 +67,6 @@ const SecondaryButton = React.forwardRef<
       className={cn(
         depth && button3DBase,
         depth && button3DDisabled,
-        depth && buttonTextShadow,
         depth && '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
         borderColor && borderColorClasses[borderColor],
         color && bgColorClasses[color],

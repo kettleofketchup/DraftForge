@@ -62,6 +62,15 @@ HERODRAFT_TEST_KEYS = {
         "position": 0,
         "initial_state": "waiting_for_captains",
     },
+    # Demo HeroDraft Tournament - for video recording demos
+    # Uses Demo Team Alpha vs Demo Team Beta
+    "demo_herodraft": {
+        "tournament_name": "Demo HeroDraft Tournament",
+        "round": 1,
+        "bracket_type": "winners",
+        "position": 0,
+        "initial_state": "waiting_for_captains",
+    },
 }
 
 

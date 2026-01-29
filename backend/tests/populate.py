@@ -1854,7 +1854,7 @@ def populate_demo_herodraft_tournament(force=False):
     """
     Create Demo HeroDraft Tournament for video recording.
 
-    Creates a tournament with 2 teams (4 players each) for hero draft demos.
+    Creates a tournament with 2 teams (5 players each) for hero draft demos.
     Uses Real Tournament 38 users with Discord avatars.
 
     Args:
@@ -1882,9 +1882,15 @@ def populate_demo_herodraft_tournament(force=False):
 
     print(f"Creating '{TOURNAMENT_NAME}' for hero draft demos...")
 
-    # Use first 8 Real Tournament users (2 teams of 4)
-    team_a_usernames = ["vrm.mtl", "tornope", "nimstria1", "thekingauto"]
-    team_b_usernames = ["ethan0688_", "just__khang", "heffdawgz", "pushingshots"]
+    # Use first 10 Real Tournament users (2 teams of 5)
+    team_a_usernames = ["vrm.mtl", "tornope", "nimstria1", "thekingauto", "clarexlauda"]
+    team_b_usernames = [
+        "ethan0688_",
+        "just__khang",
+        "heffdawgz",
+        "pushingshots",
+        "anil98765",
+    ]
 
     team_a_users = [
         _get_or_create_demo_user(u, REAL_TOURNAMENT_USERS[u]) for u in team_a_usernames

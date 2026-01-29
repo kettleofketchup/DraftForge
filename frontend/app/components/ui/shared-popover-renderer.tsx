@@ -81,16 +81,16 @@ const PlayerPopoverContent: React.FC<{
           className="w-12 h-12 rounded-full"
         />
         <div>
-          <p className="font-medium">{playerName}</p>
+          <p className="font-semibold text-foreground">{playerName}</p>
           {player.mmr && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-foreground/70">
               MMR: {player.mmr.toLocaleString()}
             </p>
           )}
         </div>
       </div>
       <RolePositions user={player} />
-      <p className="text-xs text-muted-foreground text-center pt-1">
+      <p className="text-xs text-foreground/60 text-center pt-1">
         Click for full profile
       </p>
     </div>

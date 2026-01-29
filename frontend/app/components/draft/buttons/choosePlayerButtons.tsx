@@ -1,5 +1,4 @@
 import { useState, useEffect, type FormEvent } from 'react';
-import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +41,14 @@ export const ChoosePlayerButton: React.FC<{
     null,
   );
   const [showTieOverlay, setShowTieOverlay] = useState(false);
+
+  // Check if current user is logged in
+  const isLoggedIn = currentUser?.pk != null;
+
+  // Check if current user is a captain of any team in this tournament
+  const isAnyCaptain = tournament?.teams?.some(
+    (team) => team.captain?.pk === currentUser?.pk
+  );
 
   // Check if current user is the captain for this round
   // Must check that both currentUser and captain exist with valid pks to avoid undefined === undefined
@@ -86,31 +93,44 @@ export const ChoosePlayerButton: React.FC<{
   // If pick already made for this round, show disabled button
   if (pickAlreadyMade) {
     return (
-      <Button disabled variant="outline">
-        Pick made
+      <Button disabled variant="outline" size="sm" className="text-xs px-2">
+        Done
       </Button>
     );
   }
 
   // If user can't pick (not staff and not captain for this round)
   if (!canPick) {
-    const captainName = curDraftRound?.captain ? DisplayName(curDraftRound.captain) : 'captain';
+    // Not logged in
+    if (!isLoggedIn) {
+      return (
+        <Button disabled variant="ghost" size="sm" className="text-xs px-2 text-muted-foreground">
+          Login...
+        </Button>
+      );
+    }
+    // User is a captain but not their turn
+    if (isAnyCaptain) {
+      return (
+        <Button disabled variant="ghost" size="sm" className="text-xs px-2 text-muted-foreground">
+          Not your turn
+        </Button>
+      );
+    }
+    // Regular user watching
     return (
-      <>
-        <AdminOnlyButton buttonTxt={`Waiting for ${captainName}`} />
-      </>
+      <Button disabled variant="ghost" size="sm" className="text-xs px-2 text-muted-foreground">
+        Waiting...
+      </Button>
     );
   }
 
   return (
     <>
-      <div
-        className="flex flex-row items-center gap-4"
-        data-testid="available-player"
-      >
+      <div data-testid="available-player">
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button>Pick</Button>
+            <Button size="sm" className="text-xs px-2">Pick</Button>
           </AlertDialogTrigger>
           <AlertDialogContent className="bg-green-900 border-green-700">
             <AlertDialogHeader>

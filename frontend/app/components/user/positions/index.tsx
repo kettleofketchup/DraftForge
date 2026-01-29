@@ -24,6 +24,11 @@ interface BadgeProps {
    * - `undefined`: Responsive - compact on mobile (<sm), full on larger screens
    */
   compact?: boolean;
+  /**
+   * Disable tooltips for performance in list views with many items.
+   * Uses native title attribute instead.
+   */
+  disableTooltips?: boolean;
 }
 
 import { getLogger } from '~/lib/logger';
@@ -68,7 +73,7 @@ export const useBadgeGuard = (user: UserType): boolean => {
   return true;
 };
 
-export const CarryBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
+export const CarryBadge: React.FC<BadgeProps> = memo(({ user, compact, disableTooltips }) => {
   const shouldShowBadge = useBadgeGuard(user);
 
   if (!shouldShowBadge) return null;
@@ -78,30 +83,39 @@ export const CarryBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
   const isResponsive = compact === undefined;
   const forceCompact = compact === true;
 
+  const badgeContent = (
+    <div
+      className="relative inline-block cursor-help"
+      title={disableTooltips ? `Position 1: Carry - ${getRankLabel(user.positions.carry)}` : undefined}
+    >
+      <Badge className={cn(
+        "badge-primary !bg-rose-900 !text-white hover:!bg-rose-800 transition-colors",
+        forceCompact && "!px-1 !py-0.5",
+        isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
+      )}>
+        <Badge className={cn(
+          "!bg-rose-800",
+          forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
+        )}>
+          {user.positions.carry}
+        </Badge>
+        <CarrySVG className={cn(
+          forceCompact && "w-4 h-4",
+          isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
+        )} />
+        {!forceCompact && (
+          <span className={isResponsive ? "hidden sm:inline" : undefined}>Carry</span>
+        )}
+      </Badge>
+    </div>
+  );
+
+  if (disableTooltips) return badgeContent;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="relative inline-block cursor-help">
-          <Badge className={cn(
-            "badge-primary !bg-rose-900 !text-white hover:!bg-rose-800 transition-colors",
-            forceCompact && "!px-1 !py-0.5",
-            isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
-          )}>
-            <Badge className={cn(
-              "!bg-rose-800",
-              forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
-            )}>
-              {user.positions.carry}
-            </Badge>
-            <CarrySVG className={cn(
-              forceCompact && "w-4 h-4",
-              isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
-            )} />
-            {!forceCompact && (
-              <span className={isResponsive ? "hidden sm:inline" : undefined}>Carry</span>
-            )}
-          </Badge>
-        </div>
+        {badgeContent}
       </TooltipTrigger>
       <TooltipContent className="bg-rose-900 text-white">
         <p className="font-semibold">Position 1: Carry</p>
@@ -111,7 +125,7 @@ export const CarryBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
   );
 });
 
-export const MidBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
+export const MidBadge: React.FC<BadgeProps> = memo(({ user, compact, disableTooltips }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
   if (!user.positions?.mid) return null;
@@ -119,30 +133,39 @@ export const MidBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
   const isResponsive = compact === undefined;
   const forceCompact = compact === true;
 
+  const badgeContent = (
+    <div
+      className="relative inline-block cursor-help"
+      title={disableTooltips ? `Position 2: Mid - ${getRankLabel(user.positions.mid)}` : undefined}
+    >
+      <Badge className={cn(
+        "badge-primary !bg-cyan-900 !text-white hover:!bg-cyan-800 transition-colors",
+        forceCompact && "!px-1 !py-0.5",
+        isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
+      )}>
+        <Badge className={cn(
+          "!bg-cyan-800",
+          forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
+        )}>
+          {user.positions.mid}
+        </Badge>
+        <MidSVG className={cn(
+          forceCompact && "w-4 h-4",
+          isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
+        )} />
+        {!forceCompact && (
+          <span className={isResponsive ? "hidden sm:inline" : undefined}>Mid</span>
+        )}
+      </Badge>
+    </div>
+  );
+
+  if (disableTooltips) return badgeContent;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="relative inline-block cursor-help">
-          <Badge className={cn(
-            "badge-primary !bg-cyan-900 !text-white hover:!bg-cyan-800 transition-colors",
-            forceCompact && "!px-1 !py-0.5",
-            isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
-          )}>
-            <Badge className={cn(
-              "!bg-cyan-800",
-              forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
-            )}>
-              {user.positions.mid}
-            </Badge>
-            <MidSVG className={cn(
-              forceCompact && "w-4 h-4",
-              isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
-            )} />
-            {!forceCompact && (
-              <span className={isResponsive ? "hidden sm:inline" : undefined}>Mid</span>
-            )}
-          </Badge>
-        </div>
+        {badgeContent}
       </TooltipTrigger>
       <TooltipContent className="bg-cyan-900 text-white">
         <p className="font-semibold">Position 2: Mid</p>
@@ -152,7 +175,7 @@ export const MidBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
   );
 });
 
-export const OfflaneBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
+export const OfflaneBadge: React.FC<BadgeProps> = memo(({ user, compact, disableTooltips }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
   if (!user.positions?.offlane) return null;
@@ -160,30 +183,39 @@ export const OfflaneBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
   const isResponsive = compact === undefined;
   const forceCompact = compact === true;
 
+  const badgeContent = (
+    <div
+      className="relative inline-block cursor-help"
+      title={disableTooltips ? `Position 3: Offlane - ${getRankLabel(user.positions.offlane)}` : undefined}
+    >
+      <Badge className={cn(
+        "badge-primary !bg-emerald-900 !text-white hover:!bg-emerald-800 transition-colors",
+        forceCompact && "!px-1 !py-0.5",
+        isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
+      )}>
+        <Badge className={cn(
+          "!bg-emerald-800",
+          forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
+        )}>
+          {user.positions.offlane}
+        </Badge>
+        <OfflaneSVG className={cn(
+          forceCompact && "w-4 h-4",
+          isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
+        )} />
+        {!forceCompact && (
+          <span className={isResponsive ? "hidden sm:inline" : undefined}>Offlane</span>
+        )}
+      </Badge>
+    </div>
+  );
+
+  if (disableTooltips) return badgeContent;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="relative inline-block cursor-help">
-          <Badge className={cn(
-            "badge-primary !bg-emerald-900 !text-white hover:!bg-emerald-800 transition-colors",
-            forceCompact && "!px-1 !py-0.5",
-            isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
-          )}>
-            <Badge className={cn(
-              "!bg-emerald-800",
-              forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
-            )}>
-              {user.positions.offlane}
-            </Badge>
-            <OfflaneSVG className={cn(
-              forceCompact && "w-4 h-4",
-              isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
-            )} />
-            {!forceCompact && (
-              <span className={isResponsive ? "hidden sm:inline" : undefined}>Offlane</span>
-            )}
-          </Badge>
-        </div>
+        {badgeContent}
       </TooltipTrigger>
       <TooltipContent className="bg-emerald-900 text-white">
         <p className="font-semibold">Position 3: Offlane</p>
@@ -193,7 +225,7 @@ export const OfflaneBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
   );
 });
 
-export const SoftSupportBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
+export const SoftSupportBadge: React.FC<BadgeProps> = memo(({ user, compact, disableTooltips }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
   if (!user.positions?.soft_support) return null;
@@ -201,33 +233,42 @@ export const SoftSupportBadge: React.FC<BadgeProps> = memo(({ user, compact }) =
   const isResponsive = compact === undefined;
   const forceCompact = compact === true;
 
+  const badgeContent = (
+    <div
+      className="relative inline-block cursor-help"
+      title={disableTooltips ? `Position 4: Soft Support - ${getRankLabel(user.positions.soft_support)}` : undefined}
+    >
+      <Badge className={cn(
+        "badge-primary !bg-violet-900 !text-white hover:!bg-violet-800 transition-colors",
+        forceCompact && "!px-1 !py-0.5",
+        isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
+      )}>
+        <Badge className={cn(
+          "!bg-violet-800",
+          forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
+        )}>
+          {user.positions.soft_support}
+        </Badge>
+        <SoftSupportSVG className={cn(
+          forceCompact && "w-4 h-4",
+          isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
+        )} />
+        {!forceCompact && (
+          <span className={isResponsive ? "hidden sm:inline" : undefined}>
+            <span className="hidden 2xl:inline">SoftSupport</span>
+            <span className="inline 2xl:hidden">Pos4</span>
+          </span>
+        )}
+      </Badge>
+    </div>
+  );
+
+  if (disableTooltips) return badgeContent;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="relative inline-block cursor-help">
-          <Badge className={cn(
-            "badge-primary !bg-violet-900 !text-white hover:!bg-violet-800 transition-colors",
-            forceCompact && "!px-1 !py-0.5",
-            isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
-          )}>
-            <Badge className={cn(
-              "!bg-violet-800",
-              forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
-            )}>
-              {user.positions.soft_support}
-            </Badge>
-            <SoftSupportSVG className={cn(
-              forceCompact && "w-4 h-4",
-              isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
-            )} />
-            {!forceCompact && (
-              <span className={isResponsive ? "hidden sm:inline" : undefined}>
-                <span className="hidden 2xl:inline">SoftSupport</span>
-                <span className="inline 2xl:hidden">Pos4</span>
-              </span>
-            )}
-          </Badge>
-        </div>
+        {badgeContent}
       </TooltipTrigger>
       <TooltipContent className="bg-violet-900 text-white">
         <p className="font-semibold">Position 4: Soft Support</p>
@@ -237,7 +278,7 @@ export const SoftSupportBadge: React.FC<BadgeProps> = memo(({ user, compact }) =
   );
 });
 
-export const HardSupportBadge: React.FC<BadgeProps> = memo(({ user, compact }) => {
+export const HardSupportBadge: React.FC<BadgeProps> = memo(({ user, compact, disableTooltips }) => {
   const shouldShowBadge = useBadgeGuard(user);
   if (!shouldShowBadge) return null;
   if (!user.positions?.hard_support) return null;
@@ -245,33 +286,42 @@ export const HardSupportBadge: React.FC<BadgeProps> = memo(({ user, compact }) =
   const isResponsive = compact === undefined;
   const forceCompact = compact === true;
 
+  const badgeContent = (
+    <div
+      className="relative inline-block cursor-help"
+      title={disableTooltips ? `Position 5: Hard Support - ${getRankLabel(user.positions.hard_support)}` : undefined}
+    >
+      <Badge className={cn(
+        "badge-primary !bg-indigo-900 !text-white hover:!bg-indigo-800 transition-colors",
+        forceCompact && "!px-1 !py-0.5",
+        isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
+      )}>
+        <Badge className={cn(
+          "!bg-indigo-800",
+          forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
+        )}>
+          {user.positions.hard_support}
+        </Badge>
+        <HardSupportSVG className={cn(
+          forceCompact && "w-4 h-4",
+          isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
+        )} />
+        {!forceCompact && (
+          <span className={isResponsive ? "hidden sm:inline" : undefined}>
+            <span className="hidden 2xl:inline">HardSupport</span>
+            <span className="inline 2xl:hidden">Pos5</span>
+          </span>
+        )}
+      </Badge>
+    </div>
+  );
+
+  if (disableTooltips) return badgeContent;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="relative inline-block cursor-help">
-          <Badge className={cn(
-            "badge-primary !bg-indigo-900 !text-white hover:!bg-indigo-800 transition-colors",
-            forceCompact && "!px-1 !py-0.5",
-            isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
-          )}>
-            <Badge className={cn(
-              "!bg-indigo-800",
-              forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
-            )}>
-              {user.positions.hard_support}
-            </Badge>
-            <HardSupportSVG className={cn(
-              forceCompact && "w-4 h-4",
-              isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
-            )} />
-            {!forceCompact && (
-              <span className={isResponsive ? "hidden sm:inline" : undefined}>
-                <span className="hidden 2xl:inline">HardSupport</span>
-                <span className="inline 2xl:hidden">Pos5</span>
-              </span>
-            )}
-          </Badge>
-        </div>
+        {badgeContent}
       </TooltipTrigger>
       <TooltipContent className="bg-indigo-900 text-white">
         <p className="font-semibold">Position 5: Hard Support</p>
@@ -289,9 +339,14 @@ interface RolePositionsProps {
    * - `undefined`: Responsive - compact on mobile (<sm), full on larger screens
    */
   compact?: boolean;
+  /**
+   * Disable tooltips for performance in list views with many items.
+   * Uses native title attribute instead.
+   */
+  disableTooltips?: boolean;
 }
 
-export const RolePositions: React.FC<RolePositionsProps> = ({ user, compact }) => {
+export const RolePositions: React.FC<RolePositionsProps> = ({ user, compact, disableTooltips }) => {
   if (!user.positions) return null;
 
   const isResponsive = compact === undefined;
@@ -312,7 +367,7 @@ export const RolePositions: React.FC<RolePositionsProps> = ({ user, compact }) =
         .filter(({ value }) => value != null)
         .sort((a, b) => a.value - b.value)
         .map(({ component: Component }, index) => (
-          <Component key={index} user={user} compact={compact} />
+          <Component key={index} user={user} compact={compact} disableTooltips={disableTooltips} />
         ))}
     </div>
   );
