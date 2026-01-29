@@ -202,8 +202,17 @@ test.describe('HeroDraft with Bracket Demo', () => {
     console.log(`Captain B: ${teams[1].captain.username} (${teams[1].team_name})`);
 
     // Login both captains
-    await loginAsDiscordId(setupContextA, teams[0].captain.discordId);
-    await loginAsDiscordId(setupContextB, teams[1].captain.discordId);
+    console.log(`Login: Captain A Discord ID: ${teams[0].captain.discordId}`);
+    const loginResultA = await loginAsDiscordId(setupContextA, teams[0].captain.discordId);
+    console.log(`Login: Captain A result:`, JSON.stringify(loginResultA));
+    const cookiesA = await setupContextA.cookies();
+    console.log(`Login: Captain A cookies:`, JSON.stringify(cookiesA, null, 2));
+
+    console.log(`Login: Captain B Discord ID: ${teams[1].captain.discordId}`);
+    const loginResultB = await loginAsDiscordId(setupContextB, teams[1].captain.discordId);
+    console.log(`Login: Captain B result:`, JSON.stringify(loginResultB));
+    const cookiesB = await setupContextB.cookies();
+    console.log(`Login: Captain B cookies:`, JSON.stringify(cookiesB, null, 2));
 
     const setupPageA = await setupContextA.newPage();
     const setupPageB = await setupContextB.newPage();
