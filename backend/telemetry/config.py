@@ -49,17 +49,5 @@ def init_telemetry() -> None:
     log_format = os.environ.get("LOG_FORMAT", "pretty" if is_dev() else "json")
     configure_logging(level=log_level, format=log_format)
 
-    # Get a logger now that structlog is configured
-    log = get_logger(__name__)
-
     # Initialize OTel tracing (no-op if not configured)
     init_tracing()
-
-    # Log startup summary
-    log.info(
-        "telemetry_initialized",
-        otel_enabled=env_bool("OTEL_ENABLED", False),
-        log_format=log_format,
-        log_level=log_level,
-        service_name=get_service_name(),
-    )

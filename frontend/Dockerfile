@@ -13,7 +13,7 @@ COPY package-lock.json /app/
 # ---- Browser Stage (fully independent - only rebuilds when node:22-alpine changes) ----
 FROM node:22-alpine AS browsers
 
-# Install system browsers and dependencies (fast, from apk cache)
+# Install system browsers and dependencies for Playwright (fast, from apk cache)
 RUN apk add --no-cache \
     chromium \
     firefox \
@@ -24,17 +24,6 @@ RUN apk add --no-cache \
     ttf-freefont \
     libstdc++ \
     dbus
-
-# Set up Cypress cache
-ENV CYPRESS_CACHE_FOLDER=/browsers/cypress
-RUN mkdir -p /browsers/cypress && \
-    npm install cypress@latest --prefix /tmp/cy && \
-    /tmp/cy/node_modules/.bin/cypress install && \
-    rm -rf /tmp/cy
-
-# Playwright will use system browsers - no download needed
-# Just create the directory structure
-RUN mkdir -p /browsers/playwright
 
 # ---- Production Deps ----
 FROM base AS deps
@@ -55,6 +44,7 @@ COPY --chown=node:node . /app/
 # ---- Builder ----
 FROM source AS builder
 USER node
+COPY docs/assets/* /app/public/assets/docs/
 RUN npm run build
 
 # ---- Runtime (production) ----
@@ -67,10 +57,11 @@ ENV RELEASE=false
 ENV TEST=false
 EXPOSE 3000
 COPY --from=builder --chown=node:node /app/build /app/build
+
 USER node
 CMD ["npm", "run", "start"]
 
-# ---- Dev/Test Runtime (with Cypress and Playwright) ----
+# ---- Dev/Test Runtime (with Playwright) ----
 FROM deps-build AS runtime-dev
 LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/draftforge"
 WORKDIR /app
@@ -82,7 +73,7 @@ COPY --from=browsers /usr/lib/chromium /usr/lib/chromium
 COPY --from=browsers /usr/lib/firefox /usr/lib/firefox
 COPY --from=browsers /usr/share/fonts /usr/share/fonts
 
-# Install browser runtime dependencies
+# Install browser runtime dependencies and ffmpeg for video processing
 USER root
 RUN apk add --no-cache \
     nss \
@@ -103,26 +94,21 @@ RUN apk add --no-cache \
     alsa-lib \
     cups-libs \
     gtk+3.0 \
-    at-spi2-core
-
-# Copy Cypress cache from browsers stage
-COPY --from=browsers --chown=node:node /browsers/cypress /home/node/.cache/Cypress
+    at-spi2-core \
+    ffmpeg && \
+    # Create symlink: chromium-browser wrapper calls /usr/bin/chromium but Alpine puts it at /usr/lib/chromium/chromium
+    ln -sf /usr/lib/chromium/chromium /usr/bin/chromium
 
 # Set environment variables
 ENV PROD=false
 ENV NODE_ENV="dev"
 ENV RELEASE=false
 ENV TEST=false
-ENV CYPRESS_CACHE_FOLDER=/home/node/.cache/Cypress
 # Tell Playwright to use system browsers instead of downloading
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
 ENV PLAYWRIGHT_FIREFOX_EXECUTABLE_PATH=/usr/bin/firefox
 EXPOSE 3000
-
-# Verify Cypress installation
-USER node
-RUN npx cypress --version
 
 # Copy and use entrypoint script
 COPY --chown=node:node docker-entrypoint-frontend.sh /app/docker-entrypoint-frontend.sh
