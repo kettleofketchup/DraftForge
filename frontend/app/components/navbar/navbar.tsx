@@ -53,6 +53,8 @@ interface NavItemProps
   to?: string;
   /** Use for external links (uses <a> tag) */
   href?: string;
+  /** Custom class for title text (overrides default color) */
+  titleClassName?: string;
 }
 
 const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
@@ -68,6 +70,7 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
       showSubtitleTooltip = false,
       to,
       href,
+      titleClassName,
       ...props
     },
     ref,
@@ -102,7 +105,7 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
         >
           {/* Title + badge row */}
           <div className="flex items-center justify-center gap-1">
-            <span className="text-xs font-bold leading-normal truncate text-center text-outline-sm">
+            <span className={cn("text-xs font-bold leading-normal truncate text-center text-outline-sm text-[#646cff]", titleClassName)}>
               {title}
             </span>
             {badge}
@@ -460,7 +463,8 @@ const ExternalLinks = ({ className }: { className?: string }) => {
         icon={<BugIcon />}
         title="Report Issue"
         subtitle="Help us fix it"
-        className="[&_svg]:text-destructive text-destructive hover:text-destructive hover:[&_svg]:text-red-400"
+        className="[&_svg]:text-destructive hover:[&_svg]:text-red-400"
+        titleClassName="text-destructive hover:text-red-400"
         aria-label="Report a Bug"
         hideTextOnSmall
       />

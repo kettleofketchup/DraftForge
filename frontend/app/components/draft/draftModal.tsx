@@ -1,8 +1,8 @@
-import { ChevronUp, ClipboardPen, EyeIcon, X } from 'lucide-react';
+import { BarChart3, ChevronUp, ClipboardPen, EyeIcon } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button } from '~/components/ui/button';
-import { DestructiveButton } from '~/components/ui/buttons';
+import { SecondaryButton } from '~/components/ui/buttons';
 import {
   Collapsible,
   CollapsibleContent,
@@ -10,7 +10,6 @@ import {
 } from '~/components/ui/collapsible';
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -424,7 +423,11 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {draftDialogButton()}
 
-      <DialogContent className={DIALOG_CSS}>
+      <DialogContent
+        className={DIALOG_CSS}
+        closeButtonVariant="destructive"
+        closeButtonTestId="close-draft-modal"
+      >
         <ScrollArea className={SCROLLAREA_CSS}>
           <DialogHeader>
             <DialogTitle>Tournament Draft</DialogTitle>
@@ -451,11 +454,19 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
               </CollapsibleTrigger>
             </div>
             <CollapsibleContent className="border-t bg-muted/50 p-4 space-y-3">
+              {/* Actions visible to everyone */}
               <div className="flex flex-wrap gap-2 justify-center">
-                <DraftModerationDropdown onOpenDraftStyleModal={() => setDraftStyleOpen(true)} />
-                <UndoPickButton />
-              </div>
-              <div className="flex flex-wrap gap-2 justify-center">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <SecondaryButton color="lime" onClick={() => setDraftStyleOpen(true)}>
+                        <BarChart3 className="h-4 w-4 mr-2" />
+                        Stats
+                      </SecondaryButton>
+                    </TooltipTrigger>
+                    <TooltipContent>View Draft Balance Stats</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <DraftHistoryButton
                   events={draftEvents}
                   hasNewEvent={hasNewEvent}
@@ -463,14 +474,13 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
                 />
                 <ShareDraftButton />
               </div>
-              <div className="flex justify-center">
-                <DialogClose asChild>
-                  <DestructiveButton onClick={() => handleOpenChange(false)}>
-                    <X className="h-4 w-4 mr-1" />
-                    Close
-                  </DestructiveButton>
-                </DialogClose>
-              </div>
+              {/* Moderation actions - only visible to staff */}
+              {isStaff() && (
+                <div className="flex flex-wrap gap-2 justify-center">
+                  <DraftModerationDropdown onOpenDraftStyleModal={() => setDraftStyleOpen(true)} />
+                  <UndoPickButton />
+                </div>
+              )}
             </CollapsibleContent>
           </Collapsible>
         </div>
@@ -481,8 +491,21 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
           className="hidden md:flex w-full flex-col rounded-full items-center gap-4 mb-4 md:flex-row align-center sm:shadow-md sm:shadow-black/10 /50 sm:p-6 sm:m-0"
         >
           <div className="flex w-full justify-center md:justify-start gap-2">
+            {/* Moderation actions - only visible to staff */}
             <DraftModerationDropdown onOpenDraftStyleModal={() => setDraftStyleOpen(true)} />
             <UndoPickButton />
+            {/* Balance stats - visible to everyone */}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SecondaryButton color="lime" onClick={() => setDraftStyleOpen(true)}>
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    Stats
+                  </SecondaryButton>
+                </TooltipTrigger>
+                <TooltipContent>View Draft Balance Stats</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
           {choiceButtons()}
           <div className="flex w-full justify-center md:justify-end gap-2">
@@ -492,13 +515,6 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
               onViewed={clearNewEventFlag}
             />
             <ShareDraftButton />
-
-            <DialogClose asChild>
-              <DestructiveButton onClick={() => handleOpenChange(false)}>
-                <X className="h-4 w-4 mr-1" />
-                Close
-              </DestructiveButton>
-            </DialogClose>
           </div>
         </DialogFooter>
 

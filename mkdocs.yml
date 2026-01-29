@@ -78,6 +78,7 @@ nav:
       - Quick Start: getting-started/quick-start.md
   - Features:
       - Draft System: features/draft.md
+      - Hero Draft: features/herodraft.md
   - Architecture:
       - Overview: architecture/overview.md
       - Docker Setup: architecture/docker.md

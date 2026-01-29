@@ -1,6 +1,5 @@
 import { OctagonAlert, Settings, ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
-import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { Button } from '~/components/ui/button';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import {
@@ -58,10 +57,9 @@ export const DraftModerationDropdown: React.FC<DraftModerationDropdownProps> = (
     setConfirmOpen(false);
   };
 
+  // Hide moderation controls entirely for non-staff users
   if (!isStaff()) {
-    return (
-      <AdminOnlyButton tooltipTxt="Must be an admin to manage the draft" />
-    );
+    return null;
   }
 
   return (

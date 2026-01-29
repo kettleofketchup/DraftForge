@@ -109,7 +109,11 @@ RUN apk add --no-cache \
     simdutf \
     openh264 && \
     # Create symlink: chromium-browser wrapper calls /usr/bin/chromium but Alpine puts it at /usr/lib/chromium/chromium
-    ln -sf /usr/lib/chromium/chromium /usr/bin/chromium
+    ln -sf /usr/lib/chromium/chromium /usr/bin/chromium && \
+    # Create ffmpeg symlink for Playwright (it looks in cache dir but we use system ffmpeg)
+    mkdir -p /home/node/.cache/ms-playwright/ffmpeg-1011 && \
+    ln -sf /usr/bin/ffmpeg /home/node/.cache/ms-playwright/ffmpeg-1011/ffmpeg-linux && \
+    chown -R node:node /home/node/.cache
 
 # Set environment variables
 ENV PROD=false

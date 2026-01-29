@@ -362,8 +362,8 @@ DEMO_VIDEO_NAMES = [
 # Demo tournament reset keys
 DEMO_RESET_KEYS = {
     "herodraft": "demo_herodraft",
-    "shuffle": "demo_captaindraft",
-    "snake": "demo_captaindraft",
+    "shuffle": "demo_shuffle_draft",
+    "snake": "demo_snake_draft",
 }
 
 
@@ -793,10 +793,31 @@ def demo_quick(c, duration=10, fps=12, width=400):
     demo_gifs(c, duration=duration, fps=fps, width=width)
 
 
+@task
+def demo_snapshots(c):
+    """Take site screenshots for documentation.
+
+    Captures screenshots of key pages and saves to docs/assets/site_snapshots/.
+
+    Pages captured:
+    - Home page
+    - Tournaments list
+    - Tournament detail
+    - Bracket view
+    - Draft modal
+    - HeroDraft view
+    """
+    print("=== Site Snapshots ===")
+    flush_test_redis(c)
+    _run_demo_in_docker(c, spec="Site Snapshots")
+    print("\nSnapshots saved to docs/assets/site_snapshots/")
+
+
 ns_demo.add_task(demo_create, "create")
 ns_demo.add_task(demo_shuffle, "shuffle")
 ns_demo.add_task(demo_snake, "snake")
 ns_demo.add_task(demo_herodraft, "herodraft")
+ns_demo.add_task(demo_snapshots, "snapshots")
 ns_demo.add_task(demo_all, "all")
 ns_demo.add_task(demo_gifs, "gifs")
 ns_demo.add_task(demo_trim, "trim")
