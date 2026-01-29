@@ -87,21 +87,9 @@ This migration plan was reviewed by 5 specialized agents. Below are their findin
 #### 6. Load Trigger Missing in useTournamentDataStore
 - **Agent**: React Patterns
 - **Severity**: MEDIUM
-- **Status**: ⏳ PENDING (Phase 2A)
+- **Status**: ✅ FIXED
 - **Problem**: `setTournamentId()` doesn't automatically trigger data loading.
-- **Recommendation**: Add auto-load in `setTournamentId()` or document that consumers must call `loadFull()`.
-
-```typescript
-// Option A: Auto-load in setTournamentId
-setTournamentId: (id) => {
-  if (id !== get().tournamentId) {
-    set({ tournamentId: id });
-    if (id !== null) {
-      get().loadFull();  // Auto-trigger load
-    }
-  }
-},
-```
+- **Fix Applied**: Added `get().loadAll()` call in `setTournamentId()` when setting a new ID.
 
 #### 7. Missing Toast Notifications
 - **Agent**: WebSocket
@@ -200,7 +188,7 @@ startPolling: (tournamentId, intervalMs = 5000) => {
 | Module-level variable | ✅ Fixed | `c2cb177` |
 | hasNewEvent flag | ✅ Fixed | `c2cb177` |
 | N+1 queries | ✅ Fixed | `69900a4` |
-| Load trigger | ⏳ Pending | Phase 2A |
+| Load trigger | ✅ Fixed | `35732cc` |
 | Toast notifications | ⏳ Pending | Phase 2C |
 | HTTP sequence numbers | ⏳ Pending | Phase 2G |
 | Heartbeat mechanism | ⏳ Pending | Future |
@@ -643,7 +631,7 @@ setLeagues, setLeague, getLeagues
 
 ### Phase 2A: Compatibility Layer
 - [ ] Task 2A.1: Add forwarding methods to useUserStore
-- [ ] Task 2A.2: Create migration helper hooks
+- [x] Task 2A.2: Create migration helper hooks (useTournament, useTeamDraft, useHeroDraftState)
 
 ### Phase 2B: Tournament Pages
 - [ ] Task 2B.1: TournamentDetailPage.tsx
