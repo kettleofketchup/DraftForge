@@ -263,39 +263,56 @@ test.describe('HeroDraft with Bracket Demo', () => {
 
         try {
           console.log(`Setup: ${name} clicking ready (attempt ${attempt})...`);
-          const readyBtn = page.locator('[data-testid="herodraft-ready-button"]');
 
-          // Check if button exists and is visible
-          const isVisible = await readyBtn.isVisible().catch(() => false);
-          if (!isVisible) {
-            console.log(`Setup: ${name} ready button not visible, checking page state...`);
+          // First verify we're in the waiting phase
+          const waitingPhase = page.locator('[data-testid="herodraft-waiting-phase"]');
+          if (!await waitingPhase.isVisible().catch(() => false)) {
             // Maybe already in rolling phase?
             const rollingPhase = page.locator('[data-testid="herodraft-rolling-phase"]');
             if (await rollingPhase.isVisible().catch(() => false)) {
               console.log(`Setup: ${name} already in rolling phase, skipping ready`);
               return;
             }
-            throw new Error('Ready button not visible');
+            console.log(`Setup: ${name} not in waiting phase yet, waiting...`);
+            await waitingPhase.waitFor({ state: 'visible', timeout: 10000 });
           }
 
-          // Use JavaScript click for reliability
-          await readyBtn.evaluate((el: HTMLElement) => el.click());
-          console.log(`Setup: ${name} clicked ready button via JS`);
+          const readyBtn = page.locator('[data-testid="herodraft-ready-button"]');
 
-          // Wait for button to disappear or phase to change
-          await Promise.race([
-            readyBtn.waitFor({ state: 'hidden', timeout: 5000 }),
-            page.locator('[data-testid="herodraft-rolling-phase"]').waitFor({ state: 'visible', timeout: 5000 }),
-          ]).catch(() => {});
+          // Wait for ready button to appear (it only shows for captains who haven't clicked ready)
+          console.log(`Setup: ${name} waiting for ready button...`);
+          await readyBtn.waitFor({ state: 'visible', timeout: 10000 });
+          console.log(`Setup: ${name} ready button is visible`);
 
-          console.log(`Setup: ${name} ready action completed`);
+          // Set up response listener BEFORE clicking
+          const responsePromise = page.waitForResponse(
+            (response) => response.url().includes('/set-ready/') && response.status() === 200,
+            { timeout: 15000 }
+          );
+
+          // Use Playwright's native click with force to bypass any overlays
+          await readyBtn.click({ force: true });
+          console.log(`Setup: ${name} clicked ready button, waiting for API response...`);
+
+          // Wait for the API call to complete
+          const response = await responsePromise;
+          console.log(`Setup: ${name} set-ready API returned ${response.status()}`);
+
+          // Wait for button to disappear (indicates ready state was accepted by UI)
+          await readyBtn.waitFor({ state: 'hidden', timeout: 5000 });
+          console.log(`Setup: ${name} ready confirmed - button hidden`);
           return;
         } catch (e) {
           console.log(`Setup: ${name} ready attempt ${attempt} failed: ${e}`);
           if (attempt === maxRetries) {
+            // Debug: capture page state
+            const pageUrl = page.url();
+            const waitingVisible = await page.locator('[data-testid="herodraft-waiting-phase"]').isVisible().catch(() => false);
+            const readyBtnVisible = await page.locator('[data-testid="herodraft-ready-button"]').isVisible().catch(() => false);
+            console.log(`Setup: Debug - URL: ${pageUrl}, waiting phase visible: ${waitingVisible}, ready btn visible: ${readyBtnVisible}`);
             throw new Error(`Failed to click ready for ${name} after ${maxRetries} attempts: ${e}`);
           }
-          await page.waitForTimeout(1000);
+          await page.waitForTimeout(2000);
         }
       }
     };
