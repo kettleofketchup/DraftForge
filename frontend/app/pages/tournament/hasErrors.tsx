@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { UserClassType, UserType } from '~/components/user';
 import UserEditModal from '~/components/user/userCard/editModal';
 import { getLogger } from '~/lib/logger';
-import { useUserStore } from '~/store/userStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 const log = getLogger('hasErrors');
 
 interface UserIssue {
@@ -23,16 +23,16 @@ function hasNoPositions(user: UserType): boolean {
   return totalPreference === 0;
 }
 
-export const hasErrors = () => {
-  const tournament = useUserStore((state) => state.tournament);
+export const HasErrors = () => {
+  const users = useTournamentDataStore((state) => state.users);
 
   // Compute users with issues
   const usersWithIssues = useMemo(() => {
-    if (!tournament?.users) return [];
+    if (!users || users.length === 0) return [];
 
     const issues: UserIssue[] = [];
 
-    for (const user of tournament.users) {
+    for (const user of users) {
       const userIssues: string[] = [];
 
       if (!user.mmr) {
@@ -52,7 +52,7 @@ export const hasErrors = () => {
 
     log.debug('Users with issues:', issues.length, issues);
     return issues;
-  }, [tournament?.users]);
+  }, [users]);
 
   return (
     <>

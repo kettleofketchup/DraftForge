@@ -11,7 +11,7 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 
-import { useUserStore } from '~/store/userStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import type { GameType } from '../types';
 
 interface PropsRemoveButton {
@@ -24,12 +24,13 @@ export const GameRemoveButton: React.FC<PropsRemoveButton> = ({
   disabled,
 }) => {
   const [open, setOpen] = useState(false);
-  const tournament = useUserStore((state) => state.tournament);
-  const setTournament = useUserStore((state) => state.setTournament);
+  const tournamentId = useTournamentDataStore((state) => state.metadata?.pk);
+  const loadFull = useTournamentDataStore((state) => state.loadFull);
 
   const handleChange = async () => {
+    if (!tournamentId) return;
     await deleteGameHook({ game });
-    await refreshTournamentHook({ tournament, setTournament });
+    await refreshTournamentHook({ tournamentId, reloadTournament: loadFull });
     setOpen(false);
   };
 

@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import {
   fetchCurrentUser,
-  fetchDraft,
   fetchOrganization,
   fetchTournament,
   fetchUsers,
@@ -14,7 +13,6 @@ import {
   getTournaments,
   getTournamentsBasic,
 } from '~/components/api/api';
-import type { DraftRoundType, DraftType } from '~/components/draft/types';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
@@ -25,6 +23,7 @@ import { getLogger } from '~/lib/logger';
 const log = getLogger('userStore');
 
 interface UserState {
+  // === Current User & Authentication ===
   currentUser: UserType;
   selectedUser: UserType;
   hasHydrated: boolean;
@@ -32,11 +31,15 @@ interface UserState {
   setCurrentUser: (user: UserType) => void;
   clearUser: () => void;
   isStaff: () => boolean;
+
+  // === Discord Users ===
   selectedDiscordUser: GuildMember;
   setDiscordUser: (discordUser: GuildMember) => void;
   discordUsers: GuildMembers;
   getDiscordUsers: () => Promise<void>;
   setDiscordUsers: (users: GuildMembers) => void;
+
+  // === All Users (global) ===
   users: UserType[];
   setUsers: (users: UserType[]) => void;
   setUser: (user: UserType) => void;
@@ -44,50 +47,59 @@ interface UserState {
   delUser: (user: UserType) => void;
   getUsers: () => Promise<void>;
   createUser: (user: UserType) => Promise<void>;
-
   clearUsers: () => void;
-  game: GameType;
-  games: GameType[];
-  team: TeamType;
-  teams: TeamType[];
-  tournament: TournamentType;
-  draft: DraftType;
-  setDraft: (draft: DraftType) => void;
-  tournaments: TournamentType[];
-  curDraftRound: DraftRoundType;
-  setCurDraftRound: (round: DraftRoundType) => void;
 
-  resetSelection: () => void;
-  setGames: (games: GameType[]) => void;
-  setTeams: (teams: TeamType[]) => void;
-  setTeam: (teams: TeamType) => void;
-  addTournament: (tourn: TournamentType) => void;
-  delTournament: (tourn: TournamentType) => void;
+  // === Search Queries ===
   userQuery: string;
   addUserQuery: string;
-
   discordUserQuery: string;
   setUserQuery: (query: string) => void;
   setAddUserQuery: (query: string) => void;
   setDiscordUserQuery: (query: string) => void;
+  resetSelection: () => void;
+
+  // === Tournaments List (global - for index pages) ===
+  tournaments: TournamentType[];
   setTournaments: (tournaments: TournamentType[]) => void;
-  setTournament: (tournament: TournamentType) => void;
-  tournamentsByUser: (user: UserType) => TournamentType[];
-  getCurrentUser: () => Promise<void>;
-  userAPIError: any;
-  tournamentPK: number | null;
+  addTournament: (tourn: TournamentType) => void;
+  delTournament: (tourn: TournamentType) => void;
   getTournaments: () => Promise<void>;
   getTournamentsBasic: () => Promise<void>;
 
-  getTeams: () => Promise<void>;
-  getGames: () => Promise<void>;
+  // === DEPRECATED: Use useTournamentDataStore instead ===
+  // Note: Draft state has been removed. Use useTeamDraftStore for draft functionality.
+  /** @deprecated Use useTournamentDataStore.tournament instead */
+  tournament: TournamentType;
+  /** @deprecated Use useTournamentDataStore.loadFull() instead */
+  setTournament: (tournament: TournamentType) => void;
+  /** @deprecated Use useTournamentDataStore.tournamentId instead */
+  tournamentPK: number | null;
+  /** @deprecated Use useTournamentDataStore.loadFull() instead */
   getCurrentTournament: () => Promise<void>;
-  getDraft: () => Promise<void>;
-  getCurrentDraftRound: () => Promise<void>;
-  draftIndex: number;
-  setDraftIndex: (index: number) => void;
-  autoRefreshDraft: (() => Promise<void>) | null;
-  setAutoRefreshDraft: (refresh: (() => Promise<void>) | null) => void;
+  /** @deprecated Only used by setUser for cross-tournament updates */
+  tournamentsByUser: (user: UserType) => TournamentType[];
+  /** @deprecated Use useTournamentDataStore.games instead */
+  game: GameType;
+  /** @deprecated Use useTournamentDataStore.games instead */
+  games: GameType[];
+  /** @deprecated Use useTournamentDataStore.teams instead */
+  team: TeamType;
+  /** @deprecated Use useTournamentDataStore.teams instead */
+  teams: TeamType[];
+  /** @deprecated Use useTournamentDataStore.loadGames() instead */
+  setGames: (games: GameType[]) => void;
+  /** @deprecated Use useTournamentDataStore.loadTeams() instead */
+  setTeams: (teams: TeamType[]) => void;
+  /** @deprecated Remove - single selection not needed */
+  setTeam: (teams: TeamType) => void;
+  /** @deprecated Use useTournamentDataStore.loadGames() instead */
+  getGames: () => Promise<void>;
+  /** @deprecated Use useTournamentDataStore.loadTeams() instead */
+  getTeams: () => Promise<void>;
+
+  // === Auth/API Errors ===
+  getCurrentUser: () => Promise<void>;
+  userAPIError: any;
 
   // Organizations
   organizations: OrganizationType[];
@@ -107,51 +119,15 @@ interface UserState {
 export const useUserStore = create<UserState>()(
   persist(
     (set, get) => ({
+      // === DEPRECATED: Tournament state - use useTournamentDataStore ===
       tournament: {} as TournamentType,
-      draft: get()?.tournament?.draft as DraftType,
-      autoRefreshDraft: null,
-      setAutoRefreshDraft: (refresh) => set({ autoRefreshDraft: refresh }),
-      getDraft: async () => {
-        try {
-          await get().getCurrentTournament();
-          set({ draft: get().tournament.draft });
-        } catch (err) {
-          log.error('Failed to fetch draft:', err);
-        }
-      },
-      getCurrentDraftRound: async () => {
-        try {
-          await get().getCurrentTournament();
-
-          set({
-            curDraftRound:
-              get().tournament.draft?.draft_rounds?.[get().draftIndex],
-          });
-        } catch (err) {
-          log.error('Failed to fetch draft:', err);
-        }
-      },
-      draftIndex: 0,
-      setDraftIndex: (index: number) => set({ draftIndex: index }),
-      setDraft: (draft: DraftType) => set({ draft }),
       tournaments: [] as TournamentType[],
       game: {} as GameType,
       games: [] as GameType[],
       teams: [] as TeamType[],
       team: {} as TeamType,
 
-      updateCurrentDraft: async () => {
-        if (!get().draft.pk) {
-          console.debug('Current draft does not have a primary key (pk).');
-          return;
-        }
-        const draft = await fetchDraft(get().draft.pk!);
-        set({ draft: draft });
-      },
-      curDraftRound: {} as DraftRoundType,
-
-      setCurDraftRound: (round: DraftRoundType) =>
-        set({ curDraftRound: round }),
+      // === Current User ===
       currentUser: new User({} as UserType),
       userQuery: '',
       addUserQuery: '',

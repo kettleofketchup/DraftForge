@@ -10,7 +10,7 @@ import { UserCard } from '~/components/user/userCard';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { useTournamentDataStore } from '~/store/tournamentDataStore';
-import { hasErrors } from '../hasErrors';
+import { HasErrors } from '../hasErrors';
 import { AddPlayerModal } from './players/addPlayerModal';
 
 const log = getLogger('PlayersTab');
@@ -122,7 +122,7 @@ export const PlayersTab: React.FC = memo(() => {
   const renderGames = () => {};
   return (
     <div className="py-5 px-3 mx-auto container">
-      {hasErrors()}
+      <HasErrors />
 
       <div className="grid grid-cols-2 gap-5 items-start pt-5  ">
         <div className="flex self-center place-self-stretch">

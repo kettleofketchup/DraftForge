@@ -15,32 +15,11 @@ import { create } from "zustand";
 import { fetchDraft, fetchTournamentDraftState } from "~/components/api/api";
 import type { DraftType, DraftRoundType, TieResolution } from "~/components/draft/types.d";
 import type { UserType } from "~/components/user";
+import type { DraftEvent, WebSocketMessage } from "~/types/draftEvent";
 import { WebSocketManager, type ConnectionState } from "~/lib/websocket";
 import { getLogger } from "~/lib/logger";
 
 const log = getLogger("teamDraftStore");
-
-// Draft event from WebSocket
-interface DraftEvent {
-  event_type: string;
-  payload: Record<string, unknown>;
-  created_at: string;
-}
-
-// WebSocket message types
-interface WebSocketDraftEvent {
-  type: "draft_event";
-  event: DraftEvent;
-  draft_state?: DraftType;
-  sequence?: number;
-}
-
-interface WebSocketInitialEvents {
-  type: "initial_events";
-  events: DraftEvent[];
-}
-
-type WebSocketMessage = WebSocketDraftEvent | WebSocketInitialEvents;
 
 interface TeamDraftState {
   // Draft being viewed
@@ -75,9 +54,11 @@ interface TeamDraftState {
   setCurrentRoundIndex: (index: number) => void;
   nextRound: () => void;
   previousRound: () => void;
+  goToLatestRound: () => void;
 
   // Get current round
   getCurrentRound: () => DraftRoundType | null;
+  getLatestRoundIndex: () => number;
 
   // Get users remaining to be picked
   getUsersRemaining: () => UserType[];
@@ -229,11 +210,27 @@ export const useTeamDraftStore = create<TeamDraftState>((set, get) => ({
     state.setCurrentRoundIndex(state.currentRoundIndex - 1);
   },
 
+  goToLatestRound: () => {
+    const state = get();
+    const latestIndex = state.getLatestRoundIndex();
+    state.setCurrentRoundIndex(latestIndex);
+  },
+
   // Get current round
   getCurrentRound: () => {
     const { draft, currentRoundIndex } = get();
     if (!draft?.draft_rounds || draft.draft_rounds.length === 0) return null;
     return draft.draft_rounds[currentRoundIndex] ?? null;
+  },
+
+  getLatestRoundIndex: () => {
+    const { draft } = get();
+    if (!draft?.draft_rounds || draft.draft_rounds.length === 0) return 0;
+    if (draft.latest_round === null) return 0;
+
+    // Find index of the latest round by pk
+    const index = draft.draft_rounds.findIndex(r => r.pk === draft.latest_round);
+    return index >= 0 ? index : Math.max(0, draft.draft_rounds.length - 1);
   },
 
   // Get users remaining
@@ -270,8 +267,9 @@ export const useTeamDraftStore = create<TeamDraftState>((set, get) => ({
       }));
 
       // Update draft state if included
+      // Note: Backend sends full DraftType but WebSocketMessage types it as WebSocketDraftState
       if (msg.draft_state) {
-        const draft = msg.draft_state;
+        const draft = msg.draft_state as unknown as DraftType;
         let roundIndex = get().currentRoundIndex;
 
         // Auto-advance to latest round on new pick

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import {
   AlertDialog,
@@ -15,26 +15,34 @@ import { Button } from '~/components/ui/button';
 import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
 import type { TeamType, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import { useUserStore } from '~/store/userStore';
 import { createTeamFromCaptainHook } from './createTeamFromCaptainHook';
 import { DraftOrderButton } from './draftOrder';
 const log = getLogger('updateCaptainButton');
 export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
-  const tournament = useUserStore((state) => state.tournament);
+  const tournament = useTournamentDataStore((state) => state.tournament);
+  const teams = useTournamentDataStore((state) => state.teams);
+  const loadFull = useTournamentDataStore((state) => state.loadFull);
   const isStaff = useUserStore((state) => state.isStaff);
 
-  const determineIsCaptain = () => {
-    return !!tournament?.captains?.some((c) => c.pk === user.pk);
-  };
-  const getTeam = () => {
-    return tournament?.teams?.find((t: TeamType) => t.captain?.pk === user.pk);
-  };
-  const [isCaptain, setIsCaptain] = useState<boolean>(determineIsCaptain());
-  const setTournament = useUserStore((state) => state.setTournament);
+  // Derive captains from teams (each team has a captain)
+  const captains = useMemo(() => {
+    return teams.map((t) => t.captain).filter((c): c is UserType => c !== null && c !== undefined);
+  }, [teams]);
+
+  const isCaptainDerived = useMemo(() => {
+    return captains.some((c) => c.pk === user.pk);
+  }, [captains, user.pk]);
+
+  const team = useMemo(() => {
+    return teams.find((t: TeamType) => t.captain?.pk === user.pk);
+  }, [teams, user.pk]);
+
+  const [isCaptain, setIsCaptain] = useState<boolean>(isCaptainDerived);
 
   const getDraftOrder = () => {
     if (!isCaptain) return '0';
-    const team = getTeam();
     if (!team) return '0';
     if (team.draft_order) return String(team.draft_order);
     return '0';
@@ -46,22 +54,23 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
   const getButtonVariant = (): 'destructive' | 'default' => isCaptain ? 'destructive' : 'default';
 
   useEffect(() => {
-    setIsCaptain(determineIsCaptain());
-  }, [tournament.captains, tournament.teams, isCaptain, draft_order]);
+    setIsCaptain(isCaptainDerived);
+  }, [isCaptainDerived]);
 
   const handleChange = async (e: FormEvent) => {
     log.debug('handleChange', e);
+    if (!tournament) return;
     await createTeamFromCaptainHook({
       tournament,
       captain: user,
       draft_order: draft_order,
       setDraftOrder: setDraftOrder,
-      setTournament: setTournament,
+      reloadTournament: loadFull,
       setIsCaptain: setIsCaptain,
     });
   };
   const dialogBG = () => (isCaptain ? 'bg-red-900' : 'bg-green-900');
-  if (!isStaff()) return <AdminOnlyButton buttonTxt="Change Cpatain" />;
+  if (!isStaff()) return <AdminOnlyButton buttonTxt="Change Captain" />;
 
   return (
     <div

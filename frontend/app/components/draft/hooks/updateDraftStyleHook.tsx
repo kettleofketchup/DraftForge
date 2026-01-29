@@ -2,18 +2,16 @@ import { toast } from 'sonner';
 import { updateDraft } from '~/components/api/api';
 import type { DraftType } from '~/index';
 import { getLogger } from '~/lib/logger';
-const log = getLogger('InitDraft');
+const log = getLogger('updateDraftStyleHook');
 
 type hookParams = {
   draftStyle: 'snake' | 'normal' | 'shuffle';
   draft: DraftType;
-  setDraft: (draft: DraftType) => void;
 };
 
 export const updateDraftStyleHook = async ({
   draftStyle,
   draft,
-  setDraft,
 }: hookParams) => {
   log.debug('Updating draft style', { draft });
 
@@ -30,16 +28,16 @@ export const updateDraftStyleHook = async ({
     pk: draft.pk,
     draft_style: draftStyle as 'snake' | 'normal' | 'shuffle',
   };
-  toast.promise(updateDraft(draft.pk, updatedDraft), {
+
+  await toast.promise(updateDraft(draft.pk, updatedDraft), {
     loading: `Setting draft style to ${draftStyle}...`,
-    success: (data) => {
-      log.debug('Set draft style sucess, data:', data);
-      setDraft(data);
+    success: () => {
+      log.debug('Set draft style success');
       return `Draft style set to ${draftStyle}`;
     },
     error: (err) => {
-      const val = err.response.data;
-      log.error(' Draft has failed to set style!', err);
+      const val = err.response?.data || 'Unknown error';
+      log.error('Draft has failed to set style!', err);
       return `Failed to set draft style: ${val}`;
     },
   });

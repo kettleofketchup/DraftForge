@@ -1,10 +1,11 @@
 // Holds the general draft view
-import { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Separator } from '~/components/ui/separator';
 
-import type { DraftRoundType, DraftType, TournamentType } from '~/index';
+import type { DraftRoundType } from '~/index';
 import { getLogger } from '~/lib/logger';
-import { useUserStore } from '~/store/userStore';
+import { useTeamDraftStore } from '~/store/teamDraftStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import { CaptainCards } from './roundView/captainCards';
 import { PlayerChoiceView } from './roundView/choiceCard';
 import { CurrentTeamView } from './roundView/currentTeam';
@@ -14,28 +15,38 @@ import { ShufflePickOrder } from './shuffle/ShufflePickOrder';
 const log = getLogger('DraftRoundView');
 
 export const DraftRoundView: React.FC = () => {
-  const curDraftRound: DraftRoundType = useUserStore(
-    (state) => state.curDraftRound,
-  );
-  const draftIndex: number = useUserStore((state) => state.draftIndex);
-  const tournament: TournamentType = useUserStore((state) => state.tournament);
-  const draft: DraftType = useUserStore((state) => state.draft);
+  // Subscribe to specific draft fields (not entire draft object)
+  const draftRounds = useTeamDraftStore((state) => state.draft?.draft_rounds);
+  const draftStyle = useTeamDraftStore((state) => state.draft?.draft_style);
+  const latestRoundPk = useTeamDraftStore((state) => state.draft?.latest_round);
+  const draftPk = useTeamDraftStore((state) => state.draft?.pk);
+  const usersRemainingLength = useTeamDraftStore((state) => state.draft?.users_remaining?.length);
+  const currentRoundIndex = useTeamDraftStore((state) => state.currentRoundIndex);
+
+  // Derive current round from subscribed state (reactive)
+  const curDraftRound = useMemo(() => {
+    if (!draftRounds || draftRounds.length === 0) return null;
+    return draftRounds[currentRoundIndex] ?? null;
+  }, [draftRounds, currentRoundIndex]);
+
+  // Tournament data for teams
+  const teams = useTournamentDataStore((state) => state.teams);
 
   useEffect(() => {
     log.debug('Current draft round changed:', curDraftRound);
-  }, [draftIndex]);
+  }, [currentRoundIndex]);
 
   useEffect(() => {
-    log.debug('Tournament teams updated:', tournament.teams);
-  }, [tournament.teams?.length]);
+    log.debug('Tournament teams updated:', teams);
+  }, [teams?.length]);
 
   useEffect(() => {
     log.debug('rerender: Tournament users_remaining.length updated');
-  }, [draft?.users_remaining?.length]);
+  }, [usersRemainingLength]);
 
   useEffect(() => {
-    log.debug('rerender: Draft updated from pk:', draft);
-  }, [draft?.pk]);
+    log.debug('rerender: Draft updated from pk:', draftPk);
+  }, [draftPk]);
 
   useEffect(() => {
     log.debug(
@@ -45,8 +56,8 @@ export const DraftRoundView: React.FC = () => {
   }, [curDraftRound?.pk]);
 
   const latestRound = () =>
-    draft?.draft_rounds?.find(
-      (round: DraftRoundType) => round.pk === draft?.latest_round,
+    draftRounds?.find(
+      (round: DraftRoundType) => round.pk === latestRoundPk,
     );
 
   const noDraftView = () => {
@@ -58,18 +69,18 @@ export const DraftRoundView: React.FC = () => {
     );
   };
 
-  if (!draft || !draft.draft_rounds) return <>{noDraftView()}</>;
+  if (!draftRounds) return <>{noDraftView()}</>;
 
   const isNotLatestRound =
-    draft?.latest_round &&
-    draft?.latest_round !== curDraftRound?.pk &&
+    latestRoundPk &&
+    latestRoundPk !== curDraftRound?.pk &&
     !curDraftRound?.choice;
 
   if (isNotLatestRound) {
-    log.debug('Not latest round', draft);
+    log.debug('Not latest round');
     return (
       <>
-        {draft.draft_style === 'shuffle' ? (
+        {draftStyle === 'shuffle' ? (
           <ShufflePickOrder />
         ) : (
           <CaptainCards />
@@ -89,7 +100,7 @@ export const DraftRoundView: React.FC = () => {
 
   return (
     <>
-      {draft.draft_style === 'shuffle' ? (
+      {draftStyle === 'shuffle' ? (
         <ShufflePickOrder />
       ) : (
         <CaptainCards />

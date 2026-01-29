@@ -20,11 +20,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
-import { useUserStore } from '~/store/userStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import { CaptainTable } from './captainTable';
 
 export const CaptainSelectionModal: React.FC = () => {
-  const tournament = useUserStore((state) => state.tournament);
+  const tournamentName = useTournamentDataStore((state) => state.metadata?.name);
   const [open, setOpen] = useState(false);
 
   const dialogButton = () => {
@@ -55,7 +55,7 @@ export const CaptainSelectionModal: React.FC = () => {
         <DialogHeader>
           <DialogTitle>Choose Captains</DialogTitle>
           <DialogDescription>
-            Update Captains for {tournament.name}
+            Update Captains for {tournamentName}
           </DialogDescription>
         </DialogHeader>
         <ScrollArea className={`${SCROLLAREA_CSS}`}>

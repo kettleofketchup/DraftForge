@@ -1,4 +1,5 @@
-import { test as base, expect, BrowserContext, Page } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 
 // Use nginx hostname inside Docker containers, localhost for local runs
 const DOCKER_HOST = process.env.DOCKER_HOST || 'nginx';

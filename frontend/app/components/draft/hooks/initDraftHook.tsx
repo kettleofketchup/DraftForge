@@ -7,7 +7,7 @@ const log = getLogger('InitDraft');
 
 type hookParams = {
   tournament: TournamentType;
-  setTournament: (tournament: TournamentType) => void;
+  reloadTournament: () => Promise<void>;
   setDraft: (draft: DraftType) => void;
   curDraftRound: DraftRoundType;
   setCurDraftRound: (draftRound: DraftRoundType) => void;
@@ -16,7 +16,7 @@ type hookParams = {
 
 export const initDraftHook = async ({
   tournament,
-  setTournament,
+  reloadTournament,
   setDraft,
   curDraftRound,
   setCurDraftRound,
@@ -25,7 +25,7 @@ export const initDraftHook = async ({
   log.debug('Initialization draft', { tournament });
 
   if (!tournament) {
-    log.error('Creating tournamentNo tournament found');
+    log.error('No tournament found');
     return;
   }
 
@@ -40,9 +40,9 @@ export const initDraftHook = async ({
 
   toast.promise(initDraftRounds(data), {
     loading: `Initializing draft rounds...`,
-    success: (data) => {
-      log.debug('DraftRebuild sucess, data:', data);
-      setTournament(data);
+    success: async (data) => {
+      log.debug('DraftRebuild success, data:', data);
+      await reloadTournament();
       if (!data.draft) {
         log.error('No draft in response');
         return `Tournament Draft has been initialized!`;

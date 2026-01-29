@@ -1,49 +1,30 @@
-import { fetchTournament } from '~/components/api/api';
-import type { DraftRoundType, DraftType, TournamentType } from '~/index';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('RefreshTournament');
 
 type hookParams = {
-  tournament: TournamentType;
-  setTournament: (tournament: TournamentType) => void;
-  setDraft?: (draft: DraftType) => void;
-  curDraftRound?: DraftRoundType;
-  setCurDraftRound?: (draft: DraftRoundType) => void;
+  tournamentId: number;
+  reloadTournament: () => Promise<void>;
 };
 
+/**
+ * Refresh tournament data by reloading from the store.
+ * Uses the single source of truth pattern - store handles the fetch internally.
+ */
 export const refreshTournamentHook = async ({
-  tournament,
-  setTournament,
-  setDraft,
-  curDraftRound,
-  setCurDraftRound,
+  tournamentId,
+  reloadTournament,
 }: hookParams) => {
-  log.debug('Refreshing tournament', { tournament });
+  log.debug('Refreshing tournament', { tournamentId });
 
-  if (!tournament) {
-    log.error('Creating tournamentNo tournament found');
-    return;
-  }
-
-  if (!tournament.pk) {
-    log.error('No tournament primary key found');
+  if (!tournamentId) {
+    log.error('No tournament ID provided');
     return;
   }
 
   try {
-    log.debug('tournament has been refreshed');
-
-    const data = await fetchTournament(tournament.pk);
-    setTournament(data);
-    if (setDraft && data.draft) setDraft(data.draft);
-    if (setCurDraftRound)
-      (log.debug('curDraftRound', { curDraftRound, tournament }),
-        setCurDraftRound(
-          data.draft?.draft_rounds?.find(
-            (round: DraftRoundType) => round?.pk === curDraftRound?.pk,
-          ) || ({} as DraftRoundType),
-        ));
+    await reloadTournament();
+    log.debug('Tournament has been refreshed');
   } catch (error) {
-    log.error('Tournament  has failed to refresh!', error);
+    log.error('Tournament has failed to refresh!', error);
   }
 };

@@ -11,7 +11,7 @@ import {
 } from '~/components/ui/card';
 import type { DraftRoundType } from '~/index';
 import { AvatarUrl, DisplayName } from '~/index';
-import { useUserStore } from '~/store/userStore';
+import { useTeamDraftStore } from '~/store/teamDraftStore';
 
 export const DraftRoundCard = memo(
   ({
@@ -24,9 +24,9 @@ export const DraftRoundCard = memo(
     isCur: boolean;
   }) => {
     const bgColor = isCur ? 'bg-green-900' : 'bg-gray-800';
-    const draftIndex = useUserStore((state) => state.draftIndex);
+    const currentRoundIndex = useTeamDraftStore((state) => state.currentRoundIndex);
 
-    useEffect(() => {}, [draftRound?.pk, isCur, draftIndex]);
+    useEffect(() => {}, [draftRound?.pk, isCur, currentRoundIndex]);
 
     return (
       <motion.div

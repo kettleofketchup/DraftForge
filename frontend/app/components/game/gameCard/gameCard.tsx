@@ -9,6 +9,7 @@ import { BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { refreshTournamentHook } from '~/components/draft/hooks/refreshTournamentHook';
 import { useUserStore } from '~/store/userStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import { Button } from '../../ui/button';
 import { EditButton, SubmitButton } from '../../ui/buttons';
 import { updateGameHook } from '../hooks/updateGameHook';
@@ -18,7 +19,7 @@ interface Props {
   game: GameType;
   edit?: boolean;
   saveFunc?: string;
-  onEditModeChange?: (isEditing: boolean) => void; // Added new prop
+  onEditModeChange?: (isEditing: boolean) => void;
 }
 
 export const GameCard: React.FC<Props> = ({
@@ -27,20 +28,20 @@ export const GameCard: React.FC<Props> = ({
   saveFunc,
   onEditModeChange,
 }) => {
-  let navigate = useNavigate();
+  const navigate = useNavigate();
   const [editMode, setEditMode] = useState(edit || false);
   const [form, setForm] = useState<GameType>(game ?? ({} as GameType));
   const [isSaving, setIsSaving] = useState(false);
-  const setTournament = useUserStore((state) => state.setTournament);
+  const tournamentId = useTournamentDataStore((state) => state.metadata?.pk);
+  const loadFull = useTournamentDataStore((state) => state.loadFull);
   const [error, setError] = useState(false);
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState<
     Partial<Record<keyof GameType, string>>
   >({});
-  const tournament = useUserStore((state) => state.tournament);
 
-  const allUsersFromStore = useUserStore((state) => state.users); // Assuming 'users' holds all users
-  const fetchAllUsers = useUserStore((state) => state.getUsers); // Assuming 'getUsers' fetches all users
+  const allUsersFromStore = useUserStore((state) => state.users);
+  const fetchAllUsers = useUserStore((state) => state.getUsers);
 
   const currentUser = useUserStore((state) => state.currentUser);
   const [saveCallback, setSaveCallBack] = useState(saveFunc || 'save');
@@ -51,6 +52,10 @@ export const GameCard: React.FC<Props> = ({
 
   const handleSave = async (e: FormEvent) => {
     e.stopPropagation();
+    if (!tournamentId) {
+      log.error('No tournament ID available');
+      return;
+    }
     setErrorMessage({}); // clear old errors
     const payload: Partial<GameType> = {
       pk: game.pk,
@@ -58,12 +63,9 @@ export const GameCard: React.FC<Props> = ({
     };
     setIsSaving(true);
     await updateGameHook({ game });
-    await refreshTournamentHook({ tournament, setTournament });
+    await refreshTournamentHook({ tournamentId, reloadTournament: loadFull });
     setIsSaving(false);
   };
-
-  useEffect(() => {}, [game, isSaving]);
-  useEffect(() => {}, [tournament]);
 
   useEffect(() => {
     log.debug('reset form', game);

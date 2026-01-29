@@ -1,42 +1,49 @@
-import { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { getLogger } from '~/lib/logger';
-import { useUserStore } from '~/store/userStore';
+import { useTeamDraftStore } from '~/store/teamDraftStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import type { DraftRoundType } from '../types';
 import { DraftRoundCard } from './draftRoundCard';
 const log = getLogger('CaptainCards');
 interface CaptainCardsProps {}
 
 export const CaptainCards: React.FC<CaptainCardsProps> = ({}) => {
-  const draft = useUserStore((state) => state.draft);
-  const curDraftRound = useUserStore((state) => state.curDraftRound);
-  const draftIndex = useUserStore((state) => state.draftIndex);
-  const tournament = useUserStore((state) => state.tournament);
-  useEffect(() => {}, [curDraftRound?.pk, draft?.pk]);
+  // Only subscribe to draft_rounds (not entire draft)
+  const draftRounds = useTeamDraftStore((state) => state.draft?.draft_rounds);
+  const currentRoundIndex = useTeamDraftStore((state) => state.currentRoundIndex);
+  const teams = useTournamentDataStore((state) => state.teams);
 
-  const totalRounds = (tournament?.teams?.length || 0) * 4;
+  // Derive current round from subscribed state (reactive)
+  const curDraftRound = useMemo(() => {
+    if (!draftRounds || draftRounds.length === 0) return null;
+    return draftRounds[currentRoundIndex] ?? null;
+  }, [draftRounds, currentRoundIndex]);
+
+  useEffect(() => {}, [curDraftRound?.pk]);
+
+  const totalRounds = (teams?.length || 0) * 4;
 
   useEffect(() => {
     log.debug('index changed:');
 
-  }, [draftIndex]);
+  }, [currentRoundIndex]);
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center">
         <DraftRoundCard
           draftRound={
-            draft?.draft_rounds?.[draftIndex] || ({} as DraftRoundType)
+            draftRounds?.[currentRoundIndex] || ({} as DraftRoundType)
           }
           maxRounds={totalRounds}
           isCur={true}
         />
 
-        {draftIndex < totalRounds - 1 &&
-        draft &&
-        draft.draft_rounds &&
-        draft.draft_rounds[draftIndex + 1] ? (
+        {currentRoundIndex < totalRounds - 1 &&
+        draftRounds &&
+        draftRounds[currentRoundIndex + 1] ? (
           <div className="hidden lg:flex lg:w-full lg:pl-8">
             <DraftRoundCard
-              draftRound={draft.draft_rounds[draftIndex + 1]}
+              draftRound={draftRounds[currentRoundIndex + 1]}
               maxRounds={totalRounds}
               isCur={false}
             />

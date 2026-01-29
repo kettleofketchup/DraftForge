@@ -39,7 +39,7 @@ export default defineConfig({
   reporter: [
     ['html', { open: 'never' }],
     ['list'],
-    ...(process.env.CI ? [['github' as const]] : []),
+    ...(process.env.CI ? [['github', {}] as const] : []),
   ],
 
   use: {

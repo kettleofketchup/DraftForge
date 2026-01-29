@@ -1,28 +1,40 @@
+import React, { useMemo } from 'react';
 import { Zap } from 'lucide-react';
-import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { DisplayName, type TeamType, type UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
+import { useTeamDraftStore } from '~/store/teamDraftStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 
 const log = getLogger('DoublePickThreshold');
 const MAX_TEAM_SIZE = 5;
 
 export const DoublePickThreshold: React.FC = () => {
-  const tournament = useUserStore((state) => state.tournament);
-  const draft = useUserStore((state) => state.draft);
-  const curDraftRound = useUserStore((state) => state.curDraftRound);
+  const teams = useTournamentDataStore((state) => state.teams);
+  // Subscribe to specific draft fields (not entire draft)
+  const draftRounds = useTeamDraftStore((state) => state.draft?.draft_rounds);
+  const latestRoundPk = useTeamDraftStore((state) => state.draft?.latest_round);
+  const draftStyle = useTeamDraftStore((state) => state.draft?.draft_style);
+  const usersRemaining = useTeamDraftStore((state) => state.draft?.users_remaining);
+  const currentRoundIndex = useTeamDraftStore((state) => state.currentRoundIndex);
   const currentUser = useUserStore((state) => state.currentUser);
   const isStaff = useUserStore((state) => state.isStaff);
+
+  // Derive current round from subscribed state (reactive)
+  const curDraftRound = useMemo(() => {
+    if (!draftRounds || draftRounds.length === 0) return null;
+    return draftRounds[currentRoundIndex] ?? null;
+  }, [draftRounds, currentRoundIndex]);
 
   // Derive the actual latest round from draft data (single source of truth)
   // This ensures we always use fresh data even if curDraftRound is stale
   const latestRound = useMemo(() => {
-    if (!draft?.draft_rounds || !draft?.latest_round) return null;
-    return draft.draft_rounds.find((r) => r.pk === draft.latest_round) || null;
-  }, [draft?.draft_rounds, draft?.latest_round]);
+    if (!draftRounds || !latestRoundPk) return null;
+    return draftRounds.find((r) => r.pk === latestRoundPk) || null;
+  }, [draftRounds, latestRoundPk]);
 
-  if (draft?.draft_style !== 'shuffle') return null;
+  if (draftStyle !== 'shuffle') return null;
 
   // Don't show if no latest round
   if (!latestRound) return null;
@@ -31,13 +43,13 @@ export const DoublePickThreshold: React.FC = () => {
   if (latestRound.choice) return null;
 
   // Only show when user is viewing the latest round
-  if (curDraftRound?.pk !== draft?.latest_round) return null;
+  if (curDraftRound?.pk !== latestRoundPk) return null;
 
   // Check if this is already the 2nd pick of a double pick
   // If the previous round was completed by the same captain, don't show indicator
   const currentPickNumber = latestRound.pick_number;
-  if (currentPickNumber && currentPickNumber > 1 && draft?.draft_rounds) {
-    const previousRound = draft.draft_rounds.find(
+  if (currentPickNumber && currentPickNumber > 1 && draftRounds) {
+    const previousRound = draftRounds.find(
       (r) => r.pick_number === currentPickNumber - 1
     );
     if (
@@ -68,18 +80,18 @@ export const DoublePickThreshold: React.FC = () => {
   };
 
   const getCurrentTeam = (): TeamType | undefined => {
-    return tournament?.teams?.find(
+    return teams?.find(
       (t) => t.captain?.pk === latestRound?.captain?.pk
     );
   };
 
   const getThresholdTeam = (): { team: TeamType; mmr: number } | null => {
-    const teams = tournament?.teams || [];
+    const teamsData = teams || [];
     const currentTeam = getCurrentTeam();
     if (!currentTeam) return null;
 
     // Only consider active (non-maxed) teams for threshold
-    const otherTeams = teams
+    const otherTeams = teamsData
       .filter((t) => t.pk !== currentTeam.pk && !isTeamMaxed(t))
       .map((t) => ({ team: t, mmr: getTeamMmr(t) }))
       .sort((a, b) => a.mmr - b.mmr);
@@ -103,7 +115,7 @@ export const DoublePickThreshold: React.FC = () => {
   const buffer = threshold.mmr - currentMmr;
 
   // Check if any available player would result in staying under threshold
-  const availablePlayers = draft?.users_remaining || [];
+  const availablePlayers = usersRemaining || [];
   const lowestAvailablePlayerMmr = availablePlayers.length > 0
     ? Math.min(...availablePlayers.map((p: UserType) => p.mmr || 0))
     : Infinity;

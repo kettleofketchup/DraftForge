@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo } from 'react';
+import React, { Suspense, useEffect, useMemo } from 'react';
 import {
   Table,
   TableBody,
@@ -12,7 +12,8 @@ import type { UserType } from '~/components/user/types';
 import { AvatarUrl, DisplayName, type TeamType } from '~/index';
 import { cn } from '~/lib/utils';
 import { getLogger } from '~/lib/logger';
-import { useUserStore } from '~/store/userStore';
+import { useTeamDraftStore } from '~/store/teamDraftStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import { RolePositions } from '../../user/positions';
 import { ChoosePlayerButton } from '../buttons/choosePlayerButtons';
 import type { DraftRoundType } from '../types';
@@ -34,17 +35,26 @@ const getOrdinal = (n: number): string => {
 };
 interface DraftTableProps {}
 export const DraftTable: React.FC<DraftTableProps> = ({}) => {
-  const tournament = useUserStore((state) => state.tournament);
-  const curRound: DraftRoundType = useUserStore((state) => state.curDraftRound);
-  const draft = useUserStore((state) => state.draft);
+  const teams = useTournamentDataStore((state) => state.teams);
+  // Subscribe to specific fields (not entire draft)
+  const draftRounds = useTeamDraftStore((state) => state.draft?.draft_rounds);
+  const usersRemaining = useTeamDraftStore((state) => state.draft?.users_remaining);
+  const draftStyle = useTeamDraftStore((state) => state.draft?.draft_style);
+  const currentRoundIndex = useTeamDraftStore((state) => state.currentRoundIndex);
+
+  // Derive current round from subscribed state (reactive)
+  const curRound = useMemo(() => {
+    if (!draftRounds || draftRounds.length === 0) return null;
+    return draftRounds[currentRoundIndex] ?? null;
+  }, [draftRounds, currentRoundIndex]) as DraftRoundType;
   useEffect(() => {
     log.debug('rerender: Cur round choice changed');
   }, [curRound?.choice]);
   useEffect(() => {
     log.debug('rerender: draft users_remaining changed changed');
-  }, [draft.users_remaining?.length]);
+  }, [usersRemaining?.length]);
 
-  const isShuffle = draft?.draft_style === 'shuffle';
+  const isShuffle = draftStyle === 'shuffle';
 
   const getTeamMmr = (team: TeamType): number => {
     let total = team.captain?.mmr || 0;
@@ -61,7 +71,7 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
   };
 
   const getCurrentTeam = (): TeamType | undefined => {
-    return tournament?.teams?.find(
+    return teams?.find(
       (t) => t.captain?.pk === curRound?.captain?.pk
     );
   };
@@ -70,13 +80,13 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
   const activeTeamMmrs = useMemo(() => {
     if (!isShuffle) return new Map<number, number>();
     const map = new Map<number, number>();
-    tournament?.teams?.forEach((team) => {
+    teams?.forEach((team) => {
       if (team.pk && !isTeamMaxed(team)) {
         map.set(team.pk, getTeamMmr(team));
       }
     });
     return map;
-  }, [tournament?.teams, isShuffle]);
+  }, [teams, isShuffle]);
 
   const getProjectedData = (userMmr: number): ProjectedData | null => {
     if (!isShuffle) return null;
@@ -113,7 +123,7 @@ export const DraftTable: React.FC<DraftTableProps> = ({}) => {
   };
 
   const members = () => {
-    const a = tournament?.draft?.users_remaining?.sort(
+    const a = usersRemaining?.slice().sort(
       (a: UserType, b: UserType): number => {
         if (!a.mmr && !b.mmr) return 0;
         if (!a.mmr) return 1; // Treat undefined MMR as lower

@@ -7,61 +7,65 @@
 | Phase 1: Infrastructure | ✅ Complete | Stores, WebSocketManager, backend endpoints |
 | Phase 2A: Compatibility Layer | ✅ Complete | Helper hooks created |
 | Phase 2B: Tournament Pages | ✅ Complete | All pages and modals migrated |
-| **Phase 2C: Draft Components** | 🔄 **IN PROGRESS** | See next steps below |
-| Phase 2D: HeroDraft Components | ⏳ Pending | |
-| Phase 2E: Bracket Integration | ⏳ Pending | |
-| Phase 2F: Cleanup | ⏳ Pending | |
+| Phase 2C: Draft Components | ✅ Complete | All components use selectors, useMemo patterns |
+| Phase 2D: HeroDraft Components | ✅ Complete | Store-based WebSocket, hooks deleted |
+| Phase 2E: Bracket Integration | ✅ Complete | tournament → tournamentDataStore |
+| **Phase 2F: Cleanup** | 🔄 **IN PROGRESS** | Remove legacy state from useUserStore |
 | Phase 2G: N+1 Fixes | ✅ Complete | Backend prefetching added |
+| Phase 2H: TypeScript Fixes | ⏳ Pending | Pre-existing TS errors (53 total) |
 
 ---
 
-## Next Steps (Phase 2C - Draft Components)
+## Next Steps (Phase 2F - Component Migrations + Cleanup)
 
-### Phase 2B Summary (Complete)
+### Phase 2E Summary (Complete)
 
-All tournament page components migrated from `useUserStore` to `useTournamentDataStore`:
-- ✅ TournamentDetailPage.tsx
-- ✅ PlayersTab.tsx, TeamsTab.tsx, GamesTab.tsx, TournamentTabs.tsx
-- ✅ playerRemoveButton.tsx, randomTeamsModal.tsx, createTeamsButton.tsx
-- ⏭️ addPlayerModal.tsx, addPlayerDropdown.tsx (no tournament store usage - use global user list)
+All bracket components migrated from `useUserStore` to domain-specific stores:
+- ✅ BracketView.tsx - `teams` from `useTournamentDataStore`
+- ✅ MatchStatsModal.tsx - `tournamentId` from route params
+- ✅ LinkSteamMatchModal.tsx - `metadata?.date_played` from `useTournamentDataStore`
 
-### Phase 2C Target Files
+### Phase 2F: Remaining Migrations
 
-| Priority | File | Complexity |
-|----------|------|------------|
-| 1 | `draftModal.tsx` | HIGH - 515 lines, uses 3 stores |
-| 2 | Draft round components (7 files) | MEDIUM |
-| 3 | Draft buttons/controls (5 files) | LOW |
-| 4 | `useDraftLive.ts` deprecation | MEDIUM |
-| 5 | Remove `useDraftWebSocket` hook | LOW |
+**Still using `useUserStore.tournament`** (16 files):
+
+| Category | Files | Complexity |
+|----------|-------|------------|
+| Captain Components | 4 files (`draftOrder.tsx`, `UpdateCaptainButton.tsx`, `captainSelectionModal.tsx`, `captainTable.tsx`) | LOW |
+| Game Components | 3 files (`createForm.tsx`, `deleteButton.tsx`, `gameCard.tsx`) | LOW |
+| Draft Hooks | 5 files (`useDraftLive.ts`, `initDraftHook.tsx`, etc.) | MEDIUM |
+| Other | 4 files (`TournamentEditModal.tsx`, `hasErrors.tsx`, `league.tsx`, `tournaments.tsx`) | LOW |
 
 ### Migration Pattern
 
+These files follow the same pattern as previous migrations:
 ```typescript
 // BEFORE
-const { draft, setDraft, curDraftRound } = useUserStore();
-const { events, isConnected, hasNewEvent } = useDraftWebSocket({...});
+const tournament = useUserStore((state) => state.tournament);
+const setTournament = useUserStore((state) => state.setTournament);
 
-// AFTER
-const teamDraft = useTeamDraftStore();
+// AFTER (option 1: use existing store)
+const tournament = useTournamentDataStore((state) => state.tournament);
+const loadFull = useTournamentDataStore((state) => state.loadFull);
 
-useEffect(() => {
-  if (draftId && tournamentId) {
-    teamDraft.setDraftId(draftId, tournamentId);
-  }
-  return () => teamDraft.reset();
-}, [draftId, tournamentId]);
-
-// Use teamDraft.draft, teamDraft.events, teamDraft.wsState
+// AFTER (option 2: for data mutation, reload store instead of setState)
+await api.post(...);
+await loadFull(); // Reloads from server, single source of truth
 ```
 
-### Verification Steps
+### Cleanup (After All Migrations)
 
-After each file migration:
-1. Run `npm run typecheck` to verify types
-2. Start dev server and navigate to tournament page
-3. Verify data loads (check Network tab for new endpoints)
-4. Verify WebSocket connects (check console for subscription logs)
+Once no files use legacy state:
+1. Remove `tournament`, `setTournament`, `draft`, `setDraft` from `useUserStore`
+2. Remove related fetch functions (`getCurrentTournament`, `getDraft`)
+3. Verify only user-specific state remains: `currentUser`, `isStaff()`, `users`
+
+### Verification After Each Step
+
+```bash
+npx tsc --noEmit
+inv test.playwright.headless
+```
 
 ---
 
@@ -675,26 +679,55 @@ setLeagues, setLeague, getLeagues
   - [~] addPlayerDropdown.tsx (no tournament store usage - uses global users list)
 
 ### Phase 2C: Draft Components
-- [ ] Task 2C.1: draftModal.tsx
-- [ ] Task 2C.2: Draft round components (7 files)
-- [ ] Task 2C.3: Draft buttons/controls (5 files)
-- [ ] Task 2C.4: Draft live/polling
-- [ ] Task 2C.5: Remove useDraftWebSocket hook
+- [x] Task 2C.1: draftModal.tsx
+- [x] Task 2C.2: Draft round components (7 files)
+- [x] Task 2C.3: Draft buttons/controls (5 files)
+- [x] Task 2C.4: Draft live/polling
+- [x] Task 2C.5: Remove useDraftWebSocket hook
 
 ### Phase 2D: HeroDraft Components
-- [ ] Task 2D.1: HeroDraftModal.tsx
-- [ ] Task 2D.2: HeroGrid.tsx
-- [ ] Task 2D.3: Remove useHeroDraftWebSocket hook
+- [x] Task 2D.1: HeroDraftModal.tsx (store-based WebSocket, useCallback handlers)
+- [x] Task 2D.2: HeroGrid.tsx (already optimized, fixed `any` type)
+- [x] Task 2D.3: Remove useHeroDraftWebSocket hook
+- [x] Task 2D.4: Remove useHeroDraftState.ts migration helper
 
 ### Phase 2E: Bracket Integration
-- [ ] Task 2E.1: BracketView.tsx
-- [ ] Task 2E.2: Bracket modals (2 files)
+- [x] Task 2E.1: BracketView.tsx - replaced `tournament?.teams` with `teams` from `useTournamentDataStore`
+- [x] Task 2E.2: MatchStatsModal.tsx - use `pk` from params instead of `tournament?.pk`
+- [x] Task 2E.3: LinkSteamMatchModal.tsx - use `metadata?.date_played` from `useTournamentDataStore`
 
 ### Phase 2F: Cleanup
-- [ ] Task 2F.1: Remove tournament state from useUserStore
-- [ ] Task 2F.2: Remove draft state from useUserStore
-- [ ] Task 2F.3: Remove teams/games state from useUserStore
-- [ ] Task 2F.4: Verify user-specific state retained
+
+**Prerequisite Migrations** (components still using `useUserStore.tournament`):
+
+**Captain Components** (4 files):
+- [x] Task 2F.1a: `captains/draftOrder.tsx` - migrated to `useTournamentDataStore`
+- [x] Task 2F.1b: `captains/UpdateCaptainButton.tsx` - migrated to `useTournamentDataStore`
+- [x] Task 2F.1c: `captains/captainSelectionModal.tsx` - migrated to `useTournamentDataStore`
+- [x] Task 2F.1d: `captains/captainTable.tsx` - migrated to `useTournamentDataStore`
+- [x] Task 2F.1e: `captains/createTeamFromCaptainHook.tsx` - uses `reloadTournament` pattern
+
+**Game Components** (3 files):
+- [ ] Task 2F.2a: `game/create/createForm.tsx` - migrate to `useTournamentDataStore`
+- [ ] Task 2F.2b: `game/gameCard/deleteButton.tsx` - migrate to `useTournamentDataStore`
+- [ ] Task 2F.2c: `game/gameCard/gameCard.tsx` - migrate to `useTournamentDataStore`
+
+**Draft Hooks** (5 files):
+- [ ] Task 2F.3a: `draft/hooks/useDraftLive.ts` - deprecate or migrate
+- [ ] Task 2F.3b: `draft/hooks/initDraftHook.tsx` - migrate to `useTournamentDataStore`
+- [ ] Task 2F.3c: `draft/hooks/rebuildTeamHook.tsx` - migrate to `useTournamentDataStore`
+- [ ] Task 2F.3d: `draft/hooks/refreshTournamentHook.tsx` - migrate to `useTournamentDataStore`
+- [ ] Task 2F.3e: `draft/hooks/choosePlayerHook.tsx` - migrate to `useTournamentDataStore`
+
+**Other Components** (4 files):
+- [ ] Task 2F.4a: `tournament/card/TournamentEditModal.tsx` - migrate to `useTournamentDataStore`
+- [ ] Task 2F.4b: `pages/tournament/hasErrors.tsx` - migrate to `useTournamentDataStore`
+- [ ] Task 2F.4c: `routes/league.tsx` - check if still needed (uses `tournaments` list)
+- [ ] Task 2F.4d: `pages/tournaments/tournaments.tsx` - uses `setTournaments` (list, not single)
+
+**Final Cleanup** (after all migrations):
+- [ ] Task 2F.5: Remove tournament/draft state from useUserStore
+- [ ] Task 2F.6: Verify user-specific state retained (currentUser, isStaff)
 
 ### Phase 2G: Backend N+1 Query Fixes (Critical Performance)
 
@@ -886,11 +919,16 @@ class TournamentEndpointTests(TestCase):
 ```
 
 ### Phase 2G Checklist
-- [ ] Task 2G.1: Fix teams endpoint prefetching
-- [ ] Task 2G.2: Fix games endpoint prefetching
-- [ ] Task 2G.3: Fix users endpoint prefetching
-- [ ] Task 2G.4: Fix draft_state endpoint prefetching
+- [x] Task 2G.1: Fix teams endpoint prefetching
+- [x] Task 2G.2: Fix games endpoint prefetching
+- [x] Task 2G.3: Fix users endpoint prefetching
+- [x] Task 2G.4: Fix draft_state endpoint prefetching
 - [ ] Task 2G.5: Add N+1 regression tests
+
+### Phase 2H: Fix Pre-existing TypeScript Errors
+- [ ] Task 2H.1: Fix AutoAssignModal.tsx (loadingText prop issue)
+- [ ] Task 2H.2: Fix editForm.tsx (Control type and league prop issues)
+- [ ] Task 2H.3: Address dotaconstants import attributes (tsconfig module setting)
 
 ---
 

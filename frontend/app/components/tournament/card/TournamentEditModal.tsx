@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { cn } from '~/lib/utils';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import { useUserStore } from '~/store/userStore';
 import type { TournamentType } from '../types';
 import { STATE_CHOICES } from '../constants';
@@ -108,7 +109,7 @@ export function TournamentEditModal({
 }: TournamentEditModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const setTournament = useUserStore((state) => state.setTournament);
+  const loadFull = useTournamentDataStore((state) => state.loadFull);
   const leagues = useUserStore((state) => state.leagues);
   const getLeagues = useUserStore((state) => state.getLeagues);
 
@@ -177,12 +178,14 @@ export function TournamentEditModal({
         league: getCurrentLeagueId(),
       });
     }
-  }, [open, tournament, form]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- form.reset is stable
+  }, [open, tournament]);
 
   // Update date_played when date or time changes
   useEffect(() => {
     form.setValue('date_played', combineDateAndTime(selectedDate, selectedTime));
-  }, [selectedDate, selectedTime, form]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- form.setValue is stable
+  }, [selectedDate, selectedTime]);
 
   async function onSubmit(data: TournamentEditInput) {
     if (isSubmitting || !tournament.pk) return;
@@ -200,13 +203,14 @@ export function TournamentEditModal({
       };
       log.debug('Saving tournament with payload:', payload);
 
-      const updatedTournament = await updateTournament(tournament.pk, payload);
-      setTournament(updatedTournament);
+      await updateTournament(tournament.pk, payload);
+      await loadFull();
       toast.success('Tournament updated successfully');
       onOpenChange(false);
       onSuccess?.();
-    } catch (err: any) {
-      const message = err?.response?.data || err?.message || 'Failed to update tournament';
+    } catch (err: unknown) {
+      const errorObj = err as { response?: { data?: string }; message?: string };
+      const message = errorObj?.response?.data || errorObj?.message || 'Failed to update tournament';
       log.error('Failed to update tournament', err);
       toast.error(`Failed to update tournament: ${message}`);
     } finally {

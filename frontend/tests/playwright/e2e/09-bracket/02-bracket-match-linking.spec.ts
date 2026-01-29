@@ -19,6 +19,7 @@ import {
   getTournamentByKey,
   TournamentPage,
 } from '../../fixtures';
+import type { Page } from '@playwright/test';
 
 // Tournament PK fetched in beforeAll
 let tournamentPk: number;
@@ -41,7 +42,7 @@ test.describe('Bracket Match Linking (e2e)', () => {
    * Helper to open the link modal for a specific team captain name.
    */
   async function openLinkModalForTeam(
-    page: typeof import('@playwright/test').Page,
+    page: Page,
     captainName: string
   ): Promise<void> {
     await page.locator(`text=${captainName}`).click();

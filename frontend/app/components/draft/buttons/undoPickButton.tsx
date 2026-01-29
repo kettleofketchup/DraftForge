@@ -1,22 +1,30 @@
+import React, { useMemo, useState } from 'react';
 import { Undo2 } from 'lucide-react';
-import { useState } from 'react';
 import { toast } from 'sonner';
 import { undoLastPick } from '~/components/api/api';
 import { WarningButton } from '~/components/ui/buttons';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
+import { useTeamDraftStore } from '~/store/teamDraftStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 
 const log = getLogger('undoPickButton');
 
 export const UndoPickButton: React.FC = () => {
-  const draft = useUserStore((state) => state.draft);
-  const curDraftRound = useUserStore((state) => state.curDraftRound);
-  const setTournament = useUserStore((state) => state.setTournament);
-  const setDraft = useUserStore((state) => state.setDraft);
-  const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
-  const setDraftIndex = useUserStore((state) => state.setDraftIndex);
+  // Subscribe to specific fields (not entire draft)
+  const draftPk = useTeamDraftStore((state) => state.draft?.pk);
+  const draftRounds = useTeamDraftStore((state) => state.draft?.draft_rounds);
+  const currentRoundIndex = useTeamDraftStore((state) => state.currentRoundIndex);
+  const loadDraft = useTeamDraftStore((state) => state.loadDraft);
+  const loadAll = useTournamentDataStore((state) => state.loadAll);
   const isStaff = useUserStore((state) => state.isStaff);
+
+  // Derive current round from subscribed state (reactive)
+  const curDraftRound = useMemo(() => {
+    if (!draftRounds || draftRounds.length === 0) return null;
+    return draftRounds[currentRoundIndex] ?? null;
+  }, [draftRounds, currentRoundIndex]);
   const [isLoading, setIsLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -24,34 +32,17 @@ export const UndoPickButton: React.FC = () => {
   if (!isStaff()) return null;
 
   // Only show if the current round has a pick made
-  if (!draft?.pk || !curDraftRound?.choice) return null;
+  if (!draftPk || !curDraftRound?.choice) return null;
 
   const handleUndo = async () => {
-    if (!draft?.pk) return;
+    if (!draftPk) return;
 
     setIsLoading(true);
     try {
-      const updatedTournament = await undoLastPick({ draft_pk: draft.pk });
+      await undoLastPick({ draft_pk: draftPk });
 
-      setTournament(updatedTournament);
-      if (updatedTournament.draft) {
-        setDraft(updatedTournament.draft);
-      }
-
-      // Find the round that was undone (now has no choice)
-      const undoneRound = updatedTournament.draft?.draft_rounds?.find(
-        (r) => r.pk === updatedTournament.draft?.latest_round
-      );
-
-      if (undoneRound) {
-        setCurDraftRound(undoneRound);
-        const idx = updatedTournament.draft?.draft_rounds?.findIndex(
-          (r) => r.pk === undoneRound.pk
-        );
-        if (idx !== undefined && idx >= 0) {
-          setDraftIndex(idx);
-        }
-      }
+      // Refresh data from server
+      await Promise.all([loadAll(), loadDraft()]);
 
       toast.success('Pick undone successfully');
       log.info('Undo successful');

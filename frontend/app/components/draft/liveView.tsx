@@ -1,7 +1,8 @@
+import React, { useMemo } from 'react';
 import { Radio, FastForward } from 'lucide-react';
 import { cn } from '~/lib/utils';
 import { useTournamentStore } from '~/store/tournamentStore';
-import { useUserStore } from '~/store/userStore';
+import { useTeamDraftStore } from '~/store/teamDraftStore';
 import { Button } from '../ui/button';
 
 interface LiveViewProps {
@@ -9,7 +10,15 @@ interface LiveViewProps {
 }
 
 export const LiveView: React.FC<LiveViewProps> = ({ isPolling }) => {
-  const curDraftRound = useUserStore((state) => state.curDraftRound);
+  // Only subscribe to draft_rounds (not entire draft) and currentRoundIndex
+  const draftRounds = useTeamDraftStore((state) => state.draft?.draft_rounds);
+  const currentRoundIndex = useTeamDraftStore((state) => state.currentRoundIndex);
+
+  // Derive current round's pick_number from subscribed state
+  const pickNumber = useMemo(() => {
+    if (!draftRounds || draftRounds.length === 0) return null;
+    return draftRounds[currentRoundIndex]?.pick_number ?? null;
+  }, [draftRounds, currentRoundIndex]);
   const toggleLivePolling = useTournamentStore(
     (state) => state.toggleLivePolling,
   );
@@ -30,9 +39,9 @@ export const LiveView: React.FC<LiveViewProps> = ({ isPolling }) => {
       {/* Left side: Title, pick number */}
       <div className="flex items-center gap-2">
         <h3 className="text-base font-semibold">Draft</h3>
-        {curDraftRound?.pick_number && (
+        {pickNumber && (
           <span className="text-xs font-medium px-1.5 py-0.5 bg-primary/20 text-primary rounded">
-            #{curDraftRound.pick_number}
+            #{pickNumber}
           </span>
         )}
       </div>

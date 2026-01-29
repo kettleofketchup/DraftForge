@@ -106,4 +106,6 @@ export interface WebSocketMessage {
   event?: DraftEvent;
   /** Full draft state included to allow state updates without API calls */
   draft_state?: WebSocketDraftState;
+  /** Sequence number for ordering WebSocket messages */
+  sequence?: number;
 }

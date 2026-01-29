@@ -7,17 +7,17 @@ const log = getLogger('Rebuild Teams Hook');
 
 type hookParams = {
   tournament: TournamentType;
-  setTournament: (tournament: TournamentType) => void;
+  reloadTournament: () => Promise<void>;
 };
 
 export const rebuildTeamsHook = async ({
   tournament,
-  setTournament,
+  reloadTournament,
 }: hookParams) => {
   log.debug('Rebuilding teams', { tournament });
 
   if (!tournament) {
-    log.error('Creating tournamentNo tournament found');
+    log.error('No tournament found');
     return;
   }
 
@@ -32,8 +32,8 @@ export const rebuildTeamsHook = async ({
 
   toast.promise(DraftRebuild(data), {
     loading: `Rebuilding teams...`,
-    success: (data) => {
-      setTournament(data);
+    success: async () => {
+      await reloadTournament();
       return `Tournament Draft has been rebuilt!`;
     },
     error: (err) => {

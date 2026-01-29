@@ -3,10 +3,10 @@ import React from 'react';
 import { Badge } from '~/components/ui/badge';
 import { Card, CardContent } from '~/components/ui/card';
 import { useTournamentStore } from '~/store/tournamentStore';
-import { useUserStore } from '~/store/userStore';
+import { useTeamDraftStore } from '~/store/teamDraftStore';
 
 export const DraftBalanceDisplay: React.FC = () => {
-  const draft = useUserStore((state) => state.draft);
+  const draft = useTeamDraftStore((state) => state.draft);
   const draftPredictedMMRs = useTournamentStore(
     (state) => state.draftPredictedMMRs,
   );

@@ -11,6 +11,15 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 
+/** Type for heroes from dotaconstants */
+interface DotaConstantsHero {
+  id: number;
+  localized_name: string;
+  primary_attr: string;
+  img: string;
+  icon: string;
+}
+
 interface HeroGridProps {
   onHeroClick: (heroId: number) => void;
   disabled: boolean;
@@ -52,13 +61,16 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton }: HeroGridPr
   }, [draftRounds]);
 
   const heroList = useMemo(() => {
-    return Object.values(heroes).map((hero: any) => ({
-      id: hero.id,
-      name: hero.localized_name,
-      attr: hero.primary_attr as HeroAttribute,
-      img: `https://cdn.cloudflare.steamstatic.com${hero.img}`,
-      icon: `https://cdn.cloudflare.steamstatic.com${hero.icon}`,
-    }));
+    return Object.values(heroes).map((hero) => {
+      const h = hero as DotaConstantsHero;
+      return {
+        id: h.id,
+        name: h.localized_name,
+        attr: h.primary_attr as HeroAttribute,
+        img: `https://cdn.cloudflare.steamstatic.com${h.img}`,
+        icon: `https://cdn.cloudflare.steamstatic.com${h.icon}`,
+      };
+    });
   }, []);
 
   const filteredHeroes = useMemo(() => {
@@ -111,13 +123,6 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton }: HeroGridPr
                           type="button"
                           style={{ padding: 0, margin: 0, lineHeight: 0 }}
                           onClick={() => {
-                            console.log(`[HeroGrid] Hero clicked:`, {
-                              heroId: hero.id,
-                              heroName: hero.name,
-                              disabled,
-                              available,
-                              willHandle: !disabled && available,
-                            });
                             if (!disabled && available) {
                               setSelectedHeroId(hero.id);
                               onHeroClick(hero.id);

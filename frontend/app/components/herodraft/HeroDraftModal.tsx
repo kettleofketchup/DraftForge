@@ -1,20 +1,30 @@
 // frontend/app/components/herodraft/HeroDraftModal.tsx
-import { useCallback, useState, useMemo, useEffect } from "react";
+import { useCallback, useState, useMemo, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "~/components/ui/dialog";
 import { VisuallyHidden } from "~/components/ui/visually-hidden";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { useHeroDraftStore } from "~/store/heroDraftStore";
-import { useHeroDraftWebSocket } from "./hooks/useHeroDraftWebSocket";
 import { useUserStore } from "~/store/userStore";
+import { getLogger } from "~/lib/logger";
 import { DraftTopBar } from "./DraftTopBar";
 import { HeroGrid } from "./HeroGrid";
 import { DraftPanel } from "./DraftPanel";
 import { HeroDraftHistoryModal } from "./HeroDraftHistoryModal";
 import { submitPick, setReady, triggerRoll, submitChoice } from "./api";
-import type { HeroDraft, HeroDraftEvent } from "./types";
 import { heroes } from "dotaconstants";
+
+const log = getLogger("HeroDraftModal");
+
+/** Extract error message from axios error or return fallback */
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === "object" && "response" in error) {
+    const axiosError = error as { response?: { data?: { error?: string } } };
+    return axiosError.response?.data?.error || fallback;
+  }
+  return fallback;
+}
 import { DisplayName } from "~/components/user/avatar";
 import { X, Send, History } from "lucide-react";
 import {
@@ -44,9 +54,15 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
   // Use selectors to prevent re-renders when unrelated state changes
   const draft = useHeroDraftStore((state) => state.draft);
   const tick = useHeroDraftStore((state) => state.tick);
-  const setDraft = useHeroDraftStore((state) => state.setDraft);
-  const setTick = useHeroDraftStore((state) => state.setTick);
+  const events = useHeroDraftStore((state) => state.events);
+  const wsState = useHeroDraftStore((state) => state.wsState);
+  const setDraftId = useHeroDraftStore((state) => state.setDraftId);
   const setSelectedHeroId = useHeroDraftStore((state) => state.setSelectedHeroId);
+  const reconnect = useHeroDraftStore((state) => state.reconnect);
+
+  // Derive connection state from wsState
+  const isConnected = wsState === "connected";
+  const connectionError = wsState === "error" ? "Connection error" : null;
 
   const [confirmHeroId, setConfirmHeroId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,22 +70,31 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
   const [chatMessage, setChatMessage] = useState("");
   const [resumeCountdown, setResumeCountdown] = useState<number | null>(null);
 
-  const handleStateUpdate = useCallback(
-    (newDraft: HeroDraft) => {
-      setDraft(newDraft);
-    },
-    [setDraft]
-  );
+  // Track last seen event to avoid duplicate toasts
+  const lastEventIdRef = useRef<number | null>(null);
 
-  const handleTick = useCallback(
-    (newTick: Parameters<typeof setTick>[0]) => {
-      setTick(newTick);
-    },
-    [setTick]
-  );
+  // Connect/disconnect WebSocket based on modal open state
+  useEffect(() => {
+    if (open && draftId) {
+      setDraftId(draftId);
+    } else {
+      setDraftId(null);
+      // Reset event tracking when modal closes so events show fresh next time
+      lastEventIdRef.current = null;
+    }
+  }, [open, draftId, setDraftId]);
 
-  const handleEvent = useCallback((event: HeroDraftEvent) => {
-    console.log("[HeroDraftModal] handleEvent:", event.event_type, event);
+  // Handle events - show toasts when new events arrive
+  useEffect(() => {
+    if (events.length === 0) return;
+
+    const latestEvent = events[0]; // Events are prepended (newest first)
+    if (!latestEvent.event_id || latestEvent.event_id === lastEventIdRef.current) {
+      return;
+    }
+
+    lastEventIdRef.current = latestEvent.event_id;
+    log.debug("handleEvent:", latestEvent.event_type, latestEvent);
 
     // Get hero name helper
     const getHeroName = (heroId: number | undefined): string => {
@@ -79,12 +104,12 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     };
 
     // Get captain display name
-    const draftTeam = event.draft_team;
+    const draftTeam = latestEvent.draft_team;
     const captainName = draftTeam?.captain
       ? (draftTeam.captain.nickname || draftTeam.captain.username)
       : "Unknown";
 
-    switch (event.event_type) {
+    switch (latestEvent.event_type) {
       case "captain_ready":
         toast.info(`${captainName} is ready`);
         break;
@@ -100,7 +125,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
         break;
       case "resume_countdown": {
         // Start countdown before draft resumes
-        const countdownSeconds = (event.metadata as { countdown_seconds?: number })?.countdown_seconds ?? 3;
+        const countdownSeconds = (latestEvent.metadata as { countdown_seconds?: number })?.countdown_seconds ?? 3;
         setResumeCountdown(countdownSeconds);
         toast.info(`Resuming in ${countdownSeconds}...`);
         break;
@@ -114,8 +139,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
         break;
       case "hero_selected": {
         // Get hero_id and action_type from metadata
-        const heroId = event.metadata?.hero_id;
-        const actionType = event.metadata?.action_type;
+        const heroId = latestEvent.metadata?.hero_id;
+        const actionType = latestEvent.metadata?.action_type;
         const heroName = getHeroName(heroId);
         const action = actionType === "ban" ? "banned" : "picked";
         toast.info(`${captainName} ${action} ${heroName}`);
@@ -125,7 +150,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
         toast.success("Draft completed!");
         break;
     }
-  }, []);
+  }, [events]);
 
   // Countdown timer effect - decrements every second
   useEffect(() => {
@@ -138,16 +163,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     return () => clearTimeout(timer);
   }, [resumeCountdown]);
 
-  const { isConnected, connectionError, reconnect } = useHeroDraftWebSocket({
-    draftId,
-    enabled: open,  // Only connect when modal is open
-    onStateUpdate: handleStateUpdate,
-    onTick: handleTick,
-    onEvent: handleEvent,
-  });
-
-  const handleHeroClick = (heroId: number) => {
-    console.log("[HeroDraftModal] handleHeroClick:", {
+  const handleHeroClick = useCallback((heroId: number) => {
+    log.debug("handleHeroClick:", {
       heroId,
       draft_state: draft?.state,
       draft_current_round: draft?.current_round,
@@ -155,24 +172,24 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     });
 
     if (!draft || !currentUser?.pk) {
-      console.log("[HeroDraftModal] handleHeroClick - early return: no draft or user");
+      log.debug("handleHeroClick - early return: no draft or user");
       return;
     }
 
     const myTeam = draft.draft_teams.find((t) => t.captain?.pk === currentUser.pk);
-    console.log("[HeroDraftModal] handleHeroClick:", {
+    log.debug("handleHeroClick:", {
       myTeam_id: myTeam?.id,
       myTeam_captain: myTeam?.captain?.username,
     });
 
     if (!myTeam) {
-      console.log("[HeroDraftModal] handleHeroClick - early return: not a captain");
+      log.debug("handleHeroClick - early return: not a captain");
       return;
     }
 
     // Find current round from rounds array using current_round index
     const currentRound = draft.current_round !== null ? draft.rounds[draft.current_round] : null;
-    console.log("[HeroDraftModal] handleHeroClick:", {
+    log.debug("handleHeroClick:", {
       currentRound_number: currentRound?.round_number,
       currentRound_draft_team: currentRound?.draft_team,
       currentRound_state: currentRound?.state,
@@ -181,17 +198,17 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     });
 
     if (!currentRound || currentRound.draft_team !== myTeam.id) {
-      console.log("[HeroDraftModal] handleHeroClick - not your turn!");
+      log.debug("handleHeroClick - not your turn!");
       toast.error("It's not your turn");
       return;
     }
 
-    console.log("[HeroDraftModal] handleHeroClick - setting confirmHeroId:", heroId);
+    log.debug("handleHeroClick - setting confirmHeroId:", heroId);
     setConfirmHeroId(heroId);
-  };
+  }, [draft, currentUser?.pk]);
 
-  const handleConfirmPick = async () => {
-    console.log("[HeroDraftModal] handleConfirmPick:", {
+  const handleConfirmPick = useCallback(async () => {
+    log.debug("handleConfirmPick:", {
       confirmHeroId,
       draft_id: draft?.id,
       draft_state: draft?.state,
@@ -200,7 +217,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     });
 
     if (!confirmHeroId || !draft || isSubmitting) {
-      console.log("[HeroDraftModal] handleConfirmPick - early return:", {
+      log.debug("handleConfirmPick - early return:", {
         no_confirmHeroId: !confirmHeroId,
         no_draft: !draft,
         isSubmitting,
@@ -209,23 +226,22 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     }
 
     setIsSubmitting(true);
-    console.log("[HeroDraftModal] handleConfirmPick - calling submitPick...");
+    log.debug("handleConfirmPick - calling submitPick...");
     try {
       // Don't call setDraft - WebSocket broadcasts state to all clients
       await submitPick(draft.id, confirmHeroId);
-      console.log("[HeroDraftModal] handleConfirmPick - submitPick completed successfully");
+      log.debug("handleConfirmPick - submitPick completed successfully");
       setConfirmHeroId(null);
       setSelectedHeroId(null);
     } catch (error: unknown) {
-      console.error("[HeroDraftModal] handleConfirmPick - submitPick failed:", error);
-      const axiosError = error as { response?: { data?: { error?: string } } };
-      toast.error(axiosError.response?.data?.error || "Failed to submit pick");
+      log.error("handleConfirmPick - submitPick failed:", error);
+      toast.error(getErrorMessage(error, "Failed to submit pick"));
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [confirmHeroId, draft, isSubmitting, setSelectedHeroId]);
 
-  const handleReady = async () => {
+  const handleReady = useCallback(async () => {
     if (!draft || isSubmitting) return;
     setIsSubmitting(true);
     try {
@@ -235,28 +251,26 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
       await setReady(draft.id);
       toast.success("You are ready!");
     } catch (error: unknown) {
-      const axiosError = error as { response?: { data?: { error?: string } } };
-      toast.error(axiosError.response?.data?.error || "Failed to set ready");
+      toast.error(getErrorMessage(error, "Failed to set ready"));
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [draft, isSubmitting]);
 
-  const handleTriggerRoll = async () => {
+  const handleTriggerRoll = useCallback(async () => {
     if (!draft || isSubmitting) return;
     setIsSubmitting(true);
     try {
       // Don't call setDraft - WebSocket broadcasts state to all clients
       await triggerRoll(draft.id);
     } catch (error: unknown) {
-      const axiosError = error as { response?: { data?: { error?: string } } };
-      toast.error(axiosError.response?.data?.error || "Failed to trigger roll");
+      toast.error(getErrorMessage(error, "Failed to trigger roll"));
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [draft, isSubmitting]);
 
-  const handleChoiceSubmit = async (
+  const handleChoiceSubmit = useCallback(async (
     choiceType: "pick_order" | "side",
     value: string
   ) => {
@@ -270,12 +284,11 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
         value as "first" | "second" | "radiant" | "dire"
       );
     } catch (error: unknown) {
-      const axiosError = error as { response?: { data?: { error?: string } } };
-      toast.error(axiosError.response?.data?.error || "Failed to submit choice");
+      toast.error(getErrorMessage(error, "Failed to submit choice"));
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [draft, isSubmitting]);
 
   // Find current round from rounds array
   const currentRoundData = draft && draft.current_round !== null

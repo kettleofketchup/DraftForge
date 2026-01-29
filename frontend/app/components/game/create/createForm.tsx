@@ -1,11 +1,12 @@
 import { getLogger } from '~/lib/logger';
 
 import type { FormEvent } from 'react';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { DialogClose } from '~/components/ui/dialog';
 import { useUserStore } from '~/store/userStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 
-const log = getLogger('editForm');
+const log = getLogger('GameCreateForm');
 
 import { refreshTournamentHook } from '~/components/draft/hooks/refreshTournamentHook';
 import { Label } from '~/components/ui/label';
@@ -14,18 +15,19 @@ import { TeamComboBox } from '../helpers/teamCombobox';
 import { createGameHook } from '../hooks/createGameHook';
 
 export const GameCreateForm: React.FC = () => {
-  const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
+  const currentUser: UserType = useUserStore((state) => state.currentUser);
   const [errorMessage, setErrorMessage] = useState<
     Partial<Record<keyof GameType, string>>
   >({});
 
   const [isSaving, setIsSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>('null');
-  const tournament = useUserStore((state) => state.tournament);
+  const tournamentId = useTournamentDataStore((state) => state.metadata?.pk);
+  const teams = useTournamentDataStore((state) => state.teams);
+  const loadFull = useTournamentDataStore((state) => state.loadFull);
   const [radiantPK, setRadiantPK] = useState(0);
   const [direPK, setDirePK] = useState(0);
 
-  const setTournament = useUserStore((state) => state.setTournament); // Zustand setter
   const [form, setForm] = useState<GameType>({} as GameType);
   const handleChange = (field: keyof GameType, value: any) => {
     setForm((prev: GameType) => ({ ...prev, [field]: value }) as GameType);
@@ -40,14 +42,16 @@ export const GameCreateForm: React.FC = () => {
   }
 
   const handleSave = async (e: FormEvent) => {
-    form.tournament_id = tournament.pk;
+    if (!tournamentId) {
+      log.error('No tournament ID available');
+      return;
+    }
+    form.tournament_id = tournamentId;
 
     setErrorMessage({}); // Clear old errors
     createGameHook({ game: form });
-    refreshTournamentHook({ tournament, setTournament });
+    refreshTournamentHook({ tournamentId, reloadTournament: loadFull });
   };
-
-  useEffect(() => {}, [form, setForm]);
 
   const inputView = (key: string, label: string, type: string = 'text') => {
     return (
@@ -73,7 +77,7 @@ export const GameCreateForm: React.FC = () => {
         <Label htmlFor="radiant">Radiant</Label>
         <div id={'radiant'}>
           <TeamComboBox
-            teams={tournament.teams as TeamType[]}
+            teams={teams}
             selectedTeam={radiantPK}
             setSelectedTeam={setRadiantPK}
           />
@@ -82,7 +86,7 @@ export const GameCreateForm: React.FC = () => {
 
         <div id={'dire'}>
           <TeamComboBox
-            teams={tournament.teams as TeamType[]}
+            teams={teams}
             selectedTeam={direPK}
             setSelectedTeam={setDirePK}
           />

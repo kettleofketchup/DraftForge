@@ -18,6 +18,7 @@ import './bracket-styles.css';
 import { useBracketStore } from '~/store/bracketStore';
 import { useUserStore } from '~/store/userStore';
 import { useTournamentStore } from '~/store/tournamentStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import { useElkLayout, type MatchNodeType } from './hooks/useElkLayout';
 import { MatchNode } from './nodes/MatchNode';
 import { EmptySlotNode } from './nodes/EmptySlotNode';
@@ -122,7 +123,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isStaff = useUserStore((state) => state.isStaff());
-  const tournament = useUserStore((state) => state.tournament);
+  const teams = useTournamentDataStore((state) => state.teams);
   const pendingDraftId = useTournamentStore((state) => state.pendingDraftId);
   const setPendingDraftId = useTournamentStore((state) => state.setPendingDraftId);
   const pendingMatchId = useTournamentStore((state) => state.pendingMatchId);
@@ -478,8 +479,6 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       </div>
     );
   }
-
-  const teams = tournament?.teams ?? [];
 
   return (
     <div className="w-full space-y-4">

@@ -29,6 +29,7 @@ import {
 } from '~/components/ui/tooltip';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
+import { useTeamDraftStore } from '~/store/teamDraftStore';
 
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { Label } from '~/components/ui/label';
@@ -52,9 +53,9 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
   showTrigger = true,
 }) => {
   const isStaff = useUserStore((state) => state.isStaff);
-  const draft = useUserStore((state) => state.draft);
+  const draft = useTeamDraftStore((state) => state.draft);
+  const loadDraft = useTeamDraftStore((state) => state.loadDraft);
 
-  const setDraft = useUserStore((state) => state.setDraft);
   const [internalOpen, setInternalOpen] = useState(false);
 
   // Use external open state if provided, otherwise use internal state
@@ -83,23 +84,15 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
     if (!draft) return;
 
     try {
-      // TODO: Add API call to update draft style
-      // const updatedDraft = await updateDraftStyle(draft.pk, newStyle);
-
-      // For now, update locally
       log.debug('Handling style change', { draft, newStyle });
-      const updatedDraft: DraftType = {
-        ...draft,
-        pk: draft.pk,
-        draft_style: newStyle as 'snake' | 'normal' | 'shuffle',
-      };
 
       await updateDraftStyleHook({
         draftStyle: newStyle,
         draft: draft,
-        setDraft: setDraft,
       });
-      setDraft(updatedDraft);
+
+      // Refresh draft from server to get updated state
+      await loadDraft();
       setSelectedStyle(newStyle);
       setOpen(false);
     } catch (error) {

@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
 import { OctagonAlert } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
-import { initDraftHook } from '~/components/draft/hooks/initDraftHook';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { initDraftRounds } from '~/components/api/api';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { Button } from '~/components/ui/button';
@@ -13,42 +14,51 @@ import {
 } from '~/components/ui/tooltip';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
+import { useTeamDraftStore } from '~/store/teamDraftStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 
 const log = getLogger('InitDraftDialog');
 
 export const InitDraftButton: React.FC = () => {
   const [open, setOpen] = useState(false);
-  const tournament = useUserStore((state) => state.tournament);
-  const setTournament = useUserStore((state) => state.setTournament);
-  const setDraftIndex = useUserStore((state) => state.setDraftIndex);
-  const draft = useUserStore((state) => state.draft);
-  const setDraft = useUserStore((state) => state.setDraft);
-  const curDraftRound = useUserStore((state) => state.curDraftRound);
-  const setCurDraftRound = useUserStore((state) => state.setCurDraftRound);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const tournamentId = useTournamentDataStore((state) => state.tournamentId);
+  const loadAll = useTournamentDataStore((state) => state.loadAll);
+  const loadDraft = useTeamDraftStore((state) => state.loadDraft);
+  const setCurrentRoundIndex = useTeamDraftStore((state) => state.setCurrentRoundIndex);
   const isStaff = useUserStore((state) => state.isStaff);
 
   const handleChange = async () => {
     log.debug('handleChange');
-    if (!tournament) {
+    if (!tournamentId) {
       log.error('No tournament found to update');
       return;
     }
 
-    if (tournament.pk === undefined) {
-      log.error('No tournament found to update');
-      return;
-    }
+    setIsLoading(true);
+    try {
+      await toast.promise(
+        initDraftRounds({ tournament_pk: tournamentId }),
+        {
+          loading: 'Initializing draft rounds...',
+          success: 'Tournament Draft has been initialized!',
+          error: (err) => {
+            const val = err.response?.data || 'Unknown error';
+            return `Failed to initialize draft: ${val}`;
+          },
+        }
+      );
 
-    initDraftHook({
-      tournament,
-      setTournament,
-      setDraft,
-      curDraftRound,
-      setCurDraftRound,
-      setDraftIndex,
-    });
-    setDraftIndex(0);
-    setOpen(false);
+      // Refresh data from server
+      await Promise.all([loadAll(), loadDraft()]);
+      setCurrentRoundIndex(0);
+      setOpen(false);
+    } catch (error) {
+      log.error('Failed to initialize draft:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!isStaff()) {
@@ -98,6 +108,7 @@ export const InitDraftButton: React.FC = () => {
         description="This action cannot be undone. Drafts started must be deleted and recreated."
         confirmLabel="Restart Draft"
         variant="destructive"
+        isLoading={isLoading}
         onConfirm={handleChange}
       />
     </>

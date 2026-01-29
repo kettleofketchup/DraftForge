@@ -63,6 +63,7 @@ interface HeroDraftState {
   // WebSocket management
   connectWebSocket: () => void;
   disconnectWebSocket: () => void;
+  reconnect: () => void;
 
   // Computed helpers
   getCurrentTeam: () => DraftTeam | null;
@@ -220,10 +221,16 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
 
   // Connect WebSocket
   connectWebSocket: () => {
-    const id = get().draftId;
-    if (id === null) return;
+    const { draftId, _wsUnsubscribe } = get();
+    if (draftId === null) return;
 
-    const channel = `herodraft/${id}`;
+    // Guard against duplicate subscriptions
+    if (_wsUnsubscribe !== null) {
+      log.debug("Already subscribed to herodraft WebSocket, skipping");
+      return;
+    }
+
+    const channel = `herodraft/${draftId}`;
 
     const unsubscribe = WebSocketManager.subscribe(
       channel,
@@ -243,6 +250,16 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
       set({ _wsUnsubscribe: null, wsState: "disconnected" });
       log.debug("Unsubscribed from herodraft WebSocket");
     }
+  },
+
+  // Force reconnect
+  reconnect: () => {
+    const id = get().draftId;
+    if (id === null) return;
+
+    const channel = `herodraft/${id}`;
+    WebSocketManager.reconnect(channel);
+    log.debug(`Reconnect requested for herodraft WebSocket: ${channel}`);
   },
 
   // Computed helpers
@@ -283,7 +300,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
     const { draft } = get();
     if (!draft) return [];
     return draft.rounds
-      .filter((r) => r.action_type === "pick" && r.hero_id !== null && r.draft_team_id === teamId)
+      .filter((r) => r.action_type === "pick" && r.hero_id !== null && r.draft_team === teamId)
       .map((r) => r.hero_id as number);
   },
 

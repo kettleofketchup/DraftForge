@@ -114,6 +114,16 @@ export const TournamentEditForm: React.FC<Props> = ({
     }
   }, [leagues, getLeagues]);
 
+  // Extract league ID from tournament (can be number or object with pk)
+  const getLeagueId = (): number | null => {
+    if (!tourn?.league) return null;
+    if (typeof tourn.league === 'number') return tourn.league;
+    if (typeof tourn.league === 'object' && 'pk' in tourn.league) {
+      return (tourn.league as { pk: number }).pk;
+    }
+    return null;
+  };
+
   const form = useForm<CreateTournamentInput>({
     resolver: zodResolver(CreateTournamentSchema),
     defaultValues: {
@@ -121,7 +131,7 @@ export const TournamentEditForm: React.FC<Props> = ({
       tournament_type: (tourn?.tournament_type as TournamentTypeValue) || 'double_elimination',
       date_played: combineDateAndTime(initialDateTime.date, initialDateTime.time),
       timezone: (tourn as unknown as { timezone?: string })?.timezone || 'America/New_York',
-      league: tourn?.league || null,
+      league: getLeagueId(),
     },
   });
 

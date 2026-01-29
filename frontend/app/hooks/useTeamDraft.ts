@@ -11,7 +11,7 @@
  * useTeamDraftStore directly for more control.
  */
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useTeamDraftStore } from "~/store/teamDraftStore";
 
 interface UseTeamDraftOptions {
@@ -29,53 +29,83 @@ export function useTeamDraft(
 ) {
   const { autoConnect = true } = options;
 
-  const store = useTeamDraftStore();
+  // Subscribe to individual state slices for reactivity
+  const draft = useTeamDraftStore((state) => state.draft);
+  const events = useTeamDraftStore((state) => state.events);
+  const currentRoundIndex = useTeamDraftStore((state) => state.currentRoundIndex);
+  const tieResolution = useTeamDraftStore((state) => state.tieResolution);
+  const loading = useTeamDraftStore((state) => state.loading);
+  const error = useTeamDraftStore((state) => state.error);
+  const wsState = useTeamDraftStore((state) => state.wsState);
+  const hasNewEvent = useTeamDraftStore((state) => state.hasNewEvent);
+
+  // Subscribe to actions
+  const setDraftId = useTeamDraftStore((state) => state.setDraftId);
+  const reset = useTeamDraftStore((state) => state.reset);
+  const clearTieResolution = useTeamDraftStore((state) => state.clearTieResolution);
+  const clearNewEvent = useTeamDraftStore((state) => state.clearNewEvent);
+  const nextRound = useTeamDraftStore((state) => state.nextRound);
+  const previousRound = useTeamDraftStore((state) => state.previousRound);
+  const setCurrentRoundIndex = useTeamDraftStore((state) => state.setCurrentRoundIndex);
+  const loadDraft = useTeamDraftStore((state) => state.loadDraft);
+  const loadDraftState = useTeamDraftStore((state) => state.loadDraftState);
+
+  // Derive current round from subscribed state (reactive)
+  const currentRound = useMemo(() => {
+    if (!draft?.draft_rounds || draft.draft_rounds.length === 0) return null;
+    return draft.draft_rounds[currentRoundIndex] ?? null;
+  }, [draft, currentRoundIndex]);
+
+  // Derive users remaining from draft
+  const usersRemaining = useMemo(() => {
+    return draft?.users_remaining ?? [];
+  }, [draft?.users_remaining]);
 
   // Set draft ID (triggers WebSocket connection and data load)
   useEffect(() => {
     if (autoConnect && draftId && tournamentId) {
-      store.setDraftId(draftId, tournamentId);
+      setDraftId(draftId, tournamentId);
     }
     return () => {
       // Cleanup on unmount
       if (draftId) {
-        store.reset();
+        reset();
       }
     };
-  }, [draftId, tournamentId, autoConnect]);
+  }, [draftId, tournamentId, autoConnect, setDraftId, reset]);
 
   return {
     // Draft data
-    draft: store.draft,
-    events: store.events,
-    currentRound: store.getCurrentRound(),
-    currentRoundIndex: store.currentRoundIndex,
-    usersRemaining: store.getUsersRemaining(),
+    draft,
+    events,
+    currentRound,
+    currentRoundIndex,
+    usersRemaining,
 
     // Tie resolution (for shuffle draft)
-    tieResolution: store.tieResolution,
-    clearTieResolution: store.clearTieResolution,
+    tieResolution,
+    clearTieResolution,
 
     // Loading/Error
-    loading: store.loading,
-    error: store.error,
+    loading,
+    error,
 
     // WebSocket state
-    wsState: store.wsState,
-    isConnected: store.wsState === "connected",
+    wsState,
+    isConnected: wsState === "connected",
 
     // UI feedback
-    hasNewEvent: store.hasNewEvent,
-    clearNewEvent: store.clearNewEvent,
+    hasNewEvent,
+    clearNewEvent,
 
     // Navigation
-    nextRound: store.nextRound,
-    previousRound: store.previousRound,
-    setCurrentRoundIndex: store.setCurrentRoundIndex,
+    nextRound,
+    previousRound,
+    setCurrentRoundIndex,
 
     // Actions
-    refresh: store.loadDraft,
-    refreshState: store.loadDraftState,
+    refresh: loadDraft,
+    refreshState: loadDraftState,
   };
 }
 

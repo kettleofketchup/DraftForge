@@ -1,5 +1,7 @@
-import { test as base, expect, Browser, BrowserContext, Page } from '@playwright/test';
-import { loginAsUser, waitForHydration, UserInfo } from './auth';
+import { test as base, expect } from '@playwright/test';
+import type { Browser, BrowserContext, Page } from '@playwright/test';
+import { loginAsUser, waitForHydration } from './auth';
+import type { UserInfo } from './auth';
 
 const API_URL = 'https://localhost/api';
 

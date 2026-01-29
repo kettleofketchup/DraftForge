@@ -6,7 +6,7 @@ import { CaptainSelectionModal } from '~/components/tournament/captains/captainS
 
 import type { UserType } from '~/components/user/types';
 import type { TeamType } from '~/index';
-import { hasErrors } from '~/pages/tournament/hasErrors';
+import { HasErrors } from '~/pages/tournament/hasErrors';
 import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import { RandomizeTeamsModal } from './teams/randomTeamsModal';
 
@@ -53,7 +53,7 @@ export const TeamsTab: React.FC = memo(() => {
 
   return (
     <div className="p-5 container">
-      {hasErrors()}
+      <HasErrors />
       {teamButtonsView()}
       <div className="w-full">
         <SearchTeamsDropdown

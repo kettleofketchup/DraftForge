@@ -15,7 +15,10 @@ import { SteamMatchCard, type MatchSuggestion } from './SteamMatchCard';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import type { BracketMatch } from '../types';
 import { cn } from '~/lib/utils';
-import { useUserStore } from '~/store/userStore';
+import { getLogger } from '~/lib/logger';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
+
+const log = getLogger('LinkSteamMatchModal');
 
 interface LinkSteamMatchModalProps {
   isOpen: boolean;
@@ -53,7 +56,7 @@ export function LinkSteamMatchModal({
   game,
   onLinkUpdated,
 }: LinkSteamMatchModalProps) {
-  const tournament = useUserStore((state) => state.tournament);
+  const metadata = useTournamentDataStore((state) => state.metadata);
   const [search, setSearch] = useState('');
   const [suggestions, setSuggestions] = useState<MatchSuggestion[]>([]);
   const [linkedMatchId, setLinkedMatchId] = useState<number | null>(null);
@@ -64,14 +67,14 @@ export function LinkSteamMatchModal({
   // Get tournament date for prioritizing matches on that day
   // Use local date string (YYYY-MM-DD) for reliable comparison (avoids UTC timezone shift)
   const tournamentDateLocal = useMemo(() => {
-    if (!tournament?.date_played) return null;
-    const date = new Date(tournament.date_played);
+    if (!metadata?.date_played) return null;
+    const date = new Date(metadata.date_played);
     // Use local date components to avoid UTC conversion shifting the date
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`; // e.g., "2026-01-18"
-  }, [tournament?.date_played]);
+  }, [metadata?.date_played]);
 
   // Fetch suggestions when modal opens or search changes
   useEffect(() => {
@@ -87,7 +90,7 @@ export function LinkSteamMatchModal({
         setSuggestions(response.data.suggestions);
         setLinkedMatchId(response.data.linked_match_id);
       } catch (error) {
-        console.error('Failed to fetch suggestions:', error);
+        log.error('Failed to fetch suggestions:', error);
       } finally {
         setIsLoading(false);
       }
@@ -109,7 +112,7 @@ export function LinkSteamMatchModal({
       toast.success(`Linked to Match #${matchId}`);
       onClose();
     } catch (error) {
-      console.error('Failed to link match:', error);
+      log.error('Failed to link match:', error);
       toast.error('Failed to link match. Are you logged in as staff?');
     }
   };
@@ -124,7 +127,7 @@ export function LinkSteamMatchModal({
       onLinkUpdated();
       toast.success('Match unlinked');
     } catch (error) {
-      console.error('Failed to unlink match:', error);
+      log.error('Failed to unlink match:', error);
       toast.error('Failed to unlink match. Are you logged in as staff?');
     }
   };

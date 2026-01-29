@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useMemo } from 'react';
 import { PlayerPopover } from '~/components/player';
 import {
   Table,
@@ -13,13 +13,12 @@ import { PositionEnum } from '~/components/user';
 import { AvatarUrl } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
-import { useUserStore } from '~/store/userStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import { UpdateCaptainButton } from './UpdateCaptainButton';
 interface TournamentUsersTable {}
 export const CaptainTable: React.FC<TournamentUsersTable> = () => {
-  const tournament = useUserStore((state) => state.tournament);
+  const users = useTournamentDataStore((state) => state.users);
 
-  useEffect(() => {}, [tournament.users]);
   const positions = (user: UserType) => {
     if (!user.positions) return null;
     return (
@@ -34,9 +33,8 @@ export const CaptainTable: React.FC<TournamentUsersTable> = () => {
       </div>
     );
   };
-  const members = () => {
-    if (!tournament.users) return [];
-    const sortedUsers = [...tournament.users].sort((a, b) => {
+  const members = useMemo(() => {
+    return [...users].sort((a, b) => {
       if (!a.mmr && !b.mmr) return 0;
       if (!a.mmr) return 1; // Treat undefined MMR as lower
       if (!b.mmr) return -1; // Treat undefined MMR as lower
@@ -44,8 +42,7 @@ export const CaptainTable: React.FC<TournamentUsersTable> = () => {
       if (a.mmr < b.mmr) return 1;
       return 0;
     });
-    return sortedUsers;
-  };
+  }, [users]);
 
   return (
     <Table>
@@ -59,7 +56,7 @@ export const CaptainTable: React.FC<TournamentUsersTable> = () => {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {members().map((user: UserType, idx: number) => (
+        {members.map((user: UserType, idx: number) => (
           <TableRow key={`TeamTableRow-${user.pk}`}>
             <TableCell>
               <PlayerPopover player={user}>

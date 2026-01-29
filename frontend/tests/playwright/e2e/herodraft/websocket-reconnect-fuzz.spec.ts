@@ -1,4 +1,5 @@
-import { test, expect, chromium, BrowserContext, Page } from '@playwright/test';
+import { test, expect, chromium } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 

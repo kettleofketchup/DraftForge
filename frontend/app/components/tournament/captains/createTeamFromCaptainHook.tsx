@@ -3,7 +3,6 @@ import { toast } from 'sonner';
 import {
   createTeamFromCaptain,
   deleteTeam,
-  fetchTournament,
 } from '~/components/api/api';
 import type { CreateTeamFromCaptainAPI } from '~/components/api/types';
 import type { UserType } from '~/components/user/types';
@@ -30,7 +29,7 @@ export const createErrorMessage = (
 
 type hookParams = {
   tournament: TournamentType;
-  setTournament: (tournament: TournamentType) => void;
+  reloadTournament: () => Promise<void>;
   captain: UserType;
   draft_order: string;
   setDraftOrder?: React.Dispatch<React.SetStateAction<string>>;
@@ -40,7 +39,7 @@ type hookParams = {
 
 export const createTeamFromCaptainHook = async ({
   tournament,
-  setTournament,
+  reloadTournament,
   captain,
   draft_order,
   setDraftOrder,
@@ -67,7 +66,7 @@ export const createTeamFromCaptainHook = async ({
   const getTeam = () => {
     return tournament?.teams?.find((t) => t.captain?.pk === captain.pk);
   };
-  var newTournament: Partial<TournamentType> = {
+  const newTournament: Partial<TournamentType> = {
     pk: tournament.pk,
   };
   const team = getTeam();
@@ -76,8 +75,9 @@ export const createTeamFromCaptainHook = async ({
     if (team.captain && team.captain.pk === captain.pk) setIsCaptain?.(false);
     toast.promise(deleteTeam(team.pk!), {
       loading: `Deleting team for ${captain.username}`,
-      success: () => {
+      success: async () => {
         setDraftOrder?.('0');
+        await reloadTournament();
         return `Team for ${captain.username} has been deleted`;
       },
       error: (err) => {
@@ -85,9 +85,7 @@ export const createTeamFromCaptainHook = async ({
         return `Failed to delete team: ${err.message}`;
       },
     });
-    const data = await fetchTournament(tournament.pk);
-    setTournament(data);
-    // If the captain is being removed, update state
+    // Wait for toast to complete which will reload tournament
     return;
   }
 
@@ -99,13 +97,13 @@ export const createTeamFromCaptainHook = async ({
     draft_order: parseInt(draft_order),
   };
 
-  var msg = isCaptain() ? 'Removing' : 'adding';
+  const msg = isCaptain() ? 'Removing' : 'adding';
   log.debug(`${msg} captain for user: ${captain.username}`, newTournament);
 
   toast.promise(createTeamFromCaptain(data), {
     loading: `${msg} ${captain.username} as captain...`,
-    success: (data) => {
-      setTournament(data);
+    success: async () => {
+      await reloadTournament();
 
       if (setIsCaptain) setIsCaptain(!isCaptain());
 

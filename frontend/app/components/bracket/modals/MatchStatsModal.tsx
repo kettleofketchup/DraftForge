@@ -33,8 +33,11 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
   const isStaff = useUserStore((state) => state.isStaff());
-  const tournament = useUserStore((state) => state.tournament);
-  const { setMatchWinner, advanceWinner, loadBracket } = useBracketStore();
+  const tournamentId = pk ? Number(pk) : null;
+  // Use individual selectors for actions to prevent re-renders on unrelated state changes
+  const setMatchWinner = useBracketStore((state) => state.setMatchWinner);
+  const advanceWinner = useBracketStore((state) => state.advanceWinner);
+  const loadBracket = useBracketStore((state) => state.loadBracket);
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
 
@@ -51,8 +54,8 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
   };
 
   const handleLinkUpdated = () => {
-    if (tournament?.pk) {
-      loadBracket(tournament.pk);
+    if (tournamentId) {
+      loadBracket(tournamentId);
     }
   };
 
@@ -84,8 +87,8 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
         toast.success('Draft created!');
 
         // Reload bracket to update herodraft_id in the match
-        if (tournament?.pk) {
-          loadBracket(tournament.pk);
+        if (tournamentId) {
+          loadBracket(tournamentId);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';

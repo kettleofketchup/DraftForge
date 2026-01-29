@@ -10,7 +10,7 @@ const log = getLogger('PickPlayerHook');
 
 type hookParams = {
   tournament: TournamentType;
-  setTournament: (tournament: TournamentType) => void;
+  reloadTournament: () => Promise<void>;
   player: UserType;
   curDraftRound: DraftRoundType;
   setDraft: (draft: DraftType) => void;
@@ -22,7 +22,7 @@ type hookParams = {
 
 export const choosePlayerHook = async ({
   tournament,
-  setTournament,
+  reloadTournament,
   player,
   curDraftRound,
   setDraft,
@@ -53,18 +53,10 @@ export const choosePlayerHook = async ({
     user_pk: player.pk,
   };
 
-  const getDraft = (tournament: TournamentType) => {
-    return tournament.draft as DraftType;
-  };
-  const getDraftRound = (draft: DraftType, roundPk: number) => {
-    return draft.draft_rounds?.find(
-      (round: DraftRoundType) => round.pk === roundPk,
-    );
-  };
   toast.promise(PickPlayerForRound(dataRoundUpdate), {
     loading: `Choosing ${DisplayName(player)} for ${curDraftRound.captain ? DisplayName(curDraftRound.captain) : 'captain'} in round ${curDraftRound.pick_number}`,
-    success: (data) => {
-      setTournament(data);
+    success: async (data) => {
+      await reloadTournament();
       if (!data.draft) {
         log.error('No draft in response');
         return `Pick ${curDraftRound?.pick_number} complete!`;
@@ -111,7 +103,7 @@ export const choosePlayerHook = async ({
 
       // Trigger auto-refresh after successful pick
       if (autoRefreshDraft) {
-        autoRefreshDraft();
+        void autoRefreshDraft();
       }
 
       return `Pick ${curDraftRound?.pick_number} complete!`;

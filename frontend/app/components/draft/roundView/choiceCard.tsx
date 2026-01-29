@@ -1,24 +1,33 @@
-import { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import type { UserClassType } from '~/index';
 import { getLogger } from '~/lib/logger';
-import { useUserStore } from '~/store/userStore';
+import { useTeamDraftStore } from '~/store/teamDraftStore';
 import { UserCard } from '../../user';
 import { DoublePickThreshold } from '../shuffle/DoublePickThreshold';
 import { DraftTable } from './draftTable';
 const log = getLogger('choiceCard');
 interface PlayerChoiceViewProps {}
 export const PlayerChoiceView: React.FC<PlayerChoiceViewProps> = ({}) => {
-  const draft = useUserStore((state) => state.draft);
-  const curRound = useUserStore((state) => state.curDraftRound);
+  // Only subscribe to draft_rounds (not entire draft)
+  const draftRounds = useTeamDraftStore((state) => state.draft?.draft_rounds);
+  const currentRoundIndex = useTeamDraftStore((state) => state.currentRoundIndex);
+  // Subscribe to users_remaining length for debugging (separate subscription)
+  const usersRemainingLength = useTeamDraftStore((state) => state.draft?.users_remaining?.length);
+
+  // Derive current round from subscribed state (reactive)
+  const curRound = useMemo(() => {
+    if (!draftRounds || draftRounds.length === 0) return null;
+    return draftRounds[currentRoundIndex] ?? null;
+  }, [draftRounds, currentRoundIndex]);
   useEffect(() => {
     log.debug('rerender: Current choice updated:', curRound?.choice);
   }, [curRound?.choice]);
   useEffect(() => {
     log.debug(
       'rerender: draft users remaining updated:',
-      draft?.users_remaining?.length,
+      usersRemainingLength,
     );
-  }, [draft?.users_remaining?.length]);
+  }, [usersRemainingLength]);
 
   if (!curRound || !curRound?.choice)
     return (

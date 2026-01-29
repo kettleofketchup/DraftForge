@@ -5,12 +5,12 @@ import { Button } from '~/components/ui/button';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { InfoDialog } from '~/components/ui/dialogs';
 import { Input } from '~/components/ui/input';
-import { useUserStore } from '~/store/userStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 
 export const ShareDraftButton = () => {
   const [open, setOpen] = useState(false);
-  const tournament = useUserStore((state) => state.tournament);
-  const shareUrl = `${window.location.origin}/tournament/${tournament.pk}/teams/draft?draft=open`;
+  const tournamentId = useTournamentDataStore((state) => state.tournamentId);
+  const shareUrl = `${window.location.origin}/tournament/${tournamentId}/teams/draft?draft=open`;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(shareUrl);

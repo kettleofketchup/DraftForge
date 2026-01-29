@@ -362,9 +362,13 @@ test.describe('Two Captains Full Draft', () => {
       captainB.draftPage.waitForConnection(),
     ]);
 
-    // Verify WebSocket connections were established
-    console.log(`   Captain A WebSocket: ${wsConnectionA ? 'connected to ' + wsConnectionA.url : 'NOT CONNECTED'}`);
-    console.log(`   Captain B WebSocket: ${wsConnectionB ? 'connected to ' + wsConnectionB.url : 'NOT CONNECTED'}`);
+    // Verify WebSocket connections were established (use type assertion to work around
+    // TypeScript's conservative control flow analysis for callback-assigned variables)
+    type WsConn = { url: string; closed: boolean } | null;
+    const wsAUrl = (wsConnectionA as WsConn)?.url;
+    const wsBUrl = (wsConnectionB as WsConn)?.url;
+    console.log(`   Captain A WebSocket: ${wsAUrl ? 'connected to ' + wsAUrl : 'NOT CONNECTED'}`);
+    console.log(`   Captain B WebSocket: ${wsBUrl ? 'connected to ' + wsBUrl : 'NOT CONNECTED'}`);
 
     if (!wsConnectionA || !wsConnectionB) {
       throw new Error('WebSocket connections not established for both captains');

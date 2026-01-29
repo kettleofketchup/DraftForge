@@ -10,6 +10,8 @@ export interface ConfirmButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
   /** Whether the button is in a loading state */
   loading?: boolean;
+  /** Custom loading text (overrides default variant-based text) */
+  loadingText?: string;
   /** Visual variant */
   variant?: ConfirmButtonVariant;
   /** Whether to apply 3D depth effects (default: true) */
@@ -45,6 +47,7 @@ const ConfirmButton = React.forwardRef<HTMLButtonElement, ConfirmButtonProps>(
   (
     {
       loading = false,
+      loadingText: customLoadingText,
       disabled,
       children,
       className,
@@ -78,7 +81,7 @@ const ConfirmButton = React.forwardRef<HTMLButtonElement, ConfirmButtonProps>(
         {loading ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            {loadingText[variant]}
+            {customLoadingText ?? loadingText[variant]}
           </>
         ) : (
           children

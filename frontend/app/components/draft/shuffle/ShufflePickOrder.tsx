@@ -1,9 +1,11 @@
+import React, { useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { cn } from '~/lib/utils';
 import { Badge } from '~/components/ui/badge';
 import { Card } from '~/components/ui/card';
 import { TeamPopover } from '~/components/team';
-import { useUserStore } from '~/store/userStore';
+import { useTeamDraftStore } from '~/store/teamDraftStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import { AvatarUrl, DisplayName, type TeamType, type UserType } from '~/index';
 import type { DraftRoundType } from '../types';
 
@@ -19,9 +21,16 @@ interface TeamPickStatus {
 }
 
 export const ShufflePickOrder: React.FC = () => {
-  const tournament = useUserStore((state) => state.tournament);
-  const draft = useUserStore((state) => state.draft);
-  const curDraftRound = useUserStore((state) => state.curDraftRound);
+  const teams = useTournamentDataStore((state) => state.teams);
+  // Subscribe to draft_rounds only (not entire draft)
+  const draftRounds = useTeamDraftStore((state) => state.draft?.draft_rounds);
+  const currentRoundIndex = useTeamDraftStore((state) => state.currentRoundIndex);
+
+  // Derive current round from subscribed state (reactive)
+  const curDraftRound = useMemo(() => {
+    if (!draftRounds || draftRounds.length === 0) return null;
+    return draftRounds[currentRoundIndex] ?? null;
+  }, [draftRounds, currentRoundIndex]);
 
   const getTeamMmr = (team: TeamType): number => {
     let total = team.captain?.mmr || 0;
@@ -38,15 +47,15 @@ export const ShufflePickOrder: React.FC = () => {
   };
 
   const getTeamPickStatus = (): TeamPickStatus[] => {
-    const teams = tournament?.teams || [];
+    const teamsData = teams || [];
 
-    const statuses = teams.map((team) => {
+    const statuses = teamsData.map((team) => {
       const totalMmr = getTeamMmr(team);
       const isMaxed = isTeamMaxed(team);
       const hasMissingMmr = !team.captain?.mmr || team.captain.mmr === 0;
 
       const picksMade =
-        draft?.draft_rounds?.filter(
+        draftRounds?.filter(
           (r: DraftRoundType) => r.choice && r.captain?.pk === team.captain?.pk
         ).length || 0;
 
