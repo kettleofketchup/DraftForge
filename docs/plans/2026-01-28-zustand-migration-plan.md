@@ -15,24 +15,28 @@
 
 ---
 
-## Next Steps (Phase 2B)
+## Next Steps (Phase 2B - Modals)
 
-### Immediate Tasks
+### Completed Tasks
 
-1. **Read current TournamentDetailPage.tsx** to understand existing store usage
-2. **Replace `useUserStore` tournament access** with `useTournament` hook
-3. **Test** that tournament data loads correctly
-4. **Repeat** for each tab component
+| File | Status |
+|------|--------|
+| `TournamentDetailPage.tsx` | ✅ Complete |
+| `PlayersTab.tsx` | ✅ Complete |
+| `TeamsTab.tsx` | ✅ Complete |
+| `GamesTab.tsx` | ✅ Complete |
+| `TournamentTabs.tsx` | ✅ Complete |
 
-### Files to Migrate (in order)
+### Remaining Tasks
 
-| Priority | File | Current Store | New Hook |
-|----------|------|---------------|----------|
-| 1 | `TournamentDetailPage.tsx` | `useUserStore` | `useTournament()` |
-| 2 | `PlayersTab.tsx` | `useUserStore` | `useTournamentUsers()` |
-| 3 | `TeamsTab.tsx` | `useUserStore` | `useTournamentTeams()` |
-| 4 | `GamesTab.tsx` | `useUserStore` | `useTournamentGames()` |
-| 5 | Tournament modals (6 files) | `useUserStore` | `useTournament()` |
+| Priority | File | Current Store | New Store |
+|----------|------|---------------|-----------|
+| 1 | `addUser.tsx` | `useUserStore` | `useTournamentDataStore` |
+| 2 | `addPlayerDropdown.tsx` | `useUserStore` | `useTournamentDataStore` |
+| 3 | `addPlayerModal.tsx` | `useUserStore` | `useTournamentDataStore` |
+| 4 | `playerRemoveButton.tsx` | `useUserStore` | `useTournamentDataStore` |
+| 5 | `createTeamsButton.tsx` | `useUserStore` | `useTournamentDataStore` |
+| 6 | `randomTeamsModal.tsx` | `useUserStore` | `useTournamentDataStore` |
 
 ### Migration Pattern
 
@@ -41,9 +45,14 @@
 const { tournament, setTournament } = useUserStore();
 const users = tournament?.users ?? [];
 
-// AFTER (using new hook)
-const { users, loading, error } = useTournament(tournamentId);
-// No need to manually setTournament - hook handles it
+// AFTER (using new store directly)
+const tournamentId = useTournamentDataStore((state) => state.tournamentId);
+const tournamentUsers = useTournamentDataStore((state) => state.users);
+const loadAll = useTournamentDataStore((state) => state.loadAll);
+
+// After mutations, refresh data:
+await updateTournament(tournamentId, data);
+loadAll(); // Refresh from server
 ```
 
 ### Verification Steps
@@ -653,10 +662,11 @@ setLeagues, setLeague, getLeagues
 - [x] Task 2A.2: Create migration helper hooks (useTournament, useTeamDraft, useHeroDraftState)
 
 ### Phase 2B: Tournament Pages
-- [ ] Task 2B.1: TournamentDetailPage.tsx
-- [ ] Task 2B.2: PlayersTab.tsx
-- [ ] Task 2B.3: TeamsTab.tsx
-- [ ] Task 2B.4: GamesTab.tsx
+- [x] Task 2B.1: TournamentDetailPage.tsx
+- [x] Task 2B.2: PlayersTab.tsx
+- [x] Task 2B.3: TeamsTab.tsx
+- [x] Task 2B.4: GamesTab.tsx
+- [x] Task 2B.4.1: TournamentTabs.tsx (added)
 - [ ] Task 2B.5: Tournament modals (6 files)
 
 ### Phase 2C: Draft Components

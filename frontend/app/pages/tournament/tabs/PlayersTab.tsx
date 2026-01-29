@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useState } from 'react';
 import { toast } from 'sonner';
 import { updateTournament } from '~/components/api/api';
 import type { TournamentType } from '~/components/tournament/types'; // Adjust the import path as necessary
@@ -9,56 +9,58 @@ import { User } from '~/components/user/user';
 import { UserCard } from '~/components/user/userCard';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import { hasErrors } from '../hasErrors';
 import { AddPlayerModal } from './players/addPlayerModal';
 
 const log = getLogger('PlayersTab');
 
 export const PlayersTab: React.FC = memo(() => {
-  const allUsers = useUserStore((state) => state.users); // Zustand setter
+  const allUsers = useUserStore((state) => state.users);
   const [addPlayerQuery, setAddPlayerQuery] = useState('');
-  const addUserQuery = useUserStore((state) => state.addUserQuery);
-  const setAddUserQuery = useUserStore((state) => state.setAddUserQuery); // Zustand setter
-  const tournament = useUserStore((state) => state.tournament);
-  const setTournament = useUserStore((state) => state.setTournament); // Zustand settera
   const query = useUserStore((state) => state.userQuery);
-  const setQuery = useUserStore((state) => state.setUserQuery); // Zustand setter
+  const setQuery = useUserStore((state) => state.setUserQuery);
 
-  useEffect(() => {}, [tournament.users]);
+  // Tournament data from new store (initialized by parent TournamentDetailPage)
+  const tournamentId = useTournamentDataStore((state) => state.tournamentId);
+  const tournamentUsers = useTournamentDataStore((state) => state.users);
+  const loadAll = useTournamentDataStore((state) => state.loadAll);
+
   const addUserCallback = async (user: UserType) => {
     log.debug(`Adding user: ${user.username}`);
-    // Implement the logic to remove the user from the tournament
-    if (user.pk && tournament.user_ids && user.pk in tournament.user_ids) {
+    // Check if user already in tournament
+    const userIds = tournamentUsers.map((u) => u.pk);
+    if (user.pk && userIds.includes(user.pk)) {
       log.error('User already exists in the tournament');
       return;
     }
-    const updatedUsers = tournament.users?.map((u) => u.pk);
 
     const thisUser = new User(user as UserType);
     if (!thisUser.pk) {
       thisUser.dbFetch();
     }
-    if (updatedUsers?.includes(thisUser.pk)) {
-      log.error('User in the  tournament');
+    if (userIds.includes(thisUser.pk)) {
+      log.error('User in the tournament');
       return;
     }
     const updatedTournament = {
-      user_ids: [...(updatedUsers || []), thisUser.pk],
+      user_ids: [...userIds, thisUser.pk],
     };
 
-    if (tournament.pk === undefined || tournament.pk === null) {
+    if (tournamentId === null) {
       log.error('Tournament primary key is missing');
       return;
     }
     toast.promise(
       updateTournament(
-        tournament.pk,
+        tournamentId,
         updatedTournament as Partial<TournamentType>,
       ),
       {
         loading: `Adding User ${thisUser.username}.`,
-        success: (data) => {
-          setTournament(data);
+        success: () => {
+          // Refresh tournament data from server
+          loadAll();
           return `${thisUser.username} has been added`;
         },
         error: (err: any) => {
@@ -72,8 +74,8 @@ export const PlayersTab: React.FC = memo(() => {
   };
   const filteredUsers =
     query === ''
-      ? tournament.users
-      : tournament.users?.filter((person) => {
+      ? tournamentUsers
+      : tournamentUsers.filter((person) => {
           const q = query.toLowerCase();
           return (
             person.username?.toLowerCase().includes(q) ||
@@ -125,7 +127,7 @@ export const PlayersTab: React.FC = memo(() => {
       <div className="grid grid-cols-2 gap-5 items-start pt-5  ">
         <div className="flex self-center place-self-stretch">
           <SearchUserDropdown
-            users={tournament?.users || []}
+            users={tournamentUsers}
             query={query}
             setQuery={(val) => typeof val === 'string' ? setQuery(val) : setQuery(val(''))}
             data-testid="playerSearchDropdown"
@@ -137,12 +139,12 @@ export const PlayersTab: React.FC = memo(() => {
             query={addPlayerQuery}
             setQuery={setAddPlayerQuery}
             addPlayerCallback={addUserCallback}
-            addedUsers={tournament.users ?? undefined}
+            addedUsers={tournamentUsers.length > 0 ? tournamentUsers : undefined}
           />
         </div>
       </div>
 
-      {!tournament || !tournament.users || tournament.users.length === 0
+      {tournamentUsers.length === 0
         ? renderNoPlayers()
         : renderPlayers()}
     </div>

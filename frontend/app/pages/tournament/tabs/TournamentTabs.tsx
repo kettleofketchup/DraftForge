@@ -4,53 +4,36 @@ import { GamesTab } from './GamesTab';
 import { PlayersTab } from './PlayersTab';
 import { TeamsTab } from './TeamsTab';
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useShallow } from 'zustand/react/shallow';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 
 export default function TournamentTabs() {
   const { pk } = useParams<{ pk: string }>();
   const navigate = useNavigate();
-  const users = useUserStore((state) => state.users);
   const activeTab = useTournamentStore((state) => state.activeTab);
+
+  // Tournament data from new store (initialized by parent TournamentDetailPage)
+  const tournamentUsers = useTournamentDataStore((state) => state.users);
+  const tournamentTeams = useTournamentDataStore((state) => state.teams);
+  const tournamentGames = useTournamentDataStore((state) => state.games);
 
   const handleTabChange = useCallback((tab: string) => {
     // Navigate using URL path, which will update the store via TournamentDetailPage
     navigate(`/tournament/${pk}/${tab}`, { replace: true });
   }, [pk, navigate]);
 
+  // Load all users for the add player modal
   const getUsers = useUserStore((state) => state.getUsers);
   useEffect(() => {
     getUsers();
   }, []);
 
-  const tournament = useUserStore(useShallow((state) => state.tournament)); // Zustand setter
-
-  const playerCount = useMemo(() => {
-    // Assuming you have a way to get the players array, e.g., from props or context
-    if (!tournament || !tournament.users) {
-      return 0; // Return 0 if tournament or users is not defined
-    }
-    return tournament.users.length;
-  }, [tournament.users]);
-
-  const teamCount = useMemo(() => {
-    // Assuming you have a way to get the players array, e.g., from props or context
-    if (!tournament || !tournament.teams) {
-      return 0; // Return 0 if tournament or users is not defined
-    }
-    return tournament.teams.length;
-  }, [tournament.teams]);
-
-  const gameCount = useMemo(() => {
-    // Assuming you have a way to get the players array, e.g., from props or context
-    if (!tournament || !tournament.games) {
-      return 0; // Return 0 if tournament or users is not defined
-    }
-    return tournament.games.length;
-  }, [tournament.games]);
+  const playerCount = tournamentUsers.length;
+  const teamCount = tournamentTeams.length;
+  const gameCount = tournamentGames.length;
   return (
     <Tabs
       value={activeTab}

@@ -1,23 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { useShallow } from 'zustand/react/shallow';
-import axios from '~/components/api/axios'; // Assuming axios is configured for your API
 import { useTournamentStore } from '~/store/tournamentStore';
-import { useUserStore } from '~/store/userStore';
+import { useTournament } from '~/hooks/useTournament';
 import TournamentTabs from './tabs/TournamentTabs';
 
 import { getLogger } from '~/lib/logger';
 const log = getLogger('TournamentDetailPage');
 export const TournamentDetailPage: React.FC = () => {
   const { pk, '*': slug } = useParams<{ pk: string; '*': string }>();
-  const tournament = useUserStore(useShallow((state) => state.tournament));
-  const setTournament = useUserStore((state) => state.setTournament);
+  const tournamentPk = pk ? parseInt(pk, 10) : null;
+
+  // Use new tournament hook - handles loading, WebSocket, and data fetching
+  const { tournament, loading, error } = useTournament(tournamentPk);
+
+  // UI state from tournament store
   const setLive = useTournamentStore((state) => state.setLive);
   const setActiveTab = useTournamentStore((state) => state.setActiveTab);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
   const setAutoAdvance = useTournamentStore((state) => state.setAutoAdvance);
-  const autoAdvance = useTournamentStore((state) => state.autoAdvance);
   const setPendingDraftId = useTournamentStore((state) => state.setPendingDraftId);
   const setPendingMatchId = useTournamentStore((state) => state.setPendingMatchId);
 
@@ -46,26 +45,6 @@ export const TournamentDetailPage: React.FC = () => {
       setAutoAdvance(true);
     }
   }, [slug, setActiveTab, setLive, setAutoAdvance, setPendingDraftId, setPendingMatchId]);
-  useEffect(() => {
-    if (pk) {
-      const fetchTournament = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-          const response = await axios.get(`/tournaments/${pk}/`);
-          setTournament(response.data);
-        } catch (err) {
-          log.error('Failed to fetch tournament:', err);
-          setError(
-            'Failed to load tournament details. Please try again later.',
-          );
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchTournament();
-    }
-  }, [pk]);
 
   if (loading) {
     return (

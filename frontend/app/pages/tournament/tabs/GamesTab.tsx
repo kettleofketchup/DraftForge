@@ -9,22 +9,28 @@ import { GameCard } from '~/components/game/gameCard/gameCard';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { useBracketStore } from '~/store/bracketStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 
 const log = getLogger('GamesTab');
 
 export const GamesTab: React.FC = memo(() => {
-  const tournament = useUserStore((state) => state.tournament);
+  // User state (keep in useUserStore)
   const isStaff = useUserStore((state) => state.isStaff());
+
+  // Tournament data from new store (initialized by parent TournamentDetailPage)
+  const tournamentId = useTournamentDataStore((state) => state.tournamentId);
+  const tournamentGames = useTournamentDataStore((state) => state.games);
+
   // Use getState() for actions to avoid subscribing to entire store
   const [viewMode, setViewMode] = useState<'bracket' | 'list'>('bracket');
   const [showAutoAssign, setShowAutoAssign] = useState(false);
 
   const handleAutoAssignComplete = useCallback(() => {
-    if (tournament?.pk) {
+    if (tournamentId) {
       // Access loadBracket via getState to avoid subscription
-      useBracketStore.getState().loadBracket(tournament.pk);
+      useBracketStore.getState().loadBracket(tournamentId);
     }
-  }, [tournament?.pk]);
+  }, [tournamentId]);
 
   const renderNoGames = () => {
     return (
@@ -37,14 +43,14 @@ export const GamesTab: React.FC = memo(() => {
   };
 
   const renderGamesList = () => {
-    if (!tournament || !tournament.games) {
+    if (tournamentGames.length === 0) {
       log.error('No Tournament games');
       return renderNoGames();
     }
     log.debug('rendering games');
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {tournament.games?.map((game) => (
+        {tournamentGames.map((game) => (
           <GameCard key={game.pk} game={game} />
         ))}
       </div>
@@ -80,8 +86,8 @@ export const GamesTab: React.FC = memo(() => {
         </div>
 
         <TabsContent value="bracket">
-          {tournament?.pk ? (
-            <BracketView tournamentId={tournament.pk} />
+          {tournamentId ? (
+            <BracketView tournamentId={tournamentId} />
           ) : (
             <div className="text-center text-muted-foreground py-8">
               No tournament selected
@@ -90,18 +96,18 @@ export const GamesTab: React.FC = memo(() => {
         </TabsContent>
 
         <TabsContent value="list">
-          {!tournament || !tournament.games || tournament.games.length === 0
+          {tournamentGames.length === 0
             ? renderNoGames()
             : renderGamesList()}
         </TabsContent>
       </Tabs>
 
       {/* Auto-Assign Modal */}
-      {tournament?.pk && (
+      {tournamentId && (
         <AutoAssignModal
           isOpen={showAutoAssign}
           onClose={() => setShowAutoAssign(false)}
-          tournamentId={tournament.pk}
+          tournamentId={tournamentId}
           onAssignComplete={handleAutoAssignComplete}
         />
       )}

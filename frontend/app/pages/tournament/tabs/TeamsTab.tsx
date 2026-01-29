@@ -7,20 +7,22 @@ import { CaptainSelectionModal } from '~/components/tournament/captains/captainS
 import type { UserType } from '~/components/user/types';
 import type { TeamType } from '~/index';
 import { hasErrors } from '~/pages/tournament/hasErrors';
-import { useUserStore } from '~/store/userStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import { RandomizeTeamsModal } from './teams/randomTeamsModal';
 
 export const TeamsTab: React.FC = memo(() => {
-  const tournament = useUserStore((state) => state.tournament);
+  // Tournament data from new store (initialized by parent TournamentDetailPage)
+  const tournamentTeams = useTournamentDataStore((state) => state.teams);
+  const tournamentUsers = useTournamentDataStore((state) => state.users);
   const [query, setQuery] = useState('');
 
   // Memoize filtered teams to prevent recalculation on every render
   const filteredTeams = useMemo(() => {
-    if (!tournament.teams) return [];
-    if (query === '') return tournament.teams;
+    if (tournamentTeams.length === 0) return [];
+    if (query === '') return tournamentTeams;
 
     const q = query.toLowerCase();
-    return tournament.teams
+    return tournamentTeams
       .filter((team: TeamType) => {
         // Check if any user in the team matches the query
         const userMatches = team.members?.some((user: UserType) => {
@@ -35,14 +37,14 @@ export const TeamsTab: React.FC = memo(() => {
         return userMatches || teamNameMatch;
       })
       .sort((a: TeamType, b: TeamType) => a.name.localeCompare(b.name));
-  }, [tournament.teams, query]);
+  }, [tournamentTeams, query]);
   const teamButtonsView = () => {
     return (
       <div
         className="flex flex-col justify-center items-center gap-y-4 w-full flex-grow sm:flex-row
        sm:gap-y-2 sm:gap-x-8 sm:p-4 sm:pt-2 sm:pb-6 "
       >
-        <RandomizeTeamsModal users={tournament?.users || []} teamSize={5} />
+        <RandomizeTeamsModal users={tournamentUsers} teamSize={5} />
         <CaptainSelectionModal />
         <DraftModal />
       </div>
@@ -55,7 +57,7 @@ export const TeamsTab: React.FC = memo(() => {
       {teamButtonsView()}
       <div className="w-full">
         <SearchTeamsDropdown
-          teams={tournament?.teams || []}
+          teams={tournamentTeams}
           query={query}
           setQuery={setQuery}
           data-testid="teamsSearchDropdown"
