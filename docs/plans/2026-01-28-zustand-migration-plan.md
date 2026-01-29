@@ -6,8 +6,8 @@
 |-------|--------|-------|
 | Phase 1: Infrastructure | ✅ Complete | Stores, WebSocketManager, backend endpoints |
 | Phase 2A: Compatibility Layer | ✅ Complete | Helper hooks created |
-| **Phase 2B: Tournament Pages** | 🔄 **IN PROGRESS** | See next steps below |
-| Phase 2C: Draft Components | ⏳ Pending | |
+| Phase 2B: Tournament Pages | ✅ Complete | All pages and modals migrated |
+| **Phase 2C: Draft Components** | 🔄 **IN PROGRESS** | See next steps below |
 | Phase 2D: HeroDraft Components | ⏳ Pending | |
 | Phase 2E: Bracket Integration | ⏳ Pending | |
 | Phase 2F: Cleanup | ⏳ Pending | |
@@ -15,44 +15,44 @@
 
 ---
 
-## Next Steps (Phase 2B - Modals)
+## Next Steps (Phase 2C - Draft Components)
 
-### Completed Tasks
+### Phase 2B Summary (Complete)
 
-| File | Status |
-|------|--------|
-| `TournamentDetailPage.tsx` | ✅ Complete |
-| `PlayersTab.tsx` | ✅ Complete |
-| `TeamsTab.tsx` | ✅ Complete |
-| `GamesTab.tsx` | ✅ Complete |
-| `TournamentTabs.tsx` | ✅ Complete |
+All tournament page components migrated from `useUserStore` to `useTournamentDataStore`:
+- ✅ TournamentDetailPage.tsx
+- ✅ PlayersTab.tsx, TeamsTab.tsx, GamesTab.tsx, TournamentTabs.tsx
+- ✅ playerRemoveButton.tsx, randomTeamsModal.tsx, createTeamsButton.tsx
+- ⏭️ addPlayerModal.tsx, addPlayerDropdown.tsx (no tournament store usage - use global user list)
 
-### Remaining Tasks
+### Phase 2C Target Files
 
-| Priority | File | Current Store | New Store |
-|----------|------|---------------|-----------|
-| 1 | `addUser.tsx` | `useUserStore` | `useTournamentDataStore` |
-| 2 | `addPlayerDropdown.tsx` | `useUserStore` | `useTournamentDataStore` |
-| 3 | `addPlayerModal.tsx` | `useUserStore` | `useTournamentDataStore` |
-| 4 | `playerRemoveButton.tsx` | `useUserStore` | `useTournamentDataStore` |
-| 5 | `createTeamsButton.tsx` | `useUserStore` | `useTournamentDataStore` |
-| 6 | `randomTeamsModal.tsx` | `useUserStore` | `useTournamentDataStore` |
+| Priority | File | Complexity |
+|----------|------|------------|
+| 1 | `draftModal.tsx` | HIGH - 515 lines, uses 3 stores |
+| 2 | Draft round components (7 files) | MEDIUM |
+| 3 | Draft buttons/controls (5 files) | LOW |
+| 4 | `useDraftLive.ts` deprecation | MEDIUM |
+| 5 | Remove `useDraftWebSocket` hook | LOW |
 
 ### Migration Pattern
 
 ```typescript
-// BEFORE (in each component)
-const { tournament, setTournament } = useUserStore();
-const users = tournament?.users ?? [];
+// BEFORE
+const { draft, setDraft, curDraftRound } = useUserStore();
+const { events, isConnected, hasNewEvent } = useDraftWebSocket({...});
 
-// AFTER (using new store directly)
-const tournamentId = useTournamentDataStore((state) => state.tournamentId);
-const tournamentUsers = useTournamentDataStore((state) => state.users);
-const loadAll = useTournamentDataStore((state) => state.loadAll);
+// AFTER
+const teamDraft = useTeamDraftStore();
 
-// After mutations, refresh data:
-await updateTournament(tournamentId, data);
-loadAll(); // Refresh from server
+useEffect(() => {
+  if (draftId && tournamentId) {
+    teamDraft.setDraftId(draftId, tournamentId);
+  }
+  return () => teamDraft.reset();
+}, [draftId, tournamentId]);
+
+// Use teamDraft.draft, teamDraft.events, teamDraft.wsState
 ```
 
 ### Verification Steps
@@ -667,7 +667,12 @@ setLeagues, setLeague, getLeagues
 - [x] Task 2B.3: TeamsTab.tsx
 - [x] Task 2B.4: GamesTab.tsx
 - [x] Task 2B.4.1: TournamentTabs.tsx (added)
-- [ ] Task 2B.5: Tournament modals (6 files)
+- [x] Task 2B.5: Tournament modals
+  - [x] playerRemoveButton.tsx
+  - [x] randomTeamsModal.tsx
+  - [x] createTeamsButton.tsx
+  - [~] addPlayerModal.tsx (no tournament store usage - only user auth)
+  - [~] addPlayerDropdown.tsx (no tournament store usage - uses global users list)
 
 ### Phase 2C: Draft Components
 - [ ] Task 2C.1: draftModal.tsx

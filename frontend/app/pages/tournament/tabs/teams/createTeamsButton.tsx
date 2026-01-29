@@ -3,12 +3,11 @@ import { toast } from 'sonner';
 import {
   createTeam,
   deleteTeam,
-  fetchTournament,
   updateTeam,
 } from '~/components/api/api';
 
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
-import type { TeamType, TournamentType } from '~/components/tournament/types';
+import type { TeamType } from '~/components/tournament/types';
 import type { UserType } from '~/components/user/types';
 import {
   AlertDialog,
@@ -23,26 +22,31 @@ import {
 } from '~/components/ui/alert-dialog';
 import { SubmitButton } from '~/components/ui/buttons';
 import { useUserStore } from '~/store/userStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
+
 interface CreateTeamsButtonProps {
-  tournament: TournamentType;
-  teams: TeamType[];
+  tournamentId: number | null;
+  existingTeams: TeamType[];
+  newTeams: TeamType[];
   dialogOpen: boolean;
   setDialogOpen: (open: boolean) => void;
 }
 
 export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
-  tournament,
-  teams,
+  tournamentId,
+  existingTeams,
+  newTeams,
   dialogOpen,
   setDialogOpen,
 }) => {
-  const setTournament = useUserStore((state) => state.setTournament);
   const isStaff = useUserStore((state) => state.isStaff);
-  const deleteTeams = async () => {
-    if (!tournament.teams || tournament.teams.length === 0) {
+  const loadAll = useTournamentDataStore((state) => state.loadAll);
+
+  const deleteExistingTeams = async () => {
+    if (existingTeams.length === 0) {
       return;
     }
-    for (const team of tournament.teams) {
+    for (const team of existingTeams) {
       if (!team.pk) continue;
 
       await toast.promise(deleteTeam(team.pk), {
@@ -58,24 +62,24 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
-    await deleteTeams();
-    teams = teams.sort((a, b) => {
+    await deleteExistingTeams();
+    const sortedTeams = [...newTeams].sort((a, b) => {
       if (a.name === b.name) return 0;
       if (!a.name || !b.name) return 0; // Handle undefined names
       return a.name.localeCompare(b.name);
     });
-    for (const team of teams) {
+    for (const team of sortedTeams) {
       const submitTeam: TeamType = {
         member_ids: team.members?.map((user: UserType) => user.pk),
         captain_id: team.captain?.pk,
         pk: team.pk ? team.pk : undefined,
         name: team.name,
-        tournament_id: tournament?.pk,
+        tournament_id: tournamentId ?? undefined,
       };
       if (submitTeam.pk) {
         await toast.promise(updateTeam(submitTeam.pk, submitTeam), {
           loading: `Updating Team ${team.name}.`,
-          success: (data: TeamType) => {
+          success: () => {
             return `${submitTeam.name} has been updated`;
           },
           error: (err) => `Failed to update team: ${err.message}`,
@@ -83,17 +87,15 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
       } else {
         await toast.promise(createTeam(submitTeam), {
           loading: `Creating Team ${submitTeam.name}.`,
-          success: (data: TeamType) => {
+          success: () => {
             return `${submitTeam.name} has been created`;
           },
           error: (err) => `Failed to create team: ${err.message}`,
         });
       }
     }
-    if (tournament.pk) {
-      tournament = await fetchTournament(tournament.pk);
-      setTournament(tournament);
-    }
+    // Refresh tournament data from server
+    loadAll();
     setDialogOpen(false);
   };
 

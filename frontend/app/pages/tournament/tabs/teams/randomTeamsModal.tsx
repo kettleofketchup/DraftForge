@@ -2,7 +2,6 @@ import { UsersRound } from 'lucide-react';
 import React, { useState } from 'react';
 import { TeamCard } from '~/components/team/teamCard';
 import type { TeamType } from '~/components/tournament/types';
-import { Button } from '~/components/ui/button';
 import { CancelButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import {
   Tooltip,
@@ -22,7 +21,7 @@ import {
   DialogTrigger,
 } from '~/components/ui/dialog';
 import type { UserType } from '~/components/user/types';
-import { useUserStore } from '~/store/userStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 import { createTeams } from './createTeams';
 
 import { ScrollArea } from '@radix-ui/react-scroll-area';
@@ -60,7 +59,9 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
   users,
   teamSize = 5,
 }) => {
-  const tournament = useUserStore((state) => state.tournament);
+  // Tournament data from new store
+  const tournamentId = useTournamentDataStore((state) => state.tournamentId);
+  const existingTeams = useTournamentDataStore((state) => state.teams);
 
   // Don't run createTeams until modal is opened - it's expensive (O(n²) with 100 iterations)
   const [teams, setTeams] = useState<TeamType[]>([]);
@@ -124,13 +125,14 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
             </SecondaryButton>
           </div>
           <div className="overflow-y-auto max-h-[70vh] pr-2">
-            <TeamsView teams={teams} key={`teams-${tournament.pk}`} />
+            <TeamsView teams={teams} key={`teams-${tournamentId}`} />
           </div>
         </ScrollArea>
         <DialogFooter>
           <CreateTeamsButton
-            tournament={tournament}
-            teams={teams}
+            tournamentId={tournamentId}
+            existingTeams={existingTeams}
+            newTeams={teams}
             dialogOpen={open}
             setDialogOpen={setOpen}
           />

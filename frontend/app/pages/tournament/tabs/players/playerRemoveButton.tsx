@@ -1,53 +1,33 @@
 import type { FormEvent } from 'react';
 import React, { useCallback } from 'react';
 import { toast } from 'sonner';
-import { useShallow } from 'zustand/react/shallow';
 import { updateTournament } from '~/components/api/api';
 import { TrashIconButton } from '~/components/ui/buttons';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
+import { useTournamentDataStore } from '~/store/tournamentDataStore';
 
 const log = getLogger('playerRemoveButton');
 
 import type { UserType } from '~/components/user/types';
 
-interface Props {
-  users: UserType[];
-  query: string;
-  setQuery: React.Dispatch<React.SetStateAction<string>>;
-}
-
-interface Props {
-  users: UserType[];
-
-  addedUsers?: UserType[];
-  query: string;
-  setQuery: React.Dispatch<React.SetStateAction<string>>;
-  addPlayerCallback?: (user: UserType) => Promise<void>;
-  removePlayerCallback?: (e: FormEvent, user: UserType) => Promise<void>;
-}
 interface PropsRemoveButton {
   user: UserType;
   disabled?: boolean;
-}
-interface DeleteTooltipProps {
-  tooltipText?: string;
 }
 
 export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
   user,
   disabled,
 }) => {
-  const tournament = useUserStore(useShallow((state) => state.tournament));
-  const setAddUserQuery = useUserStore(
-    useShallow((state) => state.setAddUserQuery),
-  );
-  const setDiscordUserQuery = useUserStore(
-    useShallow((state) => state.setDiscordUserQuery),
-  );
-  const setTournament = useUserStore(
-    useShallow((state) => state.setTournament),
-  );
+  // Tournament data from new store
+  const tournamentId = useTournamentDataStore((state) => state.tournamentId);
+  const tournamentUsers = useTournamentDataStore((state) => state.users);
+  const loadAll = useTournamentDataStore((state) => state.loadAll);
+
+  // Keep using useUserStore for query state (not tournament related)
+  const setAddUserQuery = useUserStore((state) => state.setAddUserQuery);
+  const setDiscordUserQuery = useUserStore((state) => state.setDiscordUserQuery);
 
   const removeUser = useCallback(
     async (e: FormEvent) => {
@@ -55,41 +35,38 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
       e.stopPropagation();
       // Implement the logic to remove the user from the tournament
       log.debug(`Removing user: ${user.username}`);
-      const updatedUsers = tournament.users
-        ?.filter((u) => u.username !== user.username)
+      const updatedUsers = tournamentUsers
+        .filter((u) => u.username !== user.username)
         .map((u) => u.pk)
         .filter((pk): pk is number => pk !== undefined);
 
       log.debug('Updated users:', updatedUsers);
 
       const updatedTournament = {
-        user_ids: updatedUsers ?? [],
+        user_ids: updatedUsers,
       };
-      if (tournament.pk === undefined) {
+      if (tournamentId === null) {
         log.error('Tournament primary key is missing');
         return;
       }
 
-      toast.promise(updateTournament(tournament.pk!, updatedTournament), {
-        loading: `Creating User ${user.username}.`,
-        success: (data) => {
-          tournament.users = tournament.users?.filter(
-            (u) => u.username !== user.username,
-          ) ?? null;
-          //Trigger rerender of tournament users
-          setTournament(data);
+      toast.promise(updateTournament(tournamentId, updatedTournament), {
+        loading: `Removing User ${user.username}.`,
+        success: () => {
+          // Refresh tournament data from server
+          loadAll();
           return `${user.username} has been removed`;
         },
         error: (err: any) => {
           log.error('Failed to update tournament', err);
-          return `${user.username} has been removed`;
+          return `${user.username} could not be removed`;
         },
       });
 
-      setAddUserQuery(''); // Reset query after adding user
-      setDiscordUserQuery(''); // Reset Discord query after adding user
+      setAddUserQuery(''); // Reset query after removing user
+      setDiscordUserQuery(''); // Reset Discord query after removing user
     },
-    [tournament],
+    [tournamentId, tournamentUsers, loadAll, user.username, setAddUserQuery, setDiscordUserQuery],
   );
   // Find all users not already in the tournament
   return (
