@@ -1,5 +1,61 @@
 # Zustand State Migration Plan
 
+## Current Status
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Phase 1: Infrastructure | ✅ Complete | Stores, WebSocketManager, backend endpoints |
+| Phase 2A: Compatibility Layer | ✅ Complete | Helper hooks created |
+| **Phase 2B: Tournament Pages** | 🔄 **IN PROGRESS** | See next steps below |
+| Phase 2C: Draft Components | ⏳ Pending | |
+| Phase 2D: HeroDraft Components | ⏳ Pending | |
+| Phase 2E: Bracket Integration | ⏳ Pending | |
+| Phase 2F: Cleanup | ⏳ Pending | |
+| Phase 2G: N+1 Fixes | ✅ Complete | Backend prefetching added |
+
+---
+
+## Next Steps (Phase 2B)
+
+### Immediate Tasks
+
+1. **Read current TournamentDetailPage.tsx** to understand existing store usage
+2. **Replace `useUserStore` tournament access** with `useTournament` hook
+3. **Test** that tournament data loads correctly
+4. **Repeat** for each tab component
+
+### Files to Migrate (in order)
+
+| Priority | File | Current Store | New Hook |
+|----------|------|---------------|----------|
+| 1 | `TournamentDetailPage.tsx` | `useUserStore` | `useTournament()` |
+| 2 | `PlayersTab.tsx` | `useUserStore` | `useTournamentUsers()` |
+| 3 | `TeamsTab.tsx` | `useUserStore` | `useTournamentTeams()` |
+| 4 | `GamesTab.tsx` | `useUserStore` | `useTournamentGames()` |
+| 5 | Tournament modals (6 files) | `useUserStore` | `useTournament()` |
+
+### Migration Pattern
+
+```typescript
+// BEFORE (in each component)
+const { tournament, setTournament } = useUserStore();
+const users = tournament?.users ?? [];
+
+// AFTER (using new hook)
+const { users, loading, error } = useTournament(tournamentId);
+// No need to manually setTournament - hook handles it
+```
+
+### Verification Steps
+
+After each file migration:
+1. Run `npm run typecheck` to verify types
+2. Start dev server and navigate to tournament page
+3. Verify data loads (check Network tab for new endpoints)
+4. Verify WebSocket connects (check console for subscription logs)
+
+---
+
 ## Overview
 
 This document details the migration from the monolithic `useUserStore` (440 lines, 87 files) to domain-specific stores created in Phase 1. The migration must be incremental, maintaining backward compatibility during the transition.
@@ -200,57 +256,20 @@ startPolling: (tournamentId, intervalMs = 5000) => {
 
 ## Migration Phases
 
-### Phase 2A: Create Compatibility Layer (Week 1)
+### Phase 2A: Create Compatibility Layer ✅ COMPLETE
 
 **Goal**: Allow gradual migration without breaking existing code.
 
 #### Task 2A.1: Add Forwarding Methods to useUserStore
 
-Add methods that delegate to new stores while maintaining API compatibility:
+*Skipped* - Using wrapper hooks instead for cleaner migration.
 
-```typescript
-// In useUserStore - add forwarding for tournament data
-getTournamentFromNewStore: () => {
-  return useTournamentDataStore.getState().tournament;
-},
-```
+#### Task 2A.2: Create Migration Helper Hooks ✅
 
-**Files to Modify**:
-- `frontend/app/store/userStore.ts`
-
-#### Task 2A.2: Create Migration Helper Hooks
-
-Create hooks that provide unified access during migration:
-
-```typescript
-// frontend/app/hooks/useTournament.ts
-export function useTournament(tournamentId: number) {
-  // Phase 1: Use new store
-  const newStore = useTournamentDataStore();
-
-  // Phase 2: Fallback to old store if needed
-  const oldStore = useUserStore();
-
-  useEffect(() => {
-    if (tournamentId) {
-      newStore.setTournamentId(tournamentId);
-    }
-  }, [tournamentId]);
-
-  return {
-    tournament: newStore.tournament ?? oldStore.tournament,
-    users: newStore.users.length > 0 ? newStore.users : (oldStore.tournament?.users ?? []),
-    teams: newStore.teams.length > 0 ? newStore.teams : (oldStore.tournament?.teams ?? []),
-    loading: newStore.loading.full,
-    error: newStore.errors.full,
-  };
-}
-```
-
-**Files to Create**:
-- `frontend/app/hooks/useTournament.ts`
-- `frontend/app/hooks/useTeamDraft.ts`
-- `frontend/app/hooks/useHeroDraft.ts`
+**Created**:
+- `frontend/app/hooks/useTournament.ts` - Tournament data with legacy fallback
+- `frontend/app/hooks/useTeamDraft.ts` - Team draft state wrapper
+- `frontend/app/hooks/useHeroDraftState.ts` - Hero draft state wrapper
 
 ---
 
