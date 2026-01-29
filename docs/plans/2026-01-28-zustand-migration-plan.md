@@ -455,9 +455,10 @@ setLeagues, setLeague, getLeagues
 ## Migration Checklist
 
 ### Pre-Migration
-- [ ] All Phase 1 stores created and tested
-- [ ] Backend @action endpoints deployed
-- [ ] WebSocketManager tested
+- [x] All Phase 1 stores created and tested
+- [x] Backend @action endpoints deployed
+- [x] WebSocketManager tested
+- [x] Critical bug fixes applied (tick handler, race condition, memory leak)
 
 ### Phase 2A: Compatibility Layer
 - [ ] Task 2A.1: Add forwarding methods to useUserStore
@@ -491,6 +492,202 @@ setLeagues, setLeague, getLeagues
 - [ ] Task 2F.2: Remove draft state from useUserStore
 - [ ] Task 2F.3: Remove teams/games state from useUserStore
 - [ ] Task 2F.4: Verify user-specific state retained
+
+### Phase 2G: Backend N+1 Query Fixes (Critical Performance)
+
+**Goal**: Fix N+1 query issues in the new `@action` endpoints before they cause performance problems.
+
+#### What is N+1?
+
+The N+1 problem occurs when fetching N items triggers N additional queries for related data:
+
+```python
+# BAD: 1 query for teams + N queries for members (one per team)
+for team in tournament.teams.all():      # 1 query
+    print(team.members.all())            # N queries!
+
+# GOOD: 2 queries total with prefetch_related
+teams = tournament.teams.prefetch_related('members').all()
+for team in teams:
+    print(team.members.all())            # No additional queries
+```
+
+#### Task 2G.1: Fix `/tournaments/{pk}/teams/` Endpoint
+
+**Current Problem**: `TeamSerializerForTournament` accesses `members`, `dropin_members`, `left_members`, `captain` without prefetching.
+
+**Fix in `views_main.py`**:
+```python
+@action(detail=True, methods=["get"])
+def teams(self, request, pk=None):
+    cache_key = f"tournament_teams:{pk}"
+
+    @cached_as(
+        Tournament.objects.filter(pk=pk),
+        Team,
+        CustomUser,
+        extra=cache_key,
+        timeout=60 * 60,
+    )
+    def get_data():
+        tournament = self.get_object()
+        # FIX: Add prefetch_related to avoid N+1
+        teams = tournament.teams.prefetch_related(
+            'members',
+            'members__positions',
+            'dropin_members',
+            'dropin_members__positions',
+            'left_members',
+            'left_members__positions',
+            'captain',
+            'captain__positions',
+        ).all()
+        return TeamSerializerForTournament(teams, many=True).data
+
+    return Response(get_data())
+```
+
+#### Task 2G.2: Fix `/tournaments/{pk}/games/` Endpoint
+
+**Current Problem**: `GameSerializerForTournament` accesses team relationships that each need their own members/captain.
+
+**Fix in `views_main.py`**:
+```python
+@action(detail=True, methods=["get"])
+def games(self, request, pk=None):
+    cache_key = f"tournament_games:{pk}"
+
+    @cached_as(
+        Tournament.objects.filter(pk=pk),
+        Game,
+        Team,
+        extra=cache_key,
+        timeout=60 * 60,
+    )
+    def get_data():
+        tournament = self.get_object()
+        # FIX: Add select_related for FK + prefetch for M2M
+        games = tournament.games.select_related(
+            'radiant_team',
+            'radiant_team__captain',
+            'dire_team',
+            'dire_team__captain',
+            'winning_team',
+            'winning_team__captain',
+        ).prefetch_related(
+            'radiant_team__members',
+            'radiant_team__members__positions',
+            'dire_team__members',
+            'dire_team__members__positions',
+            'winning_team__members',
+        ).all()
+        return GameSerializerForTournament(games, many=True).data
+
+    return Response(get_data())
+```
+
+#### Task 2G.3: Fix `/tournaments/{pk}/users/` Endpoint
+
+**Current Problem**: May cause N+1 if `positions` is not prefetched.
+
+**Fix in `views_main.py`**:
+```python
+@action(detail=True, methods=["get"])
+def users(self, request, pk=None):
+    cache_key = f"tournament_users:{pk}"
+
+    @cached_as(
+        Tournament.objects.filter(pk=pk),
+        CustomUser,
+        extra=cache_key,
+        timeout=60 * 60,
+    )
+    def get_data():
+        tournament = self.get_object()
+        # FIX: Add select_related for positions
+        users = tournament.users.select_related('positions').all()
+        return TournamentUserSerializer(users, many=True).data
+
+    return Response(get_data())
+```
+
+#### Task 2G.4: Fix `/tournaments/{pk}/draft_state/` Endpoint
+
+**Current Problem**: `TeamDraftStateSerializer` has `SerializerMethodField`s that query related data.
+
+**Fix in `views_main.py`**:
+```python
+@action(detail=True, methods=["get"])
+def draft_state(self, request, pk=None):
+    tournament = self.get_object()
+
+    if not hasattr(tournament, "draft") or not tournament.draft:
+        return Response(
+            {"error": "No draft exists for this tournament"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # FIX: Prefetch all related data used by serializer
+    draft = Draft.objects.select_related(
+        'tournament',
+    ).prefetch_related(
+        'draft_rounds',
+        'draft_rounds__team',
+        'draft_rounds__team__captain',
+        'draft_rounds__team__members',
+        'tournament__users',
+        'tournament__users__positions',
+        'tournament__teams',
+        'tournament__teams__members',
+    ).get(pk=tournament.draft.pk)
+
+    serializer = TeamDraftStateSerializer(draft)
+    return Response(serializer.data)
+```
+
+#### Task 2G.5: Add Query Count Assertions in Tests
+
+Create a test helper to catch N+1 regressions:
+
+```python
+# backend/app/tests/test_n_plus_one.py
+from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
+from django.db import connection
+
+class TournamentEndpointTests(TestCase):
+    def test_teams_endpoint_query_count(self):
+        """Ensure teams endpoint doesn't cause N+1 queries."""
+        tournament = self.create_tournament_with_teams(num_teams=5)
+
+        with CaptureQueriesContext(connection) as context:
+            response = self.client.get(f'/api/tournaments/{tournament.pk}/teams/')
+
+        # Should be constant regardless of team count
+        # Expected: 1 tournament + 1 teams with prefetch = ~3-4 queries max
+        self.assertLess(
+            len(context.captured_queries),
+            6,
+            f"Too many queries ({len(context.captured_queries)}): {context.captured_queries}"
+        )
+
+    def test_games_endpoint_query_count(self):
+        """Ensure games endpoint doesn't cause N+1 queries."""
+        tournament = self.create_tournament_with_games(num_games=10)
+
+        with CaptureQueriesContext(connection) as context:
+            response = self.client.get(f'/api/tournaments/{tournament.pk}/games/')
+
+        # Should be constant regardless of game count
+        self.assertLess(len(context.captured_queries), 8)
+```
+
+### Phase 2G Checklist
+- [ ] Task 2G.1: Fix teams endpoint prefetching
+- [ ] Task 2G.2: Fix games endpoint prefetching
+- [ ] Task 2G.3: Fix users endpoint prefetching
+- [ ] Task 2G.4: Fix draft_state endpoint prefetching
+- [ ] Task 2G.5: Add N+1 regression tests
 
 ---
 

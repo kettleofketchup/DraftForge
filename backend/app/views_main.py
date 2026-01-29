@@ -377,7 +377,9 @@ class TournamentView(viewsets.ModelViewSet):
         )
         def get_data():
             tournament = self.get_object()
-            return TournamentUserSerializer(tournament.users.all(), many=True).data
+            # FIX N+1: Prefetch positions to avoid per-user queries
+            users = tournament.users.select_related("positions").all()
+            return TournamentUserSerializer(users, many=True).data
 
         return Response(get_data())
 
@@ -398,7 +400,23 @@ class TournamentView(viewsets.ModelViewSet):
         )
         def get_data():
             tournament = self.get_object()
-            return TeamSerializerForTournament(tournament.teams.all(), many=True).data
+            # FIX N+1: Prefetch all related user collections accessed by serializer
+            teams = (
+                tournament.teams.select_related(
+                    "captain",
+                    "captain__positions",
+                )
+                .prefetch_related(
+                    "members",
+                    "members__positions",
+                    "dropin_members",
+                    "dropin_members__positions",
+                    "left_members",
+                    "left_members__positions",
+                )
+                .all()
+            )
+            return TeamSerializerForTournament(teams, many=True).data
 
         return Response(get_data())
 
@@ -419,7 +437,30 @@ class TournamentView(viewsets.ModelViewSet):
         )
         def get_data():
             tournament = self.get_object()
-            return GameSerializerForTournament(tournament.games.all(), many=True).data
+            # FIX N+1: select_related for FKs, prefetch_related for M2M
+            # GameSerializerForTournament uses TeamSerializerForTournament
+            # which needs captain + members for each team
+            games = (
+                tournament.games.select_related(
+                    "radiant_team",
+                    "radiant_team__captain",
+                    "radiant_team__captain__positions",
+                    "dire_team",
+                    "dire_team__captain",
+                    "dire_team__captain__positions",
+                    "winning_team",
+                    "winning_team__captain",
+                )
+                .prefetch_related(
+                    "radiant_team__members",
+                    "radiant_team__members__positions",
+                    "dire_team__members",
+                    "dire_team__members__positions",
+                    "winning_team__members",
+                )
+                .all()
+            )
+            return GameSerializerForTournament(games, many=True).data
 
         return Response(get_data())
 
@@ -440,7 +481,25 @@ class TournamentView(viewsets.ModelViewSet):
 
         # Don't cache draft_state - it changes frequently during active drafts
         # WebSocket is the primary source for live data
-        serializer = TeamDraftStateSerializer(tournament.draft)
+        # FIX N+1: Prefetch all related data used by TeamDraftStateSerializer
+        draft = (
+            Draft.objects.select_related("tournament")
+            .prefetch_related(
+                "draft_rounds",
+                "draft_rounds__captain",
+                "draft_rounds__captain__positions",
+                "draft_rounds__team",
+                "draft_rounds__choice",
+                "draft_rounds__choice__positions",
+                "tournament__teams",
+                "tournament__teams__members",
+                "tournament__teams__captain",
+                "tournament__users",
+                "tournament__users__positions",
+            )
+            .get(pk=tournament.draft.pk)
+        )
+        serializer = TeamDraftStateSerializer(draft)
         return Response(serializer.data)
 
 
