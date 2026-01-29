@@ -52,7 +52,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("app", "0070_add_steam_account_id"),
-        ("steam", "0001_initial"),
+        ("steam", "0004_playermatchstats_user"),  # user field added in 0004
     ]
 
     operations = [

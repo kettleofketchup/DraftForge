@@ -100,6 +100,29 @@ export default defineConfig({
       // Override parallel settings for herodraft tests (multi-browser coordination)
       fullyParallel: false,
     },
+    {
+      name: 'demo',
+      testDir: './tests/playwright/demo',
+      testMatch: /.*\.demo\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        headless: true,
+        launchOptions: {
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          slowMo: 100, // Slow for video recording
+          args: [
+            '--no-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+          ],
+        },
+      },
+      // Demo tests run sequentially (video recording)
+      fullyParallel: false,
+      // Longer timeout for demo recordings
+      timeout: 300_000,
+    },
   ],
 
   // Global timeout - 30s for test, but faster action timeout

@@ -1,7 +1,5 @@
 import { memo, useCallback, useState } from "react";
-import { Badge } from "~/components/ui/badge";
-import { SecondaryButton } from "~/components/ui/buttons";
-import { History } from "lucide-react";
+import { HistoryButton } from "~/components/ui/buttons";
 import type { DraftEvent } from "~/types/draftEvent";
 import { DraftEventModal } from "../DraftEventModal";
 
@@ -32,23 +30,13 @@ export const DraftHistoryButton = memo(function DraftHistoryButton({
 
   return (
     <>
-      <SecondaryButton
+      <HistoryButton
         data-testid="draft-history-button"
-        color="orange"
         onClick={handleClick}
-        className="relative"
-      >
-        <History className="h-4 w-4 md:mr-2" />
-        <span className="hidden md:inline">History</span>
-        {events.length > 0 && (
-          <Badge
-            variant={hasNewEvent ? "destructive" : "secondary"}
-            className="absolute -top-2 -right-2 h-5 min-w-5 rounded-full text-xs"
-          >
-            {events.length}
-          </Badge>
-        )}
-      </SecondaryButton>
+        eventCount={events.length}
+        hasNewEvent={hasNewEvent}
+        tooltipText="Draft Events"
+      />
 
       {modalOpen && (
         <DraftEventModal

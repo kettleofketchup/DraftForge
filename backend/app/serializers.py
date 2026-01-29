@@ -84,6 +84,7 @@ class TeamSerializerForTournament(serializers.ModelSerializer):
     dropin_members = TournamentUserSerializer(many=True, read_only=True)
     left_members = TournamentUserSerializer(many=True, read_only=True)
     captain = TournamentUserSerializer(many=False, read_only=True)
+    deputy_captain = TournamentUserSerializer(many=False, read_only=True)
     draft_order = serializers.IntegerField()
 
     class Meta:
@@ -95,6 +96,7 @@ class TeamSerializerForTournament(serializers.ModelSerializer):
             "dropin_members",
             "left_members",
             "captain",
+            "deputy_captain",
             "draft_order",
             "placement",
         )
@@ -557,6 +559,7 @@ class TeamSerializer(serializers.ModelSerializer):
         required=False,
     )
     captain = TournamentUserSerializer(many=False, read_only=True)
+    deputy_captain = TournamentUserSerializer(many=False, read_only=True)
 
     captain_id = serializers.PrimaryKeyRelatedField(
         source="captain",
@@ -564,6 +567,15 @@ class TeamSerializer(serializers.ModelSerializer):
         queryset=CustomUser.objects.all(),
         write_only=True,
         required=False,
+        allow_null=True,
+    )
+    deputy_captain_id = serializers.PrimaryKeyRelatedField(
+        source="deputy_captain",
+        many=False,
+        queryset=CustomUser.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
     )
     total_mmr = serializers.SerializerMethodField()
 
@@ -594,10 +606,12 @@ class TeamSerializer(serializers.ModelSerializer):
             "left_members",
             "left_member_ids",
             "captain",
-            "captain_id",  # Allow setting captain by ID
-            "member_ids",  # Allow setting member IDs
-            "dropin_member_ids",  # Allow setting drop-in member IDs
-            "tournament_id",  # Allow setting tournament by ID
+            "captain_id",
+            "deputy_captain",
+            "deputy_captain_id",
+            "member_ids",
+            "dropin_member_ids",
+            "tournament_id",
             "members",
             "dropin_members",
             "draft_order",

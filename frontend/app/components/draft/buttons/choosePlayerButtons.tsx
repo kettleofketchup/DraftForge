@@ -44,7 +44,11 @@ export const ChoosePlayerButton: React.FC<{
   const [showTieOverlay, setShowTieOverlay] = useState(false);
 
   // Check if current user is the captain for this round
-  const isCaptainForRound = currentUser?.pk === curDraftRound?.captain?.pk;
+  // Must check that both currentUser and captain exist with valid pks to avoid undefined === undefined
+  const isCaptainForRound =
+    currentUser?.pk != null &&
+    curDraftRound?.captain?.pk != null &&
+    currentUser.pk === curDraftRound.captain.pk;
   const canPick = isStaff() || isCaptainForRound;
   const pickAlreadyMade = !!curDraftRound?.choice;
 

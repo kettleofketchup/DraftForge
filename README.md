@@ -29,7 +29,17 @@ A tournament management platform for Dota 2 gaming communities.
 
 ## Demo Videos
 
-Automated demo recordings are available for key features. Generate them locally:
+Automated demo recordings are available for key features:
+
+| Captain 1 - HeroDraft | Captain 2 - HeroDraft |
+|-----------------------|-----------------------|
+| ![Captain 1](docs/assets/gifs/captain1_herodraft.gif) | ![Captain 2](docs/assets/gifs/captain2_herodraft.gif) |
+
+| Shuffle Draft | Snake Draft |
+|---------------|-------------|
+| ![Shuffle Draft](docs/assets/gifs/shuffle_draft.gif) | ![Snake Draft](docs/assets/gifs/snake_draft.gif) |
+
+### Generate Demos Locally
 
 ```bash
 source .venv/bin/activate
@@ -43,7 +53,7 @@ inv demo.snake       # Snake draft
 inv demo.herodraft   # Hero draft with bracket
 ```
 
-Outputs are saved to `docs/assets/videos/` (full recordings) and `docs/assets/gifs/` (preview clips).
+Full videos: `docs/assets/videos/` | GIF previews: `docs/assets/gifs/`
 
 ## Tech Stack
 

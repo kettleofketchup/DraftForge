@@ -30,7 +30,6 @@ import {
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
 
-import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { Label } from '~/components/ui/label';
 import { getLogger } from '~/lib/logger';
 import { updateDraftStyleHook } from '../hooks/updateDraftStyleHook';
@@ -141,7 +140,9 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
     );
   };
 
-  if (!draft) {
+  // When using external control, we need to render the Dialog even if draft is null
+  // so the open state works properly. Only skip render for trigger mode without draft.
+  if (!draft && showTrigger) {
     return null;
   }
 
@@ -157,7 +158,8 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
       draftPredictedMMRs.normal_last_pick_mmr || 0,
     );
   const getButtons = () => {
-    if (!isStaff()) return <AdminOnlyButton />;
+    // Non-staff can only view the balance stats, not change the draft style
+    if (!isStaff()) return null;
 
     return (
       <Button
@@ -173,12 +175,24 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
       {showTrigger && dialogButton()}
       <DialogContent className={`${DIALOG_CSS} max-w-2xl`}>
         <DialogHeader>
-          <DialogTitle>Draft Style Configuration</DialogTitle>
+          <DialogTitle>
+            {isStaff() ? 'Draft Style Configuration' : 'Draft Balance Stats'}
+          </DialogTitle>
           <DialogDescription>
-            Choose draft style and compare team balance using MMR projections
+            {isStaff()
+              ? 'Choose draft style and compare team balance using MMR projections'
+              : 'Compare team balance across different draft styles'}
           </DialogDescription>
         </DialogHeader>
 
+        {!draft ? (
+          <div className="py-8 text-center text-muted-foreground">
+            <p className="font-medium">Draft not initialized</p>
+            <p className="text-sm mt-2">
+              Captains must be assigned before balance stats are available.
+            </p>
+          </div>
+        ) : (
         <div className="space-y-6">
           {/* Draft Style Selection */}
           <div className="space-y-2">
@@ -332,12 +346,13 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
             </div>
           </div>
         </div>
+        )}
 
         <DialogFooter className="gap-2">
           <DialogClose asChild>
             <CancelButton />
           </DialogClose>
-          {getButtons()}
+          {draft && getButtons()}
         </DialogFooter>
       </DialogContent>
     </Dialog>

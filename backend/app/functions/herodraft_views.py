@@ -422,7 +422,17 @@ def do_submit_pick(request, draft_pk):
         f"HeroDraft {draft.pk} pick submitted: hero {hero_id} by team {draft_team.pk} (round {completed_round.round_number})"
     )
 
-    broadcast_herodraft_event(draft, "hero_selected", draft_team)
+    # Include hero_id and action_type in metadata for the toast notification
+    broadcast_herodraft_event(
+        draft,
+        "hero_selected",
+        draft_team,
+        metadata={
+            "hero_id": hero_id,
+            "action_type": completed_round.action_type,
+            "round_number": completed_round.round_number,
+        },
+    )
 
     # Refetch with prefetch for proper serialization
     draft = _get_draft_with_prefetch(draft.pk)

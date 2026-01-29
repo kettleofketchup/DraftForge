@@ -14,9 +14,10 @@ import { DraftPanel } from "./DraftPanel";
 import { HeroDraftHistoryModal } from "./HeroDraftHistoryModal";
 import { submitPick, setReady, triggerRoll, submitChoice } from "./api";
 import type { HeroDraft, HeroDraftEvent } from "./types";
-import { heroes } from "dotaconstants";
-import { DisplayName } from "~/components/user/avatar";
-import { X, Send, History } from "lucide-react";
+import { DisplayName, AvatarUrl } from "~/components/user/avatar";
+import { getHeroIcon, getHeroName as getHeroNameFromLib } from "~/lib/dota/heroes";
+import { X, Send } from "lucide-react";
+import { HistoryButton } from "~/components/ui/buttons";
 import {
   Tooltip,
   TooltipContent,
@@ -71,13 +72,6 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
   const handleEvent = useCallback((event: HeroDraftEvent) => {
     console.log("[HeroDraftModal] handleEvent:", event.event_type, event);
 
-    // Get hero name helper
-    const getHeroName = (heroId: number | undefined): string => {
-      if (!heroId) return "Unknown Hero";
-      const hero = Object.values(heroes).find((h: { id: number }) => h.id === heroId);
-      return (hero as { localized_name: string } | undefined)?.localized_name ?? `Hero ${heroId}`;
-    };
-
     // Get captain display name
     const draftTeam = event.draft_team;
     const captainName = draftTeam?.captain
@@ -116,9 +110,41 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
         // Get hero_id and action_type from metadata
         const heroId = event.metadata?.hero_id;
         const actionType = event.metadata?.action_type;
-        const heroName = getHeroName(heroId);
-        const action = actionType === "ban" ? "banned" : "picked";
-        toast.info(`${captainName} ${action} ${heroName}`);
+        const heroName = heroId ? getHeroNameFromLib(heroId) : "Unknown Hero";
+        const isBan = actionType === "ban";
+        const captain = draftTeam?.captain;
+        // Cast captain to UserType-compatible shape for AvatarUrl
+        const avatarUrl = captain ? AvatarUrl(captain as Parameters<typeof AvatarUrl>[0]) : undefined;
+        const heroIconUrl = heroId ? getHeroIcon(heroId) : undefined;
+
+        toast(
+          <div className="flex items-center gap-2">
+            {/* Captain Avatar */}
+            {avatarUrl && (
+              <img
+                src={avatarUrl}
+                alt=""
+                className="w-6 h-6 rounded-full shrink-0"
+              />
+            )}
+            {/* Captain Name */}
+            <span className="font-medium">{captainName}</span>
+            {/* Action - colored */}
+            <span className={isBan ? "text-red-500 font-semibold" : "text-green-500 font-semibold"}>
+              {isBan ? "banned" : "picked"}
+            </span>
+            {/* Hero Name */}
+            <span className="font-medium">{heroName}</span>
+            {/* Hero Icon */}
+            {heroIconUrl && (
+              <img
+                src={heroIconUrl}
+                alt={heroName}
+                className="w-6 h-6 rounded shrink-0"
+              />
+            )}
+          </div>
+        );
         break;
       }
       case "draft_completed":
@@ -523,21 +549,13 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
                 {/* Right side controls */}
                 <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowHistoryModal(true)}
-                        className="text-white border-gray-600 hover:bg-gray-800 text-xs sm:text-sm"
-                        data-testid="herodraft-history-btn"
-                      >
-                        <History className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-                        <span className="hidden sm:inline">History</span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Draft Events</TooltipContent>
-                  </Tooltip>
+                  <HistoryButton
+                    data-testid="herodraft-history-btn"
+                    onClick={() => setShowHistoryModal(true)}
+                    eventCount={draft.rounds.filter(r => r.state === "completed").length}
+                    tooltipText="Draft History"
+                    size="sm"
+                  />
                   <Button
                     variant="destructive"
                     size="sm"

@@ -368,3 +368,31 @@ poetry run inv test.run --cmd 'python manage.py test app.tests -v 2'
 
 - `inv-runner` - Python Invoke task automation (backend tests via Docker, environment management)
 - `visual-debugging` - Chrome MCP browser automation for debugging
+
+## Demo Video Recording
+
+**IMPORTANT**: Always use `inv demo.*` commands to record demo videos (or `inv test.demo.*` when in test environment).
+
+After editing UI components in `frontend/app/components/herodraft/`, `draft/`, or `bracket/`, run the appropriate demo recording command:
+
+```bash
+source .venv/bin/activate
+
+# Record all demos
+inv demo.all
+
+# Individual demos
+inv demo.snake         # Snake draft demo
+inv demo.shuffle       # Shuffle draft demo
+inv demo.herodraft     # HeroDraft with bracket demo
+inv demo.snapshots     # Site screenshots
+
+# Post-processing
+inv demo.trim          # Trim initial white screen
+inv demo.gifs          # Convert videos to GIFs
+
+# Quick workflow (record + GIFs)
+inv demo.quick
+```
+
+See [docs/ai/demo/](docs/ai/demo/index.md) for full guidelines.
