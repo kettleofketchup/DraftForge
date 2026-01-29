@@ -79,11 +79,13 @@ RUN apk add --no-cache \
     nss \
     freetype \
     harfbuzz \
+    harfbuzz-subset \
     ca-certificates \
     ttf-freefont \
     libstdc++ \
     dbus \
     mesa-gl \
+    mesa-gbm \
     libxcomposite \
     libxdamage \
     libxrandr \
@@ -95,7 +97,17 @@ RUN apk add --no-cache \
     cups-libs \
     gtk+3.0 \
     at-spi2-core \
-    ffmpeg && \
+    ffmpeg \
+    # Additional chromium dependencies
+    eudev-libs \
+    crc32c \
+    double-conversion \
+    minizip \
+    libxslt \
+    pipewire-libs \
+    libwebpdemux \
+    simdutf \
+    openh264 && \
     # Create symlink: chromium-browser wrapper calls /usr/bin/chromium but Alpine puts it at /usr/lib/chromium/chromium
     ln -sf /usr/lib/chromium/chromium /usr/bin/chromium
 
