@@ -13,21 +13,33 @@ type DisplayNameable = {
 /**
  * Get the display name for a user.
  * Priority: nickname > username
+ * @param user - The user object
+ * @param maxLength - Optional max length to truncate to (adds … if truncated)
  */
 export const DisplayName = (
   user: UserType | GuildMember | UserClassType | DisplayNameable | undefined,
+  maxLength?: number,
 ): string => {
   if (!user) {
     return '?';
   }
 
+  let name: string;
+
   if ('user' in user) {
     // user is GuildMember - prefer nick, then global_name, then username
-    return user.nick || user.user.global_name || user.user.username;
+    name = user.nick || user.user.global_name || user.user.username;
+  } else {
+    // Standard user - prefer nickname, then username, fallback to '?'
+    name = user.nickname || user.username || '?';
   }
 
-  // Standard user - prefer nickname, then username, fallback to '?'
-  return user.nickname || user.username || '?';
+  // Truncate if maxLength specified and name exceeds it
+  if (maxLength && name.length > maxLength) {
+    return `${name.substring(0, maxLength)}…`;
+  }
+
+  return name;
 };
 
 export const AvatarUrl = (

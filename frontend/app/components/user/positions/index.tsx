@@ -344,31 +344,86 @@ interface RolePositionsProps {
    * Uses native title attribute instead.
    */
   disableTooltips?: boolean;
+  /**
+   * Fill empty position slots with invisible placeholders to maintain consistent width.
+   * Useful in list views where alignment matters.
+   */
+  fillEmpty?: boolean;
 }
 
-export const RolePositions: React.FC<RolePositionsProps> = ({ user, compact, disableTooltips }) => {
-  if (!user.positions) return null;
+/** Position icon mapping */
+const positionIcons: Record<string, React.FC<{ className?: string }>> = {
+  carry: CarrySVG,
+  mid: MidSVG,
+  offlane: OfflaneSVG,
+  soft_support: SoftSupportSVG,
+  hard_support: HardSupportSVG,
+};
 
+/** Invisible placeholder badge showing the missing position icon */
+const PlaceholderBadge: React.FC<{ compact?: boolean; positionKey: string }> = ({ compact, positionKey }) => {
+  const isResponsive = compact === undefined;
+  const forceCompact = compact === true;
+  const IconComponent = positionIcons[positionKey] || CarrySVG;
+
+  return (
+    <div className="relative inline-block opacity-30 pointer-events-none">
+      <Badge className={cn(
+        "badge-primary !bg-gray-700/50 !text-gray-500",
+        forceCompact && "!px-1 !py-0.5",
+        isResponsive && "!px-1 !py-0.5 sm:!px-2.5 sm:!py-0.5"
+      )}>
+        <Badge className={cn(
+          "!bg-gray-600/50",
+          forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
+        )}>
+          -
+        </Badge>
+        <IconComponent className={cn(
+          forceCompact && "w-4 h-4",
+          isResponsive && "w-4 h-4 sm:w-5 sm:h-5"
+        )} />
+      </Badge>
+    </div>
+  );
+};
+
+export const RolePositions: React.FC<RolePositionsProps> = ({ user, compact, disableTooltips, fillEmpty }) => {
   const isResponsive = compact === undefined;
   const forceCompact = compact === true;
 
+  const positions = [
+    { component: CarryBadge, value: user?.positions?.carry, key: 'carry' },
+    { component: MidBadge, value: user?.positions?.mid, key: 'mid' },
+    { component: OfflaneBadge, value: user?.positions?.offlane, key: 'offlane' },
+    { component: SoftSupportBadge, value: user?.positions?.soft_support, key: 'soft_support' },
+    { component: HardSupportBadge, value: user?.positions?.hard_support, key: 'hard_support' },
+  ];
+
+  const activePositions = positions
+    .filter(({ value }) => value != null && value > 0)
+    .sort((a, b) => (a.value || 0) - (b.value || 0));
+
+  // Find which positions are missing (for placeholder icons)
+  const activeKeys = new Set(activePositions.map(p => p.key));
+  const missingPositions = positions.filter(p => !activeKeys.has(p.key));
+
+  // If no positions and not filling empty, return null
+  if (activePositions.length === 0 && !fillEmpty) return null;
+
   return (
     <div className={cn(
-      "flex flex-wrap justify-center",
+      "flex justify-start",
       forceCompact ? "flex-row gap-2" : isResponsive ? "flex-row gap-1 sm:gap-1" : "flex-col md:flex-row gap-1"
     )}>
-      {[
-        { component: CarryBadge, value: user?.positions?.carry },
-        { component: MidBadge, value: user?.positions?.mid },
-        { component: OfflaneBadge, value: user?.positions?.offlane },
-        { component: SoftSupportBadge, value: user?.positions?.soft_support },
-        { component: HardSupportBadge, value: user?.positions?.hard_support },
-      ]
-        .filter(({ value }) => value != null)
-        .sort((a, b) => a.value - b.value)
-        .map(({ component: Component }, index) => (
-          <Component key={index} user={user} compact={compact} disableTooltips={disableTooltips} />
-        ))}
+      {/* Render active positions first (sorted by preference) */}
+      {activePositions.map(({ component: Component, key }) => (
+        <Component key={key} user={user} compact={compact} disableTooltips={disableTooltips} />
+      ))}
+      {/* Render placeholders for missing positions with correct icons */}
+      {fillEmpty && missingPositions.map(({ key }) => (
+        <PlaceholderBadge key={`placeholder-${key}`} compact={compact} positionKey={key} />
+      ))}
     </div>
   );
 };
