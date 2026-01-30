@@ -6,8 +6,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from "~/compone
 import { VisuallyHidden } from "~/components/ui/visually-hidden";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { useHeroDraftStore } from "~/store/heroDraftStore";
-import { useHeroDraftWebSocket } from "./hooks/useHeroDraftWebSocket";
+import { useHeroDraftStore, heroDraftSelectors } from "~/store/heroDraftStore";
 import { useUserStore } from "~/store/userStore";
 import { DraftTopBar } from "./DraftTopBar";
 import { HeroGrid } from "./HeroGrid";
@@ -45,12 +44,17 @@ interface HeroDraftModalProps {
 export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) {
   const navigate = useNavigate();
   const { currentUser } = useUserStore();
-  // Use selectors to prevent re-renders when unrelated state changes
+
+  // WebSocket store - unified state and connection management
   const draft = useHeroDraftStore((state) => state.draft);
   const tick = useHeroDraftStore((state) => state.tick);
-  const setDraft = useHeroDraftStore((state) => state.setDraft);
-  const setTick = useHeroDraftStore((state) => state.setTick);
+  const lastEvent = useHeroDraftStore((state) => state.lastEvent);
   const setSelectedHeroId = useHeroDraftStore((state) => state.setSelectedHeroId);
+  const wsConnect = useHeroDraftStore((state) => state.connect);
+  const wsDisconnect = useHeroDraftStore((state) => state.disconnect);
+  const wsReconnect = useHeroDraftStore((state) => state.reconnect);
+  const isConnected = useHeroDraftStore(heroDraftSelectors.isConnected);
+  const connectionError = useHeroDraftStore((state) => state.error);
 
   const [confirmHeroId, setConfirmHeroId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -71,27 +75,28 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     }
   }, [draft?.tournament_id, draft?.game, navigate, onClose]);
 
-  const handleStateUpdate = useCallback(
-    (newDraft: HeroDraft) => {
-      setDraft(newDraft);
-    },
-    [setDraft]
-  );
+  // Connect/disconnect WebSocket based on modal open state
+  useEffect(() => {
+    if (open && draftId) {
+      wsConnect(draftId);
+    }
+    return () => {
+      if (!open) {
+        wsDisconnect();
+      }
+    };
+  }, [open, draftId, wsConnect, wsDisconnect]);
 
-  const handleTick = useCallback(
-    (newTick: Parameters<typeof setTick>[0]) => {
-      setTick(newTick);
-    },
-    [setTick]
-  );
+  // Handle events from WebSocket - show toasts
+  useEffect(() => {
+    if (!lastEvent) return;
 
-  const handleEvent = useCallback((event: HeroDraftEvent) => {
-    console.log("[HeroDraftModal] handleEvent:", event.event_type, event);
+    console.log("[HeroDraftModal] handleEvent:", lastEvent.event_type, lastEvent);
 
-    const draftTeam = event.draft_team;
+    const draftTeam = lastEvent.draft_team;
     const captain = draftTeam?.captain;
 
-    switch (event.event_type) {
+    switch (lastEvent.event_type) {
       case "captain_ready":
         toast(<CaptainToast captain={captain} message="is ready" messageClassName="text-blue-400 font-semibold" />);
         break;
@@ -106,7 +111,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
         setResumeCountdown(null);
         break;
       case "resume_countdown": {
-        const countdownSeconds = (event.metadata as { countdown_seconds?: number })?.countdown_seconds ?? 3;
+        const countdownSeconds = (lastEvent.metadata as { countdown_seconds?: number })?.countdown_seconds ?? 3;
         setResumeCountdown(countdownSeconds);
         toast.info(`Resuming in ${countdownSeconds}...`);
         break;
@@ -119,8 +124,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
         toast(<CaptainToast captain={captain} message="won the coin flip!" messageClassName="text-yellow-400 font-semibold" />);
         break;
       case "hero_selected": {
-        const heroId = event.metadata?.hero_id;
-        const actionType = event.metadata?.action_type;
+        const heroId = lastEvent.metadata?.hero_id;
+        const actionType = lastEvent.metadata?.action_type;
         const heroName = heroId ? getHeroNameFromLib(heroId) : "Unknown Hero";
         const heroIconUrl = heroId ? getHeroIcon(heroId) : undefined;
         const action = actionType === "ban" ? "banned" : "picked";
@@ -132,7 +137,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
         toast.success("Draft completed!");
         break;
     }
-  }, []);
+  }, [lastEvent]);
 
   // Countdown timer effect - decrements every second
   useEffect(() => {
@@ -145,13 +150,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     return () => clearTimeout(timer);
   }, [resumeCountdown]);
 
-  const { isConnected, connectionError, reconnect } = useHeroDraftWebSocket({
-    draftId,
-    enabled: open,  // Only connect when modal is open
-    onStateUpdate: handleStateUpdate,
-    onTick: handleTick,
-    onEvent: handleEvent,
-  });
+  // Alias for backwards compatibility
+  const reconnect = wsReconnect;
 
   const handleHeroClick = (heroId: number) => {
     console.log("[HeroDraftModal] handleHeroClick:", {
