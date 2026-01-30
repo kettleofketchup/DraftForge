@@ -237,36 +237,56 @@ export const DraftRoundView: React.FC = () => {
       hard_support: { bestRank: 6, players: [] },
     };
 
-    for (const pos of positionKeys) {
-      const playersForPos: { user: UserType; rank: number }[] = [];
+    // Build position -> players mapping with ranks
+    const positionPlayers: Record<PositionKey, { user: UserType; rank: number }[]> = {
+      carry: [], mid: [], offlane: [], soft_support: [], hard_support: [],
+    };
 
+    for (const pos of positionKeys) {
       for (const member of members) {
         const userPositions = member.positions;
         if (!userPositions) continue;
         const rank = userPositions[pos] || 0;
         if (rank > 0) {
-          playersForPos.push({ user: member, rank });
+          positionPlayers[pos].push({ user: member, rank });
         }
       }
-
       // Sort by rank (best/lowest first)
-      playersForPos.sort((a, b) => a.rank - b.rank);
+      positionPlayers[pos].sort((a, b) => a.rank - b.rank);
 
       result[pos] = {
-        bestRank: playersForPos.length > 0 ? playersForPos[0].rank : 6,
-        players: playersForPos.slice(0, 3).map((p) => p.user), // Top 3 players for this position
+        bestRank: positionPlayers[pos].length > 0 ? positionPlayers[pos][0].rank : 6,
+        players: positionPlayers[pos].slice(0, 3).map((p) => p.user),
       };
     }
 
-    // Check if unique preferred positions are possible (each member gets their #1)
-    // Count how many members have each position as their #1
+    // Greedy assignment to check which positions can be uniquely filled
+    // Sort positions by number of available players (fewest options first)
+    const sortedPositions = [...positionKeys].sort(
+      (a, b) => positionPlayers[a].length - positionPlayers[b].length
+    );
+
+    const assignedPlayers = new Set<number>(); // Track assigned player PKs
+    const assignedPositions = new Set<PositionKey>(); // Positions that got a unique player
+
+    for (const pos of sortedPositions) {
+      const availablePlayers = positionPlayers[pos].filter(
+        (p) => !assignedPlayers.has(p.user.pk!)
+      );
+      if (availablePlayers.length > 0) {
+        // Assign the best available player
+        assignedPlayers.add(availablePlayers[0].user.pk!);
+        assignedPositions.add(pos);
+      }
+    }
+
+    // Count favorites for tooltip info
     const favoriteCount: Record<PositionKey, number> = {
       carry: 0, mid: 0, offlane: 0, soft_support: 0, hard_support: 0,
     };
     for (const member of members) {
       const userPositions = member.positions;
       if (!userPositions) continue;
-      // Find which position is their #1 (rank = 1)
       for (const pos of positionKeys) {
         if (userPositions[pos] === 1) {
           favoriteCount[pos]++;
@@ -274,42 +294,42 @@ export const DraftRoundView: React.FC = () => {
       }
     }
 
-    // Count positions that have conflicts (>1 person wants it)
-    const conflictedPositions = positionKeys.filter((pos) => favoriteCount[pos] > 1);
-    const hasConflicts = conflictedPositions.length > 0;
-
-    // Count total unique positions claimed as favorites
-    const positionsWithFavorites = positionKeys.filter((pos) => favoriteCount[pos] >= 1);
-
     // A position has a warning if:
-    // 1. More than one person wants it (direct conflict)
-    // 2. OR there are conflicts elsewhere AND this position is among the contested group
-    //    (e.g., 2 people want pos 1,2,3 means one of those 3 will be unfulfilled)
+    // 1. It couldn't get a unique assignment (not in assignedPositions)
+    // 2. OR more than one person wants it as their favorite (direct conflict)
+    // 3. OR it has coverage but fewer members than covered positions (someone is double-booked)
     const positionHasWarning = (pos: PositionKey): boolean => {
-      // Direct conflict: >1 person wants this
+      // No coverage at all
+      if (result[pos].bestRank >= 6) return false; // Will show red anyway
+
+      // Couldn't get unique assignment
+      if (!assignedPositions.has(pos)) return true;
+
+      // Direct conflict: >1 person wants this as favorite
       if (favoriteCount[pos] > 1) return true;
 
-      // If there are conflicts, check if total favorites > members who claimed them
-      // This catches the case where 2 members both want positions from a set of 3
-      if (hasConflicts && favoriteCount[pos] === 1) {
-        // This position is claimed by exactly 1 person, but if there are conflicts,
-        // we need to check if the total number of favorite claims exceeds available slots
-        const totalFavoriteClaims = positionKeys.reduce((sum, p) => sum + favoriteCount[p], 0);
-        const membersWithFavorites = members.filter((m) => {
-          const up = m.positions;
-          return up && positionKeys.some((p) => up[p] === 1);
-        }).length;
-        // If more claims than members, there's an issue
-        if (totalFavoriteClaims > membersWithFavorites) return true;
+      // Check if any player covering this position is also the ONLY player for another position
+      const playersForThis = positionPlayers[pos];
+      for (const { user } of playersForThis) {
+        for (const otherPos of positionKeys) {
+          if (otherPos === pos) continue;
+          const otherPlayers = positionPlayers[otherPos];
+          // If this user is the only one who can play another position, that's a potential conflict
+          if (otherPlayers.length === 1 && otherPlayers[0].user.pk === user.pk) {
+            // This player is the only option for both positions - conflict
+            if (playersForThis.length === 1) return true;
+          }
+        }
       }
 
       return false;
     };
 
-    // Unique is possible only if no position has warnings
-    const uniquePossible = positionKeys.every((pos) => !positionHasWarning(pos));
+    // Check if all covered positions can be uniquely filled
+    const coveredPositions = positionKeys.filter((pos) => result[pos].bestRank < 6);
+    const uniquePossible = coveredPositions.every((pos) => assignedPositions.has(pos) && !positionHasWarning(pos));
 
-    return { positions: result, uniquePossible, favoriteCount, positionHasWarning };
+    return { positions: result, uniquePossible, favoriteCount, positionHasWarning, assignedPositions };
   }, [currentTeam?.members]);
 
   // Filter states
@@ -535,9 +555,9 @@ export const DraftRoundView: React.FC = () => {
               {(['carry', 'mid', 'offlane', 'soft_support', 'hard_support'] as PositionKey[]).map((pos, idx) => {
                 const coverage = teamPositionCoverage.positions[pos];
                 const { bestRank, players } = coverage;
-                const hasFavorite = bestRank === 1;
-                const { uniquePossible, favoriteCount, positionHasWarning } = teamPositionCoverage;
+                const { favoriteCount, positionHasWarning, assignedPositions } = teamPositionCoverage;
                 const hasWarning = positionHasWarning(pos);
+                const hasUniqueAssignment = assignedPositions.has(pos);
 
                 // Position icon mapping
                 const positionIcons: Record<PositionKey, React.FC<{className?: string}>> = {
@@ -551,21 +571,21 @@ export const DraftRoundView: React.FC = () => {
                 const IconComponent = positionIcons[pos];
 
                 // Color based on coverage quality - only green/orange/red
-                // Red: no one can play (bestRank = 6) or only as worst choice (5)
-                // Orange: has conflict warning OR only available as 3rd/4th choice
-                // Green: someone has it as favorite AND no conflicts (unique possible), OR good coverage (1-2)
+                // Red: no one can play (bestRank >= 5) or no unique assignment possible
+                // Orange: has conflict warning OR mediocre coverage (3-4) OR no unique player
+                // Green: good coverage (1-2) AND got unique assignment AND no conflicts
                 let colorClass: string;
                 let badgeColorClass: string;
-                if (bestRank >= 5 || bestRank === 6) {
+                if (bestRank >= 5) {
                   // Red: no coverage or very poor
                   colorClass = 'bg-red-900/60 border-red-500/70';
                   badgeColorClass = 'bg-red-600 text-white';
-                } else if (hasWarning || bestRank >= 3) {
-                  // Orange: conflicts or mediocre coverage
+                } else if (hasWarning || !hasUniqueAssignment || bestRank >= 3) {
+                  // Orange: conflicts, no unique assignment, or mediocre coverage
                   colorClass = 'bg-orange-900/50 border-orange-500/60';
                   badgeColorClass = 'bg-orange-600 text-white';
                 } else {
-                  // Green: good coverage (1-2) with no conflicts
+                  // Green: good coverage (1-2) with unique assignment and no conflicts
                   colorClass = 'bg-green-900/50 border-green-500/50';
                   badgeColorClass = 'bg-green-600 text-white';
                 }
@@ -610,18 +630,20 @@ export const DraftRoundView: React.FC = () => {
                       <p className="font-medium">Position {idx + 1}</p>
                       {bestRank === 6 ? (
                         <p className="text-red-400">No one on team plays this</p>
-                      ) : bestRank === 5 ? (
+                      ) : bestRank >= 5 ? (
                         <p className="text-red-400">Only as last choice ({players[0]?.username})</p>
-                      ) : hasWarning && favoriteCount[pos] > 1 ? (
-                        <p className="text-yellow-400">Conflict: {favoriteCount[pos]} members want this as favorite</p>
+                      ) : !hasUniqueAssignment ? (
+                        <p className="text-orange-400">No unique player available (shared with other positions)</p>
+                      ) : favoriteCount[pos] > 1 ? (
+                        <p className="text-orange-400">Conflict: {favoriteCount[pos]} members want this as favorite</p>
                       ) : hasWarning ? (
-                        <p className="text-yellow-400">Position coverage conflict on team</p>
+                        <p className="text-orange-400">Coverage conflict on team</p>
                       ) : bestRank >= 3 ? (
-                        <p className="text-yellow-400">Best rank: {bestRank}</p>
-                      ) : hasFavorite && uniquePossible ? (
+                        <p className="text-orange-400">Best rank: {bestRank}</p>
+                      ) : bestRank === 1 ? (
                         <p className="text-green-400">{players[0]?.username}'s favorite</p>
                       ) : (
-                        <p>Best rank: {bestRank}</p>
+                        <p className="text-green-400">Best rank: {bestRank}</p>
                       )}
                       {players.length > 0 && (
                         <p className="text-muted-foreground mt-1">
