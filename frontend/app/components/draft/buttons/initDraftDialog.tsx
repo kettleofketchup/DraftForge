@@ -16,6 +16,14 @@ import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('InitDraftDialog');
 
+// Stable animation objects to prevent re-renders
+const inViewAnimation = {
+  opacity: 1,
+  transition: { delay: 0.05, duration: 0.5 },
+};
+const hoverAnimation = { scale: 1.1 };
+const focusAnimation = { scale: 1.05 };
+
 export const InitDraftButton: React.FC = () => {
   const [open, setOpen] = useState(false);
   const tournament = useUserStore((state) => state.tournament);
@@ -67,12 +75,9 @@ export const InitDraftButton: React.FC = () => {
             <motion.div
               initial={{ opacity: 0 }}
               exit={{ opacity: 0 }}
-              whileInView={{
-                opacity: 1,
-                transition: { delay: 0.05, duration: 0.5 },
-              }}
-              whileHover={{ scale: 1.1 }}
-              whileFocus={{ scale: 1.05 }}
+              whileInView={inViewAnimation}
+              whileHover={hoverAnimation}
+              whileFocus={focusAnimation}
               className="flex place-self-start"
               id="RestartDraftButtonMotion"
             >
