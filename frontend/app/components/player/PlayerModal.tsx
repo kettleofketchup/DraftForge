@@ -147,7 +147,10 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
               <span className="font-semibold">MMR:</span> {displayPlayer.mmr}
             </div>
           )}
-          <RolePositions user={displayPlayer} />
+          {/* Positions with proper flex containment */}
+          <div className="w-full overflow-hidden">
+            <RolePositions user={displayPlayer} compact />
+          </div>
           {displayPlayer.steamid && (
             <div>
               <span className="font-semibold">Steam ID:</span> {displayPlayer.steamid}
