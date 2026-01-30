@@ -19,13 +19,9 @@ A tournament management platform for Dota 2 gaming communities.
 
 ## Screenshots
 
-| Home | Tournaments | Tournament Detail |
-|------|-------------|-------------------|
-| ![Home](docs/assets/site_snapshots/home.png) | ![Tournaments](docs/assets/site_snapshots/tournaments.png) | ![Tournament](docs/assets/site_snapshots/tournament.png) |
-
-| Player Draft | Bracket | Hero Draft |
-|--------------|---------|------------|
-| ![Draft](docs/assets/site_snapshots/draft.png) | ![Bracket](docs/assets/site_snapshots/bracket.png) | ![Hero Draft](docs/assets/site_snapshots/HeroDraft.png) |
+| Home | Tournaments | Tournament Detail | Bracket |
+|------|-------------|-------------------|---------|
+| ![Home](docs/assets/site_snapshots/home.png) | ![Tournaments](docs/assets/site_snapshots/tournaments.png) | ![Tournament](docs/assets/site_snapshots/tournament.png) | ![Bracket](docs/assets/site_snapshots/bracket.png) |
 
 ## Demo Videos
 

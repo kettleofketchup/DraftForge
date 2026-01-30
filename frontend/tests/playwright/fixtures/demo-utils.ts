@@ -97,7 +97,7 @@ export async function waitForImagesToLoad(
 
 /**
  * Wait for HeroDraft-specific content to load.
- * Ensures hero grid images and UI elements are fully rendered.
+ * Handles different draft states - hero grid only shows in drafting/paused/completed states.
  */
 export async function waitForHeroDraftReady(
   page: Page,
@@ -108,25 +108,42 @@ export async function waitForHeroDraftReady(
   // Wait for loading indicators to disappear
   await waitForLoadingComplete(page, { timeout: timeout / 3 });
 
-  // Wait for hero grid to be visible
+  // Wait for the modal to be visible
+  const modal = page.locator('[data-testid="herodraft-modal"]');
+  await modal.waitFor({ state: 'visible', timeout: timeout / 3 });
+
+  // Check which state-specific content is visible
+  // Hero grid only renders in drafting/paused/completed states
   const heroGrid = page.locator('[data-testid="herodraft-hero-grid"]');
-  await heroGrid.waitFor({ state: 'visible', timeout: timeout / 3 });
+  const waitingPhase = page.locator('[data-testid="herodraft-waiting-phase"]');
+  const rollingPhase = page.locator('[data-testid="herodraft-rolling-phase"]');
+  const choosingPhase = page.locator('[data-testid="herodraft-choosing-phase"]');
 
-  // Wait for hero images to load
-  await waitForImagesToLoad(page, '[data-testid="herodraft-hero-grid"]', {
-    timeout: timeout / 3,
-  });
+  // Wait for any of the main content areas to be visible
+  await Promise.race([
+    heroGrid.waitFor({ state: 'visible', timeout: timeout / 2 }).catch(() => {}),
+    waitingPhase.waitFor({ state: 'visible', timeout: timeout / 2 }).catch(() => {}),
+    rollingPhase.waitFor({ state: 'visible', timeout: timeout / 2 }).catch(() => {}),
+    choosingPhase.waitFor({ state: 'visible', timeout: timeout / 2 }).catch(() => {}),
+  ]);
 
-  // Wait for at least some heroes to be rendered
-  await page.waitForFunction(
-    () => {
-      const grid = document.querySelector('[data-testid="herodraft-hero-grid"]');
-      if (!grid) return false;
-      const heroes = grid.querySelectorAll('[data-hero-id]');
-      return heroes.length >= 10; // At least 10 heroes visible
-    },
-    { timeout }
-  );
+  // If hero grid is visible, wait for heroes to load
+  if (await heroGrid.isVisible()) {
+    await waitForImagesToLoad(page, '[data-testid="herodraft-hero-grid"]', {
+      timeout: timeout / 3,
+    });
+
+    // Wait for at least some heroes to be rendered
+    await page.waitForFunction(
+      () => {
+        const grid = document.querySelector('[data-testid="herodraft-hero-grid"]');
+        if (!grid) return false;
+        const heroes = grid.querySelectorAll('[data-hero-id]');
+        return heroes.length >= 10; // At least 10 heroes visible
+      },
+      { timeout: timeout / 3 }
+    );
+  }
 
   // Brief settle time for animations
   await page.waitForTimeout(300);
