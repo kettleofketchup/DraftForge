@@ -754,7 +754,7 @@ class DraftRestartTest(TestCase):
             name="Restart Test Tournament", date_played=date.today()
         )
         self.tournament.users.add(self.captain1, self.captain2, self.high_mmr_player)
-        self.tournament.captains.add(self.captain1, self.captain2)
+        # Note: captains property is derived from teams, not a direct field
 
         self.team1 = Team.objects.create(
             name="Team 1 (low cap)",
@@ -774,8 +774,8 @@ class DraftRestartTest(TestCase):
         self.draft = Draft.objects.create(
             tournament=self.tournament, draft_style="shuffle"
         )
-        self.draft.captains.add(self.captain1, self.captain2)
-        self.draft.users_remaining.add(self.high_mmr_player)
+        # Note: Draft.captains is a property derived from tournament.teams
+        # users_remaining is also a property, not a ManyToMany field
         self.draft.build_rounds()
 
         self.client.force_login(self.admin)
@@ -808,7 +808,7 @@ class DraftRestartTest(TestCase):
 
         # Restart the draft via generate_draft_rounds
         response = self.client.post(
-            "/api/tournaments/build_draft_rounds",
+            "/api/tournaments/init-draft",
             {"tournament_pk": self.tournament.pk},
         )
         self.assertEqual(response.status_code, 201)

@@ -10,7 +10,8 @@ import { toast } from 'sonner';
 import { getLogger } from '~/lib/logger';
 import { getWebSocketManager } from '~/lib/websocket';
 import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
-import type { DraftEvent, WebSocketDraftState, WebSocketMessage } from '~/types/draftEvent';
+import type { DraftEvent, PlayerPickedPayload, WebSocketDraftState, WebSocketMessage } from '~/types/draftEvent';
+import { PlayerPickedToast } from '~/components/draft/DraftToasts';
 
 const log = getLogger('draftWebSocketStore');
 
@@ -29,7 +30,7 @@ function getEventMessage(event: DraftEvent): string {
     case 'draft_completed':
       return 'Draft completed!';
     case 'player_picked': {
-      const payload = event.payload as { captain_name: string; picked_name: string; pick_number: number };
+      const payload = event.payload as PlayerPickedPayload;
       return `${payload.captain_name} picked ${payload.picked_name} (Pick ${payload.pick_number})`;
     }
     case 'tie_roll': {
@@ -49,6 +50,17 @@ function getEventMessage(event: DraftEvent): string {
     default:
       return 'Draft event occurred';
   }
+}
+
+function showEventToast(event: DraftEvent): void {
+  // Use rich component toast for player_picked events
+  if (event.event_type === 'player_picked') {
+    const payload = event.payload as PlayerPickedPayload;
+    toast(PlayerPickedToast({ payload }));
+    return;
+  }
+  // Use simple string toast for other events
+  toast(getEventMessage(event));
 }
 
 interface DraftWebSocketState {
@@ -163,7 +175,7 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
 
         // Show toast for significant events
         if (SIGNIFICANT_EVENTS.includes(newEvent.event_type)) {
-          toast(getEventMessage(newEvent));
+          showEventToast(newEvent);
         }
 
         // Update draft state if included

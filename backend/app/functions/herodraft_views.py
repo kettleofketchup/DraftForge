@@ -524,3 +524,61 @@ def abandon_draft(request, draft_pk):
 
     draft = _get_draft_with_prefetch(draft.pk)
     return Response(HeroDraftSerializer(draft).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def reset_draft(request, draft_pk):
+    """
+    Reset a hero draft back to waiting_for_captains state.
+
+    Can only be called by an admin.
+    Deletes all rounds and events, resets team states.
+
+    Returns:
+        200: Reset draft data
+        403: User is not an admin
+        404: Draft not found
+    """
+    if not request.user.is_staff:
+        return Response(
+            {"error": "Only admins can reset a draft"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+
+    # Delete all rounds
+    draft.rounds.all().delete()
+
+    # Delete all events
+    draft.events.all().delete()
+
+    # Reset draft teams
+    for team in draft.draft_teams.all():
+        team.is_ready = False
+        team.is_connected = False
+        team.is_first_pick = None
+        team.is_radiant = None
+        team.reserve_time_remaining = 130000  # 2:10 reserve time
+        team.save()
+
+    # Reset draft state
+    draft.state = HeroDraftState.WAITING_FOR_CAPTAINS
+    draft.roll_winner = None
+    draft.paused_at = None
+    draft.save()
+
+    log.info(f"HeroDraft {draft.pk} reset by admin {request.user.pk}")
+
+    # Create event for audit trail
+    HeroDraftEvent.objects.create(
+        draft=draft,
+        event_type="draft_reset",
+        metadata={"reset_by": request.user.pk},
+    )
+
+    broadcast_herodraft_event(draft, "draft_reset")
+
+    draft = _get_draft_with_prefetch(draft.pk)
+    return Response(HeroDraftSerializer(draft).data)
