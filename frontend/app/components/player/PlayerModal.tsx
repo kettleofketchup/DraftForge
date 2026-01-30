@@ -147,8 +147,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
               <span className="font-semibold">MMR:</span> {displayPlayer.mmr}
             </div>
           )}
-          {/* Positions with proper flex containment */}
-          <div className="w-full">
+          {/* Positions - pt-1 pl-1 accommodates the absolute positioned rank badges */}
+          <div className="pt-1 pl-1">
             <RolePositions user={displayPlayer} />
           </div>
           {displayPlayer.steamid && (
