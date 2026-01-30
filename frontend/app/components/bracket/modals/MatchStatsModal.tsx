@@ -21,8 +21,9 @@ import {
 import { Button } from '~/components/ui/button';
 import { Badge } from '~/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { BarChart3, Link2, Loader2, RotateCcw, Swords } from 'lucide-react';
+import { BarChart3, Link2, Loader2, RotateCcw, Swords, UserLock } from 'lucide-react';
 import { useUserStore } from '~/store/userStore';
+import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { useBracketStore } from '~/store/bracketStore';
 import { useCreateHeroDraft, useResetHeroDraft } from '~/hooks/useHeroDraft';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
@@ -43,6 +44,7 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
   const isStaff = useUserStore((state) => state.isStaff());
+  const currentUser = useUserStore((state) => state.currentUser);
   const tournament = useUserStore((state) => state.tournament);
   const { setMatchWinner, advanceWinner, loadBracket } = useBracketStore();
   const [showStatsModal, setShowStatsModal] = useState(false);
@@ -194,43 +196,68 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
             </div>
           )}
 
-          {/* Hero Draft button - show for staff or if both teams are set */}
-          {match.radiantTeam && match.direTeam && (
-            <div className="border-t pt-4">
-              <div className="flex gap-2 flex-wrap">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleOpenDraft}
-                  disabled={createDraftMutation.isPending}
-                  data-testid="view-draft-btn"
-                >
-                  {createDraftMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                  ) : (
-                    <Swords className="w-4 h-4 mr-1" />
-                  )}
-                  {match.herodraft_id ? 'View Draft' : 'Start Draft'}
-                </Button>
-                {isStaff && match.herodraft_id && (
+          {/* Hero Draft button - show for staff or captains */}
+          {match.radiantTeam && match.direTeam && (() => {
+            // Check if user is a captain of either team in this match
+            const isCaptain =
+              match.radiantTeam?.captain?.pk === currentUser?.pk ||
+              match.direTeam?.captain?.pk === currentUser?.pk;
+
+            // User can access draft if: staff OR captain
+            const canAccessDraft = isStaff || isCaptain;
+
+            // If draft exists, anyone can view it
+            // If draft doesn't exist, only staff/captain can start it
+            const canStartOrViewDraft = match.herodraft_id || canAccessDraft;
+
+            if (!canStartOrViewDraft) {
+              return (
+                <div className="border-t pt-4">
+                  <AdminOnlyButton
+                    buttonTxt="Start Draft"
+                    tooltipTxt="You must be a staff member or captain to start a draft."
+                  />
+                </div>
+              );
+            }
+
+            return (
+              <div className="border-t pt-4">
+                <div className="flex gap-2 flex-wrap">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowResetConfirm(true)}
-                    disabled={resetDraftMutation.isPending}
-                    data-testid="reset-draft-btn"
+                    onClick={handleOpenDraft}
+                    disabled={createDraftMutation.isPending}
+                    data-testid="view-draft-btn"
                   >
-                    {resetDraftMutation.isPending ? (
+                    {createDraftMutation.isPending ? (
                       <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                     ) : (
-                      <RotateCcw className="w-4 h-4 mr-1" />
+                      <Swords className="w-4 h-4 mr-1" />
                     )}
-                    Restart Draft
+                    {match.herodraft_id ? 'View Draft' : 'Start Draft'}
                   </Button>
-                )}
+                  {isStaff && match.herodraft_id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowResetConfirm(true)}
+                      disabled={resetDraftMutation.isPending}
+                      data-testid="reset-draft-btn"
+                    >
+                      {resetDraftMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <RotateCcw className="w-4 h-4 mr-1" />
+                      )}
+                      Restart Draft
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Steam match info and Stats button */}
           {hasMatchId && (

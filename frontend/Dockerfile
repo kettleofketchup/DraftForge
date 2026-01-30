@@ -44,7 +44,8 @@ COPY --chown=node:node . /app/
 # ---- Builder ----
 FROM source AS builder
 USER node
-COPY docs/assets/* /app/public/assets/docs/
+# Copy docs assets from additional build context (use --build-context docs=./docs when building)
+COPY --from=docs assets /app/public/assets/docs/
 RUN npm run build
 
 # ---- Runtime (production) ----

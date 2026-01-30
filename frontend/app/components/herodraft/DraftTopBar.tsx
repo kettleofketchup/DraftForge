@@ -55,11 +55,12 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
   const graceRemaining = tick?.grace_time_remaining_ms ?? 0;
 
   // Match reserve times by team ID for correctness
-  const getTeamReserve = (team: typeof teamA) => {
-    if (!team || !tick) return team?.reserve_time_remaining ?? 90000;
-    if (tick.team_a_id === team.id) return tick.team_a_reserve_ms;
-    if (tick.team_b_id === team.id) return tick.team_b_reserve_ms;
-    return team.reserve_time_remaining ?? 90000;
+  const getTeamReserve = (team: typeof teamA): number => {
+    const defaultReserve = team?.reserve_time_remaining ?? 90000;
+    if (!team || !tick) return defaultReserve;
+    if (tick.team_a_id === team.id) return tick.team_a_reserve_ms ?? defaultReserve;
+    if (tick.team_b_id === team.id) return tick.team_b_reserve_ms ?? defaultReserve;
+    return defaultReserve;
   };
 
   const teamAReserve = getTeamReserve(teamA);

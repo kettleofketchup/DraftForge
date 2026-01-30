@@ -26,6 +26,7 @@ import { getLogger } from '~/lib/logger';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
 import { TEAMS_BUTTONS_WIDTH } from '../constants';
+import { AdminOnlyButton } from '../reusable/adminButton';
 import { DIALOG_CSS_FULLSCREEN } from '../reusable/modal';
 import { DraftHistoryButton } from './buttons/DraftHistoryButton';
 import { DraftModerationDropdown } from './buttons/DraftModerationDropdown';
@@ -69,6 +70,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const [draftStyleOpen, setDraftStyleOpen] = useState(false);
   const [footerDrawerOpen, setFooterDrawerOpen] = useState(false);
   const isStaff = useUserStore((state) => state.isStaff);
+  const currentUser = useUserStore((state) => state.currentUser);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
@@ -432,6 +434,24 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   };
 
   const draftDialogButton = () => {
+    // Check if user is a captain of any team in this tournament
+    const isCaptain = tournament?.teams?.some(
+      (team) => team?.captain?.pk === currentUser?.pk
+    );
+
+    // User can access draft if: staff OR captain
+    const canAccessDraft = isStaff() || isCaptain;
+
+    // Show AdminOnlyButton for users without access
+    if (!canAccessDraft) {
+      return (
+        <AdminOnlyButton
+          buttonTxt="Start Draft"
+          tooltipTxt="You must be a staff member or captain to access the draft."
+        />
+      );
+    }
+
     return (
       <Tooltip>
         <TooltipTrigger asChild>

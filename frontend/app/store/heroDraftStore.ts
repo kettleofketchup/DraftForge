@@ -27,6 +27,7 @@ interface HeroDraftState {
   status: ConnectionStatus;
   error: string | null;
   reconnectAttempts: number;
+  wasKicked: boolean;
 
   // Domain state
   draft: HeroDraft | null;
@@ -39,11 +40,14 @@ interface HeroDraftState {
   _connectionId: string | null;
   _unsubscribe: Unsubscribe | null;
   _currentDraftId: number | null;
+  _heartbeatInterval: ReturnType<typeof setInterval> | null;
 
   // Actions
   connect: (draftId: number) => void;
   disconnect: () => void;
   reconnect: () => void;
+  startHeartbeat: () => void;
+  stopHeartbeat: () => void;
   setSelectedHeroId: (heroId: number | null) => void;
   setSearchQuery: (query: string) => void;
   reset: () => void;
@@ -59,6 +63,7 @@ const initialState = {
   status: 'disconnected' as ConnectionStatus,
   error: null,
   reconnectAttempts: 0,
+  wasKicked: false,
   draft: null,
   tick: null,
   selectedHeroId: null,
@@ -67,6 +72,7 @@ const initialState = {
   _connectionId: null,
   _unsubscribe: null,
   _currentDraftId: null,
+  _heartbeatInterval: null,
 };
 
 export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
@@ -159,14 +165,17 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
 
         case 'herodraft_tick':
           debugLog('herodraft_tick received', {
+            draft_state: message.draft_state,
             current_round: message.current_round,
             active_team_id: message.active_team_id,
             grace_time_remaining_ms: message.grace_time_remaining_ms,
+            countdown_remaining_ms: message.countdown_remaining_ms,
           });
 
           set({
             tick: {
               type: 'herodraft_tick',
+              draft_state: message.draft_state,
               current_round: message.current_round,
               active_team_id: message.active_team_id,
               grace_time_remaining_ms: message.grace_time_remaining_ms,
@@ -174,9 +183,15 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
               team_a_reserve_ms: message.team_a_reserve_ms,
               team_b_id: message.team_b_id,
               team_b_reserve_ms: message.team_b_reserve_ms,
-              draft_state: message.draft_state,
+              countdown_remaining_ms: message.countdown_remaining_ms,
             },
           });
+          break;
+
+        case 'herodraft_kicked':
+          log.warn('Kicked from draft:', message.reason);
+          get().stopHeartbeat();
+          set({ wasKicked: true, error: 'Connection replaced by new tab' });
           break;
       }
     });
@@ -185,11 +200,15 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
       _connectionId: connectionId,
       _unsubscribe: unsubscribe,
       _currentDraftId: draftId,
+      wasKicked: false,
     });
   },
 
   disconnect: () => {
     const { _connectionId, _unsubscribe } = get();
+
+    // Stop heartbeat first
+    get().stopHeartbeat();
 
     if (_unsubscribe) {
       _unsubscribe();
@@ -213,6 +232,42 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
       setTimeout(() => {
         get().connect(_currentDraftId);
       }, 100);
+    }
+  },
+
+  startHeartbeat: () => {
+    const { _connectionId, _heartbeatInterval } = get();
+
+    // Already running
+    if (_heartbeatInterval) return;
+
+    if (!_connectionId) {
+      log.warn('Cannot start heartbeat: not connected');
+      return;
+    }
+
+    log.debug('Starting captain heartbeat');
+    const manager = getWebSocketManager();
+
+    // Send immediate heartbeat
+    manager.send(_connectionId, { type: 'heartbeat' });
+
+    // Send heartbeat every 3 seconds
+    const interval = setInterval(() => {
+      const currentConnId = get()._connectionId;
+      if (currentConnId) {
+        manager.send(currentConnId, { type: 'heartbeat' });
+      }
+    }, 3000);
+
+    set({ _heartbeatInterval: interval });
+  },
+
+  stopHeartbeat: () => {
+    const { _heartbeatInterval } = get();
+    if (_heartbeatInterval) {
+      clearInterval(_heartbeatInterval);
+      set({ _heartbeatInterval: null });
     }
   },
 
@@ -271,4 +326,10 @@ export const heroDraftSelectors = {
 
   /** True when waiting for captains */
   isWaiting: (s: HeroDraftState) => s.draft?.state === 'waiting_for_captains',
+
+  /** True when draft is paused */
+  isPaused: (s: HeroDraftState) => s.draft?.state === 'paused',
+
+  /** True when draft is in resuming countdown (3-2-1 before resume) */
+  isResuming: (s: HeroDraftState) => s.draft?.state === 'resuming',
 };
