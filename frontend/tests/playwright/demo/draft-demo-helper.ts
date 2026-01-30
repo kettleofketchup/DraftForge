@@ -423,10 +423,20 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
       break;
     }
 
-    // Click the first visible pick button
-    const firstPickBtn = pickBtns.first();
-    await firstPickBtn.scrollIntoViewIfNeeded();
+    // Get the player row containing the first pick button
+    const firstPlayerRow = dialogEl.locator('[data-testid="available-player"]:visible').first();
+    await firstPlayerRow.scrollIntoViewIfNeeded();
     await page.waitForTimeout(200);
+
+    // Hover over the avatar to show player popover
+    const avatar = firstPlayerRow.locator('img').first();
+    if (await avatar.isVisible().catch(() => false)) {
+      await avatar.hover();
+      await page.waitForTimeout(1000); // Show player popover
+    }
+
+    // Click the pick button
+    const firstPickBtn = firstPlayerRow.locator('button:has-text("Pick")');
     await firstPickBtn.click();
     await page.waitForTimeout(300);
 
@@ -470,24 +480,9 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
 
     // Scroll back to top of dialog to show pick order update
     await scrollArea.evaluate((el) => el.scrollTo({ top: 0, behavior: 'smooth' }));
-    await page.waitForTimeout(800);
-
-    // Hover over an upcoming pick to show the team popover (alternating picks 1-3)
-    const upcomingPickIndex = (picksMade % 3) + 1; // Cycle through picks 1, 2, 3
-    // Try snake/normal draft testid first, then shuffle draft testid
-    let upcomingPick = dialogEl.locator(`[data-testid="upcoming-pick-${upcomingPickIndex}"]`);
-    if (!await upcomingPick.isVisible().catch(() => false)) {
-      upcomingPick = dialogEl.locator(`[data-testid="pick-order-captain-${upcomingPickIndex}"]`);
-    }
-    if (await upcomingPick.isVisible().catch(() => false)) {
-      await upcomingPick.hover();
-      await page.waitForTimeout(1200); // Show popover
-      // Move mouse away to close popover
-      await page.mouse.move(0, 0);
-      await page.waitForTimeout(300);
-    } else {
-      await page.waitForTimeout(700); // Fallback pause if no upcoming pick found
-    }
+    // Move mouse offscreen to avoid triggering popovers
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(1500); // Pause to show pick order update
   }
 
   // Final pause to show completed draft

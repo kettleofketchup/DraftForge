@@ -9,13 +9,11 @@
  * - Tournaments list
  * - Tournament detail page
  * - Bracket view
- * - Draft modal
- * - HeroDraft view
  */
 
 import { test, chromium } from '@playwright/test';
 import { loginAdmin, waitForHydration } from '../fixtures/auth';
-import { waitForDemoReady, waitForBracketReady, waitForHeroDraftReady } from '../fixtures/demo-utils';
+import { waitForDemoReady, waitForBracketReady } from '../fixtures/demo-utils';
 import * as path from 'path';
 import * as fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -28,7 +26,7 @@ const __dirname = path.dirname(__filename);
 const DOCKER_HOST = process.env.DOCKER_HOST || 'nginx';
 const API_URL = `https://${DOCKER_HOST}/api`;
 const BASE_URL = `https://${DOCKER_HOST}`;
-const SNAPSHOT_OUTPUT_DIR = '../../../docs/assets/site_snapshots';
+const SNAPSHOT_OUTPUT_DIR = '../../../../docs/assets/site_snapshots';
 
 test.describe('Site Snapshots', () => {
   test('Capture all site screenshots', async ({}) => {
@@ -134,53 +132,6 @@ test.describe('Site Snapshots', () => {
           fullPage: false,
         });
       }
-
-      // 5. Draft modal (Teams tab -> Start Draft)
-      console.log('Capturing: Draft modal');
-      const teamsTab = page.locator('[data-testid="teamsTab"]');
-      if (await teamsTab.isVisible().catch(() => false)) {
-        await teamsTab.click();
-        await page.waitForTimeout(500);
-
-        const draftButton = page.locator('button:has-text("Start Draft"), button:has-text("Live Draft")');
-        if (await draftButton.first().isVisible().catch(() => false)) {
-          await draftButton.first().click();
-          await page.waitForTimeout(500);
-
-          const dialog = page.locator('[role="dialog"]');
-          if (await dialog.isVisible().catch(() => false)) {
-            await page.screenshot({
-              path: path.join(outputDir, 'draft.png'),
-              fullPage: false,
-            });
-
-            // Close dialog
-            const closeBtn = page.locator('[data-testid="close-draft-modal"]');
-            if (await closeBtn.isVisible().catch(() => false)) {
-              await closeBtn.click();
-            }
-          }
-        }
-      }
-    }
-
-    // 6. HeroDraft view - find a herodraft to capture
-    console.log('Capturing: HeroDraft view');
-    const herodraftResponse = await context.request.get(
-      `${API_URL}/tests/herodraft-by-key/demo_herodraft/`,
-      { failOnStatusCode: false }
-    );
-
-    if (herodraftResponse.ok()) {
-      const herodraft = await herodraftResponse.json();
-      await page.goto(`${BASE_URL}/herodraft/${herodraft.pk}`);
-      await waitForHydration(page);
-      await waitForHeroDraftReady(page, { timeout: 20000 });
-      await page.waitForTimeout(500);
-      await page.screenshot({
-        path: path.join(outputDir, 'HeroDraft.png'),
-        fullPage: false,
-      });
     }
 
     await context.close();
