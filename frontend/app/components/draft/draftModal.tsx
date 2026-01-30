@@ -415,27 +415,25 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
 
   const draftDialogButton = () => {
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DialogTrigger asChild>
-              <Button
-                className={`w-[${TEAMS_BUTTONS_WIDTH}] ${!isStaff() ? 'bg-green-800 hover:bg-green-600' : 'bg-sky-800 hover:bg-sky-600'} text-white`}
-              >
-                {!isStaff() ? <EyeIcon /> : <ClipboardPen />}
-                {!isStaff() ? 'Live Draft' : 'Start Draft'}
-              </Button>
-            </DialogTrigger>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>
-              {!isStaff()
-                ? 'Watch The live draft in progress'
-                : 'Administer the Draft'}
-            </p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <Button
+              className={`w-[${TEAMS_BUTTONS_WIDTH}] ${!isStaff() ? 'bg-green-800 hover:bg-green-600' : 'bg-sky-800 hover:bg-sky-600'} text-white`}
+            >
+              {!isStaff() ? <EyeIcon /> : <ClipboardPen />}
+              {!isStaff() ? 'Live Draft' : 'Start Draft'}
+            </Button>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>
+            {!isStaff()
+              ? 'Watch The live draft in progress'
+              : 'Administer the Draft'}
+          </p>
+        </TooltipContent>
+      </Tooltip>
     );
   };
 
