@@ -7,22 +7,29 @@ import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { ScrollArea } from '~/components/ui/scroll-area';
-import { Separator } from '~/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
-import { Avatar, AvatarImage, AvatarFallback } from '~/components/ui/avatar';
 import { TeamPopover } from '~/components/team';
 import { PlayerPopover } from '~/components/player';
+import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
+import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
+import {
+  CarrySVG,
+  MidSVG,
+  OfflaneSVG,
+  SoftSupportSVG,
+  HardSupportSVG,
+} from '~/components/user/positions/icons';
 import { cn } from '~/lib/utils';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { AvatarUrl, DisplayName } from '~/components/user/avatar';
-import { RolePositions } from '../user/positions';
+import { UserStrip } from '~/components/user/UserStrip';
 import { ChoosePlayerButton } from './buttons/choosePlayerButtons';
 import { DoublePickThreshold } from './shuffle/DoublePickThreshold';
 import { TeamTable } from '~/components/team/teamTable/teamTable';
-import type { DraftRoundType, DraftType, TournamentType } from './types';
-import type { TeamType, UserType } from '~/index';
+import type { DraftRoundType, DraftType } from './types';
+import type { TournamentType, TeamType } from '~/components/tournament/types';
+import type { UserType } from '~/index';
 
 // Filter types
 type PositionFilter = 'all' | 'carry' | 'mid' | 'offlane' | 'soft_support' | 'hard_support';
@@ -68,88 +75,23 @@ interface PickOrderCaptain {
   pickOrder: number;
 }
 
-// Player row component - compact card design
-const PlayerRow: React.FC<{
-  user: UserType;
-  projected: { newTeamMmr: number; newPickOrder: number; isDoublePick: boolean } | null;
-  isShuffle: boolean;
-}> = ({ user, projected, isShuffle }) => (
-  <div
-    className={cn(
-      'flex items-center gap-2 p-2 rounded-lg border transition-colors',
-      projected?.isDoublePick
-        ? 'bg-green-950/30 border-green-500/50'
-        : 'bg-muted/20 border-muted hover:bg-muted/40'
-    )}
-    data-testid={`player-row-${user.pk}`}
-  >
-    {/* Avatar */}
-    <PlayerPopover player={user}>
-      <Avatar className="h-8 w-8 cursor-pointer shrink-0">
-        <AvatarImage src={AvatarUrl(user)} alt={user.username || 'Player'} />
-        <AvatarFallback>{(user.username || 'P')[0].toUpperCase()}</AvatarFallback>
-      </Avatar>
-    </PlayerPopover>
-
-    {/* Player Info */}
-    <div className="flex-1 min-w-0">
-      <PlayerPopover player={user}>
-        <span className="text-sm font-medium truncate block cursor-pointer hover:text-primary transition-colors">
-          {DisplayName(user)}
-        </span>
-      </PlayerPopover>
-      <div className="flex items-center gap-1 text-xs flex-wrap">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Badge variant="outline" className="px-1.5 py-0.5 text-[11px] font-mono shrink-0 cursor-help">
-              <span className="text-muted-foreground">B:</span>
-              <span className="ml-0.5">{user.mmr?.toLocaleString() || '—'}</span>
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs bg-popover text-popover-foreground">
-            <p className="font-semibold text-foreground">Base MMR</p>
-            <p className="text-muted-foreground">Dota 2 ranked MMR</p>
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Badge variant="secondary" className="px-1.5 py-0.5 text-[11px] font-mono shrink-0 cursor-help bg-primary/20">
-              <span className="text-muted-foreground">L:</span>
-              <span className="ml-0.5">{(user as UserType & { league_mmr?: number }).league_mmr?.toLocaleString() || '—'}</span>
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs bg-popover text-popover-foreground">
-            <p className="font-semibold text-foreground">League MMR</p>
-            <p className="text-muted-foreground">Performance-adjusted rating</p>
-          </TooltipContent>
-        </Tooltip>
-        <Separator orientation="vertical" className="h-3 mx-0.5 hidden sm:block" />
-        <RolePositions user={user} compact disableTooltips />
-      </div>
+// Context slot for shuffle draft projections
+const ShuffleProjectionSlot: React.FC<{
+  projected: { newTeamMmr: number; newPickOrder: number; isDoublePick: boolean };
+}> = ({ projected }) => (
+  <div className="hidden sm:block">
+    <div className="text-muted-foreground">
+      → {projected.newTeamMmr.toLocaleString()}
     </div>
-
-    {/* Shuffle projection (hidden on small screens) */}
-    {isShuffle && projected && (
-      <div className="text-right text-xs hidden sm:block shrink-0">
-        <div className="text-muted-foreground">
-          → {projected.newTeamMmr.toLocaleString()}
-        </div>
-        <div
-          className={cn(
-            projected.isDoublePick
-              ? 'text-green-400 font-medium'
-              : 'text-muted-foreground'
-          )}
-        >
-          {getOrdinal(projected.newPickOrder)}
-          {projected.isDoublePick && ' 🔥'}
-        </div>
-      </div>
-    )}
-
-    {/* Pick Button */}
-    <div className="shrink-0">
-      <ChoosePlayerButton user={user} />
+    <div
+      className={cn(
+        projected.isDoublePick
+          ? 'text-green-400 font-medium'
+          : 'text-muted-foreground'
+      )}
+    >
+      {getOrdinal(projected.newPickOrder)}
+      {projected.isDoublePick && ' 🔥'}
     </div>
   </div>
 );
@@ -190,22 +132,28 @@ export const DraftRoundView: React.FC = () => {
     const isShuffle = draft?.draft_style === 'shuffle';
 
     if (isShuffle) {
+      // For shuffle draft, pick order is determined by team MMR (lowest first)
       const activeTeams = teams
         .filter((t) => !isTeamMaxed(t))
         .map((team) => ({
           team,
           totalMmr: getTeamMmr(team),
-          isCurrent: curDraftRound?.captain?.pk === team.captain?.pk,
+          isCurrent: false, // Will be set below based on sort order
           pickOrder: 0,
         }))
         .sort((a, b) => a.totalMmr - b.totalMmr);
 
+      // In shuffle draft, the FIRST team (lowest MMR) is always "current"
+      // This is the defining rule of shuffle draft
       activeTeams.forEach((t, idx) => {
         t.pickOrder = idx + 1;
+        // First position (index 0) is always the current picker in shuffle
+        t.isCurrent = idx === 0;
       });
 
       return activeTeams.slice(0, 4);
     } else {
+      // For snake draft, use the draft_rounds order
       const currentRoundIndex = draft?.draft_rounds?.findIndex(
         (r: DraftRoundType) => r.pk === curDraftRound?.pk
       ) ?? 0;
@@ -245,6 +193,124 @@ export const DraftRoundView: React.FC = () => {
       }) || []
     );
   }, [draft?.users_remaining]);
+
+  // Position keys that exist on the user positions object
+  type PositionKey = 'carry' | 'mid' | 'offlane' | 'soft_support' | 'hard_support';
+
+  // Count available players by position (players who have that position ranked > 0)
+  const positionCounts = useMemo(() => {
+    const positionKeys: PositionKey[] = ['carry', 'mid', 'offlane', 'soft_support', 'hard_support'];
+    const result: Record<PositionKey, number> = {
+      carry: 0,
+      mid: 0,
+      offlane: 0,
+      soft_support: 0,
+      hard_support: 0,
+    };
+
+    for (const pos of positionKeys) {
+      result[pos] = availablePlayers.filter((user) => {
+        const userPositions = user.positions;
+        if (!userPositions) return false;
+        return (userPositions[pos] || 0) > 0;
+      }).length;
+    }
+
+    return result;
+  }, [availablePlayers]);
+
+  // Team position coverage analysis
+  const teamPositionCoverage = useMemo(() => {
+    const positionKeys: PositionKey[] = ['carry', 'mid', 'offlane', 'soft_support', 'hard_support'];
+    const members = currentTeam?.members || [];
+
+    type PositionCoverage = {
+      bestRank: number; // Lowest number = most preferred (1 = favorite, 5 = least, 6 = no one)
+      players: UserType[]; // Team members who can play this position
+    };
+
+    const result: Record<PositionKey, PositionCoverage> = {
+      carry: { bestRank: 6, players: [] },
+      mid: { bestRank: 6, players: [] },
+      offlane: { bestRank: 6, players: [] },
+      soft_support: { bestRank: 6, players: [] },
+      hard_support: { bestRank: 6, players: [] },
+    };
+
+    for (const pos of positionKeys) {
+      const playersForPos: { user: UserType; rank: number }[] = [];
+
+      for (const member of members) {
+        const userPositions = member.positions;
+        if (!userPositions) continue;
+        const rank = userPositions[pos] || 0;
+        if (rank > 0) {
+          playersForPos.push({ user: member, rank });
+        }
+      }
+
+      // Sort by rank (best/lowest first)
+      playersForPos.sort((a, b) => a.rank - b.rank);
+
+      result[pos] = {
+        bestRank: playersForPos.length > 0 ? playersForPos[0].rank : 6,
+        players: playersForPos.slice(0, 3).map((p) => p.user), // Top 3 players for this position
+      };
+    }
+
+    // Check if unique preferred positions are possible (each member gets their #1)
+    // Count how many members have each position as their #1
+    const favoriteCount: Record<PositionKey, number> = {
+      carry: 0, mid: 0, offlane: 0, soft_support: 0, hard_support: 0,
+    };
+    for (const member of members) {
+      const userPositions = member.positions;
+      if (!userPositions) continue;
+      // Find which position is their #1 (rank = 1)
+      for (const pos of positionKeys) {
+        if (userPositions[pos] === 1) {
+          favoriteCount[pos]++;
+        }
+      }
+    }
+
+    // Count positions that have conflicts (>1 person wants it)
+    const conflictedPositions = positionKeys.filter((pos) => favoriteCount[pos] > 1);
+    const hasConflicts = conflictedPositions.length > 0;
+
+    // Count total unique positions claimed as favorites
+    const positionsWithFavorites = positionKeys.filter((pos) => favoriteCount[pos] >= 1);
+
+    // A position has a warning if:
+    // 1. More than one person wants it (direct conflict)
+    // 2. OR there are conflicts elsewhere AND this position is among the contested group
+    //    (e.g., 2 people want pos 1,2,3 means one of those 3 will be unfulfilled)
+    const positionHasWarning = (pos: PositionKey): boolean => {
+      // Direct conflict: >1 person wants this
+      if (favoriteCount[pos] > 1) return true;
+
+      // If there are conflicts, check if total favorites > members who claimed them
+      // This catches the case where 2 members both want positions from a set of 3
+      if (hasConflicts && favoriteCount[pos] === 1) {
+        // This position is claimed by exactly 1 person, but if there are conflicts,
+        // we need to check if the total number of favorite claims exceeds available slots
+        const totalFavoriteClaims = positionKeys.reduce((sum, p) => sum + favoriteCount[p], 0);
+        const membersWithFavorites = members.filter((m) => {
+          const up = m.positions;
+          return up && positionKeys.some((p) => up[p] === 1);
+        }).length;
+        // If more claims than members, there's an issue
+        if (totalFavoriteClaims > membersWithFavorites) return true;
+      }
+
+      return false;
+    };
+
+    // Unique is possible only if no position has warnings
+    const uniquePossible = positionKeys.every((pos) => !positionHasWarning(pos));
+
+    return { positions: result, uniquePossible, favoriteCount, positionHasWarning };
+  }, [currentTeam?.members]);
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -401,69 +467,194 @@ export const DraftRoundView: React.FC = () => {
   const isShuffle = draft?.draft_style === 'shuffle';
 
   return (
-    <div className="flex flex-col h-full gap-4 p-4">
-      {/* Top Section: Pick Order + Current Team */}
-      <div className="flex flex-col md:flex-row gap-4 shrink-0">
-        {/* Pick Order - Left on desktop, first on mobile */}
-        <Card className="flex-1 p-4">
-          <h3 className="text-sm font-medium text-muted-foreground mb-3 text-center md:text-left">
-            Pick Order
-          </h3>
-          <div className="flex flex-row justify-center md:justify-start gap-2 flex-wrap">
-            {pickOrderCaptains.map((captain, idx) => (
-              <TeamPopover key={captain.team.pk || idx} team={captain.team}>
-                <div
-                  className={cn(
-                    'flex flex-col items-center p-2 rounded-lg min-w-[80px] cursor-pointer transition-all',
-                    captain.isCurrent
-                      ? 'bg-green-950/40 border-2 border-green-500'
-                      : 'bg-muted/30 border border-muted hover:bg-muted/50'
-                  )}
-                  data-testid={`pick-order-captain-${idx}`}
-                >
-                  <Badge
-                    variant={captain.isCurrent ? 'default' : 'secondary'}
-                    className={cn('mb-1 text-xs', captain.isCurrent && 'bg-green-600')}
+    <div className="flex flex-col h-full gap-2 p-2 md:gap-4 md:p-4">
+      {/* Top Section: Pick Order + Current Team - unified card */}
+      <Card className="p-2 md:p-4 shrink-0">
+        <div className="flex flex-col lg:flex-row gap-3 md:gap-4">
+          {/* Pick Order - Left side */}
+          <div className="shrink-0">
+            <h3 className="text-xs md:text-sm font-medium text-muted-foreground mb-2 md:mb-3 text-center lg:text-left">
+              Pick Order
+            </h3>
+            <div className="flex flex-row justify-center lg:justify-start gap-1 md:gap-1.5">
+              {pickOrderCaptains.map((captain, idx) => (
+                <TeamPopover key={captain.team.pk || idx} team={captain.team}>
+                  <div
+                    className={cn(
+                      'flex flex-row md:flex-col items-center p-1 md:p-1.5 rounded-lg cursor-pointer transition-all',
+                      'gap-1.5 md:gap-0',
+                      'md:min-w-[70px]',
+                      captain.isCurrent
+                        ? 'bg-green-950/40 border-2 border-green-500'
+                        : 'bg-muted/30 border border-muted hover:bg-muted/50'
+                    )}
+                    data-testid={`pick-order-captain-${idx}`}
                   >
-                    {captain.isCurrent ? 'NOW' : getOrdinal(captain.pickOrder)}
-                  </Badge>
+                    <Badge
+                      variant={captain.isCurrent ? 'default' : 'secondary'}
+                      className={cn('text-[9px] md:text-[10px] px-1 md:mb-0.5', captain.isCurrent && 'bg-green-600')}
+                    >
+                      {captain.isCurrent ? 'NOW' : getOrdinal(captain.pickOrder)}
+                    </Badge>
 
-                  {captain.team.captain ? (
-                    <img
-                      src={AvatarUrl(captain.team.captain)}
-                      alt={captain.team.captain?.username || 'Captain'}
-                      className={cn(
-                        'w-12 h-12 rounded-full transition-all',
-                        captain.isCurrent && 'ring-2 ring-green-500'
-                      )}
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-muted" />
-                  )}
+                    {captain.team.captain ? (
+                      <img
+                        src={AvatarUrl(captain.team.captain)}
+                        alt={captain.team.captain?.username || 'Captain'}
+                        className={cn(
+                          'w-8 h-8 md:w-10 md:h-10 rounded-full transition-all shrink-0',
+                          captain.isCurrent && 'ring-2 ring-green-500'
+                        )}
+                      />
+                    ) : (
+                      <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-muted shrink-0" />
+                    )}
 
-                  <span className="text-xs font-medium mt-1 text-center truncate max-w-[70px]">
-                    {captain.team.captain ? DisplayName(captain.team.captain) : 'No Captain'}
-                  </span>
-
-                  <span className="text-[10px] text-muted-foreground">
-                    {captain.totalMmr.toLocaleString()} MMR
-                  </span>
-                </div>
-              </TeamPopover>
-            ))}
+                    {/* Mobile: inline name + MMR | Desktop: stacked below avatar */}
+                    <div className="flex flex-row md:flex-col items-center md:items-center gap-1 md:gap-0">
+                      <span className="text-[10px] md:text-[10px] font-medium truncate max-w-[60px] md:max-w-[65px] md:mt-0.5 md:text-center">
+                        {captain.team.captain ? DisplayName(captain.team.captain) : 'No Captain'}
+                      </span>
+                      <span className="text-xs md:text-sm font-medium text-muted-foreground">
+                        {captain.totalMmr.toLocaleString()} · {(captain.team.members?.length || 1) - 1}/4
+                      </span>
+                    </div>
+                  </div>
+                </TeamPopover>
+              ))}
+            </div>
           </div>
-        </Card>
 
-        {/* Current Team - Right on desktop, second on mobile */}
-        <Card className="flex-1 p-4 max-h-[220px] overflow-auto">
-          <h3 className="text-sm font-medium text-muted-foreground mb-2 text-center md:text-left">
-            {curDraftRound?.captain ? DisplayName(curDraftRound.captain) : 'Current'}'s Team
-          </h3>
-          <TeamTable team={currentTeam} />
-        </Card>
-      </div>
+          {/* Divider */}
+          <div className="hidden lg:block w-px bg-border" />
 
-      {/* Double Pick Threshold for shuffle */}
+          {/* Current Team + Best by Position - Right side, visible on all screens */}
+          <div className="flex-1 flex flex-col gap-2 overflow-visible">
+            {/* Team Position Coverage - centered across the section */}
+            <div className="flex flex-wrap justify-center items-center gap-1.5 mb-2 pt-2 overflow-visible">
+              {(['carry', 'mid', 'offlane', 'soft_support', 'hard_support'] as PositionKey[]).map((pos, idx) => {
+                const coverage = teamPositionCoverage.positions[pos];
+                const { bestRank, players } = coverage;
+                const hasFavorite = bestRank === 1;
+                const { uniquePossible, favoriteCount, positionHasWarning } = teamPositionCoverage;
+                const hasWarning = positionHasWarning(pos);
+
+                // Position icon and color mapping
+                const positionConfig: Record<PositionKey, { icon: React.FC<{className?: string}>, bgColor: string, borderColor: string }> = {
+                  carry: { icon: CarrySVG, bgColor: 'bg-rose-900/70', borderColor: 'border-rose-500/50' },
+                  mid: { icon: MidSVG, bgColor: 'bg-cyan-900/70', borderColor: 'border-cyan-500/50' },
+                  offlane: { icon: OfflaneSVG, bgColor: 'bg-emerald-900/70', borderColor: 'border-emerald-500/50' },
+                  soft_support: { icon: SoftSupportSVG, bgColor: 'bg-violet-900/70', borderColor: 'border-violet-500/50' },
+                  hard_support: { icon: HardSupportSVG, bgColor: 'bg-indigo-900/70', borderColor: 'border-indigo-500/50' },
+                };
+
+                const config = positionConfig[pos];
+                const IconComponent = config.icon;
+
+                // Color based on coverage quality
+                // Red: no one can play (bestRank = 6) or only as worst choice (5) or has conflict warning
+                // Yellow: only available as 3rd/4th choice
+                // Green: someone has it as favorite AND no conflicts (unique possible)
+                // Default position color: covered adequately
+                let colorClass: string;
+                let textColorClass: string;
+                if (bestRank >= 5 || (bestRank === 6)) {
+                  colorClass = 'bg-red-900/60 border-red-500/70';
+                  textColorClass = 'text-red-400';
+                } else if (hasWarning) {
+                  colorClass = 'bg-yellow-900/60 border-yellow-500/70';
+                  textColorClass = 'text-yellow-400';
+                } else if (bestRank >= 3) {
+                  colorClass = 'bg-yellow-900/50 border-yellow-500/50';
+                  textColorClass = 'text-yellow-400';
+                } else if (hasFavorite && uniquePossible) {
+                  colorClass = 'bg-green-900/50 border-green-500/50';
+                  textColorClass = 'text-green-400';
+                } else {
+                  colorClass = cn(config.bgColor, config.borderColor);
+                  textColorClass = 'text-white';
+                }
+
+                return (
+                  <Tooltip key={pos}>
+                    <TooltipTrigger asChild>
+                      <div className={cn('relative flex flex-col items-center p-1.5 rounded-lg border min-w-[44px]', colorClass)}>
+                        {/* Rank badge - positioned outside top-left */}
+                        {bestRank <= 5 && (
+                          <span className={cn(
+                            'absolute -top-1.5 -left-1.5 h-4 w-4 rounded-full text-[10px] font-bold flex items-center justify-center z-10',
+                            bestRank >= 5 ? 'bg-red-600 text-white' :
+                            hasWarning ? 'bg-yellow-600 text-black' :
+                            bestRank >= 3 ? 'bg-yellow-600 text-black' :
+                            hasFavorite && uniquePossible ? 'bg-green-600 text-white' :
+                            'bg-gray-600 text-white'
+                          )}>
+                            {bestRank}
+                          </span>
+                        )}
+                        {/* Icon */}
+                        <IconComponent className="w-5 h-5" />
+                        {/* Player avatars */}
+                        <div className="flex -space-x-1 mt-1">
+                          {players.length > 0 ? (
+                            players.slice(0, 3).map((player) => (
+                              <PlayerPopover key={player.pk} player={player}>
+                                <Avatar className="h-4 w-4 border border-background cursor-pointer">
+                                  <AvatarImage src={AvatarUrl(player)} alt={player.username || ''} />
+                                  <AvatarFallback className="text-[7px]">
+                                    {(player.username || 'P')[0]}
+                                  </AvatarFallback>
+                                </Avatar>
+                              </PlayerPopover>
+                            ))
+                          ) : (
+                            <div className="h-4 w-4 rounded-full bg-muted/50 flex items-center justify-center">
+                              <span className="text-[7px] text-muted-foreground">—</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                      <p className="font-medium">Position {idx + 1}</p>
+                      {bestRank === 6 ? (
+                        <p className="text-red-400">No one on team plays this</p>
+                      ) : bestRank === 5 ? (
+                        <p className="text-red-400">Only as last choice ({players[0]?.username})</p>
+                      ) : hasWarning && favoriteCount[pos] > 1 ? (
+                        <p className="text-yellow-400">Conflict: {favoriteCount[pos]} members want this as favorite</p>
+                      ) : hasWarning ? (
+                        <p className="text-yellow-400">Position coverage conflict on team</p>
+                      ) : bestRank >= 3 ? (
+                        <p className="text-yellow-400">Best rank: {bestRank}</p>
+                      ) : hasFavorite && uniquePossible ? (
+                        <p className="text-green-400">{players[0]?.username}'s favorite</p>
+                      ) : (
+                        <p>Best rank: {bestRank}</p>
+                      )}
+                      {players.length > 0 && (
+                        <p className="text-muted-foreground mt-1">
+                          {players.map(p => p.username).join(', ')}
+                        </p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
+            </div>
+
+            {/* Team Members */}
+            <div>
+              <h3 className="text-xs md:text-sm font-medium text-muted-foreground mb-1 text-center lg:text-left">
+                {curDraftRound?.captain ? DisplayName(curDraftRound.captain) : 'Current'}'s Team
+              </h3>
+              <TeamTable team={currentTeam} compact useStrips />
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Double Pick Threshold for shuffle - more compact */}
       {isShuffle && (
         <div className="shrink-0">
           <DoublePickThreshold />
@@ -471,7 +662,7 @@ export const DraftRoundView: React.FC = () => {
       )}
 
       {/* Bottom Section: Available Players */}
-      <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex-1 min-h-[180px] md:min-h-[250px] flex flex-col">
         {curDraftRound?.choice ? (
           <Card className="h-full flex items-center justify-center">
             <p className="text-lg font-semibold text-green-400">
@@ -560,38 +751,53 @@ export const DraftRoundView: React.FC = () => {
             <div className="hidden xl:grid xl:grid-cols-3 gap-2 flex-1 min-h-0">
               <ScrollArea className="h-full">
                 <div className="space-y-1.5 pr-2">
-                  {col1.map((user) => (
-                    <PlayerRow
-                      key={user.pk}
-                      user={user}
-                      projected={getProjectedData(user.mmr || 0)}
-                      isShuffle={isShuffle}
-                    />
-                  ))}
+                  {col1.map((user) => {
+                    const projected = getProjectedData(user.mmr || 0);
+                    return (
+                      <UserStrip
+                        key={user.pk}
+                        user={user}
+                        className={projected?.isDoublePick ? 'bg-green-950/30 border-green-500/50' : undefined}
+                        contextSlot={isShuffle && projected ? <ShuffleProjectionSlot projected={projected} /> : undefined}
+                        actionSlot={<ChoosePlayerButton user={user} />}
+                        data-testid="available-player"
+                      />
+                    );
+                  })}
                 </div>
               </ScrollArea>
               <ScrollArea className="h-full">
                 <div className="space-y-1.5 pr-2">
-                  {col2.map((user) => (
-                    <PlayerRow
-                      key={user.pk}
-                      user={user}
-                      projected={getProjectedData(user.mmr || 0)}
-                      isShuffle={isShuffle}
-                    />
-                  ))}
+                  {col2.map((user) => {
+                    const projected = getProjectedData(user.mmr || 0);
+                    return (
+                      <UserStrip
+                        key={user.pk}
+                        user={user}
+                        className={projected?.isDoublePick ? 'bg-green-950/30 border-green-500/50' : undefined}
+                        contextSlot={isShuffle && projected ? <ShuffleProjectionSlot projected={projected} /> : undefined}
+                        actionSlot={<ChoosePlayerButton user={user} />}
+                        data-testid="available-player"
+                      />
+                    );
+                  })}
                 </div>
               </ScrollArea>
               <ScrollArea className="h-full">
                 <div className="space-y-1.5 pr-2">
-                  {col3.map((user) => (
-                    <PlayerRow
-                      key={user.pk}
-                      user={user}
-                      projected={getProjectedData(user.mmr || 0)}
-                      isShuffle={isShuffle}
-                    />
-                  ))}
+                  {col3.map((user) => {
+                    const projected = getProjectedData(user.mmr || 0);
+                    return (
+                      <UserStrip
+                        key={user.pk}
+                        user={user}
+                        className={projected?.isDoublePick ? 'bg-green-950/30 border-green-500/50' : undefined}
+                        contextSlot={isShuffle && projected ? <ShuffleProjectionSlot projected={projected} /> : undefined}
+                        actionSlot={<ChoosePlayerButton user={user} />}
+                        data-testid="available-player"
+                      />
+                    );
+                  })}
                 </div>
               </ScrollArea>
             </div>
@@ -600,26 +806,36 @@ export const DraftRoundView: React.FC = () => {
             <div className="hidden md:grid xl:hidden md:grid-cols-2 gap-2 flex-1 min-h-0">
               <ScrollArea className="h-full">
                 <div className="space-y-1.5 pr-2">
-                  {leftCol.map((user) => (
-                    <PlayerRow
-                      key={user.pk}
-                      user={user}
-                      projected={getProjectedData(user.mmr || 0)}
-                      isShuffle={isShuffle}
-                    />
-                  ))}
+                  {leftCol.map((user) => {
+                    const projected = getProjectedData(user.mmr || 0);
+                    return (
+                      <UserStrip
+                        key={user.pk}
+                        user={user}
+                        className={projected?.isDoublePick ? 'bg-green-950/30 border-green-500/50' : undefined}
+                        contextSlot={isShuffle && projected ? <ShuffleProjectionSlot projected={projected} /> : undefined}
+                        actionSlot={<ChoosePlayerButton user={user} />}
+                        data-testid="available-player"
+                      />
+                    );
+                  })}
                 </div>
               </ScrollArea>
               <ScrollArea className="h-full">
                 <div className="space-y-1.5 pr-2">
-                  {rightCol.map((user) => (
-                    <PlayerRow
-                      key={user.pk}
-                      user={user}
-                      projected={getProjectedData(user.mmr || 0)}
-                      isShuffle={isShuffle}
-                    />
-                  ))}
+                  {rightCol.map((user) => {
+                    const projected = getProjectedData(user.mmr || 0);
+                    return (
+                      <UserStrip
+                        key={user.pk}
+                        user={user}
+                        className={projected?.isDoublePick ? 'bg-green-950/30 border-green-500/50' : undefined}
+                        contextSlot={isShuffle && projected ? <ShuffleProjectionSlot projected={projected} /> : undefined}
+                        actionSlot={<ChoosePlayerButton user={user} />}
+                        data-testid="available-player"
+                      />
+                    );
+                  })}
                 </div>
               </ScrollArea>
             </div>
@@ -627,14 +843,19 @@ export const DraftRoundView: React.FC = () => {
             {/* Small screens: Single column */}
             <ScrollArea className="md:hidden flex-1">
               <div className="space-y-1.5 pr-2">
-                {filteredPlayers.map((user) => (
-                  <PlayerRow
-                    key={user.pk}
-                    user={user}
-                    projected={getProjectedData(user.mmr || 0)}
-                    isShuffle={isShuffle}
-                  />
-                ))}
+                {filteredPlayers.map((user) => {
+                  const projected = getProjectedData(user.mmr || 0);
+                  return (
+                    <UserStrip
+                      key={user.pk}
+                      user={user}
+                      className={projected?.isDoublePick ? 'bg-green-950/30 border-green-500/50' : undefined}
+                      contextSlot={isShuffle && projected ? <ShuffleProjectionSlot projected={projected} /> : undefined}
+                      actionSlot={<ChoosePlayerButton user={user} />}
+                      data-testid="available-player"
+                    />
+                  );
+                })}
               </div>
             </ScrollArea>
           </>
