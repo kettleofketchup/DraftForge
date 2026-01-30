@@ -70,18 +70,18 @@ const PlayerPopoverContent: React.FC<{
 
   return (
     <div
-      className="space-y-2"
+      className="flex flex-col gap-3 overflow-hidden"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <img
           src={AvatarUrl(player)}
           alt={`${playerName}'s avatar`}
-          className="w-12 h-12 rounded-full"
+          className="w-16 h-16 rounded-full shrink-0"
         />
-        <div>
-          <p className="font-semibold text-foreground">{playerName}</p>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-foreground text-lg truncate">{playerName}</p>
           {player.mmr && (
             <p className="text-sm text-foreground/70">
               MMR: {player.mmr.toLocaleString()}
@@ -89,8 +89,10 @@ const PlayerPopoverContent: React.FC<{
           )}
         </div>
       </div>
-      <RolePositions user={player} />
-      <p className="text-xs text-foreground/60 text-center pt-1">
+      <div className="flex flex-wrap gap-1">
+        <RolePositions user={player} />
+      </div>
+      <p className="text-xs text-foreground/60 text-center">
         Click for full profile
       </p>
     </div>
@@ -198,8 +200,8 @@ export const SharedPopoverRenderer: React.FC = () => {
   useEffect(() => {
     if (state.anchorEl && state.isOpen) {
       const rect = state.anchorEl.getBoundingClientRect();
-      const popoverWidth = state.type === 'team' ? 640 : 224;
-      const popoverHeight = state.type === 'team' ? 400 : 200;
+      const popoverWidth = state.type === 'team' ? 640 : 320;
+      const popoverHeight = state.type === 'team' ? 400 : 240;
 
       let top = rect.bottom + 4;
       let left = rect.left + rect.width / 2 - popoverWidth / 2;
@@ -265,7 +267,7 @@ export const SharedPopoverRenderer: React.FC = () => {
       <div
         ref={popoverRef}
         className={`fixed z-50 rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 ${
-          state.type === 'team' ? 'w-[640px] p-0' : 'w-56 p-3'
+          state.type === 'team' ? 'w-[640px] p-0' : 'w-80 p-4'
         }`}
         style={{ top: position.top, left: position.left }}
         onClick={handleClick}

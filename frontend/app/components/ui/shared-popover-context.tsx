@@ -2,6 +2,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -137,21 +138,36 @@ export const SharedPopoverProvider: React.FC<SharedPopoverProviderProps> = ({
     setTeamModalState((prev) => ({ ...prev, open }));
   }, []);
 
+  // Memoize the context value to prevent unnecessary re-renders of all consumers
+  const contextValue = useMemo(
+    () => ({
+      state,
+      showPlayerPopover,
+      showTeamPopover,
+      hidePopover,
+      openPlayerModal,
+      openTeamModal,
+      playerModalState,
+      teamModalState,
+      setPlayerModalOpen,
+      setTeamModalOpen,
+    }),
+    [
+      state,
+      showPlayerPopover,
+      showTeamPopover,
+      hidePopover,
+      openPlayerModal,
+      openTeamModal,
+      playerModalState,
+      teamModalState,
+      setPlayerModalOpen,
+      setTeamModalOpen,
+    ],
+  );
+
   return (
-    <SharedPopoverContext.Provider
-      value={{
-        state,
-        showPlayerPopover,
-        showTeamPopover,
-        hidePopover,
-        openPlayerModal,
-        openTeamModal,
-        playerModalState,
-        teamModalState,
-        setPlayerModalOpen,
-        setTeamModalOpen,
-      }}
-    >
+    <SharedPopoverContext.Provider value={contextValue}>
       {children}
     </SharedPopoverContext.Provider>
   );
