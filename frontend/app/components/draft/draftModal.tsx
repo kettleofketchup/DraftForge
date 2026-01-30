@@ -367,6 +367,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const initializedDraftPk = useRef<number | null>(null);
 
   // Initialize draft data when tournament.draft becomes available
+  // Goes directly to latest round if autoAdvance is enabled
   useEffect(() => {
     // Skip initialization if tournament or draft not loaded yet
     if (!tournament?.pk || !tournament?.draft?.pk) {
@@ -381,23 +382,36 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     log.debug('Initializing draft data from tournament:', tournament.draft.pk);
     initializedDraftPk.current = tournament.draft.pk;
 
-    setDraft(tournament.draft);
+    const draftData = tournament.draft;
+    setDraft(draftData);
 
     // Only set current round if draft_rounds exist and has at least one round
-    if (
-      tournament.draft.draft_rounds &&
-      tournament.draft.draft_rounds.length > 0
-    ) {
-      if (draftIndex <= 0) {
-        setDraftIndex(0);
+    if (draftData.draft_rounds && draftData.draft_rounds.length > 0) {
+      // If autoAdvance is enabled, go directly to latest round
+      // This avoids the initial → auto-advance double render
+      if (autoAdvance && draftData.latest_round) {
+        const latestRound = draftData.draft_rounds.find(
+          (r: DraftRoundType) => r.pk === draftData.latest_round
+        );
+        const latestIdx = draftData.draft_rounds.findIndex(
+          (r: DraftRoundType) => r.pk === draftData.latest_round
+        );
+        if (latestRound) {
+          setCurDraftRound(latestRound);
+          setDraftIndex(latestIdx >= 0 ? latestIdx : 0);
+          log.debug('Initialized directly to latest round:', latestRound.pk);
+          return;
+        }
       }
-      setCurDraftRound(tournament.draft.draft_rounds[0]);
-      log.debug('Set initial draft round:', tournament.draft.draft_rounds[0]);
+      // Default: start at first round
+      setDraftIndex(0);
+      setCurDraftRound(draftData.draft_rounds[0]);
+      log.debug('Set initial draft round:', draftData.draft_rounds[0]);
     } else {
       log.debug('No draft rounds available yet');
       setCurDraftRound({} as DraftRoundType);
     }
-  }, [tournament?.pk, tournament?.draft?.pk]);
+  }, [tournament?.pk, tournament?.draft?.pk, autoAdvance]);
 
   // Log modal state changes for debugging live updates
   useEffect(() => {
