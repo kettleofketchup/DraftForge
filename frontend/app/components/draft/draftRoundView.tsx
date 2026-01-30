@@ -73,6 +73,7 @@ interface PickOrderCaptain {
   totalMmr: number;
   isCurrent: boolean;
   pickOrder: number;
+  isMaxed: boolean;
 }
 
 // Context slot for shuffle draft projections
@@ -126,32 +127,42 @@ export const DraftRoundView: React.FC = () => {
     return (team.members?.length || 0) >= MAX_TEAM_SIZE;
   };
 
-  // Get next 4 captains in pick order
+  // Get all captains in pick order (including maxed teams, shown grayed out)
   const pickOrderCaptains = useMemo((): PickOrderCaptain[] => {
     const teams = tournament?.teams || [];
     const isShuffle = draft?.draft_style === 'shuffle';
 
     if (isShuffle) {
       // For shuffle draft, pick order is determined by team MMR (lowest first)
-      const activeTeams = teams
-        .filter((t) => !isTeamMaxed(t))
+      // Include all teams, but mark maxed ones
+      const allTeams = teams
         .map((team) => ({
           team,
           totalMmr: getTeamMmr(team),
-          isCurrent: false, // Will be set below based on sort order
+          isCurrent: false,
           pickOrder: 0,
+          isMaxed: isTeamMaxed(team),
         }))
-        .sort((a, b) => a.totalMmr - b.totalMmr);
+        .sort((a, b) => {
+          // Maxed teams go to the end
+          if (a.isMaxed !== b.isMaxed) return a.isMaxed ? 1 : -1;
+          // Active teams sorted by MMR (lowest first)
+          return a.totalMmr - b.totalMmr;
+        });
 
-      // In shuffle draft, the FIRST team (lowest MMR) is always "current"
-      // This is the defining rule of shuffle draft
-      activeTeams.forEach((t, idx) => {
-        t.pickOrder = idx + 1;
-        // First position (index 0) is always the current picker in shuffle
-        t.isCurrent = idx === 0;
+      // Assign pick order only to active teams
+      let activeIdx = 0;
+      allTeams.forEach((t) => {
+        if (!t.isMaxed) {
+          t.pickOrder = ++activeIdx;
+          // First active team is current picker
+          t.isCurrent = activeIdx === 1;
+        } else {
+          t.pickOrder = 0; // Maxed teams don't have a pick order
+        }
       });
 
-      return activeTeams.slice(0, 4);
+      return allTeams;
     } else {
       // For snake draft, use the draft_rounds order
       const currentRoundIndex = draft?.draft_rounds?.findIndex(
@@ -160,15 +171,38 @@ export const DraftRoundView: React.FC = () => {
 
       const upcomingRounds = draft?.draft_rounds?.slice(currentRoundIndex, currentRoundIndex + 4) || [];
 
-      return upcomingRounds.map((round: DraftRoundType, idx: number) => {
+      // Get unique teams from upcoming rounds
+      const seenTeamPks = new Set<number>();
+      const result: PickOrderCaptain[] = [];
+
+      for (const round of upcomingRounds) {
         const team = teams.find((t) => t.captain?.pk === round.captain?.pk);
-        return {
-          team: team || ({} as TeamType),
-          totalMmr: team ? getTeamMmr(team) : 0,
-          isCurrent: idx === 0,
-          pickOrder: idx + 1,
-        };
-      });
+        if (team && !seenTeamPks.has(team.pk!)) {
+          seenTeamPks.add(team.pk!);
+          result.push({
+            team,
+            totalMmr: getTeamMmr(team),
+            isCurrent: result.length === 0,
+            pickOrder: result.length + 1,
+            isMaxed: isTeamMaxed(team),
+          });
+        }
+      }
+
+      // Add maxed teams that aren't in upcoming rounds
+      for (const team of teams) {
+        if (!seenTeamPks.has(team.pk!) && isTeamMaxed(team)) {
+          result.push({
+            team,
+            totalMmr: getTeamMmr(team),
+            isCurrent: false,
+            pickOrder: 0,
+            isMaxed: true,
+          });
+        }
+      }
+
+      return result;
     }
   }, [tournament?.teams, draft?.draft_style, draft?.draft_rounds, curDraftRound?.pk]);
 
@@ -496,7 +530,7 @@ export const DraftRoundView: React.FC = () => {
             <h3 className="text-xs md:text-sm font-medium text-muted-foreground mb-2 md:mb-3 text-center lg:text-left">
               Pick Order
             </h3>
-            <div className="flex flex-row justify-center lg:justify-start gap-1 md:gap-1.5">
+            <div className="flex flex-row justify-center lg:justify-start gap-1 md:gap-1.5 flex-wrap">
               {pickOrderCaptains.map((captain, idx) => (
                 <TeamPopover key={captain.team.pk || idx} team={captain.team}>
                   <div
@@ -504,17 +538,23 @@ export const DraftRoundView: React.FC = () => {
                       'flex flex-row md:flex-col items-center p-1 md:p-1.5 rounded-lg cursor-pointer transition-all',
                       'gap-1.5 md:gap-0',
                       'md:min-w-[70px]',
-                      captain.isCurrent
-                        ? 'bg-green-950/40 border-2 border-green-500'
-                        : 'bg-muted/30 border border-muted hover:bg-muted/50'
+                      captain.isMaxed
+                        ? 'bg-muted/20 border border-muted/50 opacity-50 grayscale'
+                        : captain.isCurrent
+                          ? 'bg-green-950/40 border-2 border-green-500'
+                          : 'bg-muted/30 border border-muted hover:bg-muted/50'
                     )}
                     data-testid={`pick-order-captain-${idx}`}
                   >
                     <Badge
-                      variant={captain.isCurrent ? 'default' : 'secondary'}
-                      className={cn('text-[9px] md:text-[10px] px-1 md:mb-0.5', captain.isCurrent && 'bg-green-600')}
+                      variant={captain.isMaxed ? 'outline' : captain.isCurrent ? 'default' : 'secondary'}
+                      className={cn(
+                        'text-[9px] md:text-[10px] px-1 md:mb-0.5',
+                        captain.isCurrent && 'bg-green-600',
+                        captain.isMaxed && 'bg-muted/50 text-muted-foreground'
+                      )}
                     >
-                      {captain.isCurrent ? 'NOW' : getOrdinal(captain.pickOrder)}
+                      {captain.isMaxed ? 'DONE' : captain.isCurrent ? 'NOW' : getOrdinal(captain.pickOrder)}
                     </Badge>
 
                     {captain.team.captain ? (
@@ -731,6 +771,7 @@ export const DraftRoundView: React.FC = () => {
                         variant={pickOrderFilter === filter ? 'default' : 'outline'}
                         onClick={() => setPickOrderFilter(filter)}
                         className="text-xs px-2 py-0.5 h-6"
+                        disabled
                       >
                         {PICK_ORDER_LABELS[filter]}
                       </Button>
@@ -747,6 +788,7 @@ export const DraftRoundView: React.FC = () => {
                         variant={leagueStatsFilter === filter ? 'default' : 'outline'}
                         onClick={() => setLeagueStatsFilter(filter)}
                         className="text-xs px-2 py-0.5 h-6"
+                        disabled
                       >
                         {LEAGUE_STATS_LABELS[filter]}
                       </Button>
