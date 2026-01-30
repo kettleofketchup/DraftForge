@@ -13,10 +13,15 @@
  */
 
 import { test, expect, chromium } from '@playwright/test';
-import { loginAdmin, waitForHydration } from '../fixtures/auth';
+import { loginStaff, waitForHydration } from '../fixtures/auth';
 import { waitForDemoReady, waitForDraftReady, waitForLoadingComplete } from '../fixtures/demo-utils';
 import * as path from 'path';
 import * as fs from 'fs/promises';
+import { fileURLToPath } from 'url';
+
+// ESM-compatible __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Use nginx hostname inside Docker containers, localhost for local runs
 const DOCKER_HOST = process.env.DOCKER_HOST || 'nginx';
@@ -65,14 +70,23 @@ test.describe('Snake Draft Demo', () => {
     };
 
     const browser = await chromium.launch(browserOptions);
+    console.log('=== SNAKE DRAFT DEMO ===');
+    console.log('Browser launched');
+
+    // Create video output directory
+    await fs.mkdir(VIDEO_OUTPUT_DIR, { recursive: true });
+    console.log(`Video directory created: ${VIDEO_OUTPUT_DIR}`);
 
     // =========================================================================
     // PHASE 1: Setup (no video recording)
     // =========================================================================
+    console.log('=== PHASE 1: Setup (no recording) ===');
+
     const setupContext = await browser.newContext({
       ignoreHTTPSErrors: true,
       viewport: { width: windowSize, height: windowSize },
     });
+    console.log('Setup context created');
 
     // Inject playwright marker to disable react-scan
     await setupContext.addInitScript(() => {
@@ -80,6 +94,7 @@ test.describe('Snake Draft Demo', () => {
     });
 
     // Get Demo Snake Draft Tournament (has real player names and Discord avatars)
+    console.log('Fetching tournament data...');
     const response = await setupContext.request.get(
       `${API_URL}/tests/tournament-by-key/demo_snake_draft/`,
       { failOnStatusCode: false, timeout: 10000 }
@@ -92,7 +107,7 @@ test.describe('Snake Draft Demo', () => {
     }
 
     const tournament: TournamentData = await response.json();
-    console.log(`Demo: ${tournament.name} (pk=${tournament.pk})`);
+    console.log(`Tournament: ${tournament.name} (pk=${tournament.pk})`);
 
     // Reset the draft to initial state
     await setupContext.request.post(
@@ -100,8 +115,8 @@ test.describe('Snake Draft Demo', () => {
       { failOnStatusCode: false }
     );
 
-    // Login as admin for full control
-    await loginAdmin(setupContext);
+    // Login as staff for full control (staff can pick for any captain)
+    await loginStaff(setupContext);
 
     const setupPage = await setupContext.newPage();
 
@@ -321,7 +336,11 @@ test.describe('Snake Draft Demo', () => {
 
     for (let i = 0; i < maxPicks; i++) {
       const dialogEl = page.locator('[role="dialog"]');
-      const pickBtns = dialogEl.locator('button:has-text("Pick")');
+      // Only select enabled Pick buttons (inside available-player containers)
+      const pickBtns = dialogEl.locator('[data-testid="available-player"] button:has-text("Pick")');
+
+      // Wait for pick buttons to exist and scroll dialog to make them visible
+      await pickBtns.first().waitFor({ state: 'attached', timeout: 10000 }).catch(() => {});
       const pickCount = await pickBtns.count();
 
       if (pickCount === 0) {
@@ -339,8 +358,16 @@ test.describe('Snake Draft Demo', () => {
         `Round ${currentRound}, Pick ${pickInRound}: Making pick ${picksMade + 1}/${maxPicks}`
       );
 
-      // Click first available pick
-      await pickBtns.first().click();
+      // Scroll dialog content to show the player list, then scroll to the pick button
+      const scrollArea = dialogEl.locator('[data-radix-scroll-area-viewport]').first();
+      await scrollArea.evaluate((el) => el.scrollTo({ top: 300, behavior: 'smooth' }));
+      await page.waitForTimeout(300);
+
+      // Now scroll pick button into view and click it
+      const firstPickBtn = pickBtns.first();
+      await firstPickBtn.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(200); // Brief pause after scroll
+      await firstPickBtn.click();
       await page.waitForTimeout(300);
 
       // Handle confirmation
@@ -355,6 +382,10 @@ test.describe('Snake Draft Demo', () => {
       }
 
       await page.waitForTimeout(1000);
+
+      // Scroll back to top of dialog to show pick order update
+      const dialogContent = page.locator('[role="dialog"]');
+      await dialogContent.evaluate((el) => el.scrollTo({ top: 0, behavior: 'smooth' }));
 
       // Longer pause at round boundaries
       if (pickInRound === 4) {
