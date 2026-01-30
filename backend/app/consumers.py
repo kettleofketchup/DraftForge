@@ -34,13 +34,15 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
-        # Send recent events on connect
+        # Send recent events and current draft state on connect
         recent_events = await self.get_recent_events(self.draft_id)
+        draft_state = await self.get_draft_state(self.draft_id)
         await self.send(
             text_data=json.dumps(
                 {
                     "type": "initial_events",
                     "events": recent_events,
+                    "draft_state": draft_state,
                 }
             )
         )
@@ -78,6 +80,23 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
         events = DraftEvent.objects.filter(draft_id=draft_id)[:limit]
         return DraftEventSerializer(events, many=True).data
+
+    @database_sync_to_async
+    def get_draft_state(self, draft_id):
+        from app.models import Draft
+        from app.serializers import DraftSerializerForTournament
+
+        try:
+            draft = Draft.objects.prefetch_related(
+                "draft_rounds__captain",
+                "draft_rounds__choice",
+                "users_remaining",
+                "tournament__teams__captain",
+                "tournament__teams__members",
+            ).get(pk=draft_id)
+            return DraftSerializerForTournament(draft).data
+        except Draft.DoesNotExist:
+            return None
 
 
 class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):

@@ -257,9 +257,11 @@ def generate_draft_rounds(request):
         draft = Draft.objects.create(tournament=tournament)
 
     logging.debug(f"Initialization draft for tournament {tournament.name}")
+    # IMPORTANT: rebuild_teams MUST be called BEFORE build_rounds
+    # so that team MMR calculations use only captains, not old picks
+    # Use clear_only=True to avoid re-adding old draft choices before restart
+    draft.rebuild_teams(clear_only=True)
     draft.build_rounds()
-
-    draft.rebuild_teams()
     draft.save()
     tournament.draft = draft
     tournament.save()
@@ -290,29 +292,29 @@ def rebuild_team(request):
 
         # Create a new team and add the user as a member (or captain)
 
+    # Ensure draft exists
     try:
         draft = tournament.draft
         if not draft:
+            logging.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")
             draft = Draft.objects.create(tournament=tournament)
-            draft.build_rounds()
-            draft.save()
-
-        if not draft.draft_rounds.exists():
-            logging.debug("Draft rounds do not exist, building them now")
-            draft.build_rounds()
-
-        logging.debug(f"Draft already exists for tournament {tournament.name}")
     except Draft.DoesNotExist:
         logging.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")
         draft = Draft.objects.create(tournament=tournament)
-        draft.build_rounds()
-        draft.save()
 
-    if not draft.draft_rounds.exists():
+    # IMPORTANT: rebuild_teams MUST be called BEFORE build_rounds
+    # so that team MMR calculations use only captains, not old picks
+    # Use clear_only=True when building new rounds to avoid re-adding old picks
+    will_build_rounds = not draft.draft_rounds.exists()
+    draft.rebuild_teams(clear_only=will_build_rounds)
+
+    # Build rounds if they don't exist
+    if will_build_rounds:
         logging.debug("Draft rounds do not exist, building them now")
         draft.build_rounds()
+    else:
+        logging.debug(f"Draft already exists for tournament {tournament.name}")
 
-    draft.rebuild_teams()
     draft.save()
     tournament.draft = draft
     tournament = Tournament.objects.get(pk=tournament_pk)

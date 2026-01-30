@@ -1016,10 +1016,13 @@ class Draft(models.Model):
 
         return latest_round.pk
 
-    def rebuild_teams(self):
+    def rebuild_teams(self, clear_only=False):
         """
         Build teams based on the draft choices.
-        This method should be called after all draft rounds are completed.
+
+        Args:
+            clear_only: If True, only clear teams to captain-only (for draft restart).
+                       If False (default), also re-add players from existing draft rounds.
         """
         logging.debug(f"Creating draft round for {self.tournament.name} ")
         if not self.tournament:
@@ -1034,6 +1037,11 @@ class Draft(models.Model):
             )
             team.members.clear()
             team.members.add(team.captain)
+
+        # Skip re-adding draft choices if we're just clearing for a restart
+        if clear_only:
+            logging.debug("clear_only=True, skipping re-adding draft choices")
+            return
 
         for captain in self.captains.all():
 
