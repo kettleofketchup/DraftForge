@@ -699,7 +699,10 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
       {/* Confirm pick dialog */}
       <AlertDialog
         open={confirmHeroId !== null}
-        onOpenChange={() => setConfirmHeroId(null)}
+        onOpenChange={() => {
+          setConfirmHeroId(null);
+          setSelectedHeroId(null);
+        }}
       >
         <AlertDialogContent data-testid="herodraft-confirm-dialog">
           <AlertDialogHeader>
