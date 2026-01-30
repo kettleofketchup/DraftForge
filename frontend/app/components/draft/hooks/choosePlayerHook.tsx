@@ -2,11 +2,29 @@ import { toast } from 'sonner';
 import { PickPlayerForRound } from '~/components/api/api';
 import type { PickPlayerForRoundAPI } from '~/components/api/types';
 import type { UserType } from '~/components/user/types';
-import { DisplayName } from '~/components/user/avatar';
+import { AvatarUrl, DisplayName } from '~/components/user/avatar';
 import type { DraftRoundType, DraftType, TournamentType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import type { TieResolution } from '../types';
 const log = getLogger('PickPlayerHook');
+
+// Toast message component with avatar
+const ToastWithAvatar = ({
+  user,
+  message,
+}: {
+  user: UserType;
+  message: string;
+}) => (
+  <div className="flex items-center gap-2">
+    <img
+      src={AvatarUrl(user)}
+      alt={DisplayName(user)}
+      className="w-6 h-6 rounded-full shrink-0"
+    />
+    <span>{message}</span>
+  </div>
+);
 
 type hookParams = {
   tournament: TournamentType;
@@ -62,12 +80,22 @@ export const choosePlayerHook = async ({
     );
   };
   toast.promise(PickPlayerForRound(dataRoundUpdate), {
-    loading: `Choosing ${DisplayName(player)} for ${curDraftRound.captain ? DisplayName(curDraftRound.captain) : 'captain'} in round ${curDraftRound.pick_number}`,
+    loading: (
+      <ToastWithAvatar
+        user={player}
+        message={`Choosing ${DisplayName(player)} for ${curDraftRound.captain ? DisplayName(curDraftRound.captain) : 'captain'}`}
+      />
+    ),
     success: (data) => {
       setTournament(data);
       if (!data.draft) {
         log.error('No draft in response');
-        return `Pick ${curDraftRound?.pick_number} complete!`;
+        return (
+          <ToastWithAvatar
+            user={player}
+            message={`Picked ${DisplayName(player)}!`}
+          />
+        );
       }
       setDraft(data.draft);
 
@@ -114,7 +142,12 @@ export const choosePlayerHook = async ({
         autoRefreshDraft();
       }
 
-      return `Pick ${curDraftRound?.pick_number} complete!`;
+      return (
+        <ToastWithAvatar
+          user={player}
+          message={`Picked ${DisplayName(player)}!`}
+        />
+      );
     },
     error: (err) => {
       const val = err.response.data;

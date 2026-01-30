@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { getLogger } from '~/lib/logger';
+import { useDraftWebSocketStore, draftWsSelectors } from '~/store/draftWebSocketStore';
 import type { DraftRoundType, DraftType } from '../types';
 import { refreshDraftHook } from './refreshDraftHook';
 
@@ -18,11 +19,14 @@ export const useAutoRefreshDraft = ({
   curDraftRound,
   draft,
   setDraft,
-  interval = 3000, // Increased from 1000ms to reduce API calls
+  interval = 5000, // Fallback polling interval when WebSocket disconnected
 }: UseAutoRefreshDraftParams) => {
+  // Read WebSocket connection status from store
+  const wsConnected = useDraftWebSocketStore(draftWsSelectors.isConnected);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const draftRef = useRef(draft);
   const setDraftRef = useRef(setDraft);
+  const hasCompletedRefreshRef = useRef(false);
 
   // Keep refs updated without triggering effect
   useEffect(() => {
@@ -46,6 +50,8 @@ export const useAutoRefreshDraft = ({
   const choiceIsNull = curDraftRound?.choice === null;
   const hasDraft = !!draft;
   const hasCurDraftRound = !!curDraftRound;
+  const usersRemainingCount = draft?.users_remaining?.length ?? -1;
+  const isDraftCompleted = usersRemainingCount === 0;
 
   useEffect(() => {
     // Clear any existing interval first
@@ -54,13 +60,37 @@ export const useAutoRefreshDraft = ({
       intervalRef.current = null;
     }
 
-    if (!enabled || !hasCurDraftRound || !hasDraft) {
+    if (!enabled || !hasDraft) {
       return;
     }
 
-    // Only start interval if captain choice is null
+    // If draft is completed, do one final refresh to get complete data
+    if (isDraftCompleted) {
+      if (!hasCompletedRefreshRef.current) {
+        log.debug('Draft completed, performing final refresh');
+        hasCompletedRefreshRef.current = true;
+        refresh();
+      }
+      return;
+    }
+
+    // Reset completed flag when draft is not completed (e.g., after undo)
+    hasCompletedRefreshRef.current = false;
+
+    // If WebSocket is connected, let it handle updates - no polling needed
+    if (wsConnected) {
+      log.debug('WebSocket connected, skipping auto-refresh polling');
+      return;
+    }
+
+    // Fallback: Poll only when WebSocket is disconnected and draft not complete
+    if (!hasCurDraftRound) {
+      return;
+    }
+
+    // Only start interval if captain choice is null (waiting for pick)
     if (choiceIsNull) {
-      log.debug('Captain choice is null, starting auto-refresh');
+      log.debug('WebSocket disconnected, starting fallback auto-refresh polling');
       intervalRef.current = setInterval(refresh, interval);
 
       return () => {
@@ -70,7 +100,7 @@ export const useAutoRefreshDraft = ({
         }
       };
     }
-  }, [enabled, hasCurDraftRound, hasDraft, choiceIsNull, interval, refresh]);
+  }, [enabled, hasCurDraftRound, hasDraft, choiceIsNull, wsConnected, isDraftCompleted, interval, refresh]);
 
   return { refresh };
 };

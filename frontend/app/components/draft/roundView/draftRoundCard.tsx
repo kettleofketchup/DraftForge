@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { memo, useEffect } from 'react';
+import { memo } from 'react';
 import { Badge } from '~/components/ui/badge';
 import {
   Card,
@@ -11,31 +11,46 @@ import {
 } from '~/components/ui/card';
 import type { DraftRoundType } from '~/index';
 import { AvatarUrl, DisplayName } from '~/index';
-import { useUserStore } from '~/store/userStore';
+
+// Stable animation objects to prevent re-renders
+const inViewAnimation = {
+  opacity: 1,
+  transition: { delay: 0.05, duration: 0.5 },
+};
+const hoverAnimation = { scale: 1.1 };
+const focusAnimation = { scale: 1.05 };
+
+interface DraftRoundCardProps {
+  draftRound: DraftRoundType;
+  maxRounds: number;
+  isCur: boolean;
+}
+
+// Custom comparison for memo - check key properties that affect display
+const draftRoundCardPropsAreEqual = (
+  prevProps: DraftRoundCardProps,
+  nextProps: DraftRoundCardProps
+): boolean => {
+  if (prevProps.isCur !== nextProps.isCur) return false;
+  if (prevProps.maxRounds !== nextProps.maxRounds) return false;
+  if (prevProps.draftRound?.pk !== nextProps.draftRound?.pk) return false;
+  if (prevProps.draftRound?.pick_number !== nextProps.draftRound?.pick_number) return false;
+  if (prevProps.draftRound?.captain?.pk !== nextProps.draftRound?.captain?.pk) return false;
+  if (prevProps.draftRound?.choice?.pk !== nextProps.draftRound?.choice?.pk) return false;
+  // Also check team members count for team display
+  if (prevProps.draftRound?.team?.members?.length !== nextProps.draftRound?.team?.members?.length) return false;
+  return true;
+};
 
 export const DraftRoundCard = memo(
-  ({
-    draftRound,
-    maxRounds,
-    isCur,
-  }: {
-    draftRound: DraftRoundType;
-    maxRounds: number;
-    isCur: boolean;
-  }) => {
+  ({ draftRound, maxRounds, isCur }: DraftRoundCardProps) => {
     const bgColor = isCur ? 'bg-green-900' : 'bg-gray-800';
-    const draftIndex = useUserStore((state) => state.draftIndex);
-
-    useEffect(() => {}, [draftRound?.pk, isCur, draftIndex]);
 
     return (
       <motion.div
-        whileInView={{
-          opacity: 1,
-          transition: { delay: 0.05, duration: 0.5 },
-        }}
-        whileHover={{ scale: 1.1 }}
-        whileFocus={{ scale: 1.05 }}
+        whileInView={inViewAnimation}
+        whileHover={hoverAnimation}
+        whileFocus={focusAnimation}
         className="flex items-center justify-center w-full"
       >
         <Card className={`w-full p-2  ${bgColor} py-4`}>
@@ -68,4 +83,5 @@ export const DraftRoundCard = memo(
       </motion.div>
     );
   },
+  draftRoundCardPropsAreEqual
 );
