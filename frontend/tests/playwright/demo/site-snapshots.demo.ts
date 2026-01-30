@@ -26,7 +26,9 @@ const __dirname = path.dirname(__filename);
 const DOCKER_HOST = process.env.DOCKER_HOST || 'nginx';
 const API_URL = `https://${DOCKER_HOST}/api`;
 const BASE_URL = `https://${DOCKER_HOST}`;
-const SNAPSHOT_OUTPUT_DIR = '../../../../docs/assets/site_snapshots';
+// Output to demo-results/site_snapshots/ (in mounted volume)
+// Invoke task will copy to docs/assets/site_snapshots/
+const SNAPSHOT_OUTPUT_DIR = 'demo-results/site_snapshots';
 
 test.describe('Site Snapshots', () => {
   test('Capture all site screenshots', async ({}) => {
@@ -73,8 +75,8 @@ test.describe('Site Snapshots', () => {
 
     const page = await context.newPage();
 
-    // Ensure output directory exists
-    const outputDir = path.resolve(__dirname, SNAPSHOT_OUTPUT_DIR);
+    // Ensure output directory exists (relative to cwd, which is /app in Docker)
+    const outputDir = path.resolve(process.cwd(), SNAPSHOT_OUTPUT_DIR);
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
     }

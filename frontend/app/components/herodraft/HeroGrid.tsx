@@ -1,5 +1,5 @@
 // frontend/app/components/herodraft/HeroGrid.tsx
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { heroes } from 'dotaconstants';
 import { Input } from '~/components/ui/input';
 import { useHeroDraftStore } from '~/store/heroDraftStore';
@@ -39,6 +39,8 @@ const ATTRIBUTE_COLORS: Record<HeroAttribute, string> = {
 };
 
 export function HeroGrid({ onHeroClick, disabled, showActionButton, currentAction, isMyTurn }: HeroGridProps) {
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
   // Use selectors to prevent re-renders when unrelated state changes
   const searchQuery = useHeroDraftStore((state) => state.searchQuery);
   const setSearchQuery = useHeroDraftStore((state) => state.setSearchQuery);
@@ -46,6 +48,45 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
   const setSelectedHeroId = useHeroDraftStore((state) => state.setSelectedHeroId);
   // Select draft rounds directly for memoization
   const draftRounds = useHeroDraftStore((state) => state.draft?.rounds);
+
+  // Auto-focus search when typing anywhere (unless in a dialog/input)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if already focused on an input, textarea, or within a dialog
+      const activeEl = document.activeElement;
+      if (
+        activeEl instanceof HTMLInputElement ||
+        activeEl instanceof HTMLTextAreaElement ||
+        activeEl?.closest('[role="alertdialog"]') ||
+        activeEl?.closest('[role="dialog"]')
+      ) {
+        return;
+      }
+
+      // Only handle printable characters (single character, no ctrl/alt/meta)
+      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        setSearchQuery(searchQuery + e.key);
+      }
+
+      // Handle backspace to delete from search
+      if (e.key === 'Backspace' && searchQuery.length > 0) {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        setSearchQuery(searchQuery.slice(0, -1));
+      }
+
+      // Handle Escape to clear search
+      if (e.key === 'Escape' && searchQuery.length > 0) {
+        e.preventDefault();
+        setSearchQuery('');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [searchQuery, setSearchQuery]);
 
   // Memoize used hero IDs to prevent recalculation unless rounds change
   const usedHeroIds = useMemo(() => {
@@ -85,6 +126,7 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
     <div className={cn("flex flex-col h-full overflow-hidden relative", actionOverlay)} data-testid="herodraft-hero-grid">
       <div className="p-2 shrink-0" data-testid="herodraft-search-container">
         <Input
+          ref={searchInputRef}
           type="text"
           placeholder="Search heroes..."
           value={searchQuery}

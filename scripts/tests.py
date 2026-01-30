@@ -92,7 +92,7 @@ def playwright_headless(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"npx playwright test {args}".strip())
+        c.run(f"DOCKER_HOST=localhost npx playwright test {args}".strip())
 
 
 @task
@@ -104,7 +104,7 @@ def playwright_headed(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"npx playwright test --headed {args}".strip())
+        c.run(f"DOCKER_HOST=localhost npx playwright test --headed {args}".strip())
 
 
 @task
@@ -112,7 +112,7 @@ def playwright_ui(c):
     """Open Playwright UI mode for interactive test development."""
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run("npx playwright test --ui")
+        c.run("DOCKER_HOST=localhost npx playwright test --ui")
 
 
 @task
@@ -120,28 +120,33 @@ def playwright_debug(c):
     """Run Playwright tests in debug mode."""
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run("npx playwright test --debug")
+        c.run("DOCKER_HOST=localhost npx playwright test --debug")
 
 
 @task
-def playwright_spec(c, spec="", args=""):
-    """Run Playwright tests for a specific spec pattern.
+def playwright_spec(c, spec="", file="", args=""):
+    """Run Playwright tests for a specific spec pattern or file.
 
     Usage:
-        inv test.playwright.spec --spec herodraft  # Runs herodraft tests
-        inv test.playwright.spec --spec navigation # Runs navigation tests
+        inv test.playwright.spec --spec herodraft  # Runs tests matching "herodraft"
+        inv test.playwright.spec --file tests/playwright/e2e/herodraft-captain-connection.spec.ts
         inv test.playwright.spec --spec herodraft --args "--shard=1/4"
 
     Args:
         spec: Grep pattern to filter tests
+        file: Specific test file path to run
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        if spec:
-            c.run(f'npx playwright test --grep "{spec}" {args}'.strip())
+        if file:
+            c.run(f"DOCKER_HOST=localhost npx playwright test {file} {args}".strip())
+        elif spec:
+            c.run(
+                f'DOCKER_HOST=localhost npx playwright test --grep "{spec}" {args}'.strip()
+            )
         else:
-            c.run(f"npx playwright test {args}".strip())
+            c.run(f"DOCKER_HOST=localhost npx playwright test {args}".strip())
 
 
 @task
@@ -161,7 +166,7 @@ def playwright_navigation(c, args=""):
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
         c.run(
-            f"npx playwright test tests/playwright/e2e/00-hydration-handling.spec.ts tests/playwright/e2e/01-navigation.spec.ts {args}".strip()
+            f"DOCKER_HOST=localhost npx playwright test tests/playwright/e2e/00-hydration-handling.spec.ts tests/playwright/e2e/01-navigation.spec.ts {args}".strip()
         )
 
 
@@ -175,7 +180,7 @@ def playwright_tournament(c, args=""):
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
         c.run(
-            f"npx playwright test tests/playwright/e2e/03-tournaments/ tests/playwright/e2e/04-tournament/ {args}".strip()
+            f"DOCKER_HOST=localhost npx playwright test tests/playwright/e2e/03-tournaments/ tests/playwright/e2e/04-tournament/ {args}".strip()
         )
 
 
@@ -189,7 +194,7 @@ def playwright_draft(c, args=""):
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
         c.run(
-            f"npx playwright test tests/playwright/e2e/07-draft/ tests/playwright/e2e/08-shuffle-draft/ {args}".strip()
+            f"DOCKER_HOST=localhost npx playwright test tests/playwright/e2e/07-draft/ tests/playwright/e2e/08-shuffle-draft/ {args}".strip()
         )
 
 
@@ -202,7 +207,9 @@ def playwright_bracket(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"npx playwright test tests/playwright/e2e/09-bracket/ {args}".strip())
+        c.run(
+            f"DOCKER_HOST=localhost npx playwright test tests/playwright/e2e/09-bracket/ {args}".strip()
+        )
 
 
 @task
@@ -214,7 +221,9 @@ def playwright_league(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"npx playwright test tests/playwright/e2e/10-leagues/ {args}".strip())
+        c.run(
+            f"DOCKER_HOST=localhost npx playwright test tests/playwright/e2e/10-leagues/ {args}".strip()
+        )
 
 
 @task
@@ -226,7 +235,9 @@ def playwright_herodraft(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"npx playwright test tests/playwright/e2e/herodraft/ {args}".strip())
+        c.run(
+            f"DOCKER_HOST=localhost npx playwright test tests/playwright/e2e/herodraft/ {args}".strip()
+        )
 
 
 @task
@@ -238,7 +249,7 @@ def playwright_herodraft_headed(c):
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
         c.run(
-            "HERODRAFT_HEADED=true npx playwright test tests/playwright/e2e/herodraft/ --project=herodraft"
+            "DOCKER_HOST=localhost HERODRAFT_HEADED=true npx playwright test tests/playwright/e2e/herodraft/ --project=herodraft"
         )
 
 
@@ -251,7 +262,7 @@ def playwright_all(c, args=""):
     """
     flush_test_redis(c)
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"npx playwright test {args}".strip())
+        c.run(f"DOCKER_HOST=localhost npx playwright test {args}".strip())
 
 
 # Add tasks to playwright collection
@@ -459,6 +470,36 @@ def _copy_demo_videos(c):
             print("Commit these videos to git for documentation.")
     else:
         print(f"  Warning: Video directory not found: {videos_dir}")
+
+
+def _copy_demo_snapshots(c):
+    """Copy demo snapshots from frontend container to docs/assets/site_snapshots/."""
+    import shutil
+    from pathlib import Path
+
+    # Copy from container to host
+    demo_results = paths.FRONTEND_PATH / "demo-results"
+    snapshots_dir = demo_results / "site_snapshots"
+    docs_snapshots = paths.PROJECT_PATH / "docs" / "assets" / "site_snapshots"
+
+    docs_snapshots.mkdir(parents=True, exist_ok=True)
+
+    # The snapshots are created by mounted volume, so they should be on host
+    if snapshots_dir.exists():
+        print("\nCopying snapshots to docs/assets/site_snapshots/...")
+        copied_count = 0
+        for snapshot_file in snapshots_dir.glob("*.png"):
+            dest = docs_snapshots / snapshot_file.name
+            shutil.copy2(snapshot_file, dest)
+            print(f"  Copied: {snapshot_file.name}")
+            copied_count += 1
+
+        if copied_count == 0:
+            print("  No snapshots found. Check test output for errors.")
+        else:
+            print(f"\n{copied_count} snapshots saved to: {docs_snapshots}")
+    else:
+        print(f"  Warning: Snapshot directory not found: {snapshots_dir}")
 
 
 @task
@@ -862,7 +903,7 @@ def demo_snapshots(c):
     print("=== Site Snapshots ===")
     flush_test_redis(c)
     _run_demo_in_docker(c, spec="Site Snapshots")
-    print("\nSnapshots saved to docs/assets/site_snapshots/")
+    _copy_demo_snapshots(c)
 
 
 ns_demo.add_task(demo_create, "create")
