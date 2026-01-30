@@ -53,8 +53,10 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
   const wsConnect = useHeroDraftStore((state) => state.connect);
   const wsDisconnect = useHeroDraftStore((state) => state.disconnect);
   const wsReconnect = useHeroDraftStore((state) => state.reconnect);
+  const startHeartbeat = useHeroDraftStore((state) => state.startHeartbeat);
   const isConnected = useHeroDraftStore(heroDraftSelectors.isConnected);
   const connectionError = useHeroDraftStore((state) => state.error);
+  const wasKicked = useHeroDraftStore((state) => state.wasKicked);
 
   const [confirmHeroId, setConfirmHeroId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -149,6 +151,22 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
     return () => clearTimeout(timer);
   }, [resumeCountdown]);
+
+  // Start heartbeat when connected as captain
+  // Note: isCaptain check requires draft to be loaded, so we check both
+  const isCaptainForHeartbeat = draft?.draft_teams.some((t) => t.captain?.pk === currentUser?.pk);
+  useEffect(() => {
+    if (isConnected && isCaptainForHeartbeat) {
+      startHeartbeat();
+    }
+  }, [isConnected, isCaptainForHeartbeat, startHeartbeat]);
+
+  // Show toast when kicked
+  useEffect(() => {
+    if (wasKicked) {
+      toast.error("Connection replaced - you opened this draft in another tab");
+    }
+  }, [wasKicked]);
 
   // Alias for backwards compatibility
   const reconnect = wsReconnect;
@@ -401,39 +419,47 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                       {rollWinnerTeam?.captain ? DisplayName(rollWinnerTeam.captain) : 'Unknown'} won the flip!
                     </h2>
                     {rollWinnerTeam?.id === myTeam?.id ? (
-                      <div className="space-y-2" data-testid="herodraft-winner-choices">
-                        <p>Choose your preference:</p>
-                        <div className="flex gap-4 justify-center" data-testid="herodraft-choice-buttons">
-                          <Button
-                            onClick={() => setPendingChoice({ type: "pick_order", value: "first" })}
-                            disabled={isSubmitting}
-                            data-testid="herodraft-choice-first-pick"
-                          >
-                            {isSubmitting ? "..." : "First Pick"}
-                          </Button>
-                          <Button
-                            onClick={() => setPendingChoice({ type: "pick_order", value: "second" })}
-                            disabled={isSubmitting}
-                            data-testid="herodraft-choice-second-pick"
-                          >
-                            {isSubmitting ? "..." : "Second Pick"}
-                          </Button>
-                          <Button
-                            onClick={() => setPendingChoice({ type: "side", value: "radiant" })}
-                            disabled={isSubmitting}
-                            data-testid="herodraft-choice-radiant"
-                          >
-                            {isSubmitting ? "..." : "Radiant"}
-                          </Button>
-                          <Button
-                            onClick={() => setPendingChoice({ type: "side", value: "dire" })}
-                            disabled={isSubmitting}
-                            data-testid="herodraft-choice-dire"
-                          >
-                            {isSubmitting ? "..." : "Dire"}
-                          </Button>
+                      // Winner's turn - but check if they already made their choice
+                      myTeam.is_first_pick !== null || myTeam.is_radiant !== null ? (
+                        // Winner already made their choice, waiting for loser
+                        <p data-testid="herodraft-winner-waiting">
+                          Waiting for opponent to choose...
+                        </p>
+                      ) : (
+                        <div className="space-y-2" data-testid="herodraft-winner-choices">
+                          <p>Choose your preference:</p>
+                          <div className="flex gap-4 justify-center" data-testid="herodraft-choice-buttons">
+                            <Button
+                              onClick={() => setPendingChoice({ type: "pick_order", value: "first" })}
+                              disabled={isSubmitting}
+                              data-testid="herodraft-choice-first-pick"
+                            >
+                              {isSubmitting ? "..." : "First Pick"}
+                            </Button>
+                            <Button
+                              onClick={() => setPendingChoice({ type: "pick_order", value: "second" })}
+                              disabled={isSubmitting}
+                              data-testid="herodraft-choice-second-pick"
+                            >
+                              {isSubmitting ? "..." : "Second Pick"}
+                            </Button>
+                            <Button
+                              onClick={() => setPendingChoice({ type: "side", value: "radiant" })}
+                              disabled={isSubmitting}
+                              data-testid="herodraft-choice-radiant"
+                            >
+                              {isSubmitting ? "..." : "Radiant"}
+                            </Button>
+                            <Button
+                              onClick={() => setPendingChoice({ type: "side", value: "dire" })}
+                              disabled={isSubmitting}
+                              data-testid="herodraft-choice-dire"
+                            >
+                              {isSubmitting ? "..." : "Dire"}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
+                      )
                     ) : myTeam && rollWinnerTeam?.is_first_pick === null && rollWinnerTeam?.is_radiant === null ? (
                       // Loser waits until winner makes their first choice
                       <p data-testid="herodraft-waiting-for-winner">
@@ -493,7 +519,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
               )}
 
               {/* Small screen message - shown below sm breakpoint */}
-              {(draft.state === "drafting" || draft.state === "paused" || draft.state === "completed") && (
+              {(draft.state === "drafting" || draft.state === "paused" || draft.state === "resuming" || draft.state === "completed") && (
                 <div className="flex-1 flex sm:hidden items-start justify-start p-6" data-testid="herodraft-small-screen-message">
                   <div className="text-left space-y-2 max-w-xs">
                     <div className="text-3xl">🚧</div>
@@ -506,7 +532,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
               )}
 
               {/* Main draft area - hidden on small screens, side-by-side on sm+ */}
-              {(draft.state === "drafting" || draft.state === "paused" || draft.state === "completed") && (
+              {(draft.state === "drafting" || draft.state === "paused" || draft.state === "resuming" || draft.state === "completed") && (
                 <div className="flex-1 hidden sm:flex flex-row overflow-hidden" data-testid="herodraft-main-area">
                   {/* Hero Grid - 50% sm/md, 58% lg, 80% xl */}
                   <div className="basis-1/2 md:basis-1/2 lg:basis-7/12 xl:basis-4/5 h-full min-w-0 overflow-hidden" data-testid="herodraft-hero-grid-container">
@@ -582,51 +608,63 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                 </div>
               </div>
 
-              {/* Paused overlay - shows during pause and countdown */}
-              {(draft.state === "paused" || resumeCountdown !== null) && (
-                <div className="absolute inset-0 bg-black/70 flex items-center justify-center" data-testid="herodraft-paused-overlay">
-                  <div className="text-center space-y-4">
-                    {resumeCountdown !== null && resumeCountdown > 0 ? (
-                      <>
-                        <h2 className="text-3xl font-bold text-green-400" data-testid="herodraft-countdown-title">
-                          Resuming in {resumeCountdown}...
-                        </h2>
-                        <p className="text-muted-foreground" data-testid="herodraft-countdown-message">
-                          All captains connected
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <h2 className="text-3xl font-bold text-yellow-400" data-testid="herodraft-paused-title">
-                          Draft Paused
-                        </h2>
-                        <p className="text-muted-foreground" data-testid="herodraft-paused-message">
-                          Waiting for captain to reconnect...
-                        </p>
-                        <div className="flex flex-col gap-2 items-center">
-                          <Button
-                            variant="outline"
-                            onClick={reconnect}
-                            className="text-white border-yellow-400 hover:bg-yellow-400/20"
-                            data-testid="herodraft-reconnect-btn"
-                          >
-                            Reconnect
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={handleClose}
-                            data-testid="herodraft-paused-close-btn"
-                          >
-                            <ArrowLeft className="h-4 w-4 mr-2" />
-                            Back to Bracket
-                          </Button>
-                        </div>
-                      </>
-                    )}
+              {/* Paused/Resuming overlay - shows during pause and countdown */}
+              {(() => {
+                // Calculate countdown from tick data when in resuming state
+                const isResuming = draft.state === "resuming";
+                const tickCountdown = tick?.countdown_remaining_ms
+                  ? Math.ceil(tick.countdown_remaining_ms / 1000)
+                  : null;
+                const countdownValue = isResuming && tickCountdown !== null
+                  ? tickCountdown
+                  : resumeCountdown;
+                const showOverlay = draft.state === "paused" || isResuming || resumeCountdown !== null;
+
+                return showOverlay && (
+                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center" data-testid="herodraft-paused-overlay">
+                    <div className="text-center space-y-4">
+                      {(countdownValue !== null && countdownValue > 0) ? (
+                        <>
+                          <h2 className="text-3xl font-bold text-green-400" data-testid="herodraft-countdown-title">
+                            Resuming in {countdownValue}...
+                          </h2>
+                          <p className="text-muted-foreground" data-testid="herodraft-countdown-message">
+                            All captains connected
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <h2 className="text-3xl font-bold text-yellow-400" data-testid="herodraft-paused-title">
+                            Draft Paused
+                          </h2>
+                          <p className="text-muted-foreground" data-testid="herodraft-paused-message">
+                            Waiting for captain to reconnect...
+                          </p>
+                          <div className="flex flex-col gap-2 items-center">
+                            <Button
+                              variant="outline"
+                              onClick={reconnect}
+                              className="text-white border-yellow-400 hover:bg-yellow-400/20"
+                              data-testid="herodraft-reconnect-btn"
+                            >
+                              Reconnect
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={handleClose}
+                              data-testid="herodraft-paused-close-btn"
+                            >
+                              <ArrowLeft className="h-4 w-4 mr-2" />
+                              Back to Bracket
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Connection status */}
               {!isConnected && (

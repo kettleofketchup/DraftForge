@@ -560,7 +560,7 @@ def reset_draft(request, draft_pk):
         team.is_connected = False
         team.is_first_pick = None
         team.is_radiant = None
-        team.reserve_time_remaining = 130000  # 2:10 reserve time
+        team.reserve_time_remaining = 90000  # 1:30 reserve time (matches model default)
         team.save()
 
     # Reset draft state
