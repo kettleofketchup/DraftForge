@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 from invoke import Collection, task
 
@@ -15,6 +18,29 @@ ns_test.add_collection(ns_runner, "runner")
 
 
 import paths
+
+
+def get_docker_host():
+    """Detect DOCKER_HOST based on environment.
+
+    Returns 'nginx' if running inside a Docker container, 'localhost' otherwise.
+    Detection checks for /.dockerenv file or 'docker' in /proc/1/cgroup.
+    """
+    # Check for /.dockerenv (created by Docker)
+    if Path("/.dockerenv").exists():
+        return "nginx"
+
+    # Check /proc/1/cgroup for 'docker' (Linux containers)
+    cgroup_path = Path("/proc/1/cgroup")
+    if cgroup_path.exists():
+        try:
+            content = cgroup_path.read_text()
+            if "docker" in content:
+                return "nginx"
+        except (PermissionError, OSError):
+            pass
+
+    return "localhost"
 
 
 def flush_test_redis(c):
@@ -91,8 +117,9 @@ def playwright_headless(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
+    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"DOCKER_HOST=localhost npx playwright test {args}".strip())
+        c.run(f"DOCKER_HOST={docker_host} npx playwright test {args}".strip())
 
 
 @task
@@ -103,24 +130,27 @@ def playwright_headed(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
+    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"DOCKER_HOST=localhost npx playwright test --headed {args}".strip())
+        c.run(f"DOCKER_HOST={docker_host} npx playwright test --headed {args}".strip())
 
 
 @task
 def playwright_ui(c):
     """Open Playwright UI mode for interactive test development."""
     flush_test_redis(c)
+    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run("DOCKER_HOST=localhost npx playwright test --ui")
+        c.run(f"DOCKER_HOST={docker_host} npx playwright test --ui")
 
 
 @task
 def playwright_debug(c):
     """Run Playwright tests in debug mode."""
     flush_test_redis(c)
+    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run("DOCKER_HOST=localhost npx playwright test --debug")
+        c.run(f"DOCKER_HOST={docker_host} npx playwright test --debug")
 
 
 @task
@@ -138,15 +168,18 @@ def playwright_spec(c, spec="", file="", args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
+    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
         if file:
-            c.run(f"DOCKER_HOST=localhost npx playwright test {file} {args}".strip())
+            c.run(
+                f"DOCKER_HOST={docker_host} npx playwright test {file} {args}".strip()
+            )
         elif spec:
             c.run(
-                f'DOCKER_HOST=localhost npx playwright test --grep "{spec}" {args}'.strip()
+                f'DOCKER_HOST={docker_host} npx playwright test --grep "{spec}" {args}'.strip()
             )
         else:
-            c.run(f"DOCKER_HOST=localhost npx playwright test {args}".strip())
+            c.run(f"DOCKER_HOST={docker_host} npx playwright test {args}".strip())
 
 
 @task
@@ -164,9 +197,10 @@ def playwright_navigation(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
+    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
         c.run(
-            f"DOCKER_HOST=localhost npx playwright test tests/playwright/e2e/00-hydration-handling.spec.ts tests/playwright/e2e/01-navigation.spec.ts {args}".strip()
+            f"DOCKER_HOST={docker_host} npx playwright test tests/playwright/e2e/00-hydration-handling.spec.ts tests/playwright/e2e/01-navigation.spec.ts {args}".strip()
         )
 
 
@@ -178,9 +212,10 @@ def playwright_tournament(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
+    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
         c.run(
-            f"DOCKER_HOST=localhost npx playwright test tests/playwright/e2e/03-tournaments/ tests/playwright/e2e/04-tournament/ {args}".strip()
+            f"DOCKER_HOST={docker_host} npx playwright test tests/playwright/e2e/03-tournaments/ tests/playwright/e2e/04-tournament/ {args}".strip()
         )
 
 
@@ -192,9 +227,10 @@ def playwright_draft(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
+    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
         c.run(
-            f"DOCKER_HOST=localhost npx playwright test tests/playwright/e2e/07-draft/ tests/playwright/e2e/08-shuffle-draft/ {args}".strip()
+            f"DOCKER_HOST={docker_host} npx playwright test tests/playwright/e2e/07-draft/ tests/playwright/e2e/08-shuffle-draft/ {args}".strip()
         )
 
 
@@ -206,9 +242,10 @@ def playwright_bracket(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
+    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
         c.run(
-            f"DOCKER_HOST=localhost npx playwright test tests/playwright/e2e/09-bracket/ {args}".strip()
+            f"DOCKER_HOST={docker_host} npx playwright test tests/playwright/e2e/09-bracket/ {args}".strip()
         )
 
 
@@ -220,9 +257,10 @@ def playwright_league(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
+    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
         c.run(
-            f"DOCKER_HOST=localhost npx playwright test tests/playwright/e2e/10-leagues/ {args}".strip()
+            f"DOCKER_HOST={docker_host} npx playwright test tests/playwright/e2e/10-leagues/ {args}".strip()
         )
 
 
@@ -234,9 +272,10 @@ def playwright_herodraft(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
+    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
         c.run(
-            f"DOCKER_HOST=localhost npx playwright test tests/playwright/e2e/herodraft/ {args}".strip()
+            f"DOCKER_HOST={docker_host} npx playwright test tests/playwright/e2e/herodraft/ {args}".strip()
         )
 
 
@@ -247,9 +286,10 @@ def playwright_herodraft_headed(c):
     Opens two browser windows side-by-side to watch captains draft simultaneously.
     """
     flush_test_redis(c)
+    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
         c.run(
-            "DOCKER_HOST=localhost HERODRAFT_HEADED=true npx playwright test tests/playwright/e2e/herodraft/ --project=herodraft"
+            f"DOCKER_HOST={docker_host} HERODRAFT_HEADED=true npx playwright test tests/playwright/e2e/herodraft/ --project=herodraft"
         )
 
 
@@ -261,8 +301,9 @@ def playwright_all(c, args=""):
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
+    docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"DOCKER_HOST=localhost npx playwright test {args}".strip())
+        c.run(f"DOCKER_HOST={docker_host} npx playwright test {args}".strip())
 
 
 # Add tasks to playwright collection
@@ -386,14 +427,14 @@ def _reset_demo_data(c, demo_key):
         demo_key: Demo key (herodraft, shuffle, snake)
 
     Returns:
-        bool: True if reset successful
+        dict: Response data if successful, None otherwise
     """
     import requests
 
     reset_key = DEMO_RESET_KEYS.get(demo_key)
     if not reset_key:
         print(f"  Warning: No reset key for demo '{demo_key}'")
-        return False
+        return None
 
     # Use localhost since we're calling from host to Docker container
     url = f"https://localhost/api/tests/demo/{reset_key}/reset/"
@@ -404,12 +445,42 @@ def _reset_demo_data(c, demo_key):
         if response.ok:
             data = response.json()
             print(f"  Reset successful: {data.get('tournament', 'unknown')}")
-            return True
+            return data
         else:
             print(f"  Reset failed: {response.status_code} - {response.text[:100]}")
-            return False
+            return None
     except Exception as e:
         print(f"  Reset failed: {e}")
+        return None
+
+
+def _generate_bracket(c, tournament_pk):
+    """Generate bracket for a tournament via API.
+
+    Args:
+        c: Invoke context
+        tournament_pk: Tournament primary key
+
+    Returns:
+        bool: True if successful
+    """
+    import requests
+
+    url = f"https://localhost/api/bracket/tournaments/{tournament_pk}/generate/"
+
+    print(f"  Generating bracket for tournament {tournament_pk}...")
+    try:
+        response = requests.post(url, verify=False, timeout=10)
+        if response.ok:
+            print(f"  Bracket generated successfully")
+            return True
+        else:
+            print(
+                f"  Bracket generation failed: {response.status_code} - {response.text[:100]}"
+            )
+            return False
+    except Exception as e:
+        print(f"  Bracket generation failed: {e}")
         return False
 
 
@@ -901,6 +972,12 @@ def demo_snapshots(c):
     - HeroDraft view
     """
     print("=== Site Snapshots ===")
+
+    # Reset demo_herodraft and generate bracket before taking screenshots
+    reset_data = _reset_demo_data(c, "herodraft")
+    if reset_data and reset_data.get("tournament_pk"):
+        _generate_bracket(c, reset_data["tournament_pk"])
+
     flush_test_redis(c)
     _run_demo_in_docker(c, spec="Site Snapshots")
     _copy_demo_snapshots(c)

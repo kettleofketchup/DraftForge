@@ -4,6 +4,7 @@ WebSocket consumers for draft event broadcasting.
 
 import json
 import logging
+import time
 from datetime import timedelta
 
 from channels.db import database_sync_to_async
@@ -171,11 +172,16 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 class HeroDraftConsumer(AsyncWebsocketConsumer):
     """WebSocket consumer for Captain's Mode hero draft."""
 
+    # Redis key patterns for captain connection tracking
+    CAPTAIN_CHANNEL_KEY = "herodraft:{draft_id}:captain:{user_id}:channel"
+    CAPTAIN_HEARTBEAT_KEY = "herodraft:{draft_id}:captain:{user_id}:heartbeat"
+
     async def connect(self):
         self.draft_id = self.scope["url_route"]["kwargs"]["draft_id"]
         self.room_group_name = f"herodraft_{self.draft_id}"
         self.user = self.scope.get("user")
         self._connection_tracked = False
+        self._is_captain = False
 
         # Verify draft exists
         draft_exists = await self.draft_exists(self.draft_id)
@@ -184,12 +190,23 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
 
+        # Check if this user is a captain and kick any existing connection
+        if self.user and self.user.is_authenticated:
+            is_captain = await self.check_is_captain(self.draft_id, self.user)
+            if is_captain:
+                self._is_captain = True
+                await self.kick_existing_captain_connection()
+
         # Join room group
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
         # Track connection count for tick broadcaster
         await self.track_connection(True)
+
+        # Register captain's channel for future kick detection
+        if self._is_captain:
+            await self.register_captain_channel()
 
         # Send initial state
         try:
@@ -226,7 +243,7 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
         if hasattr(self, "_connection_tracked") and self._connection_tracked:
             await self.track_connection(False)
 
-        # Mark captain as disconnected
+        # Clean up captain channel registration and mark as disconnected
         if (
             hasattr(self, "user")
             and hasattr(self, "draft_id")
@@ -234,6 +251,10 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
             and self.user.is_authenticated
         ):
             try:
+                # Only clean up if this is still the registered channel
+                # (prevents race condition where new connection already registered)
+                if hasattr(self, "_is_captain") and self._is_captain:
+                    await self.unregister_captain_channel_if_current()
                 await self.mark_captain_connected(self.draft_id, self.user, False)
             except Exception as e:
                 log.error(
@@ -276,9 +297,117 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                 f"Failed to start tick broadcaster for draft {self.draft_id}: {e}"
             )
 
+    @database_sync_to_async
+    def check_is_captain(self, draft_id, user):
+        """Check if user is a captain for this draft."""
+        from app.models import HeroDraft
+
+        try:
+            draft = HeroDraft.objects.get(id=draft_id)
+            return draft.draft_teams.filter(tournament_team__captain=user).exists()
+        except HeroDraft.DoesNotExist:
+            return False
+
+    async def kick_existing_captain_connection(self):
+        """Kick any existing WebSocket connection for this captain."""
+        from app.tasks.herodraft_tick import get_redis_client
+
+        r = get_redis_client()
+        channel_key = self.CAPTAIN_CHANNEL_KEY.format(
+            draft_id=self.draft_id, user_id=self.user.id
+        )
+
+        old_channel = r.get(channel_key)
+        if old_channel and old_channel != self.channel_name:
+            log.info(
+                f"Kicking existing captain connection for user {self.user.id} "
+                f"in draft {self.draft_id}: {old_channel}"
+            )
+            # Send kick message to old connection
+            try:
+                await self.channel_layer.send(
+                    old_channel,
+                    {"type": "herodraft.kicked", "reason": "new_connection"},
+                )
+            except Exception as e:
+                log.warning(f"Failed to send kick message to {old_channel}: {e}")
+
+    async def register_captain_channel(self):
+        """Register this connection as the captain's active channel."""
+        from app.tasks.herodraft_tick import get_redis_client
+
+        r = get_redis_client()
+        channel_key = self.CAPTAIN_CHANNEL_KEY.format(
+            draft_id=self.draft_id, user_id=self.user.id
+        )
+        # Store channel name with expiry (cleaned up if server crashes)
+        r.set(channel_key, self.channel_name, ex=300)
+        # Initialize heartbeat
+        await self.update_captain_heartbeat()
+        log.debug(
+            f"Registered captain channel for user {self.user.id} "
+            f"in draft {self.draft_id}: {self.channel_name}"
+        )
+
+    async def unregister_captain_channel_if_current(self):
+        """Unregister captain channel only if it's still this connection."""
+        from app.tasks.herodraft_tick import get_redis_client
+
+        r = get_redis_client()
+        channel_key = self.CAPTAIN_CHANNEL_KEY.format(
+            draft_id=self.draft_id, user_id=self.user.id
+        )
+        heartbeat_key = self.CAPTAIN_HEARTBEAT_KEY.format(
+            draft_id=self.draft_id, user_id=self.user.id
+        )
+
+        current_channel = r.get(channel_key)
+        if current_channel == self.channel_name:
+            r.delete(channel_key)
+            r.delete(heartbeat_key)
+            log.debug(
+                f"Unregistered captain channel for user {self.user.id} "
+                f"in draft {self.draft_id}"
+            )
+
+    async def update_captain_heartbeat(self):
+        """Update the captain's heartbeat timestamp."""
+        from app.tasks.herodraft_tick import get_redis_client
+
+        r = get_redis_client()
+        heartbeat_key = self.CAPTAIN_HEARTBEAT_KEY.format(
+            draft_id=self.draft_id, user_id=self.user.id
+        )
+        # Store current timestamp with expiry
+        r.set(heartbeat_key, str(time.time()), ex=30)
+
+    async def herodraft_kicked(self, event):
+        """Handle being kicked by a newer connection."""
+        reason = event.get("reason", "unknown")
+        log.info(f"Captain {self.user.id} kicked from draft {self.draft_id}: {reason}")
+        await self.send(
+            text_data=json.dumps(
+                {
+                    "type": "herodraft_kicked",
+                    "reason": reason,
+                }
+            )
+        )
+        await self.close(code=4000)  # Custom close code for "kicked"
+
     async def receive(self, text_data):
-        # Read-only consumer - ignore incoming messages
-        pass
+        """Handle incoming WebSocket messages from clients."""
+        if not self._is_captain:
+            return  # Only process messages from captains
+
+        try:
+            data = json.loads(text_data)
+            msg_type = data.get("type")
+
+            if msg_type == "heartbeat":
+                await self.update_captain_heartbeat()
+        except json.JSONDecodeError:
+            pass  # Ignore malformed messages
 
     async def herodraft_event(self, event):
         """Handle herodraft.event messages from channel layer."""
@@ -375,6 +504,7 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
 
                     # Handle pause/resume on disconnect - only during DRAFTING phase
                     # (when timers are running and picks matter)
+                    # Ignore disconnects during RESUMING to prevent infinite time exploit
                     if not is_connected and draft.state == HeroDraftState.DRAFTING:
                         draft.state = HeroDraftState.PAUSED
                         draft.paused_at = timezone.now()
@@ -397,13 +527,6 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                             draft_id=draft_id, is_connected=False
                         ).exists()
                         if all_connected:
-                            # Broadcast countdown before changing state
-                            broadcast_herodraft_state(
-                                draft,
-                                "resume_countdown",
-                                metadata={"countdown_seconds": 3},
-                            )
-
                             # Calculate pause duration and adjust active round timing
                             pause_duration = None
                             if draft.paused_at:
@@ -423,19 +546,23 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                                         f"started_at by {total_adjustment.total_seconds():.2f}s (includes 3s countdown)"
                                     )
 
-                            draft.state = HeroDraftState.DRAFTING
+                            # Enter RESUMING state with 3-second countdown
+                            # This prevents infinite time exploit by blocking pauses during countdown
+                            draft.state = HeroDraftState.RESUMING
+                            draft.resuming_until = timezone.now() + timedelta(seconds=3)
                             draft.paused_at = None
                             draft.save()
                             HeroDraftEvent.objects.create(
                                 draft=draft,
-                                event_type="draft_resumed",
-                                metadata={},
+                                event_type="resume_countdown",
+                                metadata={"countdown_seconds": 3},
                             )
                             log.info(
-                                f"HeroDraft {draft_id} resumed: all captains connected"
+                                f"HeroDraft {draft_id} entering RESUMING state (3s countdown)"
                             )
-                            broadcast_event_type = "draft_resumed"
+                            broadcast_event_type = "resume_countdown"
                             should_broadcast = True
+                            # Start tick broadcaster to handle RESUMING → DRAFTING transition
                             should_restart_tick_broadcaster = True
                         else:
                             # Still waiting for other captain - broadcast connection status

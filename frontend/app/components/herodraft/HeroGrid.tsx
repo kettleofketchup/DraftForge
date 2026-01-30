@@ -149,7 +149,10 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
                 {ATTRIBUTE_LABELS[attr]}
               </h3>
               <div
-                className="flex flex-wrap content-start gap-0.5"
+                className="grid gap-0.5"
+                style={{
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(1rem, 1fr))',
+                }}
                 data-testid={`herodraft-attr-grid-${attr}`}
               >
                 {heroesForAttr.map((hero) => {
@@ -178,7 +181,7 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
                           }}
                           disabled={disabled || !available}
                           className={cn(
-                            'size-4 sm:size-5 md:size-6 lg:size-7 xl:size-8 rounded-sm border-0 bg-transparent',
+                            'aspect-square w-full max-w-10 rounded-sm border-0 bg-transparent',
                             'hover:ring-1 hover:ring-white/50 hover:scale-110 hover:z-10 transition-transform',
                             isSelected && 'ring-2 ring-yellow-400 scale-110 z-10',
                             (!available || (!matches && searchQuery)) && 'opacity-30 grayscale',

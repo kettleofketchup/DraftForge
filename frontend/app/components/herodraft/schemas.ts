@@ -40,7 +40,7 @@ export const HeroDraftSchema = z.object({
   id: z.number(),
   game: z.number(),
   tournament_id: z.number().nullable().optional(), // Tournament for "Return to Bracket" navigation
-  state: z.enum(["waiting_for_captains", "rolling", "choosing", "drafting", "paused", "completed", "abandoned"]),
+  state: z.enum(["waiting_for_captains", "rolling", "choosing", "drafting", "paused", "resuming", "completed", "abandoned"]),
   roll_winner: DraftTeamSchema.nullable(), // Backend returns full DraftTeam object
   draft_teams: z.array(DraftTeamSchema),
   rounds: z.array(HeroDraftRoundSchema),
@@ -50,17 +50,22 @@ export const HeroDraftSchema = z.object({
 });
 
 // WebSocket message schemas for runtime validation
+// Tick message fields vary by state:
+// - DRAFTING: has current_round, active_team_id, grace_time_remaining_ms, team reserves
+// - RESUMING: has countdown_remaining_ms only
 export const HeroDraftTickSchema = z.object({
   type: z.literal("herodraft_tick"),
-  current_round: z.number(),
-  active_team_id: z.number().nullable(),
-  grace_time_remaining_ms: z.number(),
-  // Team IDs for matching reserve times to correct teams
-  team_a_id: z.number().nullable(),
-  team_a_reserve_ms: z.number(),
-  team_b_id: z.number().nullable(),
-  team_b_reserve_ms: z.number(),
   draft_state: z.string(),
+  // DRAFTING-specific fields (optional when RESUMING)
+  current_round: z.number().optional(),
+  active_team_id: z.number().nullable().optional(),
+  grace_time_remaining_ms: z.number().optional(),
+  team_a_id: z.number().nullable().optional(),
+  team_a_reserve_ms: z.number().optional(),
+  team_b_id: z.number().nullable().optional(),
+  team_b_reserve_ms: z.number().optional(),
+  // RESUMING-specific field
+  countdown_remaining_ms: z.number().optional(),
 });
 
 // Metadata schema for hero_selected events
@@ -90,9 +95,15 @@ export const InitialStateMessageSchema = z.object({
   draft_state: HeroDraftSchema,
 });
 
+export const HeroDraftKickedSchema = z.object({
+  type: z.literal("herodraft_kicked"),
+  reason: z.string(),
+});
+
 // Discriminated union for all WebSocket message types
 export const HeroDraftWebSocketMessageSchema = z.discriminatedUnion("type", [
   InitialStateMessageSchema,
   HeroDraftEventSchema,
   HeroDraftTickSchema,
+  HeroDraftKickedSchema,
 ]);

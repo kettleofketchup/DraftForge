@@ -1421,6 +1421,7 @@ class HeroDraftState(models.TextChoices):
     CHOOSING = "choosing", "Choosing"
     DRAFTING = "drafting", "Drafting"
     PAUSED = "paused", "Paused"
+    RESUMING = "resuming", "Resuming"  # 3-second countdown before resuming
     COMPLETED = "completed", "Completed"
     ABANDONED = "abandoned", "Abandoned"
 
@@ -1446,6 +1447,7 @@ class HeroDraft(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     paused_at = models.DateTimeField(null=True, blank=True)
+    resuming_until = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
