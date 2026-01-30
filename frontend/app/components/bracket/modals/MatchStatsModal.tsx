@@ -8,13 +8,23 @@ import {
   DialogTitle,
   DialogDescription,
 } from '~/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '~/components/ui/alert-dialog';
 import { Button } from '~/components/ui/button';
 import { Badge } from '~/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { BarChart3, Link2, Loader2, Swords } from 'lucide-react';
+import { BarChart3, Link2, Loader2, RotateCcw, Swords } from 'lucide-react';
 import { useUserStore } from '~/store/userStore';
 import { useBracketStore } from '~/store/bracketStore';
-import { useCreateHeroDraft } from '~/hooks/useHeroDraft';
+import { useCreateHeroDraft, useResetHeroDraft } from '~/hooks/useHeroDraft';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import { LinkSteamMatchModal } from './LinkSteamMatchModal';
 import type { BracketMatch } from '../types';
@@ -37,8 +47,10 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
   const { setMatchWinner, advanceWinner, loadBracket } = useBracketStore();
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const createDraftMutation = useCreateHeroDraft();
+  const resetDraftMutation = useResetHeroDraft();
 
   if (!match) return null;
 
@@ -53,6 +65,19 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
   const handleLinkUpdated = () => {
     if (tournament?.pk) {
       loadBracket(tournament.pk);
+    }
+  };
+
+  const handleResetDraft = async () => {
+    if (!match.herodraft_id) return;
+
+    try {
+      await resetDraftMutation.mutateAsync(match.herodraft_id);
+      toast.success('Draft reset successfully');
+      setShowResetConfirm(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to reset draft: ${message}`);
     }
   };
 
@@ -172,20 +197,38 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
           {/* Hero Draft button - show for staff or if both teams are set */}
           {match.radiantTeam && match.direTeam && (
             <div className="border-t pt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleOpenDraft}
-                disabled={createDraftMutation.isPending}
-                data-testid="view-draft-btn"
-              >
-                {createDraftMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                ) : (
-                  <Swords className="w-4 h-4 mr-1" />
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenDraft}
+                  disabled={createDraftMutation.isPending}
+                  data-testid="view-draft-btn"
+                >
+                  {createDraftMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  ) : (
+                    <Swords className="w-4 h-4 mr-1" />
+                  )}
+                  {match.herodraft_id ? 'View Draft' : 'Start Draft'}
+                </Button>
+                {isStaff && match.herodraft_id && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowResetConfirm(true)}
+                    disabled={resetDraftMutation.isPending}
+                    data-testid="reset-draft-btn"
+                  >
+                    {resetDraftMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                    ) : (
+                      <RotateCcw className="w-4 h-4 mr-1" />
+                    )}
+                    Restart Draft
+                  </Button>
                 )}
-                {match.herodraft_id ? 'View Draft' : 'Start Draft'}
-              </Button>
+              </div>
             </div>
           )}
 
@@ -242,6 +285,28 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
           game={match}
           onLinkUpdated={handleLinkUpdated}
         />
+
+        {/* Reset Draft Confirmation Dialog */}
+        <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reset Hero Draft?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will reset the draft to its initial state. All picks, bans, and roll results
+                will be cleared. Both captains will need to ready up again.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleResetDraft}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Reset Draft
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );

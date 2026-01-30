@@ -51,15 +51,24 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
     return [...draft.rounds].sort((a, b) => a.round_number - b.round_number);
   }, [draft.rounds]);
 
+  // Find the active round (first round that is 'active' or 'planned', not 'completed')
+  // This ensures we highlight the NEXT pick, not a completed one
+  const activeRoundNumber = useMemo(() => {
+    const activeRound = sortedRounds.find(
+      (r) => r.state === 'active' || r.state === 'planned'
+    );
+    return activeRound?.round_number ?? null;
+  }, [sortedRounds]);
+
   // Autoscroll to active round when it changes
   useEffect(() => {
-    if (currentRound !== null && activeRoundRef.current) {
+    if (activeRoundNumber !== null && activeRoundRef.current) {
       activeRoundRef.current.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
       });
     }
-  }, [currentRound]);
+  }, [activeRoundNumber]);
 
   return (
     <div className="h-full flex flex-col bg-black/90 overflow-hidden" data-testid="herodraft-panel">
@@ -88,7 +97,8 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
             const isRadiant = team?.is_radiant;
             const heroImg = getHeroImage(round.hero_id);
             const heroName = getHeroName(round.hero_id);
-            const isActive = round.round_number === currentRound;
+            // Highlight the first non-completed round (active or planned)
+            const isActive = round.round_number === activeRoundNumber;
             const isPick = round.action_type === 'pick';
             const isBan = round.action_type === 'ban';
             const isCompleted = round.state === 'completed';

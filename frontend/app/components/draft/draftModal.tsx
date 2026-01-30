@@ -499,20 +499,35 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
             {/* Mobile Footer Drawer */}
             <div className="md:hidden">
               <Collapsible open={footerDrawerOpen} onOpenChange={setFooterDrawerOpen}>
-                <div className="flex items-center justify-between p-2">
-                  {choiceButtons()}
+                {/* Top row: Moderation (always visible) + Navigation + Actions toggle */}
+                <div className="flex items-center justify-between p-2 gap-2">
+                  {/* Moderation actions - always visible on left (staff only) */}
+                  {isStaff() ? (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <DraftModerationDropdown onOpenDraftStyleModal={() => setDraftStyleOpen(true)} />
+                      <UndoPickButton />
+                    </div>
+                  ) : (
+                    /* Spacer for non-staff */
+                    <div className="w-0" />
+                  )}
+                  {/* Navigation buttons in center */}
+                  <div className="flex-1 flex justify-center">
+                    {choiceButtons()}
+                  </div>
+                  {/* Actions dropdown toggle on right */}
                   <CollapsibleTrigger asChild>
-                    <Button variant="outline" size="sm" className="ml-2">
+                    <Button variant="outline" size="sm" className="shrink-0">
                       <ChevronUp className={cn(
                         "h-4 w-4 transition-transform",
                         footerDrawerOpen && "rotate-180"
                       )} />
-                      <span className="ml-1">Actions</span>
+                      <span className="ml-1">More</span>
                     </Button>
                   </CollapsibleTrigger>
                 </div>
-                <CollapsibleContent className="border-t border-gray-800 bg-gray-800/50 p-4 space-y-3">
-                  {/* Actions visible to everyone */}
+                {/* Expandable actions drawer - non-moderation actions only */}
+                <CollapsibleContent className="border-t border-gray-800 bg-gray-800/50 p-4">
                   <div className="flex flex-wrap gap-2 justify-center">
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -530,13 +545,6 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
                     />
                     <ShareDraftButton />
                   </div>
-                  {/* Moderation actions - only visible to staff */}
-                  {isStaff() && (
-                    <div className="flex flex-wrap gap-2 justify-center">
-                      <DraftModerationDropdown onOpenDraftStyleModal={() => setDraftStyleOpen(true)} />
-                      <UndoPickButton />
-                    </div>
-                  )}
                 </CollapsibleContent>
               </Collapsible>
             </div>

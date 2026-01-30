@@ -78,3 +78,8 @@ export async function abandonDraft(draftId: number): Promise<HeroDraft> {
   const response = await api.post(`/herodraft/${draftId}/abandon/`);
   return response.data;
 }
+
+export async function resetDraft(draftId: number): Promise<HeroDraft> {
+  const response = await api.post(`/herodraft/${draftId}/reset/`);
+  return response.data;
+}

@@ -87,12 +87,13 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         from app.serializers import DraftSerializerForTournament
 
         try:
+            # Note: users_remaining is a property, not a relation, so it can't be prefetched
             draft = Draft.objects.prefetch_related(
                 "draft_rounds__captain",
                 "draft_rounds__choice",
-                "users_remaining",
                 "tournament__teams__captain",
                 "tournament__teams__members",
+                "tournament__users",  # Prefetch users for users_remaining calculation
             ).get(pk=draft_id)
             return DraftSerializerForTournament(draft).data
         except Draft.DoesNotExist:

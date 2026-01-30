@@ -19,6 +19,7 @@ from app.functions.herodraft_views import (
     get_herodraft,
     list_available_heroes,
     list_events,
+    reset_draft,
     set_ready,
 )
 from app.functions.tournament import (
@@ -181,6 +182,11 @@ urlpatterns = [
         "api/herodraft/<int:draft_pk>/abandon/",
         abandon_draft,
         name="herodraft_abandon",
+    ),
+    path(
+        "api/herodraft/<int:draft_pk>/reset/",
+        reset_draft,
+        name="herodraft_reset",
     ),
     # Admin Team Management - Organization
     path(
