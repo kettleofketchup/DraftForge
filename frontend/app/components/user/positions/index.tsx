@@ -413,8 +413,8 @@ export const RolePositions: React.FC<RolePositionsProps> = ({ user, compact, dis
 
   return (
     <div className={cn(
-      "flex justify-start",
-      forceCompact ? "flex-row gap-2" : isResponsive ? "flex-row gap-1 sm:gap-1" : "flex-col md:flex-row gap-1"
+      "flex flex-wrap justify-start",
+      forceCompact ? "gap-1" : isResponsive ? "gap-1 sm:gap-1" : "flex-col md:flex-row gap-1"
     )}>
       {/* Render active positions first (sorted by preference) */}
       {activePositions.map(({ component: Component, key }) => (
