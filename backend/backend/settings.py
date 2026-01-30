@@ -398,6 +398,7 @@ CORS_ORIGIN_WHITELIST = [
 
 CSRF_TRUSTED_ORIGINS = [
     "https://localhost",
+    "https://nginx",  # Docker nginx hostname used by Playwright tests
     "https://dota.kettle.sh",
     "http://dota.kettle.sh",
     "https://dota.kettle.sh",
