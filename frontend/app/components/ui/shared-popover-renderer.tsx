@@ -90,10 +90,10 @@ const PlayerPopoverContent: React.FC<{
           )}
         </div>
       </div>
-      {/* Positions: compact mode with flex-wrap for responsive containment */}
+      {/* Positions with flex-wrap for responsive containment */}
       <div className="w-full overflow-hidden">
         <div className="flex flex-wrap gap-1">
-          <RolePositions user={player} compact disableTooltips />
+          <RolePositions user={player} disableTooltips />
         </div>
       </div>
       <p className="text-xs text-foreground/60 text-center">
@@ -204,8 +204,8 @@ export const SharedPopoverRenderer: React.FC = () => {
   useEffect(() => {
     if (state.anchorEl && state.isOpen) {
       const rect = state.anchorEl.getBoundingClientRect();
-      const popoverWidth = state.type === 'team' ? 640 : 320;
-      const popoverHeight = state.type === 'team' ? 400 : 240;
+      const popoverWidth = state.type === 'team' ? 640 : 400;
+      const popoverHeight = state.type === 'team' ? 400 : 280;
 
       let top = rect.bottom + 4;
       let left = rect.left + rect.width / 2 - popoverWidth / 2;
@@ -271,7 +271,7 @@ export const SharedPopoverRenderer: React.FC = () => {
       <div
         ref={popoverRef}
         className={`fixed z-50 rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 ${
-          state.type === 'team' ? 'w-[640px] p-0' : 'w-80 p-4'
+          state.type === 'team' ? 'w-[640px] p-0' : 'w-[400px] p-4'
         }`}
         style={{ top: position.top, left: position.left }}
         onClick={handleClick}
