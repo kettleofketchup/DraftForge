@@ -70,17 +70,18 @@ const PlayerPopoverContent: React.FC<{
 
   return (
     <div
-      className="flex flex-col gap-3 overflow-hidden"
+      className="flex flex-col gap-3 w-full overflow-hidden"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="flex items-center gap-4">
+      {/* Header: Avatar + Name/MMR */}
+      <div className="flex items-center gap-4 min-w-0">
         <img
           src={AvatarUrl(player)}
           alt={`${playerName}'s avatar`}
           className="w-16 h-16 rounded-full shrink-0"
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 overflow-hidden">
           <p className="font-semibold text-foreground text-lg truncate">{playerName}</p>
           {player.mmr && (
             <p className="text-sm text-foreground/70">
@@ -89,8 +90,11 @@ const PlayerPopoverContent: React.FC<{
           )}
         </div>
       </div>
-      <div className="flex flex-wrap gap-1">
-        <RolePositions user={player} />
+      {/* Positions: compact mode with flex-wrap for responsive containment */}
+      <div className="w-full overflow-hidden">
+        <div className="flex flex-wrap gap-1">
+          <RolePositions user={player} compact disableTooltips />
+        </div>
       </div>
       <p className="text-xs text-foreground/60 text-center">
         Click for full profile
