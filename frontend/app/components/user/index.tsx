@@ -14,6 +14,7 @@ import type {
 } from './types';
 import { User } from './user';
 import { UserCard } from './userCard';
+import { UserStrip } from './UserStrip';
 export {
   ActiveDraftSchema,
   PositionEnum,
@@ -21,6 +22,7 @@ export {
   User,
   UserCard,
   UserSchema,
+  UserStrip,
 };
 export type {
   ActiveDraftType,
