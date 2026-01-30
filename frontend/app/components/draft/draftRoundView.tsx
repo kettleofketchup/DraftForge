@@ -539,40 +539,35 @@ export const DraftRoundView: React.FC = () => {
                 const { uniquePossible, favoriteCount, positionHasWarning } = teamPositionCoverage;
                 const hasWarning = positionHasWarning(pos);
 
-                // Position icon and color mapping
-                const positionConfig: Record<PositionKey, { icon: React.FC<{className?: string}>, bgColor: string, borderColor: string }> = {
-                  carry: { icon: CarrySVG, bgColor: 'bg-rose-900/70', borderColor: 'border-rose-500/50' },
-                  mid: { icon: MidSVG, bgColor: 'bg-cyan-900/70', borderColor: 'border-cyan-500/50' },
-                  offlane: { icon: OfflaneSVG, bgColor: 'bg-emerald-900/70', borderColor: 'border-emerald-500/50' },
-                  soft_support: { icon: SoftSupportSVG, bgColor: 'bg-violet-900/70', borderColor: 'border-violet-500/50' },
-                  hard_support: { icon: HardSupportSVG, bgColor: 'bg-indigo-900/70', borderColor: 'border-indigo-500/50' },
+                // Position icon mapping
+                const positionIcons: Record<PositionKey, React.FC<{className?: string}>> = {
+                  carry: CarrySVG,
+                  mid: MidSVG,
+                  offlane: OfflaneSVG,
+                  soft_support: SoftSupportSVG,
+                  hard_support: HardSupportSVG,
                 };
 
-                const config = positionConfig[pos];
-                const IconComponent = config.icon;
+                const IconComponent = positionIcons[pos];
 
-                // Color based on coverage quality
-                // Red: no one can play (bestRank = 6) or only as worst choice (5) or has conflict warning
-                // Yellow: only available as 3rd/4th choice
-                // Green: someone has it as favorite AND no conflicts (unique possible)
-                // Default position color: covered adequately
+                // Color based on coverage quality - only green/orange/red
+                // Red: no one can play (bestRank = 6) or only as worst choice (5)
+                // Orange: has conflict warning OR only available as 3rd/4th choice
+                // Green: someone has it as favorite AND no conflicts (unique possible), OR good coverage (1-2)
                 let colorClass: string;
-                let textColorClass: string;
-                if (bestRank >= 5 || (bestRank === 6)) {
+                let badgeColorClass: string;
+                if (bestRank >= 5 || bestRank === 6) {
+                  // Red: no coverage or very poor
                   colorClass = 'bg-red-900/60 border-red-500/70';
-                  textColorClass = 'text-red-400';
-                } else if (hasWarning) {
-                  colorClass = 'bg-yellow-900/60 border-yellow-500/70';
-                  textColorClass = 'text-yellow-400';
-                } else if (bestRank >= 3) {
-                  colorClass = 'bg-yellow-900/50 border-yellow-500/50';
-                  textColorClass = 'text-yellow-400';
-                } else if (hasFavorite && uniquePossible) {
-                  colorClass = 'bg-green-900/50 border-green-500/50';
-                  textColorClass = 'text-green-400';
+                  badgeColorClass = 'bg-red-600 text-white';
+                } else if (hasWarning || bestRank >= 3) {
+                  // Orange: conflicts or mediocre coverage
+                  colorClass = 'bg-orange-900/50 border-orange-500/60';
+                  badgeColorClass = 'bg-orange-600 text-white';
                 } else {
-                  colorClass = cn(config.bgColor, config.borderColor);
-                  textColorClass = 'text-white';
+                  // Green: good coverage (1-2) with no conflicts
+                  colorClass = 'bg-green-900/50 border-green-500/50';
+                  badgeColorClass = 'bg-green-600 text-white';
                 }
 
                 return (
@@ -583,11 +578,7 @@ export const DraftRoundView: React.FC = () => {
                         {bestRank <= 5 && (
                           <span className={cn(
                             'absolute -top-1.5 -left-1.5 h-4 w-4 rounded-full text-[10px] font-bold flex items-center justify-center z-10',
-                            bestRank >= 5 ? 'bg-red-600 text-white' :
-                            hasWarning ? 'bg-yellow-600 text-black' :
-                            bestRank >= 3 ? 'bg-yellow-600 text-black' :
-                            hasFavorite && uniquePossible ? 'bg-green-600 text-white' :
-                            'bg-gray-600 text-white'
+                            badgeColorClass
                           )}>
                             {bestRank}
                           </span>
