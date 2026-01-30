@@ -89,7 +89,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
       open={open}
       onOpenChange={onOpenChange}
       title="Player Profile"
-      size="md"
+      size="lg"
       showClose={false}
     >
       {/* User Card Section */}
@@ -148,8 +148,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
             </div>
           )}
           {/* Positions with proper flex containment */}
-          <div className="w-full overflow-hidden">
-            <RolePositions user={displayPlayer} compact />
+          <div className="w-full">
+            <RolePositions user={displayPlayer} />
           </div>
           {displayPlayer.steamid && (
             <div>
