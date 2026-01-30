@@ -339,8 +339,8 @@ button:focus-visible {
   /* Card: slate-800 (elevated surface) */
   --card: oklch(0.279 0.041 260);
   --card-foreground: oklch(0.968 0.007 248);
-  /* Popover: slate-700 */
-  --popover: oklch(0.32 0.042 260);
+  /* Popover: dark neutral grey */
+  --popover: oklch(0.22 0.01 260);
   --popover-foreground: oklch(0.968 0.007 248);
   /* Primary: violet-400 (brighter for contrast) */
   --primary: oklch(0.702 0.183 293);
