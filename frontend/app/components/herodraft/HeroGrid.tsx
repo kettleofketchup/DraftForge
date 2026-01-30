@@ -15,6 +15,10 @@ interface HeroGridProps {
   onHeroClick: (heroId: number) => void;
   disabled: boolean;
   showActionButton: boolean;
+  /** Current action type (ban or pick) for visual feedback */
+  currentAction?: 'ban' | 'pick';
+  /** Whether it's the current user's turn */
+  isMyTurn?: boolean;
 }
 
 type HeroAttribute = 'str' | 'agi' | 'int' | 'all';
@@ -34,7 +38,7 @@ const ATTRIBUTE_COLORS: Record<HeroAttribute, string> = {
   all: 'bg-yellow-900/40',
 };
 
-export function HeroGrid({ onHeroClick, disabled, showActionButton }: HeroGridProps) {
+export function HeroGrid({ onHeroClick, disabled, showActionButton, currentAction, isMyTurn }: HeroGridProps) {
   // Use selectors to prevent re-renders when unrelated state changes
   const searchQuery = useHeroDraftStore((state) => state.searchQuery);
   const setSearchQuery = useHeroDraftStore((state) => state.setSearchQuery);
@@ -70,8 +74,15 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton }: HeroGridPr
   const matchesSearch = (heroId: number) =>
     filteredHeroes.some((h) => h.id === heroId);
 
+  // Determine overlay color based on current action when it's user's turn
+  const actionOverlay = isMyTurn && currentAction
+    ? currentAction === 'ban'
+      ? 'bg-red-900/40'  // Dark red tint for bans
+      : 'bg-green-900/40'  // Dark green tint for picks
+    : '';
+
   return (
-    <div className="flex flex-col h-full overflow-hidden" data-testid="herodraft-hero-grid">
+    <div className={cn("flex flex-col h-full overflow-hidden relative", actionOverlay)} data-testid="herodraft-hero-grid">
       <div className="p-2 shrink-0" data-testid="herodraft-search-container">
         <Input
           type="text"

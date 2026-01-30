@@ -1345,7 +1345,14 @@ class DraftRound(models.Model):
             raise ValueError("User is not available for drafting.")
 
     def __str__(self):
-        return f"{self.picker.username} picked {self.choice.username} in {self.tournament.name}"
+        captain_name = self.captain.username if self.captain else "unassigned"
+        choice_name = self.choice.username if self.choice else "pending"
+        tournament_name = (
+            self.draft.tournament.name
+            if self.draft and self.draft.tournament
+            else "unknown"
+        )
+        return f"{captain_name} picked {choice_name} in {tournament_name}"
 
 
 class Joke(models.Model):

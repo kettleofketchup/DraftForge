@@ -2,6 +2,49 @@
 import { AvatarUrl, DisplayName } from "~/components/user/avatar";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import type { UserType } from "~/index";
+import type { PlayerPickedPayload } from "~/types/draftEvent";
+
+/**
+ * Truncate a string to maxLength characters with ellipsis
+ */
+function truncateName(name: string, maxLength: number = 12): string {
+  if (name.length <= maxLength) return name;
+  return name.slice(0, maxLength - 1) + '…';
+}
+
+interface PlayerPickedToastProps {
+  payload: PlayerPickedPayload;
+}
+
+/**
+ * Toast content for player_picked events from WebSocket
+ * Format: [Captain Avatar] Captain Name picked [Player Avatar] Player Name (Pick N)
+ */
+export function PlayerPickedToast({ payload }: PlayerPickedToastProps) {
+  const captainInitial = payload.captain_name?.charAt(0).toUpperCase() || '?';
+  const pickedInitial = payload.picked_name?.charAt(0).toUpperCase() || '?';
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <Avatar className="w-5 h-5 shrink-0">
+        <AvatarImage src={payload.captain_avatar_url || undefined} alt="" />
+        <AvatarFallback className="text-[10px]">{captainInitial}</AvatarFallback>
+      </Avatar>
+      <span className="font-medium truncate max-w-[80px]" title={payload.captain_name}>
+        {truncateName(payload.captain_name)}
+      </span>
+      <span className="text-green-500 font-semibold">picked</span>
+      <Avatar className="w-5 h-5 shrink-0">
+        <AvatarImage src={payload.picked_avatar_url || undefined} alt="" />
+        <AvatarFallback className="text-[10px]">{pickedInitial}</AvatarFallback>
+      </Avatar>
+      <span className="font-medium truncate max-w-[80px]" title={payload.picked_name}>
+        {truncateName(payload.picked_name)}
+      </span>
+      <span className="text-muted-foreground text-sm">(Pick {payload.pick_number})</span>
+    </div>
+  );
+}
 
 interface PlayerPickToastProps {
   captain: UserType | null | undefined;

@@ -307,13 +307,22 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     ? draft.rounds[draft.current_round]
     : null;
 
-  const isMyTurn = currentRoundData
+  // Check if it's my team's turn (either as captain or team member)
+  const currentPickingTeam = currentRoundData
     ? draft?.draft_teams.find((t) => t.id === currentRoundData.draft_team)
-        ?.captain?.pk === currentUser?.pk
+    : null;
+  const isMyTurn = currentPickingTeam
+    ? currentPickingTeam.captain?.pk === currentUser?.pk ||
+      currentPickingTeam.members?.some((m) => m.pk === currentUser?.pk)
     : false;
 
   const isCaptain = draft?.draft_teams.some((t) => t.captain?.pk === currentUser?.pk);
-  const myTeam = draft?.draft_teams.find((t) => t.captain?.pk === currentUser?.pk);
+  // Find my team - either as captain or as a member
+  const myTeam = draft?.draft_teams.find((t) =>
+    t.captain?.pk === currentUser?.pk ||
+    t.members?.some((m) => m.pk === currentUser?.pk)
+  );
+  const isOnTeam = !!myTeam;
   // roll_winner is already the full DraftTeam object from the backend
   const rollWinnerTeam = draft?.roll_winner ?? null;
 
@@ -505,6 +514,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                       onHeroClick={handleHeroClick}
                       disabled={!isMyTurn || draft.state !== "drafting"}
                       showActionButton={isCaptain ?? false}
+                      currentAction={currentAction}
+                      isMyTurn={isMyTurn}
                     />
                   </div>
 

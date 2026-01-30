@@ -58,6 +58,9 @@ export const TournamentDetailPage: React.FC = () => {
       const fetchTournament = async () => {
         setLoading(true);
         setError(null);
+        // Clear stale tournament data immediately when pk changes
+        // This prevents showing old tournament data while loading
+        setTournament(null as unknown as typeof tournament);
         try {
           const response = await axios.get(`/tournaments/${pk}/`);
           setTournament(response.data);
@@ -72,7 +75,7 @@ export const TournamentDetailPage: React.FC = () => {
       };
       fetchTournament();
     }
-  }, [pk]);
+  }, [pk, setTournament]);
 
   if (loading) {
     return (

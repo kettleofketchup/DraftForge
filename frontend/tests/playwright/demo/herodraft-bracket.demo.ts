@@ -659,14 +659,15 @@ test.describe('HeroDraft with Bracket Demo', () => {
 
       const currentPicker = await getCurrentPicker(round);
       const action = await currentPicker.draftPage.getCurrentAction();
+      // Get current round BEFORE picking (after pick, active moves to next round)
+      const currentRound = await currentPicker.draftPage.getCurrentRound();
 
       console.log(`${currentPicker.username} will ${action}`);
 
       await currentPicker.draftPage.pickHero(heroIds[heroIndex]);
       heroIndex++;
 
-      // Wait for round completion
-      const currentRound = await currentPicker.draftPage.getCurrentRound();
+      // Wait for round completion (using round captured before pick)
       const roundCompletedA = captainA.page.locator(
         `[data-testid="herodraft-round-${currentRound}"][data-round-state="completed"]`
       );
