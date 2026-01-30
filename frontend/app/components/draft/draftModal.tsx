@@ -19,7 +19,6 @@ import {
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
@@ -364,34 +363,39 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     log.debug('Current round after update:', curDraftRound);
   };
 
+  // Track if we've initialized for this draft to avoid duplicate init in Strict Mode
+  const initializedDraftPk = useRef<number | null>(null);
+
   // Initialize draft data when tournament.draft becomes available
   useEffect(() => {
     // Skip initialization if tournament or draft not loaded yet
-    if (!tournament?.pk) {
+    if (!tournament?.pk || !tournament?.draft?.pk) {
       return;
     }
 
-    log.debug('Initializing draft data from tournament:', tournament?.draft?.pk);
+    // Skip if already initialized for this draft
+    if (initializedDraftPk.current === tournament.draft.pk) {
+      return;
+    }
 
-    if (tournament?.draft) {
-      setDraft(tournament.draft);
+    log.debug('Initializing draft data from tournament:', tournament.draft.pk);
+    initializedDraftPk.current = tournament.draft.pk;
 
-      // Only set current round if draft_rounds exist and has at least one round
-      if (
-        tournament.draft.draft_rounds &&
-        tournament.draft.draft_rounds.length > 0
-      ) {
-        if (draftIndex <= 0) {
-          setDraftIndex(0);
-        }
-        setCurDraftRound(tournament.draft.draft_rounds[0]);
-        log.debug('Set initial draft round:', tournament.draft.draft_rounds[0]);
-      } else {
-        log.debug('No draft rounds available yet');
-        setCurDraftRound({} as DraftRoundType);
+    setDraft(tournament.draft);
+
+    // Only set current round if draft_rounds exist and has at least one round
+    if (
+      tournament.draft.draft_rounds &&
+      tournament.draft.draft_rounds.length > 0
+    ) {
+      if (draftIndex <= 0) {
+        setDraftIndex(0);
       }
+      setCurDraftRound(tournament.draft.draft_rounds[0]);
+      log.debug('Set initial draft round:', tournament.draft.draft_rounds[0]);
     } else {
-      log.debug('No draft data in tournament yet');
+      log.debug('No draft rounds available yet');
+      setCurDraftRound({} as DraftRoundType);
     }
   }, [tournament?.pk, tournament?.draft?.pk]);
 
@@ -496,17 +500,15 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
                 <CollapsibleContent className="border-t border-gray-800 bg-gray-800/50 p-4 space-y-3">
                   {/* Actions visible to everyone */}
                   <div className="flex flex-wrap gap-2 justify-center">
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <SecondaryButton color="lime" onClick={() => setDraftStyleOpen(true)}>
-                            <BarChart3 className="h-4 w-4 mr-2" />
-                            Stats
-                          </SecondaryButton>
-                        </TooltipTrigger>
-                        <TooltipContent>View Draft Balance Stats</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SecondaryButton color="lime" onClick={() => setDraftStyleOpen(true)}>
+                          <BarChart3 className="h-4 w-4 mr-2" />
+                          Stats
+                        </SecondaryButton>
+                      </TooltipTrigger>
+                      <TooltipContent>View Draft Balance Stats</TooltipContent>
+                    </Tooltip>
                     <DraftHistoryButton
                       events={draftEvents}
                       hasNewEvent={hasNewEvent}
@@ -532,17 +534,15 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
                 <DraftModerationDropdown onOpenDraftStyleModal={() => setDraftStyleOpen(true)} />
                 <UndoPickButton />
                 {/* Balance stats - visible to everyone */}
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <SecondaryButton color="lime" onClick={() => setDraftStyleOpen(true)}>
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        Stats
-                      </SecondaryButton>
-                    </TooltipTrigger>
-                    <TooltipContent>View Draft Balance Stats</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <SecondaryButton color="lime" onClick={() => setDraftStyleOpen(true)}>
+                      <BarChart3 className="h-4 w-4 mr-2" />
+                      Stats
+                    </SecondaryButton>
+                  </TooltipTrigger>
+                  <TooltipContent>View Draft Balance Stats</TooltipContent>
+                </Tooltip>
               </div>
               {choiceButtons()}
               <div className="flex items-center gap-2">
