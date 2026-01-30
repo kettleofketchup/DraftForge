@@ -90,8 +90,8 @@ const PlayerPopoverContent: React.FC<{
           )}
         </div>
       </div>
-      {/* Positions with flex-wrap for responsive containment */}
-      <div className="w-full overflow-hidden">
+      {/* Positions - pt-1 pl-1 accommodates absolute positioned rank badges */}
+      <div className="w-full pt-1 pl-1">
         <div className="flex flex-wrap gap-1">
           <RolePositions user={player} disableTooltips />
         </div>
