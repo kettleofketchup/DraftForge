@@ -1,5 +1,5 @@
 import { Zap } from 'lucide-react';
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { DisplayName, type TeamType, type UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
@@ -8,49 +8,53 @@ import { useUserStore } from '~/store/userStore';
 const log = getLogger('DoublePickThreshold');
 const MAX_TEAM_SIZE = 5;
 
-export const DoublePickThreshold: React.FC = () => {
-  const tournament = useUserStore((state) => state.tournament);
-  const draft = useUserStore((state) => state.draft);
-  const curDraftRound = useUserStore((state) => state.curDraftRound);
-  const currentUser = useUserStore((state) => state.currentUser);
+// Granular selectors to minimize re-renders
+const selectDraftStyle = (state: ReturnType<typeof useUserStore.getState>) => state.draft?.draft_style;
+const selectLatestRoundPk = (state: ReturnType<typeof useUserStore.getState>) => state.draft?.latest_round;
+const selectDraftRounds = (state: ReturnType<typeof useUserStore.getState>) => state.draft?.draft_rounds;
+const selectUsersRemaining = (state: ReturnType<typeof useUserStore.getState>) => state.draft?.users_remaining;
+const selectTeams = (state: ReturnType<typeof useUserStore.getState>) => state.tournament?.teams;
+const selectCurDraftRoundPk = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.pk;
+const selectCurrentUserPk = (state: ReturnType<typeof useUserStore.getState>) => state.currentUser?.pk;
+
+export const DoublePickThreshold: React.FC = memo(() => {
+  // Use granular selectors - component only re-renders when these specific values change
+  const draftStyle = useUserStore(selectDraftStyle);
+  const latestRoundPk = useUserStore(selectLatestRoundPk);
+  const draftRounds = useUserStore(selectDraftRounds);
+  const usersRemaining = useUserStore(selectUsersRemaining);
+  const teams = useUserStore(selectTeams);
+  const curDraftRoundPk = useUserStore(selectCurDraftRoundPk);
+  const currentUserPk = useUserStore(selectCurrentUserPk);
   const isStaff = useUserStore((state) => state.isStaff);
 
   // Derive the actual latest round from draft data (single source of truth)
-  // This ensures we always use fresh data even if curDraftRound is stale
   const latestRound = useMemo(() => {
-    if (!draft?.draft_rounds || !draft?.latest_round) return null;
-    return draft.draft_rounds.find((r) => r.pk === draft.latest_round) || null;
-  }, [draft?.draft_rounds, draft?.latest_round]);
+    if (!draftRounds || !latestRoundPk) return null;
+    return draftRounds.find((r) => r.pk === latestRoundPk) || null;
+  }, [draftRounds, latestRoundPk]);
 
-  if (draft?.draft_style !== 'shuffle') return null;
-
-  // Don't show if no latest round
+  // Early returns for non-shuffle or missing data
+  if (draftStyle !== 'shuffle') return null;
   if (!latestRound) return null;
-
-  // Don't show if a pick has already been made for the latest round
   if (latestRound.choice) return null;
-
-  // Only show when user is viewing the latest round
-  if (curDraftRound?.pk !== draft?.latest_round) return null;
+  if (curDraftRoundPk !== latestRoundPk) return null;
 
   // Check if this is already the 2nd pick of a double pick
-  // If the previous round was completed by the same captain, don't show indicator
   const currentPickNumber = latestRound.pick_number;
-  if (currentPickNumber && currentPickNumber > 1 && draft?.draft_rounds) {
-    const previousRound = draft.draft_rounds.find(
+  if (currentPickNumber && currentPickNumber > 1 && draftRounds) {
+    const previousRound = draftRounds.find(
       (r) => r.pick_number === currentPickNumber - 1
     );
     if (
       previousRound?.choice &&
       previousRound?.captain?.pk === latestRound.captain?.pk
     ) {
-      // This is the 2nd pick of a double pick, don't show the indicator
-      log.debug('Hiding double pick indicator - already on 2nd pick of double pick');
       return null;
     }
   }
 
-  const isCurrentPicker = latestRound.captain?.pk === currentUser?.pk;
+  const isCurrentPicker = latestRound.captain?.pk === currentUserPk;
   if (!isCurrentPicker && !isStaff()) return null;
 
   const getTeamMmr = (team: TeamType): number => {
@@ -67,54 +71,36 @@ export const DoublePickThreshold: React.FC = () => {
     return (team.members?.length || 0) >= MAX_TEAM_SIZE;
   };
 
-  const getCurrentTeam = (): TeamType | undefined => {
-    return tournament?.teams?.find(
-      (t) => t.captain?.pk === latestRound?.captain?.pk
-    );
-  };
+  const currentTeam = teams?.find(
+    (t) => t.captain?.pk === latestRound?.captain?.pk
+  );
 
-  const getThresholdTeam = (): { team: TeamType; mmr: number } | null => {
-    const teams = tournament?.teams || [];
-    const currentTeam = getCurrentTeam();
-    if (!currentTeam) return null;
-
-    // Only consider active (non-maxed) teams for threshold
-    const otherTeams = teams
-      .filter((t) => t.pk !== currentTeam.pk && !isTeamMaxed(t))
-      .map((t) => ({ team: t, mmr: getTeamMmr(t) }))
-      .sort((a, b) => a.mmr - b.mmr);
-
-    return otherTeams[0] || null;
-  };
-
-  const currentTeam = getCurrentTeam();
-  const threshold = getThresholdTeam();
-
-  if (!currentTeam || !threshold) return null;
-
-  // Don't show if current team is already maxed
+  if (!currentTeam) return null;
   if (isTeamMaxed(currentTeam)) return null;
 
-  // Don't show if current team only has 1 slot remaining (can't double pick)
   const currentTeamSize = currentTeam.members?.length || 0;
   if (currentTeamSize >= MAX_TEAM_SIZE - 1) return null;
+
+  // Find threshold team (lowest MMR among other active teams)
+  const otherActiveTeams = (teams || [])
+    .filter((t) => t.pk !== currentTeam.pk && !isTeamMaxed(t))
+    .map((t) => ({ team: t, mmr: getTeamMmr(t) }))
+    .sort((a, b) => a.mmr - b.mmr);
+
+  const threshold = otherActiveTeams[0];
+  if (!threshold) return null;
 
   const currentMmr = getTeamMmr(currentTeam);
   const buffer = threshold.mmr - currentMmr;
 
   // Check if any available player would result in staying under threshold
-  const availablePlayers = draft?.users_remaining || [];
-  const lowestAvailablePlayerMmr = availablePlayers.length > 0
-    ? Math.min(...availablePlayers.map((p: UserType) => p.mmr || 0))
+  const lowestAvailablePlayerMmr = usersRemaining && usersRemaining.length > 0
+    ? Math.min(...usersRemaining.map((p: UserType) => p.mmr || 0))
     : Infinity;
 
-  // Can only double pick if there's a player low enough to stay under threshold
   const canDoublePick = currentMmr < threshold.mmr && lowestAvailablePlayerMmr < buffer;
-
-  // Only show when double pick is actually possible with available players
   if (!canDoublePick) return null;
 
-  // Only log when we're actually showing the indicator
   log.debug('DoublePickThreshold showing', {
     currentTeamCaptain: currentTeam.captain?.username,
     currentMmr,
@@ -149,11 +135,13 @@ export const DoublePickThreshold: React.FC = () => {
               {currentMmr.toLocaleString()}
             </span>
             <span className="text-green-400 ml-2">
-              ({(threshold.mmr - currentMmr).toLocaleString()} buffer)
+              ({buffer.toLocaleString()} buffer)
             </span>
           </span>
         </div>
       </CardContent>
     </Card>
   );
-};
+});
+
+DoublePickThreshold.displayName = 'DoublePickThreshold';
