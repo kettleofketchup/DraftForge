@@ -8,7 +8,6 @@ import { Button } from '~/components/ui/button';
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { getLogger } from '~/lib/logger';
@@ -69,33 +68,31 @@ export const InitDraftButton: React.FC = () => {
 
   return (
     <>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <motion.div
-              initial={{ opacity: 0 }}
-              exit={{ opacity: 0 }}
-              whileInView={inViewAnimation}
-              whileHover={hoverAnimation}
-              whileFocus={focusAnimation}
-              className="flex place-self-start"
-              id="RestartDraftButtonMotion"
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <motion.div
+            initial={{ opacity: 0 }}
+            exit={{ opacity: 0 }}
+            whileInView={inViewAnimation}
+            whileHover={hoverAnimation}
+            whileFocus={focusAnimation}
+            className="flex place-self-start"
+            id="RestartDraftButtonMotion"
+          >
+            <Button
+              className="w-40 sm:w-20%"
+              variant="destructive"
+              onClick={() => setOpen(true)}
             >
-              <Button
-                className="w-40 sm:w-20%"
-                variant="destructive"
-                onClick={() => setOpen(true)}
-              >
-                <OctagonAlert className="mr-2" />
-                Restart Draft
-              </Button>
-            </motion.div>
-          </TooltipTrigger>
-          <TooltipContent className="bg-red-900 text-white">
-            <p>This will delete draft data and reset the draft choices.</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+              <OctagonAlert className="mr-2" />
+              Restart Draft
+            </Button>
+          </motion.div>
+        </TooltipTrigger>
+        <TooltipContent className="bg-red-900 text-white">
+          <p>This will delete draft data and reset the draft choices.</p>
+        </TooltipContent>
+      </Tooltip>
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
