@@ -973,12 +973,6 @@ class LeagueMatchSerializer(serializers.ModelSerializer):
         ]
 
 
-class HeroDraftEventSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = HeroDraftEvent
-        fields = ["id", "event_type", "draft_team", "metadata", "created_at"]
-
-
 class HeroDraftRoundSerializerFull(serializers.ModelSerializer):
     """Full serializer for HeroDraftRound with all fields."""
 
@@ -1029,6 +1023,16 @@ class DraftTeamSerializerFull(serializers.ModelSerializer):
             "is_ready",
             "is_connected",
         ]
+
+
+class HeroDraftEventSerializer(serializers.ModelSerializer):
+    """Serializer for HeroDraft events with full captain info for toasts."""
+
+    draft_team = DraftTeamSerializerFull(read_only=True)
+
+    class Meta:
+        model = HeroDraftEvent
+        fields = ["id", "event_type", "draft_team", "metadata", "created_at"]
 
 
 class HeroDraftSerializer(serializers.ModelSerializer):

@@ -23,6 +23,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [showControls, setShowControls] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Format time as MM:SS
@@ -86,17 +87,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       setDuration(video.duration);
     };
 
+    const handleCanPlay = () => {
+      setIsLoading(false);
+    };
+
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
 
     video.addEventListener('timeupdate', handleTimeUpdate);
     video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
 
     return () => {
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('play', handlePlay);
       video.removeEventListener('pause', handlePause);
     };
@@ -123,10 +130,19 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   return (
     <div
-      className={cn('relative group rounded-lg overflow-hidden', className)}
+      className={cn('relative group rounded-lg overflow-hidden', isLoading && 'min-h-[200px]', className)}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
+      {/* Loading skeleton - maintains dimensions while video loads */}
+      {isLoading && (
+        <div className="absolute inset-0 bg-base-300 flex items-center justify-center z-10">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+            <span className="text-sm text-base-content/60">Loading video...</span>
+          </div>
+        </div>
+      )}
       <video
         ref={videoRef}
         src={src}
@@ -134,15 +150,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         loop={loop}
         muted={isMuted}
         playsInline
-        className="w-full h-auto object-contain"
+        className={cn('w-full h-auto object-contain', isLoading && 'opacity-0')}
         onClick={togglePlay}
       />
 
-      {/* Controls overlay */}
+      {/* Controls overlay - hidden while loading */}
       <div
         className={cn(
           'absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-3 pt-8 transition-opacity duration-300',
-          showControls || !isPlaying ? 'opacity-100' : 'opacity-0'
+          isLoading ? 'opacity-0' : showControls || !isPlaying ? 'opacity-100' : 'opacity-0'
         )}
       >
         {/* Progress bar */}
@@ -206,8 +222,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         </div>
       </div>
 
-      {/* Center play button when paused */}
-      {!isPlaying && (
+      {/* Center play button when paused (hidden while loading) */}
+      {!isPlaying && !isLoading && (
         <div
           className="absolute inset-0 flex items-center justify-center cursor-pointer"
           onClick={togglePlay}
