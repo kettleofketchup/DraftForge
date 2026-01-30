@@ -145,6 +145,11 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
       if (message.type === 'initial_events' && message.events) {
         log.debug(`Received ${message.events.length} initial events`);
         set({ events: message.events });
+        // Also update draft state if included in initial_events
+        if (message.draft_state) {
+          log.debug('Updating draft state from initial_events');
+          set({ draftState: message.draft_state });
+        }
       } else if (message.type === 'draft_event' && message.event) {
         const newEvent = message.event;
         log.debug('Received draft event:', newEvent.event_type);

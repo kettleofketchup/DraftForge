@@ -3,10 +3,19 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
+const ReactCompilerConfig = {
+  // Compile all files in app/ directory
+  sources: (filename: string) => filename.includes('/app/'),
+};
+
 export default defineConfig({
   plugins: [
     tailwindcss(),
-    reactRouter(),
+    reactRouter({
+      babel: {
+        plugins: [['babel-plugin-react-compiler', ReactCompilerConfig]],
+      },
+    }),
     tsconfigPaths(),
   ],
   build: {

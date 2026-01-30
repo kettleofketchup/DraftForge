@@ -24,7 +24,6 @@ import {
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { useTournamentStore } from '~/store/tournamentStore';
@@ -119,24 +118,22 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
 
   const dialogButton = () => {
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DialogTrigger asChild>
-              <PrimaryButton
-                color="blue"
-                className={`w-[${TEAMS_BUTTONS_WIDTH}]`}
-              >
-                <Settings className="mr-2 h-4 w-4" />
-                Draft Style
-              </PrimaryButton>
-            </DialogTrigger>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Configure draft style and view MMR balance</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <PrimaryButton
+              color="blue"
+              className={`w-[${TEAMS_BUTTONS_WIDTH}]`}
+            >
+              <Settings className="mr-2 h-4 w-4" />
+              Draft Style
+            </PrimaryButton>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Configure draft style and view MMR balance</p>
+        </TooltipContent>
+      </Tooltip>
     );
   };
 
