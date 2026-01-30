@@ -373,13 +373,36 @@ class DraftRoundForDraftSerializer(serializers.ModelSerializer):
         )
 
 
+class TournamentSerializerForWebSocket(serializers.ModelSerializer):
+    """
+    Minimal tournament serializer for WebSocket broadcasts.
+    Includes teams with members for real-time state updates.
+    """
+
+    teams = TeamSerializerForTournament(many=True, read_only=True)
+
+    class Meta:
+        model = Tournament
+        fields = (
+            "pk",
+            "teams",
+        )
+
+
 class DraftSerializerForTournament(serializers.ModelSerializer):
+    """
+    Serializer for draft data used in WebSocket broadcasts.
+    Includes tournament.teams for real-time team updates.
+    """
 
     draft_rounds = DraftRoundForDraftSerializer(
         many=True,
         read_only=True,
     )
     users_remaining = TournamentUserSerializer(many=True, read_only=True)
+    # Include tournament with teams for WebSocket broadcasts
+    # This allows clients to update team state without additional API calls
+    tournament = TournamentSerializerForWebSocket(read_only=True)
 
     class Meta:
         model = Draft
@@ -389,6 +412,7 @@ class DraftSerializerForTournament(serializers.ModelSerializer):
             "users_remaining",
             "latest_round",
             "draft_style",
+            "tournament",
         )
 
 
