@@ -60,7 +60,7 @@ test.describe('League Page - Edit Modal (e2e)', () => {
     await leaguePage.openEditModal();
 
     // Modal should be visible with correct elements
-    await expect(page.locator('text=Edit League')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Edit League' })).toBeVisible();
     await expect(leaguePage.nameInput).toBeVisible();
     await expect(leaguePage.prizeInput).toBeVisible();
     await expect(leaguePage.descriptionInput).toBeVisible();
@@ -151,6 +151,19 @@ test.describe('League Page - Edit Modal (e2e)', () => {
 });
 
 test.describe('League Page - Edit Modal Accessibility (e2e)', () => {
+  test.beforeAll(async ({ browser }) => {
+    // Ensure testLeagueId is set (in case tests run in parallel)
+    if (!testLeagueId) {
+      const context = await browser.newContext({ ignoreHTTPSErrors: true });
+      const league = await getFirstLeague(context);
+      if (!league) {
+        throw new Error('No leagues found in database. Run inv db.populate.all first.');
+      }
+      testLeagueId = league.pk;
+      await context.close();
+    }
+  });
+
   test.beforeEach(async ({ page, loginAdmin }) => {
     await loginAdmin();
     const leaguePage = new LeaguePage(page);

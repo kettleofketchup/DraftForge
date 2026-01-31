@@ -11,50 +11,14 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import {
-  getGames,
-  getLeagues,
-  getOrganizations,
-  getTournaments,
-} from '~/components/api/api';
+import { Link } from 'react-router';
+import { getHomeStats } from '~/components/api/api';
+import { FeatureCard } from '~/components/feature/FeatureCard';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 
-const FeatureCard = ({
-  icon: Icon,
-  title,
-  description,
-  delay,
-  comingSoon,
-}: {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  delay: number;
-  comingSoon?: boolean;
-}) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.5, delay }}
-    className={`card bg-base-200/50 backdrop-blur border border-primary/10 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 ${comingSoon ? 'opacity-75' : ''}`}
-  >
-    <div className="card-body">
-      <div className="flex items-start justify-between">
-        <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-          <Icon className="w-6 h-6 text-primary" />
-        </div>
-        {comingSoon && (
-          <Badge variant="outline" className="text-xs border-warning text-warning">
-            Coming Soon
-          </Badge>
-        )}
-      </div>
-      <h3 className="card-title text-lg">{title}</h3>
-      <p className="text-base-content/70 text-sm">{description}</p>
-    </div>
-  </motion.div>
-);
+// Video/GIF assets (mounted at public/assets/docs in dev, copied during build)
+const ASSETS_BASE = '/assets/docs';
 
 const StatCard = ({
   value,
@@ -80,42 +44,32 @@ const StatsSection = () => {
   // Only fetch on client side to avoid SSR issues with auth
   const isClient = typeof window !== 'undefined';
 
-  const { data: tournaments, isLoading: tournamentsLoading } = useQuery({
-    queryKey: ['tournaments'],
-    queryFn: () => getTournaments(),
+  // Use the optimized home-stats endpoint that returns only counts
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ['home-stats'],
+    queryFn: () => getHomeStats(),
     enabled: isClient,
+    staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
   });
 
-  const { data: games, isLoading: gamesLoading } = useQuery({
-    queryKey: ['games'],
-    queryFn: () => getGames(),
-    enabled: isClient,
-  });
-
-  const { data: organizations, isLoading: orgsLoading } = useQuery({
-    queryKey: ['organizations'],
-    queryFn: () => getOrganizations(),
-    enabled: isClient,
-  });
-
-  const { data: leagues, isLoading: leaguesLoading } = useQuery({
-    queryKey: ['leagues'],
-    queryFn: () => getLeagues(),
-    enabled: isClient,
-  });
-
-  const isLoading = tournamentsLoading || gamesLoading || orgsLoading || leaguesLoading;
-
-  if (isLoading || !tournaments || !games || !organizations || !leagues) {
+  if (isLoading || !stats) {
     return <StatsSkeleton />;
   }
 
   return (
     <>
-      <StatCard value={tournaments.length} label="Tournaments" delay={0.6} />
-      <StatCard value={games.length} label="Games Played" delay={0.7} />
-      <StatCard value={organizations.length} label="Organizations" delay={0.8} />
-      <StatCard value={leagues.length} label="Leagues" delay={0.9} />
+      <StatCard
+        value={stats.tournament_count}
+        label="Tournaments"
+        delay={0.6}
+      />
+      <StatCard value={stats.game_count} label="Games Played" delay={0.7} />
+      <StatCard
+        value={stats.organization_count}
+        label="Organizations"
+        delay={0.8}
+      />
+      <StatCard value={stats.league_count} label="Leagues" delay={0.9} />
     </>
   );
 };
@@ -181,7 +135,8 @@ export default function HomePage() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="text-xl md:text-2xl text-base-content/70 mb-8 max-w-2xl mx-auto"
           >
-            The ultimate platform for Dota 2 tournament organization, team drafting, and competitive league management.
+            The ultimate platform for Dota 2 tournament organization, team
+            drafting, and competitive league management.
           </motion.p>
 
           <motion.div
@@ -190,14 +145,18 @@ export default function HomePage() {
             transition={{ duration: 0.6, delay: 0.3 }}
             className="flex flex-col sm:flex-row gap-4 justify-center"
           >
-            <Button size="lg" className="!text-black" asChild>
-              <a href="/tournaments">
+            <Button size="lg" className="" asChild>
+              <Link to="/tournaments">
                 Browse Tournaments
                 <ChevronRight className="w-4 h-4" />
-              </a>
+              </Link>
             </Button>
-            <Button size="lg" variant="outline" className="shadow-md border-2 border-emerald-500 text-emerald-400 hover:bg-emerald-500/20" asChild>
-              <a href="https://discord.gg/dtx" target="_blank" rel="noopener noreferrer">
+            <Button size="lg" className="secondary" asChild>
+              <a
+                href="https://discord.gg/6xYb7RUn8a"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 Join Discord
               </a>
             </Button>
@@ -230,34 +189,58 @@ export default function HomePage() {
               <span className="text-primary"> Competitive Events</span>
             </h2>
             <p className="text-base-content/60 max-w-2xl mx-auto">
-              From casual in-house leagues to serious competitive tournaments, DraftForge has the tools to make it happen.
+              From casual in-house leagues to serious competitive tournaments,
+              DraftForge has the tools to make it happen.
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <FeatureCard
               icon={Trophy}
               title="Tournament Brackets"
               description="Single elimination, double elimination, and round-robin formats with automatic bracket generation."
               delay={0.1}
+              gifSrc={`${ASSETS_BASE}/site_snapshots/bracket.png`}
+              docsPath="/features/bracket/"
             />
             <FeatureCard
               icon={Swords}
               title="Hero Draft System"
               description="Real-time captain's mode drafting with spectator view, timers, and pick/ban tracking."
               delay={0.2}
-            />
-            <FeatureCard
-              icon={Users}
-              title="Team Management"
-              description="Create and manage rosters, track player stats, and coordinate with Discord integration."
-              delay={0.3}
+              gifSrc={`${ASSETS_BASE}/gifs/captain1_herodraft.gif`}
+              quickMedia={[
+                { src: `${ASSETS_BASE}/gifs/captain1_herodraft.gif`, caption: 'Captain 1 Perspective', type: 'gif' },
+                { src: `${ASSETS_BASE}/gifs/captain2_herodraft.gif`, caption: 'Captain 2 Perspective', type: 'gif' },
+              ]}
+              modalMedia={[
+                { src: `${ASSETS_BASE}/videos/captain1_herodraft.webm`, caption: 'Captain 1 Perspective', type: 'video' },
+                { src: `${ASSETS_BASE}/videos/captain2_herodraft.webm`, caption: 'Captain 2 Perspective', type: 'video' },
+              ]}
+              docsPath="/features/herodraft/"
             />
             <FeatureCard
               icon={GitBranch}
               title="Team Draft Composition"
               description="Draft 40+ team members in minutes with Snake, Normal, and Shuffle draft modes balanced by MMR."
+              delay={0.3}
+              gifSrc={`${ASSETS_BASE}/gifs/snake_draft.gif`}
+              quickMedia={[
+                { src: `${ASSETS_BASE}/gifs/snake_draft.gif`, caption: 'Snake Draft', type: 'gif' },
+                { src: `${ASSETS_BASE}/gifs/shuffle_draft.gif`, caption: 'Shuffle Draft', type: 'gif' },
+              ]}
+              modalMedia={[
+                { src: `${ASSETS_BASE}/videos/snake_draft.webm`, caption: 'Snake Draft', type: 'video' },
+                { src: `${ASSETS_BASE}/videos/shuffle_draft.webm`, caption: 'Shuffle Draft', type: 'video' },
+              ]}
+              docsPath="/features/draft/"
+            />
+            <FeatureCard
+              icon={Users}
+              title="Team Management"
+              description="Create and manage rosters, track player stats, and coordinate with Discord integration."
               delay={0.4}
+              docsPath="/features/team-management/"
             />
             <FeatureCard
               icon={Award}
@@ -265,6 +248,7 @@ export default function HomePage() {
               description="Season-based competitive leagues with ELO ratings, standings, and match history."
               delay={0.5}
               comingSoon
+              docsPath="/features/planned/league-rating/"
             />
             <FeatureCard
               icon={Shield}
@@ -272,6 +256,7 @@ export default function HomePage() {
               description="Seamless Discord server integration for roster syncing and tournament announcements."
               delay={0.6}
               comingSoon
+              docsPath="/features/planned/discord-integration/"
             />
           </div>
         </div>
@@ -288,16 +273,29 @@ export default function HomePage() {
         >
           <div className="card bg-gradient-to-r from-primary/10 via-accent/5 to-primary/10 border border-primary/20">
             <div className="card-body text-center py-12">
-              <h2 className="text-3xl font-bold mb-4">Ready to Forge Your Tournament?</h2>
+              <h2 className="text-3xl font-bold mb-4">
+                Ready to Forge Your Tournament?
+              </h2>
               <p className="text-base-content/70 mb-8 max-w-xl mx-auto">
-                Join the growing community of Dota 2 organizers using DraftForge to create unforgettable competitive experiences.
+                Join the growing community of Dota 2 organizers using DraftForge
+                to create unforgettable competitive experiences.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button size="lg" className="!text-black" asChild>
-                  <a href="/tournaments">Get Started</a>
+                  <Link to="/tournaments">Get Started</Link>
                 </Button>
-                <Button size="lg" variant="outline" className="shadow-md border-2 border-violet-500 text-violet-400 hover:bg-violet-500/20" asChild>
-                  <a href="/about">Learn More</a>
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  asChild
+                >
+                  <a
+                    href="https://kettleofketchup.github.io/DraftForge/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Learn More
+                  </a>
                 </Button>
               </div>
             </div>

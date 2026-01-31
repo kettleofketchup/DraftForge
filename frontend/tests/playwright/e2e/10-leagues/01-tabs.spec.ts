@@ -74,8 +74,8 @@ test.describe('League Page - Tab Navigation (e2e)', () => {
     // URL should update
     await expect(page).toHaveURL(new RegExp(`/leagues/${testLeagueId}/matches`));
 
-    // Matches content should be visible
-    await expect(page.locator('text=Matches')).toBeVisible();
+    // Matches tab should be active (use specific tab selector to avoid multiple matches)
+    await leaguePage.assertTabActive('matches');
   });
 
   test('should navigate back to info tab', async ({ page }) => {
@@ -103,7 +103,8 @@ test.describe('League Page - Tab Navigation (e2e)', () => {
     await leaguePage.assertTabActive('tournaments');
   });
 
-  // Skip: Browser back/forward navigation is flaky due to React Router history handling
+  // Skip: React Router client-side navigation doesn't push history entries that
+  // Playwright's goBack() can navigate. This is an SPA limitation, not a bug.
   test.skip('should handle browser back/forward navigation', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
     await leaguePage.goto(testLeagueId, 'info');
@@ -111,19 +112,21 @@ test.describe('League Page - Tab Navigation (e2e)', () => {
     // Navigate through tabs - wait for each navigation to complete
     await leaguePage.clickTournamentsTab();
     await expect(page).toHaveURL(/\/tournaments/, { timeout: 10000 });
-    await page.waitForLoadState('networkidle');
+    await leaguePage.assertTabActive('tournaments');
 
     await leaguePage.clickMatchesTab();
     await expect(page).toHaveURL(/\/matches/, { timeout: 10000 });
-    await page.waitForLoadState('networkidle');
+    await leaguePage.assertTabActive('matches');
 
-    // Go back
+    // Go back - wait for URL and tab state to update
     await page.goBack();
     await expect(page).toHaveURL(/\/tournaments/, { timeout: 10000 });
+    await leaguePage.assertTabActive('tournaments');
 
-    // Go forward
+    // Go forward - wait for URL and tab state to update
     await page.goForward();
     await expect(page).toHaveURL(/\/matches/, { timeout: 10000 });
+    await leaguePage.assertTabActive('matches');
   });
 
   test('should display league name in header', async ({ page }) => {

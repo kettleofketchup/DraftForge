@@ -1,8 +1,19 @@
 import api from '~/components/api/axios';
 import type { HeroDraft } from './types';
 
-export async function createHeroDraft(gameId: number): Promise<HeroDraft> {
-  const response = await api.post(`/games/${gameId}/create-herodraft/`);
+export interface CreateHeroDraftOptions {
+  radiantTeamId?: number;
+  direTeamId?: number;
+}
+
+export async function createHeroDraft(
+  gameId: number,
+  options?: CreateHeroDraftOptions
+): Promise<HeroDraft> {
+  const response = await api.post(`/games/${gameId}/create-herodraft/`, {
+    radiant_team_id: options?.radiantTeamId,
+    dire_team_id: options?.direTeamId,
+  });
   return response.data;
 }
 
@@ -65,5 +76,20 @@ export async function listAvailableHeroes(
 
 export async function abandonDraft(draftId: number): Promise<HeroDraft> {
   const response = await api.post(`/herodraft/${draftId}/abandon/`);
+  return response.data;
+}
+
+export async function resetDraft(draftId: number): Promise<HeroDraft> {
+  const response = await api.post(`/herodraft/${draftId}/reset/`);
+  return response.data;
+}
+
+export async function pauseDraft(draftId: number): Promise<HeroDraft> {
+  const response = await api.post(`/herodraft/${draftId}/pause/`);
+  return response.data;
+}
+
+export async function resumeDraft(draftId: number): Promise<HeroDraft> {
+  const response = await api.post(`/herodraft/${draftId}/resume/`);
   return response.data;
 }

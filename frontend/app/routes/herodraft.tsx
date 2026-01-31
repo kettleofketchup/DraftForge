@@ -1,10 +1,10 @@
 import HeroDraftPage from '~/pages/herodraft/HeroDraftPage';
-import type { Route } from './+types/home';
+import { generateMeta } from '~/lib/seo';
 
-export function meta({}: Route.MetaArgs) {
-  return [
-    { title: 'Hero Draft - Captain\'s Mode' },
-    { name: 'description', content: 'Dota 2 Captain\'s Mode Hero Draft' },
-  ];
+export function meta() {
+  return generateMeta({
+    title: 'Hero Draft',
+    description: "Captain's Mode hero drafting tool for Dota 2",
+  });
 }
 export default HeroDraftPage;

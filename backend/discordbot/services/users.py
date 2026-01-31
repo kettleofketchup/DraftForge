@@ -21,7 +21,15 @@ from social_django.models import USER_MODEL  # fix: skip
 from social_django.models import AbstractUserSocialAuth, DjangoStorage
 from social_django.utils import load_strategy, psa
 
-from app.models import CustomUser, Draft, DraftRound, PositionsModel, Team, Tournament
+from app.models import (
+    CustomUser,
+    Draft,
+    DraftRound,
+    Organization,
+    PositionsModel,
+    Team,
+    Tournament,
+)
 from app.permissions import IsStaff
 from app.serializers import (
     DraftRoundSerializer,
@@ -62,14 +70,16 @@ def get_user_guilds(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-def get_discord_members_data():
+def get_discord_members_data(guild_id=None):
     """
     Helper function to get discord members data as raw list (not JsonResponse).
     Useful for testing and internal operations.
+
+    Args:
+        guild_id: Discord guild ID. Defaults to settings.DISCORD_GUILD_ID if not provided.
     """
-    guild_id = (
-        settings.DISCORD_GUILD_ID
-    )  # Add your Discord server (guild) ID in settings
+    if guild_id is None:
+        guild_id = settings.DISCORD_GUILD_ID
     bot_token = settings.DISCORD_BOT_TOKEN  # Add your bot token in settings
 
     url = f"{settings.DISCORD_API_BASE_URL}/guilds/{guild_id}/members"
@@ -215,3 +225,40 @@ def get_discord_voice_channel_activity(request):
         return JsonResponse(
             {"error": f"An unexpected error occurred: {str(e)}"}, status=500
         )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_organization_discord_members(request, pk):
+    """
+    Fetches Discord members for a specific organization's configured Discord server.
+
+    Args:
+        pk: Organization primary key
+
+    Returns:
+        JSON response with list of Discord members
+    """
+    from django.shortcuts import get_object_or_404
+
+    from app.permissions_org import has_org_staff_access
+
+    org = get_object_or_404(Organization, pk=pk)
+
+    # Check user has staff access to this organization
+    if not has_org_staff_access(request.user, org):
+        return JsonResponse(
+            {"error": "You do not have access to this organization"}, status=403
+        )
+
+    if not org.discord_server_id:
+        return JsonResponse(
+            {"error": "Organization has no Discord server configured"}, status=400
+        )
+
+    try:
+        members = get_discord_members_data(guild_id=org.discord_server_id)
+        return JsonResponse({"members": members}, safe=True)
+    except Exception as e:
+        log.error(f"Error fetching Discord members for org {pk}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)

@@ -6,7 +6,9 @@ import type {
   UsersType,
 } from '~/components/user';
 import { PositionEnum, User } from '~/components/user';
-import { AvatarUrl, DisplayName } from '~/components/user/avatar';
+import { DisplayName } from '~/components/user/avatar';
+import { AvatarUrl, UserAvatar } from '~/components/user/UserAvatar';
+import type { UserAvatarSize, UserAvatarBorder } from '~/components/user/UserAvatar';
 import type { GameType, GamesType } from './components/game/types';
 import type { TeamType } from './components/team';
 import type {
@@ -15,7 +17,8 @@ import type {
   TournamentType,
   TournamentsType,
 } from './components/tournament/types';
-export { AvatarUrl, DisplayName, PositionEnum, User };
+export { AvatarUrl, DisplayName, PositionEnum, User, UserAvatar };
+export type { UserAvatarSize, UserAvatarBorder };
 export type { GuildMember, GuildMembers, UserClassType, UserType, UsersType };
 
 export type {
@@ -28,5 +31,8 @@ export type {
   TournamentsType,
 };
 
-import type { DraftRoundType, DraftType } from '~/components/draft/types';
+import type { TeamDraftRoundType, TeamDraftType, DraftRoundType, DraftType } from '~/components/teamdraft/types';
+// Primary exports with explicit TeamDraft naming
+export type { TeamDraftRoundType, TeamDraftType };
+// Backwards compatibility aliases
 export type { DraftRoundType, DraftType };

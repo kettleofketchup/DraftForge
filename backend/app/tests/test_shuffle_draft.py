@@ -441,6 +441,108 @@ class PickPlayerForRoundShuffleTest(TestCase):
         self.assertIsNotNone(second_round.captain)
 
 
+class PickAuthorizationTest(TestCase):
+    """Test pick authorization - only correct captain or staff can pick."""
+
+    def setUp(self):
+        """Create tournament, draft, and multiple captains."""
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament", date_played=date.today()
+        )
+
+        # Create two captains with different MMRs
+        self.captain1 = CustomUser.objects.create_user(
+            username="cap1", password="test", mmr=4000  # Lower MMR - picks first
+        )
+        self.captain2 = CustomUser.objects.create_user(
+            username="cap2", password="test", mmr=5000  # Higher MMR
+        )
+        self.player1 = CustomUser.objects.create_user(
+            username="player1", password="test", mmr=3000
+        )
+
+        # Create teams
+        self.team1 = Team.objects.create(
+            name="Team 1", captain=self.captain1, tournament=self.tournament
+        )
+        self.team1.members.add(self.captain1)
+        self.team2 = Team.objects.create(
+            name="Team 2", captain=self.captain2, tournament=self.tournament
+        )
+        self.team2.members.add(self.captain2)
+
+        # Add player to tournament
+        self.tournament.users.add(self.player1)
+
+        # Create draft
+        self.draft = Draft.objects.create(
+            tournament=self.tournament, draft_style="shuffle"
+        )
+        self.draft.build_rounds()
+
+        self.client = APIClient()
+
+    def test_wrong_captain_returns_403(self):
+        """Captain who is not assigned to current round gets 403."""
+        first_round = self.draft.draft_rounds.order_by("pick_number").first()
+
+        # captain1 (lower MMR) should be assigned first round
+        self.assertEqual(first_round.captain, self.captain1)
+
+        # Try to pick as captain2 (wrong captain)
+        self.client.force_authenticate(user=self.captain2)
+        response = self.client.post(
+            "/api/tournaments/pick_player",
+            {"draft_round_pk": first_round.pk, "user_pk": self.player1.pk},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("captain for this round", response.data["error"])
+
+    def test_correct_captain_can_pick(self):
+        """Captain assigned to current round can make pick."""
+        first_round = self.draft.draft_rounds.order_by("pick_number").first()
+
+        # captain1 should be able to pick
+        self.client.force_authenticate(user=self.captain1)
+        response = self.client.post(
+            "/api/tournaments/pick_player",
+            {"draft_round_pk": first_round.pk, "user_pk": self.player1.pk},
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+    def test_staff_can_pick_for_any_round(self):
+        """Staff can pick even if not the captain."""
+        staff = CustomUser.objects.create_user(
+            username="staff", password="test", is_staff=True
+        )
+        first_round = self.draft.draft_rounds.order_by("pick_number").first()
+
+        self.client.force_authenticate(user=staff)
+        response = self.client.post(
+            "/api/tournaments/pick_player",
+            {"draft_round_pk": first_round.pk, "user_pk": self.player1.pk},
+        )
+
+        self.assertEqual(response.status_code, 201)
+
+    def test_non_captain_non_staff_returns_403(self):
+        """Regular user who is not captain or staff gets 403."""
+        regular_user = CustomUser.objects.create_user(
+            username="regular", password="test", is_staff=False
+        )
+        first_round = self.draft.draft_rounds.order_by("pick_number").first()
+
+        self.client.force_authenticate(user=regular_user)
+        response = self.client.post(
+            "/api/tournaments/pick_player",
+            {"draft_round_pk": first_round.pk, "user_pk": self.player1.pk},
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+
 class FullTeamNotAssignedTest(TestCase):
     """Test that full teams (5 members) are not assigned as next picker."""
 
@@ -625,3 +727,101 @@ class UndoClearsNextCaptainTest(TestCase):
         self.assertIsNone(second_round.captain)
         self.assertFalse(second_round.was_tie)
         self.assertIsNone(second_round.tie_roll_data)
+
+
+class DraftRestartTest(TestCase):
+    """Test draft restart uses captain MMR only, not old picks."""
+
+    def setUp(self):
+        """Create tournament with 2 teams and completed picks."""
+        self.admin = CustomUser.objects.create_user(
+            username="admin", password="test", is_staff=True
+        )
+        # Captain 1 has lower MMR (4000) - should pick first
+        self.captain1 = CustomUser.objects.create_user(
+            username="cap1_low_mmr", password="test", mmr=4000
+        )
+        # Captain 2 has higher MMR (5000) - should pick second
+        self.captain2 = CustomUser.objects.create_user(
+            username="cap2_high_mmr", password="test", mmr=5000
+        )
+        # High MMR player that was picked by team1
+        self.high_mmr_player = CustomUser.objects.create_user(
+            username="high_mmr_player", password="test", mmr=6000
+        )
+
+        self.tournament = Tournament.objects.create(
+            name="Restart Test Tournament", date_played=date.today()
+        )
+        self.tournament.users.add(self.captain1, self.captain2, self.high_mmr_player)
+        # Note: captains property is derived from teams, not a direct field
+
+        self.team1 = Team.objects.create(
+            name="Team 1 (low cap)",
+            captain=self.captain1,
+            tournament=self.tournament,
+        )
+        self.team1.members.add(self.captain1)
+
+        self.team2 = Team.objects.create(
+            name="Team 2 (high cap)",
+            captain=self.captain2,
+            tournament=self.tournament,
+        )
+        self.team2.members.add(self.captain2)
+
+        # Create draft with shuffle style
+        self.draft = Draft.objects.create(
+            tournament=self.tournament, draft_style="shuffle"
+        )
+        # Note: Draft.captains is a property derived from tournament.teams
+        # users_remaining is also a property, not a ManyToMany field
+        self.draft.build_rounds()
+
+        self.client.force_login(self.admin)
+
+    def test_restart_uses_captain_mmr_only(self):
+        """
+        After picks are made, restarting draft should calculate first captain
+        based on captain MMR only, not team MMR including picks.
+
+        Scenario:
+        - Team1 captain: 4000 MMR (lower)
+        - Team2 captain: 5000 MMR (higher)
+        - Team1 picks high_mmr_player (6000 MMR)
+        - Team1 total MMR becomes 10000, Team2 stays 5000
+
+        Without fix: Team2 would pick first (lower total team MMR)
+        With fix: Team1 should pick first (lower captain MMR)
+        """
+        # Verify initial first captain is team1 (lower captain MMR)
+        first_round = self.draft.draft_rounds.order_by("pick_number").first()
+        self.assertEqual(first_round.captain.pk, self.captain1.pk)
+
+        # Make a pick - team1 picks high_mmr_player
+        first_round.choice = self.high_mmr_player
+        first_round.save()
+        self.team1.members.add(self.high_mmr_player)
+
+        # Now team1 has 4000 + 6000 = 10000 total MMR
+        # team2 has 5000 total MMR
+
+        # Restart the draft via generate_draft_rounds
+        response = self.client.post(
+            "/api/tournaments/init-draft",
+            {"tournament_pk": self.tournament.pk},
+        )
+        self.assertEqual(response.status_code, 201)
+
+        # Refresh draft from DB
+        self.draft.refresh_from_db()
+
+        # First captain should still be team1 (captain MMR 4000 < 5000)
+        # NOT team2 (which would be the case if using total team MMR)
+        first_round = self.draft.draft_rounds.order_by("pick_number").first()
+        self.assertEqual(
+            first_round.captain.pk,
+            self.captain1.pk,
+            "After restart, first captain should be based on captain MMR only, "
+            f"not total team MMR. Expected cap1 (4000 MMR), got {first_round.captain.username}",
+        )

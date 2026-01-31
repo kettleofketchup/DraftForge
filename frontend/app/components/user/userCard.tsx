@@ -1,10 +1,18 @@
 import { motion } from 'framer-motion';
 import React, { memo, useEffect } from 'react';
 import { Badge } from '~/components/ui/badge';
+import { ViewIconButton } from '~/components/ui/buttons';
+import {
+  CardAction,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '~/components/ui/card';
 import { Item, ItemContent, ItemTitle } from '~/components/ui/item';
+import { useSharedPopover } from '~/components/ui/shared-popover-context';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
-import { AvatarUrl } from '~/index';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
 import { useUserStore } from '~/store/userStore';
@@ -20,12 +28,21 @@ interface Props {
   deleteButtonType?: 'tournament' | 'normal';
   /** Animation delay index for staggered loading */
   animationIndex?: number;
+  /** Optional league ID for context-specific stats in mini profile */
+  leagueId?: number;
+  /** Optional organization ID for context-specific stats in mini profile */
+  organizationId?: number;
 }
 
 export const UserCard: React.FC<Props> = memo(
-  ({ user, saveFunc = 'save', compact, deleteButtonType, animationIndex = 0 }) => {
+  ({ user, saveFunc = 'save', compact, deleteButtonType, animationIndex = 0, leagueId, organizationId }) => {
     const currentUser: UserType = useUserStore((state) => state.currentUser);
     const getUsers = useUserStore((state) => state.getUsers);
+    const { openPlayerModal } = useSharedPopover();
+
+    const handleViewProfile = () => {
+      openPlayerModal(user, { leagueId, organizationId });
+    };
 
     useEffect(() => {
       if (!user.pk) {
@@ -50,11 +67,7 @@ export const UserCard: React.FC<Props> = memo(
               <span className="relative inline-flex size-3 rounded-full bg-red-500" />
             </span>
           )}
-          <img
-            src={AvatarUrl(user)}
-            alt={`${user.username}'s avatar`}
-            className="w-14 h-14 rounded-full border-2 border-primary"
-          />
+          <UserAvatar user={user} size="xl" border="primary" />
         </div>
       );
     };
@@ -123,32 +136,36 @@ export const UserCard: React.FC<Props> = memo(
           transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
           whileHover={{ scale: 1.02 }}
           key={`usercard:${getKeyName()} basediv`}
-          className="flex flex-col px-2 py-2 gap-2 card bg-base-300 shadow-elevated w-fit
+          className="flex flex-col gap-2 card card-compact bg-base-300 rounded-2xl w-fit
             hover:bg-base-200 focus:outline-2
             focus:outline-offset-2 focus:outline-primary
-            active:bg-base-200 transition-all duration-300 ease-in-out"
+            active:bg-base-200"
         >
-          {/* Header row - name and edit button */}
-          <div className="flex items-center justify-between">
-            <div className="flex-1 min-w-0">
-              <h2 className="card-title text-base truncate">
-                {user.nickname || user.username}
-              </h2>
-              {!compact && (user.is_staff || user.is_superuser) && (
-                <div className="flex gap-1 mt-0.5">
-                  {user.is_staff && (
-                    <Badge className="bg-blue-700 text-white text-[10px] px-1.5 py-0">Staff</Badge>
-                  )}
-                  {user.is_superuser && (
-                    <Badge className="bg-red-700 text-white text-[10px] px-1.5 py-0">Admin</Badge>
-                  )}
-                </div>
-              )}
-            </div>
-            {(currentUser.is_staff || currentUser.is_superuser) && (
-              <UserEditModal user={new User(user)} />
+          {/* Header: 2-col layout with name/badges left, actions right */}
+          <CardHeader className="p-0 gap-0.5">
+            <CardTitle className="text-base truncate">
+              {user.nickname || user.username}
+            </CardTitle>
+            {!compact && (user.is_staff || user.is_superuser) && (
+              <CardDescription className="flex gap-1">
+                {user.is_staff && (
+                  <Badge className="bg-blue-700 text-white text-[10px] px-1.5 py-0">Staff</Badge>
+                )}
+                {user.is_superuser && (
+                  <Badge className="bg-red-700 text-white text-[10px] px-1.5 py-0">Admin</Badge>
+                )}
+              </CardDescription>
             )}
-          </div>
+            <CardAction className="flex items-center gap-1">
+              {(currentUser.is_staff || currentUser.is_superuser) && (
+                <UserEditModal user={new User(user)} />
+              )}
+              <ViewIconButton
+                onClick={handleViewProfile}
+                tooltip="View Profile"
+              />
+            </CardAction>
+          </CardHeader>
 
           {/* 2-column layout: Avatar left, Positions right */}
           <div className="grid grid-cols-[auto_1fr] gap-2 items-center">

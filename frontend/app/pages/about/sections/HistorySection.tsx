@@ -15,9 +15,9 @@ export function HistorySection() {
     >
       <div className="card bg-base-200/50 backdrop-blur border border-primary/10 mb-12">
         <div className="card-body">
-          <h2 className="card-title text-2xl text-primary mb-6">
-            <GitBranch className="w-6 h-6" />
-            Our History
+          <h2 className="card-title text-2xl text-primary mb-6 flex items-center gap-2">
+            <GitBranch className="w-6 h-6 flex-shrink-0" />
+            <span>Our History</span>
           </h2>
 
           <div className="space-y-6">

@@ -10,13 +10,14 @@ import {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '~/components/ui/tooltip'; // Adjust path as needed
+} from '~/components/ui/tooltip';
 
 import { useUserStore } from '~/store/userStore';
 
 import { PlusCircleIcon } from 'lucide-react';
 
 import { Button } from '~/components/ui/button';
+import { CancelButton, SubmitButton } from '~/components/ui/buttons';
 import {
   Dialog,
   DialogClose,
@@ -100,11 +101,13 @@ export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
                   size="lg"
                   variant="default"
                   className={
-                    'bg-green-950 hover:bg-green-800 text-white' +
-                    ' hover:shadow-sm hover:shadow-green-500/50'
+                    'bg-emerald-600 hover:bg-emerald-500 text-white' +
+                    ' shadow-lg shadow-emerald-900/50 border-b-4 border-b-emerald-800' +
+                    ' active:border-b-0 active:translate-y-1 transition-all duration-75' +
+                    ' hover:shadow-emerald-500/50'
                   }
                 >
-                  <PlusCircleIcon color="white" className="" />
+                  <PlusCircleIcon className="text-white" />
                   Create User
                 </Button>
               </DialogTrigger>
@@ -142,10 +145,9 @@ export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
           <DialogFooter>
             <div className="flex flex-row  gap-x-4 sm:gap-x-8 justify-center align-center items-center w-full">
               <DialogClose asChild>
-                <Button
-                  type="submit"
-                  className="bg-green-950 hover:bg-green-800 text-white hover:shadow-sm hover:shadow-green-500/50"
-                  disabled={isSaving}
+                <SubmitButton
+                  loading={isSaving}
+                  loadingText="Saving..."
                   onClick={(e) => {
                     e.preventDefault();
                     handleSave(e, {
@@ -161,16 +163,12 @@ export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
                   }}
                 >
                   {selectedDiscordUser && selectedDiscordUser.pk
-                    ? isSaving
-                      ? 'Saving...'
-                      : 'Save Changes'
-                    : isSaving
-                      ? 'Saving...'
-                      : 'Create User'}
-                </Button>
+                    ? 'Save Changes'
+                    : 'Create User'}
+                </SubmitButton>
               </DialogClose>
               <DialogClose asChild>
-                <Button className="justify-right">Cancel</Button>
+                <CancelButton />
               </DialogClose>
             </div>
           </DialogFooter>

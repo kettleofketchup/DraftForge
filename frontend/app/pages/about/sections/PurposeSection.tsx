@@ -6,7 +6,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
-import { AvatarUrl } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 
@@ -31,11 +31,9 @@ export function PurposeSection() {
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger className="flex justify-center mt-4 mb-2" asChild>
-            <img
-              src={AvatarUrl(getHurk())}
-              alt="Hurk's avatar"
-              className="w-8 h-8 rounded-full"
-            />
+            <span>
+              <UserAvatar user={getHurk()} size="md" />
+            </span>
           </TooltipTrigger>
           <TooltipContent>Hurk is the founder of DTX</TooltipContent>
         </Tooltip>

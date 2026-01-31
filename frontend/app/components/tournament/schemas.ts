@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { UserSchema } from '../user';
 
-import { DraftSchema } from '../draft/schemas';
+import { DraftSchema } from '../teamdraft/schemas';
 import { GameSchema } from '../game/schemas';
 import { TeamSchema } from '../team';
 
@@ -40,24 +40,34 @@ export const COMMON_TIMEZONES = [
 
 export type TimezoneValue = typeof COMMON_TIMEZONES[number] | string;
 
+// Minimal league info returned by lightweight tournament list endpoint
+export const LeagueMinimalSchema = z.object({
+  pk: z.number(),
+  name: z.string(),
+  organization_name: z.string().nullable(),
+});
+
 export const TournamentSchema = z.object({
   name: z.string().nullable(),
   date_played: z.string().nullable(), // ISO datetime string
   timezone: z.string().default('UTC'),
-  users: z.array(UserSchema).nullable(),
-  teams: z.array(TeamSchema).nullable(),
-  captains: z.array(UserSchema).nullable(),
-  captain_ids: z.array(z.number()).nullable(),
+  users: z.array(UserSchema).nullable().optional(),
+  teams: z.array(TeamSchema).nullable().optional(),
+  captains: z.array(UserSchema).nullable().optional(),
+  captain_ids: z.array(z.number()).nullable().optional(),
   pk: z.number().nullable(),
-  winning_team: z.number().nullable(),
+  winning_team: z.number().nullable().optional(),
   state: z.enum(STATE_VALUES).nullable(),
   tournament_type: z.enum(TOURNAMENT_TYPE_VALUES).nullable(),
-  games: z.array(GameSchema).nullable(),
-  user_ids: z.array(z.number()).nullable(),
-  team_ids: z.array(z.number()).nullable(),
+  games: z.array(GameSchema).nullable().optional(),
+  user_ids: z.array(z.number()).nullable().optional(),
+  team_ids: z.array(z.number()).nullable().optional(),
   draft: DraftSchema.optional(),
-  league: z.number().nullable().optional(),
+  // League can be number (ID) or object (minimal info from list endpoint)
+  league: z.union([z.number(), LeagueMinimalSchema]).nullable().optional(),
   steam_league_id: z.number().nullable().optional(),
+  // User count from lightweight list endpoint (instead of full users array)
+  user_count: z.number().optional(),
 });
 
 // Schema for creating a new tournament

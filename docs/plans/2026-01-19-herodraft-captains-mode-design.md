@@ -2,6 +2,7 @@
 
 **Status:** Completed
 
+
 ## Overview
 
 Implement a real-time Captain's Mode hero draft system for tournament games. Two logged-in captains can draft heroes with reserve time mechanics, while spectators watch live.

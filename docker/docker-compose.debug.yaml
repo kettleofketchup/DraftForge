@@ -6,6 +6,7 @@ services:
     env_file: "./docker/.env.dev"
     volumes:
       - ./frontend:/app
+      - ./docs/assets:/app/public/assets/docs:ro
     restart: always
 
   backend:

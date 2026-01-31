@@ -1,22 +1,25 @@
 // frontend/app/components/herodraft/HeroDraftModal.tsx
-import { useCallback, useState, useMemo } from "react";
+import { useCallback, useState, useMemo, useEffect } from "react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "~/components/ui/dialog";
 import { VisuallyHidden } from "~/components/ui/visually-hidden";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { useHeroDraftStore } from "~/store/heroDraftStore";
-import { useHeroDraftWebSocket } from "./hooks/useHeroDraftWebSocket";
+import { useHeroDraftStore, heroDraftSelectors } from "~/store/heroDraftStore";
 import { useUserStore } from "~/store/userStore";
 import { DraftTopBar } from "./DraftTopBar";
 import { HeroGrid } from "./HeroGrid";
 import { DraftPanel } from "./DraftPanel";
 import { HeroDraftHistoryModal } from "./HeroDraftHistoryModal";
-import { submitPick, setReady, triggerRoll, submitChoice } from "./api";
+import { CompletedDraftView } from "./CompletedDraftView";
+import { submitPick, setReady, triggerRoll, submitChoice, pauseDraft, resumeDraft } from "./api";
 import type { HeroDraft, HeroDraftEvent } from "./types";
-import { heroes } from "dotaconstants";
 import { DisplayName } from "~/components/user/avatar";
-import { X, Send, History } from "lucide-react";
+import { getHeroIcon, getHeroName as getHeroNameFromLib } from "~/lib/dota/heroes";
+import { CaptainToast, HeroActionToast } from "./DraftToasts";
+import { Send, ArrowLeft, Users, Pause, Play } from "lucide-react";
+import { HistoryButton } from "~/components/ui/buttons";
 import {
   Tooltip,
   TooltipContent,
@@ -40,122 +43,156 @@ interface HeroDraftModalProps {
 }
 
 export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) {
+  const navigate = useNavigate();
   const { currentUser } = useUserStore();
-  // Use selectors to prevent re-renders when unrelated state changes
+
+  // WebSocket store - unified state and connection management
   const draft = useHeroDraftStore((state) => state.draft);
   const tick = useHeroDraftStore((state) => state.tick);
-  const setDraft = useHeroDraftStore((state) => state.setDraft);
-  const setTick = useHeroDraftStore((state) => state.setTick);
+  const lastEvent = useHeroDraftStore((state) => state.lastEvent);
   const setSelectedHeroId = useHeroDraftStore((state) => state.setSelectedHeroId);
+  const wsConnect = useHeroDraftStore((state) => state.connect);
+  const wsDisconnect = useHeroDraftStore((state) => state.disconnect);
+  const wsReconnect = useHeroDraftStore((state) => state.reconnect);
+  const startHeartbeat = useHeroDraftStore((state) => state.startHeartbeat);
+  const isConnected = useHeroDraftStore(heroDraftSelectors.isConnected);
+  const connectionError = useHeroDraftStore((state) => state.error);
+  const wasKicked = useHeroDraftStore((state) => state.wasKicked);
 
   const [confirmHeroId, setConfirmHeroId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
+  const [resumeCountdown, setResumeCountdown] = useState<number | null>(null);
+  const [pendingChoice, setPendingChoice] = useState<{
+    type: "pick_order" | "side";
+    value: "first" | "second" | "radiant" | "dire";
+  } | null>(null);
+  const [showFullDraft, setShowFullDraft] = useState(false);
 
-  const handleStateUpdate = useCallback(
-    (newDraft: HeroDraft) => {
-      setDraft(newDraft);
-    },
-    [setDraft]
-  );
+  // Close handler - navigates to bracket if tournament context exists, otherwise calls onClose
+  const handleClose = useCallback(() => {
+    if (draft?.tournament_id && draft?.game) {
+      navigate(`/tournament/${draft.tournament_id}/bracket/match/${draft.game}`);
+    } else {
+      onClose();
+    }
+  }, [draft?.tournament_id, draft?.game, navigate, onClose]);
 
-  const handleTick = useCallback(
-    (newTick: Parameters<typeof setTick>[0]) => {
-      setTick(newTick);
-    },
-    [setTick]
-  );
-
-  const handleEvent = useCallback((event: HeroDraftEvent) => {
-    console.log("[HeroDraftModal] handleEvent:", event.event_type, event);
-
-    // Get hero name helper
-    const getHeroName = (heroId: number | undefined): string => {
-      if (!heroId) return "Unknown Hero";
-      const hero = Object.values(heroes).find((h: { id: number }) => h.id === heroId);
-      return (hero as { localized_name: string } | undefined)?.localized_name ?? `Hero ${heroId}`;
+  // Connect/disconnect WebSocket based on modal open state
+  useEffect(() => {
+    if (open && draftId) {
+      wsConnect(draftId);
+    }
+    return () => {
+      if (!open) {
+        wsDisconnect();
+      }
     };
+  }, [open, draftId, wsConnect, wsDisconnect]);
 
-    // Get captain display name
-    const draftTeam = event.draft_team;
-    const captainName = draftTeam?.captain
-      ? (draftTeam.captain.nickname || draftTeam.captain.username)
-      : "Unknown";
+  // Handle events from WebSocket - show toasts
+  useEffect(() => {
+    if (!lastEvent) return;
 
-    switch (event.event_type) {
+    console.log("[HeroDraftModal] handleEvent:", lastEvent.event_type, lastEvent);
+
+    const draftTeam = lastEvent.draft_team;
+    const captain = draftTeam?.captain;
+
+    switch (lastEvent.event_type) {
       case "captain_ready":
-        toast.info(`${captainName} is ready`);
+        toast(<CaptainToast captain={captain} message="is ready" messageClassName="text-blue-400 font-semibold" />);
+        break;
+      case "captain_connected":
+        toast(<CaptainToast captain={captain} message="connected" messageClassName="text-green-500 font-semibold" />);
+        break;
+      case "captain_disconnected":
+        toast(<CaptainToast captain={captain} message="disconnected" messageClassName="text-red-500 font-semibold" />);
+        break;
+      case "draft_paused":
+        toast.warning("Draft paused - waiting for captain to reconnect");
+        setResumeCountdown(null);
+        break;
+      case "resume_countdown": {
+        const countdownSeconds = (lastEvent.metadata as { countdown_seconds?: number })?.countdown_seconds ?? 3;
+        setResumeCountdown(countdownSeconds);
+        toast.info(`Resuming in ${countdownSeconds}...`);
+        break;
+      }
+      case "draft_resumed":
+        toast.success("Draft resumed - all captains connected");
+        setResumeCountdown(null);
         break;
       case "roll_result":
-        toast.success(`${captainName} won the coin flip!`);
+        toast(<CaptainToast captain={captain} message="won the coin flip!" messageClassName="text-yellow-400 font-semibold" />);
         break;
       case "hero_selected": {
-        // Get hero_id and action_type from metadata
-        const heroId = event.metadata?.hero_id;
-        const actionType = event.metadata?.action_type;
-        const heroName = getHeroName(heroId);
+        const heroId = lastEvent.metadata?.hero_id;
+        const actionType = lastEvent.metadata?.action_type;
+        const heroName = heroId ? getHeroNameFromLib(heroId) : "Unknown Hero";
+        const heroIconUrl = heroId ? getHeroIcon(heroId) : undefined;
         const action = actionType === "ban" ? "banned" : "picked";
-        toast.info(`${captainName} ${action} ${heroName}`);
+
+        toast(<HeroActionToast captain={captain} action={action} heroName={heroName} heroIconUrl={heroIconUrl} />);
         break;
       }
       case "draft_completed":
         toast.success("Draft completed!");
         break;
     }
-  }, []);
+  }, [lastEvent]);
 
-  const { isConnected } = useHeroDraftWebSocket({
-    draftId,
-    enabled: open,  // Only connect when modal is open
-    onStateUpdate: handleStateUpdate,
-    onTick: handleTick,
-    onEvent: handleEvent,
-  });
+  // Countdown timer effect - decrements every second
+  useEffect(() => {
+    if (resumeCountdown === null || resumeCountdown <= 0) return;
 
-  const handleHeroClick = (heroId: number) => {
-    console.log("[HeroDraftModal] handleHeroClick:", {
-      heroId,
-      draft_state: draft?.state,
-      draft_current_round: draft?.current_round,
-      currentUser_pk: currentUser?.pk,
-    });
+    const timer = setTimeout(() => {
+      setResumeCountdown((prev) => (prev !== null && prev > 0 ? prev - 1 : null));
+    }, 1000);
 
+    return () => clearTimeout(timer);
+  }, [resumeCountdown]);
+
+  // Start heartbeat when connected as captain
+  // Note: isCaptain check requires draft to be loaded, so we check both
+  const isCaptainForHeartbeat = draft?.draft_teams.some((t) => t.captain?.pk === currentUser?.pk);
+  useEffect(() => {
+    if (isConnected && isCaptainForHeartbeat) {
+      startHeartbeat();
+    }
+  }, [isConnected, isCaptainForHeartbeat, startHeartbeat]);
+
+  // Show toast when kicked
+  useEffect(() => {
+    if (wasKicked) {
+      toast.error("Connection replaced - you opened this draft in another tab");
+    }
+  }, [wasKicked]);
+
+  // Alias for backwards compatibility
+  const reconnect = wsReconnect;
+
+  const handleHeroClick = useCallback((heroId: number) => {
     if (!draft || !currentUser?.pk) {
-      console.log("[HeroDraftModal] handleHeroClick - early return: no draft or user");
       return;
     }
 
     const myTeam = draft.draft_teams.find((t) => t.captain?.pk === currentUser.pk);
-    console.log("[HeroDraftModal] handleHeroClick:", {
-      myTeam_id: myTeam?.id,
-      myTeam_captain: myTeam?.captain?.username,
-    });
-
     if (!myTeam) {
-      console.log("[HeroDraftModal] handleHeroClick - early return: not a captain");
       return;
     }
 
     // Find current round from rounds array using current_round index
     const currentRound = draft.current_round !== null ? draft.rounds[draft.current_round] : null;
-    console.log("[HeroDraftModal] handleHeroClick:", {
-      currentRound_number: currentRound?.round_number,
-      currentRound_draft_team: currentRound?.draft_team,
-      currentRound_state: currentRound?.state,
-      currentRound_action_type: currentRound?.action_type,
-      isMyTurn: currentRound?.draft_team === myTeam.id,
-    });
 
     if (!currentRound || currentRound.draft_team !== myTeam.id) {
-      console.log("[HeroDraftModal] handleHeroClick - not your turn!");
       toast.error("It's not your turn");
       return;
     }
 
-    console.log("[HeroDraftModal] handleHeroClick - setting confirmHeroId:", heroId);
     setConfirmHeroId(heroId);
-  };
+  }, [draft, currentUser]);
 
   const handleConfirmPick = async () => {
     console.log("[HeroDraftModal] handleConfirmPick:", {
@@ -223,6 +260,34 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     }
   };
 
+  const handlePause = async () => {
+    if (!draft || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await pauseDraft(draft.id);
+      toast.success("Draft paused");
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { error?: string } } };
+      toast.error(axiosError.response?.data?.error || "Failed to pause draft");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResume = async () => {
+    if (!draft || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await resumeDraft(draft.id);
+      toast.success("Resuming draft...");
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { error?: string } } };
+      toast.error(axiosError.response?.data?.error || "Failed to resume draft");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleChoiceSubmit = async (
     choiceType: "pick_order" | "side",
     value: string
@@ -244,18 +309,45 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     }
   };
 
+  // Helper to get readable choice labels
+  const getChoiceLabel = (type: "pick_order" | "side", value: string) => {
+    const labels: Record<string, string> = {
+      first: "First Pick",
+      second: "Second Pick",
+      radiant: "Radiant",
+      dire: "Dire",
+    };
+    return labels[value] || value;
+  };
+
+  // Confirm pending choice - called when user confirms in dialog
+  const confirmPendingChoice = async () => {
+    if (!pendingChoice) return;
+    await handleChoiceSubmit(pendingChoice.type, pendingChoice.value);
+    setPendingChoice(null);
+  };
+
   // Find current round from rounds array
   const currentRoundData = draft && draft.current_round !== null
     ? draft.rounds[draft.current_round]
     : null;
 
-  const isMyTurn = currentRoundData
+  // Check if it's my team's turn (either as captain or team member)
+  const currentPickingTeam = currentRoundData
     ? draft?.draft_teams.find((t) => t.id === currentRoundData.draft_team)
-        ?.captain?.pk === currentUser?.pk
+    : null;
+  const isMyTurn = currentPickingTeam
+    ? currentPickingTeam.captain?.pk === currentUser?.pk ||
+      currentPickingTeam.members?.some((m) => m.pk === currentUser?.pk)
     : false;
 
   const isCaptain = draft?.draft_teams.some((t) => t.captain?.pk === currentUser?.pk);
-  const myTeam = draft?.draft_teams.find((t) => t.captain?.pk === currentUser?.pk);
+  // Find my team - either as captain or as a member
+  const myTeam = draft?.draft_teams.find((t) =>
+    t.captain?.pk === currentUser?.pk ||
+    t.members?.some((m) => m.pk === currentUser?.pk)
+  );
+  const isOnTeam = !!myTeam;
   // roll_winner is already the full DraftTeam object from the backend
   const rollWinnerTeam = draft?.roll_winner ?? null;
 
@@ -263,7 +355,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
   return (
     <>
-      <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
         <DialogContent
           className="!fixed !inset-0 !translate-x-0 !translate-y-0 !top-0 !left-0 !max-w-none !w-full !h-full !p-0 !gap-0 !rounded-none !border-0 bg-gray-900 overflow-hidden"
           showCloseButton={false}
@@ -334,41 +426,52 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                       {rollWinnerTeam?.captain ? DisplayName(rollWinnerTeam.captain) : 'Unknown'} won the flip!
                     </h2>
                     {rollWinnerTeam?.id === myTeam?.id ? (
-                      <div className="space-y-2" data-testid="herodraft-winner-choices">
-                        <p>Choose your preference:</p>
-                        <div className="flex gap-4 justify-center" data-testid="herodraft-choice-buttons">
-                          <Button
-                            onClick={() => handleChoiceSubmit("pick_order", "first")}
-                            disabled={isSubmitting}
-                            data-testid="herodraft-choice-first-pick"
-                          >
-                            {isSubmitting ? "..." : "First Pick"}
-                          </Button>
-                          <Button
-                            onClick={() => handleChoiceSubmit("pick_order", "second")}
-                            disabled={isSubmitting}
-                            data-testid="herodraft-choice-second-pick"
-                          >
-                            {isSubmitting ? "..." : "Second Pick"}
-                          </Button>
-                          <Button
-                            onClick={() => handleChoiceSubmit("side", "radiant")}
-                            disabled={isSubmitting}
-                            data-testid="herodraft-choice-radiant"
-                          >
-                            {isSubmitting ? "..." : "Radiant"}
-                          </Button>
-                          <Button
-                            onClick={() => handleChoiceSubmit("side", "dire")}
-                            disabled={isSubmitting}
-                            data-testid="herodraft-choice-dire"
-                          >
-                            {isSubmitting ? "..." : "Dire"}
-                          </Button>
+                      // Winner's turn - but check if they already made their choice
+                      myTeam.is_first_pick !== null || myTeam.is_radiant !== null ? (
+                        // Winner already made their choice, waiting for loser
+                        <p data-testid="herodraft-winner-waiting">
+                          Waiting for opponent to choose...
+                        </p>
+                      ) : (
+                        <div className="space-y-2" data-testid="herodraft-winner-choices">
+                          <p>Choose your preference:</p>
+                          <div className="flex gap-4 justify-center" data-testid="herodraft-choice-buttons">
+                            <Button
+                              onClick={() => setPendingChoice({ type: "pick_order", value: "first" })}
+                              disabled={isSubmitting}
+                              data-testid="herodraft-choice-first-pick"
+                            >
+                              {isSubmitting ? "..." : "First Pick"}
+                            </Button>
+                            <Button
+                              onClick={() => setPendingChoice({ type: "pick_order", value: "second" })}
+                              disabled={isSubmitting}
+                              data-testid="herodraft-choice-second-pick"
+                            >
+                              {isSubmitting ? "..." : "Second Pick"}
+                            </Button>
+                            <Button
+                              onClick={() => setPendingChoice({ type: "side", value: "radiant" })}
+                              disabled={isSubmitting}
+                              data-testid="herodraft-choice-radiant"
+                            >
+                              {isSubmitting ? "..." : "Radiant"}
+                            </Button>
+                            <Button
+                              onClick={() => setPendingChoice({ type: "side", value: "dire" })}
+                              disabled={isSubmitting}
+                              data-testid="herodraft-choice-dire"
+                            >
+                              {isSubmitting ? "..." : "Dire"}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    ) : myTeam && !rollWinnerTeam ? (
-                      <p data-testid="herodraft-waiting-for-winner">Waiting for roll winner to choose...</p>
+                      )
+                    ) : myTeam && rollWinnerTeam?.is_first_pick === null && rollWinnerTeam?.is_radiant === null ? (
+                      // Loser waits until winner makes their first choice
+                      <p data-testid="herodraft-waiting-for-winner">
+                        Waiting for {rollWinnerTeam?.captain ? DisplayName(rollWinnerTeam.captain) : 'winner'} to choose...
+                      </p>
                     ) : myTeam ? (
                       <div className="space-y-2" data-testid="herodraft-loser-choices">
                         <p>Choose the remaining option:</p>
@@ -377,7 +480,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                             <>
                               <Button
                                 onClick={() =>
-                                  handleChoiceSubmit("pick_order", "first")
+                                  setPendingChoice({ type: "pick_order", value: "first" })
                                 }
                                 disabled={isSubmitting}
                                 data-testid="herodraft-remaining-first-pick"
@@ -386,7 +489,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                               </Button>
                               <Button
                                 onClick={() =>
-                                  handleChoiceSubmit("pick_order", "second")
+                                  setPendingChoice({ type: "pick_order", value: "second" })
                                 }
                                 disabled={isSubmitting}
                                 data-testid="herodraft-remaining-second-pick"
@@ -398,14 +501,14 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                           {rollWinnerTeam?.is_radiant === null && (
                             <>
                               <Button
-                                onClick={() => handleChoiceSubmit("side", "radiant")}
+                                onClick={() => setPendingChoice({ type: "side", value: "radiant" })}
                                 disabled={isSubmitting}
                                 data-testid="herodraft-remaining-radiant"
                               >
                                 {isSubmitting ? "..." : "Radiant"}
                               </Button>
                               <Button
-                                onClick={() => handleChoiceSubmit("side", "dire")}
+                                onClick={() => setPendingChoice({ type: "side", value: "dire" })}
                                 disabled={isSubmitting}
                                 data-testid="herodraft-remaining-dire"
                               >
@@ -422,8 +525,16 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                 </div>
               )}
 
-              {/* Small screen message - shown below sm breakpoint */}
-              {(draft.state === "drafting" || draft.state === "paused" || draft.state === "completed") && (
+              {/* Completed draft view - full screen display of teams (when not viewing full draft) */}
+              {draft.state === "completed" && !showFullDraft && (
+                <CompletedDraftView
+                  draft={draft}
+                  onViewFullDraft={() => setShowFullDraft(true)}
+                />
+              )}
+
+              {/* Small screen message - shown below sm breakpoint for in-progress drafts */}
+              {(draft.state === "drafting" || draft.state === "paused" || draft.state === "resuming") && (
                 <div className="flex-1 flex sm:hidden items-start justify-start p-6" data-testid="herodraft-small-screen-message">
                   <div className="text-left space-y-2 max-w-xs">
                     <div className="text-3xl">🚧</div>
@@ -436,7 +547,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
               )}
 
               {/* Main draft area - hidden on small screens, side-by-side on sm+ */}
-              {(draft.state === "drafting" || draft.state === "paused" || draft.state === "completed") && (
+              {/* Shows during drafting/paused/resuming, OR when viewing full draft in completed state */}
+              {(draft.state === "drafting" || draft.state === "paused" || draft.state === "resuming" || (draft.state === "completed" && showFullDraft)) && (
                 <div className="flex-1 hidden sm:flex flex-row overflow-hidden" data-testid="herodraft-main-area">
                   {/* Hero Grid - 50% sm/md, 58% lg, 80% xl */}
                   <div className="basis-1/2 md:basis-1/2 lg:basis-7/12 xl:basis-4/5 h-full min-w-0 overflow-hidden" data-testid="herodraft-hero-grid-container">
@@ -444,6 +556,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                       onHeroClick={handleHeroClick}
                       disabled={!isMyTurn || draft.state !== "drafting"}
                       showActionButton={isCaptain ?? false}
+                      currentAction={currentAction}
+                      isMyTurn={isMyTurn}
                     />
                   </div>
 
@@ -490,52 +604,183 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
                 {/* Right side controls */}
                 <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowHistoryModal(true)}
-                        className="text-white border-gray-600 hover:bg-gray-800 text-xs sm:text-sm"
-                        data-testid="herodraft-history-btn"
-                      >
-                        <History className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-                        <span className="hidden sm:inline">History</span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Draft Events</TooltipContent>
-                  </Tooltip>
-                  <Button
-                    variant="destructive"
+                  {/* Pause button - shown during drafting for captains/staff */}
+                  {draft.state === "drafting" && (isCaptain || currentUser?.is_staff) && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handlePause}
+                          disabled={isSubmitting}
+                          data-testid="herodraft-pause-btn"
+                          className="flex items-center text-xs sm:text-sm border-yellow-500 text-yellow-500 hover:bg-yellow-500/20"
+                        >
+                          <Pause className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                          <span className="hidden sm:inline">Pause</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Pause the draft</TooltipContent>
+                    </Tooltip>
+                  )}
+                  {/* View Teams button - shown when viewing full draft on completed state */}
+                  {draft.state === "completed" && showFullDraft && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowFullDraft(false)}
+                      data-testid="herodraft-view-teams-btn"
+                      className="flex items-center text-xs sm:text-sm"
+                    >
+                      <Users className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">View Teams</span>
+                    </Button>
+                  )}
+                  <HistoryButton
+                    data-testid="herodraft-history-btn"
+                    onClick={() => setShowHistoryModal(true)}
+                    eventCount={draft.rounds.filter(r => r.state === "completed").length}
+                    tooltipText="Draft History"
                     size="sm"
-                    onClick={onClose}
+                  />
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleClose}
                     data-testid="herodraft-close-btn"
                     className="flex items-center justify-start text-xs sm:text-sm"
                   >
-                    <X className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Close</span>
+                    <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">Back to Bracket</span>
                   </Button>
                 </div>
               </div>
 
-              {/* Paused overlay */}
-              {draft.state === "paused" && (
-                <div className="absolute inset-0 bg-black/70 flex items-center justify-center" data-testid="herodraft-paused-overlay">
-                  <div className="text-center">
-                    <h2 className="text-3xl font-bold text-yellow-400" data-testid="herodraft-paused-title">
-                      Draft Paused
+              {/* Paused/Resuming overlay - shows during pause and countdown */}
+              {(() => {
+                // Use local countdown (not server ticks) to avoid latency issues
+                const isResuming = draft.state === "resuming";
+                const countdownValue = resumeCountdown;
+                const showOverlay = draft.state === "paused" || isResuming || resumeCountdown !== null;
+
+                // Check if both captains are connected
+                const allCaptainsConnected = draft.draft_teams.every(t => t.is_connected);
+                // Check if user can resume (captain or staff)
+                const canResume = isCaptain || currentUser?.is_staff;
+                // Get pause reason message
+                const isManualPause = draft.is_manual_pause;
+
+                return showOverlay && (
+                  <div className="absolute inset-0 bg-black/70 flex items-center justify-center" data-testid="herodraft-paused-overlay">
+                    <div className="text-center space-y-4">
+                      {(countdownValue !== null && countdownValue > 0) ? (
+                        <>
+                          <h2 className="text-3xl font-bold text-green-400" data-testid="herodraft-countdown-title">
+                            Resuming in {countdownValue}...
+                          </h2>
+                          <p className="text-muted-foreground" data-testid="herodraft-countdown-message">
+                            Get ready!
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <h2 className="text-3xl font-bold text-yellow-400" data-testid="herodraft-paused-title">
+                            Draft Paused
+                          </h2>
+                          <p className="text-muted-foreground" data-testid="herodraft-paused-message">
+                            {isManualPause
+                              ? "Paused by captain or staff"
+                              : allCaptainsConnected
+                                ? "Click Resume to continue"
+                                : "Waiting for captain to reconnect..."}
+                          </p>
+                          <div className="flex flex-col gap-2 items-center">
+                            {canResume && allCaptainsConnected && (
+                              <Button
+                                variant="default"
+                                onClick={handleResume}
+                                disabled={isSubmitting}
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                                data-testid="herodraft-resume-btn"
+                              >
+                                <Play className="h-4 w-4 mr-2" />
+                                {isSubmitting ? "Resuming..." : "Resume Draft"}
+                              </Button>
+                            )}
+                            {!allCaptainsConnected && (
+                              <Button
+                                variant="outline"
+                                onClick={reconnect}
+                                className="text-white border-yellow-400 hover:bg-yellow-400/20"
+                                data-testid="herodraft-reconnect-btn"
+                              >
+                                Reconnect
+                              </Button>
+                            )}
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={handleClose}
+                              data-testid="herodraft-paused-close-btn"
+                            >
+                              <ArrowLeft className="h-4 w-4 mr-2" />
+                              Back to Bracket
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Kicked overlay - shows when connection was replaced by another tab */}
+              {wasKicked && (
+                <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50" data-testid="herodraft-kicked-overlay">
+                  <div className="text-center space-y-4 max-w-md px-6">
+                    <h2 className="text-2xl font-bold text-orange-400" data-testid="herodraft-kicked-title">
+                      Session Replaced
                     </h2>
-                    <p className="text-muted-foreground" data-testid="herodraft-paused-message">
-                      Waiting for captain to reconnect...
+                    <p className="text-gray-300" data-testid="herodraft-kicked-message">
+                      Another browser tab has taken over this draft session.
+                      Refresh this page to take control back.
                     </p>
+                    <div className="flex flex-col gap-2 items-center pt-2">
+                      <Button
+                        variant="default"
+                        onClick={() => window.location.reload()}
+                        className="bg-orange-500 hover:bg-orange-600 text-white"
+                        data-testid="herodraft-kicked-refresh-btn"
+                      >
+                        Refresh Page
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleClose}
+                        data-testid="herodraft-kicked-close-btn"
+                      >
+                        <ArrowLeft className="h-4 w-4 mr-2" />
+                        Back to Bracket
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
 
               {/* Connection status */}
-              {!isConnected && (
-                <div className="absolute top-2 right-2 bg-red-500/80 text-white px-2 py-1 rounded text-sm" data-testid="herodraft-reconnecting">
-                  Reconnecting...
+              {!isConnected && !wasKicked && (
+                <div className="absolute top-2 right-2 bg-red-500/80 text-white px-3 py-2 rounded text-sm flex items-center gap-2" data-testid="herodraft-reconnecting">
+                  <span>{connectionError || "Reconnecting..."}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={reconnect}
+                    className="h-6 px-2 text-xs hover:bg-red-600"
+                    data-testid="herodraft-reconnect-inline-btn"
+                  >
+                    Retry
+                  </Button>
                 </div>
               )}
             </div>
@@ -556,7 +801,10 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
       {/* Confirm pick dialog */}
       <AlertDialog
         open={confirmHeroId !== null}
-        onOpenChange={() => setConfirmHeroId(null)}
+        onOpenChange={() => {
+          setConfirmHeroId(null);
+          setSelectedHeroId(null);
+        }}
       >
         <AlertDialogContent data-testid="herodraft-confirm-dialog">
           <AlertDialogHeader>
@@ -573,6 +821,39 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
               {isSubmitting
                 ? "Submitting..."
                 : `Confirm ${currentAction === "ban" ? "Ban" : "Pick"}`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm choice dialog (for pick order / side selection) */}
+      <AlertDialog
+        open={pendingChoice !== null}
+        onOpenChange={() => setPendingChoice(null)}
+      >
+        <AlertDialogContent data-testid="herodraft-confirm-choice-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle data-testid="herodraft-confirm-choice-title">
+              Confirm your choice
+            </AlertDialogTitle>
+            <AlertDialogDescription data-testid="herodraft-confirm-choice-description">
+              Are you sure you want to choose{" "}
+              <span className="font-semibold text-white">
+                {pendingChoice ? getChoiceLabel(pendingChoice.type, pendingChoice.value) : ""}
+              </span>
+              ? This choice cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting} data-testid="herodraft-confirm-choice-cancel">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmPendingChoice}
+              disabled={isSubmitting}
+              data-testid="herodraft-confirm-choice-submit"
+            >
+              {isSubmitting ? "Submitting..." : "Confirm"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

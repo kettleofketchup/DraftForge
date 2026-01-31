@@ -1,6 +1,6 @@
 """Bracket API views for tournament bracket management."""
 
-from cacheops import invalidate_model, invalidate_obj
+from cacheops import invalidate_obj
 from django.db import transaction
 from django.db.models import Max
 from rest_framework import status
@@ -170,8 +170,9 @@ def save_bracket(request, tournament_id):
     )
     result_serializer = BracketGameSerializer(saved_games, many=True)
 
-    # Invalidate caches after saving bracket
-    invalidate_model(Game)
+    # Invalidate caches after saving bracket - invalidate each saved game
+    for game in saved_games:
+        invalidate_obj(game)
     invalidate_obj(tournament)
 
     return Response({"tournamentId": tournament_id, "matches": result_serializer.data})
@@ -299,8 +300,12 @@ def advance_winner(request, game_id):
         winning_team.save()
 
     # Invalidate caches after advancing winner
-    invalidate_model(Game)
-    invalidate_model(Team)
+    invalidate_obj(game)
+    invalidate_obj(winning_team)
+    if losing_team:
+        invalidate_obj(losing_team)
+    if game.tournament:
+        invalidate_obj(game.tournament)
 
     return Response(BracketGameSerializer(game).data)
 
@@ -351,6 +356,7 @@ def set_team_placement(request, tournament_id, team_id):
 
     # Invalidate caches after setting placement
     invalidate_obj(team)
-    invalidate_model(Team)
+    if tournament:
+        invalidate_obj(tournament)
 
     return Response({"team_id": team.pk, "placement": team.placement})

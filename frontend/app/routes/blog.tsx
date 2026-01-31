@@ -1,11 +1,12 @@
-import type { Route } from './+types/home';
 import { Blog } from '../pages/blog/blog';
+import { generateMeta } from '~/lib/seo';
 
-export function meta({}: Route.MetaArgs) {
-  return [
-    { title: 'DTX: Blog' },
-    { name: 'description', content: 'Welcome to React Router!' },
-  ];
+export function meta() {
+  return generateMeta({
+    title: 'Blog',
+    description: 'News and updates from DraftForge',
+    url: '/blog',
+  });
 }
 
 export default function Home() {

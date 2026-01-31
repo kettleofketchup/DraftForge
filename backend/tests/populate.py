@@ -230,6 +230,7 @@ def populate_organizations_and_leagues(force=False):
             "description": "DTX - A Dota 2 amateur tournament organization.",
             "logo": "",
             "rules_template": "Standard DTX tournament rules apply.",
+            "timezone": "America/New_York",  # US East default
         },
     )
     action = "Created" if created else "Updated"
@@ -243,6 +244,7 @@ def populate_organizations_and_leagues(force=False):
             "description": "Main DTX League for in-house tournaments.",
             "rules": "Standard DTX tournament rules apply.",
             "prize_pool": "",
+            "timezone": "America/New_York",  # US East default
         },
     )
     # Add organization to league (ManyToMany)
@@ -265,6 +267,7 @@ def populate_organizations_and_leagues(force=False):
             "description": "Test organization for Cypress E2E tests.",
             "logo": "",
             "rules_template": "Test rules template.",
+            "timezone": "America/New_York",  # US East default
         },
     )
     action = "Created" if created else "Updated"
@@ -274,13 +277,14 @@ def populate_organizations_and_leagues(force=False):
     test_league, created = League.objects.update_or_create(
         steam_league_id=TEST_STEAM_LEAGUE_ID,
         defaults={
-            "organization": test_org,
             "name": TEST_LEAGUE_NAME,
             "description": "Test league for Cypress E2E tests.",
             "rules": "Test rules.",
             "prize_pool": "",
+            "timezone": "America/New_York",  # US East default
         },
     )
+    test_league.organizations.add(test_org)
     action = "Created" if created else "Updated"
     print(
         f"  {action} league: {TEST_LEAGUE_NAME} (steam_league_id={TEST_STEAM_LEAGUE_ID})"
@@ -533,8 +537,7 @@ def populate_tournaments(force=False):
                         captain=captain,
                         draft_order=team_idx + 1,
                     )
-                    team.members.set(team_members)
-                    team.save()
+                    team.members.set(team_members)  # Captain included in members
 
             tournament.save()
 
@@ -961,7 +964,7 @@ def populate_bracket_linking_scenario(force=False):
     teams = []
     for team_idx, team_name in enumerate(team_names):
         team_members = team_users[team_idx * 5 : (team_idx + 1) * 5]
-        captain = team_members[0]  # First player is captain
+        captain = team_members[0]
 
         team = Team.objects.create(
             tournament=tournament,
@@ -969,7 +972,7 @@ def populate_bracket_linking_scenario(force=False):
             captain=captain,
             draft_order=team_idx + 1,
         )
-        team.members.set(team_members)
+        team.members.set(team_members)  # Captain included in members
         teams.append(team)
 
     print(f"  Created 4 teams: {', '.join(team_names)}")
@@ -1215,55 +1218,40 @@ def populate_real_tournament_38(force=False):
 
     print(f"Creating '{TOURNAMENT_NAME}' with real production data...")
 
-    # Real player data from production Tournament 38
-    # Format: (username, steam_account_id or None, mmr, discord_id)
-    # Discord IDs and Steam IDs pulled directly from production API
-    team_data = {
+    # Team structure referencing usernames from REAL_TOURNAMENT_USERS (single source of truth)
+    # Only defines team composition - user data comes from REAL_TOURNAMENT_USERS
+    team_structure = {
         "vrm.mtl's Team": {
-            "captain": ("vrm.mtl", None, 6500, "764290890617192469"),
-            "members": [
-                ("tornope", None, 3500, "376476737904836614"),
-                ("nimstria1", 171468462, 500, "1303996935501381632"),
-                ("thekingauto", 97505772, 2920, "899703742012747797"),
-                ("leafael.", 1098211999, 4268, "740972649651634198"),
-            ],
+            "captain": "vrm.mtl",
+            "members": ["tornope", "nimstria1", "thekingauto", "leafael."],
         },
         "ethan0688_'s Team": {
-            "captain": ("ethan0688_", None, 6600, "1325607754177581066"),
-            "members": [
-                ("just__khang", 237494518, 4100, "279963469141377024"),
-                ("heffdawgz", 84657820, 5800, "214624382935367682"),
-                ("pushingshots", 104427945, 2725, "403758532161437706"),
-                ("p0styp0sty", None, 122, "556931015147520001"),
-            ],
+            "captain": "ethan0688_",
+            "members": ["just__khang", "heffdawgz", "pushingshots", "p0styp0sty"],
         },
         "benevolentgremlin's Team": {
-            "captain": ("benevolentgremlin", 150218787, 6800, "186688726187900929"),
-            "members": [
-                ("clarexlauda", None, 2000, "990297849688391831"),
-                ("creemy__", None, 4400, "359131134820483083"),
-                ("sir_t_rex", 93840608, 4500, "158695781216288768"),
-                ("bearthebear", 240083333, 2600, "251396038856802305"),
-            ],
+            "captain": "benevolentgremlin",
+            "members": ["clarexlauda", "creemy__", "sir_t_rex", "bearthebear"],
         },
         "gglive's Team": {
-            "captain": ("gglive", 1101709346, 9000, "584468301988757504"),
-            "members": [
-                ("anil98765", 104151469, 2000, "435984979902595083"),
-                ("hassanzulfi", 115198530, 2700, "405344576480608257"),
-                ("abaybay1392", None, 6700, "501861539033382933"),
-                ("reacher_z", None, 400, "1164441465959743540"),
-            ],
+            "captain": "gglive",
+            "members": ["anil98765", "hassanzulfi", "abaybay1392", "reacher_z"],
         },
     }
 
-    def create_or_get_user(username, steam_id, mmr, discord_id):
-        """Create or get a user with the given data."""
+    def create_or_get_user(username):
+        """Create or get a user from REAL_TOURNAMENT_USERS data."""
+        user_data = REAL_TOURNAMENT_USERS.get(username)
+        if not user_data:
+            raise ValueError(f"User '{username}' not found in REAL_TOURNAMENT_USERS")
+
+        steam_id = user_data.get("steam_id")
+        mmr = user_data.get("mmr", 3000)
+        discord_id = user_data.get("discord_id")
+        pos_data = user_data.get("positions", {})
 
         # Convert Steam ID 32-bit to 64-bit if provided
-        steamid_64 = None
-        if steam_id:
-            steamid_64 = 76561197960265728 + steam_id
+        steamid_64 = 76561197960265728 + steam_id if steam_id else None
 
         # First, try to find existing user by discord_id
         user = CustomUser.objects.filter(discordId=discord_id).first()
@@ -1289,30 +1277,45 @@ def populate_real_tournament_38(force=False):
                 print(f"    Updated user from username match: {username}")
 
         if not user:
-            # Create new user
+            # Create new user with real position data
+            positions = PositionsModel.objects.create(
+                carry=pos_data.get("carry", 3),
+                mid=pos_data.get("mid", 3),
+                offlane=pos_data.get("offlane", 3),
+                soft_support=pos_data.get("soft_support", 3),
+                hard_support=pos_data.get("hard_support", 3),
+            )
             user = CustomUser.objects.create(
                 discordId=discord_id,
                 username=username,
                 steamid=steamid_64,
                 mmr=mmr,
+                positions=positions,
             )
-            # Create positions for new user
-            positions = PositionsModel.objects.create(
-                carry=3, mid=3, offlane=3, soft_support=3, hard_support=3
-            )
-            user.positions = positions
-            user.save()
             print(
                 f"    Created user: {username} (mmr: {mmr}, steam: {steam_id or 'N/A'})"
             )
         else:
-            # Update existing user's steamid if needed
+            # Update existing user data
             if user.steamid != steamid_64 and steamid_64:
                 user.steamid = steamid_64
-                user.save()
             if user.username != username:
                 user.username = username
-                user.save()
+            if user.mmr != mmr:
+                user.mmr = mmr
+            # Update positions if we have real data
+            if pos_data and user.positions:
+                user.positions.carry = pos_data.get("carry", user.positions.carry)
+                user.positions.mid = pos_data.get("mid", user.positions.mid)
+                user.positions.offlane = pos_data.get("offlane", user.positions.offlane)
+                user.positions.soft_support = pos_data.get(
+                    "soft_support", user.positions.soft_support
+                )
+                user.positions.hard_support = pos_data.get(
+                    "hard_support", user.positions.hard_support
+                )
+                user.positions.save()
+            user.save()
 
         return user
 
@@ -1339,30 +1342,27 @@ def populate_real_tournament_38(force=False):
 
     print("  Creating users and teams...")
     for draft_order, team_name in enumerate(team_order, 1):
-        data = team_data[team_name]
+        structure = team_structure[team_name]
 
-        # Create captain
-        cap_name, cap_steam, cap_mmr, cap_discord = data["captain"]
-        captain = create_or_get_user(cap_name, cap_steam, cap_mmr, cap_discord)
+        # Create captain (data comes from REAL_TOURNAMENT_USERS)
+        captain = create_or_get_user(structure["captain"])
         all_users.append(captain)
 
         # Create team members
         team_members = [captain]
-        for member_name, member_steam, member_mmr, member_discord in data["members"]:
-            member = create_or_get_user(
-                member_name, member_steam, member_mmr, member_discord
-            )
+        for member_name in structure["members"]:
+            member = create_or_get_user(member_name)
             team_members.append(member)
             all_users.append(member)
 
-        # Create team
+        # Create team with captain
         team = Team.objects.create(
             tournament=tournament,
             name=team_name,
             captain=captain,
             draft_order=draft_order,
         )
-        team.members.set(team_members)
+        team.members.set(team_members)  # Captain included in members
         teams.append(team)
         print(f"    Created team: {team_name} (captain: {captain.username})")
 
@@ -1510,6 +1510,686 @@ def populate_real_tournament_38(force=False):
     return tournament
 
 
+# =============================================================================
+# Demo Tournament Data (for video recording)
+# =============================================================================
+
+# Real Tournament 38 user data - shared between demo tournaments
+# Updated 2026-01-29 with latest production data including Steam IDs and positions
+REAL_TOURNAMENT_USERS = {
+    "just__khang": {
+        "steam_id": 237494518,
+        "mmr": 4600,
+        "discord_id": "279963469141377024",
+        "positions": {
+            "carry": 2,
+            "mid": 3,
+            "offlane": 1,
+            "soft_support": 3,
+            "hard_support": 5,
+        },
+    },
+    "clarexlauda": {
+        "steam_id": 150363706,
+        "mmr": 2000,
+        "discord_id": "990297849688391831",
+        "positions": {
+            "carry": 3,
+            "mid": 0,
+            "offlane": 0,
+            "soft_support": 2,
+            "hard_support": 1,
+        },
+    },
+    "heffdawgz": {
+        "steam_id": 84657820,
+        "mmr": 5800,
+        "discord_id": "214624382935367682",
+        "positions": {
+            "carry": 0,
+            "mid": 1,
+            "offlane": 0,
+            "soft_support": 0,
+            "hard_support": 0,
+        },
+    },
+    "pushingshots": {
+        "steam_id": 104427945,
+        "mmr": 2725,
+        "discord_id": "403758532161437706",
+        "positions": {
+            "carry": 3,
+            "mid": 5,
+            "offlane": 0,
+            "soft_support": 1,
+            "hard_support": 2,
+        },
+    },
+    "anil98765": {
+        "steam_id": 104151469,
+        "mmr": 2000,
+        "discord_id": "435984979902595083",
+        "positions": {
+            "carry": 0,
+            "mid": 0,
+            "offlane": 0,
+            "soft_support": 4,
+            "hard_support": 5,
+        },
+    },
+    "tornope": {
+        "steam_id": 174372053,
+        "mmr": 3500,
+        "discord_id": "376476737904836614",
+        "positions": {
+            "carry": 1,
+            "mid": 0,
+            "offlane": 3,
+            "soft_support": 0,
+            "hard_support": 0,
+        },
+    },
+    "nimstria1": {
+        "steam_id": 171468462,
+        "mmr": 500,
+        "discord_id": "1303996935501381632",
+        "positions": {
+            "carry": 0,
+            "mid": 0,
+            "offlane": 0,
+            "soft_support": 1,
+            "hard_support": 1,
+        },
+    },
+    "creemy__": {
+        "steam_id": 114010086,
+        "mmr": 4400,
+        "discord_id": "359131134820483083",
+        "positions": {
+            "carry": 1,
+            "mid": 0,
+            "offlane": 2,
+            "soft_support": 2,
+            "hard_support": 2,
+        },
+    },
+    "ethan0688_": {
+        "steam_id": 875238678,
+        "mmr": 6600,
+        "discord_id": "1325607754177581066",
+        "positions": {
+            "carry": 2,
+            "mid": 1,
+            "offlane": 3,
+            "soft_support": 4,
+            "hard_support": 5,
+        },
+    },
+    "hassanzulfi": {
+        "steam_id": 115198530,
+        "mmr": 2700,
+        "discord_id": "405344576480608257",
+        "positions": {
+            "carry": 0,
+            "mid": 0,
+            "offlane": 1,
+            "soft_support": 2,
+            "hard_support": 3,
+        },
+    },
+    "sir_t_rex": {
+        "steam_id": 93840608,
+        "mmr": 4500,
+        "discord_id": "158695781216288768",
+        "positions": {
+            "carry": 1,
+            "mid": 2,
+            "offlane": 3,
+            "soft_support": 0,
+            "hard_support": 0,
+        },
+    },
+    "abaybay1392": {
+        "steam_id": 299870746,
+        "mmr": 6700,
+        "discord_id": "501861539033382933",
+        "positions": {
+            "carry": 1,
+            "mid": 1,
+            "offlane": 1,
+            "soft_support": 2,
+            "hard_support": 2,
+        },
+    },
+    "p0styp0sty": {
+        "steam_id": 275837954,
+        "mmr": 122,
+        "discord_id": "556931015147520001",
+        "positions": {
+            "carry": 0,
+            "mid": 0,
+            "offlane": 0,
+            "soft_support": 1,
+            "hard_support": 2,
+        },
+    },
+    "reacher_z": {
+        "steam_id": 84874902,
+        "mmr": 400,
+        "discord_id": "1164441465959743540",
+        "positions": {
+            "carry": 5,
+            "mid": 4,
+            "offlane": 3,
+            "soft_support": 2,
+            "hard_support": 1,
+        },
+    },
+    "vrm.mtl": {
+        "steam_id": 151410512,
+        "mmr": 6500,
+        "discord_id": "764290890617192469",
+        "positions": {
+            "carry": 2,
+            "mid": 1,
+            "offlane": 3,
+            "soft_support": 0,
+            "hard_support": 0,
+        },
+    },
+    "gglive": {
+        "steam_id": 1101709346,
+        "mmr": 9000,
+        "discord_id": "584468301988757504",
+        "positions": {
+            "carry": 0,
+            "mid": 3,
+            "offlane": 0,
+            "soft_support": 2,
+            "hard_support": 1,
+        },
+    },
+    "thekingauto": {
+        "steam_id": 97505772,
+        "mmr": 2920,
+        "discord_id": "899703742012747797",
+        "positions": {
+            "carry": 1,
+            "mid": 2,
+            "offlane": 3,
+            "soft_support": 0,
+            "hard_support": 0,
+        },
+    },
+    "leafael.": {
+        "steam_id": 1098211999,
+        "mmr": 4268,
+        "discord_id": "740972649651634198",
+        "positions": {
+            "carry": 3,
+            "mid": 0,
+            "offlane": 0,
+            "soft_support": 1,
+            "hard_support": 3,
+        },
+    },
+    "benevolentgremlin": {
+        "steam_id": 150218787,
+        "mmr": 6800,
+        "discord_id": "186688726187900929",
+        "positions": {
+            "carry": 1,
+            "mid": 0,
+            "offlane": 4,
+            "soft_support": 1,
+            "hard_support": 4,
+        },
+    },
+    "bearthebear": {
+        "steam_id": 240083333,
+        "mmr": 2600,
+        "discord_id": "251396038856802305",
+        "positions": {
+            "carry": 1,
+            "mid": 4,
+            "offlane": 4,
+            "soft_support": 3,
+            "hard_support": 4,
+        },
+    },
+}
+
+
+def _get_or_create_demo_user(username, user_data):
+    """Get or create a user for demo tournaments with real position data."""
+    from app.models import CustomUser, PositionsModel
+
+    steam_id = user_data.get("steam_id")
+    steamid_64 = 76561197960265728 + steam_id if steam_id else None
+    pos_data = user_data.get("positions", {})
+
+    user = CustomUser.objects.filter(discordId=user_data["discord_id"]).first()
+    if not user:
+        user = CustomUser.objects.filter(username=username).first()
+
+    if not user:
+        # Create new user with real position data
+        positions = PositionsModel.objects.create(
+            carry=pos_data.get("carry", 3),
+            mid=pos_data.get("mid", 3),
+            offlane=pos_data.get("offlane", 3),
+            soft_support=pos_data.get("soft_support", 3),
+            hard_support=pos_data.get("hard_support", 3),
+        )
+        user = CustomUser.objects.create(
+            discordId=user_data["discord_id"],
+            username=username,
+            steamid=steamid_64,
+            mmr=user_data["mmr"],
+            positions=positions,
+        )
+    else:
+        # Update existing user with latest data
+        if steamid_64 and user.steamid != steamid_64:
+            user.steamid = steamid_64
+        if user.mmr != user_data["mmr"]:
+            user.mmr = user_data["mmr"]
+        # Update positions if provided
+        if pos_data and user.positions:
+            user.positions.carry = pos_data.get("carry", user.positions.carry)
+            user.positions.mid = pos_data.get("mid", user.positions.mid)
+            user.positions.offlane = pos_data.get("offlane", user.positions.offlane)
+            user.positions.soft_support = pos_data.get(
+                "soft_support", user.positions.soft_support
+            )
+            user.positions.hard_support = pos_data.get(
+                "hard_support", user.positions.hard_support
+            )
+            user.positions.save()
+        user.save()
+
+    return user
+
+
+def _fetch_discord_avatars_for_users(users):
+    """Fetch Discord avatars for a list of users (sync, for population only)."""
+    import os
+
+    import requests
+
+    discord_token = os.environ.get("DISCORD_BOT_TOKEN")
+    if not discord_token:
+        print("    DISCORD_BOT_TOKEN not set, skipping avatar fetch")
+        return
+
+    headers = {"Authorization": f"Bot {discord_token}"}
+
+    for user in users:
+        if not user.discordId:
+            continue
+        # Skip if user already has an avatar hash (not a full URL)
+        # Avatar hashes are 32-char hex strings, not URLs
+        if user.avatar and not user.avatar.startswith("http"):
+            continue  # Already has avatar hash
+
+        try:
+            response = requests.get(
+                f"https://discord.com/api/v10/users/{user.discordId}",
+                headers=headers,
+                timeout=5,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                avatar_hash = data.get("avatar")
+                if avatar_hash:
+                    # Store just the hash - avatarUrl property constructs the full URL
+                    user.avatar = avatar_hash
+                    user.save(update_fields=["avatar"])
+                    print(f"    Fetched avatar for {user.username}")
+        except Exception as e:
+            print(f"    Failed to fetch avatar for {user.username}: {e}")
+
+
+def populate_demo_herodraft_tournament(force=False):
+    """
+    Create Demo HeroDraft Tournament for video recording.
+
+    Creates a tournament with 2 teams (5 players each) for hero draft demos.
+    Uses Real Tournament 38 users with Discord avatars.
+
+    Args:
+        force: If True, recreate the tournament even if it exists
+    """
+    from django.utils import timezone
+
+    from app.models import CustomUser, Game, HeroDraft, League, Team, Tournament
+
+    TOURNAMENT_NAME = "Demo HeroDraft Tournament"
+
+    # Get the DTX league
+    dtx_league = League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).first()
+
+    existing = Tournament.objects.filter(name=TOURNAMENT_NAME).first()
+    if existing and not force:
+        print(
+            f"Tournament '{TOURNAMENT_NAME}' already exists. Use force=True to recreate."
+        )
+        return existing
+
+    if force and existing:
+        print(f"Deleting existing tournament '{TOURNAMENT_NAME}'...")
+        existing.delete()
+
+    print(f"Creating '{TOURNAMENT_NAME}' for hero draft demos...")
+
+    # Use first 10 Real Tournament users (2 teams of 5)
+    team_a_usernames = ["vrm.mtl", "tornope", "nimstria1", "thekingauto", "clarexlauda"]
+    team_b_usernames = [
+        "ethan0688_",
+        "just__khang",
+        "heffdawgz",
+        "pushingshots",
+        "anil98765",
+    ]
+
+    team_a_users = [
+        _get_or_create_demo_user(u, REAL_TOURNAMENT_USERS[u]) for u in team_a_usernames
+    ]
+    team_b_users = [
+        _get_or_create_demo_user(u, REAL_TOURNAMENT_USERS[u]) for u in team_b_usernames
+    ]
+    all_users = team_a_users + team_b_users
+
+    # Fetch Discord avatars
+    print("  Fetching Discord avatars...")
+    _fetch_discord_avatars_for_users(all_users)
+
+    tournament = Tournament.objects.create(
+        name=TOURNAMENT_NAME,
+        date_played=timezone.now(),
+        state="in_progress",
+        tournament_type="double_elimination",
+        league=dtx_league,
+    )
+    tournament.users.set(all_users)
+
+    # Create teams
+    team_a = Team.objects.create(
+        tournament=tournament,
+        name="Demo Team Alpha",
+        captain=team_a_users[0],  # vrm.mtl
+        draft_order=1,
+    )
+    team_a.members.set(team_a_users)
+
+    team_b = Team.objects.create(
+        tournament=tournament,
+        name="Demo Team Beta",
+        captain=team_b_users[0],  # ethan0688_
+        draft_order=2,
+    )
+    team_b.members.set(team_b_users)
+
+    # Create a single bracket game for hero draft
+    game = Game.objects.create(
+        tournament=tournament,
+        round=1,
+        bracket_type="winners",
+        position=0,
+        elimination_type="double",
+        radiant_team=team_a,
+        dire_team=team_b,
+        status="pending",
+    )
+
+    # Create HeroDraft for this game
+    from app.models import DraftTeam
+
+    herodraft = HeroDraft.objects.create(
+        game=game,
+        state="waiting_for_captains",
+    )
+
+    # Create draft teams
+    DraftTeam.objects.create(
+        draft=herodraft,
+        tournament_team=team_a,
+        reserve_time_remaining=90000,
+    )
+    DraftTeam.objects.create(
+        draft=herodraft,
+        tournament_team=team_b,
+        reserve_time_remaining=90000,
+    )
+
+    print(f"Created '{TOURNAMENT_NAME}' with 2 teams, HeroDraft ready")
+    _flush_redis_cache()
+
+    return tournament
+
+
+def populate_demo_captaindraft_tournament(force=False):
+    """
+    Create Demo Captain Draft Tournament for video recording.
+
+    Creates a tournament with 16 players (no teams yet) for captain draft demos.
+    Uses Real Tournament 38 users with Discord avatars.
+
+    Args:
+        force: If True, recreate the tournament even if it exists
+    """
+    from django.utils import timezone
+
+    from app.models import CustomUser, Draft, League, Tournament
+
+    TOURNAMENT_NAME = "Demo Captain Draft Tournament"
+
+    dtx_league = League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).first()
+
+    existing = Tournament.objects.filter(name=TOURNAMENT_NAME).first()
+    if existing and not force:
+        print(
+            f"Tournament '{TOURNAMENT_NAME}' already exists. Use force=True to recreate."
+        )
+        return existing
+
+    if force and existing:
+        print(f"Deleting existing tournament '{TOURNAMENT_NAME}'...")
+        existing.delete()
+
+    print(f"Creating '{TOURNAMENT_NAME}' for captain draft demos...")
+
+    # Use first 16 Real Tournament users
+    usernames = list(REAL_TOURNAMENT_USERS.keys())[:16]
+    users = [_get_or_create_demo_user(u, REAL_TOURNAMENT_USERS[u]) for u in usernames]
+
+    # Fetch Discord avatars
+    print("  Fetching Discord avatars...")
+    _fetch_discord_avatars_for_users(users)
+
+    tournament = Tournament.objects.create(
+        name=TOURNAMENT_NAME,
+        date_played=timezone.now(),
+        state="future",  # Before draft
+        tournament_type="double_elimination",
+        league=dtx_league,
+    )
+    tournament.users.set(users)
+
+    # Create draft for this tournament (shuffle mode for demo)
+    draft = Draft.objects.create(
+        tournament=tournament,
+        draft_style="shuffle",
+    )
+
+    print(f"Created '{TOURNAMENT_NAME}' with 16 players, Draft ready")
+    _flush_redis_cache()
+
+    return tournament
+
+
+def populate_demo_snake_draft_tournament(force=False):
+    """
+    Create Demo Snake Draft Tournament for video recording.
+
+    Creates a tournament with 16 players and 4 teams for snake draft demos.
+    Uses Real Tournament 38 users with Discord avatars.
+
+    Args:
+        force: If True, recreate the tournament even if it exists
+    """
+    from django.utils import timezone
+
+    from app.models import CustomUser, Draft, League, Team, Tournament
+
+    TOURNAMENT_NAME = "Demo Snake Draft Tournament"
+
+    dtx_league = League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).first()
+
+    existing = Tournament.objects.filter(name=TOURNAMENT_NAME).first()
+    if existing and not force:
+        print(
+            f"Tournament '{TOURNAMENT_NAME}' already exists. Use force=True to recreate."
+        )
+        return existing
+
+    if force and existing:
+        print(f"Deleting existing tournament '{TOURNAMENT_NAME}'...")
+        existing.delete()
+
+    print(f"Creating '{TOURNAMENT_NAME}' for snake draft demos...")
+
+    # Use first 20 Real Tournament users (4 captains + 16 players)
+    usernames = list(REAL_TOURNAMENT_USERS.keys())[:20]
+    users = [_get_or_create_demo_user(u, REAL_TOURNAMENT_USERS[u]) for u in usernames]
+
+    # Fetch Discord avatars
+    print("  Fetching Discord avatars...")
+    _fetch_discord_avatars_for_users(users)
+
+    tournament = Tournament.objects.create(
+        name=TOURNAMENT_NAME,
+        date_played=timezone.now(),
+        state="in_progress",  # Ready for drafting
+        tournament_type="double_elimination",
+        league=dtx_league,
+    )
+    tournament.users.set(users)
+
+    # Create 4 teams with captains (first 4 users)
+    team_names = ["Team Alpha", "Team Beta", "Team Gamma", "Team Delta"]
+    for i, team_name in enumerate(team_names):
+        captain = users[i]
+        team = Team.objects.create(
+            tournament=tournament,
+            name=team_name,
+            captain=captain,
+            draft_order=i + 1,
+        )
+        team.members.add(captain)
+
+    # Create draft for this tournament (snake mode)
+    draft = Draft.objects.create(
+        tournament=tournament,
+        draft_style="snake",
+    )
+
+    # Initialize draft rounds
+    draft.build_rounds()
+    draft.rebuild_teams()
+    draft.save()
+
+    print(f"Created '{TOURNAMENT_NAME}' with 4 teams, 20 players, Snake Draft ready")
+    _flush_redis_cache()
+
+    return tournament
+
+
+def populate_demo_shuffle_draft_tournament(force=False):
+    """
+    Create Demo Shuffle Draft Tournament for video recording.
+
+    Creates a tournament with 16 players and 4 teams for shuffle draft demos.
+    Uses Real Tournament 38 users with Discord avatars.
+
+    Args:
+        force: If True, recreate the tournament even if it exists
+    """
+    from django.utils import timezone
+
+    from app.models import CustomUser, Draft, League, Team, Tournament
+
+    TOURNAMENT_NAME = "Demo Shuffle Draft Tournament"
+
+    dtx_league = League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).first()
+
+    existing = Tournament.objects.filter(name=TOURNAMENT_NAME).first()
+    if existing and not force:
+        print(
+            f"Tournament '{TOURNAMENT_NAME}' already exists. Use force=True to recreate."
+        )
+        return existing
+
+    if force and existing:
+        print(f"Deleting existing tournament '{TOURNAMENT_NAME}'...")
+        existing.delete()
+
+    print(f"Creating '{TOURNAMENT_NAME}' for shuffle draft demos...")
+
+    # Use first 20 Real Tournament users (4 captains + 16 players)
+    usernames = list(REAL_TOURNAMENT_USERS.keys())[:20]
+    users = [_get_or_create_demo_user(u, REAL_TOURNAMENT_USERS[u]) for u in usernames]
+
+    # Fetch Discord avatars
+    print("  Fetching Discord avatars...")
+    _fetch_discord_avatars_for_users(users)
+
+    tournament = Tournament.objects.create(
+        name=TOURNAMENT_NAME,
+        date_played=timezone.now(),
+        state="in_progress",  # Ready for drafting
+        tournament_type="double_elimination",
+        league=dtx_league,
+    )
+    tournament.users.set(users)
+
+    # Create 4 teams with captains (first 4 users)
+    team_names = ["Team Alpha", "Team Beta", "Team Gamma", "Team Delta"]
+    for i, team_name in enumerate(team_names):
+        captain = users[i]
+        team = Team.objects.create(
+            tournament=tournament,
+            name=team_name,
+            captain=captain,
+            draft_order=i + 1,
+        )
+        team.members.add(captain)
+
+    # Create draft for this tournament (shuffle mode)
+    draft = Draft.objects.create(
+        tournament=tournament,
+        draft_style="shuffle",
+    )
+
+    # Initialize draft rounds
+    draft.build_rounds()
+    draft.rebuild_teams()
+    draft.save()
+
+    print(f"Created '{TOURNAMENT_NAME}' with 4 teams, 20 players, Shuffle Draft ready")
+    _flush_redis_cache()
+
+    return tournament
+
+
+def populate_demo_tournaments(force=False):
+    """Create all demo tournaments for video recording."""
+    populate_demo_herodraft_tournament(force)
+    populate_demo_captaindraft_tournament(force)
+    populate_demo_snake_draft_tournament(force)
+    populate_demo_shuffle_draft_tournament(force)
+
+
 def populate_all(force=False):
     """Run all population functions in the correct order."""
     populate_organizations_and_leagues(force)
@@ -1518,3 +2198,4 @@ def populate_all(force=False):
     populate_tournaments(force)
     populate_steam_matches(force)
     populate_bracket_linking_scenario(force)
+    populate_demo_tournaments(force)  # Demo data for video recording

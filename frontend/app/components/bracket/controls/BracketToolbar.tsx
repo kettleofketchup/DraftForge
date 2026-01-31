@@ -1,5 +1,12 @@
+import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '~/components/ui/button';
+import {
+  CancelButton,
+  ConfirmButton,
+  DestructiveButton,
+  SecondaryButton,
+  SubmitButton,
+} from '~/components/ui/buttons';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,8 +15,6 @@ import {
 } from '~/components/ui/dropdown-menu';
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -70,13 +75,14 @@ export function BracketToolbar({
   const canGenerate = teams.length >= minTeamsForBracket;
 
   return (
-    <div className="flex items-center gap-2 mb-4 p-2 bg-muted/50 rounded-lg">
+    <div className="flex items-center gap-2 mb-4 p-2 bg-muted/50 rounded-lg relative z-10">
       {/* Generate / Reseed dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" disabled={!canGenerate}>
+          <SecondaryButton disabled={!canGenerate} color="cyan">
             {hasMatches ? 'Reseed Bracket' : 'Generate Bracket'}
-          </Button>
+            <ChevronDown className="h-4 w-4 ml-1" />
+          </SecondaryButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
           <DropdownMenuItem onClick={() => handleGenerate('mmr_total')}>
@@ -93,20 +99,21 @@ export function BracketToolbar({
 
       {/* Save button */}
       {hasMatches && (
-        <Button
+        <SubmitButton
           onClick={handleSave}
-          disabled={!isDirty || isLoading}
-          variant={isDirty ? 'default' : 'outline'}
+          disabled={!isDirty}
+          loading={isLoading}
+          loadingText="Saving..."
         >
-          {isLoading ? 'Saving...' : isVirtual ? 'Save Bracket' : 'Save Changes'}
-        </Button>
+          {isVirtual ? 'Save Bracket' : 'Save Changes'}
+        </SubmitButton>
       )}
 
       {/* Reset button */}
       {hasMatches && (
-        <Button variant="destructive" onClick={() => setShowResetConfirm(true)}>
+        <DestructiveButton onClick={() => setShowResetConfirm(true)}>
           Reset
-        </Button>
+        </DestructiveButton>
       )}
 
       {/* Team count indicator */}
@@ -116,37 +123,41 @@ export function BracketToolbar({
 
       {/* Generate confirmation dialog */}
       <AlertDialog open={showGenerateConfirm} onOpenChange={setShowGenerateConfirm}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-orange-950/95 border-orange-800">
           <AlertDialogHeader>
             <AlertDialogTitle>Regenerate Bracket?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription className="text-orange-200">
               This will replace the current bracket structure. Any unsaved changes
               will be lost.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmGenerate}>
+          <AlertDialogFooter className="gap-2">
+            <CancelButton onClick={() => setShowGenerateConfirm(false)}>
+              Cancel
+            </CancelButton>
+            <ConfirmButton variant="warning" onClick={confirmGenerate}>
               Regenerate
-            </AlertDialogAction>
+            </ConfirmButton>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       {/* Reset confirmation dialog */}
       <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-red-950/95 border-red-800">
           <AlertDialogHeader>
             <AlertDialogTitle>Reset Bracket?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogDescription className="text-slate-300">
               This will clear all matches. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleReset} className="bg-destructive">
+          <AlertDialogFooter className="gap-2">
+            <CancelButton onClick={() => setShowResetConfirm(false)}>
+              Cancel
+            </CancelButton>
+            <ConfirmButton variant="destructive" onClick={handleReset}>
               Reset
-            </AlertDialogAction>
+            </ConfirmButton>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

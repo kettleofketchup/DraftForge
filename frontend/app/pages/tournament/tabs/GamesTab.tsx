@@ -1,6 +1,6 @@
-import { memo, useState } from 'react';
+import { memo, useState, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { Button } from '~/components/ui/button';
+import { SecondaryButton } from '~/components/ui/buttons';
 import { Wand2 } from 'lucide-react';
 import { BracketView } from '~/components/bracket';
 import { AutoAssignModal } from '~/components/bracket/modals';
@@ -15,15 +15,16 @@ const log = getLogger('GamesTab');
 export const GamesTab: React.FC = memo(() => {
   const tournament = useUserStore((state) => state.tournament);
   const isStaff = useUserStore((state) => state.isStaff());
-  const { loadBracket } = useBracketStore();
+  // Use getState() for actions to avoid subscribing to entire store
   const [viewMode, setViewMode] = useState<'bracket' | 'list'>('bracket');
   const [showAutoAssign, setShowAutoAssign] = useState(false);
 
-  const handleAutoAssignComplete = () => {
+  const handleAutoAssignComplete = useCallback(() => {
     if (tournament?.pk) {
-      loadBracket(tournament.pk);
+      // Access loadBracket via getState to avoid subscription
+      useBracketStore.getState().loadBracket(tournament.pk);
     }
-  };
+  }, [tournament?.pk]);
 
   const renderNoGames = () => {
     return (
@@ -62,15 +63,15 @@ export const GamesTab: React.FC = memo(() => {
 
           <div className="flex items-center gap-2">
             {isStaff && viewMode === 'bracket' && (
-              <Button
-                variant="outline"
+              <SecondaryButton
+                color="purple"
                 size="sm"
                 onClick={() => setShowAutoAssign(true)}
                 data-testid="auto-assign-btn"
               >
                 <Wand2 className="h-4 w-4 mr-1" />
                 Auto-Assign Matches
-              </Button>
+              </SecondaryButton>
             )}
             {isStaff && viewMode === 'list' && (
               <GameCreateModal data-testid="gameCreateModalBtn" />

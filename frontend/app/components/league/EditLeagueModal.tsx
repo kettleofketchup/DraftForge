@@ -5,15 +5,7 @@ import { toast } from 'sonner';
 
 import { AdminTeamSection } from '~/components/admin-team';
 import { updateLeague } from '~/components/api/api';
-import { Button } from '~/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '~/components/ui/dialog';
+import { FormDialog } from '~/components/ui/dialogs';
 import {
   Form,
   FormControl,
@@ -24,7 +16,6 @@ import {
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
-import { DIALOG_CSS } from '~/components/reusable/modal';
 import { useIsLeagueAdmin } from '~/hooks/usePermissions';
 import { EditLeagueSchema, type EditLeagueInput, type LeagueType } from './schemas';
 
@@ -84,119 +75,100 @@ export function EditLeagueModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={DIALOG_CSS} data-testid="edit-league-modal">
-        <DialogHeader>
-          <DialogTitle>Edit League</DialogTitle>
-          <DialogDescription>
-            Update league information.
-          </DialogDescription>
-        </DialogHeader>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit League"
+      description="Update league information."
+      submitLabel="Save Changes"
+      isSubmitting={isSubmitting}
+      onSubmit={form.handleSubmit(onSubmit)}
+      size="xl"
+      data-testid="edit-league-modal"
+    >
+      <Form {...form}>
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>League Name</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="Enter league name"
+                  data-testid="league-name-input"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>League Name</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Enter league name"
-                      data-testid="league-name-input"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <FormField
+          control={form.control}
+          name="prize_pool"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Prize Pool</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="e.g., $1,000"
+                  data-testid="league-prize-input"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-            <FormField
-              control={form.control}
-              name="prize_pool"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Prize Pool</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="e.g., $1,000"
-                      data-testid="league-prize-input"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Description</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="League description..."
+                  rows={4}
+                  data-testid="league-description-input"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="League description..."
-                      rows={4}
-                      data-testid="league-description-input"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <FormField
+          control={form.control}
+          name="rules"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Rules</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="League rules..."
+                  rows={6}
+                  data-testid="league-rules-input"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-            <FormField
-              control={form.control}
-              name="rules"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Rules</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="League rules..."
-                      rows={6}
-                      data-testid="league-rules-input"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Admin Team Section */}
-            {isLeagueAdmin && (
-              <AdminTeamSection
-                league={league}
-                onUpdate={onSuccess}
-              />
-            )}
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                data-testid="league-submit-button"
-              >
-                {isSubmitting ? 'Saving...' : 'Save Changes'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+        {/* Admin Team Section */}
+        {isLeagueAdmin && (
+          <AdminTeamSection
+            league={league}
+            onUpdate={onSuccess}
+          />
+        )}
+      </Form>
+    </FormDialog>
   );
 }

@@ -14,7 +14,7 @@ import {
   getTournaments,
   getTournamentsBasic,
 } from '~/components/api/api';
-import type { DraftRoundType, DraftType } from '~/components/draft/types';
+import type { DraftRoundType, DraftType } from '~/components/teamdraft/types';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
@@ -204,7 +204,7 @@ export const useUserStore = create<UserState>()(
           return;
         }
         const users = get().users;
-        const userIndex = users.findIndex((u) => u.pk === user.pk);
+        const userIndex = users.findIndex((u) => u?.pk === user.pk);
         if (userIndex !== -1) {
           const updatedUsers = [...users];
           updatedUsers[userIndex] = user;
@@ -223,7 +223,7 @@ export const useUserStore = create<UserState>()(
           log.debug('User tournament: ', tournament.pk, user);
 
           tournament.users = tournament.users?.map((u) => {
-            if (u.pk === user.pk) {
+            if (u?.pk === user.pk) {
               log.debug('Updating user in tournament:', tournament.pk, user);
               change = true;
               return user;
@@ -246,11 +246,11 @@ export const useUserStore = create<UserState>()(
         set({ tournaments: [...get().tournaments, tourn] }),
       delTournament: (tourn: TournamentType) =>
         set({
-          tournaments: get().tournaments.filter((t) => t.pk !== tourn.pk),
+          tournaments: get().tournaments.filter((t) => t?.pk !== tourn.pk),
         }),
 
       delUser: (user) =>
-        set({ users: get().users.filter((u) => u.pk !== user.pk) }),
+        set({ users: get().users.filter((u) => u?.pk !== user.pk) }),
 
       setUsers: (users) => set({ users }),
       clearUsers: () => set({ users: [] as UserType[] }),
@@ -278,11 +278,12 @@ export const useUserStore = create<UserState>()(
 
       setTournaments: (tournaments) => set({ tournaments }),
       setTournament: (tournament) => {
+        if (!tournament) return; // Guard against null tournament
         set({ tournament });
         // If a tournament with the same pk exists in tournaments, update it
         set((state) => {
           const idx = state.tournaments.findIndex(
-            (t) => t.pk === tournament.pk,
+            (t) => t?.pk === tournament.pk,
           );
           if (idx !== -1) {
             const updatedTournaments = [...state.tournaments];
@@ -300,7 +301,7 @@ export const useUserStore = create<UserState>()(
         tourns = tourns.filter(
           (tournament) =>
             Array.isArray(tournament?.users) &&
-            tournament.users.some((u) => u.pk === user?.pk),
+            tournament.users.some((u) => u?.pk === user?.pk),
         );
 
         return tourns;

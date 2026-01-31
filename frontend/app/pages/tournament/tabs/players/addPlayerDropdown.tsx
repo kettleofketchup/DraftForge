@@ -6,9 +6,9 @@ import {
 } from '@headlessui/react';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
+import { UserAvatar } from '~/components/user/UserAvatar';
 
 import { useState, type FormEvent } from 'react';
-import { AvatarUrl } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 
@@ -112,11 +112,7 @@ export const AddPlayerDropdown: React.FC<Props> = ({
                   data-testid={`playerOption-${user?.username}`}
                 >
                   <div className="flex items-center gap-2">
-                    <img
-                      src={AvatarUrl(user)}
-                      alt={user?.username}
-                      className="w-8 h-8 rounded-full"
-                    />
+                    <UserAvatar user={user} size="md" />
                     <span>
                       {user?.username}{' '}
                       {user?.nickname && (

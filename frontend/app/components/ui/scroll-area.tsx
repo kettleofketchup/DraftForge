@@ -3,15 +3,22 @@ import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area"
 
 import { cn } from "~/lib/utils"
 
+interface ScrollAreaProps extends React.ComponentProps<typeof ScrollAreaPrimitive.Root> {
+  /** Control scrollbar visibility: "auto" (default), "always", "scroll", "hover" */
+  type?: "auto" | "always" | "scroll" | "hover";
+}
+
 function ScrollArea({
   className,
   children,
+  type = "auto",
   ...props
-}: React.ComponentProps<typeof ScrollAreaPrimitive.Root>) {
+}: ScrollAreaProps) {
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
       className={cn("relative", className)}
+      type={type}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport

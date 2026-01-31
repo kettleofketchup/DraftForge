@@ -42,7 +42,7 @@ class PickPlayerForRound(serializers.Serializer):
     user_pk = serializers.IntegerField(required=True)
 
 
-from cacheops import invalidate_model
+from cacheops import invalidate_obj
 
 
 @api_view(["POST"])
@@ -147,9 +147,10 @@ def pick_player_for_round(request):
     if tie_data:
         response_data["tie_resolution"] = tie_data
 
-    invalidate_model(Tournament)
-    invalidate_model(Draft)
-    invalidate_model(Team)
+    # Invalidate specific objects, not entire model caches
+    invalidate_obj(tournament)
+    if draft:
+        invalidate_obj(draft)
     return Response(response_data, status=201)
 
 
@@ -219,9 +220,9 @@ def create_team_from_captain(request):
     )
     team.members.add(user)
 
-    # Invalidate caches after team creation
-    invalidate_model(Tournament)
-    invalidate_model(Team)
+    # Invalidate specific tournament after team creation
+    invalidate_obj(tournament)
+    invalidate_obj(team)
 
     return Response(TournamentSerializer(tournament).data, status=201)
 
@@ -256,16 +257,18 @@ def generate_draft_rounds(request):
         draft = Draft.objects.create(tournament=tournament)
 
     logging.debug(f"Initialization draft for tournament {tournament.name}")
+    # IMPORTANT: rebuild_teams MUST be called BEFORE build_rounds
+    # so that team MMR calculations use only captains, not old picks
+    # Use clear_only=True to avoid re-adding old draft choices before restart
+    draft.rebuild_teams(clear_only=True)
     draft.build_rounds()
-
-    draft.rebuild_teams()
     draft.save()
     tournament.draft = draft
     tournament.save()
 
-    invalidate_model(Draft)
-    invalidate_model(Tournament)
-    invalidate_model(Team)
+    # Invalidate specific objects
+    invalidate_obj(draft)
+    invalidate_obj(tournament)
 
     return Response(TournamentSerializer(tournament).data, status=201)
 
@@ -289,40 +292,38 @@ def rebuild_team(request):
 
         # Create a new team and add the user as a member (or captain)
 
+    # Ensure draft exists
     try:
         draft = tournament.draft
         if not draft:
+            logging.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")
             draft = Draft.objects.create(tournament=tournament)
-            draft.build_rounds()
-            draft.save()
-
-        if not draft.draft_rounds.exists():
-            logging.debug("Draft rounds do not exist, building them now")
-            draft.build_rounds()
-
-        logging.debug(f"Draft already exists for tournament {tournament.name}")
     except Draft.DoesNotExist:
         logging.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")
         draft = Draft.objects.create(tournament=tournament)
-        draft.build_rounds()
-        draft.save()
 
-    if not draft.draft_rounds.exists():
+    # IMPORTANT: rebuild_teams MUST be called BEFORE build_rounds
+    # so that team MMR calculations use only captains, not old picks
+    # Use clear_only=True when building new rounds to avoid re-adding old picks
+    will_build_rounds = not draft.draft_rounds.exists()
+    draft.rebuild_teams(clear_only=will_build_rounds)
+
+    # Build rounds if they don't exist
+    if will_build_rounds:
         logging.debug("Draft rounds do not exist, building them now")
         draft.build_rounds()
+    else:
+        logging.debug(f"Draft already exists for tournament {tournament.name}")
 
-    draft.rebuild_teams()
     draft.save()
     tournament.draft = draft
     tournament = Tournament.objects.get(pk=tournament_pk)
     data = TournamentSerializer(tournament).data
     log.debug(data)
 
-    # Invalidate caches after rebuilding teams
-    invalidate_model(Draft)
-    invalidate_model(Tournament)
-    invalidate_model(Team)
-    invalidate_model(DraftRound)
+    # Invalidate specific objects after rebuilding teams
+    invalidate_obj(draft)
+    invalidate_obj(tournament)
 
     return Response(data, status=201)
 
@@ -453,9 +454,8 @@ def undo_last_pick(request):
 
     tournament = draft.tournament
 
-    invalidate_model(Tournament)
-    invalidate_model(Draft)
-    invalidate_model(Team)
-    invalidate_model(DraftRound)
+    # Invalidate specific objects
+    invalidate_obj(tournament)
+    invalidate_obj(draft)
 
     return Response(TournamentSerializer(tournament).data, status=200)

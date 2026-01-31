@@ -32,12 +32,18 @@ def docker_build(
     dockerfile: Path,
     context: Path,
     target: str = "runtime",
+    extra_contexts: dict[str, Path] | None = None,
 ):
     img_str = f"{image}:{version}"
     # Use BuildKit for better layer caching
+    extra_ctx_args = ""
+    if extra_contexts:
+        extra_ctx_args = " ".join(
+            f"--build-context {name}={path}" for name, path in extra_contexts.items()
+        )
     cmd = (
         f"DOCKER_BUILDKIT=1 docker build -f {str(dockerfile)} "
-        f"{str(context)} -t {img_str} --target {target}"
+        f"{extra_ctx_args} {str(context)} -t {img_str} --target {target}"
     )
     crun(c, cmd)
 
@@ -116,7 +122,9 @@ def get_nginx():
 def docker_frontend_build_prod(c):
     """Build production frontend image only."""
     version, image, dockerfile, context = get_frontend()
-    docker_build(c, image, version, dockerfile, context, "runtime")
+    # Pass docs directory as additional build context for assets
+    extra_contexts = {"docs": paths.PROJECT_PATH / "docs"}
+    docker_build(c, image, version, dockerfile, context, "runtime", extra_contexts)
 
 
 @task

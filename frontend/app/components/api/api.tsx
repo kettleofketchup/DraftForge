@@ -90,7 +90,8 @@ export async function getTournaments(filters?: {
     params.append('league', filters.leagueId.toString());
   }
   const queryString = params.toString() ? `?${params.toString()}` : '';
-  const response = await axios.get<TournamentsType>(`/tournaments/${queryString}`);
+  // Use lightweight endpoint for list view (no nested teams/users)
+  const response = await axios.get<TournamentsType>(`/tournaments-list/${queryString}`);
   return response.data as TournamentsType;
 }
 
@@ -318,6 +319,19 @@ export async function getLeagues(organizationId?: number): Promise<LeaguesType> 
   return response.data;
 }
 
+// Home page stats - optimized endpoint returning only counts
+export interface HomeStats {
+  tournament_count: number;
+  game_count: number;
+  organization_count: number;
+  league_count: number;
+}
+
+export async function getHomeStats(): Promise<HomeStats> {
+  const response = await axios.get<HomeStats>('/home-stats/');
+  return response.data;
+}
+
 export async function fetchLeague(pk: number): Promise<LeagueType> {
   const response = await axios.get<LeagueType>(`/leagues/${pk}/`);
   return response.data;
@@ -395,6 +409,23 @@ export async function removeOrgStaff(orgId: number, userId: number): Promise<voi
 export async function transferOrgOwnership(orgId: number, userId: number): Promise<UserType> {
   const response = await axios.post<TransferOwnershipResponse>(`/organizations/${orgId}/transfer-ownership/`, { user_id: userId });
   return response.data.new_owner;
+}
+
+// Organization Discord Members
+export interface DiscordMember {
+  user: {
+    id: string;
+    username: string;
+    global_name?: string;
+    avatar?: string;
+  };
+  nick?: string;
+  joined_at: string;
+}
+
+export async function getOrganizationDiscordMembers(orgId: number): Promise<DiscordMember[]> {
+  const response = await axios.get<{ members: DiscordMember[] }>(`/discord/organizations/${orgId}/discord-members/`);
+  return response.data.members;
 }
 
 // League Admin Team

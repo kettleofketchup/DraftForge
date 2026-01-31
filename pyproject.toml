@@ -1,6 +1,6 @@
 [project]
 name = "website"
-version = "0.5.7"
+version = "0.5.15"
 description = ""
 authors = [
     {name = "kettleofketchup@gmail.com",email = "kettleofketchup@gmail.com"}
@@ -41,6 +41,14 @@ dependencies = [
     "daphne (>=4.0.0,<5.0.0)",
     "pynacl (>=1.5.0,<2.0.0)",
     "nh3 (>=0.3.2,<0.4.0)",
+    "structlog (>=24.0.0,<25.0.0)",
+    "opentelemetry-api (>=1.20.0,<1.21.0)",
+    "opentelemetry-sdk (>=1.20.0,<1.21.0)",
+    "opentelemetry-exporter-otlp (>=1.20.0,<1.21.0)",
+    "opentelemetry-instrumentation-django (>=0.41b0,<0.42.0)",
+    "opentelemetry-instrumentation-requests (>=0.41b0,<0.42.0)",
+    "opentelemetry-instrumentation-system-metrics (>=0.41b0,<0.42.0)",
+    "opentelemetry-instrumentation-celery (>=0.41b0,<0.42.0)",
 ]
 
 

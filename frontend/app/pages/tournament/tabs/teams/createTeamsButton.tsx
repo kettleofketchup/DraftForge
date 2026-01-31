@@ -21,7 +21,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '~/components/ui/alert-dialog';
-import { Button } from '~/components/ui/button';
+import { SubmitButton } from '~/components/ui/buttons';
 import { useUserStore } from '~/store/userStore';
 interface CreateTeamsButtonProps {
   tournament: TournamentType;
@@ -102,13 +102,12 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button
-          className="btn btn-success bg-green-900 text-white"
+        <SubmitButton
           data-testid="submitTeamsBtn"
           aria-label="Submit and create teams"
         >
           Submit this
-        </Button>
+        </SubmitButton>
       </AlertDialogTrigger>
       <AlertDialogContent className="bg-red-900">
         <AlertDialogHeader>
