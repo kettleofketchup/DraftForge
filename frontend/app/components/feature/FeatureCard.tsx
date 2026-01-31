@@ -1,15 +1,26 @@
-import { motion, AnimatePresence } from 'framer-motion';
-import { BookOpen, Film, Image as ImageIcon, Play, X } from 'lucide-react';
-import React, { useState } from 'react';
+import { motion } from 'framer-motion';
+import { BookOpen, Film, Image as ImageIcon, Play } from 'lucide-react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Link } from 'react-router';
+import { cn } from '~/lib/utils';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '~/components/ui/dialog';
 import { Item, ItemContent, ItemMedia, ItemTitle } from '~/components/ui/item';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { VideoPlayer } from './VideoPlayer';
 
 // Video/GIF assets base path (mounted at public/assets/docs in dev, copied during build)
 export const ASSETS_BASE = '/assets/docs';
+
+// Global set to track prefetched URLs (prevents duplicate prefetches across components)
+const prefetchedUrls = new Set<string>();
 
 // Documentation base URL
 export const DOCS_BASE = 'https://kettleofketchup.github.io/DraftForge';
@@ -43,6 +54,86 @@ export interface FeatureCardProps {
   colorClass?: string;
 }
 
+/** Lazy-loading image component using IntersectionObserver + requestIdleCallback */
+const LazyImage = ({
+  src,
+  alt,
+  className,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+}) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [deferredSrc, setDeferredSrc] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let cancelled = false;
+    let idleCallbackId: number | undefined;
+
+    const loadImage = () => {
+      if (cancelled) return;
+      const scheduleLoad =
+        window.requestIdleCallback || ((cb) => setTimeout(cb, 50));
+      idleCallbackId = scheduleLoad(
+        () => {
+          if (!cancelled) setDeferredSrc(src);
+        },
+        { timeout: 200 }
+      ) as number;
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadImage();
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(container);
+
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+      if (idleCallbackId !== undefined) {
+        const cancelIdle = window.cancelIdleCallback || clearTimeout;
+        cancelIdle(idleCallbackId);
+      }
+    };
+  }, [src]);
+
+  return (
+    <div ref={containerRef} className={cn('relative min-h-[200px]', className)}>
+      {/* Image/GIF skeleton */}
+      {isLoading && (
+        <div className="absolute inset-0 rounded-lg overflow-hidden bg-base-300 flex items-center justify-center">
+          <div className="absolute inset-0 bg-gradient-to-r from-base-300 via-base-200 to-base-300 animate-pulse" />
+          {/* Image icon placeholder */}
+          <div className="relative flex flex-col items-center gap-2">
+            <ImageIcon className="w-12 h-12 text-base-content/20" />
+            <div className="w-20 h-2 rounded bg-base-content/10" />
+          </div>
+        </div>
+      )}
+      {deferredSrc && (
+        <img
+          src={deferredSrc}
+          alt={alt}
+          className={cn('w-full h-auto object-contain rounded-lg', isLoading && 'opacity-0')}
+          onLoad={() => setIsLoading(false)}
+        />
+      )}
+    </div>
+  );
+};
+
 /** Helper component to render a grid of media items */
 const MediaGrid = ({ media, title }: { media: ModalMedia[]; title: string }) => (
   <div className={`flex ${media.length > 1 ? 'flex-row gap-4' : 'flex-col'} overflow-auto`}>
@@ -58,10 +149,9 @@ const MediaGrid = ({ media, title }: { media: ModalMedia[]; title: string }) => 
         {item.type === 'video' ? (
           <VideoPlayer src={item.src} autoPlay loop />
         ) : (
-          <img
+          <LazyImage
             src={item.src}
             alt={item.caption || `${title} preview ${index + 1}`}
-            className="w-full h-auto object-contain rounded-lg"
           />
         )}
       </div>
@@ -83,6 +173,22 @@ export const FeatureCard = ({
   colorClass = 'text-primary',
 }: FeatureCardProps) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Prefetch videos on hover (uses global Set to prevent duplicates)
+  const handlePrefetchVideos = useCallback(() => {
+    if (!modalMedia) return;
+
+    modalMedia.forEach((item) => {
+      if (item.type === 'video' && !prefetchedUrls.has(item.src)) {
+        prefetchedUrls.add(item.src);
+        const link = document.createElement('link');
+        link.rel = 'prefetch';
+        link.as = 'video';
+        link.href = item.src;
+        document.head.appendChild(link);
+      }
+    });
+  }, [modalMedia]);
 
   const hasPreview = gifSrc || (modalMedia && modalMedia.length > 0) || (quickMedia && quickMedia.length > 0);
   const thumbnailSrc = gifSrc || (quickMedia && quickMedia[0]?.src) || (modalMedia && modalMedia[0]?.src);
@@ -106,6 +212,7 @@ export const FeatureCard = ({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, delay }}
         className={`card bg-base-200/50 backdrop-blur border border-primary/10 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 relative ${comingSoon ? 'opacity-75' : ''}`}
+        onMouseEnter={handlePrefetchVideos}
       >
         {/* Coming Soon Badge - Top Right of Card */}
         {comingSoon && (
@@ -203,84 +310,63 @@ export const FeatureCard = ({
         </div>
       </motion.div>
 
-      {/* Modal for enlarged media */}
-      <AnimatePresence>
-        {isModalOpen && (hasQuickPreview || hasFullVideo) && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-            onClick={() => setIsModalOpen(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="relative w-[95vw] max-w-7xl max-h-[90vh] overflow-hidden rounded-xl border border-primary/30 shadow-2xl bg-base-300"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Close button */}
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-base-200/90 hover:bg-base-300 transition-colors"
+      {/* Modal for enlarged media - using shadcn Dialog */}
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent
+          className="sm:!max-w-[80vw] !max-w-[80vw] max-h-[70vh] overflow-auto bg-base-300 border-primary/30"
+          showCloseButton={true}
+          closeButtonVariant="default"
+        >
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold text-primary">{title}</DialogTitle>
+            <DialogDescription className="sr-only">
+              Preview media for {title}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Tabbed content if we have both quick preview and full video */}
+          {hasBothTabs ? (
+            <Tabs defaultValue="quick">
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="quick" className="flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4" />
+                  Quick Preview
+                </TabsTrigger>
+                <TabsTrigger value="full" className="flex items-center gap-2">
+                  <Film className="w-4 h-4" />
+                  Full Video
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="quick" className="mt-0">
+                <MediaGrid media={quickPreviewMedia} title={title} />
+              </TabsContent>
+
+              <TabsContent value="full" className="mt-0">
+                <MediaGrid media={fullVideoMedia} title={title} />
+              </TabsContent>
+            </Tabs>
+          ) : (
+            /* Single content area if we only have one type */
+            <MediaGrid media={hasQuickPreview ? quickPreviewMedia : fullVideoMedia} title={title} />
+          )}
+
+          {/* Learn More */}
+          {docsUrl && (
+            <div className="pt-2">
+              <a
+                href={docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
               >
-                <X className="w-5 h-5" />
-              </button>
-
-              {/* Title */}
-              <div className="p-4 pb-2">
-                <h3 className="text-xl font-semibold text-primary">{title}</h3>
-              </div>
-
-              {/* Tabbed content if we have both quick preview and full video */}
-              {hasBothTabs ? (
-                <Tabs defaultValue="quick" className="px-4 pb-4">
-                  <TabsList className="grid w-full grid-cols-2 mb-4">
-                    <TabsTrigger value="quick" className="flex items-center gap-2">
-                      <ImageIcon className="w-4 h-4" />
-                      Quick Preview
-                    </TabsTrigger>
-                    <TabsTrigger value="full" className="flex items-center gap-2">
-                      <Film className="w-4 h-4" />
-                      Full Video
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="quick" className="mt-0">
-                    <MediaGrid media={quickPreviewMedia} title={title} />
-                  </TabsContent>
-
-                  <TabsContent value="full" className="mt-0">
-                    <MediaGrid media={fullVideoMedia} title={title} />
-                  </TabsContent>
-                </Tabs>
-              ) : (
-                /* Single content area if we only have one type */
-                <div className="px-4 pb-4">
-                  <MediaGrid media={hasQuickPreview ? quickPreviewMedia : fullVideoMedia} title={title} />
-                </div>
-              )}
-
-              {/* Learn More */}
-              {docsUrl && (
-                <div className="px-4 pb-4">
-                  <a
-                    href={docsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
-                  >
-                    <BookOpen className="w-4 h-4" />
-                    View documentation
-                  </a>
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                <BookOpen className="w-4 h-4" />
+                View documentation
+              </a>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
