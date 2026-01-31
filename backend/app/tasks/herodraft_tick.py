@@ -14,6 +14,7 @@ from collections import namedtuple
 
 import redis
 from asgiref.sync import sync_to_async
+from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
 from django.conf import settings
 from django.utils import timezone
@@ -86,7 +87,7 @@ async def broadcast_tick(draft_id: int):
 
     room_group_name = f"herodraft_{draft_id}"
 
-    @sync_to_async
+    @database_sync_to_async
     def get_tick_data():
         try:
             draft = HeroDraft.objects.get(id=draft_id)
@@ -181,7 +182,7 @@ async def check_timeout(draft_id: int):
     from app.functions.herodraft import auto_random_pick
     from app.models import DraftTeam, HeroDraft, HeroDraftState
 
-    @sync_to_async
+    @database_sync_to_async
     def check_and_auto_pick():
         # Use transaction with select_for_update to prevent race conditions
         completed_round = None
@@ -248,7 +249,7 @@ async def check_resume_countdown(draft_id: int):
     from app.broadcast import broadcast_herodraft_state
     from app.models import HeroDraft, HeroDraftEvent, HeroDraftState
 
-    @sync_to_async
+    @database_sync_to_async
     def check_and_resume():
         transitioned = False
 
@@ -311,7 +312,7 @@ async def check_captain_heartbeats(draft_id: int):
     from app.broadcast import broadcast_herodraft_state
     from app.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
 
-    @sync_to_async
+    @database_sync_to_async
     def check_and_handle_stale():
         r = get_redis_client()
         now = time.time()
@@ -444,11 +445,11 @@ async def run_tick_loop(draft_id: int, stop_event: threading.Event):
     r = get_redis_client()
     lock_key = LOCK_KEY.format(draft_id=draft_id)
 
-    @sync_to_async
+    @database_sync_to_async
     def check_continue():
         return should_continue_ticking(draft_id, r)
 
-    @sync_to_async
+    @sync_to_async(thread_sensitive=False)
     def extend_lock():
         # Extend lock timeout to show we're still alive
         r.expire(lock_key, LOCK_TIMEOUT)
