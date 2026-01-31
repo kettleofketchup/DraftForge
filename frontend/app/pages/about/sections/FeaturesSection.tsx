@@ -4,9 +4,6 @@ import { FeatureCard } from '~/components/feature/FeatureCard';
 
 const log = getLogger('FeaturesSection');
 
-// Video/GIF assets (mounted at public/assets/docs in dev, copied during build)
-const ASSETS_BASE = '/assets/docs';
-
 export function FeaturesSection() {
   log.debug('Rendering FeaturesSection component');
 
@@ -19,11 +16,6 @@ export function FeaturesSection() {
           title="Hero Draft System"
           description="Real-time captain's mode drafting with spectator view, timers, and pick/ban tracking. Perfect for competitive matches."
           delay={0.1}
-          gifSrc={`${ASSETS_BASE}/gifs/captain1_herodraft.gif`}
-          modalMedia={[
-            { src: `${ASSETS_BASE}/videos/captain1_herodraft.webm`, caption: 'Captain 1 Perspective', type: 'video' },
-            { src: `${ASSETS_BASE}/videos/captain2_herodraft.webm`, caption: 'Captain 2 Perspective', type: 'video' },
-          ]}
           docsPath="/features/herodraft/"
           action={{ label: 'View Tournaments', href: '/tournaments' }}
         />
@@ -32,11 +24,6 @@ export function FeaturesSection() {
           title="Team Draft Composition"
           description="Draft 40+ team members in minutes with Snake, Normal, and Shuffle draft modes balanced by MMR."
           delay={0.2}
-          gifSrc={`${ASSETS_BASE}/gifs/snake_draft.gif`}
-          modalMedia={[
-            { src: `${ASSETS_BASE}/videos/snake_draft.webm`, caption: 'Snake Draft', type: 'video' },
-            { src: `${ASSETS_BASE}/videos/shuffle_draft.webm`, caption: 'Shuffle Draft', type: 'video' },
-          ]}
           docsPath="/features/draft/"
           action={{ label: 'View Tournaments', href: '/tournaments' }}
         />
@@ -45,10 +32,6 @@ export function FeaturesSection() {
           title="Tournament Brackets"
           description="Single elimination, double elimination, and round-robin formats with automatic bracket generation and match tracking."
           delay={0.3}
-          gifSrc={`${ASSETS_BASE}/site_snapshots/bracket.png`}
-          modalMedia={[
-            { src: `${ASSETS_BASE}/site_snapshots/bracket.png`, caption: 'Bracket View', type: 'image' },
-          ]}
           docsPath="/features/bracket/"
           action={{ label: 'Browse Tournaments', href: '/tournaments' }}
         />
