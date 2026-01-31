@@ -195,11 +195,27 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
           });
           break;
 
-        case 'herodraft_kicked':
+        case 'herodraft_kicked': {
           log.warn('Kicked from draft:', message.reason);
           get().stopHeartbeat();
-          set({ wasKicked: true, error: 'Connection replaced by new tab' });
+          // Disconnect to prevent auto-reconnect loop
+          // (server will close connection after sending kicked message)
+          const kickedConnId = get()._connectionId;
+          const kickedUnsub = get()._unsubscribe;
+          if (kickedUnsub) kickedUnsub();
+          if (kickedConnId) {
+            manager.disconnect(kickedConnId, 'Kicked by server');
+          }
+          // Clear connection state but preserve wasKicked flag
+          set({
+            _connectionId: null,
+            _unsubscribe: null,
+            wasKicked: true,
+            error: 'Connection replaced by new tab',
+            isConnected: false,
+          });
           break;
+        }
       }
     });
 
@@ -232,7 +248,12 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
   },
 
   reconnect: () => {
-    const { _currentDraftId } = get();
+    const { _currentDraftId, wasKicked } = get();
+    // Don't reconnect if we were kicked - prevents infinite loop with multiple tabs
+    if (wasKicked) {
+      log.warn('Reconnect blocked: was kicked from this draft');
+      return;
+    }
     if (_currentDraftId) {
       get().disconnect();
       // Small delay before reconnecting
