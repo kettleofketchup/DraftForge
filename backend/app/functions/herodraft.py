@@ -32,17 +32,17 @@ CAPTAINS_MODE_SEQUENCE = [
     # Pick Phase 1: F-S
     (True, "pick"),  # 8
     (False, "pick"),  # 9
-    # Ban Phase 2: S-F-S
-    (False, "ban"),  # 10
+    # Ban Phase 2: F-F-S
+    (True, "ban"),  # 10
     (True, "ban"),  # 11
     (False, "ban"),  # 12
-    # Pick Phase 2: F-S-F-S-F-S
-    (True, "pick"),  # 13
-    (False, "pick"),  # 14
+    # Pick Phase 2: S-F-F-S-S-F
+    (False, "pick"),  # 13
+    (True, "pick"),  # 14
     (True, "pick"),  # 15
     (False, "pick"),  # 16
-    (True, "pick"),  # 17
-    (False, "pick"),  # 18
+    (False, "pick"),  # 17
+    (True, "pick"),  # 18
     # Ban Phase 3: F-S-F-S
     (True, "ban"),  # 19
     (False, "ban"),  # 20
