@@ -133,8 +133,13 @@ test.describe('Undo Pick', () => {
       const dialog = page.locator('[role="dialog"]');
       await dialog.waitFor({ state: 'visible' });
 
+      // Wait for dialog content to fully load
+      await page.waitForLoadState('networkidle');
+
       // Undo button should not be visible for non-staff
-      await expect(dialog.locator('button', { hasText: 'Undo' })).not.toBeVisible();
+      const undoButton = dialog.locator('button', { hasText: 'Undo' });
+      const isVisible = await undoButton.isVisible().catch(() => false);
+      expect(isVisible).toBe(false);
     });
 
     test('should NOT show undo button when no picks have been made', async ({

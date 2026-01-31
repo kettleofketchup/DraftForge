@@ -75,9 +75,13 @@ test.describe('League Page - Matches Tab (e2e)', () => {
     // This test will pass if there are no matches - checking the empty state
     await leaguePage.goto(testLeagueId, 'matches');
 
+    // Wait for content to load
+    await page.waitForLoadState('networkidle');
+
     // Either matches are shown or empty state is shown
     const matchCardCount = await leaguePage.getMatchCardCount();
-    const hasEmptyState = await page.locator('text=No matches found').isVisible().catch(() => false);
+    // Match the actual empty state text: "No matches found for this league."
+    const hasEmptyState = await page.locator('text=/No matches found/i').isVisible().catch(() => false);
 
     // One of these should be true
     expect(matchCardCount > 0 || hasEmptyState).toBe(true);
@@ -117,10 +121,15 @@ test.describe('League Match Card (e2e)', () => {
 
   test('should display match cards if matches exist', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
+
+    // Wait for page content to load
+    await page.waitForLoadState('networkidle');
+
     const matchCardCount = await leaguePage.getMatchCardCount();
 
     if (matchCardCount > 0) {
-      // Match cards should be visible
+      // Wait for the first card to be visible before asserting
+      await leaguePage.matchCards.first().waitFor({ state: 'visible', timeout: 10000 });
       await expect(leaguePage.matchCards.first()).toBeVisible();
     } else {
       // No match cards found - this is expected if no matches exist

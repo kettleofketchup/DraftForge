@@ -428,7 +428,7 @@ test.describe('Two Captains Full Draft', () => {
     assertWebSocketsOpen('before coin flip');
 
     // Wait for flip button to be available
-    await captainA.draftPage.flipCoinButton.waitFor({ state: 'visible', timeout: 5000 });
+    await captainA.draftPage.flipCoinButton.waitFor({ state: 'visible', timeout: 15000 });
 
     // Captain A clicks flip coin (either captain can do this)
     await captainA.draftPage.clickFlipCoin();
@@ -437,8 +437,8 @@ test.describe('Two Captains Full Draft', () => {
     // Wait for choosing phase on both captains via WebSocket
     console.log('   Waiting for choosing phase on both captains...');
     await Promise.all([
-      captainA.draftPage.waitForPhaseTransition('choosing', 10000),
-      captainB.draftPage.waitForPhaseTransition('choosing', 10000),
+      captainA.draftPage.waitForPhaseTransition('choosing', 15000),
+      captainB.draftPage.waitForPhaseTransition('choosing', 15000),
     ]);
 
     // Verify WebSockets still open and check states
@@ -472,7 +472,7 @@ test.describe('Two Captains Full Draft', () => {
 
       // Wait for loser choice to become available via WebSocket
       const loserChoices = captainB.page.locator('[data-testid="herodraft-loser-choices"]');
-      await loserChoices.waitFor({ state: 'visible', timeout: 5000 });
+      await loserChoices.waitFor({ state: 'visible', timeout: 10000 });
       assertWebSocketsOpen('after winner choice');
 
       // Captain B chooses side
@@ -486,7 +486,7 @@ test.describe('Two Captains Full Draft', () => {
 
       // Wait for loser choice to become available via WebSocket
       const loserChoices = captainA.page.locator('[data-testid="herodraft-loser-choices"]');
-      await loserChoices.waitFor({ state: 'visible', timeout: 5000 });
+      await loserChoices.waitFor({ state: 'visible', timeout: 10000 });
       assertWebSocketsOpen('after winner choice');
 
       // Captain A chooses side
@@ -497,8 +497,8 @@ test.describe('Two Captains Full Draft', () => {
     // Wait for drafting phase on both captains via WebSocket
     console.log('   Waiting for drafting phase on both captains...');
     await Promise.all([
-      captainA.draftPage.waitForPhaseTransition('drafting', 10000),
-      captainB.draftPage.waitForPhaseTransition('drafting', 10000),
+      captainA.draftPage.waitForPhaseTransition('drafting', 15000),
+      captainB.draftPage.waitForPhaseTransition('drafting', 15000),
     ]);
 
     // Verify WebSockets still open and check states

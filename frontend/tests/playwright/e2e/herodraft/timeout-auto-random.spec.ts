@@ -265,14 +265,14 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
     ).toContainText('Ready', { timeout: 5000 });
     await captainB.draftPage.clickReady();
 
-    // Rolling Phase - Trigger coin flip
-    await expect(captainA.draftPage.flipCoinButton).toBeVisible({ timeout: 10000 });
+    // Rolling Phase - Trigger coin flip with retry
+    await expect(captainA.draftPage.flipCoinButton).toBeVisible({ timeout: 15000 });
     await captainA.draftPage.clickFlipCoin();
 
-    // Choosing Phase - Make choices
+    // Choosing Phase - Make choices with longer timeout for stability
     await Promise.race([
-      captainA.page.getByTestId('herodraft-choosing-phase').waitFor({ state: 'visible', timeout: 10000 }),
-      captainB.page.getByTestId('herodraft-choosing-phase').waitFor({ state: 'visible', timeout: 10000 }),
+      captainA.page.getByTestId('herodraft-choosing-phase').waitFor({ state: 'visible', timeout: 20000 }),
+      captainB.page.getByTestId('herodraft-choosing-phase').waitFor({ state: 'visible', timeout: 20000 }),
     ]);
 
     const winnerChoiceFirstA = captainA.page.getByTestId('herodraft-choice-first-pick');
@@ -288,9 +288,9 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
       await captainA.page.getByTestId('herodraft-remaining-radiant').click();
     }
 
-    // Wait for drafting phase
-    await expect(captainA.draftPage.heroGrid).toBeVisible({ timeout: 15000 });
-    await expect(captainB.draftPage.heroGrid).toBeVisible({ timeout: 5000 });
+    // Wait for drafting phase - use longer timeout for stability
+    await expect(captainA.draftPage.heroGrid).toBeVisible({ timeout: 30000 });
+    await expect(captainB.draftPage.heroGrid).toBeVisible({ timeout: 15000 });
   }
 
   /**

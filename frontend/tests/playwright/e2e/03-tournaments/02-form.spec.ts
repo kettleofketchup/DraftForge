@@ -54,21 +54,15 @@ test.describe('Tournaments - create (e2e)', () => {
     await nameInput.clear();
     await nameInput.fill(thisName);
 
-    // Select a tournament type using the Shadcn Select trigger
-    const typeLabel = page.getByText('Tournament Type');
-    const typeParent = typeLabel.locator('..');
-    const typeButton = typeParent.locator('button, [role="button"]').first();
-    await typeButton.click();
+    // Select a tournament type using data-testid
+    const typeSelect = page.locator('[data-testid="tournament-type-select"]');
+    await typeSelect.waitFor({ state: 'visible', timeout: 10000 });
+    await typeSelect.click();
 
     // Wait for dropdown to open and select Single Elimination option
-    const typeOption = page
-      .locator(
-        '[role="option"], [data-radix-collection-item], .select-item, option'
-      )
-      .filter({ hasText: /single elimination/i })
-      .first();
+    const typeOption = page.locator('[data-testid="tournament-type-single"]');
     await typeOption.waitFor({ state: 'visible', timeout: 10000 });
-    await typeOption.click({ force: true });
+    await typeOption.click();
 
     // Click the date picker button to open calendar popover
     const datePicker = page.locator('[data-testid="tournament-date-picker"]');
@@ -76,7 +70,8 @@ test.describe('Tournaments - create (e2e)', () => {
     await datePicker.click();
 
     // Select today's date from the calendar
-    const dateCell = page.locator('[role="gridcell"]').filter({ hasText: /^\d+$/ }).first();
+    const today = new Date().getDate().toString();
+    const dateCell = page.locator('[role="gridcell"]').filter({ hasText: new RegExp(`^${today}$`) }).first();
     await dateCell.click({ force: true });
 
     // Submit the form

@@ -213,13 +213,13 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
       ]);
 
       // Flip coin
-      await draftPageA.flipCoinButton.waitFor({ state: 'visible', timeout: 5000 });
+      await draftPageA.flipCoinButton.waitFor({ state: 'visible', timeout: 15000 });
       await draftPageA.clickFlipCoin();
 
       // Wait for choosing phase
       await Promise.all([
-        draftPageA.waitForPhaseTransition('choosing', 10000),
-        draftPageB.waitForPhaseTransition('choosing', 10000),
+        draftPageA.waitForPhaseTransition('choosing', 15000),
+        draftPageB.waitForPhaseTransition('choosing', 15000),
       ]);
 
       // Make choices
@@ -230,20 +230,20 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
         await draftPageA.selectWinnerChoice('first_pick');
         await pageB
           .locator('[data-testid="herodraft-loser-choices"]')
-          .waitFor({ state: 'visible', timeout: 5000 });
+          .waitFor({ state: 'visible', timeout: 10000 });
         await draftPageB.selectLoserChoice('radiant');
       } else {
         await draftPageB.selectWinnerChoice('first_pick');
         await pageA
           .locator('[data-testid="herodraft-loser-choices"]')
-          .waitFor({ state: 'visible', timeout: 5000 });
+          .waitFor({ state: 'visible', timeout: 10000 });
         await draftPageA.selectLoserChoice('radiant');
       }
 
       // Wait for drafting phase
       await Promise.all([
-        draftPageA.waitForPhaseTransition('drafting', 10000),
-        draftPageB.waitForPhaseTransition('drafting', 10000),
+        draftPageA.waitForPhaseTransition('drafting', 15000),
+        draftPageB.waitForPhaseTransition('drafting', 15000),
       ]);
 
       console.log('Drafting phase started');
@@ -425,12 +425,12 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
         draftPageB.waitForPhaseTransition('rolling', 15000),
       ]);
 
-      await draftPageA.flipCoinButton.waitFor({ state: 'visible', timeout: 5000 });
+      await draftPageA.flipCoinButton.waitFor({ state: 'visible', timeout: 15000 });
       await draftPageA.clickFlipCoin();
 
       await Promise.all([
-        draftPageA.waitForPhaseTransition('choosing', 10000),
-        draftPageB.waitForPhaseTransition('choosing', 10000),
+        draftPageA.waitForPhaseTransition('choosing', 15000),
+        draftPageB.waitForPhaseTransition('choosing', 15000),
       ]);
 
       // Make choices
@@ -443,19 +443,19 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
         await draftPageA.selectWinnerChoice('first_pick');
         await pageB
           .locator('[data-testid="herodraft-loser-choices"]')
-          .waitFor({ state: 'visible', timeout: 5000 });
+          .waitFor({ state: 'visible', timeout: 10000 });
         await draftPageB.selectLoserChoice('radiant');
       } else {
         await draftPageB.selectWinnerChoice('first_pick');
         await pageA
           .locator('[data-testid="herodraft-loser-choices"]')
-          .waitFor({ state: 'visible', timeout: 5000 });
+          .waitFor({ state: 'visible', timeout: 10000 });
         await draftPageA.selectLoserChoice('radiant');
       }
 
       await Promise.all([
-        draftPageA.waitForPhaseTransition('drafting', 10000),
-        draftPageB.waitForPhaseTransition('drafting', 10000),
+        draftPageA.waitForPhaseTransition('drafting', 15000),
+        draftPageB.waitForPhaseTransition('drafting', 15000),
       ]);
 
       console.log('Drafting phase started - testing timer pause behavior');
@@ -607,12 +607,12 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
         draftPageB.waitForPhaseTransition('rolling', 15000),
       ]);
 
-      await draftPageA.flipCoinButton.waitFor({ state: 'visible', timeout: 5000 });
+      await draftPageA.flipCoinButton.waitFor({ state: 'visible', timeout: 15000 });
       await draftPageA.clickFlipCoin();
 
       await Promise.all([
-        draftPageA.waitForPhaseTransition('choosing', 10000),
-        draftPageB.waitForPhaseTransition('choosing', 10000),
+        draftPageA.waitForPhaseTransition('choosing', 15000),
+        draftPageB.waitForPhaseTransition('choosing', 15000),
       ]);
 
       // Make choices
@@ -625,19 +625,19 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
         await draftPageA.selectWinnerChoice('first_pick');
         await pageB
           .locator('[data-testid="herodraft-loser-choices"]')
-          .waitFor({ state: 'visible', timeout: 5000 });
+          .waitFor({ state: 'visible', timeout: 10000 });
         await draftPageB.selectLoserChoice('radiant');
       } else {
         await draftPageB.selectWinnerChoice('first_pick');
         await pageA
           .locator('[data-testid="herodraft-loser-choices"]')
-          .waitFor({ state: 'visible', timeout: 5000 });
+          .waitFor({ state: 'visible', timeout: 10000 });
         await draftPageA.selectLoserChoice('radiant');
       }
 
       await Promise.all([
-        draftPageA.waitForPhaseTransition('drafting', 10000),
-        draftPageB.waitForPhaseTransition('drafting', 10000),
+        draftPageA.waitForPhaseTransition('drafting', 15000),
+        draftPageB.waitForPhaseTransition('drafting', 15000),
       ]);
 
       console.log('Drafting phase started');

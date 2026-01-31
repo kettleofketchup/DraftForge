@@ -45,8 +45,8 @@ test.describe('League Steam Matches (e2e)', () => {
     // Verify URL updated
     await expect(page).toHaveURL(new RegExp(`/leagues/${testLeagueId}/matches`));
 
-    // Verify matches section exists
-    await expect(page.locator('text=Matches')).toBeVisible({ timeout: 10000 });
+    // Verify matches section exists - use h3 heading which shows "Matches (N)"
+    await expect(page.locator('h3:has-text("Matches")')).toBeVisible({ timeout: 10000 });
   });
 
   test('should display match data when matches exist', async ({ page }) => {
