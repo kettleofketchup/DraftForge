@@ -1,10 +1,11 @@
 import HomePage from '~/pages/home/home';
-import type { Route } from './+types/home';
+import { generateMeta } from '~/lib/seo';
 
-export function meta({}: Route.MetaArgs) {
-  return [
-    { title: 'Dota Tournaments' },
-    { name: 'description', content: 'Welcome to Dota Tournaments!' },
-  ];
+export function meta() {
+  return generateMeta({
+    title: 'Home',
+    description: 'Manage Dota 2 tournaments, team drafts, and hero drafting',
+    url: '/',
+  });
 }
 export default HomePage;

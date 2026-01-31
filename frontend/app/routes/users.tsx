@@ -1,11 +1,12 @@
 import { UsersPage } from '../pages/users/users';
-import type { Route } from './+types/home';
+import { generateMeta } from '~/lib/seo';
 
-export function meta({}: Route.MetaArgs) {
-  return [
-    { title: 'Users' },
-    { name: 'description', content: 'User Management' },
-  ];
+export function meta() {
+  return generateMeta({
+    title: 'Players',
+    description: 'Player directory',
+    url: '/users',
+  });
 }
 
 export default function Home() {
