@@ -654,11 +654,11 @@ def demo_herodraft(c):
 
 @task
 def demo_all(c):
-    """Record all demos in parallel.
+    """Record all demos sequentially.
 
-    Resets all demo data, then runs all demos with 3 workers.
+    Resets all demo data, then runs all demos with 1 worker to avoid CPU overload.
     """
-    print("=== Recording All Demos (Parallel) ===")
+    print("=== Recording All Demos ===")
 
     # Reset all demo tournaments (deduplicated)
     reset_keys_done = set()
@@ -667,8 +667,8 @@ def demo_all(c):
             _reset_demo_data(c, demo_key)
             reset_keys_done.add(reset_key)
 
-    # Run all demos in parallel
-    _run_demo_in_docker(c, workers=3)
+    # Run all demos sequentially (1 worker to avoid CPU overload)
+    _run_demo_in_docker(c, workers=1)
 
     # Copy videos
     _copy_demo_videos(c)
