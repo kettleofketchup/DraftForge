@@ -110,16 +110,11 @@ const LazyImage = ({
   }, [src]);
 
   return (
-    <div ref={containerRef} className={cn('relative min-h-[200px]', className)}>
-      {/* Image/GIF skeleton */}
+    <div ref={containerRef} className={cn('relative', className)}>
+      {/* Loading skeleton - uses aspect-video to match typical media dimensions */}
       {isLoading && (
-        <div className="absolute inset-0 rounded-lg overflow-hidden bg-base-300 flex items-center justify-center">
-          <div className="absolute inset-0 bg-gradient-to-r from-base-300 via-base-200 to-base-300 animate-pulse" />
-          {/* Image icon placeholder */}
-          <div className="relative flex flex-col items-center gap-2">
-            <ImageIcon className="w-12 h-12 text-base-content/20" />
-            <div className="w-20 h-2 rounded bg-base-content/10" />
-          </div>
+        <div className="aspect-video rounded-lg bg-base-300 flex items-center justify-center">
+          <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
         </div>
       )}
       {deferredSrc && (
