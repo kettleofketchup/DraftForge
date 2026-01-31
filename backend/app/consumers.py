@@ -243,6 +243,21 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
         if hasattr(self, "_connection_tracked") and self._connection_tracked:
             await self.track_connection(False)
 
+        # If this connection was kicked by a new connection, don't mark as disconnected
+        # The new connection is already active and has marked the captain as connected
+        was_kicked = getattr(self, "_was_kicked", False)
+        if was_kicked:
+            log.info(
+                f"Skipping disconnect handling for kicked connection "
+                f"(user {getattr(self, 'user', None)}, draft {getattr(self, 'draft_id', None)})"
+            )
+            # Still leave the room group
+            if hasattr(self, "room_group_name"):
+                await self.channel_layer.group_discard(
+                    self.room_group_name, self.channel_name
+                )
+            return
+
         # Clean up captain channel registration and mark as disconnected
         if (
             hasattr(self, "user")
@@ -392,6 +407,9 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
         """Handle being kicked by a newer connection."""
         reason = event.get("reason", "unknown")
         log.info(f"Captain {self.user.id} kicked from draft {self.draft_id}: {reason}")
+        # Mark this connection as kicked so disconnect() knows not to trigger
+        # disconnect events (the new connection is already active)
+        self._was_kicked = True
         await self.send(
             text_data=json.dumps(
                 {
