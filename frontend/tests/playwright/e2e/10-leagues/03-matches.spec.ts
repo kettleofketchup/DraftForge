@@ -112,7 +112,7 @@ test.describe('League Page - Matches Tab (e2e)', () => {
   });
 });
 
-// Skip: Tests depend on league page loading which times out intermittently
+// Skip: Flaky - league page loading can timeout (30s) due to slow API response under load
 test.describe.skip('League Match Card (e2e)', () => {
   test.beforeEach(async ({ page, loginAdmin }) => {
     await loginAdmin();
