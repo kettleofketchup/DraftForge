@@ -592,15 +592,14 @@ def _user_is_league_staff(draft: HeroDraft, user) -> bool:
     if user.is_staff:
         return True
     # Check if user is league staff through the tournament/league hierarchy
-    if draft.game and draft.game.match and draft.game.match.bracket:
-        tournament = draft.game.match.bracket.tournament
-        if tournament and tournament.league:
-            # Check if user is league staff
-            from app.models import LeagueMember
-
-            return LeagueMember.objects.filter(
-                league=tournament.league, user=user, role__in=["admin", "staff"]
-            ).exists()
+    # Game has a direct tournament FK, which may have a league
+    if draft.game and draft.game.tournament and draft.game.tournament.league:
+        league = draft.game.tournament.league
+        # Check league admins and staff ManyToMany fields
+        return (
+            league.admins.filter(pk=user.pk).exists()
+            or league.staff.filter(pk=user.pk).exists()
+        )
     return False
 
 
