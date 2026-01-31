@@ -103,18 +103,12 @@ test.describe('Site Snapshots', () => {
       fullPage: false,
     });
 
-    // Get a tournament for detail pages - prefer one with 4+ teams for a good bracket view
-    const tournamentsResponse = await context.request.get(`${API_URL}/tournaments/`, {
+    // Use "Real Tournament 38" (ID 17) for snapshots - has 4 teams for a good bracket view
+    const tournamentResponse = await context.request.get(`${API_URL}/tournaments/17/`, {
       failOnStatusCode: false,
       timeout: 30000,
     });
-    const tournaments = await tournamentsResponse.json();
-    const tournamentList = tournaments.results || tournaments;
-
-    // Find a tournament with 4+ teams for a better bracket screenshot
-    const tournament = tournamentList.find(
-      (t: { team_count?: number }) => (t.team_count ?? 0) >= 4
-    ) || tournamentList[0];
+    const tournament = tournamentResponse.ok() ? await tournamentResponse.json() : null;
 
     if (tournament) {
       // 3. Tournament detail page
