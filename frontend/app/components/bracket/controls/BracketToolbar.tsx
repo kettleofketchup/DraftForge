@@ -75,7 +75,7 @@ export function BracketToolbar({
   const canGenerate = teams.length >= minTeamsForBracket;
 
   return (
-    <div className="flex items-center gap-2 mb-4 p-2 bg-muted/50 rounded-lg">
+    <div className="flex items-center gap-2 mb-4 p-2 bg-muted/50 rounded-lg relative z-10">
       {/* Generate / Reseed dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
