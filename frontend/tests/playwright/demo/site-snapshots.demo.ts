@@ -103,12 +103,17 @@ test.describe('Site Snapshots', () => {
       fullPage: false,
     });
 
-    // Get a tournament for detail pages
+    // Get a tournament for detail pages - prefer one with 4+ teams for a good bracket view
     const tournamentsResponse = await context.request.get(`${API_URL}/tournaments/`, {
       failOnStatusCode: false,
     });
     const tournaments = await tournamentsResponse.json();
-    const tournament = tournaments.results?.[0] || tournaments[0];
+    const tournamentList = tournaments.results || tournaments;
+
+    // Find a tournament with 4+ teams for a better bracket screenshot
+    const tournament = tournamentList.find(
+      (t: { team_count?: number }) => (t.team_count ?? 0) >= 4
+    ) || tournamentList[0];
 
     if (tournament) {
       // 3. Tournament detail page
@@ -129,6 +134,22 @@ test.describe('Site Snapshots', () => {
         await bracketTab.click();
         await page.waitForTimeout(500);
         await waitForBracketReady(page, { timeout: 10000 });
+
+        // Wait for React Flow nodes to render
+        await page.waitForSelector('.react-flow__node', { timeout: 10000 });
+
+        // Wait for viewport positioning effect to complete
+        await page.waitForTimeout(500);
+
+        // Center the bracket using exposed fitView function
+        await page.evaluate(() => {
+          const win = window as Window & { bracketFitView?: () => void };
+          if (win.bracketFitView) {
+            win.bracketFitView();
+          }
+        });
+        await page.waitForTimeout(400);
+
         await page.screenshot({
           path: path.join(outputDir, 'bracket.png'),
           fullPage: false,
