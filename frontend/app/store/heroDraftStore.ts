@@ -160,6 +160,13 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             set({ draft: message.draft_state });
           }
 
+          // Clear selected hero when a pick/ban is made (including random picks due to timeout)
+          // This fixes the bug where the selection overlay persists after a random pick
+          if (message.event_type === 'hero_selected') {
+            debugLog('Clearing selectedHeroId after hero_selected event');
+            set({ selectedHeroId: null });
+          }
+
           set({ lastEvent: message as HeroDraftEvent });
           break;
 
