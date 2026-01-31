@@ -1,6 +1,6 @@
 import { InfoDialog } from "~/components/ui/dialogs";
 import type { HeroDraftRound, DraftTeam } from "./types";
-import { heroes } from "dotaconstants";
+import { getHeroIcon, getHeroName } from "~/lib/dota/heroes";
 import { DisplayName } from "~/components/user/avatar";
 
 interface HeroDraftHistoryModalProps {
@@ -8,18 +8,6 @@ interface HeroDraftHistoryModalProps {
   onOpenChange: (open: boolean) => void;
   rounds: HeroDraftRound[];
   draftTeams: DraftTeam[];
-}
-
-function getHeroName(heroId: number | null): string {
-  if (!heroId) return "—";
-  const hero = Object.values(heroes).find((h) => h.id === heroId);
-  return hero?.localized_name ?? `Hero #${heroId}`;
-}
-
-function getHeroIcon(heroId: number | null): string | null {
-  if (!heroId) return null;
-  const hero = Object.values(heroes).find((h) => h.id === heroId);
-  return hero?.icon ?? null;
 }
 
 function getRoundIcon(actionType: "ban" | "pick", state: string): string {
@@ -59,7 +47,9 @@ export function HeroDraftHistoryModal({
       ) : (
         <div className="space-y-2">
           {sortedRounds.map((round) => {
-            const heroIcon = getHeroIcon(round.hero_id);
+            const heroId = round.hero_id;
+            const heroIcon = heroId ? getHeroIcon(heroId) : null;
+            const heroName = heroId ? getHeroName(heroId) : "—";
             const isCompleted = round.state === "completed";
             const isActive = round.state === "active";
 
@@ -80,7 +70,7 @@ export function HeroDraftHistoryModal({
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   {heroIcon && (
                     <img
-                      src={`https://cdn.cloudflare.steamstatic.com${heroIcon}`}
+                      src={heroIcon}
                       alt=""
                       className="w-8 h-8 rounded"
                     />
@@ -88,7 +78,7 @@ export function HeroDraftHistoryModal({
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">
                       {round.action_type === "ban" ? "Ban" : "Pick"}{" "}
-                      {round.round_number - 1}: {getHeroName(round.hero_id)}
+                      {round.round_number - 1}: {heroName}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
                       {getTeamName(round.draft_team)}

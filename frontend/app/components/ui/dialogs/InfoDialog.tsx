@@ -2,6 +2,7 @@ import * as React from 'react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -19,6 +20,8 @@ export interface InfoDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Dialog title */
   title: string;
+  /** Dialog description for accessibility (visually hidden if not provided) */
+  description?: string;
   /** Dialog content */
   children: React.ReactNode;
   /** Dialog size */
@@ -54,6 +57,7 @@ export const InfoDialog = React.forwardRef<HTMLDivElement, InfoDialogProps>(
       open,
       onOpenChange,
       title,
+      description,
       children,
       size = 'md',
       showClose = true,
@@ -69,6 +73,9 @@ export const InfoDialog = React.forwardRef<HTMLDivElement, InfoDialogProps>(
         >
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
+            <DialogDescription className={description ? '' : 'sr-only'}>
+              {description || `${title} dialog`}
+            </DialogDescription>
           </DialogHeader>
 
           <ScrollArea className="max-h-[60vh] pr-4">

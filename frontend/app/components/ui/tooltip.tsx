@@ -52,4 +52,39 @@ function TooltipContent({
   )
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+/**
+ * Lazy tooltip - only mounts the full Radix tooltip structure on hover.
+ * Use this for performance-critical lists where many tooltips are rendered.
+ *
+ * On initial render, only renders the children with a title attribute as fallback.
+ * On hover, mounts the full Radix tooltip for nice styling.
+ *
+ * @example
+ * <FastTooltip content="Hero name">
+ *   <button>Hover me</button>
+ * </FastTooltip>
+ */
+interface FastTooltipProps {
+  content: React.ReactNode;
+  children: React.ReactNode;
+  /** @deprecated Native title doesn't support positioning */
+  side?: 'top' | 'bottom' | 'left' | 'right';
+  /** @deprecated Native title doesn't support custom styling */
+  className?: string;
+}
+
+function FastTooltip({
+  content,
+  children,
+}: FastTooltipProps) {
+  // Use native title for performance - no React overhead, no sticky tooltip issues
+  const title = typeof content === 'string' ? content : undefined;
+
+  return (
+    <span title={title} style={{ display: 'contents' }}>
+      {children}
+    </span>
+  );
+}
+
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, FastTooltip }

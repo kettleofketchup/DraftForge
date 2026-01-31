@@ -12,12 +12,13 @@ import { DraftTopBar } from "./DraftTopBar";
 import { HeroGrid } from "./HeroGrid";
 import { DraftPanel } from "./DraftPanel";
 import { HeroDraftHistoryModal } from "./HeroDraftHistoryModal";
+import { CompletedDraftView } from "./CompletedDraftView";
 import { submitPick, setReady, triggerRoll, submitChoice } from "./api";
 import type { HeroDraft, HeroDraftEvent } from "./types";
 import { DisplayName } from "~/components/user/avatar";
 import { getHeroIcon, getHeroName as getHeroNameFromLib } from "~/lib/dota/heroes";
 import { CaptainToast, HeroActionToast } from "./DraftToasts";
-import { Send, ArrowLeft } from "lucide-react";
+import { Send, ArrowLeft, Users } from "lucide-react";
 import { HistoryButton } from "~/components/ui/buttons";
 import {
   Tooltip,
@@ -67,6 +68,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     type: "pick_order" | "side";
     value: "first" | "second" | "radiant" | "dire";
   } | null>(null);
+  const [showFullDraft, setShowFullDraft] = useState(false);
 
   // Close handler - navigates to bracket if tournament context exists, otherwise calls onClose
   const handleClose = useCallback(() => {
@@ -171,49 +173,26 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
   // Alias for backwards compatibility
   const reconnect = wsReconnect;
 
-  const handleHeroClick = (heroId: number) => {
-    console.log("[HeroDraftModal] handleHeroClick:", {
-      heroId,
-      draft_state: draft?.state,
-      draft_current_round: draft?.current_round,
-      currentUser_pk: currentUser?.pk,
-    });
-
+  const handleHeroClick = useCallback((heroId: number) => {
     if (!draft || !currentUser?.pk) {
-      console.log("[HeroDraftModal] handleHeroClick - early return: no draft or user");
       return;
     }
 
     const myTeam = draft.draft_teams.find((t) => t.captain?.pk === currentUser.pk);
-    console.log("[HeroDraftModal] handleHeroClick:", {
-      myTeam_id: myTeam?.id,
-      myTeam_captain: myTeam?.captain?.username,
-    });
-
     if (!myTeam) {
-      console.log("[HeroDraftModal] handleHeroClick - early return: not a captain");
       return;
     }
 
     // Find current round from rounds array using current_round index
     const currentRound = draft.current_round !== null ? draft.rounds[draft.current_round] : null;
-    console.log("[HeroDraftModal] handleHeroClick:", {
-      currentRound_number: currentRound?.round_number,
-      currentRound_draft_team: currentRound?.draft_team,
-      currentRound_state: currentRound?.state,
-      currentRound_action_type: currentRound?.action_type,
-      isMyTurn: currentRound?.draft_team === myTeam.id,
-    });
 
     if (!currentRound || currentRound.draft_team !== myTeam.id) {
-      console.log("[HeroDraftModal] handleHeroClick - not your turn!");
       toast.error("It's not your turn");
       return;
     }
 
-    console.log("[HeroDraftModal] handleHeroClick - setting confirmHeroId:", heroId);
     setConfirmHeroId(heroId);
-  };
+  }, [draft, currentUser]);
 
   const handleConfirmPick = async () => {
     console.log("[HeroDraftModal] handleConfirmPick:", {
@@ -518,8 +497,16 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                 </div>
               )}
 
-              {/* Small screen message - shown below sm breakpoint */}
-              {(draft.state === "drafting" || draft.state === "paused" || draft.state === "resuming" || draft.state === "completed") && (
+              {/* Completed draft view - full screen display of teams (when not viewing full draft) */}
+              {draft.state === "completed" && !showFullDraft && (
+                <CompletedDraftView
+                  draft={draft}
+                  onViewFullDraft={() => setShowFullDraft(true)}
+                />
+              )}
+
+              {/* Small screen message - shown below sm breakpoint for in-progress drafts */}
+              {(draft.state === "drafting" || draft.state === "paused" || draft.state === "resuming") && (
                 <div className="flex-1 flex sm:hidden items-start justify-start p-6" data-testid="herodraft-small-screen-message">
                   <div className="text-left space-y-2 max-w-xs">
                     <div className="text-3xl">🚧</div>
@@ -532,7 +519,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
               )}
 
               {/* Main draft area - hidden on small screens, side-by-side on sm+ */}
-              {(draft.state === "drafting" || draft.state === "paused" || draft.state === "resuming" || draft.state === "completed") && (
+              {/* Shows during drafting/paused/resuming, OR when viewing full draft in completed state */}
+              {(draft.state === "drafting" || draft.state === "paused" || draft.state === "resuming" || (draft.state === "completed" && showFullDraft)) && (
                 <div className="flex-1 hidden sm:flex flex-row overflow-hidden" data-testid="herodraft-main-area">
                   {/* Hero Grid - 50% sm/md, 58% lg, 80% xl */}
                   <div className="basis-1/2 md:basis-1/2 lg:basis-7/12 xl:basis-4/5 h-full min-w-0 overflow-hidden" data-testid="herodraft-hero-grid-container">
@@ -588,6 +576,19 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
                 {/* Right side controls */}
                 <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                  {/* View Teams button - shown when viewing full draft on completed state */}
+                  {draft.state === "completed" && showFullDraft && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowFullDraft(false)}
+                      data-testid="herodraft-view-teams-btn"
+                      className="flex items-center text-xs sm:text-sm"
+                    >
+                      <Users className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                      <span className="hidden sm:inline">View Teams</span>
+                    </Button>
+                  )}
                   <HistoryButton
                     data-testid="herodraft-history-btn"
                     onClick={() => setShowHistoryModal(true)}
