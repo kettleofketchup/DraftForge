@@ -82,55 +82,105 @@ Users cannot see who else is currently viewing the same page. We want to show "X
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Authentication
+### Authentication & Anonymous Users
 
-Django Channels provides the authenticated user automatically via middleware:
+Support both authenticated and anonymous users:
 
 ```python
 class PresenceConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        user = self.scope["user"]  # Django User object
+        user = self.scope["user"]
 
-        if not user.is_authenticated:
-            await self.close()  # Reject anonymous connections
-            return
+        if user.is_authenticated:
+            # Authenticated user - use their PK
+            self.user_id = f"user:{user.pk}"
+            self.user_data = {
+                "type": "user",
+                "pk": user.pk,
+                "username": user.username,
+                # avatar fetched separately if needed
+            }
+        else:
+            # Anonymous user - generate session-based ID
+            session_key = self.scope.get("session", {}).get("_session_key")
+            if not session_key:
+                session_key = str(uuid.uuid4())[:8]
+            self.user_id = f"anon:{session_key}"
+            self.user_data = {
+                "type": "anonymous",
+                "id": session_key,
+            }
 
-        # Now we have full access to user data:
-        self.user_pk = user.pk           # Primary key (integer)
-        self.username = user.username    # Username
-        # Can also fetch avatar, etc. from database
+        await self.accept()
+        # ... rest of connect logic
 ```
 
-This works because your existing `AuthMiddlewareStack` in ASGI config handles session/cookie auth for WebSockets.
+**Display in UI:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│  Tournament Players                                  │
+│                                                      │
+│  Viewing: [👤 kettle] [👤 player2] [👻 Guest] [👻 Guest] │
+│           ─────────── ───────────  ─────────────────── │
+│           authenticated users      anonymous users     │
+└─────────────────────────────────────────────────────┘
+```
 
 ### Redis Schema
 
 ```python
-# Key 1: Where is this user? (HASH with TTL)
-KEY = "presence:user:{user_pk}"
+# Key 1: User/session presence data (HASH with TTL)
+# For authenticated users: presence:user:123
+# For anonymous users: presence:anon:a1b2c3d4
+KEY = "presence:{user_id}"
 VALUE = {
+    "type": "user" | "anonymous",
     "url": "/tournament/5/players",
-    "username": "kettle",
-    "connected_at": "1706745600"
+    "username": "kettle",        # only for authenticated
+    "pk": "123",                 # only for authenticated
 }
 TTL = 60 seconds  # Auto-expires if no heartbeat
 
 # Key 2: Who is on this page? (SET)
-KEY = "presence:page:{url_path}"  # Exact URL path, slashes replaced
-VALUE = SET of user_pks
-# No TTL - managed by consumer connect/disconnect
+KEY = "presence:page:{url_path}"
+VALUE = SET of user_ids (both "user:123" and "anon:a1b2c3d4")
 
-# Example:
-# User PK 123 (username: kettle) visits /tournament/5/players:
-HSET presence:user:123 url "/tournament/5/players" username "kettle"
+# Example - Authenticated user:
+HSET presence:user:123 type "user" url "/tournament/5/players" username "kettle" pk "123"
 EXPIRE presence:user:123 60
-SADD presence:page:/tournament/5/players 123
+SADD presence:page:/tournament/5/players user:123
 
-# User navigates to /tournament/5/games (DIFFERENT room):
-SREM presence:page:/tournament/5/players 123
-HSET presence:user:123 url "/tournament/5/games"
-EXPIRE presence:user:123 60
-SADD presence:page:/tournament/5/games 123
+# Example - Anonymous user:
+HSET presence:anon:a1b2c3d4 type "anonymous" url "/tournament/5/players"
+EXPIRE presence:anon:a1b2c3d4 60
+SADD presence:page:/tournament/5/players anon:a1b2c3d4
+```
+
+**Querying page presence:**
+
+```python
+async def get_page_users(url: str) -> dict:
+    """Get all users on a page, separated by type."""
+    user_ids = redis.smembers(f"presence:page:{url}")
+
+    users = []
+    anonymous_count = 0
+
+    for user_id in user_ids:
+        data = redis.hgetall(f"presence:{user_id}")
+        if data.get("type") == "user":
+            users.append({
+                "pk": int(data["pk"]),
+                "username": data["username"],
+            })
+        else:
+            anonymous_count += 1
+
+    return {
+        "users": users,              # [{pk: 123, username: "kettle"}, ...]
+        "anonymous_count": anonymous_count,  # 3
+    }
 ```
 
 ### URL Grouping: Exact Path Match
@@ -457,21 +507,28 @@ ws://localhost/api/presence/
   "type": "page_presence",
   "url": "/tournament/5/players",
   "users": [
-    { "id": 123, "username": "kettle", "avatar": "..." },
-    { "id": 456, "username": "player2", "avatar": "..." }
-  ]
+    { "pk": 123, "username": "kettle", "avatar": "..." },
+    { "pk": 456, "username": "player2", "avatar": "..." }
+  ],
+  "anonymous_count": 3  // 3 anonymous guests on this page
 }
 
-// Someone joined the page you're on
+// Authenticated user joined
 {
   "type": "user_joined",
-  "user": { "id": 789, "username": "newuser", "avatar": "..." }
+  "user": { "pk": 789, "username": "newuser", "avatar": "..." }
 }
 
-// Someone left the page you're on
+// Authenticated user left
 {
   "type": "user_left",
-  "user_id": 456
+  "user_pk": 456
+}
+
+// Anonymous user joined/left (just update count)
+{
+  "type": "anonymous_count",
+  "count": 4  // Updated count of anonymous users
 }
 ```
 
@@ -589,9 +646,15 @@ export const PRESENCE_CONFIG = {
 
 1. **URL grouping**: ✅ **Exact path match** - `/tournament/5/players` and `/tournament/5/games` are different rooms
 
-2. **Authentication**: ✅ **Authenticated users only** - Use `self.scope["user"]` from Django Channels, reject anonymous connections
+2. **Anonymous users**: ✅ **Supported** - Track both authenticated and anonymous users
+   - Authenticated: Show avatar + username
+   - Anonymous: Show ghost icon + count ("+ 3 guests")
 
-3. **User identification**: ✅ **User PK** - Store `user.pk` in Redis, can look up username/avatar as needed
+3. **User identification**: ✅ **Hybrid IDs**
+   - Authenticated: `user:{pk}` (e.g., `user:123`)
+   - Anonymous: `anon:{session_id}` (e.g., `anon:a1b2c3d4`)
+
+4. **Privacy**: ✅ **No opt-out** - All users are visible when on a page
 
 ## Open Questions
 
@@ -603,14 +666,9 @@ export const PRESENCE_CONFIG = {
    - "3 users here" (includes you) vs "2 others here"
    - Recommendation: Include self, clearer mental model
 
-3. **Privacy: Can users opt out of being shown?**
-   - User setting to appear "invisible"?
-   - v1: No opt-out (simpler)
-   - v2: Add privacy setting if requested
-
-4. **What user info to show?**
+3. **What user info to show?**
    - Just count? Avatars? Usernames on hover?
-   - Recommendation: Avatar stack with username tooltip
+   - Recommendation: Avatar stack for users, count for anonymous
 
 ---
 
