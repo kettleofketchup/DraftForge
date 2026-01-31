@@ -83,3 +83,13 @@ export async function resetDraft(draftId: number): Promise<HeroDraft> {
   const response = await api.post(`/herodraft/${draftId}/reset/`);
   return response.data;
 }
+
+export async function pauseDraft(draftId: number): Promise<HeroDraft> {
+  const response = await api.post(`/herodraft/${draftId}/pause/`);
+  return response.data;
+}
+
+export async function resumeDraft(draftId: number): Promise<HeroDraft> {
+  const response = await api.post(`/herodraft/${draftId}/resume/`);
+  return response.data;
+}

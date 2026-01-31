@@ -45,6 +45,7 @@ export const HeroDraftSchema = z.object({
   draft_teams: z.array(DraftTeamSchema),
   rounds: z.array(HeroDraftRoundSchema),
   current_round: z.number().nullable(),
+  is_manual_pause: z.boolean().optional(), // True if paused manually by captain/staff
   created_at: z.string(),
   updated_at: z.string(),
 });
