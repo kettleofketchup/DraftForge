@@ -153,7 +153,7 @@ export default function HomePage() {
             </Button>
             <Button size="lg" className="secondary" asChild>
               <a
-                href="https://discord.gg/dtx"
+                href="https://discord.gg/6xYb7RUn8a"
                 target="_blank"
                 rel="noopener noreferrer"
               >
@@ -194,7 +194,7 @@ export default function HomePage() {
             </p>
           </motion.div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             <FeatureCard
               icon={Trophy}
               title="Tournament Brackets"

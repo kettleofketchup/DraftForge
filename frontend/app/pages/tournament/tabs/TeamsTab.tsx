@@ -1,7 +1,7 @@
 import { memo, useMemo, useState } from 'react';
-import { DraftModal } from '~/components/draft/draftModal';
+import { DraftModal } from '~/components/teamdraft/draftModal';
 import { SearchTeamsDropdown } from '~/components/team/searchTeams';
-import { TeamCard } from '~/components/team/teamCard';
+import { TeamCard } from '~/components/teamdraft/CompletedTeamDraftView';
 import { CaptainSelectionModal } from '~/components/tournament/captains/captainSelectionModal';
 
 import type { UserType } from '~/components/user/types';
@@ -61,15 +61,11 @@ export const TeamsTab: React.FC = memo(() => {
           data-testid="teamsSearchDropdown"
         />
       </div>
-      <div
-        className="flex w-full  grid gap-4 md:gap-6 mt-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3
-       justify-center content-center "
-      >
-        {filteredTeams?.map((team: TeamType) => (
+      <div className="grid gap-4 md:gap-6 mt-4 grid-cols-1 lg:grid-cols-2 w-full">
+        {filteredTeams?.map((team: TeamType, index: number) => (
           <TeamCard
             team={team}
-            compact={true}
-            saveFunc={'save'}
+            rank={index + 1}
             key={`TeamCard-${team.pk}`}
           />
         ))}
