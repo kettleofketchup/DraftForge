@@ -106,6 +106,7 @@ test.describe('Site Snapshots', () => {
     // Get a tournament for detail pages - prefer one with 4+ teams for a good bracket view
     const tournamentsResponse = await context.request.get(`${API_URL}/tournaments/`, {
       failOnStatusCode: false,
+      timeout: 30000,
     });
     const tournaments = await tournamentsResponse.json();
     const tournamentList = tournaments.results || tournaments;
