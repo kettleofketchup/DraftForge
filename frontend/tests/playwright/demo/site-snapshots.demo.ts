@@ -136,14 +136,14 @@ test.describe('Site Snapshots', () => {
         // Wait for viewport positioning effect to complete
         await page.waitForTimeout(500);
 
-        // Center the bracket using exposed fitView function
+        // Scroll the page down to show the bracket better
         await page.evaluate(() => {
-          const win = window as Window & { bracketFitView?: () => void };
-          if (win.bracketFitView) {
-            win.bracketFitView();
+          const bracketContainer = document.querySelector('[data-testid="bracketContainer"]');
+          if (bracketContainer) {
+            bracketContainer.scrollIntoView({ behavior: 'instant', block: 'start' });
           }
         });
-        await page.waitForTimeout(400);
+        await page.waitForTimeout(300);
 
         await page.screenshot({
           path: path.join(outputDir, 'bracket.png'),
