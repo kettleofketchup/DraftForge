@@ -87,7 +87,7 @@ export class LeaguePage {
     this.prizeInput = page.locator('[data-testid="league-prize-input"]');
     this.descriptionInput = page.locator('[data-testid="league-description-input"]');
     this.rulesInput = page.locator('[data-testid="league-rules-input"]');
-    this.submitButton = page.locator('[data-testid="league-submit-button"]');
+    this.submitButton = page.locator('[data-testid="form-dialog-submit"]');
     this.cancelButton = page.locator('button:has-text("Cancel")');
 
     // Matches tab elements
@@ -366,12 +366,16 @@ export class LeaguePage {
 
   /**
    * Assert that form labels are visible in the edit modal.
+   * Uses getByLabel to verify labels are properly associated with inputs.
    */
   async assertFormLabelsVisible(): Promise<void> {
-    await expect(this.page.locator('label:has-text("League Name")')).toBeVisible();
-    await expect(this.page.locator('label:has-text("Prize Pool")')).toBeVisible();
-    await expect(this.page.locator('label:has-text("Description")')).toBeVisible();
-    await expect(this.page.locator('label:has-text("Rules")')).toBeVisible();
+    // Scope to the edit modal to avoid matching elements on the page
+    const modal = this.editModal;
+    // Use getByLabel which properly tests that labels are associated with inputs
+    await expect(modal.getByLabel('League Name')).toBeVisible();
+    await expect(modal.getByLabel('Prize Pool')).toBeVisible();
+    await expect(modal.getByLabel('Description')).toBeVisible();
+    await expect(modal.getByLabel('Rules')).toBeVisible();
   }
 }
 

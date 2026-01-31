@@ -124,6 +124,7 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
                 type="submit"
                 onClick={handleSubmit}
                 disabled={isSubmitting}
+                data-testid="form-dialog-submit"
               >
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {submitLabel}
