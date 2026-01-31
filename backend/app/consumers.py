@@ -318,10 +318,14 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
         )
 
         old_channel = r.get(channel_key)
+        log.info(
+            f"[KICK DEBUG] Checking kick for user {self.user.id} in draft {self.draft_id}: "
+            f"old_channel={old_channel!r}, new_channel={self.channel_name!r}"
+        )
         if old_channel and old_channel != self.channel_name:
             log.info(
                 f"Kicking existing captain connection for user {self.user.id} "
-                f"in draft {self.draft_id}: {old_channel}"
+                f"in draft {self.draft_id}: {old_channel} -> {self.channel_name}"
             )
             # Send kick message to old connection
             try:
@@ -329,8 +333,11 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                     old_channel,
                     {"type": "herodraft.kicked", "reason": "new_connection"},
                 )
+                log.info(f"[KICK DEBUG] Sent kick message to {old_channel}")
             except Exception as e:
                 log.warning(f"Failed to send kick message to {old_channel}: {e}")
+        else:
+            log.info(f"[KICK DEBUG] No kick needed - old_channel={old_channel!r}")
 
     async def register_captain_channel(self):
         """Register this connection as the captain's active channel."""
