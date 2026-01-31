@@ -260,8 +260,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
   });
 
   test.describe('Bracket Saving', () => {
-    // Skip: Save button click is blocked by overlay element (timing issue)
-    test.skip('should save bracket and persist changes', async ({ page }) => {
+    test('should save bracket and persist changes', async ({ page }) => {
       await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
 
       const bracketContainer = page.locator('[data-testid="bracketContainer"]');
@@ -291,14 +290,31 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await expect(page.locator('text=Unsaved changes')).toBeVisible({ timeout: 10000 });
 
       // Save the bracket
+      // Note: There's a known Playwright issue with Radix ScrollArea where the html element
+      // appears to intercept pointer events. Using evaluate to click works around this.
       const saveButton = page.locator('button:has-text("Save Bracket"), button:has-text("Save Changes")');
-      await saveButton.click();
 
-      // Wait for save to complete
+      // Verify button is enabled before clicking
+      await expect(saveButton).not.toBeDisabled();
+
+      // Set up response listener before clicking
+      const saveResponsePromise = page.waitForResponse(
+        (response) => response.request().method() === 'POST' && response.url().includes('/save/'),
+        { timeout: 15000 }
+      );
+
+      // Click via JavaScript to bypass the hit-testing issue
+      await saveButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+
+      // Wait for save API call and verify success
+      const saveResponse = await saveResponsePromise;
+      expect(saveResponse.status()).toBe(200);
+
+      // Wait for UI to update
       await page.waitForLoadState('networkidle');
 
-      // Unsaved changes should disappear (expect waits for condition)
-      await expect(page.locator('text=Unsaved changes')).not.toBeVisible();
+      // Unsaved changes indicator should disappear
+      await expect(page.locator('text=Unsaved changes')).not.toBeVisible({ timeout: 10000 });
     });
   });
 });

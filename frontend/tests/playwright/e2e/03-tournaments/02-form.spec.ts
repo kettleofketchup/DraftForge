@@ -38,8 +38,7 @@ test.describe('Tournaments - create (e2e)', () => {
     await visitAndWaitForHydration(page, '/tournaments');
   });
 
-  // Skip: Flaky - form submission timing and calendar date selection issues
-  test.skip('logs in, creates a tournament via the UI and shows it in the list', async ({
+  test('logs in, creates a tournament via the UI and shows it in the list', async ({
     page,
   }) => {
     const tournamentPage = new TournamentPage(page);
@@ -70,19 +69,31 @@ test.describe('Tournaments - create (e2e)', () => {
     await datePicker.waitFor({ state: 'visible', timeout: 10000 });
     await datePicker.click();
 
-    // Select today's date from the calendar
-    const today = new Date().getDate().toString();
-    const dateCell = page.locator('[role="gridcell"]').filter({ hasText: new RegExp(`^${today}$`) }).first();
-    await dateCell.click({ force: true });
+    // Wait for calendar popover to open
+    const calendar = page.locator('[data-slot="calendar"]');
+    await calendar.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Select day 15 of the current month (avoids outside days from previous/next month)
+    // Find day button by matching exact text "15" within the calendar
+    const dayButton = calendar.locator('button').filter({ hasText: /^15$/ }).first();
+    // Use evaluate to bypass any popover positioning/z-index issues
+    await dayButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+
+    // Wait for popover to close
+    await calendar.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
 
     // Submit the form
     await page.locator('[data-testid="tournament-submit-button"]').click();
 
     // After submission, the created tournament should appear in the list.
-    // Wait up to 10s for backend work and UI update.
-    const createdTournament = page.getByText(thisName);
+    // Wait for success toast or navigation
+    await page.waitForLoadState('networkidle');
+
+    // Wait up to 15s for backend work and UI update
+    // Use card-title to avoid matching the success toast, .first() to handle duplicates from reruns
+    const createdTournament = page.locator('[data-slot="card-title"]').filter({ hasText: thisName }).first();
     await createdTournament.scrollIntoViewIfNeeded();
-    await expect(createdTournament).toBeVisible({ timeout: 10000 });
+    await expect(createdTournament).toBeVisible({ timeout: 15000 });
   });
 
   // Skip: This test depends on the previous test's created tournament which may not persist
