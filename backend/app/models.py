@@ -279,6 +279,12 @@ class Organization(models.Model):
     description = models.TextField(blank=True, default="", max_length=10000)
     logo = models.URLField(blank=True, default="")
     discord_link = models.URLField(blank=True, default="")
+    discord_server_id = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        help_text="Discord server (guild) ID for fetching members",
+    )
     rules_template = models.TextField(blank=True, default="", max_length=50000)
     timezone = models.CharField(max_length=50, default="America/New_York")
     owner = models.ForeignKey(

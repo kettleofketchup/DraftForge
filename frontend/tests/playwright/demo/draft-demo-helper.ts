@@ -121,7 +121,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
 
   // Open draft modal
   const startDraftButton = setupPage.locator(
-    'button:has-text("Start Draft"), button:has-text("Live Draft")'
+    'button:has-text("Start Draft"), button:has-text("Start Team Draft"), button:has-text("Live Draft")'
   );
   await startDraftButton.first().click();
 
@@ -170,7 +170,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   await setupPage.waitForTimeout(300);
 
   // Re-open draft modal
-  await setupPage.locator('button:has-text("Start Draft"), button:has-text("Live Draft")').first().click();
+  await setupPage.locator('button:has-text("Start Draft"), button:has-text("Start Team Draft"), button:has-text("Live Draft")').first().click();
   await expect(setupPage.locator('[role="dialog"]')).toBeVisible();
   await setupPage.waitForTimeout(500);
 
@@ -235,7 +235,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   // Open draft modal and verify
   await setupPage.locator('[data-testid="teamsTab"]').click({ force: true });
   await setupPage.waitForTimeout(300);
-  await setupPage.locator('button:has-text("Start Draft"), button:has-text("Live Draft")').first().click();
+  await setupPage.locator('button:has-text("Start Draft"), button:has-text("Start Team Draft"), button:has-text("Live Draft")').first().click();
 
   dialog = setupPage.locator('[role="dialog"]');
   await expect(dialog).toBeVisible();
@@ -371,7 +371,7 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   await page.waitForTimeout(1500);
 
   // Open draft modal
-  await page.locator('button:has-text("Start Draft"), button:has-text("Live Draft")').first().click();
+  await page.locator('button:has-text("Start Draft"), button:has-text("Start Team Draft"), button:has-text("Live Draft")').first().click();
   await expect(page.locator('[role="dialog"]')).toBeVisible();
   await waitForDraftReady(page, { timeout: 15000 });
   await waitForLoadingComplete(page, { timeout: 5000 });

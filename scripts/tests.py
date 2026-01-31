@@ -461,7 +461,7 @@ def _reset_demo_data(c, demo_key):
 
 
 def _generate_bracket(c, tournament_pk):
-    """Generate bracket for a tournament via API.
+    """Generate bracket for a tournament via test API.
 
     Args:
         c: Invoke context
@@ -472,7 +472,8 @@ def _generate_bracket(c, tournament_pk):
     """
     import requests
 
-    url = f"https://localhost/api/bracket/tournaments/{tournament_pk}/generate/"
+    # Use test endpoint (no auth required)
+    url = f"https://localhost/api/tests/demo/bracket/{tournament_pk}/generate/"
 
     print(f"  Generating bracket for tournament {tournament_pk}...")
     try:

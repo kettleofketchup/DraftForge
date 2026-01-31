@@ -207,6 +207,61 @@ def _reset_demo_draft(tournament, draft_style: str):
     )
 
 
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def generate_demo_bracket(request, tournament_pk: int):
+    """
+    Generate bracket for a tournament (TEST ONLY).
+
+    This endpoint wraps the bracket generation logic for test/demo use.
+
+    Args:
+        tournament_pk: Tournament primary key
+
+    Returns:
+        200: Bracket generated successfully
+        404: Tournament not found
+        400: Error generating bracket
+    """
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from app.models import Tournament
+    from bracket.models import TournamentBracket
+
+    try:
+        tournament = Tournament.objects.get(pk=tournament_pk)
+    except Tournament.DoesNotExist:
+        return Response(
+            {"error": f"Tournament {tournament_pk} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    try:
+        # Delete existing brackets
+        tournament.brackets.all().delete()
+
+        # Create and generate new bracket
+        bracket = TournamentBracket.objects.create(tournament=tournament)
+        bracket.generate_double_elimination_bracket()
+        bracket.save()
+
+        return Response(
+            {
+                "status": "generated",
+                "tournament": tournament.name,
+                "tournament_pk": tournament.pk,
+                "bracket_pk": bracket.pk,
+            }
+        )
+    except Exception as e:
+        return Response(
+            {"error": str(e)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def get_demo_tournament(request, key: str):

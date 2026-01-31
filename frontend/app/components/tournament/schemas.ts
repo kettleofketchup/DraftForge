@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { UserSchema } from '../user';
 
-import { DraftSchema } from '../draft/schemas';
+import { DraftSchema } from '../teamdraft/schemas';
 import { GameSchema } from '../game/schemas';
 import { TeamSchema } from '../team';
 

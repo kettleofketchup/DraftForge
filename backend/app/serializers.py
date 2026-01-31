@@ -201,6 +201,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "description",
             "logo",
             "discord_link",
+            "discord_server_id",
             "rules_template",
             "timezone",
             "owner",

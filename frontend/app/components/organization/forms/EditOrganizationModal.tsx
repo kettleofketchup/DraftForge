@@ -47,6 +47,7 @@ export function EditOrganizationModal({
       description: organization.description || '',
       logo: organization.logo || '',
       discord_link: organization.discord_link || '',
+      discord_server_id: organization.discord_server_id || '',
       rules_template: organization.rules_template || '',
     },
   });
@@ -59,6 +60,7 @@ export function EditOrganizationModal({
         description: organization.description || '',
         logo: organization.logo || '',
         discord_link: organization.discord_link || '',
+        discord_server_id: organization.discord_server_id || '',
         rules_template: organization.rules_template || '',
       });
     }
@@ -148,6 +150,28 @@ export function EditOrganizationModal({
               </FormControl>
               <FormDescription>
                 Invite link to your Discord server
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="discord_server_id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Discord Server ID</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="123456789012345678"
+                  data-testid="org-discord-server-id-input"
+                  {...field}
+                  value={field.value || ''}
+                />
+              </FormControl>
+              <FormDescription>
+                Discord server (guild) ID for fetching members
               </FormDescription>
               <FormMessage />
             </FormItem>
