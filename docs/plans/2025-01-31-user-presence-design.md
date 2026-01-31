@@ -6,21 +6,33 @@
 
 ## Problem Statement
 
-Users cannot see who else is currently active on the site. We want to show real-time presence (online/away/offline) and disconnect WebSockets when browser tabs are inactive to save server resources.
+Users cannot see who else is currently viewing the same page. We want to show "X users are here" or display avatars of users on the same page, similar to Google Docs or Figma's presence indicators.
 
 ## Goals
 
-1. Show real-time user presence status (green dot = online)
-2. Disconnect WebSocket when tab is hidden for extended period
-3. Minimal resource overhead
-4. Reusable across different features (tournaments, drafts, etc.)
+1. Show which users are viewing the same page (URL-based presence)
+2. Real-time updates when users join/leave a page
+3. Disconnect WebSocket when tab is hidden (save resources)
+4. Minimal resource overhead
 
 ## Non-Goals (v1)
 
+- Global "online" status across the whole site
 - Typing indicators
+- Cursor positions
 - "Last seen" timestamps
-- Custom status messages
-- Presence in specific rooms/channels (global presence only for v1)
+
+---
+
+## Core Concept
+
+**Page-based presence**: Each URL path is a "room". Users on the same page see each other.
+
+```
+/tournament/5/players  →  [kettle, player2, player3] viewing
+/tournament/5/games    →  [admin, spectator1] viewing
+/leagues/2             →  [kettle] viewing (alone)
+```
 
 ---
 
@@ -32,122 +44,144 @@ Users cannot see who else is currently active on the site. We want to show real-
 ┌─────────────────────────────────────────────────────────────────┐
 │                         BROWSER                                  │
 │  ┌─────────────┐    ┌──────────────┐    ┌──────────────────┐   │
-│  │ Visibility  │───▶│  Presence    │───▶│ UI Components    │   │
-│  │ Detection   │    │  WebSocket   │    │ (green dots)     │   │
+│  │ Visibility  │───▶│  Presence    │───▶│ "3 users here"   │   │
+│  │ Detection   │    │  WebSocket   │    │ [avatar][avatar] │   │
 │  └─────────────┘    └──────────────┘    └──────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+│        │                   │                                    │
+│        │ Tab hidden?       │ Send current URL                   │
+│        │ Stop heartbeats   │ on connect + route change          │
+└────────┴───────────────────┴────────────────────────────────────┘
                               │
-                              │ WebSocket + Heartbeats
+                              │ WebSocket: {url: "/tournament/5"}
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      DJANGO/DAPHNE                               │
-│  ┌─────────────────┐         ┌─────────────────────────────┐   │
-│  │ PresenceConsumer │────────▶│ Batched Broadcast Service  │   │
-│  │ (lightweight)    │         │ (collects updates, sends   │   │
-│  └─────────────────┘         │  every 2-5 seconds)         │   │
-└──────────────────────────────┴─────────────────────────────────┘
+│  ┌─────────────────┐                                            │
+│  │ PresenceConsumer │─── Join group for URL path                │
+│  │                  │─── Track user → URL in Redis              │
+│  │                  │─── Broadcast to same-page users           │
+│  └─────────────────┘                                            │
+└─────────────────────────────────────────────────────────────────┘
                               │
-                              │ Redis Operations
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                         REDIS                                    │
+│                                                                  │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │ presence:online (Sorted Set)                             │   │
-│  │   score=timestamp, member=user_id                        │   │
-│  │   Example: {user:123: 1706745600, user:456: 1706745590}  │   │
+│  │ presence:user:{user_id}  (STRING with TTL)              │   │
+│  │   Value: "/tournament/5/players"                         │   │
+│  │   TTL: 60 seconds (refreshed by heartbeat)              │   │
 │  └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ presence:page:{url_hash}  (SET)                          │   │
+│  │   Members: [user_id, user_id, ...]                       │   │
+│  │   Example: presence:page:tournament_5_players → {1,2,3} │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Key Design Decisions
+### Redis Schema
 
-#### 1. Dedicated Presence WebSocket vs Piggyback on Existing
+```python
+# Key 1: Where is this user? (STRING with TTL)
+KEY = "presence:user:{user_id}"
+VALUE = "/tournament/5/players"  # Current URL path
+TTL = 60 seconds  # Auto-expires if no heartbeat
 
-**Option A: Dedicated `/api/presence/` WebSocket** (Recommended for v1)
-- Pros: Simple, isolated, easy to disable/enable
-- Cons: Additional connection per user
-- Memory: ~50-100KB per connection (can optimize with uvicorn)
+# Key 2: Who is on this page? (SET)
+KEY = "presence:page:{url_hash}"  # url_hash = md5 or slugified path
+VALUE = SET of user_ids
+# No TTL - managed by consumer connect/disconnect
 
-**Option B: Add presence to existing WebSockets (HeroDraft, Tournament)**
-- Pros: No additional connections
-- Cons: Couples presence to feature WebSockets, complex
+# Example:
+# User 123 visits /tournament/5/players:
+SET presence:user:123 "/tournament/5/players" EX 60
+SADD presence:page:tournament_5_players 123
 
-**Decision**: Start with Option A for simplicity. Can migrate to Option B later if memory is a concern.
+# User 123 navigates to /tournament/5/games:
+DEL presence:user:123  # or let it expire
+SREM presence:page:tournament_5_players 123
+SET presence:user:123 "/tournament/5/games" EX 60
+SADD presence:page:tournament_5_games 123
+```
 
-#### 2. Heartbeat Strategy
+### Message Flow
 
 ```
 Client                          Server                         Redis
    │                               │                              │
-   │──── connect ─────────────────▶│                              │
-   │                               │──── ZADD presence:online ───▶│
-   │                               │     (user_id, timestamp)     │
+   │── connect(url="/tour/5") ────▶│                              │
+   │                               │── SET presence:user:123 ────▶│
+   │                               │   "/tour/5" EX 60            │
+   │                               │── SADD presence:page:tour_5 ─▶│
+   │                               │   123                         │
+   │                               │── SMEMBERS presence:page:... ─▶│
+   │◀── page_users: [123,456] ────│◀─────────────────────────────│
    │                               │                              │
-   │◀─── initial_presence ────────│◀─── ZRANGEBYSCORE ──────────│
-   │     {users: [...]}            │                              │
+   │── navigate(url="/tour/5/g") ─▶│                              │
+   │                               │── SREM old page set ────────▶│
+   │                               │── SADD new page set ────────▶│
+   │                               │── broadcast to old page ────▶│
+   │                               │── broadcast to new page ────▶│
+   │◀── page_users: [789] ────────│                              │
    │                               │                              │
-   │──── heartbeat (every 30s) ──▶│                              │
-   │                               │──── ZADD (update score) ───▶│
+   │── heartbeat (every 30s) ─────▶│                              │
+   │                               │── EXPIRE presence:user:123 ─▶│
+   │                               │   60 (refresh TTL)           │
    │                               │                              │
-   │     [tab hidden 30s+]         │                              │
-   │──── stop heartbeats ─────────▶│                              │
+   │     [tab hidden > 30s]        │                              │
+   │     [stop heartbeats]         │                              │
    │                               │                              │
-   │                               │◀─── Celery: cleanup stale ──│
-   │                               │     ZREMRANGEBYSCORE         │
-   │                               │──── broadcast offline ──────▶│
-   │                               │                              │
+   │                               │   [TTL expires after 60s]    │
+   │                               │◀── key expired ──────────────│
+   │                               │── SREM from page set ───────▶│
+   │                               │── broadcast user left ──────▶│
 ```
 
-#### 3. Batched Broadcasting
+### Key Design Decisions
 
-Instead of broadcasting every status change immediately, collect changes and broadcast in batches:
+#### 1. URL Normalization
+
+Normalize URLs to group related pages:
 
 ```python
-class PresenceBroadcaster:
-    """Collects presence changes and broadcasts every BATCH_INTERVAL seconds."""
+def normalize_url(url: str) -> str:
+    """Normalize URL for presence grouping."""
+    # Remove query params and trailing slashes
+    # /tournament/5/players?tab=1 → /tournament/5/players
+    # /tournament/5/players/ → /tournament/5/players
+    parsed = urlparse(url)
+    return parsed.path.rstrip('/')
 
-    BATCH_INTERVAL = 2.0  # seconds
-
-    def __init__(self):
-        self.pending_updates: dict[int, str] = {}  # user_id -> status
-        self._task: asyncio.Task | None = None
-
-    async def queue_update(self, user_id: int, status: str):
-        """Queue a presence update for batched broadcast."""
-        self.pending_updates[user_id] = status
-
-        # Start batch timer if not running
-        if self._task is None:
-            self._task = asyncio.create_task(self._batch_loop())
-
-    async def _batch_loop(self):
-        """Flush pending updates every BATCH_INTERVAL."""
-        while self.pending_updates:
-            await asyncio.sleep(self.BATCH_INTERVAL)
-            await self._flush()
-        self._task = None
-
-    async def _flush(self):
-        """Broadcast all pending updates as single message."""
-        if not self.pending_updates:
-            return
-
-        updates = self.pending_updates.copy()
-        self.pending_updates.clear()
-
-        await channel_layer.group_send("presence", {
-            "type": "presence.batch",
-            "updates": updates,  # {user_id: status, ...}
-        })
+def url_to_group_key(url: str) -> str:
+    """Convert URL to Redis-safe group key."""
+    normalized = normalize_url(url)
+    # /tournament/5/players → tournament_5_players
+    return normalized.strip('/').replace('/', '_')
 ```
 
-**Why batching matters:**
+#### 2. Channel Layer Groups
 
-| Scenario | Without Batching | With Batching (2s) |
-|----------|------------------|-------------------|
-| 10 users come online in 5s | 10 broadcasts | 2-3 broadcasts |
-| 100 users, heartbeats every 30s | 3.3 msg/sec | 0.5 msg/sec |
-| Network traffic | O(users × updates) | O(batches) |
+Each page URL becomes a Django Channels group:
+
+```python
+# On connect/navigate:
+group_name = f"presence_{url_to_group_key(url)}"
+await self.channel_layer.group_add(group_name, self.channel_name)
+
+# On disconnect/navigate away:
+await self.channel_layer.group_discard(old_group_name, self.channel_name)
+```
+
+#### 3. Tab Visibility Handling
+
+| Tab State | Action | Result |
+|-----------|--------|--------|
+| Visible | Send heartbeats every 30s | TTL refreshed, stay in page set |
+| Hidden | Stop heartbeats | TTL expires after 60s, removed from page |
+| Visible again | Resume heartbeats | Re-add to page set if expired |
 
 ---
 
@@ -231,7 +265,10 @@ websocket_urlpatterns = [
 ```
 frontend/app/hooks/
 ├── usePageVisibility.ts      # Tab visibility detection
-└── usePresence.ts            # Presence WebSocket + state
+└── usePagePresence.ts        # Page presence WebSocket + state
+
+frontend/app/store/
+└── presenceStore.ts          # Zustand store for presence
 ```
 
 **usePageVisibility hook:**
@@ -244,20 +281,42 @@ export function usePageVisibility(options?: {
 }): { isVisible: boolean };
 ```
 
-**usePresence hook:**
+**usePagePresence hook:**
 
 ```typescript
-export function usePresence(): {
-  // State
-  presences: Map<number, PresenceStatus>;
-  myStatus: 'online' | 'away' | 'offline';
+export function usePagePresence(): {
+  // Users on current page
+  usersOnPage: User[];
+  userCount: number;
+
+  // Connection state
   isConnected: boolean;
 
-  // Derived
-  isUserOnline: (userId: number) => boolean;
-  onlineCount: number;
+  // Helpers
+  isUserHere: (userId: number) => boolean;
 };
+
+// Usage in component:
+function TournamentPage() {
+  const { usersOnPage, userCount } = usePagePresence();
+
+  return (
+    <div>
+      <span>{userCount} users viewing</span>
+      {usersOnPage.map(u => <Avatar key={u.id} user={u} />)}
+    </div>
+  );
+}
 ```
+
+**Automatic URL tracking:**
+
+The hook automatically:
+1. Connects to `/api/presence/` WebSocket on mount
+2. Sends current URL from `useLocation()` (React Router)
+3. Sends new URL on route changes
+4. Pauses heartbeats when tab is hidden
+5. Disconnects after extended inactivity
 
 ### Phase 3: UI Components
 
@@ -265,28 +324,40 @@ export function usePresence(): {
 
 ```
 frontend/app/components/presence/
-├── PresenceIndicator.tsx     # Green/yellow/gray dot
-├── PresenceBadge.tsx         # Dot positioned on avatar
-└── OnlineUsersList.tsx       # List of online users
+├── PagePresence.tsx          # "3 users viewing this page"
+├── PagePresenceAvatars.tsx   # Row of avatars for users on page
+└── PresenceProvider.tsx      # Context provider for presence state
 ```
 
 **Component API:**
 
 ```tsx
-// Simple indicator
-<PresenceIndicator status="online" size="sm" />
+// Simple count
+<PagePresence />
+// Renders: "3 users viewing this page" or "You're the only one here"
 
-// On avatar
-<div className="relative">
-  <Avatar src={user.avatar} />
-  <PresenceBadge userId={user.id} position="bottom-right" />
-</div>
+// Avatar stack (like Google Docs)
+<PagePresenceAvatars maxDisplay={5} />
+// Renders: [avatar][avatar][avatar] +2 more
 
-// Online users list
-<OnlineUsersList
-  showCount={true}
-  maxDisplay={10}
-/>
+// Full usage in a page layout
+<PresenceProvider>
+  <div className="flex justify-between">
+    <h1>Tournament Players</h1>
+    <PagePresenceAvatars />
+  </div>
+  {/* ... page content ... */}
+</PresenceProvider>
+```
+
+**Avatar stack design:**
+
+```
+┌─────────────────────────────────────────┐
+│  Tournament Players    [👤][👤][👤] +2  │
+│                                         │
+│  (page content...)                      │
+└─────────────────────────────────────────┘
 ```
 
 ### Phase 4: Tab Visibility Integration
@@ -313,48 +384,68 @@ const PRESENCE_CONFIG = {
 
 ## API Specification
 
+### WebSocket Endpoint
+
+```
+ws://localhost/api/presence/
+```
+
 ### WebSocket Messages
 
 **Client → Server:**
 
 ```typescript
+// Initial connection with current URL
+{ "type": "join", "url": "/tournament/5/players" }
+
+// Navigate to new page (or send new join)
+{ "type": "navigate", "url": "/tournament/5/games" }
+
 // Heartbeat (sent every 30s while tab visible)
 { "type": "heartbeat" }
 
-// Explicit status change (optional)
-{ "type": "set_status", "status": "away" | "online" }
+// Tab became hidden (optional - can just stop heartbeats)
+{ "type": "away" }
+
+// Tab became visible again
+{ "type": "active" }
 ```
 
 **Server → Client:**
 
 ```typescript
-// Initial presence list (on connect)
+// Who's on this page (sent on join/navigate)
 {
-  "type": "presence_init",
+  "type": "page_presence",
+  "url": "/tournament/5/players",
   "users": [
-    { "user_id": 123, "status": "online", "username": "kettle" },
-    { "user_id": 456, "status": "away", "username": "player2" }
+    { "id": 123, "username": "kettle", "avatar": "..." },
+    { "id": 456, "username": "player2", "avatar": "..." }
   ]
 }
 
-// Batched presence updates (every 2-5s)
+// Someone joined the page you're on
 {
-  "type": "presence_batch",
-  "updates": {
-    "123": "offline",  // user_id: new_status
-    "789": "online"
-  }
+  "type": "user_joined",
+  "user": { "id": 789, "username": "newuser", "avatar": "..." }
+}
+
+// Someone left the page you're on
+{
+  "type": "user_left",
+  "user_id": 456
 }
 ```
 
-### REST Endpoints (Optional)
+### REST Endpoint (Optional - for non-WebSocket clients)
 
 ```
-GET /api/presence/online/
-  → { "count": 42, "users": [...] }
-
-GET /api/presence/user/{id}/
-  → { "status": "online", "last_seen": "2025-01-31T12:00:00Z" }
+GET /api/presence/page/?url=/tournament/5/players
+  → {
+      "url": "/tournament/5/players",
+      "count": 3,
+      "users": [...]
+    }
 ```
 
 ---
@@ -458,20 +549,28 @@ export const PRESENCE_CONFIG = {
 
 ## Open Questions
 
-1. **Should presence be opt-in or opt-out?**
-   - Opt-out (default on) recommended for better UX
+1. **Which pages should show presence?**
+   - All pages? Only specific pages (tournament, draft, league)?
+   - Recommendation: Start with tournament/league detail pages only
 
-2. **Show presence globally or only in specific contexts?**
-   - v1: Global presence (simpler)
-   - v2: Context-specific (tournament, draft room)
+2. **URL grouping granularity?**
+   - `/tournament/5/players` and `/tournament/5/games` = same room or different?
+   - Option A: Same room (anyone on `/tournament/5/*`)
+   - Option B: Different rooms (exact path match)
+   - Recommendation: Option A (group by parent resource)
 
-3. **Should we show "last seen" for offline users?**
-   - v1: No (privacy concerns, storage cost)
-   - v2: Optional setting
+3. **Should users see themselves in the count?**
+   - "3 users here" (includes you) vs "2 others here"
+   - Recommendation: Include self, clearer mental model
 
-4. **Mobile app considerations?**
-   - Need to handle app backgrounding differently
-   - Consider longer timeouts for mobile
+4. **Anonymous/logged-out users?**
+   - Show them? Count them? Ignore them?
+   - Recommendation: Only track authenticated users
+
+5. **Privacy: Can users opt out of being shown?**
+   - User setting to appear "invisible"?
+   - v1: No opt-out (simpler)
+   - v2: Add privacy setting if requested
 
 ---
 
