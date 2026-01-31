@@ -210,12 +210,21 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
     log.debug('Saving bracket', { tournamentId });
     set({ isLoading: true });
     try {
-      await api.post(`/bracket/tournaments/${tournamentId}/save/`, {
+      const response = await api.post(`/bracket/tournaments/${tournamentId}/save/`, {
         matches: get().matches,
       });
-      // Combine all state updates into one call to prevent timing issues
-      set({ isDirty: false, isVirtual: false, isLoading: false });
-      log.debug('Bracket saved successfully');
+      // Parse response to get saved matches with their new gameId (pk) values
+      const data = BracketResponseSchema.parse(response.data);
+      const savedMatches = data.matches.map(m => mapApiMatchToMatch(m, data.matches));
+
+      // Update state with saved matches (now have gameId from backend)
+      set({
+        matches: savedMatches,
+        isDirty: false,
+        isVirtual: false,
+        isLoading: false,
+      });
+      log.debug('Bracket saved successfully', { matchCount: savedMatches.length });
     } catch (error) {
       log.error('Failed to save bracket', error);
       set({ isLoading: false }); // Ensure loading is reset on error
@@ -248,8 +257,21 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
         return;
       }
 
-      // Skip update if no matches returned
+      // Handle empty bracket from backend (e.g., after deletion)
       if (data.matches.length === 0) {
+        // Only clear if we had matches before (avoid unnecessary updates)
+        if (currentMatches.length > 0) {
+          set({
+            matches: [],
+            nodes: [],
+            edges: [],
+            isDirty: false,
+            isVirtual: true,
+            isLoading: false,
+          });
+          shouldUpdateLoading = false;
+          log.debug('Bracket cleared (no matches from backend)');
+        }
         return;
       }
 
@@ -287,6 +309,8 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
 
   resetBracket: () => {
     log.debug('Resetting bracket');
+    // Stop polling to prevent reloading old bracket from backend
+    get().stopPolling();
     set({
       matches: [],
       nodes: [],
