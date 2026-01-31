@@ -131,18 +131,23 @@ function TeamCard({ team, rank }: TeamCardProps) {
         {/* Tabs for Members and Position Coverage - always visible */}
         {/* Stop propagation to prevent opening team modal when clicking tabs */}
         <div onClick={(e) => e.stopPropagation()} className="flex-1 flex flex-col min-h-0">
-          <Tabs defaultValue="positions" className="w-full flex-1 flex flex-col min-h-0">
-            <TabsList className="w-full grid grid-cols-2 h-8 mb-2 shrink-0">
-              <TabsTrigger value="positions" className="text-xs">Guessed Positions</TabsTrigger>
-              <TabsTrigger value="members" className="text-xs">Members</TabsTrigger>
-            </TabsList>
-            <TabsContent value="positions" className="mt-0 flex-1 overflow-y-auto">
-              <TeamPositionCoverageRow team={team} teamName={team.name || displayName} showFullTable />
-            </TabsContent>
-            <TabsContent value="members" className="mt-0 flex-1 overflow-y-auto">
-              <TeamMembersList members={team.members || []} captain={captain} />
-            </TabsContent>
-          </Tabs>
+          {/* Position coverage requires 2+ members to be meaningful */}
+          {(team.members?.length || 0) >= 2 ? (
+            <Tabs defaultValue="positions" className="w-full flex-1 flex flex-col min-h-0">
+              <TabsList className="w-full grid grid-cols-2 h-8 mb-2 shrink-0">
+                <TabsTrigger value="positions" className="text-xs">Guessed Positions</TabsTrigger>
+                <TabsTrigger value="members" className="text-xs">Members</TabsTrigger>
+              </TabsList>
+              <TabsContent value="positions" className="mt-0 flex-1 overflow-y-auto">
+                <TeamPositionCoverageRow team={team} teamName={team.name || displayName} showFullTable />
+              </TabsContent>
+              <TabsContent value="members" className="mt-0 flex-1 overflow-y-auto">
+                <TeamMembersList members={team.members || []} captain={captain} />
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <TeamMembersList members={team.members || []} captain={captain} />
+          )}
         </div>
       </CardContent>
     </Card>
