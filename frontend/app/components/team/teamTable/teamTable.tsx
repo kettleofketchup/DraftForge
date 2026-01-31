@@ -13,7 +13,7 @@ import {
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserStrip } from '~/components/user/UserStrip';
-import { AvatarUrl } from '~/index';
+import { UserAvatar } from '~/components/user/UserAvatar';
 
 interface TeamTableProps {
   team?: TeamType;
@@ -116,13 +116,11 @@ export const TeamTable: React.FC<TeamTableProps> = memo(({ team, compact = false
             <TableCell>
               <PlayerPopover player={user}>
                 <div className="flex items-center gap-2 hover:text-primary transition-colors">
-                  <span className="avatar w-8 h-8">
-                    <img
-                      src={AvatarUrl(user)}
-                      alt={user.username}
-                      className="rounded-full hover:ring-2 hover:ring-primary transition-all"
-                    />
-                  </span>
+                  <UserAvatar
+                    user={user}
+                    size="md"
+                    className="hover:ring-2 hover:ring-primary transition-all"
+                  />
                   <span className={compact ? "hidden" : "hidden 3xl:inline"}>
                     {user.nickname || user.username}
                   </span>

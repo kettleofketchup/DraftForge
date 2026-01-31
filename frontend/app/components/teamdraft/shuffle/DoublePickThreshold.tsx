@@ -110,31 +110,29 @@ export const DoublePickThreshold: React.FC = memo(() => {
 
   return (
     <Card className="mb-4 border-green-500 bg-green-950/20">
-      <CardHeader className="pb-2 pt-3">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <Zap className="h-4 w-4 text-green-500" />
-          Double Pick Available!
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="text-sm pb-3">
+      <CardContent className="py-3 text-sm">
         <div className="flex flex-col gap-1">
-          <span>
-            Stay under{' '}
-            <span className="font-semibold">
-              {threshold.mmr.toLocaleString()} MMR
-            </span>{' '}
-            to pick again
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="flex items-center gap-2 font-medium">
+              <Zap className="h-4 w-4 text-green-500" />
+              Double Pick Available!
+            </span>
             <span className="text-muted-foreground">
+              Stay under{' '}
+              <span className="font-semibold text-foreground">
+                {threshold.mmr.toLocaleString()} MMR
+              </span>{' '}
+              to pick again
               {' '}
               ({threshold.team.captain ? DisplayName(threshold.team.captain) : threshold.team.name})
             </span>
-          </span>
+          </div>
           <span className="text-muted-foreground">
             Your current MMR:{' '}
             <span className="font-medium text-green-400">
               {currentMmr.toLocaleString()}
             </span>
-            <span className="text-green-400 ml-2">
+            <span className="text-green-400 ml-1">
               ({buffer.toLocaleString()} buffer)
             </span>
           </span>

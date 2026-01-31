@@ -6,7 +6,7 @@ import {
 } from '@headlessui/react';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Label } from '~/components/ui/label';
-import { AvatarUrl } from '~/index';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '../../store/userStore';
 import { get_dtx_members } from '../api/api';
@@ -168,11 +168,7 @@ const DiscordUserDropdown: React.FC<Props> = ({
         }
       >
         <div className="flex items-center w-full">
-          <img
-            src={AvatarUrl(user)}
-            alt={user.user.global_name ?? undefined}
-            className="w-8 h-8 rounded-full"
-          />
+          <UserAvatar user={user} size="md" />
           <div className="flex w-full flex-col ">
             <div className="flex">
               {getGlobalName()}

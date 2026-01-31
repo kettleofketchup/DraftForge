@@ -244,29 +244,30 @@ export const FeatureCard = ({
         </div>
 
         {/* Card Body: Description + Preview */}
-        <div className="card-body pt-2 relative z-10">
+        <div className="card-body pt-2 relative z-10 flex flex-col">
           <p className="text-base-content/70 text-sm">{description}</p>
+
+          {/* Spacer to push preview and buttons to bottom */}
+          <div className="flex-1" />
 
           {/* GIF Preview - Static thumbnail, click to play in modal */}
           {hasPreview && thumbnailSrc && (
             <div className="mt-3">
               <div
-                className="relative overflow-hidden rounded-lg border border-primary/20 cursor-pointer group"
+                className="relative overflow-hidden rounded-lg border border-primary/20 cursor-pointer group aspect-video"
                 onClick={() => setIsModalOpen(true)}
               >
                 {/* Frozen first frame - CSS pauses animation */}
-                <div className="relative">
-                  <img
-                    src={thumbnailSrc}
-                    alt={`${title} preview`}
-                    className="w-full h-32 object-cover object-top"
-                    style={{ animationPlayState: 'paused' }}
-                  />
-                  {/* Overlay with play icon */}
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:bg-black/50 transition-colors">
-                    <div className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center">
-                      <Play className="w-6 h-6 text-primary-foreground ml-0.5" fill="currentColor" />
-                    </div>
+                <img
+                  src={thumbnailSrc}
+                  alt={`${title} preview`}
+                  className="absolute inset-0 w-full h-full object-cover object-top"
+                  style={{ animationPlayState: 'paused' }}
+                />
+                {/* Overlay with play icon */}
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:bg-black/50 transition-colors">
+                  <div className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center">
+                    <Play className="w-6 h-6 text-primary-foreground ml-0.5" fill="currentColor" />
                   </div>
                 </div>
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
@@ -280,7 +281,7 @@ export const FeatureCard = ({
           )}
 
           {/* Buttons */}
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2 justify-center">
             {/* Learn More - External docs link */}
             {docsUrl && (
               <Button size="sm" variant="outline" asChild>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { refreshTournamentHook } from '~/components/draft/hooks/refreshTournamentHook';
+import { refreshTournamentHook } from '~/components/teamdraft/hooks/refreshTournamentHook';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { TrashIconButton } from '~/components/ui/buttons';
 import { deleteGameHook } from '../hooks/deleteGameHook';

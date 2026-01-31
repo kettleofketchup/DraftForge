@@ -10,7 +10,7 @@ import {
   TableRow,
 } from '~/components/ui/table';
 import { PositionEnum } from '~/components/user';
-import { AvatarUrl } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
@@ -64,13 +64,11 @@ export const CaptainTable: React.FC<TournamentUsersTable> = () => {
             <TableCell>
               <PlayerPopover player={user}>
                 <div className="flex items-center gap-2 hover:text-primary transition-colors">
-                  <span className="avatar w-8 h-8">
-                    <img
-                      src={AvatarUrl(user)}
-                      alt={user.username}
-                      className="rounded-full hover:ring-2 hover:ring-primary transition-all"
-                    />
-                  </span>
+                  <UserAvatar
+                    user={user}
+                    size="md"
+                    className="hover:ring-2 hover:ring-primary transition-all"
+                  />
                   <span>{user.nickname || user.username}</span>
                 </div>
               </PlayerPopover>

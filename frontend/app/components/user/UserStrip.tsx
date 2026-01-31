@@ -1,13 +1,13 @@
 import { memo, useMemo } from 'react';
 import { PlayerPopover } from '~/components/player';
-import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Badge } from '~/components/ui/badge';
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
-import { AvatarUrl, DisplayName } from '~/components/user/avatar';
+import { DisplayName } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { cn } from '~/lib/utils';
 import { RolePositions } from './positions';
 import type { UserType } from './types';
@@ -110,9 +110,6 @@ export const UserStrip = memo(
       [userWithLeague.league_mmr],
     );
 
-    // Memoize avatar URL
-    const avatarUrl = useMemo(() => AvatarUrl(user), [user?.avatar, user?.discordId, user?.avatarUrl]);
-
     // Memoize the entire MMR badge sections to prevent Tooltip/Radix re-renders
     const baseMmrBadge = useMemo(
       () => (
@@ -187,17 +184,11 @@ export const UserStrip = memo(
       >
         {/* Column 1: Avatar */}
         <PlayerPopover player={user}>
-          <Avatar
-            className={cn(
-              'cursor-pointer shrink-0',
-              compact ? 'h-8 w-8' : 'h-10 w-10',
-            )}
-          >
-            <AvatarImage src={avatarUrl} alt={user.username || 'Player'} />
-            <AvatarFallback>
-              {(user.username || 'P')[0].toUpperCase()}
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar
+            user={user}
+            size={compact ? 'md' : 'lg'}
+            className="cursor-pointer shrink-0"
+          />
         </PlayerPopover>
 
         {/* Column 2: Name + Positions (grouped) */}

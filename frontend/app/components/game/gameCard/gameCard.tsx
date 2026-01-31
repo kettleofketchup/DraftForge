@@ -7,7 +7,7 @@ const log = getLogger('GameCard');
 import { motion } from 'framer-motion';
 import { BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { refreshTournamentHook } from '~/components/draft/hooks/refreshTournamentHook';
+import { refreshTournamentHook } from '~/components/teamdraft/hooks/refreshTournamentHook';
 import { useUserStore } from '~/store/userStore';
 import { Button } from '../../ui/button';
 import { EditButton, SubmitButton } from '../../ui/buttons';

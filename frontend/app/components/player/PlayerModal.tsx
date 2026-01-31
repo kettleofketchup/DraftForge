@@ -7,7 +7,7 @@ import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
-import { AvatarUrl } from '~/index';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { useUserStore } from '~/store/userStore';
 import { LeagueStatsCard } from '~/components/user/LeagueStatsCard';
 import { useUserLeagueStats } from '~/features/leaderboard/queries';
@@ -96,11 +96,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
       <div className="space-y-4">
         {/* Header with avatar and name */}
         <div className="flex items-center gap-4">
-          <img
-            src={AvatarUrl(displayPlayer)}
-            alt={`${playerName}'s avatar`}
-            className="w-16 h-16 rounded-full border border-primary"
-          />
+          <UserAvatar user={displayPlayer} size="xl" border="primary" />
           <div className="flex-1">
             <h2 className="text-xl font-semibold">{playerName}</h2>
             <div className="flex gap-2 mt-1">

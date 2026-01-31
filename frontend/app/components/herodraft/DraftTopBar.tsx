@@ -3,7 +3,8 @@ import { PlayerPopover } from "~/components/player";
 import { cn } from "~/lib/utils";
 import type { HeroDraft, HeroDraftTick } from "~/components/herodraft/types";
 import type { UserType } from "~/components/user/types.d";
-import { AvatarUrl, DisplayName } from "~/components/user/avatar";
+import { DisplayName } from "~/components/user/avatar";
+import { UserAvatar } from "~/components/user/UserAvatar";
 
 interface DraftTopBarProps {
   draft: HeroDraft;
@@ -108,13 +109,13 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
         className="flex flex-col items-center hover:bg-white/10 rounded p-0.5 sm:p-1 min-w-[32px] sm:min-w-[48px]"
         data-testid={`${testIdPrefix}-button`}
       >
-        <img
-          src={AvatarUrl(captainToUser(player))}
-          alt={player.username}
+        <UserAvatar
+          user={captainToUser(player)}
+          size="sm"
+          border={isCaptain ? "captain" : "none"}
           className={cn(
-            "rounded-full",
             isCaptain
-              ? "w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 ring-2 ring-yellow-500"
+              ? "w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10"
               : "w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 opacity-80 hover:opacity-100"
           )}
           data-testid={`${testIdPrefix}-avatar`}

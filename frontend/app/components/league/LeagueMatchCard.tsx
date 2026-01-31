@@ -5,8 +5,7 @@ import { useState } from 'react';
 import { Card, CardContent } from '~/components/ui/card';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { Avatar, AvatarImage, AvatarFallback } from '~/components/ui/avatar';
-import { AvatarUrl } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { PlayerPopover } from '~/components/player/PlayerPopover';
 import { DotaMatchStatsModal } from '~/components/bracket/modals/DotaMatchStatsModal';
 import { cn } from '~/lib/utils';
@@ -16,22 +15,6 @@ import type { UserType } from '~/components/user/types';
 interface Props {
   match: LeagueMatchType;
 }
-
-// Helper component for captain avatar
-const CaptainAvatar: React.FC<{ user: UserType; size?: 'sm' | 'md' }> = ({
-  user,
-  size = 'md',
-}) => {
-  const sizeClass = size === 'sm' ? 'h-6 w-6' : 'h-10 w-10';
-  return (
-    <Avatar className={sizeClass}>
-      <AvatarImage src={AvatarUrl(user)} alt={user.nickname || user.username} />
-      <AvatarFallback>
-        {(user.nickname || user.username).charAt(0).toUpperCase()}
-      </AvatarFallback>
-    </Avatar>
-  );
-};
 
 export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
   const [showStats, setShowStats] = useState(false);
@@ -78,7 +61,7 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
               {match.radiant_captain ? (
                 <PlayerPopover player={match.radiant_captain}>
                   <div className="flex items-center gap-2 cursor-pointer">
-                    <CaptainAvatar user={match.radiant_captain} />
+                    <UserAvatar user={match.radiant_captain} size="lg" />
                     <div>
                       <p className="font-medium text-green-600">
                         {match.radiant_captain.nickname ||
@@ -135,7 +118,7 @@ export const LeagueMatchCard: React.FC<Props> = ({ match }) => {
                       </p>
                       <p className="text-xs text-muted-foreground">Dire</p>
                     </div>
-                    <CaptainAvatar user={match.dire_captain} />
+                    <UserAvatar user={match.dire_captain} size="lg" />
                   </div>
                 </PlayerPopover>
               ) : (

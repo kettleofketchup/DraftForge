@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DraftSchema } from '../draft/types';
+import { TeamDraftSchema } from '../teamdraft/schemas';
 import { GameSchema } from '../game/types';
 import { UserSchema } from '../user/user';
 import { STATE_CHOICES, TOURNAMENT_TYPE } from './constants';
