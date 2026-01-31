@@ -684,6 +684,65 @@ test.describe('HeroDraft with Bracket Demo', () => {
         console.log(`Round ${currentRound} completion timeout, continuing...`);
       }
 
+      // =========================================================================
+      // PAUSE/RESUME DEMONSTRATION - After round 12 (midway through draft)
+      // =========================================================================
+      if (round === 12) {
+        console.log('=== PAUSE/RESUME DEMO ===');
+
+        // Captain A clicks pause button
+        const pauseButton = captainA.page.locator('[data-testid="herodraft-pause-btn"]');
+        await expect(pauseButton).toBeVisible({ timeout: 5000 });
+        console.log('Clicking pause button...');
+
+        // Set up response listener before clicking
+        const pauseResponsePromise = captainA.page.waitForResponse(
+          (response) => response.url().includes('/pause/') && response.status() === 200,
+          { timeout: 10000 }
+        );
+
+        await pauseButton.click();
+
+        // Wait for pause API to complete
+        await pauseResponsePromise;
+        console.log('Pause API confirmed');
+
+        // Wait for paused overlay to appear on both pages (state comes via WebSocket)
+        const pausedOverlayA = captainA.page.locator('[data-testid="herodraft-paused-overlay"]');
+        const pausedOverlayB = captainB.page.locator('[data-testid="herodraft-paused-overlay"]');
+        await expect(pausedOverlayA).toBeVisible({ timeout: 10000 });
+        await expect(pausedOverlayB).toBeVisible({ timeout: 10000 });
+        console.log('Draft paused - overlay visible on both pages');
+
+        // Show the paused state for video
+        await captainA.page.waitForTimeout(3000);
+
+        // Captain A clicks resume button
+        const resumeButton = captainA.page.locator('[data-testid="herodraft-resume-btn"]');
+        await expect(resumeButton).toBeVisible({ timeout: 5000 });
+        console.log('Clicking resume button...');
+
+        // Set up response listener before clicking
+        const resumeResponsePromise = captainA.page.waitForResponse(
+          (response) => response.url().includes('/resume/') && response.status() === 200,
+          { timeout: 10000 }
+        );
+
+        await resumeButton.click();
+
+        // Wait for resume API to complete
+        await resumeResponsePromise;
+        console.log('Resume API confirmed');
+
+        // Wait for overlay to disappear (after countdown)
+        await expect(pausedOverlayA).not.toBeVisible({ timeout: 15000 });
+        await expect(pausedOverlayB).not.toBeVisible({ timeout: 15000 });
+        console.log('Draft resumed - continuing...');
+
+        // Brief pause after resume
+        await captainA.page.waitForTimeout(1000);
+      }
+
       // Pause for video clarity
       await captainA.page.waitForTimeout(400);
     }
