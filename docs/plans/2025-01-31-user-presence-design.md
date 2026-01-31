@@ -11,13 +11,13 @@ Users cannot see who else is currently viewing the same page. We want to show "X
 ## Goals
 
 1. Show which users are viewing the same page (URL-based presence)
-2. Real-time updates when users join/leave a page
-3. Disconnect WebSocket when tab is hidden (save resources)
-4. Minimal resource overhead
+2. Near-real-time updates (up to 30s latency acceptable)
+3. Stop heartbeats when tab is hidden (save resources, auto-remove after TTL)
+4. Minimal resource overhead (~1-2% CPU, ~120KB Redis for 1000 users)
 
 ## Non-Goals (v1)
 
-- Global "online" status across the whole site
+- Global "who's online" live feed (we DO support checking if specific users are online via batch lookup)
 - Typing indicators
 - Cursor positions
 - "Last seen" timestamps
@@ -40,27 +40,38 @@ Users cannot see who else is currently viewing the same page. We want to show "X
 
 ### High-Level Flow
 
+**Key insight**: No separate presence WebSocket. Existing consumers (Tournament, Draft, HeroDraft) include presence data in their messages. Clients read cached Redis data.
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         BROWSER                                  │
 │  ┌─────────────┐    ┌──────────────┐    ┌──────────────────┐   │
-│  │ Visibility  │───▶│  Presence    │───▶│ "3 users here"   │   │
+│  │ Visibility  │───▶│  Existing    │───▶│ "3 users here"   │   │
 │  │ Detection   │    │  WebSocket   │    │ [avatar][avatar] │   │
-│  └─────────────┘    └──────────────┘    └──────────────────┘   │
-│        │                   │                                    │
-│        │ Tab hidden?       │ Send current URL                   │
-│        │ Stop heartbeats   │ on connect + route change          │
-└────────┴───────────────────┴────────────────────────────────────┘
+│  └─────────────┘    │ (Tournament, │    └──────────────────┘   │
+│        │            │  Draft, etc) │                            │
+│        │ Tab hidden?└──────────────┘                            │
+│        │ Stop heartbeats    │                                   │
+└────────┴────────────────────┴───────────────────────────────────┘
                               │
-                              │ WebSocket: {url: "/tournament/5"}
+                              │ Existing WS messages include presence
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      DJANGO/DAPHNE                               │
-│  ┌─────────────────┐                                            │
-│  │ PresenceConsumer │─── Join group for URL path                │
-│  │                  │─── Track user → URL in Redis              │
-│  │                  │─── Broadcast to same-page users           │
-│  └─────────────────┘                                            │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │ TournamentConsumer / DraftConsumer / HeroDraftConsumer   │  │
+│  │                                                           │  │
+│  │  on_connect():                                            │  │
+│  │    - Register user in Redis presence                      │  │
+│  │    - Include presence in state response                   │  │
+│  │                                                           │  │
+│  │  on_heartbeat():                                          │  │
+│  │    - Refresh TTL in Redis                                 │  │
+│  │    - Return current presence (cached read)                │  │
+│  │                                                           │  │
+│  │  on_disconnect():                                         │  │
+│  │    - Remove from Redis presence                           │  │
+│  └──────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -68,15 +79,15 @@ Users cannot see who else is currently viewing the same page. We want to show "X
 │                         REDIS                                    │
 │                                                                  │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │ presence:user:{user_id}  (STRING with TTL)              │   │
-│  │   Value: "/tournament/5/players"                         │   │
+│  │ presence:{user_id}  (HASH with TTL)                      │   │
+│  │   Value: {url, username, pk, type}                       │   │
 │  │   TTL: 60 seconds (refreshed by heartbeat)              │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                  │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │ presence:page:{url_hash}  (SET)                          │   │
+│  │ presence:page:{url_path}  (SET)                          │   │
 │  │   Members: [user_id, user_id, ...]                       │   │
-│  │   Example: presence:page:tournament_5_players → {1,2,3} │   │
+│  │   Example: presence:page:/tournament/5 → {user:1,anon:x}│   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
@@ -98,22 +109,22 @@ class PresenceConsumer(AsyncWebsocketConsumer):
                 "type": "user",
                 "pk": user.pk,
                 "username": user.username,
-                # avatar fetched separately if needed
+                "avatar": getattr(user, "avatar_url", None),
             }
         else:
-            # Anonymous user - generate session-based ID
-            session_key = self.scope.get("session", {}).get("_session_key")
-            if not session_key:
-                session_key = str(uuid.uuid4())[:8]
-            self.user_id = f"anon:{session_key}"
+            # Anonymous user - use channel_name for stable ID per connection
+            # channel_name is unique per WebSocket connection
+            anon_id = self.channel_name[-12:]  # Last 12 chars are unique enough
+            self.user_id = f"anon:{anon_id}"
             self.user_data = {
                 "type": "anonymous",
-                "id": session_key,
             }
 
         await self.accept()
         # ... rest of connect logic
 ```
+
+**Note**: Anonymous users get a new ID per connection (page refresh = new anonymous entry). This is intentional - we can't reliably track anonymous users across connections without cookies/sessions.
 
 **Display in UI:**
 
@@ -157,31 +168,121 @@ EXPIRE presence:anon:a1b2c3d4 60
 SADD presence:page:/tournament/5/players anon:a1b2c3d4
 ```
 
-**Querying page presence:**
+**Checking if users are online (batch lookup):**
+
+For showing online status on user lists, profiles, leaderboards - without invalidating user cache:
+
+```python
+# backend/app/presence/manager.py
+def get_online_status_batch(user_ids: list[int]) -> dict[int, bool]:
+    """Check online status for multiple users in one Redis call.
+
+    SYNC function - use in REST API views (DRF).
+    Uses django-redis sync client.
+    """
+    if not user_ids:
+        return {}
+
+    # Use sync redis client (from django.core.cache or redis-py)
+    pipeline = redis_client.pipeline()
+    for user_id in user_ids:
+        pipeline.exists(f"presence:user:{user_id}")
+
+    results = pipeline.execute()
+    return {uid: bool(status) for uid, status in zip(user_ids, results)}
+
+
+async def get_online_status_batch_async(user_ids: list[int]) -> dict[int, bool]:
+    """Async version for WebSocket consumers."""
+    if not user_ids:
+        return {}
+
+    pipe = redis.pipeline()
+    for user_id in user_ids:
+        pipe.exists(f"presence:user:{user_id}")
+
+    results = await pipe.execute()
+    return {uid: bool(status) for uid, status in zip(user_ids, results)}
+```
+
+**Usage in views (prefetch pattern):**
+
+```python
+class UserListView(APIView):
+    def get(self, request):
+        users = User.objects.all()[:50]  # Cached by cacheops
+
+        # Single batched Redis call for all users
+        online_status = get_online_status_batch([u.pk for u in users])
+
+        # Pass to serializer context
+        serializer = UserSerializer(
+            users,
+            many=True,
+            context={'online_status': online_status}
+        )
+        return Response(serializer.data)
+```
+
+**Usage in serializers:**
+
+```python
+class UserSerializer(serializers.ModelSerializer):
+    is_online = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['pk', 'username', 'avatar', 'is_online']
+
+    def get_is_online(self, obj):
+        # Use prefetched data from context (not cached with user model)
+        online_status = self.context.get('online_status', {})
+        return online_status.get(obj.pk, False)
+```
+
+**Key insight**: User model cache is never invalidated by online/offline changes. Online status is fetched fresh from Redis at serialization time.
+
+**Querying page presence (with lazy cleanup):**
 
 ```python
 async def get_page_users(url: str) -> dict:
-    """Get all users on a page, separated by type."""
-    user_ids = redis.smembers(f"presence:page:{url}")
+    """Get all users on a page, separated by type.
+
+    Performs lazy cleanup: removes stale user IDs from the page SET
+    if their HASH has expired (handles ungraceful disconnects).
+    """
+    user_ids = await redis.smembers(f"presence:page:{url}")
 
     users = []
     anonymous_count = 0
+    stale_ids = []  # Track expired users for cleanup
 
     for user_id in user_ids:
-        data = redis.hgetall(f"presence:{user_id}")
+        data = await redis.hgetall(f"presence:{user_id}")
+        if not data:
+            # HASH expired (ungraceful disconnect) - mark for cleanup
+            stale_ids.append(user_id)
+            continue
         if data.get("type") == "user":
             users.append({
                 "pk": int(data["pk"]),
                 "username": data["username"],
+                "avatar": data.get("avatar"),
             })
         else:
             anonymous_count += 1
 
+    # Lazy cleanup: remove stale entries from page SET
+    if stale_ids:
+        await redis.srem(f"presence:page:{url}", *stale_ids)
+
     return {
-        "users": users,              # [{pk: 123, username: "kettle"}, ...]
+        "users": users,              # [{pk: 123, username: "kettle", avatar: "..."}, ...]
         "anonymous_count": anonymous_count,  # 3
     }
 ```
+
+**Why lazy cleanup?** Page SETs have no TTL. If a user's browser crashes or network drops, the HASH expires via TTL but the user ID remains in the SET. Lazy cleanup removes these stale entries on read.
 
 ### URL Grouping: Exact Path Match
 
@@ -197,44 +298,51 @@ This means navigating between tabs on the same tournament shows different users.
 
 ### Message Flow
 
+**No broadcasts** - presence is included in existing WebSocket responses.
+
 ```
 Client                          Server                         Redis
    │                               │                              │
-   │── connect(url="/tour/5") ────▶│                              │
-   │                               │── SET presence:user:123 ────▶│
-   │                               │   "/tour/5" EX 60            │
-   │                               │── SADD presence:page:tour_5 ─▶│
-   │                               │   123                         │
-   │                               │── SMEMBERS presence:page:... ─▶│
-   │◀── page_users: [123,456] ────│◀─────────────────────────────│
-   │                               │                              │
-   │── navigate(url="/tour/5/g") ─▶│                              │
-   │                               │── SREM old page set ────────▶│
-   │                               │── SADD new page set ────────▶│
-   │                               │── broadcast to old page ────▶│
-   │                               │── broadcast to new page ────▶│
-   │◀── page_users: [789] ────────│                              │
+   │── connect to /api/tournament/5/ ▶│                           │
+   │                               │── HSET presence:user:123 ───▶│
+   │                               │── SADD presence:page:... ───▶│
+   │                               │── SMEMBERS + HGETALL ───────▶│
+   │◀── tournament_state + presence ─│◀─────────────────────────│
+   │   {tournament: {...},         │                              │
+   │    presence: {users: [...],   │                              │
+   │               anonymous: 2}}  │                              │
    │                               │                              │
    │── heartbeat (every 30s) ─────▶│                              │
    │                               │── EXPIRE presence:user:123 ─▶│
-   │                               │   60 (refresh TTL)           │
+   │                               │── SMEMBERS + HGETALL ───────▶│
+   │◀── presence update ───────────│◀────────────────────────────│
+   │   {presence: {users: [...],   │                              │
+   │               anonymous: 2}}  │                              │
    │                               │                              │
    │     [tab hidden > 30s]        │                              │
    │     [stop heartbeats]         │                              │
    │                               │                              │
    │                               │   [TTL expires after 60s]    │
-   │                               │◀── key expired ──────────────│
+   │                               │   [user auto-removed]        │
+   │                               │                              │
+   │── disconnect ────────────────▶│                              │
    │                               │── SREM from page set ───────▶│
-   │                               │── broadcast user left ──────▶│
+   │                               │── DEL presence:user:123 ────▶│
 ```
+
+**Key difference**: Server never broadcasts. Each client gets presence data when:
+1. They connect (included in initial state)
+2. They send a heartbeat (server responds with fresh presence)
 
 ### Key Design Decisions
 
 #### 1. URL Normalization
 
-Normalize URLs to group related pages:
+Normalize URLs for presence grouping:
 
 ```python
+from urllib.parse import urlparse
+
 def normalize_url(url: str) -> str:
     """Normalize URL for presence grouping."""
     # Remove query params and trailing slashes
@@ -242,26 +350,16 @@ def normalize_url(url: str) -> str:
     # /tournament/5/players/ → /tournament/5/players
     parsed = urlparse(url)
     return parsed.path.rstrip('/')
-
-def url_to_group_key(url: str) -> str:
-    """Convert URL to Redis-safe group key."""
-    normalized = normalize_url(url)
-    # /tournament/5/players → tournament_5_players
-    return normalized.strip('/').replace('/', '_')
 ```
 
-#### 2. Channel Layer Groups
+#### 2. No Broadcast Groups
 
-Each page URL becomes a Django Channels group:
+Unlike typical presence systems, we don't use Django Channels groups for broadcasting.
+Each client polls for presence on their heartbeat. This is simpler and more efficient:
 
-```python
-# On connect/navigate:
-group_name = f"presence_{url_to_group_key(url)}"
-await self.channel_layer.group_add(group_name, self.channel_name)
-
-# On disconnect/navigate away:
-await self.channel_layer.group_discard(old_group_name, self.channel_name)
-```
+- No group management overhead
+- No broadcast fan-out CPU cost
+- Presence data is slightly stale (up to 30s) but acceptable for this use case
 
 #### 3. Tab Visibility Handling
 
@@ -271,6 +369,33 @@ await self.channel_layer.group_discard(old_group_name, self.channel_name)
 | Hidden | Stop heartbeats | TTL expires after 60s, removed from page |
 | Visible again | Resume heartbeats | Re-add to page set if expired |
 
+**Why TTL (60s) = 2 × heartbeat interval (30s)?**
+
+This allows one missed heartbeat (network hiccup, browser lag) without removing the user. If two consecutive heartbeats are missed, the user is likely actually gone.
+
+---
+
+## Storage Design
+
+### No Database Writes
+
+This system is **purely Redis-based** with zero database writes:
+
+| Storage | Used For | Persistence |
+|---------|----------|-------------|
+| Redis HASH | User presence data (`presence:user:123`) | Ephemeral, 60s TTL |
+| Redis SET | Page membership (`presence:page:/tournament/5`) | Ephemeral, cleaned on disconnect |
+| PostgreSQL/SQLite | **Nothing** | N/A |
+
+**Why no database?**
+
+- Presence is ephemeral by nature (who cares who was online yesterday?)
+- High write frequency (heartbeats every 30s) would strain the DB
+- Redis TTL handles cleanup automatically
+- Server restart = users reconnect naturally, no stale data
+
+**User metadata** (username, avatar, pk) is read from existing `User` model on connect, but nothing is written back.
+
 ---
 
 ## Resource Estimates
@@ -279,32 +404,65 @@ await self.channel_layer.group_discard(old_group_name, self.channel_name)
 
 | Component | Per User | 1,000 Users | Notes |
 |-----------|----------|-------------|-------|
-| WebSocket connection | 50-100 KB | 50-100 MB | Can reduce with uvicorn |
-| Redis presence data | 135 bytes | 135 KB | Sorted set + metadata |
-| Python consumer state | 500 bytes | 500 KB | Minimal state |
-| **Total incremental** | **~500 bytes** | **~500 KB** | If reusing existing WS |
-| **Total dedicated WS** | **~100 KB** | **~100 MB** | New presence connection |
+| Redis presence HASH | ~100 bytes | ~100 KB | User data + URL |
+| Redis page SET membership | ~20 bytes | ~20 KB | Just user ID reference |
+| **Total Redis** | **~120 bytes** | **~120 KB** | |
+
+**No additional WebSocket memory** - piggybacks on existing connections (Tournament, Draft, etc.).
 
 ### CPU Estimates
 
 | Operation | Cost | Frequency | Impact |
 |-----------|------|-----------|--------|
 | Heartbeat processing | 0.1ms | Every 30s/user | Negligible |
-| Redis ZADD | 0.05ms | Every 30s/user | Negligible |
-| Batch broadcast | 1-5ms | Every 2s | Low |
+| Redis HSET + EXPIRE | 0.05ms | Every 30s/user | Negligible |
+| Redis SMEMBERS + HGETALL | 0.2ms | Every 30s/user | Negligible |
 | Stale cleanup | 10-50ms | Every 60s | Low |
 
-**For 1,000 concurrent users**: <5% single CPU core
+**Detailed calculation for 1,000 concurrent users:**
+
+```
+Heartbeats (includes presence read):
+  - Rate: 1000 users / 30s = 33 heartbeats/second
+  - Cost per heartbeat:
+      0.1ms  (Python processing)
+    + 0.05ms (Redis HSET + EXPIRE)
+    + 0.2ms  (Redis SMEMBERS + HGETALL for presence)
+    = 0.35ms
+  - Total: 33 × 0.35ms = ~12ms/second
+
+Cleanup (Redis TTL handles most, periodic SET cleanup):
+  - Rate: 1 cleanup/60s
+  - Cost: ~30ms
+  - Amortized: 30ms / 60 = ~0.5ms/second
+
+─────────────────────────────────────────
+Total CPU time: ~12.5ms/second
+As percentage: 12.5ms / 1000ms = 1.25% of one CPU core
+```
+
+**For 1,000 concurrent users**: ~1-2% single CPU core
+
+**Note**: No broadcast overhead. Each client reads cached presence on their own heartbeat interval.
+
+### API Request Costs (Online Status Lookups)
+
+| Operation | Cost | Use Case |
+|-----------|------|----------|
+| Check 1 user online | ~0.05ms | User profile page |
+| Check 50 users online (batched) | ~0.1ms | Team list, leaderboard |
+| Check 100 users online (batched) | ~0.15ms | Large player list |
+
+Batch lookups use Redis pipelining - single round-trip regardless of user count.
 
 ### Network Estimates
 
 | Message Type | Size | Frequency |
 |--------------|------|-----------|
-| Heartbeat (client→server) | ~50 bytes | Every 30s |
-| Presence batch (server→client) | ~500 bytes | Every 2-5s |
-| Initial presence list | ~5 KB | On connect |
+| Heartbeat (client→server) | ~30 bytes | Every 30s |
+| Heartbeat ack with presence (server→client) | ~200-500 bytes | Every 30s |
 
-**Monthly data per user**: ~1-2 MB (with 30s heartbeats, 2s batches)
+**Monthly data per user**: ~500 KB (with 30s heartbeats)
 
 ---
 
@@ -317,34 +475,94 @@ await self.channel_layer.group_discard(old_group_name, self.channel_name)
 ```
 backend/app/presence/
 ├── __init__.py
-├── consumer.py      # PresenceConsumer WebSocket
-├── manager.py       # PresenceBroadcaster + Redis operations
-└── tasks.py         # Celery cleanup tasks
+├── manager.py       # PresenceManager - Redis operations
+└── mixins.py        # PresenceMixin for existing consumers
 ```
 
-**Redis schema:**
+**PresenceMixin for existing consumers:**
 
 ```python
-# Sorted Set: Online users with timestamps
-KEY = "presence:online"
-# ZADD presence:online {user_id: timestamp}
-# ZRANGEBYSCORE presence:online (now-90) +inf  → online users
-# ZREMRANGEBYSCORE presence:online -inf (now-90)  → cleanup
+# backend/app/presence/mixins.py
+class PresenceMixin:
+    """Add presence tracking to any WebSocket consumer."""
 
-# Optional: User metadata hash
-KEY = "presence:user:{user_id}"
-# HSET presence:user:123 username "kettle" avatar_url "..."
+    async def register_presence(self, url: str):
+        """Call in connect() after accept()."""
+        self.presence_url = url
+        self.presence_user_id = self._get_user_id()
+        await presence_manager.add_user(self.presence_user_id, url, self._get_user_data())
+
+    async def unregister_presence(self):
+        """Call in disconnect()."""
+        await presence_manager.remove_user(self.presence_user_id, self.presence_url)
+
+    async def refresh_presence(self):
+        """Call on heartbeat."""
+        await presence_manager.refresh_ttl(self.presence_user_id)
+
+    async def get_presence(self) -> dict:
+        """Get current presence for this page."""
+        return await presence_manager.get_page_presence(self.presence_url)
 ```
 
-**WebSocket routing:**
+**PresenceManager with atomic operations:**
 
 ```python
-# backend/app/routing.py
-websocket_urlpatterns = [
-    # ... existing routes ...
-    path("api/presence/", PresenceConsumer.as_asgi()),
-]
+# backend/app/presence/manager.py
+class PresenceManager:
+    """Handles Redis operations for presence tracking."""
+
+    async def add_user(self, user_id: str, url: str, user_data: dict):
+        """Add user to presence, handling page navigation atomically."""
+        # Get old URL to clean up old page SET (handles navigation)
+        old_url = await redis.hget(f"presence:{user_id}", "url")
+
+        pipe = redis.pipeline()
+        # Update user HASH with new URL
+        pipe.hset(f"presence:{user_id}", mapping={**user_data, "url": url})
+        pipe.expire(f"presence:{user_id}", 60)
+        # Add to new page SET
+        pipe.sadd(f"presence:page:{url}", user_id)
+        # Remove from old page SET if different (atomic cleanup)
+        if old_url and old_url != url:
+            pipe.srem(f"presence:page:{old_url}", user_id)
+        await pipe.execute()
+
+    async def remove_user(self, user_id: str, url: str):
+        """Remove user from presence on disconnect."""
+        pipe = redis.pipeline()
+        pipe.srem(f"presence:page:{url}", user_id)
+        pipe.delete(f"presence:{user_id}")
+        await pipe.execute()
+
+    async def refresh_ttl(self, user_id: str):
+        """Refresh TTL on heartbeat."""
+        await redis.expire(f"presence:{user_id}", 60)
 ```
+
+**Modify existing consumers:**
+
+```python
+# backend/app/consumers/tournament.py
+class TournamentConsumer(PresenceMixin, AsyncWebsocketConsumer):
+    async def connect(self):
+        # ... existing connect logic ...
+        await self.register_presence(f"/tournament/{self.tournament_id}")
+
+    async def disconnect(self, code):
+        await self.unregister_presence()
+        # ... existing disconnect logic ...
+
+    async def receive_json(self, content):
+        if content.get("type") == "heartbeat":
+            await self.refresh_presence()
+            presence = await self.get_presence()
+            await self.send_json({"type": "heartbeat_ack", "presence": presence})
+            return
+        # ... existing message handling ...
+```
+
+**No new WebSocket routes needed.**
 
 ### Phase 2: Frontend Hooks
 
@@ -352,59 +570,53 @@ websocket_urlpatterns = [
 
 ```
 frontend/app/hooks/
-├── usePageVisibility.ts      # Tab visibility detection
-└── usePagePresence.ts        # Page presence WebSocket + state
-
-frontend/app/store/
-└── presenceStore.ts          # Zustand store for presence
+└── usePageVisibility.ts      # Tab visibility detection
 ```
 
 **usePageVisibility hook:**
 
 ```typescript
-export function usePageVisibility(options?: {
-  onVisible?: () => void;
-  onHidden?: () => void;
-  hiddenDelayMs?: number;  // Delay before calling onHidden
-}): { isVisible: boolean };
+export function usePageVisibility(): {
+  isVisible: boolean;
+  // Use to pause/resume heartbeats
+};
 ```
 
-**usePagePresence hook:**
+**Modify existing WebSocket hooks to include heartbeat:**
 
 ```typescript
-export function usePagePresence(): {
-  // Users on current page
-  usersOnPage: User[];
-  userCount: number;
+// Example: useTournamentSocket.ts
+export function useTournamentSocket(tournamentId: number) {
+  const { isVisible } = usePageVisibility();
+  const [presence, setPresence] = useState<Presence | null>(null);
 
-  // Connection state
-  isConnected: boolean;
+  useEffect(() => {
+    if (!isVisible) return; // Stop heartbeats when tab hidden
 
-  // Helpers
-  isUserHere: (userId: number) => boolean;
-};
+    const interval = setInterval(() => {
+      ws.send(JSON.stringify({ type: "heartbeat" }));
+    }, 30_000);
 
-// Usage in component:
-function TournamentPage() {
-  const { usersOnPage, userCount } = usePagePresence();
+    return () => clearInterval(interval);
+  }, [isVisible]);
 
-  return (
-    <div>
-      <span>{userCount} users viewing</span>
-      {usersOnPage.map(u => <Avatar key={u.id} user={u} />)}
-    </div>
-  );
+  // Handle heartbeat_ack messages
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === "heartbeat_ack") {
+      setPresence(data.presence);
+    }
+    // ... existing message handling
+  };
+
+  return {
+    // ... existing return values
+    presence,
+  };
 }
 ```
 
-**Automatic URL tracking:**
-
-The hook automatically:
-1. Connects to `/api/presence/` WebSocket on mount
-2. Sends current URL from `useLocation()` (React Router)
-3. Sends new URL on route changes
-4. Pauses heartbeats when tab is hidden
-5. Disconnects after extended inactivity
+**No separate presence WebSocket connection needed.**
 
 ### Phase 3: UI Components
 
@@ -452,96 +664,114 @@ frontend/app/components/presence/
 
 **Behavior:**
 
-| Tab State | After 0s | After 30s | After 5min |
-|-----------|----------|-----------|------------|
-| Hidden | Continue heartbeats | Stop heartbeats (→ "away") | Disconnect WS |
-| Visible | Resume heartbeats | - | Reconnect if needed |
+| Tab State | Action | Result |
+|-----------|--------|--------|
+| Hidden | Stop heartbeats immediately | TTL expires after 60s, removed from presence |
+| Visible | Resume heartbeats | Back in presence on next heartbeat |
 
-**Configuration:**
+**Implementation:**
 
 ```typescript
-const PRESENCE_CONFIG = {
-  heartbeatIntervalMs: 30_000,      // Send heartbeat every 30s
-  awayThresholdMs: 30_000,          // Stop heartbeats after 30s hidden
-  disconnectThresholdMs: 300_000,   // Disconnect after 5min hidden
-  reconnectOnVisible: true,          // Auto-reconnect when tab visible
-};
+// usePageVisibility.ts
+export function usePageVisibility() {
+  const [isVisible, setIsVisible] = useState(!document.hidden);
+
+  useEffect(() => {
+    const handler = () => setIsVisible(!document.hidden);
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, []);
+
+  return { isVisible };
+}
 ```
+
+Existing WebSocket hooks use `isVisible` to pause/resume heartbeats. No separate disconnect logic needed - Redis TTL handles cleanup automatically.
 
 ---
 
 ## API Specification
 
-### WebSocket Endpoint
+### No Separate Presence Endpoint
 
-```
-ws://localhost/api/presence/
-```
+Presence is added to **existing WebSocket consumers**. No new endpoint needed.
 
-### WebSocket Messages
+### Modified Existing WebSocket Messages
 
-**Client → Server:**
+**Client → Server (add heartbeat to existing consumers):**
 
 ```typescript
-// Initial connection with current URL
-{ "type": "join", "url": "/tournament/5/players" }
-
-// Navigate to new page (or send new join)
-{ "type": "navigate", "url": "/tournament/5/games" }
-
 // Heartbeat (sent every 30s while tab visible)
+// Add this message type to TournamentConsumer, DraftConsumer, HeroDraftConsumer
 { "type": "heartbeat" }
-
-// Tab became hidden (optional - can just stop heartbeats)
-{ "type": "away" }
-
-// Tab became visible again
-{ "type": "active" }
 ```
 
-**Server → Client:**
+**Server → Client (add presence field to existing responses):**
 
 ```typescript
-// Who's on this page (sent on join/navigate)
+// Example: Tournament state now includes presence
 {
-  "type": "page_presence",
-  "url": "/tournament/5/players",
+  "type": "tournament_state",
+  "tournament": { /* existing tournament data */ },
+  "presence": {
+    "users": [
+      { "pk": 123, "username": "kettle" },
+      { "pk": 456, "username": "player2" }
+    ],
+    "anonymous_count": 3
+  }
+}
+
+// Heartbeat response includes updated presence
+{
+  "type": "heartbeat_ack",
+  "presence": {
+    "users": [
+      { "pk": 123, "username": "kettle" },
+      { "pk": 456, "username": "player2" }
+    ],
+    "anonymous_count": 3
+  }
+}
+```
+
+### Presence Data Structure
+
+```typescript
+interface PresenceUser {
+  pk: number;
+  username: string;
+  avatar?: string;  // URL to avatar image, if available
+}
+
+interface Presence {
+  users: PresenceUser[];
+  anonymous_count: number;
+}
+```
+
+### REST Endpoint (Optional - for pages without WebSocket)
+
+For pages that don't have a WebSocket connection (e.g., user profiles, static pages):
+
+```
+GET /api/presence/?url=/tournament/5
+
+Response:
+{
+  "url": "/tournament/5",
   "users": [
-    { "pk": 123, "username": "kettle", "avatar": "..." },
-    { "pk": 456, "username": "player2", "avatar": "..." }
+    { "pk": 123, "username": "kettle", "avatar": "..." }
   ],
-  "anonymous_count": 3  // 3 anonymous guests on this page
-}
-
-// Authenticated user joined
-{
-  "type": "user_joined",
-  "user": { "pk": 789, "username": "newuser", "avatar": "..." }
-}
-
-// Authenticated user left
-{
-  "type": "user_left",
-  "user_pk": 456
-}
-
-// Anonymous user joined/left (just update count)
-{
-  "type": "anonymous_count",
-  "count": 4  // Updated count of anonymous users
+  "anonymous_count": 3
 }
 ```
 
-### REST Endpoint (Optional - for non-WebSocket clients)
-
-```
-GET /api/presence/page/?url=/tournament/5/players
-  → {
-      "url": "/tournament/5/players",
-      "count": 3,
-      "users": [...]
-    }
-```
+**Implementation notes:**
+- Authentication: Optional (public endpoint, presence is not private)
+- Rate limiting: Consider 10 req/sec per IP to prevent abuse
+- Uses same `get_page_users()` function as WebSocket consumers
+- Returns empty list if no users on page (not 404)
 
 ---
 
@@ -554,18 +784,11 @@ GET /api/presence/page/?url=/tournament/5/players
 
 PRESENCE_CONFIG = {
     # Timing
-    "heartbeat_timeout_seconds": 45,      # Expect heartbeat within this
-    "presence_timeout_seconds": 90,       # Mark offline after this
-    "batch_interval_seconds": 2,          # Broadcast batch interval
-    "cleanup_interval_seconds": 60,       # Celery cleanup frequency
-
-    # Limits
-    "max_connections": 10_000,            # Connection limit
-    "max_presence_broadcast": 1_000,      # Max users in single broadcast
+    "ttl_seconds": 60,                    # Redis key TTL
+    "cleanup_interval_seconds": 60,       # Periodic SET cleanup frequency
 
     # Redis
     "redis_key_prefix": "presence:",
-    "redis_db": 2,                        # Separate DB for presence
 }
 ```
 
@@ -575,25 +798,11 @@ PRESENCE_CONFIG = {
 // frontend/app/config/presence.ts
 
 export const PRESENCE_CONFIG = {
-  // WebSocket
-  url: '/api/presence/',
-  reconnectDelayMs: 1_000,
-  maxReconnectAttempts: 5,
-
   // Heartbeat
   heartbeatIntervalMs: 30_000,
 
-  // Tab visibility
-  awayThresholdMs: 30_000,
-  disconnectThresholdMs: 300_000,
-
-  // UI
-  showAwayStatus: true,
-  statusColors: {
-    online: 'bg-green-500',
-    away: 'bg-yellow-500',
-    offline: 'bg-gray-500',
-  },
+  // Tab visibility - stop heartbeats when hidden
+  stopHeartbeatsWhenHidden: true,
 };
 ```
 
@@ -603,17 +812,19 @@ export const PRESENCE_CONFIG = {
 
 ### Unit Tests
 
-- [ ] PresenceBroadcaster batching logic
-- [ ] Redis operations (ZADD, ZRANGEBYSCORE, cleanup)
+- [ ] PresenceManager Redis operations (HSET, SADD, SMEMBERS, EXPIRE)
+- [ ] PresenceMixin methods (register, unregister, refresh, get)
+- [ ] get_online_status_batch() batch lookup
 - [ ] usePageVisibility hook
-- [ ] usePresence hook state management
+- [ ] URL normalization
 
 ### Integration Tests
 
-- [ ] WebSocket connect/disconnect flow
-- [ ] Heartbeat timeout → offline transition
-- [ ] Tab hidden → away → offline flow
-- [ ] Reconnection after tab becomes visible
+- [ ] WebSocket connect registers presence in Redis
+- [ ] WebSocket disconnect removes presence from Redis
+- [ ] Heartbeat refreshes TTL
+- [ ] TTL expiry removes user from page SET
+- [ ] Presence included in heartbeat_ack response
 
 ### Load Tests
 
@@ -637,7 +848,6 @@ export const PRESENCE_CONFIG = {
 
 ### Stage 3: Full Release
 - Enable for all users
-- Add to user settings (optional disable)
 - Monitor metrics
 
 ---
@@ -655,6 +865,14 @@ export const PRESENCE_CONFIG = {
    - Anonymous: `anon:{session_id}` (e.g., `anon:a1b2c3d4`)
 
 4. **Privacy**: ✅ **No opt-out** - All users are visible when on a page
+
+5. **Architecture**: ✅ **No separate presence WebSocket** - Piggyback on existing consumers (Tournament, Draft, HeroDraft)
+
+6. **No broadcasts**: ✅ **Pull-based** - Clients get presence on heartbeat response, no server push
+
+7. **Caching strategy**: ✅ **Separate concerns**
+   - User model data: Cached by cacheops (never invalidated by online status)
+   - Online status: Fresh from Redis at serialization time (batch prefetch in views)
 
 ## Open Questions
 
@@ -690,7 +908,7 @@ export const PRESENCE_CONFIG = {
 
 ## References
 
-- [Discord Architecture](https://d4dummies.com/architecting-for-hyperscale-an-in-depth-analysis-of-discords-billion-message-per-day-infrastructure/)
-- [Slack Real-time Messaging](https://slack.engineering/real-time-messaging/)
-- [Redis Sorted Sets](https://redis.io/docs/data-types/sorted-sets/)
 - [Page Visibility API](https://developer.mozilla.org/en-US/docs/Web/API/Page_Visibility_API)
+- [Redis HASH](https://redis.io/docs/data-types/hashes/)
+- [Redis SET](https://redis.io/docs/data-types/sets/)
+- [Redis Pipelining](https://redis.io/docs/manual/pipelining/)
