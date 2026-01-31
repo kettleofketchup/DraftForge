@@ -418,7 +418,7 @@ test.describe('Bracket Match Linking (e2e)', () => {
 
         // Wait for suggestions to load
         const matchCards = page.locator('[data-testid="match-card"]');
-        const hasCards = await matchCards.first().isAttached().catch(() => false);
+        const hasCards = await matchCards.count().then(c => c > 0).catch(() => false);
 
         if (!hasCards) {
           console.log('No match cards found - skipping test');
