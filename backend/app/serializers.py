@@ -1057,6 +1057,7 @@ class HeroDraftSerializer(serializers.ModelSerializer):
             "draft_teams",
             "rounds",
             "current_round",
+            "is_manual_pause",
             "created_at",
             "updated_at",
         ]

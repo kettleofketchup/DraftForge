@@ -1448,6 +1448,9 @@ class HeroDraft(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     paused_at = models.DateTimeField(null=True, blank=True)
     resuming_until = models.DateTimeField(null=True, blank=True)
+    is_manual_pause = models.BooleanField(
+        default=False
+    )  # True if paused manually by captain/staff
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)

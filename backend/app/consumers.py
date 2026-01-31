@@ -528,53 +528,10 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                         broadcast_event_type = "draft_paused"
                         should_broadcast = True
                     elif is_connected and draft.state == HeroDraftState.PAUSED:
-                        # Check if both captains connected - use fresh query to avoid
-                        # Django ORM caching issues with related manager
-                        all_connected = not DraftTeam.objects.filter(
-                            draft_id=draft_id, is_connected=False
-                        ).exists()
-                        if all_connected:
-                            # Calculate pause duration and adjust active round timing
-                            pause_duration = None
-                            if draft.paused_at:
-                                pause_duration = timezone.now() - draft.paused_at
-                                current_round = draft.rounds.filter(
-                                    state="active"
-                                ).first()
-                                if current_round and current_round.started_at:
-                                    # Add 3 seconds for countdown to total adjustment
-                                    total_adjustment = pause_duration + timedelta(
-                                        seconds=3
-                                    )
-                                    current_round.started_at += total_adjustment
-                                    current_round.save(update_fields=["started_at"])
-                                    log.info(
-                                        f"HeroDraft {draft_id} adjusted round {current_round.round_number} "
-                                        f"started_at by {total_adjustment.total_seconds():.2f}s (includes 3s countdown)"
-                                    )
-
-                            # Enter RESUMING state with 3-second countdown
-                            # This prevents infinite time exploit by blocking pauses during countdown
-                            draft.state = HeroDraftState.RESUMING
-                            draft.resuming_until = timezone.now() + timedelta(seconds=3)
-                            draft.paused_at = None
-                            draft.save()
-                            HeroDraftEvent.objects.create(
-                                draft=draft,
-                                event_type="resume_countdown",
-                                metadata={"countdown_seconds": 3},
-                            )
-                            log.info(
-                                f"HeroDraft {draft_id} entering RESUMING state (3s countdown)"
-                            )
-                            broadcast_event_type = "resume_countdown"
-                            should_broadcast = True
-                            # Start tick broadcaster to handle RESUMING → DRAFTING transition
-                            should_restart_tick_broadcaster = True
-                        else:
-                            # Still waiting for other captain - broadcast connection status
-                            broadcast_event_type = event_type
-                            should_broadcast = True
+                        # All pauses require manual resume via the Resume button
+                        # Just broadcast the connection status change
+                        broadcast_event_type = event_type
+                        should_broadcast = True
                     else:
                         # Always broadcast connection status changes so UI updates
                         broadcast_event_type = event_type

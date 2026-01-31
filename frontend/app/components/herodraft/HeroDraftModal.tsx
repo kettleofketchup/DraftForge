@@ -13,12 +13,12 @@ import { HeroGrid } from "./HeroGrid";
 import { DraftPanel } from "./DraftPanel";
 import { HeroDraftHistoryModal } from "./HeroDraftHistoryModal";
 import { CompletedDraftView } from "./CompletedDraftView";
-import { submitPick, setReady, triggerRoll, submitChoice } from "./api";
+import { submitPick, setReady, triggerRoll, submitChoice, pauseDraft, resumeDraft } from "./api";
 import type { HeroDraft, HeroDraftEvent } from "./types";
 import { DisplayName } from "~/components/user/avatar";
 import { getHeroIcon, getHeroName as getHeroNameFromLib } from "~/lib/dota/heroes";
 import { CaptainToast, HeroActionToast } from "./DraftToasts";
-import { Send, ArrowLeft, Users } from "lucide-react";
+import { Send, ArrowLeft, Users, Pause, Play } from "lucide-react";
 import { HistoryButton } from "~/components/ui/buttons";
 import {
   Tooltip,
@@ -255,6 +255,34 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       toast.error(axiosError.response?.data?.error || "Failed to trigger roll");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handlePause = async () => {
+    if (!draft || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await pauseDraft(draft.id);
+      toast.success("Draft paused");
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { error?: string } } };
+      toast.error(axiosError.response?.data?.error || "Failed to pause draft");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResume = async () => {
+    if (!draft || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await resumeDraft(draft.id);
+      toast.success("Resuming draft...");
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { error?: string } } };
+      toast.error(axiosError.response?.data?.error || "Failed to resume draft");
     } finally {
       setIsSubmitting(false);
     }
@@ -576,6 +604,25 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
                 {/* Right side controls */}
                 <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                  {/* Pause button - shown during drafting for captains/staff */}
+                  {draft.state === "drafting" && (isCaptain || currentUser?.is_staff) && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handlePause}
+                          disabled={isSubmitting}
+                          data-testid="herodraft-pause-btn"
+                          className="flex items-center text-xs sm:text-sm border-yellow-500 text-yellow-500 hover:bg-yellow-500/20"
+                        >
+                          <Pause className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
+                          <span className="hidden sm:inline">Pause</span>
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Pause the draft</TooltipContent>
+                    </Tooltip>
+                  )}
                   {/* View Teams button - shown when viewing full draft on completed state */}
                   {draft.state === "completed" && showFullDraft && (
                     <Button
@@ -611,15 +658,17 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
               {/* Paused/Resuming overlay - shows during pause and countdown */}
               {(() => {
-                // Calculate countdown from tick data when in resuming state
+                // Use local countdown (not server ticks) to avoid latency issues
                 const isResuming = draft.state === "resuming";
-                const tickCountdown = tick?.countdown_remaining_ms
-                  ? Math.ceil(tick.countdown_remaining_ms / 1000)
-                  : null;
-                const countdownValue = isResuming && tickCountdown !== null
-                  ? tickCountdown
-                  : resumeCountdown;
+                const countdownValue = resumeCountdown;
                 const showOverlay = draft.state === "paused" || isResuming || resumeCountdown !== null;
+
+                // Check if both captains are connected
+                const allCaptainsConnected = draft.draft_teams.every(t => t.is_connected);
+                // Check if user can resume (captain or staff)
+                const canResume = isCaptain || currentUser?.is_staff;
+                // Get pause reason message
+                const isManualPause = draft.is_manual_pause;
 
                 return showOverlay && (
                   <div className="absolute inset-0 bg-black/70 flex items-center justify-center" data-testid="herodraft-paused-overlay">
@@ -630,7 +679,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                             Resuming in {countdownValue}...
                           </h2>
                           <p className="text-muted-foreground" data-testid="herodraft-countdown-message">
-                            All captains connected
+                            Get ready!
                           </p>
                         </>
                       ) : (
@@ -639,17 +688,35 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                             Draft Paused
                           </h2>
                           <p className="text-muted-foreground" data-testid="herodraft-paused-message">
-                            Waiting for captain to reconnect...
+                            {isManualPause
+                              ? "Paused by captain or staff"
+                              : allCaptainsConnected
+                                ? "Click Resume to continue"
+                                : "Waiting for captain to reconnect..."}
                           </p>
                           <div className="flex flex-col gap-2 items-center">
-                            <Button
-                              variant="outline"
-                              onClick={reconnect}
-                              className="text-white border-yellow-400 hover:bg-yellow-400/20"
-                              data-testid="herodraft-reconnect-btn"
-                            >
-                              Reconnect
-                            </Button>
+                            {canResume && allCaptainsConnected && (
+                              <Button
+                                variant="default"
+                                onClick={handleResume}
+                                disabled={isSubmitting}
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                                data-testid="herodraft-resume-btn"
+                              >
+                                <Play className="h-4 w-4 mr-2" />
+                                {isSubmitting ? "Resuming..." : "Resume Draft"}
+                              </Button>
+                            )}
+                            {!allCaptainsConnected && (
+                              <Button
+                                variant="outline"
+                                onClick={reconnect}
+                                className="text-white border-yellow-400 hover:bg-yellow-400/20"
+                                data-testid="herodraft-reconnect-btn"
+                              >
+                                Reconnect
+                              </Button>
+                            )}
                             <Button
                               variant="secondary"
                               size="sm"
