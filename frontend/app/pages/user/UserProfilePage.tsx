@@ -13,7 +13,7 @@ import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
 import { Skeleton } from '~/components/ui/skeleton';
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
-import { AvatarUrl } from '~/index';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { RolePositions } from '~/components/user/positions';
 import { EditProfileModal } from './EditProfileModal';
 import { getLogger } from '~/lib/logger';
@@ -75,10 +75,11 @@ export function UserProfilePage() {
             <div className="flex flex-col sm:flex-row gap-6 items-center sm:items-start">
               {/* Avatar */}
               <div className="relative">
-                <img
-                  src={AvatarUrl(user)}
-                  alt={`${user.username}'s avatar`}
-                  className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-primary shadow-lg"
+                <UserAvatar
+                  user={user}
+                  size="xl"
+                  border="primary"
+                  className="w-24 h-24 sm:w-32 sm:h-32 shadow-lg"
                 />
                 {(user.is_staff || user.is_superuser) && (
                   <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex gap-1">

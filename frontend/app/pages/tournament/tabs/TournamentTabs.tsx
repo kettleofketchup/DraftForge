@@ -1,10 +1,17 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
 import { GamesTab } from './GamesTab';
 import { PlayersTab } from './PlayersTab';
 import { TeamsTab } from './TeamsTab';
 
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
 import { useTournamentStore } from '~/store/tournamentStore';
@@ -47,13 +54,39 @@ export default function TournamentTabs() {
     }
     return tournament.games.length;
   }, [tournament.games]);
+  const tabOptions = [
+    { value: 'players', label: `Players (${playerCount})` },
+    { value: 'teams', label: `Teams (${teamCount})` },
+    { value: 'bracket', label: `Bracket (${gameCount})` },
+  ];
+
   return (
     <Tabs
       value={activeTab}
       onValueChange={handleTabChange}
       className="w-full"
     >
-      <ScrollArea className="w-full whitespace-nowrap pb-2">
+      {/* Mobile: Compact dropdown selector */}
+      <div className="md:hidden px-2 pb-2">
+        <Select value={activeTab} onValueChange={handleTabChange}>
+          <SelectTrigger
+            className="w-full h-9 bg-muted/50"
+            data-testid="tournamentTabsDropdown"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {tabOptions.map((tab) => (
+              <SelectItem key={tab.value} value={tab.value}>
+                {tab.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Desktop: Full tabs */}
+      <ScrollArea className="hidden md:block w-full whitespace-nowrap pb-2">
         <TabsList
           className="inline-flex w-full min-w-max gap-1 sm:gap-2 p-1"
           data-testid="tournamentTabsList"

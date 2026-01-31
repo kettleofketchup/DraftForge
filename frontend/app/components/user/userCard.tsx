@@ -12,7 +12,7 @@ import { Item, ItemContent, ItemTitle } from '~/components/ui/item';
 import { useSharedPopover } from '~/components/ui/shared-popover-context';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
-import { AvatarUrl } from '~/index';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
 import { useUserStore } from '~/store/userStore';
@@ -67,11 +67,7 @@ export const UserCard: React.FC<Props> = memo(
               <span className="relative inline-flex size-3 rounded-full bg-red-500" />
             </span>
           )}
-          <img
-            src={AvatarUrl(user)}
-            alt={`${user.username}'s avatar`}
-            className="w-14 h-14 rounded-full border-2 border-primary"
-          />
+          <UserAvatar user={user} size="xl" border="primary" />
         </div>
       );
     };

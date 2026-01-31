@@ -2,8 +2,7 @@ import { Award, Users, FileText } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { Badge } from '~/components/ui/badge';
-import { Avatar, AvatarImage, AvatarFallback } from '~/components/ui/avatar';
-import { AvatarUrl } from '~/components/user/avatar';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import type { LeagueType } from '../schemas';
 
 interface Props {
@@ -71,10 +70,7 @@ export const InfoTab: React.FC<Props> = ({ league }) => {
             <div className="flex flex-wrap gap-3">
               {league.admins.map((admin) => (
                 <div key={admin.pk} className="flex items-center gap-2">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={AvatarUrl(admin)} alt={admin.nickname || admin.username} />
-                    <AvatarFallback>{(admin.nickname || admin.username).charAt(0).toUpperCase()}</AvatarFallback>
-                  </Avatar>
+                  <UserAvatar user={admin} size="md" />
                   <span className="text-sm">{admin.nickname || admin.username}</span>
                   <Badge variant="secondary" className="text-xs">Admin</Badge>
                 </div>

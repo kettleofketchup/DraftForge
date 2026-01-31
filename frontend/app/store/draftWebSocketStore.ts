@@ -11,7 +11,7 @@ import { getLogger } from '~/lib/logger';
 import { getWebSocketManager } from '~/lib/websocket';
 import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
 import type { DraftEvent, PlayerPickedPayload, WebSocketDraftState, WebSocketMessage } from '~/types/draftEvent';
-import { PlayerPickedToast } from '~/components/draft/DraftToasts';
+import { PlayerPickedToast } from '~/components/teamdraft/DraftToasts';
 
 const log = getLogger('draftWebSocketStore');
 

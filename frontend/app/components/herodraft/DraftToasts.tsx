@@ -1,6 +1,6 @@
 // frontend/app/components/herodraft/DraftToasts.tsx
-import { AvatarUrl, DisplayName } from "~/components/user/avatar";
-import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
+import { DisplayName } from "~/components/user/avatar";
+import { UserAvatar } from "~/components/user/UserAvatar";
 
 interface CaptainInfo {
   pk: number;
@@ -22,15 +22,11 @@ interface CaptainToastProps {
  * Used for: connected, disconnected, ready, roll_result
  */
 export function CaptainToast({ captain, message, messageClassName }: CaptainToastProps) {
-  const avatarUrl = captain ? AvatarUrl(captain as Parameters<typeof AvatarUrl>[0]) : undefined;
   const captainName = captain ? DisplayName(captain) : "Unknown";
 
   return (
     <div className="flex items-center gap-2">
-      <Avatar className="w-6 h-6 shrink-0">
-        <AvatarImage src={avatarUrl} alt="" />
-        <AvatarFallback className="text-xs">{captainName.charAt(0).toUpperCase()}</AvatarFallback>
-      </Avatar>
+      <UserAvatar user={captain || undefined} size="sm" className="shrink-0" />
       <span className="font-medium">{captainName}</span>
       <span className={messageClassName}>{message}</span>
     </div>
@@ -49,16 +45,12 @@ interface HeroActionToastProps {
  * Used for: hero_selected (picks and bans)
  */
 export function HeroActionToast({ captain, action, heroName, heroIconUrl }: HeroActionToastProps) {
-  const avatarUrl = captain ? AvatarUrl(captain as Parameters<typeof AvatarUrl>[0]) : undefined;
   const captainName = captain ? DisplayName(captain) : "Unknown";
   const isBan = action === "banned";
 
   return (
     <div className="flex items-center gap-2">
-      <Avatar className="w-6 h-6 shrink-0">
-        <AvatarImage src={avatarUrl} alt="" />
-        <AvatarFallback className="text-xs">{captainName.charAt(0).toUpperCase()}</AvatarFallback>
-      </Avatar>
+      <UserAvatar user={captain || undefined} size="sm" className="shrink-0" />
       <span className="font-medium">{captainName}</span>
       <span className={isBan ? "text-red-500 font-semibold" : "text-green-500 font-semibold"}>
         {action}

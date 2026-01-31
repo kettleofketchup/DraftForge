@@ -6,7 +6,7 @@ import {
 } from '@headlessui/react';
 import React from 'react';
 import type { UserType } from '~/components/user/types';
-import { AvatarUrl } from '~/index';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { useUserStore } from '~/store/userStore';
 
 import { getLogger } from '~/lib/logger';
@@ -88,11 +88,7 @@ export const SearchUserDropdown: React.FC<Props> = ({
                   }
                 >
                   <div className="flex items-center gap-2">
-                    <img
-                      src={AvatarUrl(user)}
-                      alt={user.username}
-                      className="w-8 h-8 rounded-full"
-                    />
+                    <UserAvatar user={user} size="md" />
                     <span>Username: {user.username}</span>
                     Nick: {user.nickname && <span>{user.nickname}</span>}
                   </div>

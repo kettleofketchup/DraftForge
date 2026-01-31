@@ -7,7 +7,7 @@ import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('editForm');
 
-import { refreshTournamentHook } from '~/components/draft/hooks/refreshTournamentHook';
+import { refreshTournamentHook } from '~/components/teamdraft/hooks/refreshTournamentHook';
 import { Label } from '~/components/ui/label';
 import type { GameType, TeamType, UserType } from '~/index';
 import { TeamComboBox } from '../helpers/teamCombobox';
