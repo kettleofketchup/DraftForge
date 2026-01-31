@@ -82,30 +82,68 @@ Users cannot see who else is currently viewing the same page. We want to show "X
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### Authentication
+
+Django Channels provides the authenticated user automatically via middleware:
+
+```python
+class PresenceConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        user = self.scope["user"]  # Django User object
+
+        if not user.is_authenticated:
+            await self.close()  # Reject anonymous connections
+            return
+
+        # Now we have full access to user data:
+        self.user_pk = user.pk           # Primary key (integer)
+        self.username = user.username    # Username
+        # Can also fetch avatar, etc. from database
+```
+
+This works because your existing `AuthMiddlewareStack` in ASGI config handles session/cookie auth for WebSockets.
+
 ### Redis Schema
 
 ```python
-# Key 1: Where is this user? (STRING with TTL)
-KEY = "presence:user:{user_id}"
-VALUE = "/tournament/5/players"  # Current URL path
+# Key 1: Where is this user? (HASH with TTL)
+KEY = "presence:user:{user_pk}"
+VALUE = {
+    "url": "/tournament/5/players",
+    "username": "kettle",
+    "connected_at": "1706745600"
+}
 TTL = 60 seconds  # Auto-expires if no heartbeat
 
 # Key 2: Who is on this page? (SET)
-KEY = "presence:page:{url_hash}"  # url_hash = md5 or slugified path
-VALUE = SET of user_ids
+KEY = "presence:page:{url_path}"  # Exact URL path, slashes replaced
+VALUE = SET of user_pks
 # No TTL - managed by consumer connect/disconnect
 
 # Example:
-# User 123 visits /tournament/5/players:
-SET presence:user:123 "/tournament/5/players" EX 60
-SADD presence:page:tournament_5_players 123
+# User PK 123 (username: kettle) visits /tournament/5/players:
+HSET presence:user:123 url "/tournament/5/players" username "kettle"
+EXPIRE presence:user:123 60
+SADD presence:page:/tournament/5/players 123
 
-# User 123 navigates to /tournament/5/games:
-DEL presence:user:123  # or let it expire
-SREM presence:page:tournament_5_players 123
-SET presence:user:123 "/tournament/5/games" EX 60
-SADD presence:page:tournament_5_games 123
+# User navigates to /tournament/5/games (DIFFERENT room):
+SREM presence:page:/tournament/5/players 123
+HSET presence:user:123 url "/tournament/5/games"
+EXPIRE presence:user:123 60
+SADD presence:page:/tournament/5/games 123
 ```
+
+### URL Grouping: Exact Path Match
+
+Each URL path is its own room. Users only see others on the exact same page:
+
+```
+/tournament/5/players  →  Room A  →  [kettle, player2]
+/tournament/5/games    →  Room B  →  [admin]
+/tournament/5          →  Room C  →  [spectator1]
+```
+
+This means navigating between tabs on the same tournament shows different users.
 
 ### Message Flow
 
@@ -547,30 +585,32 @@ export const PRESENCE_CONFIG = {
 
 ---
 
+## Decisions Made
+
+1. **URL grouping**: ✅ **Exact path match** - `/tournament/5/players` and `/tournament/5/games` are different rooms
+
+2. **Authentication**: ✅ **Authenticated users only** - Use `self.scope["user"]` from Django Channels, reject anonymous connections
+
+3. **User identification**: ✅ **User PK** - Store `user.pk` in Redis, can look up username/avatar as needed
+
 ## Open Questions
 
 1. **Which pages should show presence?**
    - All pages? Only specific pages (tournament, draft, league)?
    - Recommendation: Start with tournament/league detail pages only
 
-2. **URL grouping granularity?**
-   - `/tournament/5/players` and `/tournament/5/games` = same room or different?
-   - Option A: Same room (anyone on `/tournament/5/*`)
-   - Option B: Different rooms (exact path match)
-   - Recommendation: Option A (group by parent resource)
-
-3. **Should users see themselves in the count?**
+2. **Should users see themselves in the count?**
    - "3 users here" (includes you) vs "2 others here"
    - Recommendation: Include self, clearer mental model
 
-4. **Anonymous/logged-out users?**
-   - Show them? Count them? Ignore them?
-   - Recommendation: Only track authenticated users
-
-5. **Privacy: Can users opt out of being shown?**
+3. **Privacy: Can users opt out of being shown?**
    - User setting to appear "invisible"?
    - v1: No opt-out (simpler)
    - v2: Add privacy setting if requested
+
+4. **What user info to show?**
+   - Just count? Avatars? Usernames on hover?
+   - Recommendation: Avatar stack with username tooltip
 
 ---
 
