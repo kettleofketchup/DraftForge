@@ -51,8 +51,8 @@ test.describe('Undo Pick', () => {
         timeout: 10000,
       });
 
-      // Click on Teams tab
-      await page.locator('text=Teams (4)').click({ force: true });
+      // Click on Teams tab (use regex to match any team count)
+      await page.locator('text=/Teams \\(\\d+\\)/').first().click({ force: true });
       await page.waitForLoadState('networkidle');
 
       // Open draft modal
@@ -122,8 +122,8 @@ test.describe('Undo Pick', () => {
         timeout: 10000,
       });
 
-      // Click on Teams tab
-      await page.locator('text=Teams (4)').click({ force: true });
+      // Click on Teams tab (use regex to match any team count)
+      await page.locator('text=/Teams \\(\\d+\\)/').first().click({ force: true });
       await page.waitForLoadState('networkidle');
 
       // Open draft modal
@@ -156,8 +156,8 @@ test.describe('Undo Pick', () => {
         timeout: 10000,
       });
 
-      // Click on Teams tab
-      await page.locator('text=Teams (4)').click({ force: true });
+      // Click on Teams tab (use regex to match any team count)
+      await page.locator('text=/Teams \\(\\d+\\)/').first().click({ force: true });
       await page.waitForLoadState('networkidle');
 
       // Open draft modal
@@ -206,8 +206,8 @@ test.describe('Undo Pick', () => {
         timeout: 10000,
       });
 
-      // Click on Teams tab
-      await page.locator('text=Teams (4)').click({ force: true });
+      // Click on Teams tab (use regex to match any team count)
+      await page.locator('text=/Teams \\(\\d+\\)/').first().click({ force: true });
       await page.waitForLoadState('networkidle');
 
       // Open draft modal
@@ -299,8 +299,8 @@ test.describe('Undo Pick', () => {
         timeout: 10000,
       });
 
-      // Click on Teams tab
-      await page.locator('text=Teams (4)').click({ force: true });
+      // Click on Teams tab (use regex to match any team count)
+      await page.locator('text=/Teams \\(\\d+\\)/').first().click({ force: true });
       await page.waitForLoadState('networkidle');
 
       // Open draft modal

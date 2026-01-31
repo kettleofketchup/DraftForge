@@ -39,8 +39,8 @@ test.describe('League Page - Matches Tab (e2e)', () => {
     const leaguePage = new LeaguePage(page);
     await leaguePage.goto(testLeagueId, 'matches');
 
-    // Should show matches heading with count
-    await expect(page.locator('text=Matches')).toBeVisible({ timeout: 10000 });
+    // Should show matches heading with count (use h3 to avoid matching tab button)
+    await expect(page.locator('h3:has-text("Matches")')).toBeVisible({ timeout: 10000 });
   });
 
   test('should have Steam linked filter button', async ({ page }) => {

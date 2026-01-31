@@ -119,7 +119,10 @@ def playwright_headless(c, args=""):
     flush_test_redis(c)
     docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"DOCKER_HOST={docker_host} npx playwright test {args}".strip())
+        # Exclude demo project - demos are run separately via inv demo.* commands
+        c.run(
+            f"DOCKER_HOST={docker_host} npx playwright test --project=chromium --project=herodraft {args}".strip()
+        )
 
 
 @task
@@ -131,8 +134,11 @@ def playwright_headed(c, args=""):
     """
     flush_test_redis(c)
     docker_host = get_docker_host()
+    # Exclude demo project - demos are run separately via inv demo.* commands
     with c.cd(paths.FRONTEND_PATH):
-        c.run(f"DOCKER_HOST={docker_host} npx playwright test --headed {args}".strip())
+        c.run(
+            f"DOCKER_HOST={docker_host} npx playwright test --headed --project=chromium --project=herodraft {args}".strip()
+        )
 
 
 @task
