@@ -118,32 +118,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   return (
     <div ref={containerRef} className={cn('relative rounded-lg overflow-hidden', className)}>
-      {/* Media player skeleton */}
+      {/* Loading skeleton - uses aspect-video to match typical video dimensions */}
       {isLoading && !hasError && (
-        <div className="absolute inset-0 z-10 min-h-[200px] rounded-lg overflow-hidden bg-base-300 flex flex-col">
-          {/* Video area with play button */}
-          <div className="flex-1 flex items-center justify-center relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-base-300 via-base-200 to-base-300 animate-pulse" />
-            {/* Play button circle */}
-            <div className="relative w-16 h-16 rounded-full bg-base-content/10 flex items-center justify-center">
-              <div className="w-0 h-0 border-t-8 border-t-transparent border-l-12 border-l-base-content/20 border-b-8 border-b-transparent ml-1" />
-            </div>
-          </div>
-          {/* Controls bar skeleton */}
-          <div className="h-10 bg-base-100/50 px-3 flex items-center gap-3">
-            {/* Play/pause button */}
-            <div className="w-6 h-6 rounded bg-base-content/10" />
-            {/* Progress bar */}
-            <div className="flex-1 h-1 rounded-full bg-base-content/10 overflow-hidden">
-              <div className="w-1/4 h-full bg-base-content/20" />
-            </div>
-            {/* Time */}
-            <div className="w-16 h-3 rounded bg-base-content/10" />
-            {/* Volume */}
-            <div className="w-6 h-6 rounded bg-base-content/10" />
-            {/* Fullscreen */}
-            <div className="w-6 h-6 rounded bg-base-content/10" />
-          </div>
+        <div className="aspect-video rounded-lg bg-base-300 flex items-center justify-center">
+          <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
         </div>
       )}
 
