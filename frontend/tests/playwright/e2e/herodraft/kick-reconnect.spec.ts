@@ -82,6 +82,14 @@ test.describe('HeroDraft Kick Reconnect', () => {
     const wasKicked = page1Messages.some(m => m.includes('Kicked from draft'));
     expect(wasKicked).toBe(true);
 
+    // Verify the kicked overlay is visible on tab 1
+    const kickedOverlay = page1.locator('[data-testid="herodraft-kicked-overlay"]');
+    await expect(kickedOverlay).toBeVisible({ timeout: 5000 });
+
+    // Verify the overlay has the expected content
+    await expect(page1.locator('[data-testid="herodraft-kicked-title"]')).toHaveText('Session Replaced');
+    await expect(page1.locator('[data-testid="herodraft-kicked-refresh-btn"]')).toBeVisible();
+
     // The fix works if either:
     // 1. Reconnect was blocked (message contains "Reconnect blocked"), OR
     // 2. No reconnect was attempted (clean disconnect)

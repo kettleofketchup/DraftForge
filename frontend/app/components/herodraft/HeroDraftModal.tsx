@@ -667,8 +667,42 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                 );
               })()}
 
+              {/* Kicked overlay - shows when connection was replaced by another tab */}
+              {wasKicked && (
+                <div className="absolute inset-0 bg-black/80 flex items-center justify-center z-50" data-testid="herodraft-kicked-overlay">
+                  <div className="text-center space-y-4 max-w-md px-6">
+                    <h2 className="text-2xl font-bold text-orange-400" data-testid="herodraft-kicked-title">
+                      Session Replaced
+                    </h2>
+                    <p className="text-gray-300" data-testid="herodraft-kicked-message">
+                      Another browser tab has taken over this draft session.
+                      Refresh this page to take control back.
+                    </p>
+                    <div className="flex flex-col gap-2 items-center pt-2">
+                      <Button
+                        variant="default"
+                        onClick={() => window.location.reload()}
+                        className="bg-orange-500 hover:bg-orange-600 text-white"
+                        data-testid="herodraft-kicked-refresh-btn"
+                      >
+                        Refresh Page
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleClose}
+                        data-testid="herodraft-kicked-close-btn"
+                      >
+                        <ArrowLeft className="h-4 w-4 mr-2" />
+                        Back to Bracket
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Connection status */}
-              {!isConnected && (
+              {!isConnected && !wasKicked && (
                 <div className="absolute top-2 right-2 bg-red-500/80 text-white px-3 py-2 rounded text-sm flex items-center gap-2" data-testid="herodraft-reconnecting">
                   <span>{connectionError || "Reconnecting..."}</span>
                   <Button
