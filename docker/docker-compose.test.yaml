@@ -6,6 +6,7 @@ services:
     env_file: "./docker/.env.test"
     volumes:
       - ./frontend:/app
+      - ./docs/assets:/app/public/assets/docs:ro
     restart: always
     # Uses docker-entrypoint-frontend.sh which cleans cache and pre-optimizes on startup
     networks:

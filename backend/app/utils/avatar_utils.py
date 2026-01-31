@@ -33,14 +33,11 @@ def refresh_invalid_avatars(batch_size=50):
             old_avatar = user.avatar
 
             # This will check the URL and update if needed
-            new_url = user.get_avatar_url()
+            updated = user.check_and_update_avatar()
 
-            if new_url and old_avatar != user.avatar:
+            if updated:
                 results["updated"] += 1
                 logging.info(f"Updated avatar for user {user.username}")
-            elif not new_url:
-                results["failed"] += 1
-                logging.warning(f"Failed to get valid avatar for user {user.username}")
 
         except Exception as e:
             results["failed"] += 1
@@ -64,12 +61,12 @@ def refresh_user_avatar(user_id):
     try:
         user = User.objects.get(id=user_id, discordId__isnull=False)
         old_avatar = user.avatar
-        new_url = user.get_avatar_url(force_refresh=True)
+        updated = user.check_and_update_avatar()
 
         return {
             "success": True,
-            "updated": old_avatar != user.avatar,
-            "avatar_url": new_url,
+            "updated": updated,
+            "avatar_url": user.avatarUrl,
             "message": f"Avatar refreshed for {user.username}",
         }
     except User.DoesNotExist:

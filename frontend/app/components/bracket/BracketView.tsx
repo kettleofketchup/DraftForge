@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import {
   ReactFlow,
   Background,
@@ -120,6 +120,7 @@ function createStructuralEdges(matches: BracketMatch[]): Edge[] {
 
 function BracketFlowInner({ tournamentId }: BracketViewProps) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isStaff = useUserStore((state) => state.isStaff());
   const tournament = useUserStore((state) => state.tournament);
   const pendingDraftId = useTournamentStore((state) => state.pendingDraftId);
@@ -127,18 +128,24 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   const pendingMatchId = useTournamentStore((state) => state.pendingMatchId);
   const setPendingMatchId = useTournamentStore((state) => state.setPendingMatchId);
 
-  const {
-    matches,
-    isDirty,
-    isVirtual,
-    isLoading,
-    loadBracket,
-    startPolling,
-    stopPolling,
-  } = useBracketStore();
+  // Use individual selectors to prevent unnecessary re-renders
+  const matches = useBracketStore((state) => state.matches);
+  const isDirty = useBracketStore((state) => state.isDirty);
+  const isLoading = useBracketStore((state) => state.isLoading);
+  // Note: Actions are accessed via getState() in effects to avoid subscriptions
 
   const { getLayoutedElements } = useElkLayout();
-  const { setViewport, getViewport } = useReactFlow();
+  const { setViewport, getViewport, fitView } = useReactFlow();
+
+  // Expose fitView for Playwright testing
+  useEffect(() => {
+    (window as Window & { bracketFitView?: () => void }).bracketFitView = () => {
+      fitView({ padding: 0.1, duration: 200 });
+    };
+    return () => {
+      delete (window as Window & { bracketFitView?: () => void }).bracketFitView;
+    };
+  }, [fitView]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<MatchNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -197,21 +204,34 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   // Pre-compute badge mapping for all matches
   const badgeMapping = useMemo(() => buildBadgeMapping(matches), [matches]);
 
-  // Load bracket on mount
+  // Track current tournament to prevent unnecessary reloads
+  const currentTournamentRef = useRef<number | null>(null);
+
+  // Load bracket on mount - only depends on tournamentId
   useEffect(() => {
-    loadBracket(tournamentId);
-    return () => stopPolling();
-  }, [tournamentId, loadBracket, stopPolling]);
+    // Skip if we've already loaded this tournament
+    if (currentTournamentRef.current === tournamentId) return;
+    currentTournamentRef.current = tournamentId;
+
+    useBracketStore.getState().loadBracket(tournamentId);
+    // Use getState in cleanup to get fresh reference
+    return () => useBracketStore.getState().stopPolling();
+  }, [tournamentId]);
 
   // Start polling for live updates (when not editing)
   useEffect(() => {
+    const store = useBracketStore.getState();
     if (!isDirty) {
-      startPolling(tournamentId, 5000);
+      // Only start polling if not already polling
+      if (!store.pollInterval) {
+        store.startPolling(tournamentId, 5000);
+      }
     } else {
-      stopPolling();
+      store.stopPolling();
     }
-    return () => stopPolling();
-  }, [isDirty, tournamentId, startPolling, stopPolling]);
+    // Use getState in cleanup to get fresh reference
+    return () => useBracketStore.getState().stopPolling();
+  }, [isDirty, tournamentId]);
 
   // Layout matches using ELK when matches change
   useEffect(() => {
@@ -455,8 +475,11 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
     // Update URL to shareable match URL - prefer gameId (backend ID) over temporary id
     const match = matches.find(m => m.id === node.id);
     const urlId = match?.gameId ?? node.id;
-    navigate(`/tournament/${tournamentId}/bracket/match/${urlId}`, { replace: true });
-  }, [navigate, tournamentId, matches]);
+    // Preserve search params (especially ?tab=bracket) to prevent tab switching
+    const params = searchParams.toString();
+    const queryString = params ? `?${params}` : '';
+    navigate(`/tournament/${tournamentId}/bracket/match/${urlId}${queryString}`, { replace: true });
+  }, [navigate, tournamentId, matches, searchParams]);
 
   if (isLoading && matches.length === 0) {
     return (
@@ -538,8 +561,10 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         onClose={() => {
           setSelectedMatchId(null);
           setInitialDraftId(null);
-          // Restore URL without match
-          navigate(`/tournament/${tournamentId}/bracket`, { replace: true });
+          // Restore URL without match - preserve search params to keep tab
+          const params = searchParams.toString();
+          const queryString = params ? `?${params}` : '';
+          navigate(`/tournament/${tournamentId}/bracket${queryString}`, { replace: true });
         }}
         initialDraftId={initialDraftId}
         onOpenHeroDraft={(draftId) => {
@@ -559,8 +584,10 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
           onClose={() => {
             setShowHeroDraftModal(false);
             setHeroDraftId(null);
-            // Restore URL without draft
-            navigate(`/tournament/${tournamentId}/bracket`, { replace: true });
+            // Restore URL without draft - preserve search params to keep tab
+            const params = searchParams.toString();
+            const queryString = params ? `?${params}` : '';
+            navigate(`/tournament/${tournamentId}/bracket${queryString}`, { replace: true });
           }}
         />
       )}

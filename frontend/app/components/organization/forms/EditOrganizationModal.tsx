@@ -5,15 +5,7 @@ import { toast } from 'sonner';
 
 import { AdminTeamSection } from '~/components/admin-team';
 import { updateOrganization } from '~/components/api/api';
-import { Button } from '~/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '~/components/ui/dialog';
+import { FormDialog } from '~/components/ui/dialogs';
 import {
   Form,
   FormControl,
@@ -25,7 +17,6 @@ import {
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
-import { DIALOG_CSS } from '~/components/reusable/modal';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import {
   EditOrganizationSchema,
@@ -56,6 +47,7 @@ export function EditOrganizationModal({
       description: organization.description || '',
       logo: organization.logo || '',
       discord_link: organization.discord_link || '',
+      discord_server_id: organization.discord_server_id || '',
       rules_template: organization.rules_template || '',
     },
   });
@@ -68,6 +60,7 @@ export function EditOrganizationModal({
         description: organization.description || '',
         logo: organization.logo || '',
         discord_link: organization.discord_link || '',
+        discord_server_id: organization.discord_server_id || '',
         rules_template: organization.rules_template || '',
       });
     }
@@ -91,146 +84,149 @@ export function EditOrganizationModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={DIALOG_CSS} data-testid="edit-organization-modal">
-        <DialogHeader>
-          <DialogTitle>Edit Organization</DialogTitle>
-          <DialogDescription>
-            Update organization information and settings.
-          </DialogDescription>
-        </DialogHeader>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Edit Organization"
+      description="Update organization information and settings."
+      submitLabel="Save Changes"
+      isSubmitting={isSubmitting}
+      onSubmit={form.handleSubmit(onSubmit)}
+      size="xl"
+      data-testid="edit-organization-modal"
+    >
+      <Form {...form}>
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Organization Name</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="Enter organization name"
+                  data-testid="org-name-input"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Organization Name</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="Enter organization name"
-                      data-testid="org-name-input"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <FormField
+          control={form.control}
+          name="logo"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Logo URL</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="https://example.com/logo.png"
+                  data-testid="org-logo-input"
+                  {...field}
+                />
+              </FormControl>
+              <FormDescription>
+                URL to the organization's logo image
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-            <FormField
-              control={form.control}
-              name="logo"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Logo URL</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="https://example.com/logo.png"
-                      data-testid="org-logo-input"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    URL to the organization's logo image
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <FormField
+          control={form.control}
+          name="discord_link"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Discord Server Link</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="https://discord.gg/your-server"
+                  data-testid="org-discord-input"
+                  {...field}
+                />
+              </FormControl>
+              <FormDescription>
+                Invite link to your Discord server
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-            <FormField
-              control={form.control}
-              name="discord_link"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Discord Server Link</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="https://discord.gg/your-server"
-                      data-testid="org-discord-input"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Invite link to your Discord server
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <FormField
+          control={form.control}
+          name="discord_server_id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Discord Server ID</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="123456789012345678"
+                  data-testid="org-discord-server-id-input"
+                  {...field}
+                  value={field.value || ''}
+                />
+              </FormControl>
+              <FormDescription>
+                Discord server (guild) ID for fetching members
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Describe your organization..."
-                      rows={4}
-                      data-testid="org-description-input"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Description</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Describe your organization..."
+                  rows={4}
+                  data-testid="org-description-input"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-            <FormField
-              control={form.control}
-              name="rules_template"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Rules Template</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Default rules for leagues and tournaments..."
-                      rows={6}
-                      data-testid="org-rules-input"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    These rules will be used as defaults for new leagues
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+        <FormField
+          control={form.control}
+          name="rules_template"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Rules Template</FormLabel>
+              <FormControl>
+                <Textarea
+                  placeholder="Default rules for leagues and tournaments..."
+                  rows={6}
+                  data-testid="org-rules-input"
+                  {...field}
+                />
+              </FormControl>
+              <FormDescription>
+                These rules will be used as defaults for new leagues
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
-            {/* Admin Team Section */}
-            {isOrgAdmin && (
-              <AdminTeamSection
-                organization={organization}
-                onUpdate={onSuccess}
-              />
-            )}
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                data-testid="org-submit-button"
-              >
-                {isSubmitting ? 'Saving...' : 'Save Changes'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+        {/* Admin Team Section */}
+        {isOrgAdmin && (
+          <AdminTeamSection
+            organization={organization}
+            onUpdate={onSuccess}
+          />
+        )}
+      </Form>
+    </FormDialog>
   );
 }

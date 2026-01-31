@@ -19,6 +19,7 @@ This project uses [Python Invoke](https://www.pyinvoke.org/) for task automation
 | `version.*` | Version management |
 | `prod.*` | Production commands |
 | `discord.*` | Discord integration commands |
+| `demo.*` | Demo video recording |
 | `docs.*` | Documentation commands |
 
 ## Development Tasks (`inv dev.*`)
@@ -154,6 +155,35 @@ inv prod.certbot    # SSL certificate renewal
 ```bash
 inv discord.sync    # Sync Discord roles and members
 ```
+
+## Demo Tasks (`inv demo.*`)
+
+Record demo videos of features using Playwright, then convert to GIFs for documentation.
+
+```bash
+# Record all demos
+inv demo.create
+
+# Record specific demos
+inv demo.shuffle        # Shuffle draft demo
+inv demo.snake          # Snake draft demo
+inv demo.herodraft      # HeroDraft with bracket demo
+
+# Convert videos to GIFs
+inv demo.gifs                          # Default settings
+inv demo.gifs --duration 10 --fps 15  # Custom duration and framerate
+
+# Record and convert in one step
+inv demo.quick
+
+# Clean up demo output
+inv demo.clean
+```
+
+Output locations:
+
+- Videos: `docs/assets/videos/`
+- GIFs: `docs/assets/gifs/`
 
 ## Docs Tasks (`inv docs.*`)
 

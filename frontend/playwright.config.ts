@@ -10,12 +10,20 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Projects:
  * - chromium: General E2E tests with parallel execution
- * - mobile-chrome: Mobile viewport testing with Pixel 5 (runs only mobile tests)
  * - herodraft: Sequential execution for multi-browser draft scenarios
  */
 export default defineConfig({
   globalSetup: './tests/playwright/global-setup.ts',
   testDir: './tests/playwright',
+  // Only match *.spec.ts files in e2e directory (exclude fixtures/helpers)
+  testMatch: /e2e\/.*\.spec\.ts$/,
+  // Ignore non-test files (fixtures, helpers, constants, types)
+  testIgnore: [
+    '**/fixtures/**',
+    '**/helpers/**',
+    '**/constants.ts',
+    '**/*.d.ts',
+  ],
 
   // Enable parallel execution by default (projects can override)
   fullyParallel: true,
@@ -23,9 +31,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
 
-  // Workers: Use 50% of CPUs locally for speed, 2 in CI (shared database)
+  // Workers: Use 2 workers locally to reduce CPU load, 2 in CI (shared database)
   // Can override with --workers flag or PLAYWRIGHT_WORKERS env var
-  workers: process.env.CI ? 2 : '50%',
+  workers: 2,
 
   // Reporters: html + list locally, add github reporter in CI
   reporter: [
@@ -52,8 +60,8 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      // Exclude mobile tests (run in mobile-chrome project) and herodraft tests (run in herodraft project)
-      testIgnore: /mobile|responsive|herodraft/i,
+      // Exclude herodraft tests (run in herodraft project)
+      testIgnore: /herodraft/i,
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
@@ -61,23 +69,6 @@ export default defineConfig({
           executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
           args: [
             // Container/WSL compatibility
-            '--no-sandbox',
-            '--disable-gpu',
-            '--disable-dev-shm-usage',
-            '--disable-setuid-sandbox',
-          ],
-        },
-      },
-    },
-    {
-      name: 'mobile-chrome',
-      // Only run mobile/responsive tests
-      testMatch: /mobile|responsive/i,
-      use: {
-        ...devices['Pixel 5'],
-        launchOptions: {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
-          args: [
             '--no-sandbox',
             '--disable-gpu',
             '--disable-dev-shm-usage',
@@ -108,6 +99,29 @@ export default defineConfig({
       },
       // Override parallel settings for herodraft tests (multi-browser coordination)
       fullyParallel: false,
+    },
+    {
+      name: 'demo',
+      testDir: './tests/playwright/demo',
+      testMatch: /.*\.demo\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        headless: true,
+        launchOptions: {
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          slowMo: 100, // Slow for video recording
+          args: [
+            '--no-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+          ],
+        },
+      },
+      // Demo tests run sequentially (video recording)
+      fullyParallel: false,
+      // Longer timeout for demo recordings
+      timeout: 300_000,
     },
   ],
 

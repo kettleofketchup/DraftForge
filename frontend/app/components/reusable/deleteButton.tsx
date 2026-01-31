@@ -1,33 +1,32 @@
-import { Trash2 } from 'lucide-react'; // Or your preferred icon library
-import React, { memo } from 'react';
-import { Button } from '~/components/ui/button'; // Adjust path as needed
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '~/components/ui/tooltip'; // Adjust path as needed
+import React, { memo, useState } from 'react';
+import { ConfirmDialog } from '~/components/ui/dialogs';
+import { TrashIconButton } from '~/components/ui/buttons';
+import { TooltipContent } from '~/components/ui/tooltip';
 
 interface DeleteButtonProps {
-  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onClick: (event?: React.MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
   tooltipText?: string;
   ariaLabel?: string;
-  className?: string; // Optional className prop for additional styling
+  className?: string;
+  /** If true, shows a confirmation dialog before executing onClick */
+  requireConfirmation?: boolean;
+  /** Title for the confirmation dialog */
+  confirmTitle?: string;
+  /** Description for the confirmation dialog */
+  confirmDescription?: string;
 }
 
 interface DeleteTooltipProps {
   tooltipText?: string;
 }
+
 export const DeleteButtonTooltip: React.FC<DeleteTooltipProps> = memo(
-  ({
-    tooltipText = 'Delete item',
-  }) => {
+  ({ tooltipText = 'Delete item' }) => {
     return (
       <TooltipContent>
         <p>{tooltipText}</p>
       </TooltipContent>
-
     );
   },
 );
@@ -37,27 +36,47 @@ export const DeleteButton: React.FC<DeleteButtonProps> = memo(
     onClick,
     disabled = false,
     tooltipText = 'Delete item',
-    ariaLabel = 'Delete',
-    className = 'bg-red-950 hover:bg-red-600 text-white',
+    className,
+    requireConfirmation = false,
+    confirmTitle = 'Delete Item?',
+    confirmDescription = 'This action cannot be undone.',
   }) => {
+    const [open, setOpen] = useState(false);
+
+    const handleClick = (e?: React.MouseEvent<HTMLButtonElement>) => {
+      if (requireConfirmation) {
+        setOpen(true);
+      } else {
+        onClick(e);
+      }
+    };
+
+    const handleConfirm = () => {
+      onClick();
+      setOpen(false);
+    };
+
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onClick}
-              disabled={disabled}
-              aria-label={ariaLabel}
-              className={className}
-            >
-              <Trash2 className="h-4 w-4" color="red" />
-            </Button>
-          </TooltipTrigger>
-          <DeleteButtonTooltip tooltipText={tooltipText} />
-        </Tooltip>
-      </TooltipProvider>
+      <>
+        <TrashIconButton
+          size="sm"
+          onClick={handleClick}
+          disabled={disabled}
+          tooltip={tooltipText}
+          className={className}
+        />
+        {requireConfirmation && (
+          <ConfirmDialog
+            open={open}
+            onOpenChange={setOpen}
+            title={confirmTitle}
+            description={confirmDescription}
+            confirmLabel="Delete"
+            variant="destructive"
+            onConfirm={handleConfirm}
+          />
+        )}
+      </>
     );
   },
 );

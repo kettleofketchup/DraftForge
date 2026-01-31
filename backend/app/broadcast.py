@@ -141,7 +141,7 @@ def broadcast_herodraft_event(draft, event_type: str, draft_team=None, metadata=
         )
 
 
-def broadcast_herodraft_state(draft, event_type: str):
+def broadcast_herodraft_state(draft, event_type: str, metadata=None, draft_team=None):
     """
     Broadcast the current HeroDraft state to WebSocket consumers.
 
@@ -151,6 +151,8 @@ def broadcast_herodraft_state(draft, event_type: str):
     Args:
         draft: HeroDraft instance (should be refreshed from DB)
         event_type: Type of event for logging (e.g., "draft_paused", "draft_resumed")
+        metadata: Additional event metadata (optional, e.g., countdown_seconds)
+        draft_team: DraftTeam instance (optional, for captain_connected/disconnected events)
     """
     channel_layer = get_channel_layer()
     if channel_layer is None:
@@ -162,6 +164,13 @@ def broadcast_herodraft_state(draft, event_type: str):
         "type": "herodraft.event",
         "event_type": event_type,
     }
+
+    if metadata:
+        payload["metadata"] = metadata
+
+    # Include draft_team with captain data for connection events
+    if draft_team:
+        payload["draft_team"] = DraftTeamSerializerFull(draft_team).data
 
     # Include full draft state with prefetched members
     try:

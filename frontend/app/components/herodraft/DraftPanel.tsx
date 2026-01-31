@@ -1,5 +1,5 @@
 // frontend/app/components/herodraft/DraftPanel.tsx
-import { useMemo } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { heroes } from 'dotaconstants';
 import { cn } from '~/lib/utils';
 import type { HeroDraft, HeroDraftRound } from '~/components/herodraft/types';
@@ -9,6 +9,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
+import { ScrollArea } from '~/components/ui/scroll-area';
 
 interface DraftPanelProps {
   draft: HeroDraft;
@@ -36,6 +37,8 @@ function getHeroName(heroId: number | null): string {
 }
 
 export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
+  const activeRoundRef = useRef<HTMLDivElement>(null);
+
   // Memoize team lookups
   const { radiantTeam, direTeam } = useMemo(() => {
     const radiant = draft.draft_teams.find((t) => t.is_radiant);
@@ -47,6 +50,25 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
   const sortedRounds = useMemo(() => {
     return [...draft.rounds].sort((a, b) => a.round_number - b.round_number);
   }, [draft.rounds]);
+
+  // Find the active round (first round that is 'active' or 'planned', not 'completed')
+  // This ensures we highlight the NEXT pick, not a completed one
+  const activeRoundNumber = useMemo(() => {
+    const activeRound = sortedRounds.find(
+      (r) => r.state === 'active' || r.state === 'planned'
+    );
+    return activeRound?.round_number ?? null;
+  }, [sortedRounds]);
+
+  // Autoscroll to active round when it changes
+  useEffect(() => {
+    if (activeRoundNumber !== null && activeRoundRef.current) {
+      activeRoundRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  }, [activeRoundNumber]);
 
   return (
     <div className="h-full flex flex-col bg-black/90 overflow-hidden" data-testid="herodraft-panel">
@@ -68,14 +90,15 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
       </div>
 
       {/* Draft timeline */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="flex flex-col">
+      <ScrollArea className="flex-1 min-h-0" type="always">
+        <div className="flex flex-col py-4">
           {sortedRounds.map((round) => {
             const team = draft.draft_teams.find((t) => t.id === round.draft_team);
             const isRadiant = team?.is_radiant;
             const heroImg = getHeroImage(round.hero_id);
             const heroName = getHeroName(round.hero_id);
-            const isActive = round.round_number === currentRound;
+            // Highlight the first non-completed round (active or planned)
+            const isActive = round.round_number === activeRoundNumber;
             const isPick = round.action_type === 'pick';
             const isBan = round.action_type === 'ban';
             const isCompleted = round.state === 'completed';
@@ -144,6 +167,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
             return (
               <div
                 key={round.id}
+                ref={isActive ? activeRoundRef : undefined}
                 className={cn('flex items-center', slotHeight)}
                 data-testid={`herodraft-round-${round.round_number - 1}`}
                 data-round-active={isActive}
@@ -191,7 +215,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
             );
           })}
         </div>
-      </div>
+      </ScrollArea>
     </div>
   );
 }

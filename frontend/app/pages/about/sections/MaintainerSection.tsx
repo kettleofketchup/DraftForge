@@ -1,7 +1,7 @@
 import { Beer, Binary, Code, Gamepad2, HeartPlus } from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { AvatarUrl } from '~/index';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 
@@ -65,11 +65,8 @@ export function MaintainerSection() {
       <div className="card bg-base-200/50 backdrop-blur border border-primary/10 hover:border-primary/30 transition-all duration-300">
         <div className="card-body">
           <div className="flex items-center gap-4 mb-6">
-            <div className="avatar hover:animate-spin">
-              <img
-                src={AvatarUrl(getKettle())}
-                alt="KettleOfKetchup's avatar"
-              />
+            <div className="hover:animate-spin">
+              <UserAvatar user={getKettle()} size="xl" />
             </div>
             <div>
               <h2 className="card-title text-2xl text-red-500">

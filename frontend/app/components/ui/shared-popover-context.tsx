@@ -2,6 +2,7 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -18,14 +19,19 @@ interface SharedPopoverState {
   isOpen: boolean;
 }
 
+export interface PlayerModalContext {
+  leagueId?: number;
+  organizationId?: number;
+}
+
 interface SharedPopoverContextValue {
   state: SharedPopoverState;
   showPlayerPopover: (player: UserType, anchorEl: HTMLElement) => void;
   showTeamPopover: (team: TeamType, anchorEl: HTMLElement) => void;
   hidePopover: () => void;
-  openPlayerModal: (player: UserType) => void;
+  openPlayerModal: (player: UserType, context?: PlayerModalContext) => void;
   openTeamModal: (team: TeamType) => void;
-  playerModalState: { player: UserType | null; open: boolean };
+  playerModalState: { player: UserType | null; open: boolean; context?: PlayerModalContext };
   teamModalState: { team: TeamType | null; open: boolean };
   setPlayerModalOpen: (open: boolean) => void;
   setTeamModalOpen: (open: boolean) => void;
@@ -59,6 +65,7 @@ export const SharedPopoverProvider: React.FC<SharedPopoverProviderProps> = ({
   const [playerModalState, setPlayerModalState] = useState<{
     player: UserType | null;
     open: boolean;
+    context?: PlayerModalContext;
   }>({ player: null, open: false });
 
   const [teamModalState, setTeamModalState] = useState<{
@@ -113,9 +120,9 @@ export const SharedPopoverProvider: React.FC<SharedPopoverProviderProps> = ({
     setState((prev) => ({ ...prev, isOpen: false }));
   }, []);
 
-  const openPlayerModal = useCallback((player: UserType) => {
+  const openPlayerModal = useCallback((player: UserType, context?: PlayerModalContext) => {
     hidePopover();
-    setPlayerModalState({ player, open: true });
+    setPlayerModalState({ player, open: true, context });
   }, [hidePopover]);
 
   const openTeamModal = useCallback((team: TeamType) => {
@@ -131,21 +138,36 @@ export const SharedPopoverProvider: React.FC<SharedPopoverProviderProps> = ({
     setTeamModalState((prev) => ({ ...prev, open }));
   }, []);
 
+  // Memoize the context value to prevent unnecessary re-renders of all consumers
+  const contextValue = useMemo(
+    () => ({
+      state,
+      showPlayerPopover,
+      showTeamPopover,
+      hidePopover,
+      openPlayerModal,
+      openTeamModal,
+      playerModalState,
+      teamModalState,
+      setPlayerModalOpen,
+      setTeamModalOpen,
+    }),
+    [
+      state,
+      showPlayerPopover,
+      showTeamPopover,
+      hidePopover,
+      openPlayerModal,
+      openTeamModal,
+      playerModalState,
+      teamModalState,
+      setPlayerModalOpen,
+      setTeamModalOpen,
+    ],
+  );
+
   return (
-    <SharedPopoverContext.Provider
-      value={{
-        state,
-        showPlayerPopover,
-        showTeamPopover,
-        hidePopover,
-        openPlayerModal,
-        openTeamModal,
-        playerModalState,
-        teamModalState,
-        setPlayerModalOpen,
-        setTeamModalOpen,
-      }}
-    >
+    <SharedPopoverContext.Provider value={contextValue}>
       {children}
     </SharedPopoverContext.Provider>
   );

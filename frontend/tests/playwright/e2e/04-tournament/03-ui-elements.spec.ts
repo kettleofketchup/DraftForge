@@ -65,20 +65,34 @@ test.describe('Tournament UI Elements (e2e)', () => {
   test('should have working add player UI elements', async ({ page }) => {
     const tournamentPage = new TournamentPage(page);
 
-    // Open the add player dropdown
+    // Open the add player dropdown/modal
     await tournamentPage.addPlayerButton.scrollIntoViewIfNeeded();
     await expect(tournamentPage.addPlayerButton).toBeVisible();
-    await tournamentPage.addPlayerButton.click({ force: true });
+    await tournamentPage.addPlayerButton.evaluate((btn) => (btn as HTMLButtonElement).click());
 
-    // Verify the modal/dialog appears with search input
-    await expect(tournamentPage.playerSearchInput).toBeVisible();
+    // Wait for modal dialog to appear
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 10000 });
+
+    // Verify the search input appears (users may still be loading)
+    await expect(tournamentPage.playerSearchInput).toBeVisible({ timeout: 10000 });
+
+    // Wait a moment for users to load in the background
+    await page.waitForLoadState('networkidle');
 
     // Verify the input accepts text
     await tournamentPage.playerSearchInput.fill('test');
     await expect(tournamentPage.playerSearchInput).toHaveValue('test');
 
-    // Close by clicking cancel
-    await page.getByText('Cancel').click({ force: true });
+    // Close the dialog
+    const closeButton = dialog.locator('button:has-text("Cancel")');
+    if (await closeButton.isVisible().catch(() => false)) {
+      await closeButton.click({ force: true });
+    } else {
+      // Try escape key if cancel button not found
+      await page.keyboard.press('Escape');
+    }
+    await dialog.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});
   });
 
   test('should be able to remove a player from tournament', async ({

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
 import axios from '~/components/api/axios'; // Assuming axios is configured for your API
 import { useTournamentStore } from '~/store/tournamentStore';
@@ -10,6 +10,7 @@ import { getLogger } from '~/lib/logger';
 const log = getLogger('TournamentDetailPage');
 export const TournamentDetailPage: React.FC = () => {
   const { pk, '*': slug } = useParams<{ pk: string; '*': string }>();
+  const navigate = useNavigate();
   const tournament = useUserStore(useShallow((state) => state.tournament));
   const setTournament = useUserStore((state) => state.setTournament);
   const setLive = useTournamentStore((state) => state.setLive);
@@ -23,24 +24,43 @@ export const TournamentDetailPage: React.FC = () => {
 
   useEffect(() => {
     const parts = slug?.split('/') || [];
-    const tab = parts[0] || 'players';
-    const live = parts[1] === 'draft';
+    // Map legacy "games" URL to "bracket" tab
+    let tab = parts[0] || 'players';
+    if (tab === 'games') {
+      tab = 'bracket';
+    }
+    const isLive = parts[1] === 'draft';
     // Parse draftId from URL: /tournament/:pk/bracket/draft/:draftId
     const draftId = parts[1] === 'draft' && parts[2] ? parseInt(parts[2], 10) : null;
     // Parse matchId from URL: /tournament/:pk/bracket/match/:matchId
     const matchId = parts[1] === 'match' && parts[2] ? parts[2] : null;
 
+    // Redirect /tournament/:pk/bracket/draft/:draftId to /herodraft/:draftId
+    if (draftId && !Number.isNaN(draftId)) {
+      navigate(`/herodraft/${draftId}`, { replace: true });
+      return;
+    }
+
+    // Batch state updates using unstable_batchedUpdates pattern via setTimeout
+    // This prevents multiple rerenders from sequential state updates
     setActiveTab(tab);
-    setLive(live);
-    setAutoAdvance(live);
     setPendingDraftId(Number.isNaN(draftId) ? null : draftId);
     setPendingMatchId(matchId);
-  }, [slug, setActiveTab, setPendingDraftId, setPendingMatchId]);
+
+    // Only update live/autoAdvance if they actually changed
+    setLive(isLive);
+    if (isLive) {
+      setAutoAdvance(true);
+    }
+  }, [slug, setActiveTab, setLive, setAutoAdvance, setPendingDraftId, setPendingMatchId, navigate]);
   useEffect(() => {
     if (pk) {
       const fetchTournament = async () => {
         setLoading(true);
         setError(null);
+        // Clear stale tournament data immediately when pk changes
+        // This prevents showing old tournament data while loading
+        setTournament(null as unknown as typeof tournament);
         try {
           const response = await axios.get(`/tournaments/${pk}/`);
           setTournament(response.data);
@@ -55,8 +75,8 @@ export const TournamentDetailPage: React.FC = () => {
       };
       fetchTournament();
     }
-  }, [pk]);
-  useEffect(() => {}, [tournament.users]);
+  }, [pk, setTournament]);
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">

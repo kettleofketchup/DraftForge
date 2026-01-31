@@ -93,6 +93,20 @@ async def broadcast_tick(draft_id: int):
         except HeroDraft.DoesNotExist:
             return None
 
+        # Handle RESUMING state - broadcast countdown remaining
+        if draft.state == HeroDraftState.RESUMING:
+            now = timezone.now()
+            countdown_remaining_ms = 0
+            if draft.resuming_until:
+                remaining = (draft.resuming_until - now).total_seconds() * 1000
+                countdown_remaining_ms = max(0, int(remaining))
+
+            return {
+                "type": "herodraft.tick",
+                "draft_state": draft.state,
+                "countdown_remaining_ms": countdown_remaining_ms,
+            }
+
         if draft.state != HeroDraftState.DRAFTING:
             return None
 
@@ -163,12 +177,15 @@ async def check_timeout(draft_id: int):
     """Check if current round has timed out and auto-pick if needed."""
     from django.db import transaction
 
+    from app.broadcast import broadcast_herodraft_state
     from app.functions.herodraft import auto_random_pick
     from app.models import DraftTeam, HeroDraft, HeroDraftState
 
     @sync_to_async
     def check_and_auto_pick():
         # Use transaction with select_for_update to prevent race conditions
+        completed_round = None
+
         with transaction.atomic():
             try:
                 draft = HeroDraft.objects.select_for_update().get(id=draft_id)
@@ -201,11 +218,200 @@ async def check_timeout(draft_id: int):
                 log.info(
                     f"Timeout reached for draft {draft_id}, round {current_round.round_number}"
                 )
-                return auto_random_pick(draft, team)
+                completed_round = auto_random_pick(draft, team)
 
-            return None
+        # Broadcast AFTER transaction commits so clients see the updated state
+        # Use broadcast_herodraft_state to avoid creating duplicate events
+        # (submit_pick already creates the hero_selected event)
+        if completed_round:
+            try:
+                # Re-fetch draft to get committed state with prefetched relations
+                draft = HeroDraft.objects.prefetch_related(
+                    "draft_teams__tournament_team__captain",
+                    "draft_teams__tournament_team__members",
+                    "rounds",
+                ).get(id=draft_id)
+                broadcast_herodraft_state(draft, "hero_selected")
+                log.debug(f"Broadcast auto-pick state for draft {draft_id}")
+            except Exception as e:
+                log.error(f"Failed to broadcast auto-pick for draft {draft_id}: {e}")
+
+        return completed_round
 
     return await check_and_auto_pick()
+
+
+async def check_resume_countdown(draft_id: int):
+    """Check if RESUMING countdown is complete and transition to DRAFTING."""
+    from django.db import transaction
+
+    from app.broadcast import broadcast_herodraft_state
+    from app.models import HeroDraft, HeroDraftEvent, HeroDraftState
+
+    @sync_to_async
+    def check_and_resume():
+        transitioned = False
+
+        with transaction.atomic():
+            try:
+                draft = HeroDraft.objects.select_for_update().get(id=draft_id)
+            except HeroDraft.DoesNotExist:
+                return False
+
+            if draft.state != HeroDraftState.RESUMING:
+                return False
+
+            now = timezone.now()
+            if not draft.resuming_until or now < draft.resuming_until:
+                return False
+
+            # Countdown complete - transition to DRAFTING
+            draft.state = HeroDraftState.DRAFTING
+            draft.resuming_until = None
+            draft.save()
+            HeroDraftEvent.objects.create(
+                draft=draft,
+                event_type="draft_resumed",
+                metadata={},
+            )
+            log.info(f"HeroDraft {draft_id} resumed after countdown")
+            transitioned = True
+
+        # Broadcast AFTER transaction commits
+        if transitioned:
+            try:
+                draft = HeroDraft.objects.prefetch_related(
+                    "draft_teams__tournament_team__captain",
+                    "draft_teams__tournament_team__members",
+                    "rounds",
+                ).get(id=draft_id)
+                broadcast_herodraft_state(draft, "draft_resumed")
+                log.debug(f"Broadcast draft_resumed for draft {draft_id}")
+            except Exception as e:
+                log.error(
+                    f"Failed to broadcast draft_resumed for draft {draft_id}: {e}"
+                )
+
+        return transitioned
+
+    return await check_and_resume()
+
+
+# Heartbeat key pattern (must match consumers.py)
+CAPTAIN_HEARTBEAT_KEY = "herodraft:{draft_id}:captain:{user_id}:heartbeat"
+HEARTBEAT_STALE_SECONDS = (
+    9  # Consider stale if no heartbeat for 9 seconds (3 missed beats)
+)
+
+
+async def check_captain_heartbeats(draft_id: int):
+    """Check if any captain's heartbeat is stale and trigger disconnect if so."""
+    from django.db import transaction
+
+    from app.broadcast import broadcast_herodraft_state
+    from app.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
+
+    @sync_to_async
+    def check_and_handle_stale():
+        r = get_redis_client()
+        now = time.time()
+        stale_captain = None
+
+        try:
+            draft = HeroDraft.objects.prefetch_related(
+                "draft_teams__tournament_team__captain"
+            ).get(id=draft_id)
+        except HeroDraft.DoesNotExist:
+            return None
+
+        # Only check during DRAFTING (not PAUSED, RESUMING, etc.)
+        if draft.state != HeroDraftState.DRAFTING:
+            return None
+
+        # Check each captain's heartbeat
+        for draft_team in draft.draft_teams.all():
+            captain = draft_team.tournament_team.captain
+            if not captain:
+                continue
+
+            heartbeat_key = CAPTAIN_HEARTBEAT_KEY.format(
+                draft_id=draft_id, user_id=captain.id
+            )
+            last_heartbeat = r.get(heartbeat_key)
+
+            if last_heartbeat is None:
+                # No heartbeat recorded - captain may not have connected yet
+                # or heartbeat expired (30s TTL)
+                if draft_team.is_connected:
+                    log.warning(
+                        f"Captain {captain.username} has no heartbeat but marked connected - "
+                        f"treating as stale for draft {draft_id}"
+                    )
+                    stale_captain = (draft_team, captain)
+                    break
+            else:
+                heartbeat_age = now - float(last_heartbeat)
+                if heartbeat_age > HEARTBEAT_STALE_SECONDS:
+                    log.warning(
+                        f"Captain {captain.username} heartbeat stale ({heartbeat_age:.1f}s) "
+                        f"for draft {draft_id}"
+                    )
+                    stale_captain = (draft_team, captain)
+                    break
+
+        if not stale_captain:
+            return None
+
+        draft_team, captain = stale_captain
+
+        # Trigger disconnect handling
+        with transaction.atomic():
+            draft = HeroDraft.objects.select_for_update().get(id=draft_id)
+            if draft.state != HeroDraftState.DRAFTING:
+                return None
+
+            draft_team = DraftTeam.objects.select_for_update().get(id=draft_team.id)
+            draft_team.is_connected = False
+            draft_team.save()
+
+            draft.state = HeroDraftState.PAUSED
+            draft.paused_at = timezone.now()
+            draft.save()
+
+            HeroDraftEvent.objects.create(
+                draft=draft,
+                event_type="captain_disconnected",
+                draft_team=draft_team,
+                metadata={
+                    "user_id": captain.id,
+                    "username": captain.username,
+                    "reason": "heartbeat_stale",
+                },
+            )
+            HeroDraftEvent.objects.create(
+                draft=draft,
+                event_type="draft_paused",
+                draft_team=draft_team,
+                metadata={"reason": "heartbeat_stale"},
+            )
+            log.info(
+                f"HeroDraft {draft_id} paused: captain {captain.username} heartbeat stale"
+            )
+
+        # Broadcast after transaction commits
+        try:
+            draft = HeroDraft.objects.prefetch_related(
+                "draft_teams__tournament_team__captain",
+                "draft_teams__tournament_team__members",
+                "rounds",
+            ).get(id=draft_id)
+            broadcast_herodraft_state(draft, "draft_paused", draft_team=draft_team)
+        except Exception as e:
+            log.error(f"Failed to broadcast draft_paused for draft {draft_id}: {e}")
+
+        return captain.username
+
+    return await check_and_handle_stale()
 
 
 def should_continue_ticking(draft_id: int, r: redis.Redis) -> tuple[bool, str]:
@@ -222,10 +428,10 @@ def should_continue_ticking(draft_id: int, r: redis.Redis) -> tuple[bool, str]:
     if conn_count <= 0:
         return False, "no_connections"
 
-    # Check draft state
+    # Check draft state - allow DRAFTING and RESUMING (countdown before resume)
     try:
         draft = HeroDraft.objects.get(id=draft_id)
-        if draft.state != HeroDraftState.DRAFTING:
+        if draft.state not in (HeroDraftState.DRAFTING, HeroDraftState.RESUMING):
             return False, f"draft_state_{draft.state}"
     except HeroDraft.DoesNotExist:
         return False, "draft_not_found"
@@ -255,6 +461,10 @@ async def run_tick_loop(draft_id: int, stop_event: threading.Event):
             log.info(f"Stopping tick loop for draft {draft_id}: {reason}")
             break
 
+        # Check if RESUMING countdown is complete first
+        await check_resume_countdown(draft_id)
+        # Check for stale captain heartbeats (zombie connections)
+        await check_captain_heartbeats(draft_id)
         await broadcast_tick(draft_id)
         await check_timeout(draft_id)
         await extend_lock()

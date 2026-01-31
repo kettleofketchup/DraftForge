@@ -84,6 +84,7 @@ class TeamSerializerForTournament(serializers.ModelSerializer):
     dropin_members = TournamentUserSerializer(many=True, read_only=True)
     left_members = TournamentUserSerializer(many=True, read_only=True)
     captain = TournamentUserSerializer(many=False, read_only=True)
+    deputy_captain = TournamentUserSerializer(many=False, read_only=True)
     draft_order = serializers.IntegerField()
 
     class Meta:
@@ -95,6 +96,7 @@ class TeamSerializerForTournament(serializers.ModelSerializer):
             "dropin_members",
             "left_members",
             "captain",
+            "deputy_captain",
             "draft_order",
             "placement",
         )
@@ -116,6 +118,49 @@ class TournamentsSerializer(serializers.ModelSerializer):
             "state",
             "captains",
             "winner",
+        )
+
+
+class LeagueMinimalSerializer(serializers.ModelSerializer):
+    """Minimal league info for tournament list cards."""
+
+    organization_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = League
+        fields = ("pk", "name", "organization_name")
+
+    def get_organization_name(self, obj):
+        """Get the first organization name, if any."""
+        # Use prefetched data if available, otherwise query
+        orgs = getattr(obj, "_prefetched_objects_cache", {}).get("organizations")
+        if orgs is not None:
+            return orgs[0].name if orgs else None
+        first_org = obj.organizations.first()
+        return first_org.name if first_org else None
+
+
+class TournamentListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for tournament list page.
+
+    Only includes basic scalar fields and minimal league info.
+    No nested team/user data for fast performance.
+    """
+
+    league = LeagueMinimalSerializer(read_only=True)
+    user_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Tournament
+        fields = (
+            "pk",
+            "name",
+            "date_played",
+            "timezone",
+            "tournament_type",
+            "state",
+            "league",
+            "user_count",
         )
 
 
@@ -156,7 +201,9 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "description",
             "logo",
             "discord_link",
+            "discord_server_id",
             "rules_template",
+            "timezone",
             "owner",
             "owner_id",
             "admins",
@@ -242,6 +289,7 @@ class LeagueSerializer(serializers.ModelSerializer):
             "description",
             "rules",
             "prize_pool",
+            "timezone",
             "admins",
             "staff",
             "admin_ids",
@@ -326,13 +374,36 @@ class DraftRoundForDraftSerializer(serializers.ModelSerializer):
         )
 
 
+class TournamentSerializerForWebSocket(serializers.ModelSerializer):
+    """
+    Minimal tournament serializer for WebSocket broadcasts.
+    Includes teams with members for real-time state updates.
+    """
+
+    teams = TeamSerializerForTournament(many=True, read_only=True)
+
+    class Meta:
+        model = Tournament
+        fields = (
+            "pk",
+            "teams",
+        )
+
+
 class DraftSerializerForTournament(serializers.ModelSerializer):
+    """
+    Serializer for draft data used in WebSocket broadcasts.
+    Includes tournament.teams for real-time team updates.
+    """
 
     draft_rounds = DraftRoundForDraftSerializer(
         many=True,
         read_only=True,
     )
     users_remaining = TournamentUserSerializer(many=True, read_only=True)
+    # Include tournament with teams for WebSocket broadcasts
+    # This allows clients to update team state without additional API calls
+    tournament = TournamentSerializerForWebSocket(read_only=True)
 
     class Meta:
         model = Draft
@@ -342,6 +413,7 @@ class DraftSerializerForTournament(serializers.ModelSerializer):
             "users_remaining",
             "latest_round",
             "draft_style",
+            "tournament",
         )
 
 
@@ -512,6 +584,7 @@ class TeamSerializer(serializers.ModelSerializer):
         required=False,
     )
     captain = TournamentUserSerializer(many=False, read_only=True)
+    deputy_captain = TournamentUserSerializer(many=False, read_only=True)
 
     captain_id = serializers.PrimaryKeyRelatedField(
         source="captain",
@@ -519,6 +592,15 @@ class TeamSerializer(serializers.ModelSerializer):
         queryset=CustomUser.objects.all(),
         write_only=True,
         required=False,
+        allow_null=True,
+    )
+    deputy_captain_id = serializers.PrimaryKeyRelatedField(
+        source="deputy_captain",
+        many=False,
+        queryset=CustomUser.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
     )
     total_mmr = serializers.SerializerMethodField()
 
@@ -549,10 +631,12 @@ class TeamSerializer(serializers.ModelSerializer):
             "left_members",
             "left_member_ids",
             "captain",
-            "captain_id",  # Allow setting captain by ID
-            "member_ids",  # Allow setting member IDs
-            "dropin_member_ids",  # Allow setting drop-in member IDs
-            "tournament_id",  # Allow setting tournament by ID
+            "captain_id",
+            "deputy_captain",
+            "deputy_captain_id",
+            "member_ids",
+            "dropin_member_ids",
+            "tournament_id",
             "members",
             "dropin_members",
             "draft_order",
@@ -608,6 +692,33 @@ class TournamentSerializer(serializers.ModelSerializer):
             "league",
             "league_id_write",
         )
+
+    def update(self, instance, validated_data):
+        """
+        Override update to handle captain removal when users are removed.
+        If a user is removed from the tournament and they are a captain,
+        delete their team.
+        """
+        # Check if users are being updated
+        if "users" in validated_data:
+            new_users = set(validated_data["users"])
+            current_users = set(instance.users.all())
+            removed_users = current_users - new_users
+
+            # For each removed user, check if they're a captain and remove their team
+            if removed_users:
+                for user in removed_users:
+                    # Find teams where this user is captain in this tournament
+                    captain_teams = Team.objects.filter(
+                        tournament=instance, captain=user
+                    )
+                    if captain_teams.exists():
+                        log.info(
+                            f"Removing captain {user.username}'s team(s) from tournament {instance.name}"
+                        )
+                        captain_teams.delete()
+
+        return super().update(instance, validated_data)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -863,12 +974,6 @@ class LeagueMatchSerializer(serializers.ModelSerializer):
         ]
 
 
-class HeroDraftEventSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = HeroDraftEvent
-        fields = ["id", "event_type", "draft_team", "metadata", "created_at"]
-
-
 class HeroDraftRoundSerializerFull(serializers.ModelSerializer):
     """Full serializer for HeroDraftRound with all fields."""
 
@@ -921,6 +1026,16 @@ class DraftTeamSerializerFull(serializers.ModelSerializer):
         ]
 
 
+class HeroDraftEventSerializer(serializers.ModelSerializer):
+    """Serializer for HeroDraft events with full captain info for toasts."""
+
+    draft_team = DraftTeamSerializerFull(read_only=True)
+
+    class Meta:
+        model = HeroDraftEvent
+        fields = ["id", "event_type", "draft_team", "metadata", "created_at"]
+
+
 class HeroDraftSerializer(serializers.ModelSerializer):
     """Full serializer for HeroDraft with nested relations."""
 
@@ -929,6 +1044,7 @@ class HeroDraftSerializer(serializers.ModelSerializer):
     rounds = HeroDraftRoundSerializerFull(many=True, read_only=True)
     roll_winner = DraftTeamSerializerFull(read_only=True)
     current_round = serializers.SerializerMethodField()
+    tournament_id = serializers.SerializerMethodField()
 
     class Meta:
         model = HeroDraft
@@ -936,11 +1052,13 @@ class HeroDraftSerializer(serializers.ModelSerializer):
             "pk",
             "id",
             "game",
+            "tournament_id",
             "state",
             "roll_winner",
             "draft_teams",
             "rounds",
             "current_round",
+            "is_manual_pause",
             "created_at",
             "updated_at",
         ]
@@ -950,6 +1068,11 @@ class HeroDraftSerializer(serializers.ModelSerializer):
         if active_round:
             # Return index (0-based) into rounds array for frontend compatibility
             return active_round.round_number - 1
+        return None
+
+    def get_tournament_id(self, obj):
+        if obj.game and obj.game.tournament:
+            return obj.game.tournament.id
         return None
 
 

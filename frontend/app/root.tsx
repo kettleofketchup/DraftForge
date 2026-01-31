@@ -8,6 +8,7 @@ import {
   Scripts,
   ScrollRestoration,
 } from 'react-router';
+import { ScrollArea } from '~/components/ui/scroll-area';
 import { Toaster } from '~/components/ui/sonner';
 import { SharedPopoverProvider } from '~/components/ui/shared-popover-context';
 import { SharedPopoverRenderer } from '~/components/ui/shared-popover-renderer';
@@ -15,8 +16,8 @@ import { TooltipProvider } from '~/components/ui/tooltip';
 import { getLogger } from '~/lib/logger';
 import type { Route } from './+types/root';
 import './app.css';
-import { ActiveDraftBanner } from './components/draft/ActiveDraftBanner';
-import { FloatingDraftIndicator } from './components/draft/FloatingDraftIndicator';
+import { ActiveDraftBanner } from './components/teamdraft/ActiveDraftBanner';
+import { FloatingDraftIndicator } from './components/teamdraft/FloatingDraftIndicator';
 import ResponsiveAppBar from './components/navbar/navbar';
 
 ('use client');
@@ -44,12 +45,17 @@ export function DevScripts() {
       process.env.NODE_ENV,
     );
 
-    if (process.env.NODE_ENV === 'dev' || process.env.NODE_ENV === 'test') {
+    // Skip react-scan during Playwright tests or when explicitly disabled
+    // Playwright tests inject window.playwright = true via addInitScript
+    const isPlaywright = typeof window !== 'undefined' && 'playwright' in window;
+    const disableReactScan = import.meta.env.VITE_DISABLE_REACT_SCAN === 'true';
+
+    if (import.meta.env.DEV && !isPlaywright && !disableReactScan) {
       import('react-scan').then((module) => {
         module.scan({
-          enabled: import.meta.env.DEV === true,
-          trackUnnecessaryRenders: import.meta.env.DEV === true,
-          showToolbar: import.meta.env.DEV === true,
+          enabled: true,
+          trackUnnecessaryRenders: true,
+          showToolbar: true,
         });
       });
     }
@@ -82,9 +88,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div className="flex flex-col w-screen h-screen justify-between">
               <ResponsiveAppBar />
               <ActiveDraftBanner />
-              <div id="outlet_root" className="flex-grow overflow-x-hidden">
+              <ScrollArea id="outlet_root" className="flex-grow h-0">
                 {children}
-              </div>
+              </ScrollArea>
             </div>
             <Toaster richColors closeButton position="top-center" />
             <FloatingDraftIndicator />

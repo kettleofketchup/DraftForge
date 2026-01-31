@@ -80,13 +80,6 @@ inv test.setup
 inv test.playwright.headless  # or inv test.playwright.headed
 ```
 
-### Full Test Setup (with Cypress - Legacy)
-```bash
-source .venv/bin/activate
-inv test.setup
-inv test.open  # or inv test.headless
-```
-
 ## Docker Compose Architecture
 
 ### Services
@@ -206,18 +199,13 @@ inv update.all         # Update everything (git, deps, images)
 inv version.set 1.2.3  # Set version
 inv version.tag        # Tag and bump version
 
-# Tests (Playwright - Recommended)
+# Tests (Playwright)
 inv test.playwright.install    # Install Playwright browsers
 inv test.playwright.headless   # Run all tests headless
 inv test.playwright.headed     # Run all tests headed
 inv test.playwright.ui         # Open Playwright UI mode
 inv test.playwright.debug      # Debug mode with inspector
-inv test.playwright.spec --file <path>  # Run specific test file
-
-# Tests (Cypress - Legacy)
-inv test.setup         # Full test setup
-inv test.open          # Cypress interactive
-inv test.headless      # Cypress headless
+inv test.playwright.spec --spec <pattern>  # Run tests matching pattern
 ```
 
 Run `inv --list` for all available tasks.
@@ -308,8 +296,6 @@ inv test.playwright.league        # League tests only
 inv test.playwright.herodraft     # HeroDraft tests only
 ```
 
-**Frontend E2E (Cypress - Legacy)**: Cypress tests in `frontend/tests/cypress/`
-
 ## Documentation
 
 Project documentation uses MkDocs Material:
@@ -382,3 +368,31 @@ poetry run inv test.run --cmd 'python manage.py test app.tests -v 2'
 
 - `inv-runner` - Python Invoke task automation (backend tests via Docker, environment management)
 - `visual-debugging` - Chrome MCP browser automation for debugging
+
+## Demo Video Recording
+
+**IMPORTANT**: Always use `inv demo.*` commands to record demo videos (or `inv test.demo.*` when in test environment).
+
+After editing UI components in `frontend/app/components/herodraft/`, `draft/`, or `bracket/`, run the appropriate demo recording command:
+
+```bash
+source .venv/bin/activate
+
+# Record all demos
+inv demo.all
+
+# Individual demos
+inv demo.snake         # Snake draft demo
+inv demo.shuffle       # Shuffle draft demo
+inv demo.herodraft     # HeroDraft with bracket demo
+inv demo.snapshots     # Site screenshots
+
+# Post-processing
+inv demo.trim          # Trim initial white screen
+inv demo.gifs          # Convert videos to GIFs
+
+# Quick workflow (record + GIFs)
+inv demo.quick
+```
+
+See [docs/ai/demo/](docs/ai/demo/index.md) for full guidelines.

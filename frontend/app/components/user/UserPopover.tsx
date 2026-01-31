@@ -5,11 +5,14 @@ import {
 } from "~/components/ui/hover-card";
 import { useUserLeagueStats } from "~/features/leaderboard/queries";
 import { LeagueStatsCard } from "./LeagueStatsCard";
+import { UserAvatar } from "./UserAvatar";
 
 interface UserPopoverProps {
   userId: number;
   username: string;
   avatar?: string | null;
+  /** Discord ID for proper avatar URL construction */
+  discordId?: string | null;
   children?: React.ReactNode;
 }
 
@@ -17,6 +20,7 @@ export function UserPopover({
   userId,
   username,
   avatar,
+  discordId,
   children,
 }: UserPopoverProps) {
   const { data: stats, isLoading } = useUserLeagueStats(userId);
@@ -31,13 +35,10 @@ export function UserPopover({
       <HoverCardContent className="w-64 border-gray-700 bg-gray-800">
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            {avatar && (
-              <img
-                src={`https://cdn.discordapp.com/avatars/${userId}/${avatar}.png`}
-                alt={username}
-                className="h-10 w-10 rounded-full"
-              />
-            )}
+            <UserAvatar
+              user={{ username, avatar, discordId }}
+              size="lg"
+            />
             <div className="font-semibold text-white">{username}</div>
           </div>
           {isLoading ? (

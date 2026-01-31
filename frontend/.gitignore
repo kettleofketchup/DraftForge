@@ -1,4 +1,6 @@
 # Logs
+docs/assets
+demo-results
 test-results
 playwright-report
 logs

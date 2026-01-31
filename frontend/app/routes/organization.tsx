@@ -1,4 +1,39 @@
+import { generateMeta } from '~/lib/seo';
+import { fetchOrganization } from '~/components/api/api';
 import { Building2, ExternalLink, Pencil, Plus } from 'lucide-react';
+import type { Route } from './+types/organization';
+
+export async function loader({ params }: Route.LoaderArgs) {
+  const pk = params.organizationId ? parseInt(params.organizationId, 10) : null;
+  if (!pk) return { organization: null };
+
+  try {
+    const organization = await fetchOrganization(pk);
+    return { organization };
+  } catch {
+    return { organization: null };
+  }
+}
+
+export function meta({ data }: Route.MetaArgs) {
+  const org = data?.organization;
+
+  if (org?.name) {
+    const desc = org.description
+      ? org.description.slice(0, 150)
+      : `${org.name} - Dota 2 tournament organization`;
+    return generateMeta({
+      title: org.name,
+      description: desc,
+      url: `/organizations/${org.pk}`,
+    });
+  }
+
+  return generateMeta({
+    title: 'Organization',
+    description: 'Organization profile and events',
+  });
+}
 import { useState } from 'react';
 import { useParams } from 'react-router';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
@@ -50,111 +85,111 @@ export default function OrganizationDetailPage() {
 
   return (
     <div className="container mx-auto p-4">
-      {/* Organization Header */}
-      <div className="card bg-base-200 shadow-lg mb-8">
-        <div className="card-body">
-          <div className="flex flex-col md:flex-row gap-6">
-            {/* Organization Logo */}
-            <div className="flex-shrink-0">
-              {organization.logo ? (
-                <img
-                  src={organization.logo}
-                  alt={organization.name}
-                  className="w-32 h-32 rounded-xl object-cover shadow-md"
-                />
-              ) : (
-                <div className="w-32 h-32 rounded-xl bg-base-300 flex items-center justify-center shadow-md">
-                  <Building2 className="w-16 h-16 text-muted-foreground" />
-                </div>
-              )}
-            </div>
-
-            {/* Organization Info */}
-            <div className="flex-1">
-              <div className="flex items-start justify-between mb-2">
-                <h1 className="text-3xl font-bold">{organization.name}</h1>
-                {isOrgAdmin && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditOrgOpen(true)}
-                  >
-                    <Pencil className="w-4 h-4 mr-2" />
-                    Edit
-                  </Button>
+        {/* Organization Header */}
+        <div className="card bg-base-200 shadow-lg mb-8">
+          <div className="card-body">
+            <div className="flex flex-col md:flex-row gap-6">
+              {/* Organization Logo */}
+              <div className="flex-shrink-0">
+                {organization.logo ? (
+                  <img
+                    src={organization.logo}
+                    alt={organization.name}
+                    className="w-32 h-32 rounded-xl object-cover shadow-md"
+                  />
+                ) : (
+                  <div className="w-32 h-32 rounded-xl bg-base-300 flex items-center justify-center shadow-md">
+                    <Building2 className="w-16 h-16 text-muted-foreground" />
+                  </div>
                 )}
               </div>
 
-              {/* Discord Link */}
-              {organization.discord_link && (
-                <a
-                  href={organization.discord_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 transition-colors mb-4"
-                >
-                  <DiscordIcon className="w-5 h-5" />
-                  <span>Join our Discord</span>
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              )}
-
-              {/* Description */}
-              {organization.description && (
-                <div className="prose prose-sm max-w-none">
-                  <p className="text-base-content/80 whitespace-pre-wrap">
-                    {organization.description}
-                  </p>
+              {/* Organization Info */}
+              <div className="flex-1">
+                <div className="flex items-start justify-between mb-2">
+                  <h1 className="text-3xl font-bold">{organization.name}</h1>
+                  {isOrgAdmin && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditOrgOpen(true)}
+                    >
+                      <Pencil className="w-4 h-4 mr-2" />
+                      Edit
+                    </Button>
+                  )}
                 </div>
-              )}
+
+                {/* Discord Link */}
+                {organization.discord_link && (
+                  <a
+                    href={organization.discord_link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 transition-colors mb-4"
+                  >
+                    <DiscordIcon className="w-5 h-5" />
+                    <span>Join our Discord</span>
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
+
+                {/* Description */}
+                {organization.description && (
+                  <div className="prose prose-sm max-w-none">
+                    <p className="text-base-content/80 whitespace-pre-wrap">
+                      {organization.description}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Leagues Section */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">Leagues</h2>
-        {isOrgAdmin && (
-          <Button onClick={() => setCreateLeagueOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Create League
-          </Button>
+        {/* Leagues Section */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">Leagues</h2>
+          {isOrgAdmin && (
+            <Button onClick={() => setCreateLeagueOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" />
+              Create League
+            </Button>
+          )}
+        </div>
+
+        {leaguesLoading ? (
+          <div className="text-center py-8 text-muted-foreground">
+            Loading leagues...
+          </div>
+        ) : leagues.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            No leagues found
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {leagues.map((league) => (
+              <LeagueCard key={league.pk} league={league} />
+            ))}
+          </div>
         )}
-      </div>
 
-      {leaguesLoading ? (
-        <div className="text-center py-8 text-muted-foreground">
-          Loading leagues...
-        </div>
-      ) : leagues.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          No leagues found
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {leagues.map((league) => (
-            <LeagueCard key={league.pk} league={league} />
-          ))}
-        </div>
-      )}
+        {pk && (
+          <CreateLeagueModal
+            open={createLeagueOpen}
+            onOpenChange={setCreateLeagueOpen}
+            organizationId={pk}
+          />
+        )}
 
-      {pk && (
-        <CreateLeagueModal
-          open={createLeagueOpen}
-          onOpenChange={setCreateLeagueOpen}
-          organizationId={pk}
-        />
-      )}
-
-      {organization && (
-        <EditOrganizationModal
-          open={editOrgOpen}
-          onOpenChange={setEditOrgOpen}
-          organization={organization}
-          onSuccess={refetch}
-        />
-      )}
+        {organization && (
+          <EditOrganizationModal
+            open={editOrgOpen}
+            onOpenChange={setEditOrgOpen}
+            organization={organization}
+            onSuccess={refetch}
+          />
+        )}
     </div>
   );
 }

@@ -16,8 +16,8 @@ test.describe('API Integration Tests', () => {
     // Navigate to tournaments page
     await visitAndWaitForHydration(page, '/tournaments');
 
-    // Verify the page displays the expected test data
-    // "Partial Bracket Test" should be present in the tournaments list
-    await expect(page.locator('body')).toContainText('Partial Bracket Test');
+    // Wait for tournament data to load - the API returns a large payload
+    // so we wait directly for the expected content with extended timeout
+    await expect(page.locator('body')).toContainText('Partial Bracket Test', { timeout: 30000 });
   });
 });

@@ -1,6 +1,8 @@
 import { test as base, expect, BrowserContext, Page } from '@playwright/test';
 
-const API_URL = 'https://localhost/api';
+// Use nginx hostname inside Docker containers, localhost for local runs
+export const DOCKER_HOST = process.env.DOCKER_HOST || 'nginx';
+export const API_URL = `https://${DOCKER_HOST}/api`;
 
 /**
  * Authentication utilities for Playwright tests.
@@ -73,15 +75,46 @@ export async function loginAsDiscordId(
 }
 
 /**
- * Login as admin user.
+ * Login as admin user via context.request.
+ * Note: Playwright's context.request automatically handles Set-Cookie headers.
+ *
+ * IMPORTANT: For cookies to work with page XHR requests, you should:
+ * 1. Create a page first
+ * 2. Navigate to a URL on the target domain
+ * 3. Then call loginAdminFromPage() instead
+ *
+ * This function is kept for API-only tests where page XHR is not needed.
  */
 export async function loginAdmin(context: BrowserContext): Promise<void> {
   const response = await context.request.post(`${API_URL}/tests/login-admin/`);
   expect(response.ok()).toBeTruthy();
+  // Playwright automatically stores cookies from response - no manual handling needed
+}
 
-  const cookies = response.headers()['set-cookie'];
-  if (cookies) {
-    await setSessionCookies(context, cookies);
+/**
+ * Login as admin user from within a page context.
+ * This ensures cookies are properly set in the browser's native cookie jar.
+ * Use this when you need to make authenticated XHR requests from the page.
+ */
+export async function loginAdminFromPage(page: Page): Promise<void> {
+  // Navigate to a page on the target domain first to establish origin
+  const currentUrl = page.url();
+  if (!currentUrl.includes(DOCKER_HOST)) {
+    await page.goto(`https://${DOCKER_HOST}/`);
+    await page.waitForLoadState('domcontentloaded');
+  }
+
+  // Make login request from within the page so browser handles cookies natively
+  const result = await page.evaluate(async (apiUrl: string) => {
+    const response = await fetch(`${apiUrl}/tests/login-admin/`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    return { ok: response.ok, status: response.status };
+  }, API_URL);
+
+  if (!result.ok) {
+    throw new Error(`Login failed with status ${result.status}`);
   }
 }
 
@@ -121,6 +154,9 @@ async function setSessionCookies(
   // Parse multiple cookies from header
   const cookieStrings = cookieHeader.split(/,(?=\s*\w+=)/);
 
+  // Use URL instead of domain/path for more reliable cookie setting
+  const cookieUrl = `https://${DOCKER_HOST}/`;
+
   for (const cookieStr of cookieStrings) {
     const [nameValue] = cookieStr.split(';');
     const [name, value] = nameValue.split('=');
@@ -130,11 +166,10 @@ async function setSessionCookies(
         {
           name: name.trim(),
           value: value.trim(),
-          domain: 'localhost',
-          path: '/',
-          secure: true,
+          url: cookieUrl,  // Use URL instead of domain/path
           httpOnly: name.trim() === 'sessionid',
-          sameSite: 'Lax',
+          // Note: sameSite defaults to 'Lax' when not specified
+          // For same-origin requests, Lax should work
         },
       ]);
     }
@@ -179,6 +214,15 @@ export const test = base.extend<{
   waitForHydration: () => Promise<void>;
   visitAndWait: (url: string) => Promise<void>;
 }>({
+  // Override context to inject playwright marker (disables react-scan)
+  context: async ({ context }, use) => {
+    // Add init script that runs before any page content loads
+    // This sets window.playwright = true which react-scan checks
+    await context.addInitScript(() => {
+      (window as Window & { playwright?: boolean }).playwright = true;
+    });
+    await use(context);
+  },
   loginAsUser: async ({ context }, use) => {
     await use((userPk: number) => loginAsUser(context, userPk));
   },

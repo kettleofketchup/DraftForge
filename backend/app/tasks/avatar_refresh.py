@@ -3,10 +3,16 @@
 import logging
 
 from celery import shared_task
+from django.conf import settings
 from django.contrib.auth import get_user_model
 
 log = logging.getLogger(__name__)
 User = get_user_model()
+
+
+def _is_test_environment():
+    """Check if running in test environment (skip Discord API calls)."""
+    return getattr(settings, "TEST", False) and settings.DEBUG
 
 
 @shared_task
@@ -23,6 +29,11 @@ def refresh_discord_avatars(batch_size: int = 100):
     Returns:
         dict: Summary of results
     """
+    # Skip in test environment to avoid Discord API rate limits
+    if _is_test_environment():
+        log.info("Skipping Discord avatar refresh in test environment")
+        return {"checked": 0, "updated": 0, "failed": 0, "skipped": True}
+
     from app.utils.avatar_utils import refresh_invalid_avatars
 
     log.info(f"Starting Discord avatar refresh (batch_size={batch_size})")
@@ -50,6 +61,11 @@ def refresh_single_user_avatar(user_id: int):
     Returns:
         dict: Result of the operation
     """
+    # Skip in test environment to avoid Discord API rate limits
+    if _is_test_environment():
+        log.debug(f"Skipping avatar refresh for user {user_id} in test environment")
+        return {"updated": False, "skipped": True}
+
     from app.utils.avatar_utils import refresh_user_avatar
 
     log.debug(f"Refreshing avatar for user {user_id}")
@@ -72,6 +88,11 @@ def refresh_all_discord_data():
     Returns:
         dict: Summary of results
     """
+    # Skip in test environment to avoid Discord API rate limits
+    if _is_test_environment():
+        log.info("Skipping full Discord data refresh in test environment")
+        return {"checked": 0, "updated": 0, "failed": 0, "skipped": True}
+
     total_checked = 0
     total_updated = 0
     total_failed = 0
@@ -95,15 +116,12 @@ def refresh_all_discord_data():
         for user in users:
             try:
                 total_checked += 1
-                old_avatar = user.avatar
 
-                # get_avatar_url() checks and updates the avatar
-                new_url = user.get_avatar_url(force_refresh=True)
+                # check_and_update_avatar() checks and updates the avatar
+                updated = user.check_and_update_avatar()
 
-                if new_url and old_avatar != user.avatar:
+                if updated:
                     total_updated += 1
-                elif not new_url:
-                    total_failed += 1
 
             except Exception as e:
                 total_failed += 1

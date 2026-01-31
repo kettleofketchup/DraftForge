@@ -8,13 +8,24 @@ import {
   DialogTitle,
   DialogDescription,
 } from '~/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '~/components/ui/alert-dialog';
 import { Button } from '~/components/ui/button';
 import { Badge } from '~/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { BarChart3, Link2, Loader2, Swords } from 'lucide-react';
+import { BarChart3, Link2, Loader2, RotateCcw, Swords, UserLock } from 'lucide-react';
 import { useUserStore } from '~/store/userStore';
+import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { useBracketStore } from '~/store/bracketStore';
-import { useCreateHeroDraft } from '~/hooks/useHeroDraft';
+import { useCreateHeroDraft, useResetHeroDraft } from '~/hooks/useHeroDraft';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import { LinkSteamMatchModal } from './LinkSteamMatchModal';
 import type { BracketMatch } from '../types';
@@ -33,12 +44,15 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
   const isStaff = useUserStore((state) => state.isStaff());
+  const currentUser = useUserStore((state) => state.currentUser);
   const tournament = useUserStore((state) => state.tournament);
   const { setMatchWinner, advanceWinner, loadBracket } = useBracketStore();
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const createDraftMutation = useCreateHeroDraft();
+  const resetDraftMutation = useResetHeroDraft();
 
   if (!match) return null;
 
@@ -53,6 +67,19 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
   const handleLinkUpdated = () => {
     if (tournament?.pk) {
       loadBracket(tournament.pk);
+    }
+  };
+
+  const handleResetDraft = async () => {
+    if (!match.herodraft_id) return;
+
+    try {
+      await resetDraftMutation.mutateAsync(match.herodraft_id);
+      toast.success('Draft reset successfully');
+      setShowResetConfirm(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast.error(`Failed to reset draft: ${message}`);
     }
   };
 
@@ -71,8 +98,15 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
       draftIdToOpen = match.herodraft_id;
     } else if (match.gameId) {
       // Create new draft (backend is idempotent - returns existing if race condition)
+      // Pass team IDs so backend can assign them if not already set
       try {
-        const draft = await createDraftMutation.mutateAsync(match.gameId);
+        const draft = await createDraftMutation.mutateAsync({
+          gameId: match.gameId,
+          options: {
+            radiantTeamId: match.radiantTeam?.pk,
+            direTeamId: match.direTeam?.pk,
+          },
+        });
         draftIdToOpen = draft.id;
         toast.success('Draft created!');
 
@@ -90,9 +124,8 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
       return;
     }
 
-    // Navigate and open the draft modal
-    navigate(`/tournament/${pk}/bracket/draft/${draftIdToOpen}`, { replace: true });
-    onOpenHeroDraft(draftIdToOpen);
+    // Navigate directly to the herodraft page
+    navigate(`/herodraft/${draftIdToOpen}`);
   };
 
   return (
@@ -163,25 +196,68 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
             </div>
           )}
 
-          {/* Hero Draft button - show for staff or if both teams are set */}
-          {match.radiantTeam && match.direTeam && (
-            <div className="border-t pt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleOpenDraft}
-                disabled={createDraftMutation.isPending}
-                data-testid="view-draft-btn"
-              >
-                {createDraftMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                ) : (
-                  <Swords className="w-4 h-4 mr-1" />
-                )}
-                {match.herodraft_id ? 'View Draft' : 'Start Draft'}
-              </Button>
-            </div>
-          )}
+          {/* Hero Draft button - show for staff or captains */}
+          {match.radiantTeam && match.direTeam && (() => {
+            // Check if user is a captain of either team in this match
+            const isCaptain =
+              match.radiantTeam?.captain?.pk === currentUser?.pk ||
+              match.direTeam?.captain?.pk === currentUser?.pk;
+
+            // User can access draft if: staff OR captain
+            const canAccessDraft = isStaff || isCaptain;
+
+            // If draft exists, anyone can view it
+            // If draft doesn't exist, only staff/captain can start it
+            const canStartOrViewDraft = match.herodraft_id || canAccessDraft;
+
+            if (!canStartOrViewDraft) {
+              return (
+                <div className="border-t pt-4">
+                  <AdminOnlyButton
+                    buttonTxt="Start Draft"
+                    tooltipTxt="You must be a staff member or captain to start a draft."
+                  />
+                </div>
+              );
+            }
+
+            return (
+              <div className="border-t pt-4">
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenDraft}
+                    disabled={createDraftMutation.isPending}
+                    data-testid="view-draft-btn"
+                  >
+                    {createDraftMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                    ) : (
+                      <Swords className="w-4 h-4 mr-1" />
+                    )}
+                    {match.herodraft_id ? 'View Draft' : 'Start Draft'}
+                  </Button>
+                  {isStaff && match.herodraft_id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowResetConfirm(true)}
+                      disabled={resetDraftMutation.isPending}
+                      data-testid="reset-draft-btn"
+                    >
+                      {resetDraftMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <RotateCcw className="w-4 h-4 mr-1" />
+                      )}
+                      Restart Draft
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Steam match info and Stats button */}
           {hasMatchId && (
@@ -236,6 +312,28 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
           game={match}
           onLinkUpdated={handleLinkUpdated}
         />
+
+        {/* Reset Draft Confirmation Dialog */}
+        <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reset Hero Draft?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will reset the draft to its initial state. All picks, bans, and roll results
+                will be cleared. Both captains will need to ready up again.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleResetDraft}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Reset Draft
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );

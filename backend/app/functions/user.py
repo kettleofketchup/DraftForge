@@ -89,7 +89,20 @@ def profile_update(request):
             setattr(posObj, field, value)
         user.positions = posObj
     if steamid is not None:
-        user.steamid = steamid
+        # Normalize Steam ID to 64-bit format
+        # Steam uses two formats:
+        # - 64-bit (Friend ID): e.g., 76561198012345678
+        # - 32-bit (Account ID): e.g., 52079950
+        # Convert 32-bit to 64-bit if needed
+        try:
+            steamid_int = int(steamid)
+            STEAM_ID_64_BASE = 76561197960265728
+            if steamid_int < STEAM_ID_64_BASE:
+                # This is a 32-bit account ID, convert to 64-bit
+                steamid_int = steamid_int + STEAM_ID_64_BASE
+            user.steamid = steamid_int
+        except (ValueError, TypeError):
+            return Response({"error": "Invalid Steam ID format"}, status=400)
     if nickname is not None:
         user.nickname = nickname
     log.debug(f"{positions}, {steamid}, {nickname}")

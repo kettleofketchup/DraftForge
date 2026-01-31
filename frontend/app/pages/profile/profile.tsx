@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { UpdateProfile } from '~/components/api/api';
-import { Button } from '~/components/ui/button';
+import { SubmitButton } from '~/components/ui/buttons';
 import {
   Form,
   FormControl,
@@ -92,61 +92,61 @@ export const ProfilePage: React.FC = () => {
 
   return (
     <div className="container px-1 sm:mx-auto sm:p-4">
-      <div className="flex flex-col  gap-4">
-        <div className="flex flex-col  sm:flex-row w-90 justify-center text-center align-center w-full">
-          <h1 className="text-title text-pretty text-center">
-            {currentUser.username}
-          </h1>
-        </div>
+        <div className="flex flex-col  gap-4">
+          <div className="flex flex-col  sm:flex-row w-90 justify-center text-center align-center w-full">
+            <h1 className="text-title text-pretty text-center">
+              {currentUser.username}
+            </h1>
+          </div>
 
-        <div className="flex-1 w-full justify-center align-center self-center ">
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="">
-              <PositionForm form={form} />
+          <div className="flex-1 w-full justify-center align-center self-center ">
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="">
+                <PositionForm form={form} />
 
-              <FormField
-                control={form.control}
-                name="steamid"
-                rules={{
-                  validate: (value) => {
-                    if (currentUser?.steamid && !value) {
-                      return 'Steam ID cannot be cleared once set';
-                    }
-                    return true;
-                  },
-                }}
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Steam ID</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        placeholder="Enter your Steam ID"
-                        {...field}
-                        value={field.value ?? ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          field.onChange(val ? parseInt(val, 10) : null);
-                        }}
-                      />
-                    </FormControl>
-                    {currentUser?.steamid && (
-                      <FormDescription>
-                        Steam ID cannot be removed once set
-                      </FormDescription>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                <FormField
+                  control={form.control}
+                  name="steamid"
+                  rules={{
+                    validate: (value) => {
+                      if (currentUser?.steamid && !value) {
+                        return 'Steam ID cannot be cleared once set';
+                      }
+                      return true;
+                    },
+                  }}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Steam ID</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="Enter your Steam ID"
+                          {...field}
+                          value={field.value ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            field.onChange(val ? parseInt(val, 10) : null);
+                          }}
+                        />
+                      </FormControl>
+                      {currentUser?.steamid && (
+                        <FormDescription>
+                          Steam ID cannot be removed once set
+                        </FormDescription>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <div className="flex justify-center align-center self-center">
-                <Button type="submit">Submit</Button>
-              </div>
-            </form>
-          </Form>
+                <div className="flex justify-center align-center self-center">
+                  <SubmitButton>Submit</SubmitButton>
+                </div>
+              </form>
+            </Form>
+          </div>
         </div>
       </div>
-    </div>
   );
 };

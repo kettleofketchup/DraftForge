@@ -1,6 +1,8 @@
 """Tests for HeroDraft WebSocket consumer."""
 
+import asyncio
 import json
+from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from asgiref.sync import sync_to_async
@@ -10,9 +12,18 @@ from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
 from django.test import TestCase, TransactionTestCase
 from django.urls import re_path
+from django.utils import timezone
 
 from app.consumers import HeroDraftConsumer
-from app.models import DraftTeam, Game, HeroDraft, Team, Tournament
+from app.models import (
+    DraftTeam,
+    Game,
+    HeroDraft,
+    HeroDraftRound,
+    HeroDraftState,
+    Team,
+    Tournament,
+)
 
 User = get_user_model()
 
@@ -39,7 +50,7 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         # Create tournament and teams
         self.tournament = Tournament.objects.create(
             name="Test Tournament",
-            owner=self.captain1,
+            date_played=date.today(),
         )
         self.team1 = Team.objects.create(
             tournament=self.tournament,
@@ -319,3 +330,140 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         self.assertEqual(response["team_b_id"], self.draft_team2.id)
 
         await communicator.disconnect()
+
+    async def test_pause_resume_timing_adjustment(self):
+        """Test that pause/resume adjusts round started_at correctly."""
+        # Set up draft in drafting state with both captains connected
+        original_started_at = timezone.now() - timedelta(seconds=10)
+
+        @database_sync_to_async
+        def setup_drafting_state():
+            self.draft.state = HeroDraftState.DRAFTING
+            self.draft.save()
+            self.draft_team1.is_connected = True
+            self.draft_team1.save()
+            self.draft_team2.is_connected = True
+            self.draft_team2.save()
+            # Create an active round with started_at 10 seconds ago
+            return HeroDraftRound.objects.create(
+                draft=self.draft,
+                draft_team=self.draft_team1,
+                round_number=1,
+                action_type="ban",
+                state="active",
+                started_at=original_started_at,
+            )
+
+        active_round = await setup_drafting_state()
+
+        # Connect captain1
+        captain1_communicator = WebsocketCommunicator(
+            self.get_application(),
+            f"/api/herodraft/{self.draft.id}/",
+        )
+        captain1_communicator.scope["user"] = self.captain1
+        connected, _ = await captain1_communicator.connect()
+        self.assertTrue(connected)
+        await captain1_communicator.receive_json_from()  # initial state
+
+        # Connect captain2
+        captain2_communicator = WebsocketCommunicator(
+            self.get_application(),
+            f"/api/herodraft/{self.draft.id}/",
+        )
+        captain2_communicator.scope["user"] = self.captain2
+        connected, _ = await captain2_communicator.connect()
+        self.assertTrue(connected)
+        await captain2_communicator.receive_json_from()  # initial state
+
+        # Disconnect captain1 - this should trigger pause
+        await captain1_communicator.disconnect()
+
+        # Verify draft is paused and paused_at is set
+        @database_sync_to_async
+        def check_paused():
+            self.draft.refresh_from_db()
+            return self.draft.state, self.draft.paused_at
+
+        state, paused_at = await check_paused()
+        self.assertEqual(state, HeroDraftState.PAUSED)
+        self.assertIsNotNone(paused_at)
+
+        # Drain any messages from captain2's communicator
+        try:
+            while True:
+                await asyncio.wait_for(
+                    captain2_communicator.receive_json_from(), timeout=0.1
+                )
+        except asyncio.TimeoutError:
+            pass
+
+        # Simulate 2 seconds passing by adjusting paused_at backwards
+        @database_sync_to_async
+        def simulate_pause_duration():
+            self.draft.refresh_from_db()
+            self.draft.paused_at = timezone.now() - timedelta(seconds=2)
+            self.draft.save()
+
+        await simulate_pause_duration()
+
+        # Verify captain2 is still connected before captain1 reconnects
+        @database_sync_to_async
+        def check_captain2_connected():
+            self.draft_team2.refresh_from_db()
+            return self.draft_team2.is_connected
+
+        captain2_is_connected = await check_captain2_connected()
+        self.assertTrue(
+            captain2_is_connected, "Captain2 should still be connected before resume"
+        )
+
+        # Reconnect captain1 - this should trigger resume with timing adjustment
+        captain1_reconnect = WebsocketCommunicator(
+            self.get_application(),
+            f"/api/herodraft/{self.draft.id}/",
+        )
+        captain1_reconnect.scope["user"] = self.captain1
+        connected, _ = await captain1_reconnect.connect()
+        self.assertTrue(connected)
+
+        # Give some time for the resume to process
+        await asyncio.sleep(0.2)
+
+        # Verify timing adjustment: started_at should be moved forward by ~5 seconds
+        # (2s pause duration + 3s countdown)
+        @database_sync_to_async
+        def check_timing_adjustment():
+            self.draft.refresh_from_db()
+            active_round.refresh_from_db()
+            # Also check team connection status for debugging
+            self.draft_team1.refresh_from_db()
+            self.draft_team2.refresh_from_db()
+            return (
+                self.draft.state,
+                active_round.started_at,
+                self.draft_team1.is_connected,
+                self.draft_team2.is_connected,
+            )
+
+        state, new_started_at, team1_connected, team2_connected = (
+            await check_timing_adjustment()
+        )
+        self.assertTrue(team1_connected, "Captain1 should be connected after reconnect")
+        self.assertTrue(team2_connected, "Captain2 should still be connected")
+        self.assertEqual(state, HeroDraftState.DRAFTING)
+
+        # Calculate expected adjustment: original + 5 seconds (2s pause + 3s countdown)
+        expected_started_at = original_started_at + timedelta(seconds=5)
+        time_difference = abs((new_started_at - expected_started_at).total_seconds())
+
+        # Allow 1 second tolerance for timing variations
+        self.assertLess(
+            time_difference,
+            1.0,
+            f"started_at adjustment incorrect. Expected ~{expected_started_at}, got {new_started_at}",
+        )
+
+        # Clean up
+        await captain1_reconnect.disconnect()
+        await captain2_communicator.disconnect()

@@ -1,64 +1,12 @@
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSharedPopover } from './shared-popover-context';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
-import { AvatarUrl } from '~/index';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { PlayerModal } from '~/components/player/PlayerModal';
 import { TeamModal } from '~/components/team/TeamModal';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '~/components/ui/table';
-
-// Memoized player row for team popover
-const TeamMemberRow = memo(({
-  member,
-  isCaptain,
-  onPlayerHover,
-  onPlayerLeave,
-  onPlayerClick,
-}: {
-  member: UserType;
-  isCaptain: boolean;
-  onPlayerHover: (player: UserType, el: HTMLElement) => void;
-  onPlayerLeave: () => void;
-  onPlayerClick: (player: UserType) => void;
-}) => (
-  <TableRow>
-    <TableCell>
-      <div
-        className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
-        onMouseEnter={(e) => onPlayerHover(member, e.currentTarget)}
-        onMouseLeave={onPlayerLeave}
-        onClick={() => onPlayerClick(member)}
-      >
-        <img
-          src={AvatarUrl(member)}
-          alt={member.username}
-          className="w-8 h-8 rounded-full hover:ring-2 hover:ring-primary transition-all"
-        />
-        <span className="font-medium">
-          {member.nickname || member.username}
-        </span>
-        {isCaptain && (
-          <span className="text-xs text-primary">(C)</span>
-        )}
-      </div>
-    </TableCell>
-    <TableCell className="text-right">
-      {member.mmr?.toLocaleString() || 'N/A'}
-    </TableCell>
-    <TableCell>
-      <RolePositions user={member} />
-    </TableCell>
-  </TableRow>
-));
-TeamMemberRow.displayName = 'TeamMemberRow';
+import { TeamPopoverContent } from '~/components/team/TeamPopoverContent';
 
 // Player popover content
 const PlayerPopoverContent: React.FC<{
@@ -70,109 +18,31 @@ const PlayerPopoverContent: React.FC<{
 
   return (
     <div
-      className="space-y-2"
+      className="flex flex-col gap-3 w-full overflow-hidden"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="flex items-center gap-3">
-        <img
-          src={AvatarUrl(player)}
-          alt={`${playerName}'s avatar`}
-          className="w-12 h-12 rounded-full"
-        />
-        <div>
-          <p className="font-medium">{playerName}</p>
+      {/* Header: Avatar + Name/MMR */}
+      <div className="flex items-center gap-4 min-w-0">
+        <UserAvatar user={player} size="xl" className="shrink-0" />
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <p className="font-semibold text-foreground text-lg truncate">{playerName}</p>
           {player.mmr && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-foreground/70">
               MMR: {player.mmr.toLocaleString()}
             </p>
           )}
         </div>
       </div>
-      <RolePositions user={player} />
-      <p className="text-xs text-muted-foreground text-center pt-1">
+      {/* Positions - pt-1 pl-1 accommodates absolute positioned rank badges */}
+      <div className="w-full pt-1 pl-1">
+        <div className="flex flex-wrap gap-1">
+          <RolePositions user={player} disableTooltips />
+        </div>
+      </div>
+      <p className="text-xs text-foreground/60 text-center">
         Click for full profile
       </p>
-    </div>
-  );
-};
-
-// Team popover content
-const TeamPopoverContent: React.FC<{
-  team: NonNullable<ReturnType<typeof useSharedPopover>['state']['team']>;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
-  onPlayerHover: (player: UserType, el: HTMLElement) => void;
-  onPlayerLeave: () => void;
-  onPlayerClick: (player: UserType) => void;
-}> = ({ team, onMouseEnter, onMouseLeave, onPlayerHover, onPlayerLeave, onPlayerClick }) => {
-  const captain = team.captain;
-  const teamName = team.name || `${captain?.nickname || captain?.username || 'Unknown'}'s Team`;
-  const hasMembers = team.members && team.members.length > 0;
-
-  const avgMMR = hasMembers
-    ? Math.round(
-        team.members!.reduce((sum: number, m: UserType) => sum + (m.mmr || 0), 0) /
-          team.members!.length
-      )
-    : 0;
-
-  const sortedMembers = hasMembers
-    ? [...team.members!].sort((a, b) => {
-        if (!a.mmr && !b.mmr) return 0;
-        if (!a.mmr) return 1;
-        if (!b.mmr) return -1;
-        return b.mmr - a.mmr;
-      })
-    : [];
-
-  return (
-    <div onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b">
-        <span className="font-medium">{teamName}</span>
-        {hasMembers && (
-          <span className="text-sm text-muted-foreground">
-            {team.members?.length} players | Avg: {avgMMR.toLocaleString()} MMR
-          </span>
-        )}
-      </div>
-
-      {/* Team Table or Empty State */}
-      <div className="max-h-80 overflow-y-auto">
-        {hasMembers ? (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Player</TableHead>
-                <TableHead className="text-right">MMR</TableHead>
-                <TableHead>Positions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedMembers.map((member) => (
-                <TeamMemberRow
-                  key={member.pk}
-                  member={member}
-                  isCaptain={captain?.pk === member.pk}
-                  onPlayerHover={onPlayerHover}
-                  onPlayerLeave={onPlayerLeave}
-                  onPlayerClick={onPlayerClick}
-                />
-              ))}
-            </TableBody>
-          </Table>
-        ) : (
-          <div className="p-4 text-center text-muted-foreground">
-            No players drafted yet
-          </div>
-        )}
-      </div>
-
-      {/* Click hint */}
-      <div className="p-2 border-t text-center text-xs text-muted-foreground">
-        Click for full view
-      </div>
     </div>
   );
 };
@@ -198,8 +68,8 @@ export const SharedPopoverRenderer: React.FC = () => {
   useEffect(() => {
     if (state.anchorEl && state.isOpen) {
       const rect = state.anchorEl.getBoundingClientRect();
-      const popoverWidth = state.type === 'team' ? 640 : 224;
-      const popoverHeight = state.type === 'team' ? 400 : 200;
+      const popoverWidth = state.type === 'team' ? 640 : 400;
+      const popoverHeight = state.type === 'team' ? 400 : 280;
 
       let top = rect.bottom + 4;
       let left = rect.left + rect.width / 2 - popoverWidth / 2;
@@ -244,6 +114,8 @@ export const SharedPopoverRenderer: React.FC = () => {
             player={playerModalState.player}
             open={playerModalState.open}
             onOpenChange={setPlayerModalOpen}
+            leagueId={playerModalState.context?.leagueId}
+            organizationId={playerModalState.context?.organizationId}
           />
         )}
         {teamModalState.team?.captain && (
@@ -263,7 +135,7 @@ export const SharedPopoverRenderer: React.FC = () => {
       <div
         ref={popoverRef}
         className={`fixed z-50 rounded-md border bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 ${
-          state.type === 'team' ? 'w-[640px] p-0' : 'w-56 p-3'
+          state.type === 'team' ? 'w-[640px] p-0' : 'w-[400px] p-4'
         }`}
         style={{ top: position.top, left: position.left }}
         onClick={handleClick}
@@ -294,6 +166,8 @@ export const SharedPopoverRenderer: React.FC = () => {
           player={playerModalState.player}
           open={playerModalState.open}
           onOpenChange={setPlayerModalOpen}
+          leagueId={playerModalState.context?.leagueId}
+          organizationId={playerModalState.context?.organizationId}
         />
       )}
       {teamModalState.team?.captain && (

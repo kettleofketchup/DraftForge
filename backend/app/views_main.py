@@ -60,6 +60,7 @@ from .serializers import (
     OrganizationSerializer,
     OrganizationsSerializer,
     TeamSerializer,
+    TournamentListSerializer,
     TournamentSerializer,
     TournamentsSerializer,
     UserSerializer,
@@ -795,6 +796,54 @@ class TournamentsBasicView(viewsets.ModelViewSet):
         return Response(data)
 
 
+@permission_classes((AllowAny,))
+class TournamentListView(viewsets.ReadOnlyModelViewSet):
+    """Lightweight view for tournament list page.
+
+    Returns minimal tournament data without nested teams/users for fast loading.
+    Supports filtering by organization and league query params.
+    """
+
+    serializer_class = TournamentListSerializer
+
+    def get_queryset(self):
+        """Annotate user_count and prefetch league/orgs for efficiency."""
+        qs = (
+            Tournament.objects.select_related("league")
+            .prefetch_related("league__organizations")
+            .annotate(user_count=Count("users", distinct=True))
+            .order_by("-date_played")
+        )
+
+        # Filter by organization (League has M2M to Organization)
+        org_id = self.request.query_params.get("organization")
+        if org_id:
+            qs = qs.filter(league__organizations__id=org_id)
+
+        # Filter by league
+        league_id = self.request.query_params.get("league")
+        if league_id:
+            qs = qs.filter(league_id=league_id)
+
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f"tournaments_list_v2:{request.get_full_path()}"
+
+        @cached_as(
+            Tournament.objects.all(),
+            extra=cache_key,
+            timeout=60 * 10,
+        )
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+
 class OrganizationView(viewsets.ModelViewSet):
     """Organization CRUD endpoints."""
 
@@ -983,6 +1032,34 @@ class DraftCreateView(generics.CreateAPIView):
 class DraftRoundCreateView(generics.CreateAPIView):
     serializer_class = DraftRoundSerializer
     permission_classes = [IsStaff]
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def home_stats(request):
+    """
+    Cached endpoint for home page statistics.
+    Returns counts only, much more efficient than fetching full objects.
+    """
+    cache_key = "home_stats"
+
+    @cached_as(
+        Tournament,
+        Game,
+        Organization,
+        League,
+        extra=cache_key,
+        timeout=60 * 5,  # 5 minutes cache
+    )
+    def get_stats():
+        return {
+            "tournament_count": Tournament.objects.count(),
+            "game_count": Game.objects.count(),
+            "organization_count": Organization.objects.count(),
+            "league_count": League.objects.count(),
+        }
+
+    return Response(get_stats())
 
 
 @api_view(["POST"])

@@ -10,6 +10,7 @@ from .test_auth import (
     login_staff,
     login_user,
 )
+from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
 from .test_herodraft import (
     force_herodraft_timeout,
     get_herodraft_by_key,
@@ -67,5 +68,22 @@ urlpatterns = [
         "herodraft-by-key/<str:key>/",
         get_herodraft_by_key,
         name="test-herodraft-by-key",
+    ),
+    # Demo tournament endpoints (for video recording)
+    # More specific paths first to avoid <str:key> catching them
+    path(
+        "demo/bracket/<int:tournament_pk>/generate/",
+        generate_demo_bracket,
+        name="test-demo-bracket-generate",
+    ),
+    path(
+        "demo/<str:key>/reset/",
+        reset_demo_tournament,
+        name="test-demo-reset",
+    ),
+    path(
+        "demo/<str:key>/",
+        get_demo_tournament,
+        name="test-demo-get",
     ),
 ]

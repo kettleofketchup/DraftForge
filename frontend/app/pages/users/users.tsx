@@ -1,11 +1,37 @@
 import { Loader2, Users } from 'lucide-react';
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState, useCallback } from 'react';
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
 import { UserCreateModal } from '~/components/user/userCard/createModal';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useUserStore } from '~/store/userStore';
+
+/** Hook for progressive/batched rendering of items */
+const useProgressiveRender = (items: UserType[], batchSize = 12, delay = 50) => {
+  const [visibleCount, setVisibleCount] = useState(batchSize);
+
+  useEffect(() => {
+    // Reset when items change
+    setVisibleCount(batchSize);
+  }, [items, batchSize]);
+
+  useEffect(() => {
+    if (visibleCount >= items.length) return;
+
+    const timer = setTimeout(() => {
+      setVisibleCount((prev) => Math.min(prev + batchSize, items.length));
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [visibleCount, items.length, batchSize, delay]);
+
+  return {
+    visibleItems: items.slice(0, visibleCount),
+    isLoading: visibleCount < items.length,
+    progress: items.length > 0 ? visibleCount / items.length : 1,
+  };
+};
 
 /** Skeleton loader for user cards */
 const UserCardSkeleton = () => (
@@ -63,12 +89,12 @@ const UserCardWrapper = memo(({
 });
 
 /** Grid of skeleton cards for initial loading */
-const UserGridSkeleton = ({ count = 8 }: { count?: number }) => (
+const UserGridSkeleton = ({ count = 12 }: { count?: number }) => (
   <div
     className="grid grid-flow-row-dense grid-auto-rows
     align-middle content-center justify-center
-    grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4
-    mb-0 mt-0 p-0 bg-background w-full gap-2 md:gap-4 lg:gap-6"
+    grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6
+    mb-0 mt-0 p-0 bg-background w-full gap-2 md:gap-3 lg:gap-4"
   >
     {Array.from({ length: count }).map((_, index) => (
       <UserCardSkeleton key={`skeleton-${index}`} />
@@ -141,6 +167,13 @@ export function UsersPage() {
     );
   }, [users, debouncedQuery]);
 
+  // Progressive render for performance - render in batches
+  const { visibleItems, isLoading: isProgressiveLoading } = useProgressiveRender(
+    filteredUsers,
+    12, // batch size
+    100  // delay between batches in ms
+  );
+
   // Fetch users after hydration - show cached data immediately, refresh in background
   useEffect(() => {
     if (!hasHydrated) return; // Wait for Zustand to hydrate from sessionStorage
@@ -183,20 +216,28 @@ export function UsersPage() {
       }
 
       return (
-        <div
-          className="grid grid-flow-row-dense grid-auto-rows
-          align-middle content-center justify-center
-          grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4
-          mb-0 mt-0 p-0 bg-background w-full gap-2 md:gap-4 lg:gap-6"
-        >
-          {filteredUsers.map((u: UserType, index: number) => (
-            <UserCardWrapper
-              userData={u}
-              key={`wrapper-${u.pk}`}
-              animationIndex={index}
-            />
-          ))}
-        </div>
+        <>
+          <div
+            className="grid grid-flow-row-dense grid-auto-rows
+            align-middle content-center justify-center
+            grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6
+            mb-0 mt-0 p-0 bg-background w-full gap-2 md:gap-3 lg:gap-4"
+          >
+            {visibleItems.map((u: UserType, index: number) => (
+              <UserCardWrapper
+                userData={u}
+                key={`wrapper-${u.pk}`}
+                animationIndex={index}
+              />
+            ))}
+          </div>
+          {isProgressiveLoading && (
+            <div className="flex items-center justify-center py-4 text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              <span className="text-sm">Loading more users...</span>
+            </div>
+          )}
+        </>
       );
     }
 
@@ -210,32 +251,45 @@ export function UsersPage() {
   };
 
   return (
-    <>
-      <div className="flex flex-col items-start p-4 h-full">
-        {/* Header with search and create button - NOT affected by transitions */}
-        <div
-          className="grid grid-flow-row-dense grid-auto-rows
-          align-middle content-center justify-center
-          grid-cols-4 w-full"
-        >
-          <div className="flex col-span-2 w-full content-center">
-            <SearchUserDropdown
-              users={users}
-              query={query}
-              setQuery={setQuery}
-            />
-          </div>
-          <div className="flex col-start-4 align-end content-end justify-end">
-            <UserCreateModal
-              query={createModalQuery}
-              setQuery={setCreateModalQuery}
-            />
-          </div>
-        </div>
-
-        {/* User grid - affected by transitions */}
-        {renderUserGrid()}
+    <div className="flex flex-col items-start p-4">
+      {/* Page title with user count */}
+      <div className="flex items-center gap-2 mb-4 w-full">
+        <Users className="w-6 h-6 text-primary" />
+        <h1 className="text-xl font-semibold">Users</h1>
+        <span className="text-sm text-muted-foreground">
+          {debouncedQuery ? (
+            <>
+              {filteredUsers.length} of {users.length}
+            </>
+          ) : (
+            <>{users.length} total</>
+          )}
+        </span>
       </div>
-    </>
+
+      {/* Header with search and create button - NOT affected by transitions */}
+      <div
+        className="grid grid-flow-row-dense grid-auto-rows
+        align-middle content-center justify-center
+        grid-cols-4 w-full mb-4"
+      >
+        <div className="flex col-span-2 w-full content-center">
+          <SearchUserDropdown
+            users={users}
+            query={query}
+            setQuery={setQuery}
+          />
+        </div>
+        <div className="flex col-start-4 align-end content-end justify-end">
+          <UserCreateModal
+            query={createModalQuery}
+            setQuery={setCreateModalQuery}
+          />
+        </div>
+      </div>
+
+      {/* User grid - affected by transitions */}
+      {renderUserGrid()}
+    </div>
   );
 }

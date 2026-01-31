@@ -123,6 +123,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "telemetry.middleware.TelemetryMiddleware",  # AFTER AuthenticationMiddleware
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",
@@ -382,7 +383,7 @@ SESSION_COOKIE_SAMESITE = None
 # https://docs.djangoproject.com/en/1.10/howto/static-files/
 
 STATIC_URL = "/static/"
-ALLOWED_HOSTS = ["dota.kettle.sh", "www.dota.kettle.sh", "localhost"]
+ALLOWED_HOSTS = ["dota.kettle.sh", "www.dota.kettle.sh", "localhost", "nginx"]
 
 
 with contextlib.suppress(ImportError):
@@ -397,6 +398,7 @@ CORS_ORIGIN_WHITELIST = [
 
 CSRF_TRUSTED_ORIGINS = [
     "https://localhost",
+    "https://nginx",  # Docker nginx hostname used by Playwright tests
     "https://dota.kettle.sh",
     "http://dota.kettle.sh",
     "https://dota.kettle.sh",
@@ -428,3 +430,12 @@ from config.leagues import app_config
 
 LEAGUE_CHOICES = app_config.league_choices
 DEFAULT_LEAGUE_ID = app_config.default_league_id
+
+# =============================================================================
+# Telemetry Configuration
+# =============================================================================
+
+# Initialize telemetry (structured logging + optional OTel tracing)
+from telemetry.config import init_telemetry
+
+init_telemetry()

@@ -40,7 +40,7 @@ COPY --chown=appuser:appuser ./backend /app/backend
 WORKDIR /app/backend
 EXPOSE 8000
 USER appuser
-ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "backend.asgi:application"]
+ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "--ping-interval", "10", "--ping-timeout", "10", "backend.asgi:application"]
 
 # ---- Runtime for dev/test ----
 FROM deps-dev AS runtime-dev
@@ -55,4 +55,4 @@ COPY --chown=appuser:appuser ./backend /app/backend
 WORKDIR /app/backend
 EXPOSE 8000
 USER appuser
-ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "backend.asgi:application"]
+ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "--ping-interval", "10", "--ping-timeout", "10", "backend.asgi:application"]

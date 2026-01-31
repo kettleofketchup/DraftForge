@@ -1,231 +1,197 @@
-import type { FormEvent } from 'react';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import type { TournamentType } from '~/components/tournament/types';
-import { getLogger } from '~/lib/logger';
 import { STATE_CHOICES } from '../constants';
 
-const log = getLogger('TournamentCard');
-
+import { Building2, Calendar, Clock, Crown, Swords, Trophy, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Edit } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { toast } from 'sonner';
 import { useUserStore } from '~/store/userStore';
-import { updateTournament } from '../../api/api';
-import { Button } from '../../ui/button';
-import { UsersDropdown } from './UsersDropdown';
+import { EditIconButton, ViewIconButton } from '../../ui/buttons';
+import {
+  CardAction,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '../../ui/card';
+import { Item, ItemContent, ItemMedia, ItemTitle } from '../../ui/item';
 import { TournamentRemoveButton } from './deleteButton';
+import { TournamentEditModal } from './TournamentEditModal';
 interface Props {
   tournament: TournamentType;
-  edit?: boolean;
-  saveFunc?: string;
-  onEditModeChange?: (isEditing: boolean) => void;
   /** Animation delay index for staggered loading */
   animationIndex?: number;
 }
 
+/** Truncate text to max 12 characters with ellipsis */
+const truncateText = (text: string, maxLength = 12): string => {
+  if (!text) return '';
+  return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
+};
+
 export const TournamentCard: React.FC<Props> = React.memo(({
   tournament,
-  edit,
-  saveFunc,
-  onEditModeChange,
   animationIndex = 0,
 }) => {
-  let navigate = useNavigate();
-  const [editMode, setEditMode] = useState(edit || false);
-  const [form, setForm] = useState<TournamentType>(
-    tournament ?? ({} as TournamentType),
-  );
-  const [isSaving, setIsSaving] = useState(false);
-  const setTournament = useUserStore((state) => state.setTournament);
-  const [error, setError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<
-    Partial<Record<keyof TournamentType, string>>
-  >({});
-  const allUsersFromStore = useUserStore((state) => state.users); // Assuming 'users' holds all users
-  const fetchAllUsers = useUserStore((state) => state.getUsers); // Assuming 'getUsers' fetches all users
-
+  const navigate = useNavigate();
   const currentUser = useUserStore((state) => state.currentUser);
-
-  const TOURNAMENT_TYPE_CHOICES = [
-    { value: 'single_elimination', label: 'Single Elimination' },
-    { value: 'double_elimination', label: 'Double Elimination' },
-    { value: 'swiss', label: 'Swiss Bracket' },
-  ];
-
-  const handleChange = (field: keyof TournamentType, value: any) => {
-    setForm((prev: any) => ({ ...prev, [field]: value }));
-  };
-
-  const handleSave = async (e: FormEvent) => {
-    e.stopPropagation();
-    setErrorMessage({}); // clear old errors
-
-    const { pk: _pk, ...formWithoutPk } = form;
-    const payload: Partial<TournamentType> = {
-      pk: tournament.pk,
-      ...formWithoutPk,
-    };
-    log.debug('Saving tournament with payload:', payload);
-    log.debug('Save function:', saveFunc);
-
-    if (!tournament.pk) return;
-
-    toast.promise(updateTournament(tournament.pk, payload), {
-      loading: `Updating Tournament for  ${tournament.pk}`,
-      success: (data: TournamentType) => {
-        log.debug('Tournament updated successfully:', data);
-        setTournament(data);
-
-        return `${tournament.pk} has been updated successfully!`;
-      },
-      error: (err) => {
-        const val = err.response.data;
-        log.error('Failed to update tournament', err);
-        return `Failed to update tournament: ${val}`;
-      },
-    });
-
-    setIsSaving(true);
-  };
-
-  const [saveCallback, setSaveCallBack] = useState(saveFunc || 'save');
-
-  useEffect(() => {
-    log.debug('reset form', tournament.pk);
-    setForm(tournament);
-    // Only reset form when tournament pk changes, not on every object reference change
-  }, [tournament.pk]);
-
-  useEffect(() => {
-    // Added useEffect to call onEditModeChange
-    if (onEditModeChange) {
-      onEditModeChange(editMode);
-    }
-  }, [editMode, onEditModeChange]);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const getHeaderName = () => {
-    let date = tournament.date_played
-      ? (() => {
-          const [year, month, day] = tournament.date_played.split('-');
-          return `${month}-${day}`;
-        })()
-      : '';
-    return `${tournament.name || ''}`;
+    return tournament.name || '';
   };
 
-  const TournamentHeader = () => {
-    if (editMode) return null;
+  const TournamentHeaderContent = () => {
     if (!tournament || !tournament.name) return null;
     return (
-      <div className="flex flex-col w-40em items-top ">
-        <h2 className="w-full card-title text-lg">Tournament</h2>
-        <h2 className="w-full card-subtitle text-lg text-center ">
-          {getHeaderName()}
-        </h2>
-      </div>
-    );
-  };
-  const editModeView = () => {
-    return (
       <>
-        <div>
-          <label className="font-semibold">Name:</label>
-          <input
-            type="text"
-            value={form.name ?? ''}
-            onChange={(e) => handleChange('name', e.target.value)}
-            className={`input input-bordered w-full mt-1 ${errorMessage.name ? 'input-error' : ''}`}
-          />
-          {errorMessage.name && (
-            <p className="text-error text-sm mt-1">{errorMessage.name}</p>
-          )}
-        </div>
-        <div>
-          <label className="font-semibold" htmlFor="state-select">
-            State:
-          </label>
-          <select
-            id="state-select"
-            value={form.state ?? ''}
-            onChange={(e) => handleChange('state', e.target.value)}
-            className={`select select-bordered w-full mt-1 ${errorMessage.state ? 'select-error' : ''}`}
-          >
-            <option disabled value="">
-              Select State
-            </option>
-            {Object.entries(STATE_CHOICES).map(([key, value]) => (
-              <option key={key} value={key}>
-                {value}
-              </option>
-            ))}
-          </select>
-          {errorMessage.state && (
-            <p className="text-error text-sm mt-1">{errorMessage.state}</p>
-          )}
-        </div>
-        <div>
-          <label className="font-semibold" htmlFor="tournament-type-select">
-            Tournament Type:
-          </label>
-          <select
-            id="tournament-type-select"
-            value={form.tournament_type ?? ''}
-            onChange={(e) => handleChange('tournament_type', e.target.value)}
-            className={`select select-bordered w-full mt-1 ${errorMessage.tournament_type ? 'select-error' : ''}`}
-          >
-            <option disabled value="">
-              Select Tournament Type
-            </option>
-            {TOURNAMENT_TYPE_CHOICES.map((type) => (
-              <option key={type.value} value={type.value}>
-                {type.label}
-              </option>
-            ))}
-          </select>
-          {errorMessage.tournament_type && (
-            <p className="text-error text-sm mt-1">
-              {errorMessage.tournament_type}
-            </p>
-          )}
-        </div>
-
-        <Button
-          onClick={handleSave}
-          type="submit"
-          className="btn btn-primary btn-sm mt-3"
-          disabled={isSaving}
-        >
-          {saveCallback === 'create' &&
-            (isSaving ? 'Saving...' : 'Create Tournament')}
-          {saveCallback === 'save' && (isSaving ? 'Saving...' : 'Save Changes')}
-        </Button>
+        <CardTitle className="text-base truncate">
+          {getHeaderName()}
+        </CardTitle>
+        <CardDescription className="text-xs text-muted-foreground">
+          Tournament
+        </CardDescription>
       </>
     );
   };
+  // Helper for League display with avatar
+  const LeagueItem = () => {
+    // League can be a number (ID) or an object with league details
+    const leagueData = typeof tournament.league === 'object'
+      ? (tournament.league as unknown as { pk?: number; name?: string; organization_name?: string })
+      : null;
+    const hasLeague = tournament.league != null;
+    const leagueName = hasLeague
+      ? (leagueData?.name || (typeof tournament.league === 'number' ? `League #${tournament.league}` : 'Unknown League'))
+      : 'None';
+
+    return (
+      <Item size="sm" variant="muted" className={`!p-1.5 ${!hasLeague ? 'bg-red-500/20' : ''}`}>
+        <ItemMedia variant="icon" className={`!size-6 ${hasLeague ? 'bg-primary/20 border-primary/30' : 'bg-red-500/30 border-red-500/40'}`}>
+          <Trophy className={`h-3 w-3 ${hasLeague ? 'text-primary' : 'text-red-500'}`} />
+        </ItemMedia>
+        <ItemContent className="!gap-0">
+          <ItemTitle className="!text-xs text-muted-foreground">League</ItemTitle>
+          <span className={`text-sm font-medium ${!hasLeague ? 'text-red-500' : ''}`} title={leagueName}>{truncateText(leagueName)}</span>
+        </ItemContent>
+      </Item>
+    );
+  };
+
+  // Helper for Organization display with avatar
+  const OrganizationItem = () => {
+    // Get organization from league data if available
+    const leagueData = typeof tournament.league === 'object'
+      ? (tournament.league as unknown as { organization_name?: string })
+      : null;
+    const orgName = leagueData?.organization_name;
+    const hasOrg = !!orgName;
+
+    return (
+      <Item size="sm" variant="muted" className={`!p-1.5 ${!hasOrg ? 'bg-red-500/20' : ''}`}>
+        <ItemMedia variant="icon" className={`!size-6 ${hasOrg ? 'bg-purple-500/20 border-purple-500/30' : 'bg-red-500/30 border-red-500/40'}`}>
+          <Building2 className={`h-3 w-3 ${hasOrg ? 'text-purple-500' : 'text-red-500'}`} />
+        </ItemMedia>
+        <ItemContent className="!gap-0">
+          <ItemTitle className="!text-xs text-muted-foreground">Organization</ItemTitle>
+          <span className={`text-sm font-medium ${!hasOrg ? 'text-red-500' : ''}`} title={orgName || 'None'}>{truncateText(orgName || 'None')}</span>
+        </ItemContent>
+      </Item>
+    );
+  };
+
+  // Helper to extract time from date_played (ISO datetime string)
+  const getTimeFromDate = (dateStr: string | null): string => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    } catch {
+      return '';
+    }
+  };
+
+  // Helper to format timezone for display
+  const formatTimezone = (tz: string | undefined): string => {
+    if (!tz) return 'UTC';
+    // Extract the last part after '/' for cleaner display
+    const parts = tz.split('/');
+    return parts[parts.length - 1].replace('_', ' ');
+  };
+
   const viewMode = () => {
     return (
-      <>
-        {tournament.date_played !== undefined && (
-          <div>
-            <span className="font-semibold">Played:</span>{' '}
-            {tournament.date_played}
-          </div>
-        )}
-        {tournament.name && (
-          <div>
-            <span className="font-semibold">Name:</span> {tournament.name}
-          </div>
-        )}
+      <div className="flex flex-col gap-1.5">
+        {/* Top row: Date and Time/Timezone */}
+        <div className="grid grid-cols-2 gap-1">
+          {tournament.date_played && (
+            <Item size="sm" variant="muted" className="!p-1.5">
+              <ItemMedia variant="icon" className="!size-6 bg-sky-500/20 border-sky-500/30">
+                <Calendar className="h-3 w-3 text-sky-500" />
+              </ItemMedia>
+              <ItemContent className="!gap-0">
+                <ItemTitle className="!text-xs text-muted-foreground">Date</ItemTitle>
+                <span className="text-sm" title={tournament.date_played}>{truncateText(tournament.date_played)}</span>
+              </ItemContent>
+            </Item>
+          )}
+          <Item size="sm" variant="muted" className="!p-1.5">
+            <ItemMedia variant="icon" className="!size-6 bg-indigo-500/20 border-indigo-500/30">
+              <Clock className="h-3 w-3 text-indigo-500" />
+            </ItemMedia>
+            <ItemContent className="!gap-0">
+              <ItemTitle className="!text-xs text-muted-foreground">Time</ItemTitle>
+              <span className="text-sm" title={`${getTimeFromDate(tournament.date_played)} (${tournament.timezone || 'UTC'})`}>
+                {truncateText(`${getTimeFromDate(tournament.date_played)} ${formatTimezone(tournament.timezone)}`)}
+              </span>
+            </ItemContent>
+          </Item>
+        </div>
+
+        {/* Second row: Style */}
         {tournament.tournament_type && (
-          <div>
-            <span className="font-semibold">Style:</span>{' '}
-            {tournament.tournament_type}
-          </div>
+          <Item size="sm" variant="muted" className="!p-1.5">
+            <ItemMedia variant="icon" className="!size-6 bg-orange-500/20 border-orange-500/30">
+              <Swords className="h-3 w-3 text-orange-500" />
+            </ItemMedia>
+            <ItemContent className="!gap-0">
+              <ItemTitle className="!text-xs text-muted-foreground">Style</ItemTitle>
+              <span className="text-sm capitalize" title={tournament.tournament_type.replace('_', ' ')}>{truncateText(tournament.tournament_type.replace('_', ' '))}</span>
+            </ItemContent>
+          </Item>
         )}
 
-        <UsersDropdown users={tournament.captains || []} />
-      </>
+        {/* Second row: League and Organization */}
+        <div className="grid grid-cols-2 gap-1">
+          <LeagueItem />
+          <OrganizationItem />
+        </div>
+
+        {/* Third row: State and Players */}
+        <div className="grid grid-cols-2 gap-1">
+          {tournament.state && (
+            <Item size="sm" variant="muted" className="!p-1.5">
+              <ItemMedia variant="icon" className="!size-6 bg-emerald-500/20 border-emerald-500/30">
+                <Crown className="h-3 w-3 text-emerald-500" />
+              </ItemMedia>
+              <ItemContent className="!gap-0">
+                <ItemTitle className="!text-xs text-muted-foreground">State</ItemTitle>
+                <span className="text-sm capitalize" title={STATE_CHOICES[tournament.state] || tournament.state}>{truncateText(STATE_CHOICES[tournament.state] || tournament.state)}</span>
+              </ItemContent>
+            </Item>
+          )}
+
+          {/* Players count */}
+          <Item size="sm" variant="muted" className="!p-1.5">
+            <ItemMedia variant="icon" className="!size-6 bg-cyan-500/20 border-cyan-500/30">
+              <Users className="h-3 w-3 text-cyan-500" />
+            </ItemMedia>
+            <ItemContent className="!gap-0">
+              <ItemTitle className="!text-xs text-muted-foreground">Players</ItemTitle>
+              <span className="text-sm font-medium">{tournament.user_count ?? tournament.users?.length ?? 0}</span>
+            </ItemContent>
+          </Item>
+        </div>
+      </div>
     );
   };
 
@@ -243,76 +209,84 @@ export const TournamentCard: React.FC<Props> = React.memo(({
     return result;
   };
 
-  const editBtn = () => {
-    if (!currentUser || !currentUser.is_staff) return null;
-    if (saveCallback === 'create') {
-      return null;
-    }
+  const ActionButtons = () => {
+    const showEditBtn = currentUser?.is_staff;
 
     return (
-      <Button
-        className="w-20 ml-0 bg-purple-900 text-white"
-        onClick={() => setEditMode(!editMode)}
-      >
-        {!editMode && <Edit />}
-        {editMode ? 'Cancel' : 'Edit'}
-      </Button>
-    );
-  };
-  const headerButtons = () => {
-    return (
-      <div className="flex self-start flex flex-col w-full align-top  items-end justify-end gap-2 lg:flex-row lg:justify-end lg:items-top ">
-        {editBtn()}
-        <Button
-          variant={'secondary'}
-          className="w-20 outline-green-500"
+      <>
+        {showEditBtn && (
+          <EditIconButton
+            onClick={() => setEditModalOpen(true)}
+            tooltip="Edit Tournament"
+          />
+        )}
+        <ViewIconButton
           onClick={() => navigate(`/tournament/${tournament.pk}`)}
-        >
-          View
-        </Button>
-      </div>
+          tooltip="View Tournament"
+        />
+      </>
     );
   };
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
-      key={`Tournamentcard:${getKeyName()} base`}
-      className={
-        'flex items-center justify-center p-4 gap-6 content-center w-full h-full'
-      }
-      whileHover={{ scale: 1.02 }}
-    >
-      <div
-        className="card bg-base-300 shadow-elevated w-full max-w-sm p-4
-            hover:bg-base-200 focus:outline-2 shadow-hover
-            focus:outline-offset-2 focus:outline-primary
-            active:bg-base-200 transition-all duration-300 ease-in-out"
+    <>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
+        key={`Tournamentcard:${getKeyName()} base`}
+        className="flex items-center justify-center p-4 gap-6 content-center w-full h-full"
+        whileHover={{ scale: 1.02 }}
       >
-        <div className="flex flex-row items-center align-start gap-2">
-          {TournamentHeader()}
-          {headerButtons()}
-        </div>
+        <div
+          className="card card-compact bg-base-300 rounded-2xl w-full max-w-sm
+              hover:bg-base-200 focus:outline-2
+              focus:outline-offset-2 focus:outline-primary
+              active:bg-base-200"
+        >
+          {/* Header: 2-col layout with name/type left, actions right */}
+          <CardHeader className="p-0 gap-0.5">
+            <TournamentHeaderContent />
+            <CardAction className="flex items-center gap-1">
+              <ActionButtons />
+            </CardAction>
+          </CardHeader>
 
-        <div className="mt-4 space-y-2 text-sm">
-          {editMode ? editModeView() : viewMode()}
+          {/* Card content */}
+          <div className="mt-2">
+            {viewMode()}
+          </div>
+
+          {/* Footer with delete button */}
+          <div className="flex flex-row mt-2 justify-end">
+            <TournamentRemoveButton tournament={tournament} />
+          </div>
         </div>
-        <div className="flex flex-row mt-4 justify-end">
-          <TournamentRemoveButton tournament={tournament} />
-        </div>
-      </div>
-    </motion.div>
+      </motion.div>
+
+      {/* Edit Modal */}
+      <TournamentEditModal
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        tournament={tournament}
+      />
+    </>
   );
 }, (prevProps, nextProps) => {
   // Custom comparison - only re-render if these values actually change
+  const prevLeagueId = typeof prevProps.tournament.league === 'object'
+    ? prevProps.tournament.league?.pk
+    : prevProps.tournament.league;
+  const nextLeagueId = typeof nextProps.tournament.league === 'object'
+    ? nextProps.tournament.league?.pk
+    : nextProps.tournament.league;
   return (
     prevProps.tournament.pk === nextProps.tournament.pk &&
     prevProps.tournament.name === nextProps.tournament.name &&
     prevProps.tournament.state === nextProps.tournament.state &&
     prevProps.tournament.date_played === nextProps.tournament.date_played &&
-    prevProps.animationIndex === nextProps.animationIndex &&
-    prevProps.edit === nextProps.edit &&
-    prevProps.saveFunc === nextProps.saveFunc
+    prevProps.tournament.tournament_type === nextProps.tournament.tournament_type &&
+    prevLeagueId === nextLeagueId &&
+    prevProps.tournament.user_count === nextProps.tournament.user_count &&
+    prevProps.animationIndex === nextProps.animationIndex
   );
 });

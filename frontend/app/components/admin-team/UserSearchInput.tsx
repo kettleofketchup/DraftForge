@@ -7,6 +7,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Loader2 } from 'lucide-react';
 import type { UserType } from '~/components/user/types';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { searchUsers } from '~/components/api/api';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 
@@ -123,11 +124,7 @@ export function UserSearchInput({
                       onClick={() => handleSelect(user)}
                       className="w-full flex items-center gap-3 p-3 hover:bg-base-200 transition-colors text-left"
                     >
-                      <img
-                        src={user.avatarUrl || user.avatar || '/default-avatar.png'}
-                        alt={displayName}
-                        className="w-8 h-8 rounded-full"
-                      />
+                      <UserAvatar user={user} size="md" />
                       <div>
                         <div className="font-medium">{displayName}</div>
                         {user.username && user.username !== displayName && (

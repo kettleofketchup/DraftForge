@@ -25,6 +25,7 @@ export const LeagueSchema = z.object({
   description: z.string().optional().default(''),
   rules: z.string().optional().default(''),
   prize_pool: z.string().optional().default(''),
+  timezone: z.string().optional().default('America/New_York'), // Default to US East
   admin_ids: z.array(z.number()).optional(),
   staff_ids: z.array(z.number()).optional(),
   tournament_count: z.number().optional(),

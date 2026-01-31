@@ -5,11 +5,12 @@ import { getLogger } from '~/lib/logger';
 const log = getLogger('GameCard');
 
 import { motion } from 'framer-motion';
-import { Edit, BarChart3 } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { refreshTournamentHook } from '~/components/draft/hooks/refreshTournamentHook';
+import { refreshTournamentHook } from '~/components/teamdraft/hooks/refreshTournamentHook';
 import { useUserStore } from '~/store/userStore';
 import { Button } from '../../ui/button';
+import { EditButton, SubmitButton } from '../../ui/buttons';
 import { updateGameHook } from '../hooks/updateGameHook';
 import { GameRemoveButton } from './deleteButton';
 import { DotaMatchStatsModal } from '~/components/bracket/modals';
@@ -105,16 +106,15 @@ export const GameCard: React.FC<Props> = ({
           </label>
         </div>
 
-        <Button
+        <SubmitButton
           onClick={handleSave}
-          type="submit"
-          className="btn btn-primary btn-sm mt-3"
-          disabled={isSaving}
+          className="mt-3"
+          size="sm"
+          loading={isSaving}
+          loadingText="Saving..."
         >
-          {saveCallback === 'create' &&
-            (isSaving ? 'Saving...' : 'Create Tournament')}
-          {saveCallback === 'save' && (isSaving ? 'Saving...' : 'Save Changes')}
-        </Button>
+          {saveCallback === 'create' ? 'Create Tournament' : 'Save Changes'}
+        </SubmitButton>
       </>
     );
   };
@@ -155,13 +155,11 @@ export const GameCard: React.FC<Props> = ({
     }
 
     return (
-      <Button
-        className="w-20 ml-0 bg-purple-900 text-white"
+      <EditButton
+        className="w-20 ml-0"
         onClick={() => setEditMode(!editMode)}
-      >
-        {!editMode && <Edit />}
-        {editMode ? 'Cancel' : 'Edit'}
-      </Button>
+        editMode={editMode}
+      />
     );
   };
 

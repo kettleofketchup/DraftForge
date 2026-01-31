@@ -12,8 +12,8 @@ export const EmptySlotNode = memo(({ data }: NodeProps & { data: EmptySlotData }
   return (
     <BaseNode
       className={cn(
-        'w-52 border-dashed',
-        isStaff && 'cursor-pointer hover:border-primary/50'
+        'w-52 border-dashed border-white/50',
+        isStaff && 'cursor-pointer hover:border-white/80'
       )}
     >
       <BaseHandle type="target" position={Position.Left} />

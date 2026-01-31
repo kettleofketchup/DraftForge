@@ -1,59 +1,41 @@
-import { memo, useEffect, useState } from 'react';
-import { DraftModal } from '~/components/draft/draftModal';
+import { memo, useMemo, useState } from 'react';
+import { DraftModal } from '~/components/teamdraft/draftModal';
 import { SearchTeamsDropdown } from '~/components/team/searchTeams';
-import { TeamCard } from '~/components/team/teamCard';
+import { TeamCard } from '~/components/teamdraft/CompletedTeamDraftView';
 import { CaptainSelectionModal } from '~/components/tournament/captains/captainSelectionModal';
 
 import type { UserType } from '~/components/user/types';
 import type { TeamType } from '~/index';
-import { getLogger } from '~/lib/logger';
 import { hasErrors } from '~/pages/tournament/hasErrors';
 import { useUserStore } from '~/store/userStore';
 import { RandomizeTeamsModal } from './teams/randomTeamsModal';
-const log = getLogger('TeamsTab');
+
 export const TeamsTab: React.FC = memo(() => {
   const tournament = useUserStore((state) => state.tournament);
-  const isStaff = useUserStore((state) => state.isStaff);
-
-  const allUsers = useUserStore((state) => state.users); // Zustand setter
-  const currentUser = useUserStore((state) => state.currentUser); // Zustand setter
-
-  const getCurrentTournament = useUserStore(
-    (state) => state.getCurrentTournament,
-  ); // Zustand setter
   const [query, setQuery] = useState('');
 
-  useEffect(() => {}, [
-    tournament.teams?.length,
-    tournament.users?.length,
-    tournament.captains?.length,
-  ]);
+  // Memoize filtered teams to prevent recalculation on every render
+  const filteredTeams = useMemo(() => {
+    if (!tournament.teams) return [];
+    if (query === '') return tournament.teams;
 
-  const filteredTeams =
-    query === ''
-      ? tournament.teams
-      : tournament.teams
-          ?.filter((team: TeamType) => {
-            const q = query.toLowerCase();
+    const q = query.toLowerCase();
+    return tournament.teams
+      .filter((team: TeamType) => {
+        // Check if any user in the team matches the query
+        const userMatches = team.members?.some((user: UserType) => {
+          const usernameMatch = user.username?.toLowerCase().includes(q);
+          const nicknameMatch = user.nickname?.toLowerCase().includes(q);
+          return usernameMatch || nicknameMatch;
+        });
 
-            // Check if any user in the team matches the query
+        // Check if team name matches
+        const teamNameMatch = team.name?.toLowerCase().includes(q);
 
-            const userMatches = team.members?.some((user: UserType) => {
-              const usernameMatch = user.username?.toLowerCase().includes(q);
-              const nicknameMatch = user.nickname?.toLowerCase().includes(q);
-
-              return usernameMatch || nicknameMatch;
-            });
-
-            // Check if team name matches
-            const teamNameMatch = team.name?.toLowerCase().includes(q);
-
-            return userMatches || teamNameMatch;
-          })
-          .sort((a: TeamType, b: TeamType) => a.name.localeCompare(b.name));
-  useEffect(() => {
-    log.debug('Filtered teams:', filteredTeams);
-  }, [tournament.teams?.length, filteredTeams?.length]);
+        return userMatches || teamNameMatch;
+      })
+      .sort((a: TeamType, b: TeamType) => a.name.localeCompare(b.name));
+  }, [tournament.teams, query]);
   const teamButtonsView = () => {
     return (
       <div
@@ -79,15 +61,11 @@ export const TeamsTab: React.FC = memo(() => {
           data-testid="teamsSearchDropdown"
         />
       </div>
-      <div
-        className="flex w-full  grid gap-4 md:gap-6 mt-4 grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3
-       justify-center content-center "
-      >
-        {filteredTeams?.map((team: TeamType) => (
+      <div className="grid gap-4 md:gap-6 mt-4 grid-cols-1 lg:grid-cols-2 w-full">
+        {filteredTeams?.map((team: TeamType, index: number) => (
           <TeamCard
             team={team}
-            compact={true}
-            saveFunc={'save'}
+            rank={index + 1}
             key={`TeamCard-${team.pk}`}
           />
         ))}

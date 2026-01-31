@@ -1,8 +1,8 @@
 import { useClickAway } from '@uidotdev/usehooks';
 import { LogOutIcon, UserPenIcon } from 'lucide-react';
-import React, { memo, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router';
-import { DraftNotificationBadge } from '~/components/draft/DraftNotificationBadge';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router';
+import { DraftNotificationBadge } from '~/components/teamdraft/DraftNotificationBadge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,15 +11,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import { useUserStore } from '../../store/userStore';
 import type { UserType } from '../user/types';
 
 import { Button } from '~/components/ui/button';
+import { DestructiveButton } from '~/components/ui/buttons';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('login');
-type UserProps = {
-  user: UserType;
-};
+
 type AvatarProps = {
   children: React.ReactNode;
 };
@@ -34,43 +34,6 @@ const AvatarContainer: React.FC<AvatarProps> = (props) => {
     </div>
   );
 };
-export const UserAvatarImg: React.FC<UserProps> = memo(({ user }) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [hasError, setHasError] = useState(false);
-
-  // Reset loading state when user changes
-  React.useEffect(() => {
-    setIsLoaded(false);
-    setHasError(false);
-  }, [user?.avatarUrl]);
-
-  if (!user) {
-    return <div className="w-full h-full skeleton rounded-full" />;
-  }
-
-  if (hasError) {
-    return (
-      <div className="w-full h-full bg-base-300 rounded-full flex items-center justify-center">
-        <span className="text-xs text-base-content/50">
-          {user.username?.charAt(0)?.toUpperCase() || '?'}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      {!isLoaded && <div className="absolute inset-0 skeleton rounded-full" />}
-      <img
-        src={user.avatarUrl}
-        alt={user.username}
-        className={`w-full h-full rounded-full ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
-        onLoad={() => setIsLoaded(true)}
-        onError={() => setHasError(true)}
-      />
-    </>
-  );
-});
 
 import { logout } from '~/components/api/api';
 
@@ -123,26 +86,26 @@ export const ProfileButton: React.FC = () => {
             onFocusCapture={handleClick}
           >
             <AvatarContainer>
-              <UserAvatarImg user={currentUser} />
+              <UserAvatar user={currentUser} size="xl" className="w-full h-full" />
             </AvatarContainer>
             <DraftNotificationBadge />
           </div>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
           <DropdownMenuLabel>
-            <a href="/profile">
+            <Link to="/profile">
               <Button>
                 <UserPenIcon />
                 Profile
               </Button>
-            </a>
+            </Link>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem>
-            <Button className="" onClick={logoutClick} variant={'destructive'}>
+            <DestructiveButton onClick={logoutClick}>
               <LogOutIcon />
               Logout
-            </Button>
+            </DestructiveButton>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
