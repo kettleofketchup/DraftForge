@@ -96,60 +96,120 @@ test.describe('Tournaments - create (e2e)', () => {
     await expect(createdTournament).toBeVisible({ timeout: 15000 });
   });
 
-  // Skip: This test depends on the previous test's created tournament which may not persist
-  test.skip('Can edit the form', async ({ page }) => {
-    // Ensure the tournament exists
-    await expect(page.getByText(thisName)).toBeVisible({ timeout: 10000 });
+  test('Can edit a tournament via the form', async ({ page }) => {
+    // Use existing test tournament - wait for it to load
+    await expect(page.getByText(completedBracketTest)).toBeVisible({ timeout: 30000 });
 
-    // Find the tournament card and click the Edit button inside it
+    // Find the tournament card and click the Edit button
     const tournamentCard = page
-      .getByText(thisName)
+      .getByText(completedBracketTest)
       .locator(
         'xpath=ancestor::*[contains(@class, "tournament-card") or contains(@class, "card") or self::article or self::li][1]'
       );
 
-    await tournamentCard.locator('button').filter({ hasText: /edit/i }).first().click();
+    // Open edit modal
+    const editButton = tournamentCard.locator('button').filter({ hasText: /edit/i }).first();
+    await editButton.evaluate((btn) => (btn as HTMLButtonElement).click());
 
-    // Clear and fill with edited name
+    // Wait for modal and name input
     const nameInput = page.locator('[data-testid="tournament-name-input"]');
     await nameInput.waitFor({ state: 'visible', timeout: 10000 });
+
+    // Store original name for verification
+    const originalName = await nameInput.inputValue();
+
+    // Make a minor edit (add suffix)
+    const editedNameWithSuffix = `${originalName} (edited)`;
     await nameInput.clear();
-    await nameInput.fill(editedName);
+    await nameInput.fill(editedNameWithSuffix);
 
     // Find and click the save button
-    await page.getByRole('button', { name: /save changes/i }).first().click();
+    const saveButton = page.getByRole('button', { name: /save changes/i }).first();
+    await saveButton.evaluate((btn) => (btn as HTMLButtonElement).click());
 
     // Wait for success message
     await expect(page.getByText(/successfully/i)).toBeVisible({ timeout: 10000 });
 
     // Verify edited name appears
-    const editedTournament = page.getByText(editedName);
-    await editedTournament.scrollIntoViewIfNeeded();
-    await expect(editedTournament).toBeVisible();
+    await expect(page.getByText(editedNameWithSuffix).first()).toBeVisible({ timeout: 10000 });
+
+    // Revert the change to keep test data clean
+    const editedCard = page
+      .getByText(editedNameWithSuffix)
+      .first()
+      .locator(
+        'xpath=ancestor::*[contains(@class, "tournament-card") or contains(@class, "card") or self::article or self::li][1]'
+      );
+    const revertEditButton = editedCard.locator('button').filter({ hasText: /edit/i }).first();
+    await revertEditButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+
+    const revertNameInput = page.locator('[data-testid="tournament-name-input"]');
+    await revertNameInput.waitFor({ state: 'visible', timeout: 10000 });
+    await revertNameInput.clear();
+    await revertNameInput.fill(originalName);
+
+    const revertSaveButton = page.getByRole('button', { name: /save changes/i }).first();
+    await revertSaveButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+    await page.waitForLoadState('networkidle');
   });
 
-  // Skip: This test depends on the previous test's edited tournament which may not persist
-  test.skip('Can delete a tournament', async ({ page }) => {
-    // Ensure the tournament exists
-    const tournament = page.getByText(editedName);
-    await expect(tournament).toBeVisible();
-    await tournament.scrollIntoViewIfNeeded();
+  test('Can delete a tournament', async ({ page }) => {
+    // First create a tournament to delete (so we don't destroy test data)
+    const createButton = page.getByRole('button', { name: /create tournament/i });
+    await createButton.waitFor({ state: 'visible', timeout: 30000 });
+    await createButton.click();
 
-    // Find the tournament card and click the Delete button inside it
-    const tournamentCard = tournament.locator(
-      'xpath=ancestor::*[contains(@class, "tournament-card") or contains(@class, "card") or self::article or self::li][1]'
-    );
+    const deletableName = `Delete Test ${Date.now()}`;
+    const nameInput = page.locator('[data-testid="tournament-name-input"]');
+    await nameInput.waitFor({ state: 'visible', timeout: 10000 });
+    await nameInput.fill(deletableName);
 
-    // Target the delete button by aria-label
-    await tournamentCard.locator('[aria-label="Delete"]').click();
+    // Select tournament type
+    const typeSelect = page.locator('[data-testid="tournament-type-select"]');
+    await typeSelect.click();
+    const typeOption = page.locator('[data-testid="tournament-type-single"]');
+    await typeOption.waitFor({ state: 'visible', timeout: 10000 });
+    await typeOption.click();
 
-    // Click the confirmation delete button
-    await page.getByRole('button', { name: 'Confirm Delete' }).click({ timeout: 10000 });
+    // Select date
+    const datePicker = page.locator('[data-testid="tournament-date-picker"]');
+    await datePicker.click();
+    const calendar = page.locator('[data-slot="calendar"]');
+    await calendar.waitFor({ state: 'visible', timeout: 5000 });
+    const dayButton = calendar.locator('button').filter({ hasText: /^15$/ }).first();
+    await dayButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+    await calendar.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
 
-    // Wait for deletion success message
-    await expect(
-      page.getByText(/deleted|deleted successfully|removed/i)
-    ).toBeVisible({ timeout: 2000 });
+    // Submit to create
+    await page.locator('[data-testid="tournament-submit-button"]').click();
+    await page.waitForLoadState('networkidle');
+
+    // Verify it was created
+    const createdTournament = page.locator('[data-slot="card-title"]').filter({ hasText: deletableName }).first();
+    await createdTournament.scrollIntoViewIfNeeded();
+    await expect(createdTournament).toBeVisible({ timeout: 15000 });
+
+    // Find the tournament card - use the card structure: div.card contains the title
+    // Cards use class "card card-compact" - find the one containing our tournament name
+    const tournamentCard = page.locator('div.card').filter({ hasText: deletableName }).first();
+    await tournamentCard.waitFor({ state: 'visible', timeout: 10000 });
+
+    // Find the delete button - TrashIconButton uses variant="destructive" which applies bg-destructive
+    // The button also has sr-only text "Delete" or "Delete tournament"
+    const deleteButton = tournamentCard.getByRole('button', { name: /delete/i }).first();
+    await deleteButton.waitFor({ state: 'visible', timeout: 10000 });
+    await deleteButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+
+    // Confirm deletion
+    const confirmButton = page.getByRole('button', { name: 'Confirm Delete' });
+    await confirmButton.waitFor({ state: 'visible', timeout: 5000 });
+    await confirmButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+
+    // Wait for deletion success
+    await expect(page.getByText(/deleted/i)).toBeVisible({ timeout: 10000 });
+
+    // Verify tournament is gone
+    await expect(page.locator('[data-slot="card-title"]').filter({ hasText: deletableName })).not.toBeVisible({ timeout: 5000 });
   });
 
   test('View Button works', async ({ page }) => {
