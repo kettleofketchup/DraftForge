@@ -135,7 +135,17 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   // Note: Actions are accessed via getState() in effects to avoid subscriptions
 
   const { getLayoutedElements } = useElkLayout();
-  const { setViewport, getViewport } = useReactFlow();
+  const { setViewport, getViewport, fitView } = useReactFlow();
+
+  // Expose fitView for Playwright testing
+  useEffect(() => {
+    (window as Window & { bracketFitView?: () => void }).bracketFitView = () => {
+      fitView({ padding: 0.1, duration: 200 });
+    };
+    return () => {
+      delete (window as Window & { bracketFitView?: () => void }).bracketFitView;
+    };
+  }, [fitView]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<MatchNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
