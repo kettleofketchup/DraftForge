@@ -1,4 +1,39 @@
+import { generateMeta } from '~/lib/seo';
+import { fetchOrganization } from '~/components/api/api';
 import { Building2, ExternalLink, Pencil, Plus } from 'lucide-react';
+import type { Route } from './+types/organization';
+
+export async function loader({ params }: Route.LoaderArgs) {
+  const pk = params.organizationId ? parseInt(params.organizationId, 10) : null;
+  if (!pk) return { organization: null };
+
+  try {
+    const organization = await fetchOrganization(pk);
+    return { organization };
+  } catch {
+    return { organization: null };
+  }
+}
+
+export function meta({ data }: Route.MetaArgs) {
+  const org = data?.organization;
+
+  if (org?.name) {
+    const desc = org.description
+      ? org.description.slice(0, 150)
+      : `${org.name} - Dota 2 tournament organization`;
+    return generateMeta({
+      title: org.name,
+      description: desc,
+      url: `/organizations/${org.pk}`,
+    });
+  }
+
+  return generateMeta({
+    title: 'Organization',
+    description: 'Organization profile and events',
+  });
+}
 import { useState } from 'react';
 import { useParams } from 'react-router';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';

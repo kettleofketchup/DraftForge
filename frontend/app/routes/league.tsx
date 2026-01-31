@@ -1,4 +1,37 @@
+import { generateMeta } from '~/lib/seo';
+import { fetchLeague } from '~/components/api/api';
 import { useParams, useNavigate } from 'react-router';
+import type { Route } from './+types/league';
+
+export async function loader({ params }: Route.LoaderArgs) {
+  const pk = params.leagueId ? parseInt(params.leagueId, 10) : null;
+  if (!pk) return { league: null };
+
+  try {
+    const league = await fetchLeague(pk);
+    return { league };
+  } catch {
+    return { league: null };
+  }
+}
+
+export function meta({ data }: Route.MetaArgs) {
+  const league = data?.league;
+
+  if (league?.name) {
+    const orgName = league.organization_name ? ` by ${league.organization_name}` : '';
+    return generateMeta({
+      title: league.name,
+      description: `${league.name}${orgName} - League standings and tournament schedule`,
+      url: `/leagues/${league.pk}`,
+    });
+  }
+
+  return generateMeta({
+    title: 'League',
+    description: 'League standings and tournament schedule',
+  });
+}
 import { useState, useEffect } from 'react';
 import { Trophy, Building2, Loader2, Pencil } from 'lucide-react';
 

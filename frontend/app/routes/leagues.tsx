@@ -1,4 +1,13 @@
+import { generateMeta } from '~/lib/seo';
 import { Plus, Trophy } from 'lucide-react';
+
+export function meta() {
+  return generateMeta({
+    title: 'Leagues',
+    description: 'Competitive Dota 2 league seasons',
+    url: '/leagues',
+  });
+}
 import { memo, useEffect, useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import {

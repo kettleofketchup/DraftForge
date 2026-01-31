@@ -1,10 +1,11 @@
 import TournamentsPage from '~/pages/tournaments/tournaments';
-import type { Route } from './+types/home';
+import { generateMeta } from '~/lib/seo';
 
-export function meta({}: Route.MetaArgs) {
-  return [
-    { title: 'Dota Tournaments' },
-    { name: 'description', content: 'All the Tournaments!' },
-  ];
+export function meta() {
+  return generateMeta({
+    title: 'Tournaments',
+    description: 'Browse and manage Dota 2 tournaments',
+    url: '/tournaments',
+  });
 }
 export default TournamentsPage;

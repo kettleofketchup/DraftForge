@@ -1,4 +1,13 @@
+import { generateMeta } from '~/lib/seo';
 import { Building2, Plus } from 'lucide-react';
+
+export function meta() {
+  return generateMeta({
+    title: 'Organizations',
+    description: 'Dota 2 tournament organizers',
+    url: '/organizations',
+  });
+}
 import { memo, useEffect, useState } from 'react';
 import {
   CreateOrganizationModal,
