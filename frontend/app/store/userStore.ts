@@ -14,7 +14,7 @@ import {
   getTournaments,
   getTournamentsBasic,
 } from '~/components/api/api';
-import type { DraftRoundType, DraftType } from '~/components/draft/types';
+import type { DraftRoundType, DraftType } from '~/components/teamdraft/types';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { TeamType, TournamentType } from '~/components/tournament/types';

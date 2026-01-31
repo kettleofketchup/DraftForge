@@ -411,6 +411,23 @@ export async function transferOrgOwnership(orgId: number, userId: number): Promi
   return response.data.new_owner;
 }
 
+// Organization Discord Members
+export interface DiscordMember {
+  user: {
+    id: string;
+    username: string;
+    global_name?: string;
+    avatar?: string;
+  };
+  nick?: string;
+  joined_at: string;
+}
+
+export async function getOrganizationDiscordMembers(orgId: number): Promise<DiscordMember[]> {
+  const response = await axios.get<{ members: DiscordMember[] }>(`/discord/organizations/${orgId}/discord-members/`);
+  return response.data.members;
+}
+
 // League Admin Team
 export async function addLeagueAdmin(leagueId: number, userId: number): Promise<UserType> {
   const response = await axios.post<AddUserResponse>(`/leagues/${leagueId}/admins/`, { user_id: userId });

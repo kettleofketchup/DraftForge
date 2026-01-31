@@ -7,6 +7,7 @@ export const OrganizationSchema = z.object({
   description: z.string().optional().default(''),
   logo: z.union([z.string().url(), z.literal('')]).optional().default(''),
   discord_link: z.union([z.string().url(), z.literal('')]).optional().default(''),
+  discord_server_id: z.string().max(20).nullable().optional(),
   rules_template: z.string().optional().default(''),
   timezone: z.string().optional().default('America/New_York'), // Default to US East
   owner_id: z.number().nullable().optional(),
@@ -32,6 +33,7 @@ export const EditOrganizationSchema = z.object({
   description: z.string(),
   logo: z.union([z.string().url(), z.literal('')]),
   discord_link: z.union([z.string().url(), z.literal('')]),
+  discord_server_id: z.string().max(20).nullable().optional(),
   rules_template: z.string(),
 });
 

@@ -16,8 +16,8 @@ import { TooltipProvider } from '~/components/ui/tooltip';
 import { getLogger } from '~/lib/logger';
 import type { Route } from './+types/root';
 import './app.css';
-import { ActiveDraftBanner } from './components/draft/ActiveDraftBanner';
-import { FloatingDraftIndicator } from './components/draft/FloatingDraftIndicator';
+import { ActiveDraftBanner } from './components/teamdraft/ActiveDraftBanner';
+import { FloatingDraftIndicator } from './components/teamdraft/FloatingDraftIndicator';
 import ResponsiveAppBar from './components/navbar/navbar';
 
 ('use client');
