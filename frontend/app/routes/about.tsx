@@ -1,8 +1,12 @@
 import { About } from '../pages/about/about';
-import type { Route } from './+types/home';
+import { generateMeta } from '~/lib/seo';
 
-export function meta({}: Route.MetaArgs) {
-  return [{ title: 'About Us' }, { name: 'description', content: 'About us!' }];
+export function meta() {
+  return generateMeta({
+    title: 'About',
+    description: 'Learn about DraftForge and the team behind it',
+    url: '/about',
+  });
 }
 
 export default function Home() {

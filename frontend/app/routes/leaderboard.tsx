@@ -1,11 +1,12 @@
 import { LeaderboardPage } from "~/features/leaderboard";
-import type { Route } from "./+types/leaderboard";
+import { generateMeta } from "~/lib/seo";
 
-export function meta({}: Route.MetaArgs) {
-  return [
-    { title: "Leaderboard" },
-    { name: "description", content: "League leaderboard standings" },
-  ];
+export function meta() {
+  return generateMeta({
+    title: "Leaderboard",
+    description: "Player rankings and league standings",
+    url: "/leaderboard",
+  });
 }
 
 export default function LeaderboardRoute() {
