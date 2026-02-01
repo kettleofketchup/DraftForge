@@ -8,6 +8,7 @@ services:
     env_file: "./docker/.env.test"
     volumes:
       - ./frontend:/app
+      - ./docs/assets:/app/public/assets/docs:ro
     networks:
       - ci-network
 
