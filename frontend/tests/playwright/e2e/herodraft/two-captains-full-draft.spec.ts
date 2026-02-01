@@ -334,9 +334,9 @@ test.describe('Two Captains Full Draft', () => {
       waitForHydration(captainB.page),
     ]);
 
-    // Click Start Draft button on both pages
+    // Click Start Draft button on both pages - use data-testid for reliability
     const startDraftButton = (page: Page) =>
-      page.locator('button:has-text("Start Draft"), button:has-text("View Draft"), button:has-text("Live Draft")').first();
+      page.locator('[data-testid="view-draft-btn"]');
 
     await Promise.all([
       startDraftButton(captainA.page).click(),
