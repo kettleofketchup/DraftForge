@@ -155,16 +155,26 @@ def generate_mock_discord_members(count=100):
     return members
 
 
-def create_user(user_data):
+def create_user(user_data, organization=None):
+    """
+    Create a user from Discord data.
+
+    Args:
+        user_data: Discord user data dict
+        organization: Optional Organization to create OrgUser for
+    """
     user, created = CustomUser.objects.get_or_create(discordId=user_data["user"]["id"])
     if not created:
+        # Ensure OrgUser exists for existing user
+        if organization:
+            _ensure_org_user(user, organization)
         return user
 
     mmr = random.randint(200, 6000)
     with transaction.atomic():
         print("creating user", user_data["user"]["username"])
         user.createFromDiscordData(user_data)
-        user.mmr = mmr
+        user.mmr = mmr  # Keep for backwards compat during migration
         positions = PositionsModel.objects.create()
         positions.carry = random.randint(0, 5)
         positions.mid = random.randint(0, 5)
@@ -178,7 +188,36 @@ def create_user(user_data):
         user.positions = positions
         user.save()
 
+        # Create OrgUser for organization-scoped MMR
+        if organization:
+            _ensure_org_user(user, organization, mmr=mmr)
+
     return user
+
+
+def _ensure_org_user(user, organization, mmr=None):
+    """Ensure OrgUser exists for user in organization."""
+    from org.models import OrgUser
+
+    org_user, created = OrgUser.objects.get_or_create(
+        user=user,
+        organization=organization,
+        defaults={"mmr": mmr if mmr is not None else (user.mmr or 0)},
+    )
+    if not created and mmr is not None and org_user.mmr != mmr:
+        org_user.mmr = mmr
+        org_user.save()
+    return org_user
+
+
+def _ensure_league_user(user, org_user, league):
+    """Ensure LeagueUser exists for user in league."""
+    from league.models import LeagueUser
+
+    league_user, created = LeagueUser.objects.get_or_create(
+        user=user, org_user=org_user, league=league, defaults={"mmr": org_user.mmr}
+    )
+    return league_user
 
 
 from tests.test_auth import createTestStaffUser, createTestSuperUser, createTestUser
@@ -308,11 +347,14 @@ def populate_users(force=False):
     Populates the database with Discord users.
     - Grabs a random number of discord users (40-100).
     - Creates CustomUser objects for them.
+    - Creates OrgUser records for DTX organization.
     - Falls back to mock data if Discord API is unavailable (e.g., in CI).
 
     Args:
         force (bool): If True, populate users even if there are already more than 100 users.
     """
+    from app.models import Organization
+
     current_count = CustomUser.objects.count()
     createTestStaffUser()
     createTestSuperUser()
@@ -320,6 +362,14 @@ def populate_users(force=False):
     if current_count > 100 and not force:
         print(
             f"Database already has {current_count} users (>100). Use force=True to populate anyway."
+        )
+        return
+
+    # Get DTX organization for OrgUser creation
+    dtx_org = Organization.objects.filter(name=DTX_ORG_NAME).first()
+    if not dtx_org:
+        print(
+            "DTX Organization not found. Run populate_organizations_and_leagues first."
         )
         return
 
@@ -345,11 +395,11 @@ def populate_users(force=False):
     sample_size = random.randint(40, min(100, len(discord_users)))
     users_to_create = random.sample(discord_users, sample_size)
 
-    # Create users
+    # Create users with OrgUser records
     users_created = 0
 
     for user in users_to_create:
-        create_user(user)
+        create_user(user, organization=dtx_org)
         users_created += 1
 
     print(
@@ -500,6 +550,13 @@ def populate_tournaments(force=False):
 
             # Add users to tournament
             tournament.users.set(selected_users)
+
+            # Create OrgUser and LeagueUser records for tournament users
+            org = league.organizations.first()
+            if org:
+                for user in selected_users:
+                    org_user = _ensure_org_user(user, org)
+                    _ensure_league_user(user, org_user, league)
 
             # Create teams based on config (5 players per team: 1 captain + 4 members)
             team_name_pool = [
@@ -959,6 +1016,13 @@ def populate_bracket_linking_scenario(force=False):
     # Add all users to tournament
     tournament.users.set(team_users)
 
+    # Create OrgUser and LeagueUser records for tournament users
+    org = dtx_league.organizations.first()
+    if org:
+        for user in team_users:
+            org_user = _ensure_org_user(user, org)
+            _ensure_league_user(user, org_user, dtx_league)
+
     # Create 4 teams with 5 players each
     team_names = ["Link Alpha", "Link Beta", "Link Gamma", "Link Delta"]
     teams = []
@@ -1369,6 +1433,13 @@ def populate_real_tournament_38(force=False):
     # Add all users to tournament
     tournament.users.set(all_users)
 
+    # Create OrgUser and LeagueUser records for tournament users
+    org = dtx_league.organizations.first()
+    if org:
+        for user in all_users:
+            org_user = _ensure_org_user(user, org)
+            _ensure_league_user(user, org_user, dtx_league)
+
     # Create bracket games (6 games for 4-team double elimination)
     # Based on actual bracket state from /api/bracket/tournaments/38/
     #
@@ -1760,13 +1831,14 @@ REAL_TOURNAMENT_USERS = {
 }
 
 
-def _get_or_create_demo_user(username, user_data):
+def _get_or_create_demo_user(username, user_data, organization=None):
     """Get or create a user for demo tournaments with real position data."""
-    from app.models import CustomUser, PositionsModel
+    from app.models import CustomUser, Organization, PositionsModel
 
     steam_id = user_data.get("steam_id")
     steamid_64 = 76561197960265728 + steam_id if steam_id else None
     pos_data = user_data.get("positions", {})
+    mmr = user_data.get("mmr", 3000)
 
     user = CustomUser.objects.filter(discordId=user_data["discord_id"]).first()
     if not user:
@@ -1785,15 +1857,15 @@ def _get_or_create_demo_user(username, user_data):
             discordId=user_data["discord_id"],
             username=username,
             steamid=steamid_64,
-            mmr=user_data["mmr"],
+            mmr=mmr,
             positions=positions,
         )
     else:
         # Update existing user with latest data
         if steamid_64 and user.steamid != steamid_64:
             user.steamid = steamid_64
-        if user.mmr != user_data["mmr"]:
-            user.mmr = user_data["mmr"]
+        if user.mmr != mmr:
+            user.mmr = mmr
         # Update positions if provided
         if pos_data and user.positions:
             user.positions.carry = pos_data.get("carry", user.positions.carry)
@@ -1807,6 +1879,12 @@ def _get_or_create_demo_user(username, user_data):
             )
             user.positions.save()
         user.save()
+
+    # Ensure OrgUser exists for DTX organization
+    if organization is None:
+        organization = Organization.objects.filter(name=DTX_ORG_NAME).first()
+    if organization:
+        _ensure_org_user(user, organization, mmr=mmr)
 
     return user
 
@@ -1913,6 +1991,13 @@ def populate_demo_herodraft_tournament(force=False):
     )
     tournament.users.set(all_users)
 
+    # Create LeagueUser records for tournament users
+    org = dtx_league.organizations.first()
+    if org:
+        for user in all_users:
+            org_user = _ensure_org_user(user, org)
+            _ensure_league_user(user, org_user, dtx_league)
+
     # Create teams
     team_a = Team.objects.create(
         tournament=tournament,
@@ -2016,6 +2101,13 @@ def populate_demo_captaindraft_tournament(force=False):
     )
     tournament.users.set(users)
 
+    # Create LeagueUser records for tournament users
+    org = dtx_league.organizations.first()
+    if org:
+        for user in users:
+            org_user = _ensure_org_user(user, org)
+            _ensure_league_user(user, org_user, dtx_league)
+
     # Create draft for this tournament (shuffle mode for demo)
     draft = Draft.objects.create(
         tournament=tournament,
@@ -2075,6 +2167,13 @@ def populate_demo_snake_draft_tournament(force=False):
         league=dtx_league,
     )
     tournament.users.set(users)
+
+    # Create LeagueUser records for tournament users
+    org = dtx_league.organizations.first()
+    if org:
+        for user in users:
+            org_user = _ensure_org_user(user, org)
+            _ensure_league_user(user, org_user, dtx_league)
 
     # Create 4 teams with captains (first 4 users)
     team_names = ["Team Alpha", "Team Beta", "Team Gamma", "Team Delta"]
@@ -2152,6 +2251,13 @@ def populate_demo_shuffle_draft_tournament(force=False):
         league=dtx_league,
     )
     tournament.users.set(users)
+
+    # Create LeagueUser records for tournament users
+    org = dtx_league.organizations.first()
+    if org:
+        for user in users:
+            org_user = _ensure_org_user(user, org)
+            _ensure_league_user(user, org_user, dtx_league)
 
     # Create 4 teams with captains (first 4 users)
     team_names = ["Team Alpha", "Team Beta", "Team Gamma", "Team Delta"]
