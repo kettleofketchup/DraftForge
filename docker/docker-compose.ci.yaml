@@ -1,15 +1,17 @@
 # Lightweight compose for CI - only essential services for Playwright tests
-# Excludes: celery-worker, celery-beat, discord-bot, redis (cache disabled)
+# Excludes: celery-worker, celery-beat, discord-bot
 services:
   frontend:
     container_name: frontend
-    image: ghcr.io/kettleofketchup/draftforge/frontend-dev:latest
+    image: ghcr.io/kettleofketchup/draftforge/frontend:latest
     user: "1000:1000"
     env_file: "./docker/.env.test"
-    shm_size: 1gb
-    volumes:
-      - ./frontend:/app
-      - ./docs/assets:/app/public/assets/docs:ro
+    networks:
+      - ci-network
+
+  redis:
+    image: redis:8-alpine
+    container_name: redis
     networks:
       - ci-network
 
@@ -18,10 +20,10 @@ services:
     user: "1000:1000"
     env_file: "./docker/.env.test"
     image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
-    environment:
-      - DISABLE_CACHE=true
     volumes:
       - ./backend:/app/backend
+    depends_on:
+      - redis
     networks:
       - ci-network
 
