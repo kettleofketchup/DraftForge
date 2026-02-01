@@ -721,6 +721,287 @@ git commit -m "feat(org): add OrgUser API endpoints"
 
 ---
 
+### Task 8.1: Update shuffle_draft.py to use OrgUser MMR
+
+**Files:**
+- Modify: `backend/app/functions/shuffle_draft.py`
+
+**Step 1: Update get_team_total_mmr function**
+
+```python
+# backend/app/functions/shuffle_draft.py
+def get_team_total_mmr(team, org=None):
+    """Calculate total MMR for a team using org-scoped MMR."""
+    from org.models import OrgUser
+
+    if not org:
+        # Fallback to 0 if no org context
+        return 0
+
+    # Get captain's MMR
+    try:
+        captain_org_user = OrgUser.objects.get(user=team.captain, organization=org)
+        total = captain_org_user.mmr
+    except OrgUser.DoesNotExist:
+        total = 0
+
+    # Get members' MMR
+    member_ids = team.members.exclude(id=team.captain_id).values_list('id', flat=True)
+    member_mmrs = OrgUser.objects.filter(
+        user_id__in=member_ids,
+        organization=org
+    ).values_list('mmr', flat=True)
+
+    total += sum(member_mmrs)
+    return total
+```
+
+**Step 2: Commit**
+
+```bash
+git add backend/app/functions/shuffle_draft.py
+git commit -m "feat(app): update shuffle_draft to use OrgUser MMR"
+```
+
+---
+
+### Task 8.2: Update TeamSerializer.get_total_mmr
+
+**Files:**
+- Modify: `backend/app/serializers.py`
+
+**Step 1: Update get_total_mmr method**
+
+Find `TeamSerializer` and update `get_total_mmr`:
+
+```python
+class TeamSerializer(serializers.ModelSerializer):
+    # ... existing fields
+
+    def get_total_mmr(self, team):
+        """Calculate total MMR using org-scoped MMR."""
+        from org.models import OrgUser
+
+        # Get org from tournament's league
+        tournament = team.tournament
+        league = tournament.league if tournament else None
+        org = league.organizations.first() if league else None
+
+        if not org:
+            return 0
+
+        # Get all team member IDs (captain + members)
+        member_ids = [team.captain_id] + list(
+            team.members.exclude(id=team.captain_id).values_list('id', flat=True)
+        )
+
+        # Sum MMR from OrgUser
+        total = OrgUser.objects.filter(
+            user_id__in=member_ids,
+            organization=org
+        ).aggregate(total=models.Sum('mmr'))['total'] or 0
+
+        return total
+```
+
+**Step 2: Commit**
+
+```bash
+git add backend/app/serializers.py
+git commit -m "feat(app): update TeamSerializer to use OrgUser MMR"
+```
+
+---
+
+### Task 8.3: Update match_finalization.py
+
+**Files:**
+- Modify: `backend/app/services/match_finalization.py`
+
+**Step 1: Update LeagueRating creation to use OrgUser MMR**
+
+Find where `LeagueRating` is created and update `base_mmr` source:
+
+```python
+# When creating LeagueRating for a player
+from org.models import OrgUser
+
+def get_or_create_league_rating(player, league):
+    """Get or create LeagueRating with base_mmr from OrgUser."""
+    org = league.organizations.first()
+
+    # Get base MMR from OrgUser
+    base_mmr = 0
+    if org:
+        try:
+            org_user = OrgUser.objects.get(user=player, organization=org)
+            base_mmr = org_user.mmr
+        except OrgUser.DoesNotExist:
+            pass
+
+    rating, created = LeagueRating.objects.get_or_create(
+        league=league,
+        player=player,
+        defaults={'base_mmr': base_mmr}
+    )
+    return rating
+```
+
+**Step 2: Commit**
+
+```bash
+git add backend/app/services/match_finalization.py
+git commit -m "feat(app): update match_finalization to use OrgUser MMR"
+```
+
+---
+
+### Task 8.4: Update mmr_calculation.py
+
+**Files:**
+- Modify: `backend/steam/functions/mmr_calculation.py`
+
+**Step 1: Update to work with OrgUser instead of CustomUser.mmr**
+
+This file manages `league_mmr` which is being removed. Update to work with `LeagueUser.mmr`:
+
+```python
+# backend/steam/functions/mmr_calculation.py
+from org.models import OrgUser
+from league.models import LeagueUser
+
+def update_user_league_mmr(user, league, new_mmr):
+    """Update user's MMR in a league context."""
+    org = league.organizations.first()
+    if not org:
+        return
+
+    # Get or create OrgUser
+    org_user, _ = OrgUser.objects.get_or_create(
+        user=user,
+        organization=org,
+        defaults={'mmr': 0}
+    )
+
+    # Get or create LeagueUser
+    league_user, _ = LeagueUser.objects.get_or_create(
+        user=user,
+        org_user=org_user,
+        league=league,
+        defaults={'mmr': org_user.mmr}
+    )
+
+    # Update league-specific MMR
+    league_user.mmr = new_mmr
+    league_user.save()
+```
+
+**Step 2: Commit**
+
+```bash
+git add backend/steam/functions/mmr_calculation.py
+git commit -m "feat(steam): update mmr_calculation to use OrgUser/LeagueUser"
+```
+
+---
+
+### Task 8.5: Update TournamentUserSerializer to include league_mmr
+
+**Files:**
+- Modify: `backend/org/serializers.py`
+
+**Step 1: Update OrgUserSerializer to include league_mmr**
+
+```python
+# backend/org/serializers.py
+class OrgUserSerializer(serializers.ModelSerializer):
+    """Returns user data with org-scoped MMR and league MMR."""
+
+    id = serializers.IntegerField(read_only=True)  # OrgUser's pk
+    pk = serializers.IntegerField(source="user.pk", read_only=True)  # User's pk
+    username = serializers.CharField(source="user.username", read_only=True)
+    nickname = serializers.CharField(source="user.nickname", read_only=True)
+    avatar = serializers.CharField(source="user.avatar", read_only=True)
+    discordId = serializers.CharField(source="user.discordId", read_only=True)
+    positions = PositionsSerializer(source="user.positions", read_only=True)
+    steamid = serializers.IntegerField(source="user.steamid", read_only=True)
+    steam_account_id = serializers.IntegerField(source="user.steam_account_id", read_only=True)
+    avatarUrl = serializers.CharField(source="user.avatarUrl", read_only=True)
+    mmr = serializers.IntegerField(read_only=True)  # From OrgUser.mmr
+    league_mmr = serializers.SerializerMethodField()  # From LeagueUser.mmr
+
+    def get_league_mmr(self, org_user):
+        """Get league MMR if league context is provided."""
+        league_id = self.context.get('league_id')
+        if not league_id:
+            return None
+
+        from league.models import LeagueUser
+        try:
+            league_user = LeagueUser.objects.get(
+                org_user=org_user,
+                league_id=league_id
+            )
+            return league_user.mmr
+        except LeagueUser.DoesNotExist:
+            return None
+
+    class Meta:
+        model = OrgUser
+        fields = (
+            "id",
+            "pk",
+            "username",
+            "nickname",
+            "avatar",
+            "discordId",
+            "positions",
+            "steamid",
+            "steam_account_id",
+            "avatarUrl",
+            "mmr",
+            "league_mmr",
+        )
+```
+
+**Step 2: Update TournamentSerializerBase to pass league context**
+
+```python
+def get_users(self, tournament):
+    """Return users with org-scoped MMR and league MMR."""
+    from org.models import OrgUser
+    from org.serializers import OrgUserSerializer
+
+    league = tournament.league
+    if not league:
+        return TournamentUserSerializer(tournament.users.all(), many=True).data
+
+    org = league.organizations.first()
+    if not org:
+        return TournamentUserSerializer(tournament.users.all(), many=True).data
+
+    org_users = OrgUser.objects.filter(
+        user__in=tournament.users.all(),
+        organization=org,
+    ).select_related("user", "user__positions")
+
+    # Pass league_id in context for league_mmr lookup
+    return OrgUserSerializer(
+        org_users,
+        many=True,
+        context={'league_id': league.id}
+    ).data
+```
+
+**Step 3: Commit**
+
+```bash
+git add backend/org/serializers.py backend/app/serializers.py
+git commit -m "feat(org): add league_mmr to OrgUserSerializer"
+```
+
+---
+
 ## Phase 4: Frontend Updates
 
 ### Task 9: Add OrgUser TypeScript types and API
@@ -738,7 +1019,8 @@ import { z } from "zod";
 import { PositionSchema } from "../user/schemas";
 
 export const OrgUserSchema = z.object({
-  pk: z.number(),
+  id: z.number(),  // OrgUser pk (for PATCH requests)
+  pk: z.number(),  // User pk
   username: z.string(),
   nickname: z.string().nullable().optional(),
   avatar: z.string().nullable().optional(),
@@ -747,7 +1029,8 @@ export const OrgUserSchema = z.object({
   steamid: z.number().nullable().optional(),
   steam_account_id: z.number().nullable().optional(),
   avatarUrl: z.string().nullable().optional(),
-  mmr: z.number(),
+  mmr: z.number(),  // Org-scoped MMR
+  league_mmr: z.number().nullable().optional(),  // League-scoped MMR
 });
 
 export type OrgUserType = z.infer<typeof OrgUserSchema>;
