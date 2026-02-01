@@ -63,9 +63,33 @@ class TournamentUserSerializer(serializers.ModelSerializer):
 
 
 class TournamentSerializerBase(serializers.ModelSerializer):
-    users = TournamentUserSerializer(many=True, read_only=True)
+    users = serializers.SerializerMethodField()
     captains = TournamentUserSerializer(many=True, read_only=True)
     tournament_type = serializers.CharField(read_only=False)
+
+    def get_users(self, tournament):
+        """Return users with org-scoped MMR via OrgUserSerializer."""
+        from org.models import OrgUser
+        from org.serializers import OrgUserSerializer
+
+        league = tournament.league
+        if not league:
+            # No league, fall back to TournamentUserSerializer
+            return TournamentUserSerializer(tournament.users.all(), many=True).data
+
+        org = league.organizations.first()
+        if not org:
+            # No organization, fall back to TournamentUserSerializer
+            return TournamentUserSerializer(tournament.users.all(), many=True).data
+
+        # Get OrgUser objects for tournament users in this organization
+        org_users = OrgUser.objects.filter(
+            user__in=tournament.users.all(), organization=org
+        ).select_related("user", "user__positions")
+
+        return OrgUserSerializer(
+            org_users, many=True, context={"league_id": league.pk}
+        ).data
 
     class Meta:
         model = Tournament
