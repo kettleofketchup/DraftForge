@@ -1099,12 +1099,14 @@ git commit -m "feat(frontend): add OrgUser types and API"
 - Modify: `frontend/app/components/user/userCard/editModal.tsx`
 - Modify: `frontend/app/components/user/userCard/editForm.tsx`
 
-**Architecture:** Instead of passing `organizationId` as props, use zustand stores:
-- `useOrgStore` - current org context (set when viewing org pages)
-- `useLeagueStore` - current league context (set when viewing league pages)
-- `useTournamentStore` - current tournament context (set when viewing tournament pages)
+**Architecture:** Use `useOrgStore` as the single source of truth for organization context.
 
-The modal reads context from stores - no props needed.
+When loading any page, set `useOrgStore.currentOrg` to the relevant organization:
+- **Tournament page** → sets orgStore to tournament's league's organization
+- **League page** → sets orgStore to league's organization
+- **Org page** → sets orgStore to that organization
+
+`UserEditModal` only reads from `useOrgStore` - one source of truth, no prop drilling.
 
 **Step 1: Update editModal.tsx**
 
@@ -1158,16 +1160,9 @@ export function UserEditModalDialog({
   onOpenChange,
   onSave,
 }: UserEditModalDialogProps) {
-  // Get org context from stores (priority: org > league > tournament)
-  const orgPk = useOrgStore(orgSelectors.orgPk);
-  const league = useLeagueStore((s) => s.currentLeague);
-  const tournament = useTournamentStore((s) => s.tournament);
-
-  // Resolve organizationId from context
-  const organizationId = orgPk
-    ?? league?.organizations?.[0]?.pk
-    ?? tournament?.league?.organizations?.[0]?.pk
-    ?? null;
+  // Get org context from orgStore (single source of truth)
+  const currentOrg = useOrgStore((s) => s.currentOrg);
+  const organizationId = currentOrg?.pk ?? null;
 
   const [orgUser, setOrgUser] = useState<OrgUserType | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1269,42 +1264,54 @@ git commit -m "feat(frontend): UserCard uses UserEditModal with store context"
 
 ---
 
-### Task 12: Ensure stores are populated on page load
+### Task 12: Set orgStore on page load (single source of truth)
 
 **Files:**
-- Verify: `frontend/app/pages/tournament/` pages set `useTournamentStore`
-- Verify: `frontend/app/pages/league/` pages set `useLeagueStore`
-- Verify: `frontend/app/pages/organization/` pages set `useOrgStore`
+- Modify: `frontend/app/pages/tournament/` pages
+- Modify: `frontend/app/pages/league/` pages
+- Verify: `frontend/app/pages/organization/` pages already set `useOrgStore`
 
-**Step 1: Verify tournament pages populate store**
+**Architecture:** `useOrgStore.currentOrg` is the single source of truth. Every page that has org context must set it.
 
-Tournament pages should call `useTournamentStore.setState({ tournament })` when loading:
+**Step 1: Tournament pages set orgStore to tournament's org**
 
 ```typescript
 // In tournament page loader or useEffect
+import { useOrgStore } from "~/store/orgStore";
+
 const tournament = await fetchTournament(id);
 useTournamentStore.getState().setTournament(tournament);
+
+// Set orgStore to tournament's organization
+const org = tournament?.league?.organizations?.[0] ?? null;
+useOrgStore.getState().setCurrentOrg(org);
 ```
 
-**Step 2: Verify league pages populate store**
+**Step 2: League pages set orgStore to league's org**
 
 ```typescript
 // In league page loader or useEffect
+import { useOrgStore } from "~/store/orgStore";
+
 const league = await fetchLeague(id);
 useLeagueStore.getState().setCurrentLeague(league);
+
+// Set orgStore to league's organization
+const org = league?.organizations?.[0] ?? null;
+useOrgStore.getState().setCurrentOrg(org);
 ```
 
-**Step 3: Verify org pages populate store**
+**Step 3: Org pages already set orgStore**
 
 ```typescript
-// In org page loader or useEffect
+// In org page loader or useEffect (should already exist)
 const org = await fetchOrganization(id);
 useOrgStore.getState().setCurrentOrg(org);
 ```
 
-**Step 4: No changes needed to PlayersTab**
+**Step 4: UserEditModal reads from orgStore only**
 
-`PlayersTab` renders `UserCard` which renders `UserEditModal`. The modal reads from stores automatically:
+No changes needed to PlayersTab or UserCard. `UserEditModal` reads `organizationId` from `useOrgStore`:
 
 ```typescript
 export function PlayersTab() {
