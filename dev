@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Bootstrap script: installs just if needed, then runs `just bootstrap`
+
+install_just() {
+    echo "Installing just..."
+
+    if command -v cargo &> /dev/null; then
+        cargo install just
+    elif command -v brew &> /dev/null; then
+        brew install just
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to ~/.local/bin
+        export PATH="$HOME/.local/bin:$PATH"
+    else
+        echo "Error: Could not install just. Please install manually: https://github.com/casey/just#installation"
+        exit 1
+    fi
+}
+
+if ! command -v just &> /dev/null; then
+    install_just
+fi
+
+just bootstrap "$@"
