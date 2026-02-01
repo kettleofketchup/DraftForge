@@ -50,11 +50,13 @@ jobs:
       run: poetry install --no-interaction --no-ansi
 
     - name: Pull Docker images
-      run: |
-        docker compose -f docker/docker-compose.test.yaml pull || {
-          echo "Pull failed, building images..."
-          poetry run inv docker.all.build
-        }
+      id: pull
+      continue-on-error: true
+      run: docker compose -f docker/docker-compose.test.yaml pull
+
+    - name: Build Docker images (fallback)
+      if: steps.pull.outcome == 'failure'
+      run: docker compose -f docker/docker-compose.test.yaml build
       env:
         DOCKER_BUILDKIT: 1
 
