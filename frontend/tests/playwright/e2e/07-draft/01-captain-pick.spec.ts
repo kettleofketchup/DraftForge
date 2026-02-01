@@ -217,14 +217,14 @@ test.describe('Captain Draft Pick', () => {
       const pickButton = page
         .locator(`text=${playerName}`)
         .locator('..')
-        .locator('button', { hasText: 'Pick' });
+        .locator('[data-testid="pickPlayerButton"]');
       await pickButton.scrollIntoViewIfNeeded();
       await pickButton.click();
 
       // Confirm the pick in the alert dialog
       const alertDialog = page.locator('[role="alertdialog"]');
       await expect(alertDialog).toBeVisible({ timeout: 10000 });
-      await alertDialog.locator('button', { hasText: 'Confirm Pick' }).click();
+      await alertDialog.locator('[data-testid="confirmPickButton"]').click();
 
       // Verify pick was recorded (toast or UI update)
       await expect(page.locator('text=/pick.*completed|selected/i')).toBeVisible({
@@ -249,7 +249,7 @@ test.describe('Captain Draft Pick', () => {
 
       // Check if this user is a captain or staff - they would see Pick buttons
       const dialog = page.locator('[role="dialog"]');
-      const pickButton = dialog.locator('button', { hasText: 'Pick' });
+      const pickButton = dialog.locator('[data-testid="pickPlayerButton"]');
       const hasPickButton = await pickButton.count() > 0;
 
       if (hasPickButton) {
@@ -312,13 +312,13 @@ test.describe('Captain Draft Pick', () => {
       if (playerCount > 0) {
         await availablePlayers.first().waitFor({ state: 'visible', timeout: 10000 });
         const availablePlayerRow = availablePlayers.first().locator('..');
-        const pickButton = availablePlayerRow.locator('button', { hasText: 'Pick' });
+        const pickButton = availablePlayerRow.locator('[data-testid="pickPlayerButton"]');
         await pickButton.scrollIntoViewIfNeeded();
         await expect(pickButton).toBeVisible();
       } else {
         // No available players - check for Pick buttons anywhere in dialog
         const dialog = page.locator('[role="dialog"]');
-        const anyPickButton = dialog.locator('button', { hasText: 'Pick' });
+        const anyPickButton = dialog.locator('[data-testid="pickPlayerButton"]');
         // Staff should see at least one pick option
         await expect(anyPickButton.first()).toBeVisible({ timeout: 10000 });
       }

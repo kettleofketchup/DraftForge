@@ -88,27 +88,26 @@ test.describe('League Page - Matches Tab (e2e)', () => {
   });
 
   test('should load matches via API', async ({ page }) => {
-    // Set up request interception
+    // Set up BOTH request and response waits BEFORE navigation to avoid race conditions
     const matchesRequestPromise = page.waitForRequest(
       (request) => request.url().includes(`/leagues/${testLeagueId}/matches/`) && request.method() === 'GET'
+    );
+    const matchesResponsePromise = page.waitForResponse(
+      (response) => response.url().includes(`/leagues/${testLeagueId}/matches/`) && (response.status() === 200 || response.status() === 304)
     );
 
     const leaguePage = new LeaguePage(page);
     await leaguePage.goto(testLeagueId, 'matches');
 
-    // API should be called
-    const request = await matchesRequestPromise;
+    // Wait for both request and response
+    const [request, response] = await Promise.all([
+      matchesRequestPromise,
+      matchesResponsePromise,
+    ]);
+
     expect(request).toBeDefined();
-
-    // Also verify response
-    const responsePromise = page.waitForResponse(
-      (response) => response.url().includes(`/leagues/${testLeagueId}/matches/`) && response.status() === 200 || response.status() === 304
-    );
-
-    // Wait for the response (may already be fulfilled)
-    const response = await responsePromise.catch(() => null);
-    // Response should have been received (test passes if request was made)
     expect(request.url()).toContain(`/leagues/${testLeagueId}/matches/`);
+    expect([200, 304]).toContain(response.status());
   });
 });
 

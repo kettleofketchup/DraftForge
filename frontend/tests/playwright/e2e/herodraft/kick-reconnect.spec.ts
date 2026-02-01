@@ -6,10 +6,8 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { loginAsDiscordId, waitForHydration } from '../../fixtures/auth';
+import { loginAsDiscordId, waitForHydration, DOCKER_HOST, API_URL } from '../../fixtures/auth';
 
-const DOCKER_HOST = process.env.DOCKER_HOST || 'nginx';
-const API_URL = `https://${DOCKER_HOST}/api`;
 const BASE_URL = `https://${DOCKER_HOST}`;
 
 test.describe('HeroDraft Kick Reconnect', () => {
