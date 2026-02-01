@@ -3,6 +3,7 @@ from django.urls import path
 from common.utils import isTestEnvironment
 
 from .test_auth import (
+    create_claimable_user,
     get_tournament_by_key,
     get_user_org_membership,
     login_admin,
@@ -54,6 +55,11 @@ urlpatterns = [
         "user/<int:user_pk>/org-membership/",
         get_user_org_membership,
         name="test-user-org-membership",
+    ),
+    path(
+        "create-claimable-user/",
+        create_claimable_user,
+        name="test-create-claimable-user",
     ),
     path(
         "create-match/",

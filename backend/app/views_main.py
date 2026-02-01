@@ -229,6 +229,120 @@ class UserView(viewsets.ModelViewSet):
         except CustomUser.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
+    @action(detail=True, methods=["post"])
+    def claim(self, request, pk=None):
+        """
+        Claim a user profile by merging target user's data into current user.
+
+        Requirements:
+        - Current user must be authenticated and have a Steam ID
+        - Target user must NOT have a Steam ID
+        - Current user must be different from target user
+
+        The merge copies non-Steam profile data (nickname, mmr, positions, etc.)
+        from the target user to the current user, then deletes the target user.
+        """
+        from django.db import transaction
+
+        current_user = request.user
+        if not current_user.is_authenticated:
+            return Response(
+                {"error": "Authentication required"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if not current_user.steamid:
+            return Response(
+                {"error": "Your account must have a Steam ID linked to claim profiles"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        target_user = self.get_object()
+
+        if target_user.pk == current_user.pk:
+            return Response(
+                {"error": "Cannot claim your own profile"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if target_user.steamid:
+            return Response(
+                {"error": "Cannot claim a profile that already has a Steam ID"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            # Copy relevant fields from target to current user (if not already set)
+            if target_user.nickname and not current_user.nickname:
+                current_user.nickname = target_user.nickname
+            if target_user.mmr and (not current_user.mmr or current_user.mmr == 0):
+                current_user.mmr = target_user.mmr
+            if target_user.avatar and not current_user.avatar:
+                current_user.avatar = target_user.avatar
+            if target_user.discordId and not current_user.discordId:
+                current_user.discordId = target_user.discordId
+
+            # Copy positions if target has them and current doesn't
+            if target_user.positions and not current_user.positions:
+                from .models import PositionsModel
+
+                positions_data = {
+                    "carry": target_user.positions.carry,
+                    "mid": target_user.positions.mid,
+                    "offlane": target_user.positions.offlane,
+                    "soft_support": target_user.positions.soft_support,
+                    "hard_support": target_user.positions.hard_support,
+                }
+                current_user.positions = PositionsModel.objects.create(**positions_data)
+
+            # Transfer OrgUser memberships from target to current user
+            from org.models import OrgUser
+
+            for org_user in OrgUser.objects.filter(user=target_user):
+                # Check if current user already has OrgUser for this org
+                existing = OrgUser.objects.filter(
+                    user=current_user, organization=org_user.organization
+                ).first()
+                if existing:
+                    # Keep the one with higher MMR
+                    if org_user.mmr > existing.mmr:
+                        existing.mmr = org_user.mmr
+                        existing.save()
+                    org_user.delete()
+                else:
+                    # Transfer to current user
+                    org_user.user = current_user
+                    org_user.save()
+
+            # Transfer tournament participations
+            for tournament in target_user.tournaments.all():
+                if current_user not in tournament.users.all():
+                    tournament.users.add(current_user)
+                tournament.users.remove(target_user)
+
+            # Transfer team memberships
+            for team in target_user.teams.all():
+                if current_user not in team.members.all():
+                    team.members.add(current_user)
+                team.members.remove(target_user)
+
+            # Transfer captain roles
+            from .models import Team
+
+            Team.objects.filter(captain=target_user).update(captain=current_user)
+            Team.objects.filter(deputy_captain=target_user).update(
+                deputy_captain=current_user
+            )
+
+            current_user.save()
+
+            # Delete the target user
+            target_user.delete()
+
+        # Return updated current user
+        serializer = self.get_serializer(current_user)
+        return Response(serializer.data)
+
 
 @permission_classes((IsStaff,))
 class TournamentView(viewsets.ModelViewSet):
@@ -894,6 +1008,26 @@ class OrganizationView(viewsets.ModelViewSet):
         def get_data():
             instance = self.get_object()
             serializer = self.get_serializer(instance)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
+    @action(detail=True, methods=["get"])
+    def users(self, request, pk=None):
+        """Get all users who are members of this organization (via OrgUser)."""
+        from org.models import OrgUser
+        from org.serializers import OrgUserSerializer
+
+        org = self.get_object()
+        cache_key = f"organization_users:{pk}"
+
+        @cached_as(OrgUser, CustomUser, extra=cache_key, timeout=60 * 10)
+        def get_data():
+            org_users = OrgUser.objects.filter(organization=org).select_related(
+                "user", "user__positions"
+            )
+            serializer = OrgUserSerializer(org_users, many=True)
             return serializer.data
 
         data = get_data()

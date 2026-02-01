@@ -24,7 +24,8 @@ export const PlayersTab: React.FC = memo(() => {
   const query = useUserStore((state) => state.userQuery);
   const setQuery = useUserStore((state) => state.setUserQuery); // Zustand setter
 
-  useEffect(() => {}, [tournament.users]);
+  // Get the organization ID from the tournament
+  const orgId = tournament?.organization_pk ?? undefined;
   const addUserCallback = async (user: UserType) => {
     log.debug(`Adding user: ${user.username}`);
     // Implement the logic to remove the user from the tournament
@@ -138,6 +139,7 @@ export const PlayersTab: React.FC = memo(() => {
             setQuery={setAddPlayerQuery}
             addPlayerCallback={addUserCallback}
             addedUsers={tournament.users ?? undefined}
+            orgId={orgId}
           />
         </div>
       </div>
