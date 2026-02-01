@@ -55,8 +55,10 @@ test.describe('Undo Pick', () => {
       await page.locator('text=/Teams \\(\\d+\\)/').first().click({ force: true });
       await page.waitForLoadState('networkidle');
 
-      // Open draft modal
-      const draftButton = page.locator('button', { hasText: /Live Draft|Start Draft/i });
+      // Open draft modal - use data-testid for reliable selection
+      const draftButton = page.locator(
+        '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
+      ).first();
       await draftButton.click({ force: true });
 
       const dialog = page.locator('[role="dialog"]');
@@ -80,7 +82,7 @@ test.describe('Undo Pick', () => {
       }
 
       // Make a pick first
-      const pickButtons = dialog.locator('button', { hasText: 'Pick' });
+      const pickButtons = dialog.locator('[data-testid="pickPlayerButton"]');
       if (await pickButtons.count() > 0) {
         await pickButtons.first().click({ force: true });
 
@@ -88,9 +90,7 @@ test.describe('Undo Pick', () => {
         const alertDialog = page.locator('[role="alertdialog"]');
         await alertDialog.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
         if (await alertDialog.isVisible().catch(() => false)) {
-          const confirmButton = alertDialog.locator('button', {
-            hasText: /Confirm|Yes|Pick/i,
-          });
+          const confirmButton = alertDialog.locator('[data-testid="confirmPickButton"]');
           await confirmButton.click({ force: true });
         }
 
@@ -105,7 +105,7 @@ test.describe('Undo Pick', () => {
 
       // Now check for undo button
       await expect(dialog).toBeVisible();
-      await expect(dialog.locator('button', { hasText: 'Undo' })).toBeVisible();
+      await expect(dialog.locator('[data-testid="undoPickButton"]')).toBeVisible();
     });
 
     // Skip: Flaky - depends on tournament state and tab navigation timing
@@ -127,8 +127,10 @@ test.describe('Undo Pick', () => {
       await page.locator('text=/Teams \\(\\d+\\)/').first().click({ force: true });
       await page.waitForLoadState('networkidle');
 
-      // Open draft modal
-      const draftButton = page.locator('button', { hasText: /Live Draft|Start Draft/i });
+      // Open draft modal - use data-testid for reliable selection
+      const draftButton = page.locator(
+        '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
+      ).first();
       await draftButton.click({ force: true });
 
       const dialog = page.locator('[role="dialog"]');
@@ -138,7 +140,7 @@ test.describe('Undo Pick', () => {
       await page.waitForLoadState('networkidle');
 
       // Undo button should not be visible for non-staff
-      const undoButton = dialog.locator('button', { hasText: 'Undo' });
+      const undoButton = dialog.locator('[data-testid="undoPickButton"]');
       const isVisible = await undoButton.isVisible().catch(() => false);
       expect(isVisible).toBe(false);
     });
@@ -161,8 +163,10 @@ test.describe('Undo Pick', () => {
       await page.locator('text=/Teams \\(\\d+\\)/').first().click({ force: true });
       await page.waitForLoadState('networkidle');
 
-      // Open draft modal
-      const draftButton = page.locator('button', { hasText: /Live Draft|Start Draft/i });
+      // Open draft modal - use data-testid for reliable selection
+      const draftButton = page.locator(
+        '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
+      ).first();
       await draftButton.click({ force: true });
 
       const dialog = page.locator('[role="dialog"]');
@@ -187,7 +191,7 @@ test.describe('Undo Pick', () => {
       }
 
       // After restart, no picks should exist, so undo should not be visible
-      await expect(dialog.locator('button', { hasText: 'Undo' })).not.toBeVisible();
+      await expect(dialog.locator('[data-testid="undoPickButton"]')).not.toBeVisible();
     });
   });
 
@@ -211,8 +215,10 @@ test.describe('Undo Pick', () => {
       await page.locator('text=/Teams \\(\\d+\\)/').first().click({ force: true });
       await page.waitForLoadState('networkidle');
 
-      // Open draft modal
-      const draftButton = page.locator('button', { hasText: /Live Draft|Start Draft/i });
+      // Open draft modal - use data-testid for reliable selection
+      const draftButton = page.locator(
+        '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
+      ).first();
       await draftButton.click({ force: true });
 
       const dialog = page.locator('[role="dialog"]');
@@ -242,7 +248,7 @@ test.describe('Undo Pick', () => {
       console.log(`Will pick player: ${pickedPlayerName}`);
 
       // Make a pick
-      const pickButton = dialog.locator('button', { hasText: 'Pick' }).first();
+      const pickButton = dialog.locator('[data-testid="pickPlayerButton"]').first();
       await pickButton.click({ force: true });
 
       // Confirm pick
@@ -264,14 +270,14 @@ test.describe('Undo Pick', () => {
       await page.waitForLoadState('networkidle');
 
       // Now undo the pick - wait for button to appear first (confirms pick was recorded)
-      const undoButton = dialog.locator('button', { hasText: 'Undo' });
+      const undoButton = dialog.locator('[data-testid="undoPickButton"]');
       await expect(undoButton).toBeVisible({ timeout: 10000 });
       await undoButton.click({ force: true });
 
       // Confirm undo in the alert dialog
       const undoDialog = page.locator('[role="alertdialog"]');
       await expect(undoDialog).toBeVisible({ timeout: 10000 });
-      await undoDialog.locator('button', { hasText: 'Undo Pick' }).click({ force: true });
+      await undoDialog.locator('[data-testid="confirmUndoPickButton"]').click({ force: true });
 
       await page.waitForLoadState('networkidle');
 
@@ -282,7 +288,7 @@ test.describe('Undo Pick', () => {
 
       // The player should be back in the available pool
       // Check that we can still make picks (draft round was reset)
-      await expect(dialog.locator('button', { hasText: 'Pick' })).toBeVisible();
+      await expect(dialog.locator('[data-testid="pickPlayerButton"]')).toBeVisible();
     });
 
     // Skip: Undo functionality depends on complex draft state that's difficult to control in tests
@@ -304,15 +310,17 @@ test.describe('Undo Pick', () => {
       await page.locator('text=/Teams \\(\\d+\\)/').first().click({ force: true });
       await page.waitForLoadState('networkidle');
 
-      // Open draft modal
-      const draftButton = page.locator('button', { hasText: /Live Draft|Start Draft/i });
+      // Open draft modal - use data-testid for reliable selection
+      const draftButton = page.locator(
+        '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
+      ).first();
       await draftButton.click({ force: true });
 
       const dialog = page.locator('[role="dialog"]');
       await dialog.waitFor({ state: 'visible' });
 
       // Make a pick first
-      const pickButtons = dialog.locator('button', { hasText: 'Pick' });
+      const pickButtons = dialog.locator('[data-testid="pickPlayerButton"]');
       if (await pickButtons.count() > 0) {
         await pickButtons.first().click({ force: true });
 
@@ -320,9 +328,7 @@ test.describe('Undo Pick', () => {
         const alertDialog = page.locator('[role="alertdialog"]');
         await alertDialog.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
         if (await alertDialog.isVisible().catch(() => false)) {
-          const confirmButton = alertDialog.locator('button', {
-            hasText: /Confirm|Yes|Pick/i,
-          });
+          const confirmButton = alertDialog.locator('[data-testid="confirmPickButton"]');
           await confirmButton.click({ force: true });
         }
 
@@ -336,19 +342,19 @@ test.describe('Undo Pick', () => {
       }
 
       // Click undo button
-      const undoButton = dialog.locator('button', { hasText: 'Undo' });
+      const undoButton = dialog.locator('[data-testid="undoPickButton"]');
       await undoButton.click({ force: true });
 
       // Click cancel in the alert dialog
       const alertDialog = page.locator('[role="alertdialog"]');
       await alertDialog.waitFor({ state: 'visible' });
-      await alertDialog.locator('button', { hasText: 'Cancel' }).click({ force: true });
+      await alertDialog.locator('[data-testid="cancelUndoPickButton"]').click({ force: true });
 
       // Alert dialog should be closed
       await expect(page.locator('[role="alertdialog"]')).not.toBeVisible();
 
       // Pick should NOT be undone - undo button should still be visible
-      await expect(dialog.locator('button', { hasText: 'Undo' })).toBeVisible();
+      await expect(dialog.locator('[data-testid="undoPickButton"]')).toBeVisible();
     });
   });
 });

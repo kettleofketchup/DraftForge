@@ -40,9 +40,9 @@ export const TeamCard: React.FC<Props> = memo(({
       <>
         {!editMode && (
           <div className="flex-1 justify-between text-center">
-            <h2 className="card-title text-lg">{team.name}</h2>
+            <h2 className="card-title text-lg" data-testid="team-card-name">{team.name}</h2>
 
-            <h3 className="card-title text-lg">Avg MMR: {averageMMR}</h3>
+            <h3 className="card-title text-lg"><span data-testid="team-avg-mmr-label">Avg MMR</span>: {averageMMR}</h3>
           </div>
         )}
       </>

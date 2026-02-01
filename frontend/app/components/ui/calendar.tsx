@@ -180,11 +180,15 @@ function CalendarDayButton({
     if (modifiers.focused) ref.current?.focus()
   }, [modifiers.focused])
 
+  // Extract day number for data-testid
+  const dayNumber = day.date.getDate();
+
   return (
     <Button
       ref={ref}
       variant="ghost"
       size="icon"
+      data-testid={`calendar-day-${dayNumber}`}
       data-day={day.date.toLocaleDateString()}
       data-selected-single={
         modifiers.selected &&

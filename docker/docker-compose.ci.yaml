@@ -1,0 +1,92 @@
+# Lightweight compose for CI - only essential services for Playwright tests
+# Excludes: discord-bot
+services:
+  frontend:
+    container_name: frontend
+    image: ghcr.io/kettleofketchup/draftforge/frontend-dev:latest
+    user: "1000:1000"
+    env_file: "./docker/.env.test"
+    volumes:
+      # Mount source and config files, preserve node_modules from image
+      - ./frontend/app:/app/app
+      - ./frontend/public:/app/public
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/react-router.config.ts:/app/react-router.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+      - ./docs/assets:/app/public/assets/docs:ro
+    networks:
+      - ci-network
+
+  redis:
+    image: redis:8-alpine
+    container_name: redis
+    networks:
+      - ci-network
+
+  backend:
+    container_name: backend
+    user: "1000:1000"
+    env_file: "./docker/.env.test"
+    image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      - redis
+    networks:
+      - ci-network
+
+  nginx:
+    image: ghcr.io/kettleofketchup/draftforge/nginx:latest
+    container_name: nginx
+    env_file: "./docker/.env.test"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.template.conf:/etc/nginx/templates/default.template.conf
+      - ./nginx/data/ssl/cert.crt:/etc/letsencrypt/live/dota.kettle.sh/fullchain.pem
+      - ./nginx/data/ssl/cert.key:/etc/letsencrypt/live/dota.kettle.sh/privkey.pem
+      - ./nginx/data/user_conf.d:/etc/nginx/user_conf.d
+      - ./nginx/data/certbot/webroot/:/var/www/certbot/
+      - ./nginx/data/certbot/work/:/lib/letsencrypt/
+      - ./nginx/data/certbot/configs/:/etc/letsencrypt/
+      - ./nginx/data/certbot/logs/:/var/log/letsencrypt/
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      ci-network:
+        aliases:
+          - localhost
+
+  celery-worker:
+    image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
+    user: "1000:1000"
+    entrypoint: ["celery"]
+    command: ["-A", "config", "worker", "-l", "info"]
+    volumes:
+      - ./backend:/app/backend
+    env_file: "./docker/.env.test"
+    depends_on:
+      - redis
+      - backend
+    networks:
+      - ci-network
+
+  celery-beat:
+    image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
+    user: "1000:1000"
+    entrypoint: ["celery"]
+    command: ["-A", "config", "beat", "-l", "info"]
+    volumes:
+      - ./backend:/app/backend
+    env_file: "./docker/.env.test"
+    depends_on:
+      - redis
+      - celery-worker
+    networks:
+      - ci-network
+
+networks:
+  ci-network:
+    driver: bridge

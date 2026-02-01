@@ -33,21 +33,55 @@ def docker_build(
     context: Path,
     target: str = "runtime",
     extra_contexts: dict[str, Path] | None = None,
+    push: bool = False,
+    use_cache: bool = True,
 ):
+    """Build Docker image using buildx with registry caching.
+
+    Args:
+        c: Invoke context
+        image: Full image name (e.g., ghcr.io/user/repo/image)
+        version: Image version tag
+        dockerfile: Path to Dockerfile
+        context: Build context path
+        target: Dockerfile target stage
+        extra_contexts: Additional build contexts
+        push: If True, push to registry. If False, load locally.
+        use_cache: If True, use registry caching. Set False for local-only builds.
+    """
     img_str = f"{image}:{version}"
-    # Use BuildKit for better layer caching
+    cache_ref = f"{image}:buildcache"
+
     extra_ctx_args = ""
     if extra_contexts:
         extra_ctx_args = " ".join(
             f"--build-context {name}={path}" for name, path in extra_contexts.items()
         )
+
+    # Use --push for registry, --load for local Docker daemon
+    output_flag = "--push" if push else "--load"
+
+    # Cache args - only use registry cache when pushing or explicitly enabled
+    # --cache-from is safe even if cache doesn't exist (buildx handles gracefully)
+    cache_args = ""
+    if use_cache or push:
+        cache_args = (
+            f"--cache-from type=registry,ref={cache_ref} "
+            f"--cache-to type=registry,ref={cache_ref},mode=max "
+        )
+
     cmd = (
-        f"DOCKER_BUILDKIT=1 docker build -f {str(dockerfile)} "
-        f"{extra_ctx_args} {str(context)} -t {img_str} --target {target}"
+        f"docker buildx build "
+        f"--file {str(dockerfile)} "
+        f"--target {target} "
+        f"--tag {img_str} "
+        f"--tag {image}:latest "
+        f"{cache_args}"
+        f"{extra_ctx_args} "
+        f"{output_flag} "
+        f"{str(context)}"
     )
     crun(c, cmd)
-
-    crun(c, f"docker tag {img_str} {image}:latest")
 
 
 def docker_pull(c, image: str, version: str, dockerfile: Path, context: Path):
@@ -59,7 +93,9 @@ def docker_pull(c, image: str, version: str, dockerfile: Path, context: Path):
 
 
 def tag_latest(c, image: str, version: str):
-    crun(c, f"docker tag {image}:{version} {image}:latest")
+    """Push image to registry (legacy - buildx now handles this)."""
+    # With buildx --push, images are already pushed during build
+    # This is kept for compatibility but may not be needed
     crun(c, f"docker push {image}:{version}")
     crun(c, f"docker push {image}:latest")
 
@@ -119,40 +155,50 @@ def get_nginx():
 
 
 @task
-def docker_frontend_build_prod(c):
+def docker_frontend_build_prod(c, push=False):
     """Build production frontend image only."""
     version, image, dockerfile, context = get_frontend()
     # Pass docs directory as additional build context for assets
     extra_contexts = {"docs": paths.PROJECT_PATH / "docs"}
-    docker_build(c, image, version, dockerfile, context, "runtime", extra_contexts)
+    docker_build(
+        c, image, version, dockerfile, context, "runtime", extra_contexts, push=push
+    )
 
 
 @task
-def docker_frontend_build_dev(c):
+def docker_frontend_build_dev(c, push=False):
     """Build dev frontend image with Cypress/Playwright (slower)."""
     version, image, dockerfile, context = get_frontend_dev()
-    docker_build(c, image, version, dockerfile, context, "runtime-dev")
+    docker_build(c, image, version, dockerfile, context, "runtime-dev", push=push)
 
 
 @task
-def docker_frontend_build(c):
+def docker_frontend_build(c, push=False):
     """Build both production and dev frontend images."""
-    docker_frontend_build_prod(c)
-    docker_frontend_build_dev(c)
+    docker_frontend_build_prod(c, push=push)
+    docker_frontend_build_dev(c, push=push)
 
 
 @task
-def docker_backend_build(c):
+def docker_test_build(c, push=False):
+    """Build frontend-dev image for CI fallback."""
+    docker_frontend_build_dev(c, push=push)
+
+
+@task
+def docker_backend_build(c, push=False):
+    """Build both production and dev backend images."""
     version, image, dockerfile, context = get_backend()
-    docker_build(c, image, version, dockerfile, context)
+    docker_build(c, image, version, dockerfile, context, push=push)
     version, image, dockerfile, context = get_backend_dev()
-    docker_build(c, image, version, dockerfile, context, "runtime-dev")
+    docker_build(c, image, version, dockerfile, context, "runtime-dev", push=push)
 
 
 @task
-def docker_nginx_build(c):
+def docker_nginx_build(c, push=False):
+    """Build nginx image."""
     version, image, dockerfile, context = get_nginx()
-    docker_build(c, image, version, dockerfile, context)
+    docker_build(c, image, version, dockerfile, context, push=push)
 
 
 @task
@@ -180,28 +226,20 @@ def docker_frontend_pull(c):
 
 @task
 def docker_frontend_push(c):
-    docker_frontend_build(c)
-    version, image, dockerfile, context = get_frontend()
-    tag_latest(c, image, version)
-    # frontend-dev needed for Cypress tests in CI
-    version, image, dockerfile, context = get_frontend_dev()
-    tag_latest(c, image, version)
+    """Build and push frontend images to registry."""
+    docker_frontend_build(c, push=True)
 
 
 @task
 def docker_backend_push(c):
-    docker_backend_build(c)
-    version, image, dockerfile, context = get_backend()
-    tag_latest(c, image, version)
-    version, image, dockerfile, context = get_backend_dev()
-    tag_latest(c, image, version)
+    """Build and push backend images to registry."""
+    docker_backend_build(c, push=True)
 
 
 @task
 def docker_nginx_push(c):
-    version, image, dockerfile, context = get_nginx()
-    docker_nginx_build(c)
-    tag_latest(c, image, version)
+    """Build and push nginx image to registry."""
+    docker_nginx_build(c, push=True)
 
 
 @task
@@ -230,11 +268,20 @@ def docker_nginx_run(c):
 
 
 @task()
-def docker_build_all(c):
-    funcs = [docker_backend_build, docker_frontend_build, docker_nginx_build]
+def docker_build_all(c, push=False):
+    """Build all Docker images (backend, frontend, nginx).
+
+    Args:
+        push: If True, push to registry after building.
+    """
+    funcs = [
+        lambda: docker_backend_build(c, push=push),
+        lambda: docker_frontend_build(c, push=push),
+        lambda: docker_nginx_build(c, push=push),
+    ]
     with alive_bar(total=3, title="Building Images") as bar:
         with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(func, c): func for func in funcs}
+            futures = {executor.submit(func): func for func in funcs}
             for future in as_completed(futures):
                 future.result()
                 bar()
@@ -242,14 +289,8 @@ def docker_build_all(c):
 
 @task
 def docker_push_all(c):
-    docker_build_all(c)
-    funcs = [docker_backend_push, docker_frontend_push, docker_nginx_push]
-    with alive_bar(total=3, title="Pushing Images") as bar:
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(func, c): func for func in funcs}
-            for future in as_completed(futures):
-                future.result()
-                bar()
+    """Build and push all Docker images to registry."""
+    docker_build_all(c, push=True)
 
 
 @task
@@ -280,4 +321,6 @@ ns_docker_nginx.add_task(docker_nginx_run, "run")
 ns_docker_all.add_task(docker_pull_all, "pull")
 ns_docker_all.add_task(docker_build_all, "build")
 ns_docker_all.add_task(docker_push_all, "push")
-ns_docker_all.add_task(docker_build_all, "build")
+
+# Test-specific builds
+ns_docker.add_task(docker_test_build, "test-build")

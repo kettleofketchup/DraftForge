@@ -85,6 +85,7 @@ export function EditLeagueModal({
       onSubmit={form.handleSubmit(onSubmit)}
       size="xl"
       data-testid="edit-league-modal"
+      titleTestId="edit-league-modal-heading"
     >
       <Form {...form}>
         <FormField

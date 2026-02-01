@@ -68,7 +68,7 @@ test.describe('Largo Hero Pick', () => {
 
       // Click Start Draft
       const startBtn = (page: any) =>
-        page.locator('button:has-text("Start Draft"), button:has-text("View Draft")').first();
+        page.getByTestId('view-draft-btn');
       await Promise.all([startBtn(pageA).click(), startBtn(pageB).click()]);
 
       const draftPageA = new HeroDraftPage(pageA);
