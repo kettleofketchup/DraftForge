@@ -621,33 +621,38 @@ test.describe('HeroDraft with Bracket Demo', () => {
 
     // Draft sequence helper
     const getCurrentPicker = async (roundNum: number) => {
-      // Captain's Mode draft order (first picker perspective):
-      // B B B B B B B P P B B B P P P P P P B B B B P P
+      // Captain's Mode draft order (2024 patch, first picker perspective):
+      // Ban Phase 1: F-F-S-S-F-S-S
+      // Pick Phase 1: F-S
+      // Ban Phase 2: F-F-S
+      // Pick Phase 2: S-F-F-S-S-F
+      // Ban Phase 3: F-S-F-S
+      // Pick Phase 3: F-S
       const DRAFT_SEQUENCE: [boolean, string][] = [
-        [true, 'ban'],
-        [true, 'ban'],
-        [false, 'ban'],
-        [false, 'ban'],
-        [true, 'ban'],
-        [false, 'ban'],
-        [false, 'ban'],
-        [true, 'pick'],
-        [false, 'pick'],
-        [false, 'ban'],
-        [true, 'ban'],
-        [false, 'ban'],
-        [true, 'pick'],
-        [false, 'pick'],
-        [true, 'pick'],
-        [false, 'pick'],
-        [true, 'pick'],
-        [false, 'pick'],
-        [true, 'ban'],
-        [false, 'ban'],
-        [true, 'ban'],
-        [false, 'ban'],
-        [true, 'pick'],
-        [false, 'pick'],
+        [true, 'ban'],   // 1
+        [true, 'ban'],   // 2
+        [false, 'ban'],  // 3
+        [false, 'ban'],  // 4
+        [true, 'ban'],   // 5
+        [false, 'ban'],  // 6
+        [false, 'ban'],  // 7
+        [true, 'pick'],  // 8
+        [false, 'pick'], // 9
+        [true, 'ban'],   // 10
+        [true, 'ban'],   // 11
+        [false, 'ban'],  // 12
+        [false, 'pick'], // 13
+        [true, 'pick'],  // 14
+        [true, 'pick'],  // 15
+        [false, 'pick'], // 16
+        [false, 'pick'], // 17
+        [true, 'pick'],  // 18
+        [true, 'ban'],   // 19
+        [false, 'ban'],  // 20
+        [true, 'ban'],   // 21
+        [false, 'ban'],  // 22
+        [true, 'pick'],  // 23
+        [false, 'pick'], // 24
       ];
 
       const [isFirstPickTeam] = DRAFT_SEQUENCE[roundNum - 1];

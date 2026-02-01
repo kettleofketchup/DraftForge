@@ -75,7 +75,7 @@ class BuildDraftRoundsTest(TestCase):
         self.assertEqual(rounds[8].draft_team, second_team)
 
     def test_ban_and_pick_counts(self):
-        """First team has 6 bans, 5 picks. Second team has 8 bans, 5 picks."""
+        """Both teams have 7 bans and 5 picks each."""
         draft = HeroDraft.objects.create(game=self.game)
         first_team = DraftTeam.objects.create(
             draft=draft, tournament_team=self.team1, is_first_pick=True
@@ -99,7 +99,7 @@ class BuildDraftRoundsTest(TestCase):
             draft_team=second_team, action_type="pick"
         ).count()
 
-        self.assertEqual(first_bans, 6)
+        self.assertEqual(first_bans, 7)
         self.assertEqual(first_picks, 5)
-        self.assertEqual(second_bans, 8)
+        self.assertEqual(second_bans, 7)
         self.assertEqual(second_picks, 5)
