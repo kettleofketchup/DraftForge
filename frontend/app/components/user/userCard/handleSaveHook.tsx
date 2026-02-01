@@ -1,6 +1,7 @@
 import type { FormEvent, JSX } from 'react';
 import React from 'react';
 import { toast } from 'sonner';
+import { updateOrgUser } from '~/components/api/api';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { getLogger } from '~/lib/logger';
@@ -34,6 +35,7 @@ type HandleSaveParams = {
   setStatusMsg: React.Dispatch<React.SetStateAction<string | null>>;
   setUser: (user: UserType) => void;
   setDiscordUser?: React.Dispatch<React.SetStateAction<User>>;
+  organizationId?: number | null; // Org context for org-scoped updates
 };
 
 export const handleSave = async (
@@ -47,6 +49,7 @@ export const handleSave = async (
     setStatusMsg,
     setUser,
     setDiscordUser,
+    organizationId,
   }: HandleSaveParams,
 ) => {
   setErrorMessage({}); // Clear old errors
@@ -79,7 +82,13 @@ export const handleSave = async (
       },
     });
   } else {
-    toast.promise(newUser.dbUpdate(form as UserType), {
+    // If we have org context AND form.id (OrgUser pk), use org-scoped update
+    const updatePromise =
+      organizationId && form.id
+        ? updateOrgUser(organizationId, form.id, form as UserType)
+        : newUser.dbUpdate(form as UserType);
+
+    toast.promise(updatePromise, {
       loading: `Updating User ${user.username}.`,
       success: (data) => {
         setIsSaving(true);
