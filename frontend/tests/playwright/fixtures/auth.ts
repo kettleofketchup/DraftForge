@@ -1,7 +1,8 @@
 import { test as base, expect, BrowserContext, Page } from '@playwright/test';
 
-// Use nginx hostname inside Docker containers, localhost for local runs
-export const DOCKER_HOST = process.env.DOCKER_HOST || 'nginx';
+// Use localhost by default (matches playwright.config.ts baseURL)
+// Can be overridden with DOCKER_HOST for running inside Docker containers
+export const DOCKER_HOST = process.env.DOCKER_HOST || 'localhost';
 export const API_URL = `https://${DOCKER_HOST}/api`;
 
 /**
