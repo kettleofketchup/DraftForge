@@ -130,7 +130,7 @@ export const ChoosePlayerButton: React.FC<{
       <div data-testid="available-player">
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button size="sm" className="text-xs px-2">Pick</Button>
+            <Button size="sm" className="text-xs px-2" data-testid="pickPlayerButton">Pick</Button>
           </AlertDialogTrigger>
           <AlertDialogContent className="bg-green-900 border-green-700">
             <AlertDialogHeader>
@@ -144,7 +144,7 @@ export const ChoosePlayerButton: React.FC<{
                 <CancelButton variant="destructive">Cancel</CancelButton>
               </AlertDialogCancel>
               <AlertDialogAction asChild onClick={handleChange}>
-                <ConfirmButton>Confirm Pick</ConfirmButton>
+                <ConfirmButton data-testid="confirmPickButton">Confirm Pick</ConfirmButton>
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
