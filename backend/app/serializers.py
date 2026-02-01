@@ -750,15 +750,16 @@ class TournamentSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         """
-        Override update to handle captain removal when users are removed.
-        If a user is removed from the tournament and they are a captain,
-        delete their team.
+        Override update to handle:
+        1. Captain removal when users are removed (delete their team)
+        2. OrgUser/LeagueUser creation when users are added
         """
         # Check if users are being updated
         if "users" in validated_data:
             new_users = set(validated_data["users"])
             current_users = set(instance.users.all())
             removed_users = current_users - new_users
+            added_users = new_users - current_users
 
             # For each removed user, check if they're a captain and remove their team
             if removed_users:
@@ -772,6 +773,28 @@ class TournamentSerializer(serializers.ModelSerializer):
                             f"Removing captain {user.username}'s team(s) from tournament {instance.name}"
                         )
                         captain_teams.delete()
+
+            # For each added user, create OrgUser and LeagueUser if needed
+            if added_users and instance.league:
+                org = instance.league.organizations.first()
+                if org:
+                    from league.models import LeagueUser
+                    from org.models import OrgUser
+
+                    for user in added_users:
+                        # Ensure OrgUser exists
+                        org_user, _ = OrgUser.objects.get_or_create(
+                            user=user,
+                            organization=org,
+                            defaults={"mmr": user.mmr or 0},
+                        )
+                        # Ensure LeagueUser exists
+                        LeagueUser.objects.get_or_create(
+                            user=user,
+                            org_user=org_user,
+                            league=instance.league,
+                            defaults={"mmr": org_user.mmr},
+                        )
 
         return super().update(instance, validated_data)
 
