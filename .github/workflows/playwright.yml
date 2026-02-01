@@ -54,6 +54,21 @@ jobs:
     - name: Install Python dependencies
       run: poetry install --no-interaction --no-ansi
 
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install frontend dependencies
+      run: npm ci
+      working-directory: frontend
+
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps chromium
+      working-directory: frontend
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
@@ -110,23 +125,15 @@ jobs:
         docker compose --project-directory . -f docker/docker-compose.ci.yaml ps
         docker compose --project-directory . -f docker/docker-compose.ci.yaml logs --tail=20
 
-    - name: Run Snake Draft Test
+    - name: Run Playwright tests
       run: |
-        docker exec -e CI=true -e DOCKER_HOST=nginx frontend \
-          npx playwright test --workers=1 \
-          tests/playwright/e2e/07-draft/01-captain-pick.spec.ts
-
-    - name: Run Shuffle Draft Test
-      run: |
-        docker exec -e CI=true -e DOCKER_HOST=nginx frontend \
-          npx playwright test --workers=1 \
-          tests/playwright/e2e/08-shuffle-draft/01-full-draft.spec.ts
-
-    - name: Run HeroDraft Test
-      run: |
-        docker exec -e CI=true -e DOCKER_HOST=nginx frontend \
-          npx playwright test --workers=1 \
+        npx playwright test --workers=1 \
+          tests/playwright/e2e/07-draft/01-captain-pick.spec.ts \
+          tests/playwright/e2e/08-shuffle-draft/01-full-draft.spec.ts \
           tests/playwright/e2e/herodraft/two-captains-full-draft.spec.ts
+      working-directory: frontend
+      env:
+        CI: true
 
     - name: Upload test results
       if: failure()
