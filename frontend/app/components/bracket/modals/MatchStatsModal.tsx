@@ -184,6 +184,7 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
                   variant="outline"
                   className="flex-1"
                   onClick={() => handleSetWinner('radiant')}
+                  data-testid="radiantWinsButton"
                 >
                   {match.radiantTeam.captain ? DisplayName(match.radiantTeam.captain) : match.radiantTeam.name} Wins
                 </Button>
@@ -191,6 +192,7 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
                   variant="outline"
                   className="flex-1"
                   onClick={() => handleSetWinner('dire')}
+                  data-testid="direWinsButton"
                 >
                   {match.direTeam.captain ? DisplayName(match.direTeam.captain) : match.direTeam.name} Wins
                 </Button>
