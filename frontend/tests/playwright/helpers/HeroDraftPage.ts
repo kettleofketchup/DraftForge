@@ -245,6 +245,8 @@ export class HeroDraftPage {
       dire: 'herodraft-choice-dire',
     };
     await this.page.locator(`[data-testid="${testIdMap[choice]}"]`).click();
+    // Wait for and click confirm button in the dialog
+    await this.page.locator('[data-testid="herodraft-confirm-choice-submit"]').click();
   }
 
   async selectLoserChoice(
@@ -257,6 +259,8 @@ export class HeroDraftPage {
       dire: 'herodraft-remaining-dire',
     };
     await this.page.locator(`[data-testid="${testIdMap[choice]}"]`).click();
+    // Wait for and click confirm button in the dialog
+    await this.page.locator('[data-testid="herodraft-confirm-choice-submit"]').click();
   }
 
   async assertFlipWinner(): Promise<void> {
@@ -271,10 +275,25 @@ export class HeroDraftPage {
 
   async clickHero(heroId: number): Promise<void> {
     const heroButton = this.page.locator(`[data-testid="herodraft-hero-${heroId}"]`);
-    console.log(`[clickHero] Clicking hero ${heroId} with JS click...`);
-    // Use dispatchEvent to bypass viewport checks
-    // Playwright's native click fails when element is in a nested scrollable container
-    await heroButton.dispatchEvent('click');
+    console.log(`[clickHero] Clicking hero ${heroId}...`);
+
+    // Wait for button to be visible and not disabled
+    await heroButton.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Double-check it's enabled right before clicking
+    const isDisabledNow = await heroButton.isDisabled();
+    if (isDisabledNow) {
+      throw new Error(`Hero ${heroId} became disabled before click`);
+    }
+
+    // Scroll into view and use standard click (not force) to let Playwright handle actionability
+    await heroButton.scrollIntoViewIfNeeded();
+
+    // Small wait to let any pending state updates settle
+    await this.page.waitForTimeout(100);
+
+    // Click with standard behavior
+    await heroButton.click();
     console.log(`[clickHero] Hero ${heroId} clicked!`);
   }
 

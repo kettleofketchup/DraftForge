@@ -128,7 +128,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                     isActive && 'border-yellow-400 border-2',
                     imgSize
                   )}
-                  data-testid={`herodraft-round-${round.round_number - 1}-hero`}
+                  data-testid={`herodraft-round-${round.round_number}-hero`}
                   data-hero-id={round.hero_id}
                 >
                   {heroImg ? (
@@ -169,7 +169,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                 key={round.id}
                 ref={isActive ? activeRoundRef : undefined}
                 className={cn('flex items-center', slotHeight)}
-                data-testid={`herodraft-round-${round.round_number - 1}`}
+                data-testid={`herodraft-round-${round.round_number}`}
                 data-round-active={isActive}
                 data-round-state={round.state}
               >
@@ -203,7 +203,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                           : 'bg-gray-800 text-gray-500 border border-gray-600'
                     )}
                   >
-                    {round.round_number - 1}
+                    {round.round_number}
                   </div>
                 </div>
 
