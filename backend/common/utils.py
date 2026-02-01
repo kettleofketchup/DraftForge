@@ -63,7 +63,13 @@ def isTestEnvironment(request=None):
     ]
 
     if request:
-        remote_addr = request.META.get("REMOTE_ADDR")
+        # Use X-Forwarded-For if behind proxy (e.g., Nginx), otherwise REMOTE_ADDR
+        # X-Forwarded-For can contain multiple IPs; the first is the original client
+        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        if x_forwarded_for:
+            remote_addr = x_forwarded_for.split(",")[0].strip()
+        else:
+            remote_addr = request.META.get("REMOTE_ADDR")
         if remote_addr and not _is_ip_allowed(remote_addr, allowed_ips):
             return False
 
