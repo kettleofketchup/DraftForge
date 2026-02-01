@@ -161,9 +161,12 @@ jobs:
       env:
         CI: true
 
-    - name: Dump backend logs on failure
+    - name: Dump container logs on failure
       if: failure()
       run: |
+        echo "=== Frontend container logs ==="
+        docker logs frontend 2>&1 || echo "No frontend logs"
+        echo ""
         echo "=== Backend container logs ==="
         docker logs backend 2>&1 || echo "No backend logs"
         echo ""
