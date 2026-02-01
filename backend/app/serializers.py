@@ -69,6 +69,9 @@ class TournamentSerializerBase(serializers.ModelSerializer):
 
     def get_users(self, tournament):
         """Return users with org-scoped MMR via OrgUserSerializer."""
+        from django.db.models import Prefetch
+
+        from league.models import LeagueUser
         from org.models import OrgUser
         from org.serializers import OrgUserSerializer
 
@@ -83,9 +86,17 @@ class TournamentSerializerBase(serializers.ModelSerializer):
             return TournamentUserSerializer(tournament.users.all(), many=True).data
 
         # Get OrgUser objects for tournament users in this organization
-        org_users = OrgUser.objects.filter(
-            user__in=tournament.users.all(), organization=org
-        ).select_related("user", "user__positions")
+        # Prefetch league_users filtered by this league to avoid N+1 in get_league_mmr
+        org_users = (
+            OrgUser.objects.filter(user__in=tournament.users.all(), organization=org)
+            .select_related("user", "user__positions")
+            .prefetch_related(
+                Prefetch(
+                    "league_users",
+                    queryset=LeagueUser.objects.filter(league_id=league.pk),
+                )
+            )
+        )
 
         return OrgUserSerializer(
             org_users, many=True, context={"league_id": league.pk}
@@ -727,6 +738,19 @@ class TournamentSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    organization_pk = serializers.SerializerMethodField()
+    league_pk = serializers.SerializerMethodField()
+
+    def get_organization_pk(self, tournament):
+        """Return the primary organization's PK for this tournament."""
+        if not tournament.league:
+            return None
+        org = tournament.league.organizations.first()
+        return org.pk if org else None
+
+    def get_league_pk(self, tournament):
+        """Return the league's PK for this tournament."""
+        return tournament.league.pk if tournament.league else None
 
     class Meta:
         model = Tournament
@@ -746,6 +770,8 @@ class TournamentSerializer(serializers.ModelSerializer):
             "tournament_type",
             "league",
             "league_id_write",
+            "organization_pk",
+            "league_pk",
         )
 
     def update(self, instance, validated_data):
@@ -754,49 +780,87 @@ class TournamentSerializer(serializers.ModelSerializer):
         1. Captain removal when users are removed (delete their team)
         2. OrgUser/LeagueUser creation when users are added
         """
-        # Check if users are being updated
-        if "users" in validated_data:
-            new_users = set(validated_data["users"])
-            current_users = set(instance.users.all())
-            removed_users = current_users - new_users
-            added_users = new_users - current_users
+        with transaction.atomic():
+            # Check if users are being updated
+            if "users" in validated_data:
+                new_users = set(validated_data["users"])
+                current_users = set(instance.users.all())
+                removed_users = current_users - new_users
+                added_users = new_users - current_users
 
-            # For each removed user, check if they're a captain and remove their team
-            if removed_users:
-                for user in removed_users:
-                    # Find teams where this user is captain in this tournament
+                # Bulk delete teams where removed users are captains
+                if removed_users:
+                    removed_user_ids = [u.pk for u in removed_users]
                     captain_teams = Team.objects.filter(
-                        tournament=instance, captain=user
+                        tournament=instance, captain_id__in=removed_user_ids
                     )
                     if captain_teams.exists():
                         log.info(
-                            f"Removing captain {user.username}'s team(s) from tournament {instance.name}"
+                            f"Removing {captain_teams.count()} captain team(s) from tournament {instance.name}"
                         )
                         captain_teams.delete()
 
-            # For each added user, create OrgUser and LeagueUser if needed
-            if added_users and instance.league:
-                org = instance.league.organizations.first()
-                if org:
-                    from league.models import LeagueUser
-                    from org.models import OrgUser
+                # Bulk create OrgUser and LeagueUser for added users
+                if added_users and instance.league:
+                    org = instance.league.organizations.first()
+                    if org:
+                        from league.models import LeagueUser
+                        from org.models import OrgUser
 
-                    for user in added_users:
-                        # Ensure OrgUser exists
-                        org_user, _ = OrgUser.objects.get_or_create(
-                            user=user,
-                            organization=org,
-                            defaults={"mmr": user.mmr or 0},
-                        )
-                        # Ensure LeagueUser exists
-                        LeagueUser.objects.get_or_create(
-                            user=user,
-                            org_user=org_user,
-                            league=instance.league,
-                            defaults={"mmr": org_user.mmr},
+                        # Get existing OrgUsers for these users in this org
+                        existing_org_users = {
+                            ou.user_id: ou
+                            for ou in OrgUser.objects.filter(
+                                user__in=added_users, organization=org
+                            )
+                        }
+
+                        # Create missing OrgUsers in bulk
+                        new_org_users = []
+                        for user in added_users:
+                            if user.pk not in existing_org_users:
+                                new_org_users.append(
+                                    OrgUser(
+                                        user=user,
+                                        organization=org,
+                                        mmr=user.mmr or 0,
+                                    )
+                                )
+                        if new_org_users:
+                            OrgUser.objects.bulk_create(new_org_users)
+                            # Refresh existing_org_users with newly created ones
+                            existing_org_users = {
+                                ou.user_id: ou
+                                for ou in OrgUser.objects.filter(
+                                    user__in=added_users, organization=org
+                                )
+                            }
+
+                        # Get existing LeagueUsers for these users in this league
+                        existing_league_users = set(
+                            LeagueUser.objects.filter(
+                                user__in=added_users, league=instance.league
+                            ).values_list("user_id", flat=True)
                         )
 
-        return super().update(instance, validated_data)
+                        # Create missing LeagueUsers in bulk
+                        new_league_users = []
+                        for user in added_users:
+                            if user.pk not in existing_league_users:
+                                org_user = existing_org_users.get(user.pk)
+                                if org_user:
+                                    new_league_users.append(
+                                        LeagueUser(
+                                            user=user,
+                                            org_user=org_user,
+                                            league=instance.league,
+                                            mmr=org_user.mmr,
+                                        )
+                                    )
+                        if new_league_users:
+                            LeagueUser.objects.bulk_create(new_league_users)
+
+            return super().update(instance, validated_data)
 
 
 class UserSerializer(serializers.ModelSerializer):

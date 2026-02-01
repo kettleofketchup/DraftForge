@@ -10,25 +10,27 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 
 import { useState, type FormEvent } from 'react';
 import { getLogger } from '~/lib/logger';
-import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('addPlayerDropdown');
 interface Props {
+  users: UserType[];
   addedUsers?: UserType[];
   query: string;
   setQuery: React.Dispatch<React.SetStateAction<string>>;
   addPlayerCallback?: (user: UserType) => Promise<void>;
   removePlayerCallback?: (e: FormEvent, user: UserType) => Promise<void>;
+  placeholder?: string;
 }
 
 export const AddPlayerDropdown: React.FC<Props> = ({
+  users,
   addedUsers,
   query,
   setQuery,
   addPlayerCallback,
   removePlayerCallback,
+  placeholder = 'Search organization members...',
 }) => {
-  const users = useUserStore((state) => state.users); // Zustand setter
   const [searchedPerson, setSearchedPerson] = useState(
     new User({} as UserClassType),
   );
@@ -91,7 +93,7 @@ export const AddPlayerDropdown: React.FC<Props> = ({
         <Combobox value={query} onChange={handleSearchUserSelect}>
           <ComboboxInput
             className="input input-bordered w-full"
-            placeholder="Search DTX members..."
+            placeholder={placeholder}
             onChange={(event) => setQuery(event.target.value)}
             data-testid="playerSearchInput"
             aria-label="Search for players to add"
