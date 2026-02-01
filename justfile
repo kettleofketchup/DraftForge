@@ -33,7 +33,7 @@ bootstrap *args:
 
 # Modules (namespaced with ::)
 mod dev 'just/dev.just'
-mod docker 'just/docker.just'
+mod docker 'just/docker/mod.just'
 mod demo 'just/demo.just'
 mod docs 'just/docs.just'
 mod update 'just/update.just'
