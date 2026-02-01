@@ -94,7 +94,7 @@ test.describe('Shuffle Draft - Roll Results Display', () => {
       }
 
       // Check for the modal title
-      await expect(dialog.locator('text=Draft Event History')).toBeVisible();
+      await expect(dialog.locator('[data-testid="draft-event-history-title"]')).toBeVisible();
 
       // Close the modal
       const closeButton = dialog.locator('button[aria-label="Close"]');
@@ -163,7 +163,7 @@ test.describe('Shuffle Draft - Roll Results Display', () => {
       console.log(`Initial FAB text: ${fabText}`);
 
       // The badge shows the event count
-      const badge = fab.locator('[class*="badge"]');
+      const badge = fab.locator('[data-testid="event-count-badge"]');
       const badgeVisible = await badge.isVisible().catch(() => false);
 
       if (badgeVisible) {

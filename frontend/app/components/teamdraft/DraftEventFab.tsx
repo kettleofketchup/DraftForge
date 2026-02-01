@@ -50,6 +50,7 @@ export const DraftEventFab = memo(function DraftEventFab({
           <Badge
             variant={hasNewEvent ? "destructive" : "secondary"}
             className="absolute -top-1 -right-1 h-6 min-w-6 rounded-full"
+            data-testid="event-count-badge"
           >
             {events.length}
           </Badge>

@@ -34,6 +34,7 @@ export const TurnIndicator: React.FC = () => {
 
   return (
     <div
+      data-testid="turn-indicator"
       className={`p-4 rounded-lg text-center ${
         isMyTurn ? 'bg-green-800 animate-pulse' : 'bg-base-200'
       }`}

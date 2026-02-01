@@ -41,6 +41,8 @@ export interface FormDialogProps {
   className?: string;
   /** Test ID for testing */
   'data-testid'?: string;
+  /** Test ID for the title heading */
+  titleTestId?: string;
 }
 
 const sizeClasses: Record<FormDialogSize, string> = {
@@ -84,6 +86,7 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       showFooter = true,
       className,
       'data-testid': dataTestId,
+      titleTestId,
     },
     ref
   ) => {
@@ -100,7 +103,7 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
           data-testid={dataTestId}
         >
           <DialogHeader>
-            <DialogTitle>{title}</DialogTitle>
+            <DialogTitle data-testid={titleTestId}>{title}</DialogTitle>
             {description && <DialogDescription>{description}</DialogDescription>}
           </DialogHeader>
 
@@ -117,6 +120,7 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
                 variant="outline"
                 onClick={() => onOpenChange(false)}
                 disabled={isSubmitting}
+                data-testid="modal-cancel-button"
               >
                 {cancelLabel}
               </Button>
