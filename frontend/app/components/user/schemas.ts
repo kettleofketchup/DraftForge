@@ -38,9 +38,12 @@ export const UserSchema = z.object({
   is_superuser: z.boolean().optional(),
   nickname: z.string().min(2).max(100).nullable().optional(),
   mmr: z.number().min(0).nullable().optional(),
+  league_mmr: z.number().min(0).nullable().optional(), // MMR snapshot from LeagueUser
   steamid: z.number().min(0).nullable().optional(),
+  steam_account_id: z.number().min(0).nullable().optional(), // 32-bit account ID
   avatar: z.string().url().nullable().optional(),
-  pk: z.number().min(0).optional(),
+  id: z.number().min(0).optional(), // OrgUser pk (for PATCH operations)
+  pk: z.number().min(0).optional(), // User pk (for display)
   discordNickname: z.string().min(2).max(100).nullable().optional(),
   discordId: z.string().min(2).max(100).nullable().optional(),
   guildNickname: z.string().min(2).max(100).nullable().optional(),
