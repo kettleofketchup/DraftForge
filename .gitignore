@@ -1,3 +1,4 @@
+.claude/settings.local.json
 .venv
 .env
 tmux*.log
