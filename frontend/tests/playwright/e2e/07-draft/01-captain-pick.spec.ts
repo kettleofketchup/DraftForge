@@ -247,9 +247,14 @@ test.describe('Captain Draft Pick', () => {
       await tournamentPage.clickStartDraft();
       await tournamentPage.waitForDraftModal();
 
-      // Check if this user is a captain or staff - they would see Pick buttons
+      // Wait for player list to load - either Pick buttons or Waiting buttons will appear
       const dialog = page.locator('[role="dialog"]');
       const pickButton = dialog.locator('[data-testid="pickPlayerButton"]');
+      const waitingButton = dialog.locator('button:has-text("Waiting")');
+
+      // Wait for either state to be visible (handles race condition)
+      await expect(pickButton.or(waitingButton).first()).toBeVisible({ timeout: 10000 });
+
       const hasPickButton = await pickButton.count() > 0;
 
       if (hasPickButton) {
@@ -257,12 +262,9 @@ test.describe('Captain Draft Pick', () => {
         console.log('User can pick - they are either captain or staff');
         await expect(pickButton.first()).toBeVisible();
       } else {
-        // User is not captain - should see waiting message
-        const availablePlayerRow = page
-          .locator('[data-testid="available-player"]')
-          .first()
-          .locator('..');
-        await expect(availablePlayerRow).toContainText('Waiting for');
+        // User is not captain - should see waiting buttons
+        console.log('User cannot pick - checking for Waiting buttons');
+        await expect(waitingButton.first()).toBeVisible();
       }
     });
   });
