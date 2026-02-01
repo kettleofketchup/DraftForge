@@ -15,6 +15,7 @@ services:
 
   backend:
     container_name: backend
+    user: "1000:1000"
     env_file: "./docker/.env.test"
     image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
     environment:
