@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import axios from '~/components/api/axios'; // Assuming axios is configured for your API
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
+import { useOrgStore } from '~/store/orgStore';
 import TournamentTabs from './tabs/TournamentTabs';
 
 import { getLogger } from '~/lib/logger';
@@ -76,6 +77,19 @@ export const TournamentDetailPage: React.FC = () => {
       fetchTournament();
     }
   }, [pk, setTournament]);
+
+  // Set org context from tournament's league
+  useEffect(() => {
+    if (tournament) {
+      const org = tournament.league?.organizations?.[0] ?? null;
+      useOrgStore.getState().setCurrentOrg(org);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      useOrgStore.getState().setCurrentOrg(null);
+    };
+  }, [tournament]);
 
   if (loading) {
     return (
