@@ -120,7 +120,9 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
         return;
       }
     } else {
-      toast.error('Game not saved yet');
+      toast.error('Save the bracket first', {
+        description: 'Game records are created when you save the bracket.',
+      });
       return;
     }
 
@@ -221,23 +223,28 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
               );
             }
 
+            // Check if game exists (bracket has been saved)
+            const gameNotSaved = !match.herodraft_id && !match.gameId;
+
             return (
               <div className="border-t pt-4">
-                <div className="flex gap-2 flex-wrap">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleOpenDraft}
-                    disabled={createDraftMutation.isPending}
-                    data-testid="view-draft-btn"
-                  >
-                    {createDraftMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                    ) : (
-                      <Swords className="w-4 h-4 mr-1" />
-                    )}
-                    {match.herodraft_id ? 'View Draft' : 'Start Draft'}
-                  </Button>
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleOpenDraft}
+                      disabled={createDraftMutation.isPending || gameNotSaved}
+                      title={gameNotSaved ? 'Save the bracket first to create games' : undefined}
+                      data-testid="view-draft-btn"
+                    >
+                      {createDraftMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <Swords className="w-4 h-4 mr-1" />
+                      )}
+                      {match.herodraft_id ? 'View Draft' : 'Start Draft'}
+                    </Button>
                   {isStaff && match.herodraft_id && (
                     <Button
                       variant="outline"
@@ -253,6 +260,12 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
                       )}
                       Restart Draft
                     </Button>
+                  )}
+                  </div>
+                  {gameNotSaved && (
+                    <p className="text-xs text-muted-foreground">
+                      Save the bracket first to create game records before starting a draft.
+                    </p>
                   )}
                 </div>
               </div>
