@@ -39,6 +39,7 @@ import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { useLeague, LeagueTabs, EditLeagueModal } from '~/components/league';
 import { useUserStore } from '~/store/userStore';
+import { useOrgStore } from '~/store/orgStore';
 import { useIsLeagueAdmin } from '~/hooks/usePermissions';
 
 export default function LeaguePage() {
@@ -66,6 +67,19 @@ export default function LeaguePage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  // Set org context from league's organizations
+  useEffect(() => {
+    if (league) {
+      const org = league.organizations?.[0] ?? null;
+      useOrgStore.getState().setCurrentOrg(org);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      useOrgStore.getState().setCurrentOrg(null);
+    };
+  }, [league]);
 
   const handleTabChange = (newTab: string) => {
     setActiveTab(newTab);
