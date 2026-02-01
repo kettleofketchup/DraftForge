@@ -79,19 +79,32 @@ export function BracketToolbar({
       {/* Generate / Reseed dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <SecondaryButton disabled={!canGenerate} color="cyan">
+          <SecondaryButton
+            disabled={!canGenerate}
+            color="cyan"
+            data-testid={hasMatches ? 'reseedBracketButton' : 'generateBracketButton'}
+          >
             {hasMatches ? 'Reseed Bracket' : 'Generate Bracket'}
             <ChevronDown className="h-4 w-4 ml-1" />
           </SecondaryButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
-          <DropdownMenuItem onClick={() => handleGenerate('mmr_total')}>
+          <DropdownMenuItem
+            onClick={() => handleGenerate('mmr_total')}
+            data-testid="seedByTeamMmrOption"
+          >
             Seed by Team MMR (Recommended)
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handleGenerate('captain_mmr')}>
+          <DropdownMenuItem
+            onClick={() => handleGenerate('captain_mmr')}
+            data-testid="seedByCaptainMmrOption"
+          >
             Seed by Captain MMR
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => handleGenerate('random')}>
+          <DropdownMenuItem
+            onClick={() => handleGenerate('random')}
+            data-testid="randomSeedingOption"
+          >
             Random Seeding
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -104,6 +117,7 @@ export function BracketToolbar({
           disabled={!isDirty}
           loading={isLoading}
           loadingText="Saving..."
+          data-testid="saveBracketButton"
         >
           {isVirtual ? 'Save Bracket' : 'Save Changes'}
         </SubmitButton>
@@ -135,7 +149,11 @@ export function BracketToolbar({
             <CancelButton onClick={() => setShowGenerateConfirm(false)}>
               Cancel
             </CancelButton>
-            <ConfirmButton variant="warning" onClick={confirmGenerate}>
+            <ConfirmButton
+              variant="warning"
+              onClick={confirmGenerate}
+              data-testid="regenerateBracketConfirmButton"
+            >
               Regenerate
             </ConfirmButton>
           </AlertDialogFooter>
