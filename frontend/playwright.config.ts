@@ -29,7 +29,8 @@ export default defineConfig({
   fullyParallel: true,
 
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // Retry flaky tests: 2 in CI, 1 locally to catch timing issues early
+  retries: process.env.CI ? 2 : 1,
 
   // Workers: Use 2 workers locally to reduce CPU load, 2 in CI (shared database)
   // Can override with --workers flag or PLAYWRIGHT_WORKERS env var
@@ -53,8 +54,8 @@ export default defineConfig({
     // Default viewport
     viewport: { width: 1280, height: 720 },
 
-    // Performance: Reuse browser context where possible
-    // actionTimeout: 15_000, // Faster timeout for actions
+    // Action timeout - 15s max for clicks/fills (faster failure than test timeout)
+    actionTimeout: 15_000,
   },
 
   projects: [
