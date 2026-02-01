@@ -411,6 +411,18 @@ export async function transferOrgOwnership(orgId: number, userId: number): Promi
   return response.data.new_owner;
 }
 
+export async function updateOrgUser(
+  organizationId: number,
+  orgUserId: number,
+  data: Partial<UserType>,
+): Promise<UserType> {
+  const response = await axios.patch<UserType>(
+    `/org/${organizationId}/users/${orgUserId}/`,
+    data
+  );
+  return response.data;
+}
+
 // Organization Discord Members
 export interface DiscordMember {
   user: {
