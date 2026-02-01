@@ -1,5 +1,5 @@
 # Lightweight compose for CI - only essential services for Playwright tests
-# Excludes: celery-worker, celery-beat, discord-bot
+# Excludes: celery-beat, discord-bot
 services:
   frontend:
     container_name: frontend
@@ -50,6 +50,20 @@ services:
       ci-network:
         aliases:
           - localhost
+
+  celery-worker:
+    image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
+    user: "1000:1000"
+    entrypoint: ["celery"]
+    command: ["-A", "config", "worker", "-l", "info"]
+    volumes:
+      - ./backend:/app/backend
+    env_file: "./docker/.env.test"
+    depends_on:
+      - redis
+      - backend
+    networks:
+      - ci-network
 
 networks:
   ci-network:
