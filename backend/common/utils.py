@@ -30,21 +30,30 @@ def _is_ip_allowed(ip_str, allowed_ranges):
 
 
 def isTestEnvironment(request=None):
+    log.warning(f"isTestEnvironment called: TEST={settings.TEST}, RELEASE={settings.RELEASE}, DEBUG={settings.DEBUG}, NODE_ENV={settings.NODE_ENV}, CI={os.environ.get('CI')}")
 
     if not settings.TEST:
+        log.warning("isTestEnvironment: TEST is not True")
         return False
     if settings.RELEASE:
+        log.warning("isTestEnvironment: RELEASE is True")
         return False
     if not settings.DEBUG:
+        log.warning("isTestEnvironment: DEBUG is not True")
         return False
     if settings.NODE_ENV == "prod":
+        log.warning("isTestEnvironment: NODE_ENV is 'prod'")
         return False
     if settings.NODE_ENV == "release":
+        log.warning("isTestEnvironment: NODE_ENV is 'release'")
         return False
 
     # In CI environments (GitHub Actions), skip IP validation
     # All other security checks above still apply (TEST, DEBUG, NODE_ENV)
-    if os.environ.get("CI") == "true":
+    ci_env = os.environ.get("CI", "").strip().lower()
+    log.warning(f"isTestEnvironment: CI environment variable = '{ci_env}' (original: '{os.environ.get('CI')}')")
+    if ci_env in ("true", "1", "yes", "on"):
+        log.warning("isTestEnvironment: CI is truthy, returning True")
         return True
 
     # Allow requests from localhost and common Docker container IP ranges
@@ -75,9 +84,12 @@ def isTestEnvironment(request=None):
             remote_addr = x_forwarded_for.split(",")[0].strip()
         else:
             remote_addr = request.META.get("REMOTE_ADDR")
+        log.warning(f"isTestEnvironment: Checking IP - X-Forwarded-For='{x_forwarded_for}', REMOTE_ADDR='{request.META.get('REMOTE_ADDR')}', remote_addr='{remote_addr}'")
         if remote_addr and not _is_ip_allowed(remote_addr, allowed_ips):
+            log.warning(f"isTestEnvironment: IP '{remote_addr}' not in allowed list, returning False")
             return False
 
+    log.warning("isTestEnvironment: All checks passed, returning True")
     return True
 
 
