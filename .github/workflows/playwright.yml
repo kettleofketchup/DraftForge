@@ -118,6 +118,12 @@ jobs:
         echo "Populating test database from scratch..."
         poetry run inv db.populate.all
 
+    - name: Fix database permissions
+      run: |
+        # Ensure SQLite DB is writable by container (uid 1000)
+        chmod 666 backend/test.db.sqlite3
+        ls -la backend/test.db.sqlite3
+
     - name: Start test services
       run: |
         docker compose --project-directory . -f docker/docker-compose.ci.yaml up -d --no-build
