@@ -120,9 +120,12 @@ jobs:
 
     - name: Fix database permissions
       run: |
-        # Ensure SQLite DB is writable by container (uid 1000)
+        # Ensure SQLite DB and directory are writable by container (uid 1000)
+        # SQLite needs write access to directory for journal/WAL files
+        chmod 777 backend
         chmod 666 backend/test.db.sqlite3
         ls -la backend/test.db.sqlite3
+        ls -la backend | head -5
 
     - name: Start test services
       run: |
