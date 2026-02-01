@@ -6,17 +6,13 @@ on:
     tags:
       - 'v*'
   pull_request:
-    branches: 
+    branches:
       - main
       - 'fix/**'
 
 jobs:
   playwright:
     runs-on: ubuntu-latest
-    services:
-      docker:
-        image: docker:dind
-        options: --privileged
     permissions:
       contents: read
       packages: write
@@ -25,28 +21,17 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: 'Login to GitHub Container Registry'
-      uses: docker/login-action@v1
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
       with:
         registry: ghcr.io
         username: ${{github.actor}}
         password: ${{secrets.GITHUB_TOKEN}}
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.12'
-        cache: 'pip'
-        cache-dependency-path: |
-          **/requirements.txt
-          poetry.lock
-
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
 
     - name: Install Poetry
       uses: snok/install-poetry@v1
@@ -56,62 +41,16 @@ jobs:
         virtualenvs-in-project: true
 
     - name: Cache Poetry dependencies
-      id: poetry-cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: .venv
         key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
-        restore-keys: |
-          poetry-${{ runner.os }}-
 
     - name: Install Python dependencies
-      if: steps.poetry-cache.outputs.cache-hit != 'true'
       run: poetry install --no-interaction --no-ansi
-
-    - name: Cache node_modules
-      id: node-cache
-      uses: actions/cache@v3
-      with:
-        path: frontend/node_modules
-        key: node-modules-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
-
-    - name: Install frontend dependencies
-      if: steps.node-cache.outputs.cache-hit != 'true'
-      run: cd frontend && npm install
-
-    - name: Get Playwright version
-      id: playwright-version
-      run: |
-        PLAYWRIGHT_VERSION=$(node -p "require('./frontend/package-lock.json').packages['node_modules/@playwright/test'].version")
-        echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
-
-    - name: Cache Playwright browsers
-      uses: actions/cache@v3
-      id: playwright-cache
-      with:
-        path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-        restore-keys: |
-          playwright-${{ runner.os }}-
-
-    - name: Install Playwright browsers
-      if: steps.playwright-cache.outputs.cache-hit != 'true'
-      run: cd frontend && npx playwright install chromium --with-deps
-
-    - name: Install Playwright system dependencies
-      if: steps.playwright-cache.outputs.cache-hit == 'true'
-      run: cd frontend && npx playwright install-deps chromium
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-
-    - name: Cache Docker layers
-      uses: actions/cache@v3
-      with:
-        path: /tmp/.buildx-cache
-        key: buildx-${{ runner.os }}-${{ hashFiles('backend/Dockerfile', 'frontend/Dockerfile', 'nginx/Dockerfile', 'pyproject.toml', 'poetry.lock', 'frontend/package-lock.json') }}
-        restore-keys: |
-          buildx-${{ runner.os }}-
 
     - name: Build Docker images
       run: poetry run inv docker.all.build
@@ -139,12 +78,15 @@ jobs:
         docker compose -f docker/docker-compose.test.yaml ps
         docker compose -f docker/docker-compose.test.yaml logs --tail=20
 
+    - name: Flush Redis cache
+      run: docker exec redis redis-cli FLUSHALL
+
     - name: Run Core Draft Tests
       run: |
-        cd frontend && npx playwright test \
+        docker exec frontend sh -c "npx playwright test --fail-fast \
           tests/playwright/e2e/07-draft/01-captain-pick.spec.ts \
           tests/playwright/e2e/08-shuffle-draft/01-full-draft.spec.ts \
-          tests/playwright/e2e/herodraft/two-captains-full-draft.spec.ts
+          tests/playwright/e2e/herodraft/two-captains-full-draft.spec.ts"
       env:
         CI: true
 
