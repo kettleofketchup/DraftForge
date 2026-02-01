@@ -69,13 +69,43 @@ def calculate_mmr_adjustment(stats) -> int:
     return max(-500, min(500, adjustment))
 
 
-def update_user_league_mmr(user) -> None:
+def update_user_league_mmr(user, organization=None, league=None) -> None:
     """
     Set user's league_mmr to base mmr + best league adjustment.
+
+    Args:
+        user: CustomUser instance
+        organization: Optional Organization to get base MMR from OrgUser
+        league: Optional League to update LeagueUser.mmr
     """
-    if not user.mmr:
-        user.league_mmr = None
-        user.save(update_fields=["league_mmr"])
+    # Get base MMR from OrgUser if organization provided
+    base_mmr = None
+    if organization:
+        from org.models import OrgUser
+
+        try:
+            org_user = OrgUser.objects.get(user=user, organization=organization)
+            base_mmr = org_user.mmr
+        except OrgUser.DoesNotExist:
+            base_mmr = user.mmr  # Fallback
+    else:
+        base_mmr = user.mmr
+
+    if not base_mmr:
+        # No base MMR - update LeagueUser if we have league context
+        if league:
+            from league.models import LeagueUser
+
+            try:
+                league_user = LeagueUser.objects.get(user=user, league=league)
+                league_user.mmr = 0
+                league_user.save(update_fields=["mmr"])
+            except LeagueUser.DoesNotExist:
+                pass
+        else:
+            # Legacy fallback
+            user.league_mmr = None
+            user.save(update_fields=["league_mmr"])
         return
 
     best_adjustment = user.league_stats.aggregate(Max("mmr_adjustment"))[
@@ -85,9 +115,29 @@ def update_user_league_mmr(user) -> None:
     if best_adjustment is None:
         best_adjustment = 0
 
-    user.league_mmr = user.mmr + best_adjustment
-    user.save(update_fields=["league_mmr"])
-    logger.debug(
-        f"Updated {user.username} league_mmr to {user.league_mmr} "
-        f"(base: {user.mmr}, adjustment: {best_adjustment})"
-    )
+    calculated_league_mmr = base_mmr + best_adjustment
+
+    # Update LeagueUser if league context provided
+    if league:
+        from league.models import LeagueUser
+
+        try:
+            league_user = LeagueUser.objects.get(user=user, league=league)
+            league_user.mmr = calculated_league_mmr
+            league_user.save(update_fields=["mmr"])
+            logger.debug(
+                f"Updated {user.username} LeagueUser.mmr to {calculated_league_mmr} "
+                f"(base: {base_mmr}, adjustment: {best_adjustment})"
+            )
+        except LeagueUser.DoesNotExist:
+            # No LeagueUser entry, fall back to legacy
+            user.league_mmr = calculated_league_mmr
+            user.save(update_fields=["league_mmr"])
+    else:
+        # Legacy fallback
+        user.league_mmr = calculated_league_mmr
+        user.save(update_fields=["league_mmr"])
+        logger.debug(
+            f"Updated {user.username} league_mmr to {calculated_league_mmr} "
+            f"(base: {base_mmr}, adjustment: {best_adjustment})"
+        )
