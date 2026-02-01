@@ -10,20 +10,57 @@ RUN mkdir -p /home/node/.npm && \
 COPY package.json /app/
 COPY package-lock.json /app/
 
-# ---- Browser Stage (fully independent - only rebuilds when node:22-alpine changes) ----
-FROM node:22-alpine AS browsers
+# ---- System Deps (independent - only rebuilds when Alpine image changes) ----
+# This stage installs ALL system packages needed for Playwright/browsers
+# It's independent of package.json, so npm changes don't invalidate it
+FROM node:22-alpine AS system-deps
 
-# Install system browsers and dependencies for Playwright (fast, from apk cache)
+# Install browsers and ALL runtime dependencies in one layer
 RUN apk add --no-cache \
+    # Browsers
     chromium \
     firefox \
+    # Core browser dependencies
     nss \
     freetype \
     harfbuzz \
+    harfbuzz-subset \
     ca-certificates \
     ttf-freefont \
     libstdc++ \
-    dbus
+    dbus \
+    # Graphics/display dependencies
+    mesa-gl \
+    mesa-gbm \
+    libxcomposite \
+    libxdamage \
+    libxrandr \
+    libxshmfence \
+    libxxf86vm \
+    pango \
+    cairo \
+    # Audio/accessibility
+    alsa-lib \
+    cups-libs \
+    gtk+3.0 \
+    at-spi2-core \
+    # Video processing
+    ffmpeg \
+    # Additional chromium dependencies
+    eudev-libs \
+    crc32c \
+    double-conversion \
+    minizip \
+    libxslt \
+    pipewire-libs \
+    libwebpdemux \
+    simdutf \
+    openh264 && \
+    # Create chromium symlink
+    ln -sf /usr/lib/chromium/chromium /usr/bin/chromium && \
+    # Create ffmpeg symlink for Playwright
+    mkdir -p /root/.cache/ms-playwright/ffmpeg-1011 && \
+    ln -sf /usr/bin/ffmpeg /root/.cache/ms-playwright/ffmpeg-1011/ffmpeg-linux
 
 # ---- Production Deps ----
 FROM base AS deps
@@ -63,58 +100,22 @@ USER node
 CMD ["npm", "run", "start"]
 
 # ---- Dev/Test Runtime (with Playwright) ----
-FROM deps-build AS runtime-dev
+# Based on system-deps (has all packages pre-installed)
+# Copies node_modules from deps-build
+FROM system-deps AS runtime-dev
 LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/draftforge"
 WORKDIR /app
 
-# Copy system browsers and deps from browsers stage
-COPY --from=browsers /usr/bin/chromium-browser /usr/bin/chromium-browser
-COPY --from=browsers /usr/bin/firefox /usr/bin/firefox
-COPY --from=browsers /usr/lib/chromium /usr/lib/chromium
-COPY --from=browsers /usr/lib/firefox /usr/lib/firefox
-COPY --from=browsers /usr/share/fonts /usr/share/fonts
-
-# Install browser runtime dependencies and ffmpeg for video processing
-USER root
-RUN apk add --no-cache \
-    nss \
-    freetype \
-    harfbuzz \
-    harfbuzz-subset \
-    ca-certificates \
-    ttf-freefont \
-    libstdc++ \
-    dbus \
-    mesa-gl \
-    mesa-gbm \
-    libxcomposite \
-    libxdamage \
-    libxrandr \
-    libxshmfence \
-    libxxf86vm \
-    pango \
-    cairo \
-    alsa-lib \
-    cups-libs \
-    gtk+3.0 \
-    at-spi2-core \
-    ffmpeg \
-    # Additional chromium dependencies
-    eudev-libs \
-    crc32c \
-    double-conversion \
-    minizip \
-    libxslt \
-    pipewire-libs \
-    libwebpdemux \
-    simdutf \
-    openh264 && \
-    # Create symlink: chromium-browser wrapper calls /usr/bin/chromium but Alpine puts it at /usr/lib/chromium/chromium
-    ln -sf /usr/lib/chromium/chromium /usr/bin/chromium && \
-    # Create ffmpeg symlink for Playwright (it looks in cache dir but we use system ffmpeg)
-    mkdir -p /home/node/.cache/ms-playwright/ffmpeg-1011 && \
+# Create node user (system-deps doesn't have it)
+RUN addgroup -g 1000 node && \
+    adduser -u 1000 -G node -s /bin/sh -D node && \
+    mkdir -p /home/node/.npm /home/node/.cache/ms-playwright/ffmpeg-1011 && \
     ln -sf /usr/bin/ffmpeg /home/node/.cache/ms-playwright/ffmpeg-1011/ffmpeg-linux && \
-    chown -R node:node /home/node/.cache
+    chown -R node:node /home/node /app
+
+# Copy node_modules from deps-build (this is the only layer affected by package.json)
+COPY --from=deps-build --chown=node:node /app/node_modules /app/node_modules
+COPY --chown=node:node package.json package-lock.json /app/
 
 # Set environment variables
 ENV PROD=false
@@ -123,13 +124,12 @@ ENV RELEASE=false
 ENV TEST=false
 # Tell Playwright to use system browsers instead of downloading
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_FIREFOX_EXECUTABLE_PATH=/usr/bin/firefox
 EXPOSE 3000
 
 # Copy and use entrypoint script
 COPY --chown=node:node docker-entrypoint-frontend.sh /app/docker-entrypoint-frontend.sh
-USER root
 RUN chmod +x /app/docker-entrypoint-frontend.sh
 USER node
 CMD ["/bin/sh", "/app/docker-entrypoint-frontend.sh"]
