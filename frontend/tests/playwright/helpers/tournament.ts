@@ -140,15 +140,15 @@ export class TournamentPage {
     this.submitButton = page.locator('[data-testid="tournament-submit-button"]');
     this.cancelButton = page.locator('[data-testid="tournament-cancel-button"]');
 
-    // Draft buttons - try multiple possible selectors
+    // Draft buttons - try multiple possible selectors (team draft and hero draft)
     this.startDraftButton = page.locator(
-      'button:has-text("Start Draft"), [data-testid="startDraftButton"]'
+      '[data-testid="startTeamDraftButton"], [data-testid="startDraftButton"], button:has-text("Start Draft")'
     );
     this.liveDraftButton = page.locator(
-      'button:has-text("Live Draft"), [data-testid="liveDraftButton"]'
+      '[data-testid="liveTeamDraftButton"], [data-testid="liveDraftButton"], button:has-text("Live Draft")'
     );
     this.viewDraftButton = page.locator(
-      'button:has-text("View Draft"), [data-testid="viewDraftButton"]'
+      '[data-testid="viewTeamDraftButton"], [data-testid="viewDraftButton"], button:has-text("View Draft")'
     );
 
     // Draft modal - HeroDraft modal or generic draft modal
@@ -514,26 +514,14 @@ export async function clickTeamsTab(page: Page): Promise<void> {
  * @param page - Playwright Page instance
  */
 export async function clickStartDraft(page: Page): Promise<void> {
-  const startButton = page.locator(
-    'button:has-text("Start Draft"), [data-testid="startDraftButton"]'
-  );
-  const liveButton = page.locator(
-    'button:has-text("Live Draft"), [data-testid="liveDraftButton"]'
-  );
-  const viewButton = page.locator(
-    'button:has-text("View Draft"), [data-testid="viewDraftButton"]'
-  );
+  // Use data-testid for reliable selection - supports both team draft and hero draft buttons
+  const draftButton = page.locator(
+    '[data-testid="startTeamDraftButton"], [data-testid="liveTeamDraftButton"], [data-testid="viewTeamDraftButton"], ' +
+    '[data-testid="startDraftButton"], [data-testid="liveDraftButton"], [data-testid="viewDraftButton"], ' +
+    'button:has-text("Start Draft"), button:has-text("View Draft")'
+  ).first();
 
-  if (await startButton.isVisible().catch(() => false)) {
-    await startButton.click();
-  } else if (await liveButton.isVisible().catch(() => false)) {
-    await liveButton.click();
-  } else if (await viewButton.isVisible().catch(() => false)) {
-    await viewButton.click();
-  } else {
-    // Fallback
-    await page.locator('button:has-text("Draft")').first().click();
-  }
+  await draftButton.click();
 }
 
 /**

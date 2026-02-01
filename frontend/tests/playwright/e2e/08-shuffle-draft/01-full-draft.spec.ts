@@ -84,7 +84,7 @@ test.describe('Shuffle Draft - Full Flow', () => {
     await page.waitForLoadState('networkidle');
 
     // Click Start Draft button to open the draft modal
-    await page.locator('button:has-text("Start Draft")').click({ force: true });
+    await page.locator('[data-testid="startTeamDraftButton"]').click({ force: true });
 
     // The draft modal should open
     const dialog = page.locator('[role="dialog"]');
@@ -271,18 +271,11 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
     await page.waitForLoadState('networkidle');
 
-    // Open draft modal - button text includes "Team Draft"
-    const liveDraftButton = page.locator('button:has-text("Live Team Draft")');
-    const startDraftButton = page.locator('button:has-text("Start Team Draft")');
-    const viewDraftButton = page.locator('button:has-text("View Team Draft")');
-
-    if (await liveDraftButton.isVisible().catch(() => false)) {
-      await liveDraftButton.click({ force: true });
-    } else if (await startDraftButton.isVisible().catch(() => false)) {
-      await startDraftButton.click({ force: true });
-    } else if (await viewDraftButton.isVisible().catch(() => false)) {
-      await viewDraftButton.click({ force: true });
-    }
+    // Open draft modal - use data-testid for reliable selection
+    const draftButton = page.locator(
+      '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
+    ).first();
+    await draftButton.click({ force: true });
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
@@ -332,18 +325,11 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
     await page.waitForLoadState('networkidle');
 
-    // Open draft modal - button text includes "Team Draft"
-    const liveDraftButton = page.locator('button:has-text("Live Team Draft")');
-    const startDraftButton = page.locator('button:has-text("Start Team Draft")');
-    const viewDraftButton = page.locator('button:has-text("View Team Draft")');
-
-    if (await liveDraftButton.isVisible().catch(() => false)) {
-      await liveDraftButton.click({ force: true });
-    } else if (await startDraftButton.isVisible().catch(() => false)) {
-      await startDraftButton.click({ force: true });
-    } else if (await viewDraftButton.isVisible().catch(() => false)) {
-      await viewDraftButton.click({ force: true });
-    }
+    // Open draft modal - use data-testid for reliable selection
+    const draftButton = page.locator(
+      '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
+    ).first();
+    await draftButton.click({ force: true });
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
@@ -381,18 +367,11 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
     await page.waitForLoadState('networkidle');
 
-    // Open draft modal - button text includes "Team Draft"
-    const liveDraftButton = page.locator('button:has-text("Live Team Draft")');
-    const startDraftButton = page.locator('button:has-text("Start Team Draft")');
-    const viewDraftButton = page.locator('button:has-text("View Team Draft")');
-
-    if (await liveDraftButton.isVisible().catch(() => false)) {
-      await liveDraftButton.click({ force: true });
-    } else if (await startDraftButton.isVisible().catch(() => false)) {
-      await startDraftButton.click({ force: true });
-    } else if (await viewDraftButton.isVisible().catch(() => false)) {
-      await viewDraftButton.click({ force: true });
-    }
+    // Open draft modal - use data-testid for reliable selection
+    const draftButton = page.locator(
+      '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
+    ).first();
+    await draftButton.click({ force: true });
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
@@ -445,18 +424,11 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
     await page.waitForLoadState('networkidle');
 
-    // Open draft modal - button text includes "Team Draft"
-    const liveDraftButton = page.locator('button:has-text("Live Team Draft")');
-    const startDraftButton = page.locator('button:has-text("Start Team Draft")');
-    const viewDraftButton = page.locator('button:has-text("View Team Draft")');
-
-    if (await liveDraftButton.isVisible().catch(() => false)) {
-      await liveDraftButton.click({ force: true });
-    } else if (await startDraftButton.isVisible().catch(() => false)) {
-      await startDraftButton.click({ force: true });
-    } else if (await viewDraftButton.isVisible().catch(() => false)) {
-      await viewDraftButton.click({ force: true });
-    }
+    // Open draft modal - use data-testid for reliable selection
+    const draftButton = page.locator(
+      '[data-testid="liveTeamDraftButton"], [data-testid="startTeamDraftButton"], [data-testid="viewTeamDraftButton"]'
+    ).first();
+    await draftButton.click({ force: true });
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
