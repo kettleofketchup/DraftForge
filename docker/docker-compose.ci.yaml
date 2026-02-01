@@ -7,9 +7,12 @@ services:
     user: "1000:1000"
     env_file: "./docker/.env.test"
     volumes:
-      # Mount source directories only, preserve node_modules from image
+      # Mount source and config files, preserve node_modules from image
       - ./frontend/app:/app/app
       - ./frontend/public:/app/public
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/react-router.config.ts:/app/react-router.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
       - ./docs/assets:/app/public/assets/docs:ro
     networks:
       - ci-network
