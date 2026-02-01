@@ -57,11 +57,11 @@ jobs:
     - name: Pull or Build Docker images
       run: |
         echo "Attempting to pull images from registry..."
-        if docker compose -f docker/docker-compose.test.yaml pull 2>&1; then
+        if docker compose --project-directory . -f docker/docker-compose.test.yaml pull 2>&1; then
           echo "✓ Images pulled successfully"
         else
           echo "✗ Pull failed, building images..."
-          docker compose -f docker/docker-compose.test.yaml build
+          docker compose --project-directory . -f docker/docker-compose.test.yaml build
         fi
       env:
         DOCKER_BUILDKIT: 1
@@ -91,7 +91,7 @@ jobs:
 
     - name: Start test services
       run: |
-        docker compose -f docker/docker-compose.test.yaml up -d --no-build
+        docker compose --project-directory . -f docker/docker-compose.test.yaml up -d --no-build
       env:
         COMPOSE_IGNORE_ORPHANS: true
 
@@ -106,8 +106,8 @@ jobs:
           sleep 2
         done
         echo "WARNING: Services may not be ready"
-        docker compose -f docker/docker-compose.test.yaml ps
-        docker compose -f docker/docker-compose.test.yaml logs --tail=20
+        docker compose --project-directory . -f docker/docker-compose.test.yaml ps
+        docker compose --project-directory . -f docker/docker-compose.test.yaml logs --tail=20
 
     - name: Flush Redis cache
       run: docker exec redis redis-cli FLUSHALL
@@ -133,5 +133,5 @@ jobs:
     - name: Clean up
       if: always()
       run: |
-        docker compose -f docker/docker-compose.test.yaml down -v || true
+        docker compose --project-directory . -f docker/docker-compose.test.yaml down -v || true
         docker container prune -f || true
