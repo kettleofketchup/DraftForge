@@ -58,8 +58,28 @@ jobs:
         DOCKER_BUILDKIT: 1
         COMPOSE_DOCKER_CLI_BUILD: 1
 
-    - name: Populate test database
-      run: poetry run inv db.populate.all
+    - name: Get test database
+      run: |
+        # Try to use pre-built test DB + migrations (fastest)
+        if docker pull ghcr.io/${{ github.repository }}/test-db:latest 2>/dev/null; then
+          echo "Extracting pre-populated test database..."
+          docker create --name test-db-container ghcr.io/${{ github.repository }}/test-db:latest
+          docker cp test-db-container:/data/test.db.sqlite3 backend/test.db.sqlite3
+          docker rm test-db-container
+
+          echo "Running migrations on top..."
+          if poetry run inv db.migrate.test; then
+            echo "Using pre-populated test database with migrations applied"
+            exit 0
+          else
+            echo "Migrations failed, falling back to full populate..."
+            rm -f backend/test.db.sqlite3
+          fi
+        fi
+
+        # Fallback: populate from scratch
+        echo "Populating test database from scratch..."
+        poetry run inv db.populate.all
 
     - name: Start test services
       run: poetry run inv dev.test

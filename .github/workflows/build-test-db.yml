@@ -1,0 +1,85 @@
+name: Build Test Database Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/tests/populate.py'
+      - 'backend/tests/helpers/tournament_config.py'
+      - 'backend/app/management/commands/populate_*.py'
+      - 'backend/*/migrations/*.py'
+      - 'backend/app/models.py'
+      - 'backend/steam/models.py'
+      - 'backend/bracket/models.py'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/test-db
+
+jobs:
+  build-test-db:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: '2.2.0'
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Cache Poetry dependencies
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+
+    - name: Install Python dependencies
+      run: poetry install --no-interaction --no-ansi
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build backend image
+      run: poetry run inv docker.backend.build
+      env:
+        DOCKER_BUILDKIT: 1
+
+    - name: Populate test database
+      run: poetry run inv db.populate.all
+
+    - name: Create test-db image
+      run: |
+        # Create a minimal Dockerfile for the test DB
+        cat > /tmp/Dockerfile.test-db << 'EOF'
+        FROM busybox:latest
+        COPY backend/test.db.sqlite3 /data/test.db.sqlite3
+        EOF
+
+        # Build and push the test-db image
+        docker build -f /tmp/Dockerfile.test-db -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest .
+        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+    - name: Output image info
+      run: |
+        echo "Test DB image pushed: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        ls -lh backend/test.db.sqlite3
