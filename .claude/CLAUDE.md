@@ -4,13 +4,21 @@ DraftForge is a platform for managing Dota 2 tournaments, teams, and competitive
 
 ## First Things First
 
-**IMPORTANT**: Always source the virtual environment before running Python or Invoke commands:
+This project uses **just** as the task runner, which automatically handles venv activation.
 
 ```bash
-source .venv/bin/activate
+# First-time setup (installs just, creates venv, installs deps)
+./dev
+
+# All commands use just with :: namespace syntax
+just dev::debug        # Start dev environment
+just test::pw::ui      # Open Playwright UI
+just db::migrate::all  # Run all migrations
 ```
 
-This project uses Python Invoke for task automation. All repo operations should use `inv` commands.
+**No manual venv activation needed** - just commands auto-activate the correct venv (works in worktrees too).
+
+Run `just --list --list-submodules` to see all available commands.
 
 ## Project Structure
 
@@ -55,29 +63,30 @@ const ws = new WebSocket(wsUrl);
 
 ## Quick Start
 
+### First-Time Setup
+```bash
+./dev  # Installs just, creates venv, installs deps, starts dev environment
+```
+
 ### Development (Docker)
 ```bash
-source .venv/bin/activate
-inv dev.debug
+just dev::debug
 ```
 
 ### Production
 ```bash
-source .venv/bin/activate
-inv dev.prod
+just dev::local-prod
 ```
 
 ### Testing
 ```bash
-source .venv/bin/activate
-inv dev.test
+just test::up
 ```
 
 ### Full Test Setup (with Playwright)
 ```bash
-source .venv/bin/activate
-inv test.setup
-inv test.playwright.headless  # or inv test.playwright.headed
+just test::setup
+just test::pw::headless  # or just test::pw::headed
 ```
 
 ## Docker Compose Architecture
@@ -127,104 +136,103 @@ inv test.playwright.headless  # or inv test.playwright.headed
 ## Building & Pushing Images
 
 ```bash
-source .venv/bin/activate
-
 # Build all
-inv docker.all.build
+just docker::all-build
 
 # Push all
-inv docker.all.push
+just docker::all-push
 
 # Individual services
-inv docker.backend.build
-inv docker.frontend.build
-inv docker.nginx.build
+just docker::backend::build
+just docker::frontend::build
+just docker::nginx::build
 ```
 
 Version is pulled from `pyproject.toml`.
 
-## Common Invoke Commands
+## Common Just Commands
 
 ```bash
-source .venv/bin/activate
-
 # Development
-inv dev.debug          # Start dev environment
-inv dev.live           # Start with tmux
+just dev::debug          # Start dev environment
+just dev::live           # Start with tmux
 
 # Environment Management (dev, test, prod)
-inv dev.up             # Start dev environment
-inv dev.down           # Stop dev environment
-inv dev.logs           # Follow dev logs
-inv dev.ps             # List dev containers
-inv dev.restart        # Restart dev services
-inv dev.stop           # Stop without removing
-inv dev.build          # Build dev images
-inv dev.pull           # Pull dev images
-inv dev.top            # Show running processes
-inv dev.exec <svc> <cmd>  # Execute command in running container
-inv dev.run --service backend --cmd '<cmd>'  # Run one-off command in new container
+just dev::up             # Start dev environment
+just dev::down           # Stop dev environment
+just dev::logs           # Follow dev logs
+just dev::ps             # List dev containers
+just dev::restart        # Restart dev services
+just dev::stop           # Stop without removing
+just dev::build          # Build dev images
+just dev::pull           # Pull dev images
+just dev::top            # Show running processes
+just dev::exec <svc> <cmd>    # Execute command in running container
+just dev::run '<cmd>'         # Run one-off command in backend container
 
-inv test.up            # Start test environment
-inv test.down          # Stop test environment
-# ... (same commands as dev)
+just test::up            # Start test environment
+just test::down          # Stop test environment
+# ... (same commands as dev::)
 
-inv prod.up            # Start prod environment
-inv prod.down          # Stop prod environment
-# ... (same commands as dev)
+just prod::up            # Start prod environment
+just prod::down          # Stop prod environment
+# ... (same commands as dev::)
 
 # Database Migrations
-inv db.migrate         # Run migrations for dev (default)
-inv db.migrate.dev     # Run migrations for dev environment
-inv db.migrate.test    # Run migrations for test environment
-inv db.migrate.prod    # Run migrations for prod environment
-inv db.migrate.all     # Run migrations for all environments
+just db::run-migrate           # Run migrations for dev (default)
+just db::migrate::dev          # Run migrations for dev environment
+just db::migrate::test         # Run migrations for test environment
+just db::migrate::prod         # Run migrations for prod environment
+just db::migrate::all          # Run migrations for all environments
 
 # Database Population
-inv db.populate.all    # Reset and populate test DB
+just db::populate::all         # Reset and populate test DB
 
 # Docker Images
-inv docker.all.build   # Build all images
-inv docker.all.push    # Push all images
-inv docker.all.pull    # Pull all images
+just docker::all-build         # Build all images
+just docker::all-push          # Push all images
+just docker::all-pull          # Pull all images
+just docker::backend::build    # Build backend image
+just docker::frontend::build   # Build frontend image
+just docker::nginx::build      # Build nginx image
 
 # Docs
-inv docs.serve         # Start MkDocs dev server
-inv docs.build         # Build static docs site
+just docs::serve         # Start MkDocs dev server
+just docs::build         # Build static docs site
 
 # Updates
-inv update.all         # Update everything (git, deps, images)
+just update::all         # Update everything (git, deps, images)
 
 # Version
-inv version.set 1.2.3  # Set version
-inv version.tag        # Tag and bump version
+just version::set 1.2.3  # Set version
+just version::tag        # Tag and bump version
 
 # Tests (Playwright)
-inv test.playwright.install    # Install Playwright browsers
-inv test.playwright.headless   # Run all tests headless
-inv test.playwright.headed     # Run all tests headed
-inv test.playwright.ui         # Open Playwright UI mode
-inv test.playwright.debug      # Debug mode with inspector
-inv test.playwright.spec --spec <pattern>  # Run tests matching pattern
+just test::pw::install   # Install Playwright browsers
+just test::pw::headless  # Run all tests headless
+just test::pw::headed    # Run all tests headed
+just test::pw::ui        # Open Playwright UI mode
+just test::pw::debug     # Debug mode with inspector
+just test::pw::spec <pattern>  # Run tests matching pattern
 ```
 
-Run `inv --list` for all available tasks.
+Run `just --list --list-submodules` for all available commands.
 
 ## Backend Development
 
 ```bash
-source .venv/bin/activate
-cd backend
-
 # Database migrations
-python manage.py makemigrations app
-python manage.py migrate
+just db::makemigrations app
+just py::migrate
 
-# Without Redis (for management commands)
-DISABLE_CACHE=true python manage.py <command>
+# Django management commands
+just py::manage <command>
 
-# Run server
-python manage.py runserver
+# Django shell (with cache disabled)
+just py::shell
+
+# Run server directly
+just py::runserver
 ```
 
 ## Frontend Development
@@ -239,35 +247,31 @@ npm run dev
 
 **Backend (via Docker - Recommended)**:
 ```bash
-source .venv/bin/activate
-
 # Run all tests (avoids Redis hanging issues)
-inv test.run --cmd 'python manage.py test app.tests -v 2'
+just test::run 'python manage.py test app.tests -v 2'
 
 # Run specific test module
-inv test.run --cmd 'python manage.py test app.tests.test_shuffle_draft -v 2'
+just test::run 'python manage.py test app.tests.test_shuffle_draft -v 2'
 ```
 
-**Backend (Local - May hang on cleanup due to Redis/cacheops)**:
+**Backend (Local - via pytest)**:
 ```bash
-DISABLE_CACHE=true python manage.py test app.tests -v 2
+just py::test
 ```
 
 **Frontend E2E (Playwright - Recommended)**:
 ```bash
-source .venv/bin/activate
-
 # Run all Playwright tests headless
-inv test.playwright.headless
+just test::pw::headless
 
 # Run tests in headed mode (visible browser)
-inv test.playwright.headed
+just test::pw::headed
 
 # Open Playwright UI for interactive debugging
-inv test.playwright.ui
+just test::pw::ui
 
 # Run specific test file
-inv test.playwright.spec --file tests/playwright/e2e/01-navigation.spec.ts
+just test::pw::spec 01-navigation
 ```
 
 ### Playwright Performance
@@ -275,13 +279,13 @@ inv test.playwright.spec --file tests/playwright/e2e/01-navigation.spec.ts
 **Local parallel execution:**
 ```bash
 # Run with default workers (50% of CPUs)
-inv test.playwright.headless
+just test::pw::headless
 
 # Run with specific worker count
-inv test.playwright.headless --args="--workers=4"
+just test::pw::headless --workers=4
 
 # Run specific shard locally (for debugging CI issues)
-inv test.playwright.headless --args="--shard=1/4"
+just test::pw::headless --shard=1/4
 ```
 
 **CI sharding:**
@@ -290,10 +294,10 @@ Each shard runs approximately 1/4 of the test suite.
 
 **Running specific test suites:**
 ```bash
-inv test.playwright.navigation    # Navigation tests only
-inv test.playwright.tournament    # Tournament tests only
-inv test.playwright.league        # League tests only
-inv test.playwright.herodraft     # HeroDraft tests only
+just test::pw::spec navigation    # Navigation tests only
+just test::pw::spec tournament    # Tournament tests only
+just test::pw::spec league        # League tests only
+just test::pw::spec herodraft     # HeroDraft tests only
 ```
 
 ## Documentation
@@ -301,13 +305,11 @@ inv test.playwright.herodraft     # HeroDraft tests only
 Project documentation uses MkDocs Material:
 
 ```bash
-source .venv/bin/activate
-
 # Serve docs locally
-mkdocs serve
+just docs::serve
 
 # Build static site
-mkdocs build
+just docs::build
 ```
 
 Docs available at http://127.0.0.1:8000
@@ -323,38 +325,27 @@ Docs available at http://127.0.0.1:8000
 cd /home/kettle/git_repos/website
 git worktree add .worktrees/feature-name -b feature/feature-name
 
-# 2. Setup worktree Python environment
+# 2. Bootstrap the worktree (creates venv, installs deps)
 cd /home/kettle/git_repos/website/.worktrees/feature-name
-python -m venv .venv
-source .venv/bin/activate
-poetry install
+./dev
 
 # 3. Copy backend secrets from main repo
 cp /home/kettle/git_repos/website/backend/.env ./backend/.env
 
-# 4. Install frontend dependencies (IMPORTANT: must be in worktree!)
-cd /home/kettle/git_repos/website/.worktrees/feature-name/frontend
-npm install
+# 4. Run migrations for all environments
+just db::migrate::all
 
-# 5. Run migrations for all environments (from worktree root)
-cd /home/kettle/git_repos/website/.worktrees/feature-name
-source .venv/bin/activate
-inv db.migrate.all
-
-# 6. Start Docker environment
-inv dev.test  # Detached mode for testing, or inv dev.debug for dev
-
-# 7. Populate test data (optional)
-inv db.populate.all
+# 5. Populate test data (optional)
+just db::populate::all
 ```
 
-### Using Invoke in Worktrees
+### Using Just in Worktrees
 
-Always cd into the worktree first:
+Just auto-detects the venv from the repo root, so commands work seamlessly:
 ```bash
 cd /home/kettle/git_repos/website/.worktrees/feature-name
-poetry run inv dev.debug
-poetry run inv test.run --cmd 'python manage.py test app.tests -v 2'
+just dev::debug
+just test::run 'python manage.py test app.tests -v 2'
 ```
 
 ## Agents Available
@@ -366,33 +357,31 @@ poetry run inv test.run --cmd 'python manage.py test app.tests -v 2'
 
 ## Skills Available
 
-- `inv-runner` - Python Invoke task automation (backend tests via Docker, environment management)
+- `just` - Just command runner (auto-activates venv, works in worktrees)
 - `visual-debugging` - Chrome MCP browser automation for debugging
 
 ## Demo Video Recording
 
-**IMPORTANT**: Always use `inv demo.*` commands to record demo videos (or `inv test.demo.*` when in test environment).
+**IMPORTANT**: Always use `just demo::*` commands to record demo videos (or `just test::demo::*` when in test environment).
 
 After editing UI components in `frontend/app/components/herodraft/`, `draft/`, or `bracket/`, run the appropriate demo recording command:
 
 ```bash
-source .venv/bin/activate
-
 # Record all demos
-inv demo.all
+just demo::all
 
 # Individual demos
-inv demo.snake         # Snake draft demo
-inv demo.shuffle       # Shuffle draft demo
-inv demo.herodraft     # HeroDraft with bracket demo
-inv demo.snapshots     # Site screenshots
+just demo::snake         # Snake draft demo
+just demo::shuffle       # Shuffle draft demo
+just demo::herodraft     # HeroDraft with bracket demo
+just demo::snapshots     # Site screenshots
 
 # Post-processing
-inv demo.trim          # Trim initial white screen
-inv demo.gifs          # Convert videos to GIFs
+just demo::trim          # Trim initial white screen
+just demo::gifs          # Convert videos to GIFs
 
 # Quick workflow (record + GIFs)
-inv demo.quick
+just demo::quick
 ```
 
 See [docs/ai/demo/](docs/ai/demo/index.md) for full guidelines.
