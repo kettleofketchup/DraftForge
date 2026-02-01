@@ -104,6 +104,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "app.apps.AppConfig",
     "org.apps.OrgConfig",
+    "league.apps.LeagueConfig",
     "social_django",
     "rest_framework",
     "django_jinja",
