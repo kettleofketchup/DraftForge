@@ -40,9 +40,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
     await waitForHydration(page);
 
     // Click start/view draft
-    const startBtn = page
-      .locator('button:has-text("Start Draft"), button:has-text("View Draft")')
-      .first();
+    const startBtn = page.getByTestId('view-draft-btn');
     await startBtn.click();
 
     const draftPage = new HeroDraftPage(page);

@@ -70,6 +70,7 @@ export const UndoPickButton: React.FC = () => {
       <WarningButton
         loading={isLoading}
         onClick={() => setOpen(true)}
+        data-testid="undoPickButton"
       >
         <Undo2 className="mr-2 h-4 w-4" />
         Undo
@@ -83,6 +84,8 @@ export const UndoPickButton: React.FC = () => {
         variant="warning"
         isLoading={isLoading}
         onConfirm={handleUndo}
+        confirmTestId="confirmUndoPickButton"
+        cancelTestId="cancelUndoPickButton"
       />
     </>
   );

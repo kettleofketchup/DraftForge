@@ -52,7 +52,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
       // Staff should see the toolbar
-      const reseedButton = page.locator('button:has-text("Reseed Bracket"), button:has-text("Generate Bracket")');
+      const reseedButton = page.locator('[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]');
       await expect(reseedButton).toBeVisible();
     });
 
@@ -63,13 +63,13 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
       // Click on Reseed Bracket dropdown
-      const reseedButton = page.locator('button:has-text("Reseed Bracket"), button:has-text("Generate Bracket")');
+      const reseedButton = page.locator('[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]');
       await reseedButton.click();
 
       // Should show seeding options
-      await expect(page.locator('text=Seed by Team MMR')).toBeVisible();
-      await expect(page.locator('text=Seed by Captain MMR')).toBeVisible();
-      await expect(page.locator('text=Random Seeding')).toBeVisible();
+      await expect(page.locator('[data-testid="seedByTeamMmrOption"]')).toBeVisible();
+      await expect(page.locator('[data-testid="seedByCaptainMmrOption"]')).toBeVisible();
+      await expect(page.locator('[data-testid="randomSeedingOption"]')).toBeVisible();
     });
 
     test('should enable save button after reseeding', async ({ page }) => {
@@ -82,16 +82,16 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await page.waitForLoadState('networkidle');
 
       // Click on Reseed Bracket dropdown
-      const reseedButton = page.locator('button:has-text("Reseed Bracket"), button:has-text("Generate Bracket")');
+      const reseedButton = page.locator('[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]');
       await reseedButton.click();
 
       // Wait for dropdown to open and select seeding method
-      const randomSeeding = page.locator('[role="menuitem"]:has-text("Random Seeding")');
+      const randomSeeding = page.locator('[data-testid="randomSeedingOption"]');
       await randomSeeding.waitFor({ state: 'visible', timeout: 5000 });
       await randomSeeding.click();
 
       // Wait for and confirm the regenerate dialog
-      const regenerateButton = page.locator('button:has-text("Regenerate")');
+      const regenerateButton = page.locator('[data-testid="regenerateBracketConfirmButton"]');
       await regenerateButton.waitFor({ state: 'visible', timeout: 5000 });
       await regenerateButton.click();
 
@@ -102,7 +102,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await expect(page.locator('text=Unsaved changes')).toBeVisible({ timeout: 10000 });
 
       // Save button should be enabled and clickable
-      const saveButton = page.locator('button:has-text("Save Bracket"), button:has-text("Save Changes")');
+      const saveButton = page.locator('[data-testid="saveBracketButton"]');
       await expect(saveButton).toBeVisible();
       await expect(saveButton).not.toBeDisabled();
     });
@@ -120,7 +120,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await page.waitForLoadState('networkidle');
 
       // Find all match nodes and try each one until we find one with teams
-      const matchNodes = page.locator('.react-flow__node');
+      const matchNodes = page.locator('[data-testid="bracket-match-node"]');
       const nodeCount = await matchNodes.count();
 
       let foundMatchWithTeams = false;
@@ -133,10 +133,10 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
 
         if (isVisible) {
           // Check for Match Details
-          const hasDetails = await page.locator('text=Match Details').isVisible().catch(() => false);
+          const hasDetails = await page.locator('[data-testid="match-details-header"]').isVisible().catch(() => false);
           if (hasDetails) {
             // Check for "Wins" buttons (indicating teams are assigned)
-            const winButtons = dialog.locator('button:has-text("Wins")');
+            const winButtons = dialog.locator('[data-testid="radiantWinsButton"], [data-testid="direWinsButton"]');
             const winButtonCount = await winButtons.count();
 
             if (winButtonCount > 0) {
@@ -173,7 +173,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await page.waitForLoadState('networkidle');
 
       // Find a match with teams and winner selection buttons
-      const matchNodes = page.locator('.react-flow__node');
+      const matchNodes = page.locator('[data-testid="bracket-match-node"]');
       const nodeCount = await matchNodes.count();
 
       let foundMatch = false;
@@ -186,7 +186,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
 
         if (isVisible) {
           // Check if this match has teams and Set Winner buttons
-          const winButtons = dialog.locator('button:has-text("Wins")');
+          const winButtons = dialog.locator('[data-testid="radiantWinsButton"], [data-testid="direWinsButton"]');
           const winButtonCount = await winButtons.count();
 
           if (winButtonCount >= 2) {
@@ -220,12 +220,12 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
       // First, reseed to ensure we have a fresh bracket with loser paths
-      const reseedButton = page.locator('button:has-text("Reseed Bracket"), button:has-text("Generate Bracket")');
+      const reseedButton = page.locator('[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]');
       await reseedButton.click();
-      await page.locator('text=Random Seeding').click();
+      await page.locator('[data-testid="randomSeedingOption"]').click();
 
       // Confirm if dialog appears
-      const regenerateButton = page.locator('button:has-text("Regenerate")');
+      const regenerateButton = page.locator('[data-testid="regenerateBracketConfirmButton"]');
       await regenerateButton.waitFor({ state: 'visible', timeout: 2000 }).catch(() => {});
       if (await regenerateButton.isVisible().catch(() => false)) {
         await regenerateButton.click({ force: true });
@@ -235,7 +235,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await page.waitForLoadState('networkidle');
 
       // Click on first match
-      const matchNode = page.locator('.react-flow__node').filter({ has: page.locator(':visible') }).first();
+      const matchNode = page.locator('[data-testid="bracket-match-node"]').first();
       await matchNode.click({ force: true });
 
       // Wait for modal
@@ -243,7 +243,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await expect(dialog).toBeVisible({ timeout: 10000 });
 
       // If match has Set Winner buttons, click one
-      const winButtons = dialog.locator('button:has-text("Wins")');
+      const winButtons = dialog.locator('[data-testid="radiantWinsButton"], [data-testid="direWinsButton"]');
       const winButtonCount = await winButtons.count();
 
       if (winButtonCount >= 2) {
@@ -270,16 +270,16 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       await page.waitForLoadState('networkidle');
 
       // Reseed the bracket
-      const reseedButton = page.locator('button:has-text("Reseed Bracket"), button:has-text("Generate Bracket")');
+      const reseedButton = page.locator('[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]');
       await reseedButton.click();
 
       // Wait for dropdown and select seeding method
-      const randomSeeding = page.locator('[role="menuitem"]:has-text("Random Seeding")');
+      const randomSeeding = page.locator('[data-testid="randomSeedingOption"]');
       await randomSeeding.waitFor({ state: 'visible', timeout: 5000 });
       await randomSeeding.click();
 
       // Wait for and confirm the regenerate dialog
-      const regenerateButton = page.locator('button:has-text("Regenerate")');
+      const regenerateButton = page.locator('[data-testid="regenerateBracketConfirmButton"]');
       await regenerateButton.waitFor({ state: 'visible', timeout: 5000 });
       await regenerateButton.click();
 
@@ -292,7 +292,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       // Save the bracket
       // Note: There's a known Playwright issue with Radix ScrollArea where the html element
       // appears to intercept pointer events. Using evaluate to click works around this.
-      const saveButton = page.locator('button:has-text("Save Bracket"), button:has-text("Save Changes")');
+      const saveButton = page.locator('[data-testid="saveBracketButton"]');
 
       // Verify button is enabled before clicking
       await expect(saveButton).not.toBeDisabled();

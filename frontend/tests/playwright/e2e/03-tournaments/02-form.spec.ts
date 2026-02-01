@@ -73,9 +73,8 @@ test.describe('Tournaments - create (e2e)', () => {
     const calendar = page.locator('[data-slot="calendar"]');
     await calendar.waitFor({ state: 'visible', timeout: 5000 });
 
-    // Select day 15 of the current month (avoids outside days from previous/next month)
-    // Find day button by matching exact text "15" within the calendar
-    const dayButton = calendar.locator('button').filter({ hasText: /^15$/ }).first();
+    // Select day 15 of the current month using data-testid
+    const dayButton = calendar.locator('[data-testid="calendar-day-15"]').first();
     // Use evaluate to bypass any popover positioning/z-index issues
     await dayButton.evaluate((btn) => (btn as HTMLButtonElement).click());
 
@@ -100,15 +99,14 @@ test.describe('Tournaments - create (e2e)', () => {
     // Use existing test tournament - wait for it to load
     await expect(page.getByText(completedBracketTest)).toBeVisible({ timeout: 30000 });
 
-    // Find the tournament card and click the Edit button
+    // Find the tournament card containing our test tournament
     const tournamentCard = page
-      .getByText(completedBracketTest)
-      .locator(
-        'xpath=ancestor::*[contains(@class, "tournament-card") or contains(@class, "card") or self::article or self::li][1]'
-      );
+      .locator('[data-testid^="tournament-card-"]')
+      .filter({ hasText: completedBracketTest })
+      .first();
 
-    // Open edit modal
-    const editButton = tournamentCard.locator('button').filter({ hasText: /edit/i }).first();
+    // Open edit modal using data-testid
+    const editButton = tournamentCard.locator('[data-testid="tournament-edit-button"]');
     await editButton.evaluate((btn) => (btn as HTMLButtonElement).click());
 
     // Wait for modal and name input
@@ -135,12 +133,10 @@ test.describe('Tournaments - create (e2e)', () => {
 
     // Revert the change to keep test data clean
     const editedCard = page
-      .getByText(editedNameWithSuffix)
-      .first()
-      .locator(
-        'xpath=ancestor::*[contains(@class, "tournament-card") or contains(@class, "card") or self::article or self::li][1]'
-      );
-    const revertEditButton = editedCard.locator('button').filter({ hasText: /edit/i }).first();
+      .locator('[data-testid^="tournament-card-"]')
+      .filter({ hasText: editedNameWithSuffix })
+      .first();
+    const revertEditButton = editedCard.locator('[data-testid="tournament-edit-button"]');
     await revertEditButton.evaluate((btn) => (btn as HTMLButtonElement).click());
 
     const revertNameInput = page.locator('[data-testid="tournament-name-input"]');
@@ -176,7 +172,7 @@ test.describe('Tournaments - create (e2e)', () => {
     await datePicker.click();
     const calendar = page.locator('[data-slot="calendar"]');
     await calendar.waitFor({ state: 'visible', timeout: 5000 });
-    const dayButton = calendar.locator('button').filter({ hasText: /^15$/ }).first();
+    const dayButton = calendar.locator('[data-testid="calendar-day-15"]').first();
     await dayButton.evaluate((btn) => (btn as HTMLButtonElement).click());
     await calendar.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
 
@@ -216,12 +212,11 @@ test.describe('Tournaments - create (e2e)', () => {
     // Wait for tournament data to load (API returns large payload)
     await expect(page.getByText(completedBracketTest)).toBeVisible({ timeout: 30000 });
 
-    // Find the tournament card and click the View button inside it
+    // Find the tournament card containing our test tournament using data-testid
     const tournamentCard = page
-      .getByText(completedBracketTest)
-      .locator(
-        'xpath=ancestor::*[contains(@class, "tournament-card") or contains(@class, "card") or self::article or self::li][1]'
-      );
+      .locator('[data-testid^="tournament-card-"]')
+      .filter({ hasText: completedBracketTest })
+      .first();
 
     // Click the View button
     await tournamentCard.getByRole('button', { name: 'View' }).click();

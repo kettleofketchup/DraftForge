@@ -12,6 +12,8 @@ export interface EditIconButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {
   /** Optional tooltip text */
   tooltip?: string;
+  /** Test ID for Playwright/testing */
+  'data-testid'?: string;
 }
 
 /**
@@ -24,11 +26,12 @@ export interface EditIconButtonProps
  * ```
  */
 const EditIconButton = React.forwardRef<HTMLButtonElement, EditIconButtonProps>(
-  ({ tooltip, className, ...props }, ref) => {
+  ({ tooltip, className, 'data-testid': dataTestId, ...props }, ref) => {
     const button = (
       <Button
         ref={ref}
         size="icon"
+        data-testid={dataTestId}
         className={cn(
           'rounded-full',
           'bg-emerald-600 hover:bg-emerald-500 text-white',

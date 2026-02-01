@@ -383,7 +383,13 @@ SESSION_COOKIE_SAMESITE = None
 # https://docs.djangoproject.com/en/1.10/howto/static-files/
 
 STATIC_URL = "/static/"
-ALLOWED_HOSTS = ["dota.kettle.sh", "www.dota.kettle.sh", "localhost", "nginx"]
+ALLOWED_HOSTS = [
+    "dota.kettle.sh",
+    "www.dota.kettle.sh",
+    "localhost",
+    "nginx",
+    "backend",
+]
 
 
 with contextlib.suppress(ImportError):

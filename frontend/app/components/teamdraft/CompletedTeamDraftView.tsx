@@ -101,7 +101,7 @@ function TeamCard({ team, rank }: TeamCardProps) {
 
           {/* Team Name & Captain */}
           <div className="flex-1 min-w-0">
-            <CardTitle className="text-lg text-white truncate">
+            <CardTitle className="text-lg text-white truncate" data-testid="team-card-name">
               {team.name}
             </CardTitle>
             <p className="text-sm text-slate-400 truncate">
@@ -116,7 +116,7 @@ function TeamCard({ team, rank }: TeamCardProps) {
         <div className="flex items-center gap-4 mb-3 shrink-0">
           <div className="flex items-center gap-1.5">
             <Trophy className="h-4 w-4 text-yellow-500" />
-            <span className="text-sm font-medium text-slate-200">
+            <span className="text-sm font-medium text-slate-200" data-testid="team-avg-mmr-label">
               {averageMMR.toLocaleString()} avg MMR
             </span>
           </div>

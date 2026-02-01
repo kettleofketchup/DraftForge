@@ -84,12 +84,12 @@ test.describe('Tournament UI Elements (e2e)', () => {
     await tournamentPage.playerSearchInput.fill('test');
     await expect(tournamentPage.playerSearchInput).toHaveValue('test');
 
-    // Close the dialog
-    const closeButton = dialog.locator('button:has-text("Cancel")');
+    // Close the dialog - use data-testid for the cancel button, fall back to escape
+    const closeButton = dialog.locator('[data-testid="modal-cancel-button"], [data-testid="dialog-close-button"]');
     if (await closeButton.isVisible().catch(() => false)) {
       await closeButton.click({ force: true });
     } else {
-      // Try escape key if cancel button not found
+      // Try escape key if cancel/close button not found
       await page.keyboard.press('Escape');
     }
     await dialog.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => {});

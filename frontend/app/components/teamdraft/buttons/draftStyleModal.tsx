@@ -162,6 +162,7 @@ export const DraftStyleModal: React.FC<DraftStyleModalProps> = ({
       <Button
         onClick={() => handleStyleChange(selectedStyle)}
         disabled={selectedStyle === draft.draft_style}
+        data-testid={`apply-${selectedStyle}-draft-button`}
       >
         Apply {selectedStyle === 'snake' ? 'Snake' : selectedStyle === 'normal' ? 'Normal' : 'Shuffle'} Draft
       </Button>

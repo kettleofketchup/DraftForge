@@ -57,8 +57,8 @@ export const GamesTab: React.FC = memo(() => {
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'bracket' | 'list')}>
         <div className="flex items-center justify-between mb-4">
           <TabsList>
-            <TabsTrigger value="bracket">Bracket View</TabsTrigger>
-            <TabsTrigger value="list">List View</TabsTrigger>
+            <TabsTrigger value="bracket" data-testid="bracket-view-tab">Bracket View</TabsTrigger>
+            <TabsTrigger value="list" data-testid="list-view-tab">List View</TabsTrigger>
           </TabsList>
 
           <div className="flex items-center gap-2">

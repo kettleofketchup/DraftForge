@@ -25,7 +25,7 @@ import {
   type BrowserContext,
   type Page,
 } from '@playwright/test';
-import { loginAsDiscordId, waitForHydration } from '../fixtures/auth';
+import { loginAsDiscordId, waitForHydration, DOCKER_HOST, API_URL } from '../fixtures/auth';
 import { waitForDemoReady, waitForMatchModalReady } from '../fixtures/demo-utils';
 import { HeroDraftPage } from '../helpers/HeroDraftPage';
 import * as path from 'path';
@@ -36,9 +36,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Use nginx hostname inside Docker containers, localhost for local runs
-const DOCKER_HOST = process.env.DOCKER_HOST || 'nginx';
-const API_URL = `https://${DOCKER_HOST}/api`;
+// Use centralized DOCKER_HOST from fixtures
 const BASE_URL = `https://${DOCKER_HOST}`;
 const VIDEO_OUTPUT_DIR = 'demo-results/videos';
 const DOCS_VIDEO_DIR = path.resolve(__dirname, '../../../docs/assets/videos');

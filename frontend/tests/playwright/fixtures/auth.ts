@@ -1,7 +1,8 @@
 import { test as base, expect, BrowserContext, Page } from '@playwright/test';
 
-// Use nginx hostname inside Docker containers, localhost for local runs
-export const DOCKER_HOST = process.env.DOCKER_HOST || 'nginx';
+// Use localhost by default (matches playwright.config.ts baseURL)
+// Can be overridden with DOCKER_HOST for running inside Docker containers
+export const DOCKER_HOST = process.env.DOCKER_HOST || 'localhost';
 export const API_URL = `https://${DOCKER_HOST}/api`;
 
 /**
@@ -30,13 +31,39 @@ export async function loginAsUser(
   context: BrowserContext,
   userPk: number
 ): Promise<LoginResponse> {
-  const response = await context.request.post(`${API_URL}/tests/login-as/`, {
-    data: { user_pk: userPk },
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const url = `${API_URL}/tests/login-as/`;
+  console.log(`[auth] loginAsUser: POST ${url} (user_pk=${userPk})`);
 
-  expect(response.ok()).toBeTruthy();
+  let response;
+  try {
+    response = await context.request.post(url, {
+      data: { user_pk: userPk },
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (e) {
+    console.error(`[auth] loginAsUser: Network error - ${e}`);
+    throw new Error(`loginAsUser network error: ${e}`);
+  }
+
+  const status = response.status();
+  console.log(`[auth] loginAsUser response: ${status}`);
+
+  if (!response.ok()) {
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    const headers = response.headers();
+    console.error(`[auth] loginAsUser FAILED: ${status}`);
+    console.error(`[auth] Response headers: ${JSON.stringify(headers)}`);
+    console.error(`[auth] Response body: ${body}`);
+    throw new Error(`loginAsUser failed: ${status} - ${body.slice(0, 500)}`);
+  }
+
   const data = await response.json();
+  console.log(`[auth] loginAsUser: OK - logged in as ${data.user?.username}`);
 
   // Extract cookies from response headers and set them
   const cookies = response.headers()['set-cookie'];
@@ -55,16 +82,32 @@ export async function loginAsDiscordId(
   context: BrowserContext,
   discordId: string
 ): Promise<LoginResponse> {
-  const response = await context.request.post(
-    `${API_URL}/tests/login-as-discord/`,
-    {
-      data: { discord_id: discordId },
-      headers: { 'Content-Type': 'application/json' },
-    }
-  );
+  const url = `${API_URL}/tests/login-as-discord/`;
+  console.log(`[auth] loginAsDiscordId: POST ${url} (discord_id=${discordId})`);
 
-  expect(response.ok()).toBeTruthy();
+  const response = await context.request.post(url, {
+    data: { discord_id: discordId },
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  if (!response.ok()) {
+    const status = response.status();
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    console.error(`[auth] loginAsDiscordId FAILED: ${status} - ${body}`);
+    throw new Error(
+      `loginAsDiscordId failed: ${status} - ${body.slice(0, 500)}`
+    );
+  }
+
   const data = await response.json();
+  console.log(
+    `[auth] loginAsDiscordId: OK - logged in as ${data.user?.username}`
+  );
 
   const cookies = response.headers()['set-cookie'];
   if (cookies) {
@@ -86,8 +129,37 @@ export async function loginAsDiscordId(
  * This function is kept for API-only tests where page XHR is not needed.
  */
 export async function loginAdmin(context: BrowserContext): Promise<void> {
-  const response = await context.request.post(`${API_URL}/tests/login-admin/`);
-  expect(response.ok()).toBeTruthy();
+  const url = `${API_URL}/tests/login-admin/`;
+  console.log(`[auth] loginAdmin: POST ${url}`);
+  console.log(`[auth] Environment: API_URL=${API_URL}, DOCKER_HOST=${DOCKER_HOST}, CI=${process.env.CI}`);
+
+  let response;
+  try {
+    response = await context.request.post(url);
+  } catch (e) {
+    console.error(`[auth] loginAdmin: Network error connecting to ${url}`);
+    console.error(`[auth] Error: ${e}`);
+    throw new Error(`loginAdmin network error: ${e}`);
+  }
+
+  const status = response.status();
+  const statusText = response.statusText();
+  const headers = response.headers();
+
+  console.log(`[auth] loginAdmin response: ${status} ${statusText}`);
+
+  if (!response.ok()) {
+    console.error(`[auth] loginAdmin FAILED: ${status} ${statusText}`);
+    console.error(`[auth] This usually means:`);
+    console.error(`[auth]   - 403: TEST=true not set or IP not whitelisted`);
+    console.error(`[auth]   - 404: Backend not running or route not found`);
+    console.error(`[auth]   - 502/503: Nginx can't reach backend`);
+    throw new Error(
+      `loginAdmin failed: ${status} ${statusText} - ${body.slice(0, 500)}`
+    );
+  }
+
+  console.log(`[auth] loginAdmin: OK`);
   // Playwright automatically stores cookies from response - no manual handling needed
 }
 
@@ -122,8 +194,24 @@ export async function loginAdminFromPage(page: Page): Promise<void> {
  * Login as staff user.
  */
 export async function loginStaff(context: BrowserContext): Promise<void> {
-  const response = await context.request.post(`${API_URL}/tests/login-staff/`);
-  expect(response.ok()).toBeTruthy();
+  const url = `${API_URL}/tests/login-staff/`;
+  console.log(`[auth] loginStaff: POST ${url}`);
+
+  const response = await context.request.post(url);
+
+  if (!response.ok()) {
+    const status = response.status();
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    console.error(`[auth] loginStaff FAILED: ${status} - ${body}`);
+    throw new Error(`loginStaff failed: ${status} - ${body.slice(0, 500)}`);
+  }
+
+  console.log(`[auth] loginStaff: OK (${response.status()})`);
 
   const cookies = response.headers()['set-cookie'];
   if (cookies) {
@@ -135,8 +223,24 @@ export async function loginStaff(context: BrowserContext): Promise<void> {
  * Login as regular user.
  */
 export async function loginUser(context: BrowserContext): Promise<void> {
-  const response = await context.request.post(`${API_URL}/tests/login-user/`);
-  expect(response.ok()).toBeTruthy();
+  const url = `${API_URL}/tests/login-user/`;
+  console.log(`[auth] loginUser: POST ${url}`);
+
+  const response = await context.request.post(url);
+
+  if (!response.ok()) {
+    const status = response.status();
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    console.error(`[auth] loginUser FAILED: ${status} - ${body}`);
+    throw new Error(`loginUser failed: ${status} - ${body.slice(0, 500)}`);
+  }
+
+  console.log(`[auth] loginUser: OK (${response.status()})`);
 
   const cookies = response.headers()['set-cookie'];
   if (cookies) {

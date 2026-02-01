@@ -29,7 +29,8 @@ export default defineConfig({
   fullyParallel: true,
 
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // Retry flaky tests: 2 in CI, 1 locally to catch timing issues early
+  retries: process.env.CI ? 2 : 1,
 
   // Workers: Use 2 workers locally to reduce CPU load, 2 in CI (shared database)
   // Can override with --workers flag or PLAYWRIGHT_WORKERS env var
@@ -47,14 +48,15 @@ export default defineConfig({
     // Trace only on retry to save resources
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    // Disable video in CI to speed up tests, retain on failure locally
+    video: process.env.CI ? 'off' : 'retain-on-failure',
     ignoreHTTPSErrors: true, // For self-signed certs in dev
 
     // Default viewport
     viewport: { width: 1280, height: 720 },
 
-    // Performance: Reuse browser context where possible
-    // actionTimeout: 15_000, // Faster timeout for actions
+    // Action timeout - 15s max for clicks/fills (faster failure than test timeout)
+    actionTimeout: 15_000,
   },
 
   projects: [

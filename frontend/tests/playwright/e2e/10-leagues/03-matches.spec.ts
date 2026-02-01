@@ -39,8 +39,8 @@ test.describe('League Page - Matches Tab (e2e)', () => {
     const leaguePage = new LeaguePage(page);
     await leaguePage.goto(testLeagueId, 'matches');
 
-    // Should show matches heading with count (use h3 to avoid matching tab button)
-    await expect(page.locator('h3:has-text("Matches")')).toBeVisible({ timeout: 10000 });
+    // Should show matches heading with count
+    await expect(page.locator('[data-testid="league-matches-heading"]')).toBeVisible({ timeout: 10000 });
   });
 
   test('should have Steam linked filter button', async ({ page }) => {
@@ -80,35 +80,33 @@ test.describe('League Page - Matches Tab (e2e)', () => {
 
     // Either matches are shown or empty state is shown
     const matchCardCount = await leaguePage.getMatchCardCount();
-    // Match the actual empty state text: "No matches found for this league."
-    const hasEmptyState = await page.locator('text=/No matches found/i').isVisible().catch(() => false);
+    const hasEmptyState = await page.locator('[data-testid="league-matches-empty-state"]').isVisible().catch(() => false);
 
     // One of these should be true
     expect(matchCardCount > 0 || hasEmptyState).toBe(true);
   });
 
   test('should load matches via API', async ({ page }) => {
-    // Set up request interception
+    // Set up BOTH request and response waits BEFORE navigation to avoid race conditions
     const matchesRequestPromise = page.waitForRequest(
       (request) => request.url().includes(`/leagues/${testLeagueId}/matches/`) && request.method() === 'GET'
+    );
+    const matchesResponsePromise = page.waitForResponse(
+      (response) => response.url().includes(`/leagues/${testLeagueId}/matches/`) && (response.status() === 200 || response.status() === 304)
     );
 
     const leaguePage = new LeaguePage(page);
     await leaguePage.goto(testLeagueId, 'matches');
 
-    // API should be called
-    const request = await matchesRequestPromise;
+    // Wait for both request and response
+    const [request, response] = await Promise.all([
+      matchesRequestPromise,
+      matchesResponsePromise,
+    ]);
+
     expect(request).toBeDefined();
-
-    // Also verify response
-    const responsePromise = page.waitForResponse(
-      (response) => response.url().includes(`/leagues/${testLeagueId}/matches/`) && response.status() === 200 || response.status() === 304
-    );
-
-    // Wait for the response (may already be fulfilled)
-    const response = await responsePromise.catch(() => null);
-    // Response should have been received (test passes if request was made)
     expect(request.url()).toContain(`/leagues/${testLeagueId}/matches/`);
+    expect([200, 304]).toContain(response.status());
   });
 });
 

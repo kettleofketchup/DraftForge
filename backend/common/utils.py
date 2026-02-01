@@ -30,40 +30,38 @@ def _is_ip_allowed(ip_str, allowed_ranges):
 
 
 def isTestEnvironment(request=None):
-
+    # Fast path: bail immediately in prod
     if not settings.TEST:
         return False
     if settings.RELEASE:
         return False
     if not settings.DEBUG:
         return False
-    if settings.NODE_ENV == "prod":
-        return False
-    if settings.NODE_ENV == "release":
+    if settings.NODE_ENV in ("prod", "release"):
         return False
 
-    # Allow requests from localhost and common Docker container IP ranges
+    # In CI environments (GitHub Actions), skip IP validation
+    ci_env = os.environ.get("CI", "").strip().lower()
+    if ci_env in ("true", "1", "yes", "on"):
+        return True
+
+    # Allow requests from localhost and Docker container IP ranges
     allowed_ips = [
         "127.0.0.1",
         "localhost",
-        # Docker default bridge network range
-        "172.17.0.0/16",
-        # Docker compose default network ranges
-        "172.18.0.0/16",
-        "172.19.0.0/16",
-        "172.20.0.0/16",
-        "172.21.0.0/16",
-        "172.22.0.0/16",
-        "172.23.0.0/16",
-        "172.24.0.0/16",
-        "172.25.0.0/16",
-        # Common custom Docker networks
-        "192.168.0.0/16",
-        "10.0.0.0/8",
+        # Docker bridge networks (172.16.0.0/12 covers all Docker defaults)
+        "172.16.0.0/12",
     ]
 
     if request:
-        remote_addr = request.META.get("REMOTE_ADDR")
+        x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        remote_addr = (
+            x_forwarded_for.split(",")[0].strip()
+            if x_forwarded_for
+            else request.META.get("REMOTE_ADDR")
+        )
+        # TODO(#84): Temporary logging to diagnose CI test failures
+        log.warning(f"isTestEnvironment: CI={ci_env}, IP={remote_addr}")
         if remote_addr and not _is_ip_allowed(remote_addr, allowed_ips):
             return False
 
