@@ -113,12 +113,22 @@ jobs:
     - name: Flush Redis cache
       run: docker exec redis redis-cli FLUSHALL
 
-    - name: Run Core Draft Tests
+    - name: Run Snake Draft Test
       run: |
         docker exec -e CI=true -e DOCKER_HOST=nginx frontend \
-          npx playwright test --fail-fast --workers=1 \
-          tests/playwright/e2e/07-draft/01-captain-pick.spec.ts \
-          tests/playwright/e2e/08-shuffle-draft/01-full-draft.spec.ts \
+          npx playwright test --workers=1 \
+          tests/playwright/e2e/07-draft/01-captain-pick.spec.ts
+
+    - name: Run Shuffle Draft Test
+      run: |
+        docker exec -e CI=true -e DOCKER_HOST=nginx frontend \
+          npx playwright test --workers=1 \
+          tests/playwright/e2e/08-shuffle-draft/01-full-draft.spec.ts
+
+    - name: Run HeroDraft Test
+      run: |
+        docker exec -e CI=true -e DOCKER_HOST=nginx frontend \
+          npx playwright test --workers=1 \
           tests/playwright/e2e/herodraft/two-captains-full-draft.spec.ts
 
     - name: Upload test results
