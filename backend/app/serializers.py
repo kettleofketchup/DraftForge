@@ -639,12 +639,43 @@ class TeamSerializer(serializers.ModelSerializer):
 
     def get_total_mmr(self, obj):
         """Sum of captain MMR + all member MMRs (excluding captain from members to avoid double-counting)."""
+        from org.models import OrgUser
+
+        # Get organization from team's tournament's league
+        tournament = obj.tournament
+        org = None
+        if tournament and tournament.league:
+            org = tournament.league.organizations.first()
+
+        # If no organization, fall back to legacy user.mmr behavior
+        if not org:
+            total = 0
+            if obj.captain and obj.captain.mmr:
+                total += obj.captain.mmr
+            for member in obj.members.all():
+                if member.mmr and member.pk != getattr(obj.captain, "pk", None):
+                    total += member.mmr
+            return total
+
+        # Use OrgUser MMR
         total = 0
-        if obj.captain and obj.captain.mmr:
-            total += obj.captain.mmr
+        captain_pk = getattr(obj.captain, "pk", None)
+
+        if obj.captain:
+            try:
+                org_user = OrgUser.objects.get(user=obj.captain, organization=org)
+                total += org_user.mmr or 0
+            except OrgUser.DoesNotExist:
+                pass
+
         for member in obj.members.all():
-            if member.mmr and member.pk != getattr(obj.captain, "pk", None):
-                total += member.mmr
+            if member.pk != captain_pk:
+                try:
+                    org_user = OrgUser.objects.get(user=member, organization=org)
+                    total += org_user.mmr or 0
+                except OrgUser.DoesNotExist:
+                    pass
+
         return total
 
     class Meta:
