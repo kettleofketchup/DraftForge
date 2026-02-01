@@ -3,9 +3,11 @@
 services:
   frontend:
     container_name: frontend
-    image: ghcr.io/kettleofketchup/draftforge/frontend:latest
+    image: ghcr.io/kettleofketchup/draftforge/frontend-dev:latest
     user: "1000:1000"
     env_file: "./docker/.env.test"
+    volumes:
+      - ./frontend:/app
     networks:
       - ci-network
 
