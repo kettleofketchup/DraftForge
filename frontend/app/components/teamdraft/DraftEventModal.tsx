@@ -105,7 +105,7 @@ export function DraftEventModal({ open, onOpenChange, events }: DraftEventModalP
     <InfoDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Draft Event History"
+      title={<span data-testid="draft-event-history-title">Draft Event History</span>}
       size="md"
       showClose={false}
     >

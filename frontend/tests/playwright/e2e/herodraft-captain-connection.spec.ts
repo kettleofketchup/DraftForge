@@ -110,19 +110,18 @@ test.describe('HeroDraft Captain Connection Management', () => {
         .isVisible()
         .catch(() => false);
 
-      const hasKickedToast = await page1
-        .locator('text=Connection replaced')
+      // Check for kicked overlay or kicked message (contains "another tab" text)
+      const hasKickedOverlay = await page1
+        .getByTestId('herodraft-kicked-overlay')
         .isVisible()
         .catch(() => false);
 
-      // Also check if page1's WebSocket got closed
-      // The kicked message includes "another tab"
-      const hasAnotherTabMessage = await page1
-        .locator('text=another tab')
+      const hasKickedMessage = await page1
+        .getByTestId('herodraft-kicked-message')
         .isVisible()
         .catch(() => false);
 
-      expect(hasError || hasKickedToast || hasAnotherTabMessage).toBe(true);
+      expect(hasError || hasKickedOverlay || hasKickedMessage).toBe(true);
     }).toPass({ timeout: 10000 });
 
     // === Verify Second Context Is Still Connected ===
@@ -278,20 +277,20 @@ test.describe('HeroDraft Captain Connection Management', () => {
 
     // Captain A's first tab should be kicked
     const captainAKicked = await captainAPage
-      .locator('text=another tab')
+      .getByTestId('herodraft-kicked-overlay')
       .isVisible()
       .catch(() => false);
     const captainAError = await captainAPage
-      .locator('[data-testid="herodraft-reconnecting"]')
+      .getByTestId('herodraft-reconnecting')
       .isVisible()
       .catch(() => false);
     expect(captainAKicked || captainAError).toBe(true);
 
     // Captain B should NOT be affected
     await expect(
-      captainBPage.locator('[data-testid="herodraft-reconnecting"]')
+      captainBPage.getByTestId('herodraft-reconnecting')
     ).not.toBeVisible();
-    await expect(captainBPage.locator('text=another tab')).not.toBeVisible();
+    await expect(captainBPage.getByTestId('herodraft-kicked-overlay')).not.toBeVisible();
 
     // Captain A's second tab should be fine
     await expect(

@@ -60,8 +60,8 @@ test.describe('Shuffle Draft - Full Flow', () => {
     await teamsTab.click();
 
     // Verify teams exist (check for team headers)
-    await expect(page.locator('text=Team Alpha')).toBeVisible();
-    await expect(page.locator('text=Avg MMR').first()).toBeVisible();
+    await expect(page.locator('[data-testid="team-card-name"]').first()).toBeVisible();
+    await expect(page.locator('[data-testid="team-avg-mmr-label"]').first()).toBeVisible();
   });
 
   // TODO: This test needs rework - Draft Style dialog shows "Draft not initialized"
@@ -92,7 +92,7 @@ test.describe('Shuffle Draft - Full Flow', () => {
 
     // Open Moderation dropdown and click "Change Draft Style"
     await dialog.getByRole('button', { name: 'Moderation' }).click({ force: true });
-    await page.locator('text=Change Draft Style').click({ force: true });
+    await page.locator('[data-testid="change-draft-style-option"]').click({ force: true });
 
     // Wait for the draft style dialog to open
     const styleDialog = page.locator('[role="dialog"]').filter({ hasText: 'Draft Style' });
@@ -103,13 +103,13 @@ test.describe('Shuffle Draft - Full Flow', () => {
     await page.locator('[role="option"]:has-text("Shuffle")').click();
 
     // Apply the style
-    await page.locator('button:has-text("Apply Shuffle Draft")').click({ force: true });
+    await page.locator('[data-testid="apply-shuffle-draft-button"]').click({ force: true });
 
     await page.waitForLoadState('networkidle');
 
     // Open Moderation dropdown and click Restart Draft
     await dialog.getByRole('button', { name: 'Moderation' }).click({ force: true });
-    await page.locator('text=Restart Draft').click({ force: true });
+    await page.locator('[data-testid="restart-draft-option"]').click({ force: true });
 
     // Confirm if there's a confirmation dialog
     const alertDialog = page.locator('[role="alertdialog"]');
@@ -145,14 +145,14 @@ test.describe('Shuffle Draft - Full Flow', () => {
     await page.waitForLoadState('networkidle');
 
     // Open draft modal
-    await page.locator('button:has-text("Start Draft")').click({ force: true });
+    await page.locator('[data-testid="startTeamDraftButton"]').click({ force: true });
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
 
     // Open Moderation dropdown and click "Change Draft Style"
     await dialog.getByRole('button', { name: 'Moderation' }).click({ force: true });
-    await page.locator('text=Change Draft Style').click({ force: true });
+    await page.locator('[data-testid="change-draft-style-option"]').click({ force: true });
 
     // Wait for the draft style dialog to open
     const styleDialog = page.locator('[role="dialog"]').filter({ hasText: 'Draft Style' });
@@ -163,13 +163,13 @@ test.describe('Shuffle Draft - Full Flow', () => {
     await page.locator('[role="option"]:has-text("Shuffle")').click();
 
     // Apply the style
-    await page.locator('button:has-text("Apply Shuffle Draft")').click({ force: true });
+    await page.locator('[data-testid="apply-shuffle-draft-button"]').click({ force: true });
 
     await page.waitForLoadState('networkidle');
 
     // Open Moderation dropdown and click Restart Draft
     await dialog.getByRole('button', { name: 'Moderation' }).click({ force: true });
-    await page.locator('text=Restart Draft').click({ force: true });
+    await page.locator('[data-testid="restart-draft-option"]').click({ force: true });
 
     // Confirm restart dialog
     const alertDialog = page.locator('[role="alertdialog"]');
@@ -189,7 +189,7 @@ test.describe('Shuffle Draft - Full Flow', () => {
     // Try to make 4 picks sequentially
     const attemptPick = async () => {
       const dialogEl = page.locator('[role="dialog"]');
-      const pickButtons = dialogEl.locator('button:has-text("Pick")');
+      const pickButtons = dialogEl.locator('[data-testid="pickPlayerButton"]');
       const pickCount = await pickButtons.count();
 
       if (pickCount > 0) {
@@ -198,9 +198,7 @@ test.describe('Shuffle Draft - Full Flow', () => {
         // Handle confirmation dialog if it appears
         const confirmDialog = page.locator('[role="alertdialog"]');
         if (await confirmDialog.isVisible().catch(() => false)) {
-          const pickConfirmBtn = confirmDialog.locator(
-            'button:has-text("Confirm"), button:has-text("Yes"), button:has-text("Pick")'
-          );
+          const pickConfirmBtn = confirmDialog.locator('[data-testid="confirmPickButton"]');
           if (await pickConfirmBtn.isVisible().catch(() => false)) {
             await pickConfirmBtn.first().click({ force: true });
           }
@@ -377,7 +375,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
     await expect(dialog).toBeVisible();
 
     // Look for Pick buttons - captain should be able to pick
-    const pickButtons = dialog.locator('button:has-text("Pick")');
+    const pickButtons = dialog.locator('[data-testid="pickPlayerButton"]');
     const pickCount = await pickButtons.count();
 
     if (pickCount > 0) {
@@ -389,9 +387,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
       // Handle confirmation dialog
       const alertDialog = page.locator('[role="alertdialog"]');
       if (await alertDialog.isVisible().catch(() => false)) {
-        const confirmBtn = alertDialog.locator(
-          'button:has-text("Confirm"), button:has-text("Yes"), button:has-text("Pick")'
-        );
+        const confirmBtn = alertDialog.locator('[data-testid="confirmPickButton"]');
         if (await confirmBtn.isVisible().catch(() => false)) {
           await confirmBtn.first().click({ force: true });
           await page.waitForLoadState('networkidle');
@@ -438,7 +434,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
     console.log(`Initial draft state: ${initialText?.substring(0, 200)}...`);
 
     // Make a pick as admin
-    const pickButtons = dialog.locator('button:has-text("Pick")');
+    const pickButtons = dialog.locator('[data-testid="pickPlayerButton"]');
     const pickCount = await pickButtons.count();
 
     if (pickCount > 0) {
@@ -447,9 +443,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
       // Confirm the pick
       const alertDialog = page.locator('[role="alertdialog"]');
       if (await alertDialog.isVisible().catch(() => false)) {
-        const confirmBtn = alertDialog.locator(
-          'button:has-text("Confirm"), button:has-text("Yes"), button:has-text("Pick")'
-        );
+        const confirmBtn = alertDialog.locator('[data-testid="confirmPickButton"]');
         if (await confirmBtn.isVisible().catch(() => false)) {
           await confirmBtn.first().click({ force: true });
         }

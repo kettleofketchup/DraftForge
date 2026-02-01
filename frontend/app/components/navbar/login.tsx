@@ -86,7 +86,7 @@ export const ProfileButton: React.FC = () => {
             onFocusCapture={handleClick}
           >
             <AvatarContainer>
-              <UserAvatar user={currentUser} size="xl" className="w-full h-full" />
+              <UserAvatar user={currentUser} size="xl" className="w-full h-full" data-testid="user-avatar" />
             </AvatarContainer>
             <DraftNotificationBadge />
           </div>
