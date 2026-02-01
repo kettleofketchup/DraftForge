@@ -30,8 +30,8 @@ def _is_ip_allowed(ip_str, allowed_ranges):
 
 
 def isTestEnvironment(request=None):
-    # TODO: Temporary WARNING level logging to diagnose CI test failures.
-    # These should be changed back to DEBUG level once the issue is resolved.
+    # TODO(#84): Temporary WARNING level logging to diagnose CI test failures.
+    # These should be changed back to DEBUG level once auth.ts tests pass in CI.
     log.warning(f"isTestEnvironment called: TEST={settings.TEST}, RELEASE={settings.RELEASE}, DEBUG={settings.DEBUG}, NODE_ENV={settings.NODE_ENV}, CI={os.environ.get('CI')}")
 
     if not settings.TEST:
