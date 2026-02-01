@@ -360,4 +360,32 @@ export const heroDraftSelectors = {
 
   /** True when draft is in resuming countdown (3-2-1 before resume) */
   isResuming: (s: HeroDraftState) => s.draft?.state === 'resuming',
+
+  /** True when it's the current user's turn to pick/ban */
+  isMyTurn: (s: HeroDraftState, currentUserId: number | undefined) => {
+    if (!currentUserId) return false;
+    if (s.draft?.state !== 'drafting') return false;
+
+    // Get active team ID from tick first, then fall back to current round
+    const activeTeamId = s.tick?.active_team_id
+      ?? (s.draft.current_round !== null
+        ? s.draft.rounds[s.draft.current_round]?.draft_team
+        : null);
+
+    if (!activeTeamId) return false;
+
+    // Find user's team (as captain or member)
+    const myTeam = s.draft.draft_teams.find(t =>
+      t.captain?.pk === currentUserId ||
+      t.members?.some(m => m.pk === currentUserId)
+    );
+
+    return myTeam?.id === activeTeamId;
+  },
+
+  /** Get the current action type (pick or ban) */
+  currentAction: (s: HeroDraftState) => {
+    if (!s.draft || s.draft.current_round === null) return null;
+    return s.draft.rounds[s.draft.current_round]?.action_type ?? null;
+  },
 };

@@ -5,6 +5,8 @@ import type { HeroDraft, HeroDraftTick } from "~/components/herodraft/types";
 import type { UserType } from "~/components/user/types.d";
 import { DisplayName } from "~/components/user/avatar";
 import { UserAvatar } from "~/components/user/UserAvatar";
+import { useHeroDraftStore, heroDraftSelectors } from "~/store/heroDraftStore";
+import { useUserStore } from "~/store/userStore";
 
 interface DraftTopBarProps {
   draft: HeroDraft;
@@ -40,6 +42,12 @@ function captainToUser(captain: {
 }
 
 export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
+  // Get current user and isMyTurn from stores
+  const { currentUser } = useUserStore();
+  const isMyTurn = useHeroDraftStore((state) =>
+    heroDraftSelectors.isMyTurn(state, currentUser?.pk)
+  );
+
   // Safely access teams with bounds checking
   const teamA = draft.draft_teams?.[0] ?? null;
   const teamB = draft.draft_teams?.[1] ?? null;
@@ -133,8 +141,19 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
     </PlayerPopover>
   );
 
+  // Determine background color based on turn and action
+  const getTopBarBackground = () => {
+    if (!isMyTurn || draft.state !== "drafting") {
+      return "bg-black/90";
+    }
+    return currentAction === "ban" ? "bg-red-900/90" : "bg-green-900/90";
+  };
+
   return (
-    <div className="bg-black/90 border-b border-gray-800 shrink-0" data-testid="herodraft-topbar">
+    <div
+      className={cn(getTopBarBackground(), "border-b border-gray-800 shrink-0 transition-colors duration-300")}
+      data-testid="herodraft-topbar"
+    >
       {/* Row 1: Teams - Captain on outer edges, members flowing inward */}
       <div className="flex items-center justify-between p-1 sm:p-2" data-testid="herodraft-teams-row">
         {/* Team A: Captain on left, members flowing right */}
@@ -147,14 +166,9 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
           <div className="hidden lg:flex items-center gap-0.5 sm:gap-1">
             {teamAMembers.map((member, idx) => renderPlayer(member, false, `herodraft-team-a-member-${idx}`))}
           </div>
-          {activeTeamId === teamA?.id && (
-            <span className="text-yellow-400 text-[10px] sm:text-sm animate-pulse ml-1 sm:ml-2" data-testid="herodraft-team-a-picking">
-              <span className="hidden sm:inline">◀ </span>PICK
-            </span>
-          )}
         </div>
 
-        {/* Center: VS and progress (only show progress during drafting) */}
+        {/* Center: VS or YOUR TURN indicator */}
         <div className="flex items-center gap-2 sm:gap-4">
           {draft.state === "drafting" || draft.state === "completed" ? (
             <>
@@ -162,7 +176,29 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
                 {teamAProgress.completed}/{teamAProgress.total}
               </div>
               <div className="text-center" data-testid="herodraft-vs-section">
-                <span className="text-lg sm:text-2xl font-bold text-muted-foreground">VS</span>
+                {isMyTurn && draft.state === "drafting" ? (
+                  <div
+                    className="flex flex-col items-center animate-pulse-scale"
+                    data-testid="herodraft-your-turn-indicator"
+                  >
+                    <span className={cn(
+                      "text-xs sm:text-sm font-bold tracking-wide",
+                      currentAction === "ban" ? "text-red-300" : "text-green-300"
+                    )}>
+                      YOUR TURN
+                    </span>
+                    <span className={cn(
+                      "text-xl sm:text-3xl font-black tracking-wider",
+                      currentAction === "ban"
+                        ? "text-red-400 drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]"
+                        : "text-green-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.5)]"
+                    )}>
+                      {currentAction.toUpperCase()}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="text-lg sm:text-2xl font-bold text-muted-foreground">VS</span>
+                )}
               </div>
               <div className="text-center text-[10px] sm:text-xs text-muted-foreground" data-testid="herodraft-team-b-progress">
                 {teamBProgress.completed}/{teamBProgress.total}
@@ -177,11 +213,6 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
 
         {/* Team B: Members flowing left, Captain on right */}
         <div className="flex items-center gap-0.5 sm:gap-1" data-testid="herodraft-team-b">
-          {activeTeamId === teamB?.id && (
-            <span className="text-yellow-400 text-[10px] sm:text-sm animate-pulse mr-1 sm:mr-2" data-testid="herodraft-team-b-picking">
-              PICK<span className="hidden sm:inline"> ▶</span>
-            </span>
-          )}
           {/* Team members (reversed order so they flow toward center) - hidden below lg */}
           <div className="hidden lg:flex items-center gap-0.5 sm:gap-1">
             {[...teamBMembers].reverse().map((member, idx) => renderPlayer(member, false, `herodraft-team-b-member-${idx}`))}
