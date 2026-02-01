@@ -4,6 +4,7 @@ from common.utils import isTestEnvironment
 
 from .test_auth import (
     get_tournament_by_key,
+    get_user_org_membership,
     login_admin,
     login_as_discord_id,
     login_as_user,
@@ -48,6 +49,11 @@ urlpatterns = [
         "tournament-by-key/<str:key>/",
         get_tournament_by_key,
         name="tournament-by-key",
+    ),
+    path(
+        "user/<int:user_pk>/org-membership/",
+        get_user_org_membership,
+        name="test-user-org-membership",
     ),
     path(
         "create-match/",

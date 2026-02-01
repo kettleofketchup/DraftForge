@@ -353,3 +353,68 @@ def get_tournament_by_key(request, key: str):
         )
 
     return Response(TournamentSerializer(tournament).data)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def get_user_org_membership(request, user_pk: int):
+    """
+    TEST ONLY: Get OrgUser and LeagueUser records for a user.
+
+    This endpoint is used by Playwright tests to verify that adding a user
+    to a tournament correctly creates OrgUser and LeagueUser records.
+
+    Path params:
+        user_pk: int - Primary key of the user
+
+    Returns:
+        200: User membership data including org_users and league_users
+        404: Not in test mode or user not found
+    """
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        user = CustomUser.objects.get(pk=user_pk)
+    except CustomUser.DoesNotExist:
+        return Response(
+            {"error": f"User with pk {user_pk} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    from league.models import LeagueUser
+    from org.models import OrgUser
+
+    org_users = OrgUser.objects.filter(user=user).select_related("organization")
+    league_users = LeagueUser.objects.filter(user=user).select_related(
+        "league", "org_user"
+    )
+
+    return Response(
+        {
+            "user": {
+                "pk": user.pk,
+                "username": user.username,
+                "discordId": user.discordId,
+            },
+            "org_users": [
+                {
+                    "pk": ou.pk,
+                    "organization_pk": ou.organization.pk,
+                    "organization_name": ou.organization.name,
+                    "mmr": ou.mmr,
+                }
+                for ou in org_users
+            ],
+            "league_users": [
+                {
+                    "pk": lu.pk,
+                    "league_pk": lu.league.pk,
+                    "league_name": lu.league.name,
+                    "org_user_pk": lu.org_user.pk,
+                    "mmr": lu.mmr,
+                }
+                for lu in league_users
+            ],
+        }
+    )
