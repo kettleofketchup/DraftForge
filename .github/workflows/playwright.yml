@@ -110,9 +110,6 @@ jobs:
         docker compose --project-directory . -f docker/docker-compose.ci.yaml ps
         docker compose --project-directory . -f docker/docker-compose.ci.yaml logs --tail=20
 
-    - name: Flush Redis cache
-      run: docker exec redis redis-cli FLUSHALL
-
     - name: Run Snake Draft Test
       run: |
         docker exec -e CI=true -e DOCKER_HOST=nginx frontend \
