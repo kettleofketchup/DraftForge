@@ -65,7 +65,7 @@ test.describe('Captain Draft Pick', () => {
       await visitAndWaitForHydration(page, '/');
 
       // Wait for user to be fully logged in (avatar visible)
-      await page.locator('.avatar img').waitFor({ state: 'visible', timeout: 15000 });
+      await page.locator('[data-testid="user-avatar"]').waitFor({ state: 'visible', timeout: 15000 });
 
       // Check for floating indicator - shows "Active Team Draft" or "Active Hero Draft"
       const floatingIndicator = page.locator('[data-testid="floating-draft-indicator"]');
@@ -84,7 +84,7 @@ test.describe('Captain Draft Pick', () => {
       await visitAndWaitForHydration(page, '/');
 
       // Wait for user to be fully logged in (avatar visible)
-      await page.locator('.avatar img').waitFor({ state: 'visible', timeout: 15000 });
+      await page.locator('[data-testid="user-avatar"]').waitFor({ state: 'visible', timeout: 15000 });
 
       // Check for notification badge
       const badge = page.locator('[data-testid="draft-notification-badge"]');
@@ -156,7 +156,7 @@ test.describe('Captain Draft Pick', () => {
       await visitAndWaitForHydration(page, '/');
 
       // Wait for user to be fully logged in
-      await page.locator('.avatar img').waitFor({ state: 'visible', timeout: 15000 });
+      await page.locator('[data-testid="user-avatar"]').waitFor({ state: 'visible', timeout: 15000 });
 
       // Click floating indicator
       const floatingIndicator = page.locator('[data-testid="floating-draft-indicator"]');
@@ -186,8 +186,8 @@ test.describe('Captain Draft Pick', () => {
       await tournamentPage.waitForDraftModal();
 
       // Check turn indicator - look for the animated green indicator or the text
-      const turnIndicator = page.locator('.bg-green-800.animate-pulse, [class*="bg-green"]');
-      await expect(turnIndicator.first()).toBeVisible({ timeout: 10000 });
+      const turnIndicator = page.locator('[data-testid="turn-indicator"]');
+      await expect(turnIndicator).toBeVisible({ timeout: 10000 });
       // Verify it contains turn-related text
       await expect(page.locator('text=/YOUR turn|Your turn/i')).toBeVisible();
     });

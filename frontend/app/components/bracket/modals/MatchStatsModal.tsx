@@ -134,7 +134,7 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Match Details</DialogTitle>
+          <DialogTitle data-testid="match-details-header">Match Details</DialogTitle>
           <DialogDescription>
             {match.bracketType === 'grand_finals'
               ? 'Grand Finals'

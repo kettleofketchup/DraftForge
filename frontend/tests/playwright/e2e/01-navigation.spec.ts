@@ -52,22 +52,14 @@ test.describe('Navigation and Basic Functionality', () => {
           foundNavigation = true;
         }
       } else {
-        // Desktop navigation - try visible links
-        const desktopSelectors = [
-          `nav a[href="${route}"]`,
-          `header a[href="${route}"]`,
-          `.navbar a[href="${route}"]`,
-        ];
+        // Desktop navigation - use data-testid for reliable selection
+        const routeName = route.replace(/^\//, ''); // Remove leading slash
+        const navLink = page.locator(`[data-testid="nav-link-${routeName}"]`).first();
+        const isVisible = await navLink.isVisible().catch(() => false);
 
-        for (const selector of desktopSelectors) {
-          const link = page.locator(selector).first();
-          const isVisible = await link.isVisible().catch(() => false);
-
-          if (isVisible) {
-            await link.click();
-            foundNavigation = true;
-            break;
-          }
+        if (isVisible) {
+          await navLink.click();
+          foundNavigation = true;
         }
       }
 
@@ -174,17 +166,14 @@ test.describe('Navigation and Basic Functionality', () => {
         .first()
         .click();
     } else {
-      // Desktop navigation flow - look for visible navigation links
-      const desktopNavLink = page.locator(
-        'nav a[href*="/tournaments"], header a[href*="/tournaments"]'
-      );
-      const isDesktopNavVisible = await desktopNavLink
-        .first()
+      // Desktop navigation flow - use data-testid for reliable selection
+      const navLink = page.locator('[data-testid="nav-link-tournaments"]');
+      const isNavLinkVisible = await navLink
         .isVisible()
         .catch(() => false);
 
-      if (isDesktopNavVisible) {
-        await desktopNavLink.first().click();
+      if (isNavLinkVisible) {
+        await navLink.click();
       } else {
         // Fallback - try any tournaments link with force
         await page

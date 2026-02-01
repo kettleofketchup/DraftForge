@@ -55,6 +55,8 @@ interface NavItemProps
   href?: string;
   /** Custom class for title text (overrides default color) */
   titleClassName?: string;
+  /** Test ID for Playwright/testing - auto-generated from route if not provided */
+  'data-testid'?: string;
 }
 
 const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
@@ -71,10 +73,13 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
       to,
       href,
       titleClassName,
+      'data-testid': dataTestId,
       ...props
     },
     ref,
   ) => {
+    // Auto-generate testId from route if not provided
+    const testId = dataTestId || (to ? `nav-link-${to.replace(/^\//, '')}` : undefined);
     const baseClassName = cn(
       // Base layout with responsive gap: tight at medium (1100px+), expanded at xl
       'flex items-center gap-1 xl:gap-2 rounded-md px-1.5 xl:px-2 py-1.5 h-9',
@@ -125,19 +130,19 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
     let navContent: React.ReactElement;
     if (asChild) {
       navContent = (
-        <Slot ref={ref} className={baseClassName} {...props}>
+        <Slot ref={ref} className={baseClassName} data-testid={testId} {...props}>
           {content}
         </Slot>
       );
     } else if (to) {
       navContent = (
-        <Link ref={ref} to={to} className={baseClassName} {...props}>
+        <Link ref={ref} to={to} className={baseClassName} data-testid={testId} {...props}>
           {content}
         </Link>
       );
     } else {
       navContent = (
-        <a ref={ref} href={href} className={baseClassName} {...props}>
+        <a ref={ref} href={href} className={baseClassName} data-testid={testId} {...props}>
           {content}
         </a>
       );
