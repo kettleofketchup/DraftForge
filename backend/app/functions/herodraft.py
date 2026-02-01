@@ -19,39 +19,39 @@ log = logging.getLogger(__name__)
 
 # Updated Captain's Mode sequence (2024 patch)
 # F = First pick team, S = Second pick team
-# Format: (team_is_first, action_type)
-CAPTAINS_MODE_SEQUENCE = [
+# Format: {round_number: (team_is_first, action_type)}
+CAPTAINS_MODE_SEQUENCE = {
     # Ban Phase 1: F-F-S-S-F-S-S
-    (True, "ban"),  # 1
-    (True, "ban"),  # 2
-    (False, "ban"),  # 3
-    (False, "ban"),  # 4
-    (True, "ban"),  # 5
-    (False, "ban"),  # 6
-    (False, "ban"),  # 7
+    1: (True, "ban"),
+    2: (True, "ban"),
+    3: (False, "ban"),
+    4: (False, "ban"),
+    5: (True, "ban"),
+    6: (False, "ban"),
+    7: (False, "ban"),
     # Pick Phase 1: F-S
-    (True, "pick"),  # 8
-    (False, "pick"),  # 9
-    # Ban Phase 2: S-F-S
-    (False, "ban"),  # 10
-    (True, "ban"),  # 11
-    (False, "ban"),  # 12
-    # Pick Phase 2: F-S-F-S-F-S
-    (True, "pick"),  # 13
-    (False, "pick"),  # 14
-    (True, "pick"),  # 15
-    (False, "pick"),  # 16
-    (True, "pick"),  # 17
-    (False, "pick"),  # 18
+    8: (True, "pick"),
+    9: (False, "pick"),
+    # Ban Phase 2: F-F-S
+    10: (True, "ban"),
+    11: (True, "ban"),
+    12: (False, "ban"),
+    # Pick Phase 2: S-F-F-S-S-F
+    13: (False, "pick"),
+    14: (True, "pick"),
+    15: (True, "pick"),
+    16: (False, "pick"),
+    17: (False, "pick"),
+    18: (True, "pick"),
     # Ban Phase 3: F-S-F-S
-    (True, "ban"),  # 19
-    (False, "ban"),  # 20
-    (True, "ban"),  # 21
-    (False, "ban"),  # 22
+    19: (True, "ban"),
+    20: (False, "ban"),
+    21: (True, "ban"),
+    22: (False, "ban"),
     # Pick Phase 3: F-S
-    (True, "pick"),  # 23
-    (False, "pick"),  # 24
-]
+    23: (True, "pick"),
+    24: (False, "pick"),
+}
 
 
 def build_draft_rounds(draft: HeroDraft, first_team: DraftTeam, second_team: DraftTeam):
@@ -65,13 +65,13 @@ def build_draft_rounds(draft: HeroDraft, first_team: DraftTeam, second_team: Dra
     """
     rounds_to_create = []
 
-    for i, (is_first, action_type) in enumerate(CAPTAINS_MODE_SEQUENCE):
+    for round_number, (is_first, action_type) in CAPTAINS_MODE_SEQUENCE.items():
         team = first_team if is_first else second_team
         rounds_to_create.append(
             HeroDraftRound(
                 draft=draft,
                 draft_team=team,
-                round_number=i + 1,
+                round_number=round_number,
                 action_type=action_type,
                 state="planned",
             )
