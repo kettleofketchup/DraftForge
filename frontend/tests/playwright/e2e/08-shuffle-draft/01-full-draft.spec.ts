@@ -55,9 +55,10 @@ test.describe('Shuffle Draft - Full Flow', () => {
       timeout: 10000,
     });
 
-    // Click on Teams tab
+    // Click on Teams tab and wait for content
     const teamsTab = page.locator('[data-testid="teamsTab"]');
     await teamsTab.click();
+    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
 
     // Verify teams exist (check for team headers)
     await expect(page.locator('[data-testid="team-card-name"]').first()).toBeVisible();
@@ -79,9 +80,9 @@ test.describe('Shuffle Draft - Full Flow', () => {
       timeout: 10000,
     });
 
-    // Click on Teams tab
+    // Click on Teams tab and wait for content
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.waitForLoadState('networkidle');
+    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
 
     // Click Start Draft button to open the draft modal
     await page.locator('[data-testid="startTeamDraftButton"]').click({ force: true });
@@ -142,7 +143,7 @@ test.describe('Shuffle Draft - Full Flow', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.waitForLoadState('networkidle');
+    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
 
     // Open draft modal
     await page.locator('[data-testid="startTeamDraftButton"]').click({ force: true });
@@ -267,7 +268,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.waitForLoadState('networkidle');
+    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
 
     // Open draft modal - use data-testid for reliable selection
     const draftButton = page.locator(
@@ -321,7 +322,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.waitForLoadState('networkidle');
+    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
 
     // Open draft modal - use data-testid for reliable selection
     const draftButton = page.locator(
@@ -363,7 +364,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.waitForLoadState('networkidle');
+    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
 
     // Open draft modal - use data-testid for reliable selection
     const draftButton = page.locator(
@@ -418,7 +419,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Click on Teams tab
     await page.locator('[data-testid="teamsTab"]').click({ force: true });
-    await page.waitForLoadState('networkidle');
+    await page.locator('[data-testid="teamsTabContent"]').waitFor({ state: 'visible' });
 
     // Open draft modal - use data-testid for reliable selection
     const draftButton = page.locator(
