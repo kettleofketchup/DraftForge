@@ -1093,15 +1093,20 @@ git commit -m "feat(frontend): add OrgUser types and API"
 
 ---
 
-### Task 10: Update UserEditModal to accept organizationId
+### Task 10: Update UserEditModal to use zustand stores
 
 **Files:**
 - Modify: `frontend/app/components/user/userCard/editModal.tsx`
 - Modify: `frontend/app/components/user/userCard/editForm.tsx`
 
-**Step 1: Update editModal.tsx**
+**Architecture:** Instead of passing `organizationId` as props, use zustand stores:
+- `useOrgStore` - current org context (set when viewing org pages)
+- `useLeagueStore` - current league context (set when viewing league pages)
+- `useTournamentStore` - current tournament context (set when viewing tournament pages)
 
-Update `UserEditModal` and `UserEditModalDialog` to accept `organizationId` prop:
+The modal reads context from stores - no props needed.
+
+**Step 1: Update editModal.tsx**
 
 ```typescript
 // frontend/app/components/user/userCard/editModal.tsx
@@ -1113,14 +1118,16 @@ import { UserEditForm } from "./editForm";
 import { UserType } from "../types";
 import { getOrgUser, updateOrgUser } from "../../org/api";
 import { OrgUserType } from "../../org/types";
+import { useOrgStore, orgSelectors } from "~/store/orgStore";
+import { useLeagueStore } from "~/store/leagueStore";
+import { useTournamentStore } from "~/store/tournamentStore";
 
 interface UserEditModalProps {
   user: UserType;
-  organizationId: number;
   onSave?: (updatedUser: UserType) => void;
 }
 
-export function UserEditModal({ user, organizationId, onSave }: UserEditModalProps) {
+export function UserEditModal({ user, onSave }: UserEditModalProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -1130,7 +1137,6 @@ export function UserEditModal({ user, organizationId, onSave }: UserEditModalPro
       </Button>
       <UserEditModalDialog
         user={user}
-        organizationId={organizationId}
         open={open}
         onOpenChange={setOpen}
         onSave={onSave}
@@ -1141,7 +1147,6 @@ export function UserEditModal({ user, organizationId, onSave }: UserEditModalPro
 
 interface UserEditModalDialogProps {
   user: UserType;
-  organizationId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave?: (updatedUser: UserType) => void;
@@ -1149,11 +1154,21 @@ interface UserEditModalDialogProps {
 
 export function UserEditModalDialog({
   user,
-  organizationId,
   open,
   onOpenChange,
   onSave,
 }: UserEditModalDialogProps) {
+  // Get org context from stores (priority: org > league > tournament)
+  const orgPk = useOrgStore(orgSelectors.orgPk);
+  const league = useLeagueStore((s) => s.currentLeague);
+  const tournament = useTournamentStore((s) => s.tournament);
+
+  // Resolve organizationId from context
+  const organizationId = orgPk
+    ?? league?.organizations?.[0]?.pk
+    ?? tournament?.league?.organizations?.[0]?.pk
+    ?? null;
+
   const [orgUser, setOrgUser] = useState<OrgUserType | null>(null);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -1164,9 +1179,9 @@ export function UserEditModalDialog({
   });
 
   useEffect(() => {
-    if (open && organizationId) {
+    if (open && organizationId && user.pk) {
       setLoading(true);
-      getOrgUser(user.pk!, organizationId)
+      getOrgUser(user.pk, organizationId)
         .then((data) => {
           setOrgUser(data);
           setFormData((prev) => ({ ...prev, mmr: data.mmr }));
@@ -1180,8 +1195,8 @@ export function UserEditModalDialog({
     if (!orgUser) return;
 
     try {
-      // Update OrgUser MMR
-      await updateOrgUser(orgUser.pk, { mmr: formData.mmr });
+      // Update OrgUser MMR using orgUser.id (OrgUser's pk)
+      await updateOrgUser(orgUser.id, { mmr: formData.mmr });
 
       // Update user profile (nickname, positions, etc.)
       // ... existing user update logic
@@ -1224,71 +1239,76 @@ git commit -m "feat(frontend): update UserEditModal to use organizationId"
 
 ---
 
-### Task 11: Update UserCard to pass organizationId
+### Task 11: UserCard uses UserEditModal (no props needed)
 
 **Files:**
 - Modify: `frontend/app/components/user/userCard.tsx`
 
-**Step 1: Update UserCard props and edit modal usage**
+**Step 1: UserEditModal gets context from stores**
 
-Add `organizationId` prop to `UserCard`:
+Since `UserEditModal` now reads organization context from zustand stores, `UserCard` doesn't need to pass `organizationId`:
 
 ```typescript
-interface UserCardProps {
-  user: UserType;
-  organizationId?: number;
-  deleteButtonType?: "tournament" | "team" | "none";
-  onDelete?: () => void;
-  // ... other existing props
-}
-
-export function UserCard({
-  user,
-  organizationId,
-  deleteButtonType = "none",
-  onDelete,
-  // ... other props
-}: UserCardProps) {
-  // ... existing code
-
-  // Update edit modal usage
-  {isStaff && organizationId && (
-    <UserEditModal
-      user={user}
-      organizationId={organizationId}
-      onSave={handleUserUpdate}
-    />
-  )}
-
-  // ... rest of component
-}
+// UserCard just renders the modal - no organizationId prop needed
+{isStaff && (
+  <UserEditModal
+    user={user}
+    onSave={handleUserUpdate}
+  />
+)}
 ```
+
+The modal will automatically get org context from `useOrgStore`, `useLeagueStore`, or `useTournamentStore`.
 
 **Step 2: Commit**
 
 ```bash
 git add frontend/app/components/user/userCard.tsx
-git commit -m "feat(frontend): update UserCard to pass organizationId to edit modal"
+git commit -m "feat(frontend): UserCard uses UserEditModal with store context"
 ```
 
 ---
 
-### Task 12: Update Tournament PlayersTab to pass organizationId
+### Task 12: Ensure stores are populated on page load
 
 **Files:**
-- Modify: `frontend/app/pages/tournament/tabs/PlayersTab.tsx`
+- Verify: `frontend/app/pages/tournament/` pages set `useTournamentStore`
+- Verify: `frontend/app/pages/league/` pages set `useLeagueStore`
+- Verify: `frontend/app/pages/organization/` pages set `useOrgStore`
 
-**Step 1: Get organizationId from tournament's league**
+**Step 1: Verify tournament pages populate store**
+
+Tournament pages should call `useTournamentStore.setState({ tournament })` when loading:
 
 ```typescript
-// In PlayersTab.tsx
-import { useTournament } from "~/hooks/useTournament";
+// In tournament page loader or useEffect
+const tournament = await fetchTournament(id);
+useTournamentStore.getState().setTournament(tournament);
+```
 
+**Step 2: Verify league pages populate store**
+
+```typescript
+// In league page loader or useEffect
+const league = await fetchLeague(id);
+useLeagueStore.getState().setCurrentLeague(league);
+```
+
+**Step 3: Verify org pages populate store**
+
+```typescript
+// In org page loader or useEffect
+const org = await fetchOrganization(id);
+useOrgStore.getState().setCurrentOrg(org);
+```
+
+**Step 4: No changes needed to PlayersTab**
+
+`PlayersTab` renders `UserCard` which renders `UserEditModal`. The modal reads from stores automatically:
+
+```typescript
 export function PlayersTab() {
   const { tournament } = useTournament();
-
-  // Get organization from tournament's league
-  const organizationId = tournament?.league?.organizations?.[0]?.pk;
 
   return (
     <div>
@@ -1296,7 +1316,6 @@ export function PlayersTab() {
         <UserCard
           key={user.pk}
           user={user}
-          organizationId={organizationId}
           deleteButtonType="tournament"
           onDelete={() => handleRemoveUser(user.pk)}
         />
