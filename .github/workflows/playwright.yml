@@ -65,8 +65,21 @@ jobs:
       run: npm ci
       working-directory: frontend
 
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      id: playwright-cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
     - name: Install Playwright browsers
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
       run: npx playwright install --with-deps chromium
+      working-directory: frontend
+
+    - name: Install Playwright system deps (if cached)
+      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      run: npx playwright install-deps chromium
       working-directory: frontend
 
     - name: Set up Docker Buildx
