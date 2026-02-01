@@ -54,17 +54,18 @@ jobs:
     - name: Install Python dependencies
       run: poetry install --no-interaction --no-ansi
 
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
     - name: Pull or Build Docker images
       run: |
         echo "Attempting to pull images from registry..."
         if docker compose --project-directory . -f docker/docker-compose.test.yaml pull 2>&1; then
           echo "✓ Images pulled successfully"
         else
-          echo "✗ Pull failed, building images..."
-          docker compose --project-directory . -f docker/docker-compose.test.yaml build
+          echo "✗ Pull failed, building with buildx + registry cache..."
+          poetry run inv docker.test-build
         fi
-      env:
-        DOCKER_BUILDKIT: 1
 
     - name: Get test database
       run: |
