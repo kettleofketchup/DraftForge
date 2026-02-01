@@ -4,7 +4,7 @@
 
 **Goal:** Move MMR from global user field to organization-scoped membership, with frontend support for editing org-scoped MMR.
 
-**Architecture:** Create `org` and `league_player` Django apps with OrgUser and LeagueUser models. OrgUser holds the source-of-truth MMR per organization. LeagueUser snapshots MMR when joining a league. Frontend edit modals accept organizationId to scope MMR edits.
+**Architecture:** Create `org` and `league` Django apps with OrgUser and LeagueUser models. OrgUser holds the source-of-truth MMR per organization. LeagueUser snapshots MMR when joining a league. Frontend edit modals accept organizationId to scope MMR edits.
 
 **Tech Stack:** Django, Django REST Framework, React, TypeScript, Zod, react-hook-form
 
@@ -62,6 +62,7 @@ class OrgUser(models.Model):
         "app.Organization",
         on_delete=models.CASCADE,
         related_name="members",
+        db_index=True,
     )
     mmr = models.IntegerField(default=0)
     joined_at = models.DateTimeField(auto_now_add=True)
@@ -130,39 +131,39 @@ git commit -m "feat(org): create org app with OrgUser model"
 
 ---
 
-### Task 2: Create league_player Django app
+### Task 2: Create league Django app
 
 **Files:**
-- Create: `backend/league_player/__init__.py`
-- Create: `backend/league_player/apps.py`
-- Create: `backend/league_player/models.py`
-- Create: `backend/league_player/admin.py`
-- Create: `backend/league_player/serializers.py`
+- Create: `backend/league/__init__.py`
+- Create: `backend/league/apps.py`
+- Create: `backend/league/models.py`
+- Create: `backend/league/admin.py`
+- Create: `backend/league/serializers.py`
 - Modify: `backend/app/settings.py` (add to INSTALLED_APPS)
 
 **Step 1: Create app directory structure**
 
 ```bash
-mkdir -p backend/league_player
-touch backend/league_player/__init__.py
+mkdir -p backend/league
+touch backend/league/__init__.py
 ```
 
 **Step 2: Create apps.py**
 
 ```python
-# backend/league_player/apps.py
+# backend/league/apps.py
 from django.apps import AppConfig
 
 
 class LeaguePlayerConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "league_player"
+    name = "league"
 ```
 
 **Step 3: Create models.py with LeagueUser**
 
 ```python
-# backend/league_player/models.py
+# backend/league/models.py
 from django.db import models
 
 
@@ -201,7 +202,7 @@ class LeagueUser(models.Model):
 **Step 4: Create admin.py**
 
 ```python
-# backend/league_player/admin.py
+# backend/league/admin.py
 from django.contrib import admin
 from .models import LeagueUser
 
@@ -221,21 +222,21 @@ Modify `backend/app/settings.py`:
 INSTALLED_APPS = [
     # ... existing apps
     "org",
-    "league_player",
+    "league",
 ]
 ```
 
 **Step 6: Create initial migration**
 
 ```bash
-just py::manage makemigrations league_player
+just py::manage makemigrations league
 ```
 
 **Step 7: Commit**
 
 ```bash
-git add backend/league_player backend/app/settings.py
-git commit -m "feat(league_player): create league_player app with LeagueUser model"
+git add backend/league backend/app/settings.py
+git commit -m "feat(league): create league app with LeagueUser model"
 ```
 
 ---
@@ -294,7 +295,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("org", "0001_initial"),
-        ("app", "0001_initial"),  # Adjust to actual latest app migration
+        ("app", "0077_add_discord_server_id_to_organization"),
     ]
 
     operations = [
@@ -326,18 +327,18 @@ git commit -m "feat(org): migrate all users to OrgUser (org pk=1)"
 ### Task 4: Migrate tournament users to LeagueUser
 
 **Files:**
-- Create: `backend/league_player/migrations/0002_populate_league_users.py`
+- Create: `backend/league/migrations/0002_populate_league_users.py`
 
 **Step 1: Create data migration**
 
 ```bash
-just py::manage makemigrations league_player --empty --name populate_league_users
+just py::manage makemigrations league --empty --name populate_league_users
 ```
 
 **Step 2: Write migration code**
 
 ```python
-# backend/league_player/migrations/0002_populate_league_users.py
+# backend/league/migrations/0002_populate_league_users.py
 from django.db import migrations
 
 
@@ -345,7 +346,7 @@ def migrate_tournament_users_to_league_users(apps, schema_editor):
     """Create LeagueUser for all existing tournament users."""
     Tournament = apps.get_model("app", "Tournament")
     OrgUser = apps.get_model("org", "OrgUser")
-    LeagueUser = apps.get_model("league_player", "LeagueUser")
+    LeagueUser = apps.get_model("league", "LeagueUser")
 
     for tournament in Tournament.objects.select_related("league").prefetch_related("users"):
         league = tournament.league
@@ -380,16 +381,16 @@ def migrate_tournament_users_to_league_users(apps, schema_editor):
 
 def reverse_migration(apps, schema_editor):
     """Delete all LeagueUser records."""
-    LeagueUser = apps.get_model("league_player", "LeagueUser")
+    LeagueUser = apps.get_model("league", "LeagueUser")
     LeagueUser.objects.all().delete()
 
 
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("league_player", "0001_initial"),
+        ("league", "0001_initial"),
         ("org", "0002_populate_org_users"),
-        ("app", "0001_initial"),  # Adjust to actual latest app migration
+        ("app", "0077_add_discord_server_id_to_organization"),
     ]
 
     operations = [
@@ -406,14 +407,14 @@ just db::migrate::all
 **Step 4: Verify migration**
 
 ```bash
-just py::manage shell -c "from league_player.models import LeagueUser; print(f'LeagueUser count: {LeagueUser.objects.count()}')"
+just py::manage shell -c "from league.models import LeagueUser; print(f'LeagueUser count: {LeagueUser.objects.count()}')"
 ```
 
 **Step 5: Commit**
 
 ```bash
-git add backend/league_player/migrations/
-git commit -m "feat(league_player): migrate tournament users to LeagueUser"
+git add backend/league/migrations/
+git commit -m "feat(league): migrate tournament users to LeagueUser"
 ```
 
 ---
@@ -473,7 +474,8 @@ from app.serializers import PositionsSerializer
 class OrgUserSerializer(serializers.ModelSerializer):
     """Returns user data with org-scoped MMR. Same schema as TournamentUserSerializer."""
 
-    pk = serializers.IntegerField(source="user.pk", read_only=True)
+    id = serializers.IntegerField(read_only=True)  # OrgUser's pk (for PATCH requests)
+    pk = serializers.IntegerField(source="user.pk", read_only=True)  # User's pk
     username = serializers.CharField(source="user.username", read_only=True)
     nickname = serializers.CharField(source="user.nickname", read_only=True)
     avatar = serializers.CharField(source="user.avatar", read_only=True)
@@ -487,6 +489,7 @@ class OrgUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrgUser
         fields = (
+            "id",
             "pk",
             "username",
             "nickname",
@@ -1263,12 +1266,12 @@ git commit -m "test(org): add OrgUser model tests"
 ### Task 17: Write backend tests for LeagueUser
 
 **Files:**
-- Create: `backend/league_player/tests.py`
+- Create: `backend/league/tests.py`
 
 **Step 1: Create test file**
 
 ```python
-# backend/league_player/tests.py
+# backend/league/tests.py
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from app.models import Organization, League
@@ -1319,14 +1322,14 @@ class LeagueUserModelTest(TestCase):
 **Step 2: Run tests**
 
 ```bash
-just py::test backend/league_player/tests.py -v
+just py::test backend/league/tests.py -v
 ```
 
 **Step 3: Commit**
 
 ```bash
-git add backend/league_player/tests.py
-git commit -m "test(league_player): add LeagueUser model tests"
+git add backend/league/tests.py
+git commit -m "test(league): add LeagueUser model tests"
 ```
 
 ---
