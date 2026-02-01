@@ -103,12 +103,10 @@ jobs:
 
     - name: Run Core Draft Tests
       run: |
-        docker exec frontend sh -c "npx playwright test --fail-fast --workers=1 \
+        docker exec -e CI=true frontend sh -c "npx playwright test --fail-fast --workers=1 \
           tests/playwright/e2e/07-draft/01-captain-pick.spec.ts \
           tests/playwright/e2e/08-shuffle-draft/01-full-draft.spec.ts \
           tests/playwright/e2e/herodraft/two-captains-full-draft.spec.ts"
-      env:
-        CI: true
 
     - name: Upload test results
       if: failure()
