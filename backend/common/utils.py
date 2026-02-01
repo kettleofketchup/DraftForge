@@ -42,6 +42,11 @@ def isTestEnvironment(request=None):
     if settings.NODE_ENV == "release":
         return False
 
+    # In CI environments (GitHub Actions), skip IP validation
+    # All other security checks above still apply (TEST, DEBUG, NODE_ENV)
+    if os.environ.get("CI") == "true":
+        return True
+
     # Allow requests from localhost and common Docker container IP ranges
     allowed_ips = [
         "127.0.0.1",
