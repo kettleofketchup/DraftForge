@@ -573,6 +573,14 @@ class Team(models.Model):
         User, related_name="teams_as_left", blank=True
     )
 
+    # LeagueUser-based membership (org-scoped MMR system)
+    league_users = models.ManyToManyField(
+        "league.LeagueUser",
+        related_name="teams",
+        blank=True,
+        help_text="Team members as LeagueUser (for org-scoped MMR)",
+    )
+
     current_points = models.IntegerField(default=0, blank=True)
     placement = models.PositiveSmallIntegerField(
         null=True,
