@@ -65,8 +65,7 @@ test.describe('Shuffle Draft - Full Flow', () => {
     await expect(page.locator('[data-testid="team-avg-mmr-label"]').first()).toBeVisible();
   });
 
-  // TODO: This test needs rework - Draft Style dialog shows "Draft not initialized"
-  // because the draft hasn't been started yet. Need to start draft first, then change style.
+  // TODO: This test needs a tournament with draft initialized, not completed_bracket
   test.skip('should open draft modal and configure shuffle draft style', async ({
     page,
     loginAdmin,
@@ -127,7 +126,7 @@ test.describe('Shuffle Draft - Full Flow', () => {
     await expect(page.locator('[role="dialog"]')).toBeVisible();
   });
 
-  // TODO: This test needs rework - same issue as above, draft needs to be initialized first
+  // TODO: This test needs a tournament with draft initialized, not completed_bracket
   test.skip('should complete shuffle draft flow with picks', async ({
     page,
     loginAdmin,
