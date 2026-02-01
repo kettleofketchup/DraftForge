@@ -85,6 +85,8 @@ def create_social_auth(user):
 def createTestSuperUser() -> tuple[CustomUser, bool]:
     assert isTestEnvironment() == True
     uid = "243497113906970625"
+    # Steam ID for test user (required for claim profile tests)
+    steam_id = 76561198012345678  # Fake Steam ID for testing
     user, created = CustomUser.objects.get_or_create(
         username="kettleofketchup",
         discordId=uid,
@@ -93,13 +95,16 @@ def createTestSuperUser() -> tuple[CustomUser, bool]:
     if created:
         user.set_password("cypress")
         user.mmr = random.randint(2000, 6000)
+        user.steamid = steam_id
         user.save()
     create_social_auth(user)
 
     if created or not user.is_superuser:
         user.is_staff = True
-
         user.is_superuser = True
+        # Ensure Steam ID is set even for existing users
+        if not user.steamid:
+            user.steamid = steam_id
         with transaction.atomic():
             user.check_and_update_avatar()
             user.save()
@@ -353,6 +358,60 @@ def get_tournament_by_key(request, key: str):
         )
 
     return Response(TournamentSerializer(tournament).data)
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def create_claimable_user(request):
+    """
+    TEST ONLY: Create a user without Discord or Steam ID that can be claimed.
+
+    This endpoint is used by Playwright tests to test the "Claim Profile" feature.
+    Creates a user with only username, nickname, and MMR - no discordId or steamid.
+
+    Request body (optional):
+        username: str - Username for the user (default: generated)
+        nickname: str - Nickname for the user (default: generated)
+        mmr: int - MMR value (default: random 2000-6000)
+
+    Returns:
+        200: Created user data
+        404: Not in test mode
+    """
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    import uuid
+
+    # Generate unique identifiers if not provided
+    unique_id = str(uuid.uuid4())[:8]
+    username = request.data.get("username", f"claimable_{unique_id}")
+    nickname = request.data.get("nickname", f"Claimable User {unique_id}")
+    mmr = request.data.get("mmr", random.randint(2000, 6000))
+
+    # Create user without Discord or Steam
+    user = CustomUser.objects.create(
+        username=username,
+        nickname=nickname,
+        mmr=mmr,
+        discordId=None,
+        discordUsername=None,
+        steamid=None,
+    )
+    user.set_unusable_password()
+    user.save()
+
+    from app.serializers import UserSerializer
+
+    return Response(
+        {
+            "success": True,
+            "user": UserSerializer(user).data,
+        },
+        status=status.HTTP_201_CREATED,
+    )
 
 
 @api_view(["GET"])

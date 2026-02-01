@@ -29,11 +29,29 @@ class OrgUserSerializer(serializers.ModelSerializer):
     league_mmr = serializers.SerializerMethodField()
 
     def get_league_mmr(self, org_user):
-        """Get MMR from LeagueUser if league_id is in context."""
+        """Get MMR from LeagueUser if league_id is in context.
+
+        Uses prefetched league_users if available to avoid N+1 queries.
+        Prefetch with: OrgUser.objects.prefetch_related(
+            Prefetch('league_users', queryset=LeagueUser.objects.filter(league_id=X))
+        )
+        """
         league_id = self.context.get("league_id")
         if not league_id:
             return None
 
+        # Try to use prefetched data first (avoids N+1)
+        if (
+            hasattr(org_user, "_prefetched_objects_cache")
+            and "league_users" in org_user._prefetched_objects_cache
+        ):
+            league_users = org_user._prefetched_objects_cache["league_users"]
+            for lu in league_users:
+                if lu.league_id == league_id:
+                    return lu.mmr
+            return None
+
+        # Fallback to query (will cause N+1 if not prefetched)
         from league.models import LeagueUser
 
         try:

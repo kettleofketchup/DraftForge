@@ -46,6 +46,17 @@ export async function deleteUser(userId: number): Promise<void> {
   await axios.delete(`/users/${userId}/`);
 }
 
+/**
+ * Claim a user profile by merging the target user's data into the current user.
+ * This links the current user's Steam account to the target profile.
+ * @param targetUserId - The ID of the user profile to claim (must not have Steam ID)
+ * @returns The updated current user with merged data
+ */
+export async function claimUserProfile(targetUserId: number): Promise<UserType> {
+  const response = await axios.post<UserType>(`/users/${targetUserId}/claim/`);
+  return response.data;
+}
+
 export async function createUser(data: Partial<UserType>): Promise<UserType> {
   const response = await axios.post(`/user/register`, data);
   return response.data as UserType;
@@ -457,4 +468,10 @@ export async function addLeagueStaff(leagueId: number, userId: number): Promise<
 
 export async function removeLeagueStaff(leagueId: number, userId: number): Promise<void> {
   await axios.delete(`/leagues/${leagueId}/staff/${userId}/`);
+}
+
+// Organization Users (members via OrgUser)
+export async function getOrganizationUsers(orgId: number): Promise<UserType[]> {
+  const response = await axios.get<UserType[]>(`/organizations/${orgId}/users/`);
+  return response.data;
 }
