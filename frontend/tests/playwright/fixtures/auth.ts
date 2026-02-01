@@ -147,17 +147,9 @@ export async function loginAdmin(context: BrowserContext): Promise<void> {
   const headers = response.headers();
 
   console.log(`[auth] loginAdmin response: ${status} ${statusText}`);
-  console.log(`[auth] Response headers: ${JSON.stringify(headers, null, 2)}`);
 
   if (!response.ok()) {
-    let body = '';
-    try {
-      body = await response.text();
-    } catch {
-      body = '[could not read body]';
-    }
     console.error(`[auth] loginAdmin FAILED: ${status} ${statusText}`);
-    console.error(`[auth] Response body: ${body}`);
     console.error(`[auth] This usually means:`);
     console.error(`[auth]   - 403: TEST=true not set or IP not whitelisted`);
     console.error(`[auth]   - 404: Backend not running or route not found`);
