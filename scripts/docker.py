@@ -180,6 +180,22 @@ def docker_frontend_build(c, push=False):
 
 
 @task
+def docker_test_build(c, push=False):
+    """Build only images needed for testing (frontend-dev, backend-dev, nginx)."""
+    funcs = [
+        lambda: docker_frontend_build_dev(c, push=push),
+        lambda: docker_backend_build(c, push=push),
+        lambda: docker_nginx_build(c, push=push),
+    ]
+    with alive_bar(total=3, title="Building Test Images") as bar:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(func): func for func in funcs}
+            for future in as_completed(futures):
+                future.result()
+                bar()
+
+
+@task
 def docker_backend_build(c, push=False):
     """Build both production and dev backend images."""
     version, image, dockerfile, context = get_backend()
@@ -315,4 +331,6 @@ ns_docker_nginx.add_task(docker_nginx_run, "run")
 ns_docker_all.add_task(docker_pull_all, "pull")
 ns_docker_all.add_task(docker_build_all, "build")
 ns_docker_all.add_task(docker_push_all, "push")
-ns_docker_all.add_task(docker_build_all, "build")
+
+# Test-specific builds
+ns_docker.add_task(docker_test_build, "test-build")
