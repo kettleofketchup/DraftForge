@@ -181,18 +181,8 @@ def docker_frontend_build(c, push=False):
 
 @task
 def docker_test_build(c, push=False):
-    """Build only images needed for testing (frontend-dev, backend-dev, nginx)."""
-    funcs = [
-        lambda: docker_frontend_build_dev(c, push=push),
-        lambda: docker_backend_build(c, push=push),
-        lambda: docker_nginx_build(c, push=push),
-    ]
-    with alive_bar(total=3, title="Building Test Images") as bar:
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(func): func for func in funcs}
-            for future in as_completed(futures):
-                future.result()
-                bar()
+    """Build frontend-dev image for CI fallback."""
+    docker_frontend_build_dev(c, push=push)
 
 
 @task
