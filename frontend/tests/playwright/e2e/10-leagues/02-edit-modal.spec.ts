@@ -60,7 +60,7 @@ test.describe('League Page - Edit Modal (e2e)', () => {
     await leaguePage.openEditModal();
 
     // Modal should be visible with correct elements
-    await expect(page.getByRole('heading', { name: 'Edit League' })).toBeVisible();
+    await expect(page.locator('[data-testid="edit-league-modal-heading"]')).toBeVisible();
     await expect(leaguePage.nameInput).toBeVisible();
     await expect(leaguePage.prizeInput).toBeVisible();
     await expect(leaguePage.descriptionInput).toBeVisible();
@@ -108,7 +108,7 @@ test.describe('League Page - Edit Modal (e2e)', () => {
     await leaguePage.submitEditForm();
 
     // Should show error message
-    await expect(page.locator('text=/required|name is required/i')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="form-error-message"]')).toBeVisible({ timeout: 5000 });
   });
 
   test('should update league successfully', async ({ page }) => {
@@ -128,8 +128,8 @@ test.describe('League Page - Edit Modal (e2e)', () => {
     // Submit
     await leaguePage.submitEditForm();
 
-    // Should show success message
-    await expect(page.locator('text=/updated successfully|success/i')).toBeVisible({ timeout: 10000 });
+    // Should show success message (sonner toast)
+    await expect(page.locator('[data-sonner-toast][data-type="success"]')).toBeVisible({ timeout: 10000 });
 
     // Modal should close
     await leaguePage.assertEditModalNotVisible();

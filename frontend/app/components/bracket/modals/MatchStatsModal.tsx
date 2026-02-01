@@ -134,7 +134,7 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Match Details</DialogTitle>
+          <DialogTitle data-testid="match-details-header">Match Details</DialogTitle>
           <DialogDescription>
             {match.bracketType === 'grand_finals'
               ? 'Grand Finals'
@@ -184,6 +184,7 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
                   variant="outline"
                   className="flex-1"
                   onClick={() => handleSetWinner('radiant')}
+                  data-testid="radiantWinsButton"
                 >
                   {match.radiantTeam.captain ? DisplayName(match.radiantTeam.captain) : match.radiantTeam.name} Wins
                 </Button>
@@ -191,6 +192,7 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
                   variant="outline"
                   className="flex-1"
                   onClick={() => handleSetWinner('dire')}
+                  data-testid="direWinsButton"
                 >
                   {match.direTeam.captain ? DisplayName(match.direTeam.captain) : match.direTeam.name} Wins
                 </Button>

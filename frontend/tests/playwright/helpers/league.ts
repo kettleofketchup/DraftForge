@@ -88,10 +88,10 @@ export class LeaguePage {
     this.descriptionInput = page.locator('[data-testid="league-description-input"]');
     this.rulesInput = page.locator('[data-testid="league-rules-input"]');
     this.submitButton = page.locator('[data-testid="form-dialog-submit"]');
-    this.cancelButton = page.locator('button:has-text("Cancel")');
+    this.cancelButton = page.locator('[data-testid="modal-cancel-button"]');
 
     // Matches tab elements
-    this.steamLinkedFilterButton = page.locator('button:has-text("Steam linked only")');
+    this.steamLinkedFilterButton = page.locator('[data-testid="steam-filter-button"]');
     this.matchCards = page.locator('[data-testid^="league-match-card"]');
   }
 
@@ -252,9 +252,9 @@ export class LeaguePage {
     await this.fillEditForm(options);
     await this.submitEditForm();
 
-    // Wait for success message
+    // Wait for success message (sonner toast)
     await expect(
-      this.page.locator('text=/updated successfully|success/i')
+      this.page.locator('[data-sonner-toast][data-type="success"]')
     ).toBeVisible({ timeout: 10000 });
 
     // Wait for modal to close

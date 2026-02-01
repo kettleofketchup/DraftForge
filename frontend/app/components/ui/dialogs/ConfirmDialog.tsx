@@ -32,6 +32,10 @@ export interface ConfirmDialogProps {
   isLoading?: boolean;
   /** Callback when confirm is clicked */
   onConfirm: () => void | Promise<void>;
+  /** data-testid for confirm button */
+  confirmTestId?: string;
+  /** data-testid for cancel button */
+  cancelTestId?: string;
 }
 
 // Content background styling per variant
@@ -84,6 +88,8 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
       cancelVariant,
       isLoading = false,
       onConfirm,
+      confirmTestId,
+      cancelTestId,
     },
     ref
   ) => {
@@ -118,6 +124,7 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
               onClick={handleCancel}
               disabled={isLoading}
               variant={cancelVariant ?? (variant === 'warning' ? 'success' : 'default')}
+              data-testid={cancelTestId}
             >
               {cancelLabel}
             </CancelButton>
@@ -125,6 +132,7 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
               onClick={handleConfirm}
               loading={isLoading}
               variant={confirmButtonVariantMap[variant]}
+              data-testid={confirmTestId}
             >
               {confirmLabel}
             </ConfirmButton>

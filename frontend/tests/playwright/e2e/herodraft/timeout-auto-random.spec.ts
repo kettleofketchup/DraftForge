@@ -236,7 +236,7 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
     ]);
 
     const startDraftButton = (page: Page) =>
-      page.locator('button:has-text("Start Draft"), button:has-text("View Draft"), button:has-text("Live Draft")').first();
+      page.getByTestId('view-draft-btn');
 
     await Promise.all([
       startDraftButton(captainA.page).click(),

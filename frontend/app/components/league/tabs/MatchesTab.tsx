@@ -33,7 +33,10 @@ export const MatchesTab: React.FC<Props> = ({ leaguePk }) => {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium flex items-center gap-2">
+        <h3
+          className="text-lg font-medium flex items-center gap-2"
+          data-testid="league-matches-heading"
+        >
           <Gamepad2 className="h-5 w-5" />
           Matches ({matches.length})
         </h3>
@@ -41,6 +44,7 @@ export const MatchesTab: React.FC<Props> = ({ leaguePk }) => {
           variant={linkedOnly ? 'default' : 'outline'}
           size="sm"
           onClick={() => setLinkedOnly(!linkedOnly)}
+          data-testid="steam-filter-button"
         >
           {linkedOnly && <Check className="h-4 w-4 mr-1" />}
           Steam linked only
@@ -55,7 +59,10 @@ export const MatchesTab: React.FC<Props> = ({ leaguePk }) => {
           ))}
         </div>
       ) : (
-        <div className="text-center py-12 text-muted-foreground">
+        <div
+          className="text-center py-12 text-muted-foreground"
+          data-testid="league-matches-empty-state"
+        >
           No matches found for this league.
         </div>
       )}

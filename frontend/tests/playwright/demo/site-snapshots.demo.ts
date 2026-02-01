@@ -12,7 +12,7 @@
  */
 
 import { test, chromium } from '@playwright/test';
-import { loginAdmin, waitForHydration } from '../fixtures/auth';
+import { loginAdmin, waitForHydration, DOCKER_HOST, API_URL } from '../fixtures/auth';
 import { waitForDemoReady, waitForBracketReady } from '../fixtures/demo-utils';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -22,9 +22,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Use nginx hostname inside Docker containers, localhost for local runs
-const DOCKER_HOST = process.env.DOCKER_HOST || 'nginx';
-const API_URL = `https://${DOCKER_HOST}/api`;
+// Use centralized DOCKER_HOST from fixtures
 const BASE_URL = `https://${DOCKER_HOST}`;
 // Output to demo-results/site_snapshots/ (in mounted volume)
 // Invoke task will copy to docs/assets/site_snapshots/

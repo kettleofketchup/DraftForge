@@ -218,6 +218,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
           <EditIconButton
             onClick={() => setEditModalOpen(true)}
             tooltip="Edit Tournament"
+            data-testid="tournament-edit-button"
           />
         )}
         <ViewIconButton
@@ -242,6 +243,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
               hover:bg-base-200 focus:outline-2
               focus:outline-offset-2 focus:outline-primary
               active:bg-base-200"
+          data-testid={`tournament-card-${tournament.pk}`}
         >
           {/* Header: 2-col layout with name/type left, actions right */}
           <CardHeader className="p-0 gap-0.5">
