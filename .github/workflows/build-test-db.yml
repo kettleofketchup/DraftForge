@@ -15,7 +15,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/test-db
+  # Force lowercase for GHCR compatibility
+  IMAGE_NAME: kettleofketchup/draftforge/test-db
 
 jobs:
   build-test-db:
