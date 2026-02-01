@@ -459,6 +459,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     let buttonIcon: React.ReactNode;
     let buttonStyle: string;
     let tooltipText: string;
+    let testId: string;
 
     if (isDraftCompleted) {
       // Draft is complete - show view completed for everyone
@@ -466,21 +467,25 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
       buttonIcon = <EyeIcon />;
       buttonStyle = 'bg-purple-700 hover:bg-purple-600';
       tooltipText = 'View the completed team draft results';
+      testId = 'viewCompletedTeamDraftButton';
     } else if (isStaff()) {
       buttonLabel = 'Start Team Draft';
       buttonIcon = <ClipboardPen />;
       buttonStyle = 'bg-sky-800 hover:bg-sky-600';
       tooltipText = 'Administer the Team Draft';
+      testId = 'startTeamDraftButton';
     } else if (isCaptain) {
       buttonLabel = 'Live Team Draft';
       buttonIcon = <EyeIcon />;
       buttonStyle = 'bg-green-800 hover:bg-green-600';
       tooltipText = 'Watch the live team draft in progress';
+      testId = 'liveTeamDraftButton';
     } else {
       buttonLabel = 'View Team Draft';
       buttonIcon = <EyeIcon />;
       buttonStyle = 'bg-gray-700 hover:bg-gray-600';
       tooltipText = 'View the team draft (read-only)';
+      testId = 'viewTeamDraftButton';
     }
 
     return (
@@ -489,6 +494,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
           <DialogTrigger asChild>
             <Button
               className={`w-[${TEAMS_BUTTONS_WIDTH}] ${buttonStyle} text-white`}
+              data-testid={testId}
             >
               {buttonIcon}
               {buttonLabel}
