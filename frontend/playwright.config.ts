@@ -48,7 +48,8 @@ export default defineConfig({
     // Trace only on retry to save resources
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    // Disable video in CI to speed up tests, retain on failure locally
+    video: process.env.CI ? 'off' : 'retain-on-failure',
     ignoreHTTPSErrors: true, // For self-signed certs in dev
 
     // Default viewport
