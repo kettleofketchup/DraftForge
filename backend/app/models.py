@@ -70,6 +70,9 @@ class DraftStyles(StrEnum):
 
 
 class CustomUser(AbstractUser):
+    # Override username to allow blank (users can be created from Steam only)
+    username = models.CharField(max_length=150, unique=True, blank=True, null=True)
+
     # Steam64 (Friend ID) - the full 64-bit Steam ID
     steamid = models.BigIntegerField(null=True, unique=True, blank=True)
     # Steam32 (Account ID) - auto-calculated from steamid, used for match lookups
