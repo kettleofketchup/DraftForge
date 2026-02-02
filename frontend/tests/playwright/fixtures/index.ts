@@ -1,6 +1,9 @@
 /**
  * Playwright Test Fixtures
  *
+ * Reference: docs/testing/auth/fixtures.md
+ * If you update these fixtures, also update the documentation!
+ *
  * Export all fixtures for easy importing in tests.
  * Uses named exports to avoid naming collisions.
  */
@@ -12,6 +15,11 @@ export {
   loginAdmin,
   loginStaff,
   loginUser,
+  loginUserClaimer,
+  loginOrgAdmin,
+  loginOrgStaff,
+  loginLeagueAdmin,
+  loginLeagueStaff,
   waitForHydration,
   visitAndWait,
   type UserInfo,

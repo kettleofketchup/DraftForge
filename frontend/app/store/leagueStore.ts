@@ -6,23 +6,102 @@
  */
 
 import { create } from 'zustand';
+import { fetchLeague, getLeagueUsers } from '~/components/api/api';
 import type { LeagueType } from '~/components/league/schemas';
+import type { UserType } from '~/components/user/types';
+import { getLogger } from '~/lib/logger';
+
+const log = getLogger('leagueStore');
 
 interface LeagueState {
   /** Current league context */
   currentLeague: LeagueType | null;
+  currentLeagueLoading: boolean;
+
+  /** League users (members via LeagueUser) */
+  leagueUsers: UserType[];
+  leagueUsersLoading: boolean;
+  leagueUsersError: string | null;
+  leagueUsersLeagueId: number | null;
 
   /** Actions */
   setCurrentLeague: (league: LeagueType | null) => void;
+  getLeague: (leaguePk: number) => Promise<void>;
   reset: () => void;
+
+  /** League Users Actions */
+  setLeagueUsers: (users: UserType[]) => void;
+  getLeagueUsers: (leagueId: number) => Promise<void>;
+  clearLeagueUsers: () => void;
 }
 
-export const useLeagueStore = create<LeagueState>((set) => ({
+export const useLeagueStore = create<LeagueState>((set, get) => ({
   currentLeague: null,
+  currentLeagueLoading: false,
+  leagueUsers: [],
+  leagueUsersLoading: false,
+  leagueUsersError: null,
+  leagueUsersLeagueId: null,
 
   setCurrentLeague: (league) => set({ currentLeague: league }),
 
-  reset: () => set({ currentLeague: null }),
+  getLeague: async (leaguePk: number) => {
+    // Skip if already loaded for this league
+    if (get().currentLeague?.pk === leaguePk) {
+      log.debug('League already loaded:', leaguePk);
+      return;
+    }
+
+    set({ currentLeagueLoading: true });
+
+    try {
+      const league = await fetchLeague(leaguePk);
+      set({ currentLeague: league, currentLeagueLoading: false });
+      log.debug('League fetched successfully:', league.name);
+    } catch (error) {
+      log.error('Error fetching league:', error);
+      set({ currentLeague: null, currentLeagueLoading: false });
+    }
+  },
+
+  reset: () =>
+    set({
+      currentLeague: null,
+      currentLeagueLoading: false,
+      leagueUsers: [],
+      leagueUsersLoading: false,
+      leagueUsersLeagueId: null,
+      leagueUsersError: null,
+    }),
+
+  setLeagueUsers: (users) => set({ leagueUsers: users }),
+
+  getLeagueUsers: async (leagueId: number) => {
+    // Skip if already loaded for this league
+    if (get().leagueUsersLeagueId === leagueId && get().leagueUsers.length > 0) {
+      log.debug('LeagueUsers already loaded for league:', leagueId);
+      return;
+    }
+
+    set({ leagueUsersLoading: true, leagueUsersError: null, leagueUsersLeagueId: leagueId });
+
+    try {
+      const users = await getLeagueUsers(leagueId);
+      set({ leagueUsers: users, leagueUsersLoading: false });
+      log.debug('LeagueUsers fetched successfully:', users.length, 'users');
+    } catch (error) {
+      log.error('Error fetching league users:', error);
+      set({
+        leagueUsersError:
+          error instanceof Error ? error.message : 'Failed to fetch league users',
+        leagueUsersLoading: false,
+        leagueUsers: [],
+      });
+    }
+  },
+
+  clearLeagueUsers: () =>
+    set({ leagueUsers: [], leagueUsersLeagueId: null, leagueUsersError: null }),
 }));
 
 // Selectors
@@ -35,4 +114,13 @@ export const leagueSelectors = {
 
   /** Check if league is set */
   hasLeague: (s: LeagueState) => s.currentLeague !== null,
+
+  /** Check if league is loading */
+  isLoading: (s: LeagueState) => s.currentLeagueLoading,
+
+  /** Get league users */
+  leagueUsers: (s: LeagueState) => s.leagueUsers,
+
+  /** Check if league users are loading */
+  isLoadingLeagueUsers: (s: LeagueState) => s.leagueUsersLoading,
 };

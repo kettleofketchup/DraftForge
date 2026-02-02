@@ -1,14 +1,18 @@
+/**
+ * Authentication utilities for Playwright tests.
+ *
+ * Reference: docs/testing/auth/fixtures.md
+ * If you update these fixtures, also update the documentation!
+ *
+ * Ports the Cypress login commands to Playwright.
+ */
+
 import { test as base, expect, BrowserContext, Page } from '@playwright/test';
 
 // Use localhost by default (matches playwright.config.ts baseURL)
 // Can be overridden with DOCKER_HOST for running inside Docker containers
 export const DOCKER_HOST = process.env.DOCKER_HOST || 'localhost';
 export const API_URL = `https://${DOCKER_HOST}/api`;
-
-/**
- * Authentication utilities for Playwright tests.
- * Ports the Cypress login commands to Playwright.
- */
 
 export interface UserInfo {
   pk: number;
@@ -249,6 +253,153 @@ export async function loginUser(context: BrowserContext): Promise<void> {
 }
 
 /**
+ * Login as user_claimer - for testing claim/merge flow.
+ * This user has the same Steam ID as claimable_profile.
+ * Also ensures claimable_profile exists in the database.
+ */
+export async function loginUserClaimer(context: BrowserContext): Promise<void> {
+  const url = `${API_URL}/tests/login-user-claimer/`;
+  console.log(`[auth] loginUserClaimer: POST ${url}`);
+
+  const response = await context.request.post(url);
+
+  if (!response.ok()) {
+    const status = response.status();
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    console.error(`[auth] loginUserClaimer FAILED: ${status} - ${body}`);
+    throw new Error(`loginUserClaimer failed: ${status} - ${body.slice(0, 500)}`);
+  }
+
+  console.log(`[auth] loginUserClaimer: OK (${response.status()})`);
+
+  const cookies = response.headers()['set-cookie'];
+  if (cookies) {
+    await setSessionCookies(context, cookies);
+  }
+}
+
+/**
+ * Login as organization admin.
+ */
+export async function loginOrgAdmin(context: BrowserContext): Promise<void> {
+  const url = `${API_URL}/tests/login-org-admin/`;
+  console.log(`[auth] loginOrgAdmin: POST ${url}`);
+
+  const response = await context.request.post(url);
+
+  if (!response.ok()) {
+    const status = response.status();
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    console.error(`[auth] loginOrgAdmin FAILED: ${status} - ${body}`);
+    throw new Error(`loginOrgAdmin failed: ${status} - ${body.slice(0, 500)}`);
+  }
+
+  console.log(`[auth] loginOrgAdmin: OK (${response.status()})`);
+
+  const cookies = response.headers()['set-cookie'];
+  if (cookies) {
+    await setSessionCookies(context, cookies);
+  }
+}
+
+/**
+ * Login as organization staff.
+ */
+export async function loginOrgStaff(context: BrowserContext): Promise<void> {
+  const url = `${API_URL}/tests/login-org-staff/`;
+  console.log(`[auth] loginOrgStaff: POST ${url}`);
+
+  const response = await context.request.post(url);
+
+  if (!response.ok()) {
+    const status = response.status();
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    console.error(`[auth] loginOrgStaff FAILED: ${status} - ${body}`);
+    throw new Error(`loginOrgStaff failed: ${status} - ${body.slice(0, 500)}`);
+  }
+
+  console.log(`[auth] loginOrgStaff: OK (${response.status()})`);
+
+  const cookies = response.headers()['set-cookie'];
+  if (cookies) {
+    await setSessionCookies(context, cookies);
+  }
+}
+
+/**
+ * Login as league admin.
+ */
+export async function loginLeagueAdmin(context: BrowserContext): Promise<void> {
+  const url = `${API_URL}/tests/login-league-admin/`;
+  console.log(`[auth] loginLeagueAdmin: POST ${url}`);
+
+  const response = await context.request.post(url);
+
+  if (!response.ok()) {
+    const status = response.status();
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    console.error(`[auth] loginLeagueAdmin FAILED: ${status} - ${body}`);
+    throw new Error(`loginLeagueAdmin failed: ${status} - ${body.slice(0, 500)}`);
+  }
+
+  console.log(`[auth] loginLeagueAdmin: OK (${response.status()})`);
+
+  const cookies = response.headers()['set-cookie'];
+  if (cookies) {
+    await setSessionCookies(context, cookies);
+  }
+}
+
+/**
+ * Login as league staff.
+ */
+export async function loginLeagueStaff(context: BrowserContext): Promise<void> {
+  const url = `${API_URL}/tests/login-league-staff/`;
+  console.log(`[auth] loginLeagueStaff: POST ${url}`);
+
+  const response = await context.request.post(url);
+
+  if (!response.ok()) {
+    const status = response.status();
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    console.error(`[auth] loginLeagueStaff FAILED: ${status} - ${body}`);
+    throw new Error(`loginLeagueStaff failed: ${status} - ${body.slice(0, 500)}`);
+  }
+
+  console.log(`[auth] loginLeagueStaff: OK (${response.status()})`);
+
+  const cookies = response.headers()['set-cookie'];
+  if (cookies) {
+    await setSessionCookies(context, cookies);
+  }
+}
+
+/**
  * Parse and set session cookies from response headers.
  */
 async function setSessionCookies(
@@ -315,6 +466,11 @@ export const test = base.extend<{
   loginAdmin: () => Promise<void>;
   loginStaff: () => Promise<void>;
   loginUser: () => Promise<void>;
+  loginUserClaimer: () => Promise<void>;
+  loginOrgAdmin: () => Promise<void>;
+  loginOrgStaff: () => Promise<void>;
+  loginLeagueAdmin: () => Promise<void>;
+  loginLeagueStaff: () => Promise<void>;
   waitForHydration: () => Promise<void>;
   visitAndWait: (url: string) => Promise<void>;
 }>({
@@ -341,6 +497,21 @@ export const test = base.extend<{
   },
   loginUser: async ({ context }, use) => {
     await use(() => loginUser(context));
+  },
+  loginUserClaimer: async ({ context }, use) => {
+    await use(() => loginUserClaimer(context));
+  },
+  loginOrgAdmin: async ({ context }, use) => {
+    await use(() => loginOrgAdmin(context));
+  },
+  loginOrgStaff: async ({ context }, use) => {
+    await use(() => loginOrgStaff(context));
+  },
+  loginLeagueAdmin: async ({ context }, use) => {
+    await use(() => loginLeagueAdmin(context));
+  },
+  loginLeagueStaff: async ({ context }, use) => {
+    await use(() => loginLeagueStaff(context));
   },
   waitForHydration: async ({ page }, use) => {
     await use(() => waitForHydration(page));

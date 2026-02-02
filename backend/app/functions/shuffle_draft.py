@@ -10,19 +10,54 @@ from app.models import DraftEvent
 MAX_TEAM_SIZE = 5
 
 
-def get_team_total_mmr(team) -> int:
+def get_user_org_mmr(user, organization) -> int:
+    """
+    Get a user's MMR from their OrgUser membership.
+
+    Args:
+        user: CustomUser model instance
+        organization: Organization model instance
+
+    Returns:
+        MMR as integer, or 0 if no OrgUser exists
+    """
+    from org.models import OrgUser
+
+    try:
+        org_user = OrgUser.objects.get(user=user, organization=organization)
+        return org_user.mmr or 0
+    except OrgUser.DoesNotExist:
+        return 0
+
+
+def get_team_total_mmr(team, organization=None) -> int:
     """
     Calculate total MMR for a team (captain + members).
 
     Args:
         team: Team model instance
+        organization: Organization model instance (if None, gets from team's tournament)
 
     Returns:
         Total MMR as integer
     """
-    total = team.captain.mmr or 0 if team.captain else 0
+    # Get organization from team's tournament's league if not provided
+    if organization is None:
+        tournament = team.tournament
+        if tournament and tournament.league:
+            organization = tournament.league.organization
+
+    # If still no organization, fall back to direct user.mmr (legacy behavior)
+    if organization is None:
+        total = team.captain.mmr or 0 if team.captain else 0
+        for member in team.members.exclude(id=team.captain_id):
+            total += member.mmr or 0
+        return total
+
+    # Use OrgUser MMR
+    total = get_user_org_mmr(team.captain, organization) if team.captain else 0
     for member in team.members.exclude(id=team.captain_id):
-        total += member.mmr or 0
+        total += get_user_org_mmr(member, organization)
     return total
 
 

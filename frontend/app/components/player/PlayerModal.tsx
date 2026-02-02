@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { toast } from 'sonner';
+import { claimUserProfile, fetchUser } from '~/components/api/api';
 import { Badge } from '~/components/ui/badge';
 import { ViewIconButton } from '~/components/ui/buttons';
 import { InfoDialog } from '~/components/ui/dialogs';
+import { LeagueStatsCard } from '~/components/user/LeagueStatsCard';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import { useUserStore } from '~/store/userStore';
-import { LeagueStatsCard } from '~/components/user/LeagueStatsCard';
 import { useUserLeagueStats } from '~/features/leaderboard/queries';
-import { fetchUser } from '~/components/api/api';
 import { getLogger } from '~/lib/logger';
+import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('PlayerModal');
 
@@ -33,11 +34,22 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
 }) => {
   const navigate = useNavigate();
   const currentUser = useUserStore((state) => state.currentUser);
+  const setCurrentUser = useUserStore((state) => state.setCurrentUser);
   const canEdit = currentUser?.is_staff || currentUser?.is_superuser;
 
   // Fetch full user data for editing (player prop may have partial data from herodraft)
   const [fullUserData, setFullUserData] = useState<UserType | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
+  const [isClaiming, setIsClaiming] = useState(false);
+
+  // Can claim if: target HAS steamid (manually added profile with steam identifier),
+  // target has NO discordId (can't log in), and current user HAS discordId (can log in).
+  // Note: steamid is unique in the database. Claiming merges the profile.
+  const canClaimProfile =
+    player.steamid &&
+    !player.discordId &&
+    currentUser?.discordId &&
+    currentUser?.pk !== player.pk;
 
   // Fetch league stats if leagueId is provided
   // TODO: Update useUserLeagueStats to accept leagueId parameter when backend supports it
@@ -79,9 +91,31 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
     }
   };
 
+  const handleClaimProfile = async () => {
+    if (!player.pk || !currentUser?.pk) return;
+
+    setIsClaiming(true);
+    toast.promise(
+      claimUserProfile(player.pk),
+      {
+        loading: 'Claiming profile...',
+        success: (updatedUser) => {
+          // Update current user with merged data
+          setCurrentUser(updatedUser);
+          onOpenChange(false);
+          return `Profile claimed! Your Steam data has been linked.`;
+        },
+        error: (err) => {
+          log.error('Failed to claim profile', err);
+          return err?.response?.data?.error || 'Failed to claim profile';
+        },
+      }
+    ).finally(() => setIsClaiming(false));
+  };
+
   const goToDotabuff = () => {
-    if (!displayPlayer.steamid) return '#';
-    return `https://www.dotabuff.com/players/${encodeURIComponent(String(displayPlayer.steamid))}`;
+    if (!displayPlayer.steam_account_id) return '#';
+    return `https://www.dotabuff.com/players/${encodeURIComponent(String(displayPlayer.steam_account_id))}`;
   };
 
   return (
@@ -181,24 +215,43 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
           </div>
         )}
 
-        {/* Dotabuff link */}
-        {displayPlayer.steamid && (
-          <div className="pt-2">
+        {/* Action buttons */}
+        <div className="pt-2 flex gap-2">
+          {/* Dotabuff link */}
+          {displayPlayer.steam_account_id && (
             <a
-              className="flex items-center justify-center btn btn-sm btn-outline w-full"
+              className="flex items-center justify-center btn btn-sm btn-outline flex-1 gap-1"
               href={goToDotabuff()}
               target="_blank"
               rel="noopener noreferrer"
             >
               <img
                 src="https://cdn.brandfetch.io/idKrze_WBi/w/96/h/96/theme/dark/logo.png?c=1dxbfHSJFAPEGdCLU4o5B"
-                alt="Dotabuff Logo"
-                className="w-4 h-4 mr-2"
+                alt="Dotabuff"
+                className="w-4 h-4"
               />
-              Dotabuff Profile
+              Dotabuff
             </a>
-          </div>
-        )}
+          )}
+
+          {/* Claim Profile button */}
+          {canClaimProfile && (
+            <button
+              className="flex items-center justify-center btn btn-sm btn-primary flex-1 gap-1"
+              onClick={handleClaimProfile}
+              disabled={isClaiming}
+              data-testid={`claim-profile-modal-btn-${displayPlayer.pk}`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <line x1="19" x2="19" y1="8" y2="14" />
+                <line x1="22" x2="16" y1="11" y2="11" />
+              </svg>
+              {isClaiming ? 'Claiming...' : 'Claim Profile'}
+            </button>
+          )}
+        </div>
       </div>
     </InfoDialog>
   );
