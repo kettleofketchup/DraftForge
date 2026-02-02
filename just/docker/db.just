@@ -10,7 +10,7 @@ build:
     cd {{root}}
 
     HASH=$(./scripts/hash-test-db-sources.sh)
-    EXISTING=$(docker inspect --format='{{{{.Config.Labels.org.draftforge.test-db.content-hash}}}}' {{image}} 2>/dev/null || echo "")
+    EXISTING=$(docker inspect --format='{{{{index .Config.Labels "org.draftforge.test-db.content-hash"}}' {{image}} 2>/dev/null || echo "")
 
     if [[ "$HASH" == "$EXISTING" ]]; then
         echo "Test DB image up-to-date (hash: ${HASH:0:12}...)"
