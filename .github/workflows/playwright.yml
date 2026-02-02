@@ -49,9 +49,10 @@ jobs:
       run: poetry install --no-interaction --no-ansi
 
     - name: Run bracket tests
-      run: poetry run python backend/manage.py test app.tests.test_bracket -v 2
+      run: poetry run python manage.py test app.tests.test_bracket -v 2
+      working-directory: backend
       env:
-        DATABASE_URL: sqlite:///backend/test.db.sqlite3
+        DATABASE_URL: sqlite:///test.db.sqlite3
         DJANGO_SETTINGS_MODULE: config.settings
 
   playwright:
