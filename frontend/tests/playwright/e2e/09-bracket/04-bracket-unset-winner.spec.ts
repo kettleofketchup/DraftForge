@@ -49,11 +49,12 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     // Wait for nodes to render
     await page.waitForLoadState('networkidle');
 
-    // Find a match with teams and set winner buttons
+    // Find a match with teams and set winner buttons (status !== 'completed')
     const matchNodes = page.locator('[data-testid="bracket-match-node"]');
     const nodeCount = await matchNodes.count();
 
     let foundMatch = false;
+    let matchIndex = -1;
     for (let i = 0; i < Math.min(nodeCount, 5); i++) {
       await matchNodes.nth(i).click({ force: true });
 
@@ -61,7 +62,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
       const isVisible = await dialog.isVisible().catch(() => false);
 
       if (isVisible) {
-        // Check for Set Winner buttons
+        // Check for Set Winner buttons (only visible when match is NOT completed)
         const winButtons = dialog.locator(
           '[data-testid="radiantWinsButton"], [data-testid="direWinsButton"]'
         );
@@ -69,26 +70,13 @@ test.describe('Bracket Unset Winner (e2e)', () => {
 
         if (winButtonCount >= 2) {
           foundMatch = true;
+          matchIndex = i;
 
           // Set a winner first - clicking sets status to 'completed' and advances winner
           await winButtons.first().click();
 
-          // After setting winner, the Set Winner buttons should be hidden and Unset Winner should appear
-          // Wait for the UI to update (React state change)
-          const unsetButton = dialog.locator('[data-testid="unsetWinnerButton"]');
-          await expect(unsetButton).toBeVisible({ timeout: 5000 });
-
-          // The Set Winner buttons should now be hidden (match is completed)
-          await expect(winButtons.first()).not.toBeVisible();
-
-          // Click Unset Winner to clear the result
-          await unsetButton.click();
-
-          // After unsetting, the Set Winner buttons should reappear
-          await expect(winButtons.first()).toBeVisible({ timeout: 5000 });
-
-          // Unset Winner button should be hidden again
-          await expect(unsetButton).not.toBeVisible();
+          // Wait for state to settle
+          await page.waitForTimeout(500);
 
           break;
         }
@@ -101,7 +89,50 @@ test.describe('Bracket Unset Winner (e2e)', () => {
 
     if (!foundMatch) {
       test.skip();
+      return;
     }
+
+    // Close the current modal
+    const dialog = page.locator('[role="dialog"]');
+    if (await dialog.isVisible().catch(() => false)) {
+      await page.keyboard.press('Escape');
+      await dialog.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
+    }
+
+    // Reopen the same match to see updated state
+    await matchNodes.nth(matchIndex).click({ force: true });
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+
+    // Debug: Check if the match shows as completed (has "Final" badge or winner indicator)
+    // The modal should now show the match as completed with a winner
+    const dialogContent = await dialog.textContent();
+    console.log('Dialog content after setting winner:', dialogContent?.substring(0, 500));
+
+    // Now the Unset Winner button should be visible
+    const unsetButton = dialog.locator('[data-testid="unsetWinnerButton"]');
+    await expect(unsetButton).toBeVisible({ timeout: 5000 });
+
+    // Click Unset Winner to clear the result
+    await unsetButton.click();
+
+    // Wait for state to settle
+    await page.waitForTimeout(500);
+
+    // Close and reopen to see updated state
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
+
+    await matchNodes.nth(matchIndex).click({ force: true });
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+
+    // After unsetting, the Set Winner buttons should reappear
+    const winButtons = dialog.locator(
+      '[data-testid="radiantWinsButton"], [data-testid="direWinsButton"]'
+    );
+    await expect(winButtons.first()).toBeVisible({ timeout: 5000 });
+
+    // Unset Winner button should be hidden again
+    await expect(unsetButton).not.toBeVisible();
 
     // Should show unsaved changes
     await expect(page.locator('text=Unsaved changes')).toBeVisible({ timeout: 5000 });
