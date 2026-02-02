@@ -525,3 +525,101 @@ class ManualPlacementOverrideTest(TestCase):
         )
 
         self.assertEqual(response.status_code, 404)
+
+
+class UnsetWinnerTest(TestCase):
+    """Test advance_winner with winner=null to unset winner."""
+
+    def setUp(self):
+        """Create test data."""
+        self.admin = CustomUser.objects.create_superuser(
+            username="admin",
+            password="admin123",
+            email="admin@test.com",
+        )
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament",
+            date_played=date.today(),
+        )
+        self.captain1 = CustomUser.objects.create_user(username="cap1", password="test")
+        self.captain2 = CustomUser.objects.create_user(username="cap2", password="test")
+        self.team1 = Team.objects.create(
+            name="Team 1",
+            captain=self.captain1,
+            tournament=self.tournament,
+        )
+        self.team2 = Team.objects.create(
+            name="Team 2",
+            captain=self.captain2,
+            tournament=self.tournament,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+
+    def test_advance_winner_unset_clears_winner(self):
+        """Test that advance_winner with winner=null clears the winner."""
+        # Create a completed game with team1 as winner
+        game = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="losers",
+            round=1,
+            position=0,
+            radiant_team=self.team1,
+            dire_team=self.team2,
+            winning_team=self.team1,
+            status="completed",
+        )
+        # Loser (team2) got placement from previous advance
+        self.team2.placement = 3
+        self.team2.save()
+
+        # Call advance_winner with None to unset
+        response = self.client.post(
+            f"/api/bracket/games/{game.pk}/advance-winner/",
+            {"winner": None},
+            format="json",
+        )
+
+        # Assert success
+        self.assertEqual(response.status_code, 200)
+
+        # Refresh from DB
+        game.refresh_from_db()
+        self.team2.refresh_from_db()
+
+        # Winner should be cleared
+        self.assertIsNone(game.winning_team)
+        # Status should be reset to scheduled
+        self.assertEqual(game.status, "scheduled")
+        # Loser's placement should be cleared
+        self.assertIsNone(self.team2.placement)
+
+    def test_advance_winner_unset_when_no_previous_winner(self):
+        """Test that advance_winner with winner=null works when no winner set."""
+        # Create a game with no winner
+        game = Game.objects.create(
+            tournament=self.tournament,
+            bracket_type="winners",
+            round=1,
+            position=0,
+            radiant_team=self.team1,
+            dire_team=self.team2,
+            status="scheduled",
+        )
+
+        # Call advance_winner with None
+        response = self.client.post(
+            f"/api/bracket/games/{game.pk}/advance-winner/",
+            {"winner": None},
+            format="json",
+        )
+
+        # Should still succeed
+        self.assertEqual(response.status_code, 200)
+
+        # Refresh from DB
+        game.refresh_from_db()
+
+        # Winner should remain None
+        self.assertIsNone(game.winning_team)
+        self.assertEqual(game.status, "scheduled")
