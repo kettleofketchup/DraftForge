@@ -2,6 +2,7 @@
 
 root := source_directory() / "../.."
 image := "draftforge/test-db:latest"
+inv := ". " + root / ".venv/bin/activate && cd " + root + " && inv"
 
 [group('docker::db')]
 build:
@@ -18,8 +19,16 @@ build:
     fi
 
     echo "Hash changed, rebuilding test DB..."
-    just db::populate::all
-    docker build -f docker/Dockerfile.test-db \
+    # Run populate directly (not via just, to avoid circular dependency)
+    {{inv}} db.populate.all
+
+    # Build using temp context to avoid .dockerignore excluding sqlite files
+    TMPDIR=$(mktemp -d)
+    trap "rm -rf $TMPDIR" EXIT
+    cp backend/test.db.sqlite3 "$TMPDIR/"
+    cp docker/Dockerfile.test-db "$TMPDIR/Dockerfile"
+
+    docker build "$TMPDIR" \
         --build-arg CONTENT_HASH="$HASH" \
-        -t {{image}} .
+        -t {{image}}
     echo "Built {{image}} (hash: ${HASH:0:12}...)"
