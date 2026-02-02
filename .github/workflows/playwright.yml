@@ -59,6 +59,9 @@ jobs:
     - name: Install Python dependencies
       run: poetry install --no-interaction --no-ansi
 
+    - name: Set up Just
+      uses: extractions/setup-just@v2
+
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
@@ -102,41 +105,33 @@ jobs:
 
     - name: Get test database
       run: |
-        # Compute content hash to find exact matching image
-        HASH=$(./scripts/hash-test-db-sources.sh)
-        echo "Content hash: $HASH"
+        # Strategy 1: Try to pull from GHCR (hash first, then latest)
+        if just docker::db::pull; then
+          just db::reset-test
 
-        # Strategy 1: Try to pull exact hash-tagged image (fastest - no migrations needed)
-        if docker pull ${{ env.IMAGE_PREFIX }}/test-db:$HASH 2>/dev/null; then
-          echo "✓ Found exact match for hash $HASH"
-          docker create --name test-db-container ${{ env.IMAGE_PREFIX }}/test-db:$HASH
-          docker cp test-db-container:/data/test.db.sqlite3 backend/test.db.sqlite3
-          docker rm test-db-container
-          echo "Using pre-populated test database (exact hash match)"
-          exit 0
-        fi
+          # Check if we got exact hash match or need migrations
+          HASH=$(just docker::db::hash)
+          EXISTING=$(docker inspect --format='{{index .Config.Labels "org.draftforge.test-db.content-hash"}}' draftforge/test-db:latest 2>/dev/null || echo "")
 
-        # Strategy 2: Try latest + migrations (if hash-tagged version not available)
-        echo "Hash-tagged image not found, trying latest + migrations..."
-        if docker pull ${{ env.IMAGE_PREFIX }}/test-db:latest 2>/dev/null; then
-          echo "Extracting pre-populated test database..."
-          docker create --name test-db-container ${{ env.IMAGE_PREFIX }}/test-db:latest
-          docker cp test-db-container:/data/test.db.sqlite3 backend/test.db.sqlite3
-          docker rm test-db-container
+          if [[ "$HASH" == "$EXISTING" ]]; then
+            echo "✓ Exact hash match - no migrations needed"
+            exit 0
+          fi
 
-          echo "Running migrations on top..."
-          if poetry run inv db.migrate.test; then
-            echo "Using pre-populated test database with migrations applied"
+          # Got latest, need to run migrations
+          echo "Running migrations on top of latest..."
+          if just db::migrate::test; then
+            echo "✓ Using pre-populated test database with migrations applied"
             exit 0
           else
-            echo "Migrations failed, falling back to full populate..."
+            echo "✗ Migrations failed, falling back to full populate..."
             rm -f backend/test.db.sqlite3
           fi
         fi
 
-        # Strategy 3: Fallback - populate from scratch
+        # Strategy 2: Fallback - populate from scratch
         echo "Populating test database from scratch..."
-        poetry run inv db.populate.all
+        just db::populate::fresh
 
     - name: Fix database permissions
       run: |
