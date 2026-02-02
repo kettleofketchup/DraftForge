@@ -3,8 +3,15 @@
 root := source_directory() / "../.."
 inv := ". " + root / ".venv/bin/activate && cd " + root + " && inv"
 
+# Smart populate: builds cached image if needed, then extracts
 [group('db::populate')]
 all:
+    just docker::db::build
+    just db::reset-test
+
+# Force fresh populate (bypasses cache)
+[group('db::populate')]
+fresh:
     {{inv}} db.populate.all
 
 [group('db::populate')]

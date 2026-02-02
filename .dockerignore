@@ -3,5 +3,3 @@
 .vscode
 *.sqlite3
 **/*.sqlite3
-# Exception for test-db image build
-!backend/test.db.sqlite3
