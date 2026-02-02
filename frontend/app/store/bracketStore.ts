@@ -3,8 +3,8 @@ import type { Node, Edge } from '@xyflow/react';
 import type { BracketMatch, SeedingMethod } from '~/components/bracket/types';
 import type { TeamType } from '~/components/tournament/types.d';
 import { generateBracket, reseedBracket } from '~/components/bracket/utils/bracketFactory';
-import { api } from '~/components/api/axios';
-import { BracketResponseSchema, type BracketMatchDTO as ApiBracketMatch } from '~/components/bracket/schemas';
+import { saveBracket as saveBracketAPI, loadBracket as loadBracketAPI } from '~/components/api/bracketAPI';
+import type { BracketMatchDTO as ApiBracketMatch } from '~/components/bracket/schemas';
 import { getLogger } from '~/lib/logger';
 
 const log = getLogger('bracketStore');
@@ -210,14 +210,9 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
     log.debug('Saving bracket', { tournamentId });
     set({ isLoading: true });
     try {
-      const response = await api.post(`/bracket/tournaments/${tournamentId}/save/`, {
-        matches: get().matches,
-      });
-      // Parse response to get saved matches with their new gameId (pk) values
-      const data = BracketResponseSchema.parse(response.data);
+      const data = await saveBracketAPI(tournamentId, get().matches);
       const savedMatches = data.matches.map(m => mapApiMatchToMatch(m, data.matches));
 
-      // Update state with saved matches (now have gameId from backend)
       set({
         matches: savedMatches,
         isDirty: false,
@@ -227,7 +222,7 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
       log.debug('Bracket saved successfully', { matchCount: savedMatches.length });
     } catch (error) {
       log.error('Failed to save bracket', error);
-      set({ isLoading: false }); // Ensure loading is reset on error
+      set({ isLoading: false });
       throw error;
     }
   },
@@ -249,8 +244,7 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
     }
 
     try {
-      const response = await api.get(`/bracket/tournaments/${tournamentId}/`);
-      const data = BracketResponseSchema.parse(response.data);
+      const data = await loadBracketAPI(tournamentId);
 
       // Check if user made changes during fetch - don't overwrite their work
       if (get().isDirty) {
