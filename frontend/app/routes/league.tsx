@@ -68,10 +68,10 @@ export default function LeaguePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  // Set org context from league's organizations
+  // Set org context from league's organization
   useEffect(() => {
     if (league) {
-      const org = league.organizations?.[0] ?? null;
+      const org = league.organization ?? null;
       useOrgStore.getState().setCurrentOrg(org);
     }
 
@@ -87,9 +87,11 @@ export default function LeaguePage() {
   };
 
   // Filter tournaments for this league
-  const leagueTournaments = tournaments?.filter(
-    (t) => t.league === pk
-  ) || [];
+  // league can be a number (ID) or object (from list endpoint with pk, name, organization_name)
+  const leagueTournaments = tournaments?.filter((t) => {
+    const leagueId = typeof t.league === 'object' ? t.league?.pk : t.league;
+    return leagueId === pk || t.league_pk === pk;
+  }) || [];
 
   // Permission check for edit - includes org admins via useIsLeagueAdmin
   const canEdit = useIsLeagueAdmin(league);
