@@ -68,7 +68,10 @@ export function UserSearchInput({
     [onSelect]
   );
 
+  // Show dropdown when typing enough characters
+  // Use debouncedQuery for consistency with query enabled state
   const showDropdown = isOpen && query.length >= 3;
+  const isSearchReady = debouncedQuery.length >= 3;
 
   return (
     <div className="relative">
@@ -101,12 +104,10 @@ export function UserSearchInput({
           ref={dropdownRef}
           className="absolute z-50 w-full mt-1 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto"
         >
-          {query.length < 3 ? (
-            <div className="p-3 text-sm text-gray-500">Type at least 3 characters...</div>
-          ) : isFetching ? (
+          {!isSearchReady || isFetching ? (
             <div className="p-3 text-sm text-gray-500 flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Searching...
+              {!isSearchReady ? 'Waiting...' : 'Searching...'}
             </div>
           ) : filteredResults.length === 0 ? (
             <div className="p-3 text-sm text-gray-500">No users found</div>
