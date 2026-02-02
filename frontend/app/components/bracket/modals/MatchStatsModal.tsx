@@ -46,7 +46,7 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
   const isStaff = useUserStore((state) => state.isStaff());
   const currentUser = useUserStore((state) => state.currentUser);
   const tournament = useUserStore((state) => state.tournament);
-  const { setMatchWinner, advanceWinner, loadBracket } = useBracketStore();
+  const { setMatchWinner, advanceWinner, loadBracket, unsetMatchWinner } = useBracketStore();
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -62,6 +62,10 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
   const handleSetWinner = (winner: 'radiant' | 'dire') => {
     setMatchWinner(match.id, winner);
     advanceWinner(match.id);
+  };
+
+  const handleUnsetWinner = () => {
+    unsetMatchWinner(match.id);
   };
 
   const handleLinkUpdated = () => {
@@ -197,6 +201,21 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
                   {match.direTeam.captain ? DisplayName(match.direTeam.captain) : match.direTeam.name} Wins
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Unset Winner - only show if match has winner */}
+          {isStaff && match.status === 'completed' && match.winner && (
+            <div className="border-t pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleUnsetWinner}
+                data-testid="unsetWinnerButton"
+              >
+                <RotateCcw className="w-4 h-4 mr-1" />
+                Unset Winner
+              </Button>
             </div>
           )}
 
