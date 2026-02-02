@@ -103,6 +103,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "app.apps.AppConfig",
+    "org.apps.OrgConfig",
+    "league.apps.LeagueConfig",
     "social_django",
     "rest_framework",
     "django_jinja",
@@ -296,6 +298,9 @@ if not env_bool("DISABLE_CACHE"):
         "app.draft": {"ops": "all", "timeout": 60 * 60},
         "app.game": {"ops": "all", "timeout": 60 * 60},
         "app.draftround": {"ops": "all", "timeout": 60 * 60},
+        # Organization/League membership models
+        "org.orguser": {"ops": "all", "timeout": 60 * 60},
+        "league.leagueuser": {"ops": "all", "timeout": 60 * 60},
         # Steam match data - cached with shorter timeout for freshness
         "steam.match": {"ops": "all", "timeout": 30 * 60},
         "steam.playermatchstats": {"ops": "all", "timeout": 30 * 60},
@@ -312,6 +317,8 @@ else:
         "app.draft": {"ops": (), "timeout": 0},
         "app.game": {"ops": (), "timeout": 0},
         "app.draftround": {"ops": (), "timeout": 0},
+        "org.orguser": {"ops": (), "timeout": 0},
+        "league.leagueuser": {"ops": (), "timeout": 0},
         "steam.match": {"ops": (), "timeout": 0},
         "steam.playermatchstats": {"ops": (), "timeout": 0},
     }

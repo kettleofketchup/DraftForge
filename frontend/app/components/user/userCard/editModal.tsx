@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useState } from 'react';
 import type { UserClassType, UserType } from '~/components/user/types';
 
+import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 
 import { Button } from '~/components/ui/button';
@@ -36,18 +37,19 @@ export const UserEditModalDialog: React.FC<DialogProps> = memo(
     const [isSaving, setIsSaving] = useState(false);
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
     const setUser = useUserStore((state) => state.setUser);
+    const currentOrg = useOrgStore((s) => s.currentOrg);
 
     const onSubmit = (e: React.FormEvent) => {
       e.preventDefault();
       handleSave(e, {
         user: {} as UserClassType,
-
         form,
         setForm,
         setErrorMessage,
         setIsSaving,
         setStatusMsg,
         setUser,
+        organizationId: currentOrg?.pk ?? null,
       });
       setForm({} as UserType); // Reset form after
     };
@@ -79,6 +81,7 @@ export const UserEditModalDialog: React.FC<DialogProps> = memo(
                     setIsSaving,
                     setStatusMsg,
                     setUser,
+                    organizationId: currentOrg?.pk ?? null,
                   });
                 }}
               >

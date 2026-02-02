@@ -35,6 +35,7 @@ from .models import (
     Game,
     League,
     Organization,
+    ProfileClaimRequest,
     Team,
     Tournament,
 )
@@ -229,6 +230,101 @@ class UserView(viewsets.ModelViewSet):
         except CustomUser.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
+    @action(detail=True, methods=["post"])
+    def claim(self, request, pk=None):
+        """
+        Request to claim a user profile.
+
+        Use case: An org admin manually added a player with just their Steam ID.
+        Later, that player logs in via Discord and wants to claim their profile.
+
+        Requirements:
+        - Current user must be authenticated (has Discord ID)
+        - Target user must have a Steam ID (the profile to claim)
+        - Target user must NOT have a Discord ID (not already claimed)
+        - Target user must be a member of at least one organization
+        - Current user must be different from target user
+
+        Creates a ProfileClaimRequest that must be approved by an org admin.
+        """
+        from org.models import OrgUser
+
+        current_user = request.user
+        if not current_user.is_authenticated:
+            return Response(
+                {"error": "Authentication required"},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        target_user = self.get_object()
+
+        if target_user.pk == current_user.pk:
+            return Response(
+                {"error": "Cannot claim your own profile"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Target must have Steam ID (the valuable data to claim)
+        if not target_user.steamid:
+            return Response(
+                {"error": "Target profile has no Steam ID to claim"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Target must not have Discord ID (would mean it's already claimed/owned)
+        if target_user.discordId:
+            return Response(
+                {
+                    "error": "Cannot claim a profile that already has a Discord account linked"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # If current user already has a Steam ID, it must match target's
+        if current_user.steamid and current_user.steamid != target_user.steamid:
+            return Response(
+                {"error": "Your account already has a different Steam ID linked"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Target must be a member of at least one organization
+        org_membership = OrgUser.objects.filter(user=target_user).first()
+        if not org_membership:
+            return Response(
+                {"error": "Target profile is not a member of any organization"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check for existing pending request
+        existing_request = ProfileClaimRequest.objects.filter(
+            claimer=current_user,
+            target_user=target_user,
+            status=ProfileClaimRequest.Status.PENDING,
+        ).first()
+
+        if existing_request:
+            return Response(
+                {"error": "You already have a pending claim request for this profile"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create the claim request
+        claim_request = ProfileClaimRequest.objects.create(
+            claimer=current_user,
+            target_user=target_user,
+            organization=org_membership.organization,
+            status=ProfileClaimRequest.Status.PENDING,
+        )
+
+        return Response(
+            {
+                "message": "Claim request submitted. An organization admin will review your request.",
+                "request_id": claim_request.pk,
+                "status": claim_request.status,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
 
 @permission_classes((IsStaff,))
 class TournamentView(viewsets.ModelViewSet):
@@ -250,7 +346,7 @@ class TournamentView(viewsets.ModelViewSet):
         org_id = self.request.query_params.get("organization")
         league_id = self.request.query_params.get("league")
         if org_id:
-            queryset = queryset.filter(league__organizations__pk=org_id)
+            queryset = queryset.filter(league__organization__pk=org_id)
         if league_id:
             queryset = queryset.filter(league_id=league_id)
         return queryset
@@ -807,18 +903,17 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
     serializer_class = TournamentListSerializer
 
     def get_queryset(self):
-        """Annotate user_count and prefetch league/orgs for efficiency."""
+        """Annotate user_count and prefetch league/org for efficiency."""
         qs = (
-            Tournament.objects.select_related("league")
-            .prefetch_related("league__organizations")
+            Tournament.objects.select_related("league", "league__organization")
             .annotate(user_count=Count("users", distinct=True))
             .order_by("-date_played")
         )
 
-        # Filter by organization (League has M2M to Organization)
+        # Filter by organization (League has FK to Organization)
         org_id = self.request.query_params.get("organization")
         if org_id:
-            qs = qs.filter(league__organizations__id=org_id)
+            qs = qs.filter(league__organization__id=org_id)
 
         # Filter by league
         league_id = self.request.query_params.get("league")
@@ -861,6 +956,7 @@ class OrganizationView(viewsets.ModelViewSet):
             .annotate(
                 league_count=Count("leagues", distinct=True),
                 tournament_count=Count("leagues__tournaments", distinct=True),
+                users_count=Count("members", distinct=True),  # OrgUser memberships
             )
             .order_by("name")
         )
@@ -899,6 +995,26 @@ class OrganizationView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
+    @action(detail=True, methods=["get"])
+    def users(self, request, pk=None):
+        """Get all users who are members of this organization (via OrgUser)."""
+        from org.models import OrgUser
+        from org.serializers import OrgUserSerializer
+
+        org = self.get_object()
+        cache_key = f"organization_users:{pk}"
+
+        @cached_as(OrgUser, CustomUser, extra=cache_key, timeout=60 * 10)
+        def get_data():
+            org_users = OrgUser.objects.filter(organization=org).select_related(
+                "user", "user__positions"
+            )
+            serializer = OrgUserSerializer(org_users, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
+
 
 class LeagueView(viewsets.ModelViewSet):
     """League CRUD endpoints with org filtering."""
@@ -913,16 +1029,18 @@ class LeagueView(viewsets.ModelViewSet):
     def get_queryset(self):
         """Optimize with select_related, prefetch_related, and annotations."""
         queryset = (
-            League.objects.prefetch_related("organizations", "admins", "staff")
+            League.objects.select_related("organization")
+            .prefetch_related("admins", "staff")
             .annotate(
                 tournament_count=Count("tournaments", distinct=True),
+                users_count=Count("members", distinct=True),  # LeagueUser memberships
             )
             .order_by("name")
         )
 
         org_id = self.request.query_params.get("organization")
         if org_id:
-            queryset = queryset.filter(organizations__pk=org_id)
+            queryset = queryset.filter(organization__pk=org_id)
         return queryset
 
     def get_permissions(self):
@@ -1008,6 +1126,26 @@ class LeagueView(viewsets.ModelViewSet):
 
         serializer = LeagueMatchSerializer(games, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=["get"])
+    def users(self, request, pk=None):
+        """Get all users who are members of this league (via LeagueUser)."""
+        from league.models import LeagueUser
+        from league.serializers import LeagueUserSerializer
+
+        league = self.get_object()
+        cache_key = f"league_users:{pk}"
+
+        @cached_as(LeagueUser, CustomUser, extra=cache_key, timeout=60 * 10)
+        def get_data():
+            league_users = LeagueUser.objects.filter(league=league).select_related(
+                "user", "user__positions"
+            )
+            serializer = LeagueUserSerializer(league_users, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
 
 
 class TeamCreateView(generics.CreateAPIView):

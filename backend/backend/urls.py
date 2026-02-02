@@ -64,6 +64,7 @@ from app.views.admin_team import (
 )
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
+from org.views import ClaimRequestViewSet
 
 router = routers.DefaultRouter()
 router.register(r"users", UserView, "users")
@@ -84,6 +85,7 @@ router.register(r"games", GameView, "games")
 
 router.register(r"organizations", app_views.OrganizationView, basename="organization")
 router.register(r"leagues", app_views.LeagueView, basename="league")
+router.register(r"claim-requests", ClaimRequestViewSet, basename="claim-request")
 
 router.register(r"tournaments-basic", TournamentsBasicView, "tournaments-basic")
 router.register(r"tournaments-list", TournamentListView, "tournaments-list")
