@@ -40,13 +40,25 @@ interface MatchStatsModalProps {
   onOpenHeroDraft?: (draftId: number) => void;
 }
 
-export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpenHeroDraft }: MatchStatsModalProps) {
+export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraftId, onOpenHeroDraft }: MatchStatsModalProps) {
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
   const isStaff = useUserStore((state) => state.isStaff());
   const currentUser = useUserStore((state) => state.currentUser);
   const tournament = useUserStore((state) => state.tournament);
-  const { setMatchWinner, advanceWinner, loadBracket, unsetMatchWinner } = useBracketStore();
+
+  // Subscribe to match directly from store for reactive updates
+  const storeMatch = useBracketStore((state) =>
+    matchProp ? state.matches.find(m => m.id === matchProp.id) : null
+  );
+  // Use store match if available (has latest state), otherwise fall back to prop
+  const match = storeMatch ?? matchProp;
+
+  const setMatchWinner = useBracketStore((state) => state.setMatchWinner);
+  const advanceWinner = useBracketStore((state) => state.advanceWinner);
+  const loadBracket = useBracketStore((state) => state.loadBracket);
+  const unsetMatchWinner = useBracketStore((state) => state.unsetMatchWinner);
+
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
