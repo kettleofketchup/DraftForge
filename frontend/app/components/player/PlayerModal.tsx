@@ -42,10 +42,13 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   const [isLoadingUser, setIsLoadingUser] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
 
-  // Can claim if: target has no steamid, current user has steamid, and they're different users
+  // Can claim if: target HAS steamid (manually added profile with steam identifier),
+  // target has NO discordId (can't log in), and current user HAS discordId (can log in).
+  // Note: steamid is unique in the database. Claiming merges the profile.
   const canClaimProfile =
-    !player.steamid &&
-    currentUser?.steamid &&
+    player.steamid &&
+    !player.discordId &&
+    currentUser?.discordId &&
     currentUser?.pk !== player.pk;
 
   // Fetch league stats if leagueId is provided

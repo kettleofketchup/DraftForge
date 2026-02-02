@@ -343,11 +343,13 @@ class Organization(models.Model):
 
 
 class League(models.Model):
-    """League that can belong to multiple organizations, 1:1 with Steam league."""
+    """League belonging to a single organization."""
 
-    organizations = models.ManyToManyField(
+    organization = models.ForeignKey(
         Organization,
+        on_delete=models.CASCADE,
         related_name="leagues",
+        null=True,
         blank=True,
     )
     steam_league_id = models.IntegerField(unique=True)
@@ -436,17 +438,15 @@ class League(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate this specific league and its related organizations
-
+        # Invalidate this specific league and its related organization
         invalidate_obj(self)
-        for org in self.organizations.all():
-            invalidate_obj(org)
+        if self.organization:
+            invalidate_obj(self.organization)
 
     def delete(self, *args, **kwargs):
-        # Invalidate related organizations before deletion
-
-        for org in self.organizations.all():
-            invalidate_obj(org)
+        # Invalidate related organization before deletion
+        if self.organization:
+            invalidate_obj(self.organization)
         super().delete(*args, **kwargs)
 
 
@@ -514,8 +514,8 @@ class Tournament(models.Model):
         invalidate_obj(self)
         if self.league:
             invalidate_obj(self.league)
-            for org in self.league.organizations.all():
-                invalidate_obj(org)
+            if self.league.organization:
+                invalidate_obj(self.league.organization)
 
     class Meta:
         indexes = [
@@ -1817,6 +1817,8 @@ class OrgLog(models.Model):
         ("create", "Create Organization"),
         ("update", "Update Organization"),
         ("delete", "Delete Organization"),
+        ("approve_claim", "Approve Profile Claim"),
+        ("reject_claim", "Reject Profile Claim"),
     ]
 
     organization = models.ForeignKey(
@@ -1906,3 +1908,78 @@ class LeagueLog(models.Model):
     def __str__(self):
         actor_name = self.actor.username if self.actor else "System"
         return f"{actor_name} {self.action} on {self.league.name}"
+
+
+class ProfileClaimRequest(models.Model):
+    """
+    Request to claim a profile (merge a Steam-only profile into a Discord account).
+
+    Flow:
+    1. User with Discord ID sees profile with Steam ID but no Discord
+    2. User clicks "Claim" which creates a pending request
+    3. Org admin reviews and approves/rejects
+    4. If approved, the merge happens and target profile is deleted
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
+    claimer = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.CASCADE,
+        related_name="claim_requests_made",
+        help_text="User requesting to claim the profile (has Discord ID)",
+    )
+    target_user = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="claim_requests_received",
+        help_text="Profile being claimed (has Steam ID, no Discord). NULL after merge.",
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="claim_requests",
+        help_text="Organization where the target profile is a member",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    reviewed_by = models.ForeignKey(
+        "CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="claim_requests_reviewed",
+        help_text="Admin who approved/rejected the request",
+    )
+    rejection_reason = models.TextField(
+        blank=True,
+        help_text="Reason for rejection (if rejected)",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["organization", "status", "-created_at"]),
+            models.Index(fields=["claimer", "status"]),
+        ]
+        # Prevent duplicate pending requests for same claimer+target
+        constraints = [
+            models.UniqueConstraint(
+                fields=["claimer", "target_user"],
+                condition=models.Q(status="pending"),
+                name="unique_pending_claim_request",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.claimer.username} -> {self.target_user.nickname or self.target_user.steamid} ({self.status})"

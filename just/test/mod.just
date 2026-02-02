@@ -7,6 +7,7 @@ mod pw 'pw.just'
 mod backend 'backend.just'
 mod cicd 'cicd.just'
 mod demo 'demo.just'
+mod populate 'populate.just'
 
 [group('test')]
 up:

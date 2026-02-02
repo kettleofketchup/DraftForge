@@ -310,14 +310,12 @@ export function AdminTeamSection({
             </div>
           )}
 
-          {/* Inherited Organizations Note (League only) */}
-          {!isOrgMode && league?.organizations && league.organizations.length > 0 && (
+          {/* Inherited Organization Note (League only) */}
+          {!isOrgMode && league?.organization && (
             <div className="text-sm text-gray-500 bg-base-200 p-3 rounded-lg">
               <p className="font-medium mb-1">Inherited permissions from:</p>
               <ul className="list-disc list-inside">
-                {league.organizations.map((org) => (
-                  <li key={org.pk}>{org.name}</li>
-                ))}
+                <li>{league.organization.name}</li>
               </ul>
             </div>
           )}

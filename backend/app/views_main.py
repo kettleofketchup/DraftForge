@@ -35,6 +35,7 @@ from .models import (
     Game,
     League,
     Organization,
+    ProfileClaimRequest,
     Team,
     Tournament,
 )
@@ -232,29 +233,27 @@ class UserView(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def claim(self, request, pk=None):
         """
-        Claim a user profile by merging target user's data into current user.
+        Request to claim a user profile.
+
+        Use case: An org admin manually added a player with just their Steam ID.
+        Later, that player logs in via Discord and wants to claim their profile.
 
         Requirements:
-        - Current user must be authenticated and have a Steam ID
-        - Target user must NOT have a Steam ID
+        - Current user must be authenticated (has Discord ID)
+        - Target user must have a Steam ID (the profile to claim)
+        - Target user must NOT have a Discord ID (not already claimed)
+        - Target user must be a member of at least one organization
         - Current user must be different from target user
 
-        The merge copies non-Steam profile data (nickname, mmr, positions, etc.)
-        from the target user to the current user, then deletes the target user.
+        Creates a ProfileClaimRequest that must be approved by an org admin.
         """
-        from django.db import transaction
+        from org.models import OrgUser
 
         current_user = request.user
         if not current_user.is_authenticated:
             return Response(
                 {"error": "Authentication required"},
                 status=status.HTTP_401_UNAUTHORIZED,
-            )
-
-        if not current_user.steamid:
-            return Response(
-                {"error": "Your account must have a Steam ID linked to claim profiles"},
-                status=status.HTTP_400_BAD_REQUEST,
             )
 
         target_user = self.get_object()
@@ -265,83 +264,66 @@ class UserView(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if target_user.steamid:
+        # Target must have Steam ID (the valuable data to claim)
+        if not target_user.steamid:
             return Response(
-                {"error": "Cannot claim a profile that already has a Steam ID"},
+                {"error": "Target profile has no Steam ID to claim"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        with transaction.atomic():
-            # Copy relevant fields from target to current user (if not already set)
-            if target_user.nickname and not current_user.nickname:
-                current_user.nickname = target_user.nickname
-            if target_user.mmr and (not current_user.mmr or current_user.mmr == 0):
-                current_user.mmr = target_user.mmr
-            if target_user.avatar and not current_user.avatar:
-                current_user.avatar = target_user.avatar
-            if target_user.discordId and not current_user.discordId:
-                current_user.discordId = target_user.discordId
-
-            # Copy positions if target has them and current doesn't
-            if target_user.positions and not current_user.positions:
-                from .models import PositionsModel
-
-                positions_data = {
-                    "carry": target_user.positions.carry,
-                    "mid": target_user.positions.mid,
-                    "offlane": target_user.positions.offlane,
-                    "soft_support": target_user.positions.soft_support,
-                    "hard_support": target_user.positions.hard_support,
-                }
-                current_user.positions = PositionsModel.objects.create(**positions_data)
-
-            # Transfer OrgUser memberships from target to current user
-            from org.models import OrgUser
-
-            for org_user in OrgUser.objects.filter(user=target_user):
-                # Check if current user already has OrgUser for this org
-                existing = OrgUser.objects.filter(
-                    user=current_user, organization=org_user.organization
-                ).first()
-                if existing:
-                    # Keep the one with higher MMR
-                    if org_user.mmr > existing.mmr:
-                        existing.mmr = org_user.mmr
-                        existing.save()
-                    org_user.delete()
-                else:
-                    # Transfer to current user
-                    org_user.user = current_user
-                    org_user.save()
-
-            # Transfer tournament participations
-            for tournament in target_user.tournaments.all():
-                if current_user not in tournament.users.all():
-                    tournament.users.add(current_user)
-                tournament.users.remove(target_user)
-
-            # Transfer team memberships
-            for team in target_user.teams.all():
-                if current_user not in team.members.all():
-                    team.members.add(current_user)
-                team.members.remove(target_user)
-
-            # Transfer captain roles
-            from .models import Team
-
-            Team.objects.filter(captain=target_user).update(captain=current_user)
-            Team.objects.filter(deputy_captain=target_user).update(
-                deputy_captain=current_user
+        # Target must not have Discord ID (would mean it's already claimed/owned)
+        if target_user.discordId:
+            return Response(
+                {
+                    "error": "Cannot claim a profile that already has a Discord account linked"
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-            current_user.save()
+        # If current user already has a Steam ID, it must match target's
+        if current_user.steamid and current_user.steamid != target_user.steamid:
+            return Response(
+                {"error": "Your account already has a different Steam ID linked"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-            # Delete the target user
-            target_user.delete()
+        # Target must be a member of at least one organization
+        org_membership = OrgUser.objects.filter(user=target_user).first()
+        if not org_membership:
+            return Response(
+                {"error": "Target profile is not a member of any organization"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # Return updated current user
-        serializer = self.get_serializer(current_user)
-        return Response(serializer.data)
+        # Check for existing pending request
+        existing_request = ProfileClaimRequest.objects.filter(
+            claimer=current_user,
+            target_user=target_user,
+            status=ProfileClaimRequest.Status.PENDING,
+        ).first()
+
+        if existing_request:
+            return Response(
+                {"error": "You already have a pending claim request for this profile"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create the claim request
+        claim_request = ProfileClaimRequest.objects.create(
+            claimer=current_user,
+            target_user=target_user,
+            organization=org_membership.organization,
+            status=ProfileClaimRequest.Status.PENDING,
+        )
+
+        return Response(
+            {
+                "message": "Claim request submitted. An organization admin will review your request.",
+                "request_id": claim_request.pk,
+                "status": claim_request.status,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 @permission_classes((IsStaff,))
@@ -364,7 +346,7 @@ class TournamentView(viewsets.ModelViewSet):
         org_id = self.request.query_params.get("organization")
         league_id = self.request.query_params.get("league")
         if org_id:
-            queryset = queryset.filter(league__organizations__pk=org_id)
+            queryset = queryset.filter(league__organization__pk=org_id)
         if league_id:
             queryset = queryset.filter(league_id=league_id)
         return queryset
@@ -921,18 +903,17 @@ class TournamentListView(viewsets.ReadOnlyModelViewSet):
     serializer_class = TournamentListSerializer
 
     def get_queryset(self):
-        """Annotate user_count and prefetch league/orgs for efficiency."""
+        """Annotate user_count and prefetch league/org for efficiency."""
         qs = (
-            Tournament.objects.select_related("league")
-            .prefetch_related("league__organizations")
+            Tournament.objects.select_related("league", "league__organization")
             .annotate(user_count=Count("users", distinct=True))
             .order_by("-date_played")
         )
 
-        # Filter by organization (League has M2M to Organization)
+        # Filter by organization (League has FK to Organization)
         org_id = self.request.query_params.get("organization")
         if org_id:
-            qs = qs.filter(league__organizations__id=org_id)
+            qs = qs.filter(league__organization__id=org_id)
 
         # Filter by league
         league_id = self.request.query_params.get("league")
@@ -975,6 +956,7 @@ class OrganizationView(viewsets.ModelViewSet):
             .annotate(
                 league_count=Count("leagues", distinct=True),
                 tournament_count=Count("leagues__tournaments", distinct=True),
+                users_count=Count("members", distinct=True),  # OrgUser memberships
             )
             .order_by("name")
         )
@@ -1047,16 +1029,18 @@ class LeagueView(viewsets.ModelViewSet):
     def get_queryset(self):
         """Optimize with select_related, prefetch_related, and annotations."""
         queryset = (
-            League.objects.prefetch_related("organizations", "admins", "staff")
+            League.objects.select_related("organization")
+            .prefetch_related("admins", "staff")
             .annotate(
                 tournament_count=Count("tournaments", distinct=True),
+                users_count=Count("members", distinct=True),  # LeagueUser memberships
             )
             .order_by("name")
         )
 
         org_id = self.request.query_params.get("organization")
         if org_id:
-            queryset = queryset.filter(organizations__pk=org_id)
+            queryset = queryset.filter(organization__pk=org_id)
         return queryset
 
     def get_permissions(self):
@@ -1142,6 +1126,26 @@ class LeagueView(viewsets.ModelViewSet):
 
         serializer = LeagueMatchSerializer(games, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=["get"])
+    def users(self, request, pk=None):
+        """Get all users who are members of this league (via LeagueUser)."""
+        from league.models import LeagueUser
+        from league.serializers import LeagueUserSerializer
+
+        league = self.get_object()
+        cache_key = f"league_users:{pk}"
+
+        @cached_as(LeagueUser, CustomUser, extra=cache_key, timeout=60 * 10)
+        def get_data():
+            league_users = LeagueUser.objects.filter(league=league).select_related(
+                "user", "user__positions"
+            )
+            serializer = LeagueUserSerializer(league_users, many=True)
+            return serializer.data
+
+        data = get_data()
+        return Response(data)
 
 
 class TeamCreateView(generics.CreateAPIView):

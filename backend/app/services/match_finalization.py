@@ -62,7 +62,7 @@ class LeagueMatchService:
 
         # Create missing ratings
         # Get organization for MMR lookup
-        org = league.organizations.first()
+        org = league.organization
 
         for player in all_players:
             if player.pk not in existing_ratings:

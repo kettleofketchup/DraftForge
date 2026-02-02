@@ -80,7 +80,7 @@ class TournamentSerializerBase(serializers.ModelSerializer):
             # No league, fall back to TournamentUserSerializer
             return TournamentUserSerializer(tournament.users.all(), many=True).data
 
-        org = league.organizations.first()
+        org = league.organization
         if not org:
             # No organization, fall back to TournamentUserSerializer
             return TournamentUserSerializer(tournament.users.all(), many=True).data
@@ -171,7 +171,7 @@ class LeagueMinimalSerializer(serializers.ModelSerializer):
         orgs = getattr(obj, "_prefetched_objects_cache", {}).get("organizations")
         if orgs is not None:
             return orgs[0].name if orgs else None
-        first_org = obj.organizations.first()
+        first_org = obj.organization
         return first_org.name if first_org else None
 
 
@@ -227,6 +227,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
     # Use annotated fields from ViewSet queryset (avoids N+1)
     league_count = serializers.IntegerField(read_only=True)
     tournament_count = serializers.IntegerField(read_only=True)
+    users_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Organization
@@ -248,6 +249,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "default_league",
             "league_count",
             "tournament_count",
+            "users_count",
             "created_at",
             "updated_at",
         )
@@ -257,6 +259,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "updated_at",
             "league_count",
             "tournament_count",
+            "users_count",
         )
 
     def validate_description(self, value):
@@ -276,20 +279,20 @@ class OrganizationsSerializer(serializers.ModelSerializer):
     """Lightweight serializer for organization list view."""
 
     league_count = serializers.IntegerField(read_only=True)
+    users_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Organization
-        fields = ("pk", "name", "logo", "league_count", "created_at")
-        read_only_fields = ("pk", "league_count", "created_at")
+        fields = ("pk", "name", "logo", "league_count", "users_count", "created_at")
+        read_only_fields = ("pk", "league_count", "users_count", "created_at")
 
 
 class LeagueSerializer(serializers.ModelSerializer):
-    organizations = OrganizationsSerializer(many=True, read_only=True)
-    organization_ids = serializers.PrimaryKeyRelatedField(
+    organization = OrganizationsSerializer(read_only=True)
+    organization_id = serializers.PrimaryKeyRelatedField(
         queryset=Organization.objects.all(),
-        many=True,
         write_only=True,
-        source="organizations",
+        source="organization",
         required=False,
     )
     admins = TournamentUserSerializer(many=True, read_only=True)
@@ -309,6 +312,7 @@ class LeagueSerializer(serializers.ModelSerializer):
         required=False,
     )
     tournament_count = serializers.IntegerField(read_only=True)
+    users_count = serializers.IntegerField(read_only=True)
     # For backwards compatibility, return first org name
     organization_name = serializers.SerializerMethodField()
 
@@ -316,8 +320,8 @@ class LeagueSerializer(serializers.ModelSerializer):
         model = League
         fields = (
             "pk",
-            "organizations",
-            "organization_ids",
+            "organization",
+            "organization_id",
             "organization_name",
             "steam_league_id",
             "name",
@@ -330,6 +334,7 @@ class LeagueSerializer(serializers.ModelSerializer):
             "admin_ids",
             "staff_ids",
             "tournament_count",
+            "users_count",
             "last_synced",
             "created_at",
             "updated_at",
@@ -339,12 +344,13 @@ class LeagueSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "tournament_count",
+            "users_count",
             "organization_name",
         )
 
     def get_organization_name(self, obj):
         """Return first organization name for backwards compatibility."""
-        first_org = obj.organizations.first()
+        first_org = obj.organization
         return first_org.name if first_org else None
 
     def validate_description(self, value):
@@ -362,29 +368,32 @@ class LeaguesSerializer(serializers.ModelSerializer):
     """Lightweight serializer for league list view."""
 
     tournament_count = serializers.IntegerField(read_only=True)
-    organizations = OrganizationsSerializer(many=True, read_only=True)
+    users_count = serializers.IntegerField(read_only=True)
+    organization = OrganizationsSerializer(read_only=True)
     organization_name = serializers.SerializerMethodField()
 
     class Meta:
         model = League
         fields = (
             "pk",
-            "organizations",
+            "organization",
             "organization_name",
             "steam_league_id",
             "name",
             "tournament_count",
+            "users_count",
         )
         read_only_fields = (
             "pk",
             "tournament_count",
+            "users_count",
             "organization_name",
-            "organizations",
+            "organization",
         )
 
     def get_organization_name(self, obj):
         """Return first organization name for backwards compatibility."""
-        first_org = obj.organizations.first()
+        first_org = obj.organization
         return first_org.name if first_org else None
 
 
@@ -656,7 +665,7 @@ class TeamSerializer(serializers.ModelSerializer):
         tournament = obj.tournament
         org = None
         if tournament and tournament.league:
-            org = tournament.league.organizations.first()
+            org = tournament.league.organization
 
         # If no organization, fall back to legacy user.mmr behavior
         if not org:
@@ -745,7 +754,7 @@ class TournamentSerializer(serializers.ModelSerializer):
         """Return the primary organization's PK for this tournament."""
         if not tournament.league:
             return None
-        org = tournament.league.organizations.first()
+        org = tournament.league.organization
         return org.pk if org else None
 
     def get_league_pk(self, tournament):
@@ -802,7 +811,7 @@ class TournamentSerializer(serializers.ModelSerializer):
 
                 # Bulk create OrgUser and LeagueUser for added users
                 if added_users and instance.league:
-                    org = instance.league.organizations.first()
+                    org = instance.league.organization
                     if org:
                         from league.models import LeagueUser
                         from org.models import OrgUser

@@ -315,19 +315,17 @@ def transfer_org_ownership(request, org_id):
 def add_league_admin(request, league_id):
     """Add an admin to a league. Requires org admin access."""
     try:
-        league = League.objects.prefetch_related("organizations").get(pk=league_id)
+        league = League.objects.select_related("organization").get(pk=league_id)
     except League.DoesNotExist:
         return Response(
             {"error": "League not found"},
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    # Check if user is admin of any linked organization
-    has_access = False
-    for org in league.organizations.all():
-        if has_org_admin_access(request.user, org):
-            has_access = True
-            break
+    # Check if user is admin of the linked organization
+    has_access = league.organization and has_org_admin_access(
+        request.user, league.organization
+    )
 
     if not has_access and not request.user.is_superuser:
         return Response(
@@ -368,19 +366,17 @@ def add_league_admin(request, league_id):
 def remove_league_admin(request, league_id, user_id):
     """Remove an admin from a league. Requires org admin access."""
     try:
-        league = League.objects.prefetch_related("organizations").get(pk=league_id)
+        league = League.objects.select_related("organization").get(pk=league_id)
     except League.DoesNotExist:
         return Response(
             {"error": "League not found"},
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    # Check if user is admin of any linked organization
-    has_access = False
-    for org in league.organizations.all():
-        if has_org_admin_access(request.user, org):
-            has_access = True
-            break
+    # Check if user is admin of the linked organization
+    has_access = league.organization and has_org_admin_access(
+        request.user, league.organization
+    )
 
     if not has_access and not request.user.is_superuser:
         return Response(
@@ -414,7 +410,7 @@ def remove_league_admin(request, league_id, user_id):
 def add_league_staff(request, league_id):
     """Add staff to a league. Requires org admin or league admin access."""
     try:
-        league = League.objects.prefetch_related("organizations").get(pk=league_id)
+        league = League.objects.select_related("organization").get(pk=league_id)
     except League.DoesNotExist:
         return Response(
             {"error": "League not found"},
@@ -460,7 +456,7 @@ def add_league_staff(request, league_id):
 def remove_league_staff(request, league_id, user_id):
     """Remove staff from a league. Requires org admin or league admin access."""
     try:
-        league = League.objects.prefetch_related("organizations").get(pk=league_id)
+        league = League.objects.select_related("organization").get(pk=league_id)
     except League.DoesNotExist:
         return Response(
             {"error": "League not found"},
