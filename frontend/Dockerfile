@@ -106,9 +106,10 @@ FROM system-deps AS runtime-dev
 LABEL org.opencontainers.image.source="https://github.com/kettleofketchup/draftforge"
 WORKDIR /app
 
-# Create node user (system-deps doesn't have it)
-RUN addgroup -g 1000 node && \
-    adduser -u 1000 -G node -s /bin/sh -D node && \
+# Ensure node user exists and has correct directories
+# (node:22-alpine base already has node user, so use || true for idempotency)
+RUN (addgroup -g 1000 node 2>/dev/null || true) && \
+    (adduser -u 1000 -G node -s /bin/sh -D node 2>/dev/null || true) && \
     mkdir -p /home/node/.npm /home/node/.cache/ms-playwright/ffmpeg-1011 && \
     ln -sf /usr/bin/ffmpeg /home/node/.cache/ms-playwright/ffmpeg-1011/ffmpeg-linux && \
     chown -R node:node /home/node /app
