@@ -87,10 +87,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
       }
     }
 
-    if (!foundMatch) {
-      test.skip();
-      return;
-    }
+    expect(foundMatch, 'Could not find a pending match with Set Winner buttons in the bracket').toBe(true);
 
     // Close the current modal
     const dialog = page.locator('[role="dialog"]');
