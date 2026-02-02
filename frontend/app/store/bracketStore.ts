@@ -104,6 +104,7 @@ interface BracketStore {
   removeTeamFromSlot: (matchId: string, slot: 'radiant' | 'dire') => void;
   setMatchWinner: (matchId: string, winner: 'radiant' | 'dire') => void;
   advanceWinner: (matchId: string) => void;
+  unsetMatchWinner: (matchId: string) => void;
 
   // Persistence
   saveBracket: (tournamentId: number) => Promise<void>;
@@ -204,6 +205,46 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
       });
       get().assignTeamToSlot(match.loserNextMatchId, match.loserNextMatchSlot, losingTeam);
     }
+  },
+
+  unsetMatchWinner: (matchId) => {
+    const match = get().matches.find((m) => m.id === matchId);
+    if (!match?.winner) return;
+
+    const winningTeam = match.winner === 'radiant' ? match.radiantTeam : match.direTeam;
+    const losingTeam = match.winner === 'radiant' ? match.direTeam : match.radiantTeam;
+
+    log.debug('Unsetting match winner', { matchId, previousWinner: match.winner });
+
+    set((state) => ({
+      matches: state.matches.map((m) => {
+        if (m.id === matchId) {
+          return { ...m, winner: undefined, status: 'pending' as const };
+        }
+        // Clear winning team from next match slot
+        if (match.nextMatchId && m.id === match.nextMatchId) {
+          const slot = match.nextMatchSlot;
+          if (slot === 'radiant' && m.radiantTeam?.pk === winningTeam?.pk) {
+            return { ...m, radiantTeam: undefined };
+          }
+          if (slot === 'dire' && m.direTeam?.pk === winningTeam?.pk) {
+            return { ...m, direTeam: undefined };
+          }
+        }
+        // Clear losing team from losers bracket slot
+        if (match.loserNextMatchId && m.id === match.loserNextMatchId) {
+          const slot = match.loserNextMatchSlot;
+          if (slot === 'radiant' && m.radiantTeam?.pk === losingTeam?.pk) {
+            return { ...m, radiantTeam: undefined };
+          }
+          if (slot === 'dire' && m.direTeam?.pk === losingTeam?.pk) {
+            return { ...m, direTeam: undefined };
+          }
+        }
+        return m;
+      }),
+      isDirty: true,
+    }));
   },
 
   saveBracket: async (tournamentId) => {
