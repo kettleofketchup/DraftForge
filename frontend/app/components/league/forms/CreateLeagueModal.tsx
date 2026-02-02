@@ -34,7 +34,7 @@ export function CreateLeagueModal({
   const form = useForm<CreateLeagueInput>({
     resolver: zodResolver(CreateLeagueSchema),
     defaultValues: {
-      organization_ids: [organizationId],
+      organization_id: organizationId,
       steam_league_id: undefined as number | undefined,
       name: '',
       description: '',
@@ -46,7 +46,7 @@ export function CreateLeagueModal({
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await createLeague({ ...data, organization_ids: [organizationId] });
+      await createLeague({ ...data, organization_id: organizationId });
       toast.success('League created successfully');
       getLeagues(organizationId);
       onOpenChange(false);

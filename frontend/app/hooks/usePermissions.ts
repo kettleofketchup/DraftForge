@@ -147,7 +147,9 @@ export function useIsLeagueAdmin(
       ? organizations
       : organizations
         ? [organizations]
-        : league.organizations || [];
+        : league.organization
+          ? [league.organization]
+          : [];
 
     for (const org of orgs) {
       // Check owner
@@ -205,7 +207,9 @@ export function useIsLeagueStaff(
       ? organizations
       : organizations
         ? [organizations]
-        : league.organizations || [];
+        : league.organization
+          ? [league.organization]
+          : [];
 
     for (const org of orgs) {
       // Check staff_ids

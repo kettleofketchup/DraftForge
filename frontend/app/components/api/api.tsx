@@ -11,10 +11,46 @@ import type {
   UsersType,
   UserType,
 } from '~/index';
-import type { OrganizationType, OrganizationsType } from '~/components/organization/schemas';
-import type { LeagueType, LeaguesType, LeagueMatchType } from '~/components/league/schemas';
 import { getLogger } from '~/lib/logger';
 import axios from './axios';
+
+// Re-export organization API
+export {
+  getOrganizations,
+  fetchOrganization,
+  createOrganization,
+  updateOrganization,
+  deleteOrganization,
+  addOrgAdmin,
+  removeOrgAdmin,
+  addOrgStaff,
+  removeOrgStaff,
+  transferOrgOwnership,
+  getOrganizationUsers,
+  updateOrgUser,
+  getOrganizationDiscordMembers,
+  type DiscordMember,
+  // Claim requests
+  getClaimRequests,
+  approveClaimRequest,
+  rejectClaimRequest,
+  type ProfileClaimRequest,
+} from './orgAPI';
+
+// Re-export league API
+export {
+  getLeagues,
+  fetchLeague,
+  createLeague,
+  updateLeague,
+  deleteLeague,
+  getLeagueMatches,
+  addLeagueAdmin,
+  removeLeagueAdmin,
+  addLeagueStaff,
+  removeLeagueStaff,
+  getLeagueUsers,
+} from './leagueAPI';
 import type {
   CreateTeamFromCaptainAPI,
   DraftStyleMMRsAPIReturn,
@@ -44,6 +80,17 @@ export async function fetchUser(pk: number): Promise<UserType> {
 
 export async function deleteUser(userId: number): Promise<void> {
   await axios.delete(`/users/${userId}/`);
+}
+
+/**
+ * Claim a user profile by merging the target user's data into the current user.
+ * This links the current user's Steam account to the target profile.
+ * @param targetUserId - The ID of the user profile to claim (must not have Steam ID)
+ * @returns The updated current user with merged data
+ */
+export async function claimUserProfile(targetUserId: number): Promise<UserType> {
+  const response = await axios.post<UserType>(`/users/${targetUserId}/claim/`);
+  return response.data;
 }
 
 export async function createUser(data: Partial<UserType>): Promise<UserType> {
@@ -279,45 +326,6 @@ export async function undoLastPick(
   return response.data as TournamentType;
 }
 
-// Organization API
-export async function getOrganizations(): Promise<OrganizationsType> {
-  const response = await axios.get<OrganizationsType>('/organizations/');
-  return response.data;
-}
-
-export async function fetchOrganization(pk: number): Promise<OrganizationType> {
-  const response = await axios.get<OrganizationType>(`/organizations/${pk}/`);
-  return response.data;
-}
-
-export async function createOrganization(
-  data: Partial<OrganizationType>,
-): Promise<OrganizationType> {
-  const response = await axios.post<OrganizationType>('/organizations/', data);
-  return response.data;
-}
-
-export async function updateOrganization(
-  pk: number,
-  data: Partial<OrganizationType>,
-): Promise<OrganizationType> {
-  const response = await axios.patch<OrganizationType>(
-    `/organizations/${pk}/`,
-    data,
-  );
-  return response.data;
-}
-
-export async function deleteOrganization(pk: number): Promise<void> {
-  await axios.delete(`/organizations/${pk}/`);
-}
-
-// League API
-export async function getLeagues(organizationId?: number): Promise<LeaguesType> {
-  const params = organizationId ? `?organization=${organizationId}` : '';
-  const response = await axios.get<LeaguesType>(`/leagues/${params}`);
-  return response.data;
-}
 
 // Home page stats - optimized endpoint returning only counts
 export interface HomeStats {
@@ -332,117 +340,9 @@ export async function getHomeStats(): Promise<HomeStats> {
   return response.data;
 }
 
-export async function fetchLeague(pk: number): Promise<LeagueType> {
-  const response = await axios.get<LeagueType>(`/leagues/${pk}/`);
-  return response.data;
-}
-
-export async function createLeague(
-  data: Partial<LeagueType>,
-): Promise<LeagueType> {
-  const response = await axios.post<LeagueType>('/leagues/', data);
-  return response.data;
-}
-
-export async function updateLeague(
-  pk: number,
-  data: Partial<LeagueType>,
-): Promise<LeagueType> {
-  const response = await axios.patch<LeagueType>(`/leagues/${pk}/`, data);
-  return response.data;
-}
-
-export async function deleteLeague(pk: number): Promise<void> {
-  await axios.delete(`/leagues/${pk}/`);
-}
-
-export async function getLeagueMatches(
-  leaguePk: number,
-  options?: { tournament?: number; linkedOnly?: boolean }
-): Promise<LeagueMatchType[]> {
-  const params = new URLSearchParams();
-  if (options?.tournament) params.append('tournament', options.tournament.toString());
-  if (options?.linkedOnly) params.append('linked_only', 'true');
-
-  const queryString = params.toString() ? `?${params.toString()}` : '';
-  const response = await axios.get<LeagueMatchType[]>(
-    `/leagues/${leaguePk}/matches/${queryString}`
-  );
-  return response.data;
-}
 
 // Admin Team API
 export async function searchUsers(query: string): Promise<UserType[]> {
   const response = await axios.get<UserType[]>(`/users/search/?q=${encodeURIComponent(query)}`);
   return response.data;
-}
-
-interface AddUserResponse {
-  status: string;
-  user: UserType;
-}
-
-interface TransferOwnershipResponse {
-  status: string;
-  new_owner: UserType;
-}
-
-// Organization Admin Team
-export async function addOrgAdmin(orgId: number, userId: number): Promise<UserType> {
-  const response = await axios.post<AddUserResponse>(`/organizations/${orgId}/admins/`, { user_id: userId });
-  return response.data.user;
-}
-
-export async function removeOrgAdmin(orgId: number, userId: number): Promise<void> {
-  await axios.delete(`/organizations/${orgId}/admins/${userId}/`);
-}
-
-export async function addOrgStaff(orgId: number, userId: number): Promise<UserType> {
-  const response = await axios.post<AddUserResponse>(`/organizations/${orgId}/staff/`, { user_id: userId });
-  return response.data.user;
-}
-
-export async function removeOrgStaff(orgId: number, userId: number): Promise<void> {
-  await axios.delete(`/organizations/${orgId}/staff/${userId}/`);
-}
-
-export async function transferOrgOwnership(orgId: number, userId: number): Promise<UserType> {
-  const response = await axios.post<TransferOwnershipResponse>(`/organizations/${orgId}/transfer-ownership/`, { user_id: userId });
-  return response.data.new_owner;
-}
-
-// Organization Discord Members
-export interface DiscordMember {
-  user: {
-    id: string;
-    username: string;
-    global_name?: string;
-    avatar?: string;
-  };
-  nick?: string;
-  joined_at: string;
-}
-
-export async function getOrganizationDiscordMembers(orgId: number): Promise<DiscordMember[]> {
-  const response = await axios.get<{ members: DiscordMember[] }>(`/discord/organizations/${orgId}/discord-members/`);
-  return response.data.members;
-}
-
-// League Admin Team
-export async function addLeagueAdmin(leagueId: number, userId: number): Promise<UserType> {
-  const response = await axios.post<AddUserResponse>(`/leagues/${leagueId}/admins/`, { user_id: userId });
-  return response.data.user;
-}
-
-export async function removeLeagueAdmin(leagueId: number, userId: number): Promise<void> {
-  await axios.delete(`/leagues/${leagueId}/admins/${userId}/`);
-}
-
-export async function addLeagueStaff(leagueId: number, userId: number): Promise<UserType> {
-  const response = await axios.post<AddUserResponse>(`/leagues/${leagueId}/staff/`, { user_id: userId });
-  return response.data.user;
-}
-
-export async function removeLeagueStaff(leagueId: number, userId: number): Promise<void> {
-  await axios.delete(`/leagues/${leagueId}/staff/${userId}/`);
 }

@@ -19,6 +19,7 @@ import { useUserStore } from '~/store/userStore';
 import { RolePositions } from './positions';
 import { UserRemoveButton } from './userCard/deleteButton';
 import UserEditModal from './userCard/editModal';
+import { LoginAsUserButton } from './userCard/LoginAsUserButton';
 const log = getLogger('UserCard');
 
 interface Props {
@@ -75,25 +76,58 @@ export const UserCard: React.FC<Props> = memo(
 
     const userDotabuff = () => {
       const goToDotabuff = () => {
-        return `https://www.dotabuff.com/players/${user.steamid}`;
+        return `https://www.dotabuff.com/players/${user.steam_account_id}`;
       };
-      if (!user.steamid) return <></>;
+      if (!user.steam_account_id) return null;
       return (
-        <>
-          <a
-            className="self-center btn btn-sm btn-outline"
-            href={goToDotabuff()}
-          >
-            <span className="flex items-center">
-              <img
-                src="https://cdn.brandfetch.io/idKrze_WBi/w/96/h/96/theme/dark/logo.png?c=1dxbfHSJFAPEGdCLU4o5B"
-                alt="Dotabuff Logo"
-                className="w-4 h-4 mr-2"
-              />
-              Dotabuff Profile
-            </span>
-          </a>
-        </>
+        <a
+          className="btn btn-sm btn-outline gap-1"
+          href={goToDotabuff()}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="View Dotabuff Profile"
+        >
+          <img
+            src="https://cdn.brandfetch.io/idKrze_WBi/w/96/h/96/theme/dark/logo.png?c=1dxbfHSJFAPEGdCLU4o5B"
+            alt="Dotabuff"
+            className="w-4 h-4"
+          />
+          <span className="hidden sm:inline">Dotabuff</span>
+        </a>
+      );
+    };
+
+    // Show "Claim Profile" button when:
+    // - Target user HAS Steam ID (manually added profile with steam identifier)
+    // - Target user has NO Discord ID (manually added, can't log in)
+    // - Current user HAS Discord ID (logged in, can claim)
+    // - Current user either has NO Steam ID or has the SAME Steam ID as target
+    // - Current user is not this user
+    // Note: steamid is unique in the database. Claiming merges the profile.
+    const canClaimProfile =
+      user.steamid &&
+      !user.discordId &&
+      currentUser?.discordId &&
+      (!currentUser?.steamid || currentUser.steamid === user.steamid) &&
+      currentUser?.pk !== user.pk;
+
+    const claimProfileButton = () => {
+      if (!canClaimProfile) return null;
+      return (
+        <button
+          className="btn btn-sm btn-primary gap-1"
+          onClick={handleViewProfile}
+          title="Link your Steam account to this profile"
+          data-testid={`claim-profile-btn-${user.pk}`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <line x1="19" x2="19" y1="8" y2="14" />
+            <line x1="22" x2="16" y1="11" y2="11" />
+          </svg>
+          <span>Claim</span>
+        </button>
       );
     };
     const getKeyName = () => {
@@ -157,6 +191,7 @@ export const UserCard: React.FC<Props> = memo(
               </CardDescription>
             )}
             <CardAction className="flex items-center gap-1">
+              <LoginAsUserButton user={user} />
               {(currentUser.is_staff || currentUser.is_superuser) && (
                 <UserEditModal user={new User(user)} />
               )}
@@ -236,10 +271,11 @@ export const UserCard: React.FC<Props> = memo(
           )}
 
           {/* Card Footer */}
-          <div className="flex items-center justify-between mt-auto">
-            {/* Dotabuff - bottom left */}
-            <div className="flex-shrink-0">
+          <div className="flex items-center justify-between gap-2 mt-auto">
+            {/* Dotabuff / Claim - bottom left */}
+            <div className="flex gap-1 flex-shrink-0">
               {userDotabuff()}
+              {claimProfileButton()}
             </div>
 
             {/* Delete button - bottom right */}
