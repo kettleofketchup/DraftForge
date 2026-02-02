@@ -2190,6 +2190,188 @@ def populate_demo_tournaments(force=False):
     populate_demo_shuffle_draft_tournament(force)
 
 
+def populate_bracket_unset_winner_tournament(force=False):
+    """
+    Create dedicated tournament for bracket unset winner E2E test.
+
+    Creates a 4-team double elimination tournament with:
+    - All games in 'pending' status (no completed games)
+    - Teams assigned to first round games
+    - Bracket links set up for winner/loser advancement
+
+    This tournament is used exclusively by the bracket unset winner test
+    to avoid polluting or being affected by other tests.
+
+    Args:
+        force: If True, recreate the tournament even if it exists
+    """
+    from app.models import Game, League, Team, Tournament
+
+    TOURNAMENT_NAME = "bracket:unsetWinner Tournament"
+
+    # Get the DTX league
+    dtx_league = League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).first()
+    if not dtx_league:
+        print(f"DTX League not found. Run populate_organizations_and_leagues first.")
+        return None
+
+    existing = Tournament.objects.filter(name=TOURNAMENT_NAME).first()
+    if existing and not force:
+        print(
+            f"Tournament '{TOURNAMENT_NAME}' already exists. Use force=True to recreate."
+        )
+        return existing
+
+    if force and existing:
+        print(f"Deleting existing tournament '{TOURNAMENT_NAME}'...")
+        existing.delete()
+
+    print(f"Creating '{TOURNAMENT_NAME}' for bracket unset winner test...")
+
+    # Get users with Steam IDs for team membership
+    from app.models import CustomUser
+
+    users_with_steam = list(
+        CustomUser.objects.filter(steamid__isnull=False).exclude(steamid=0)[:20]
+    )
+
+    if len(users_with_steam) < 20:
+        print(
+            f"Need 20 users with Steam IDs, found {len(users_with_steam)}. "
+            "Run populate_users first."
+        )
+        return None
+
+    # Create tournament
+    tournament = Tournament.objects.create(
+        name=TOURNAMENT_NAME,
+        date_played=date.today(),
+        state="in_progress",
+        tournament_type="double_elimination",
+        league=dtx_league,
+        steam_league_id=DTX_STEAM_LEAGUE_ID,
+    )
+    tournament.users.set(users_with_steam)
+
+    # Create 4 teams with 5 players each
+    team_names = ["Unset Alpha", "Unset Beta", "Unset Gamma", "Unset Delta"]
+    teams = []
+    for team_idx, team_name in enumerate(team_names):
+        team_members = users_with_steam[team_idx * 5 : (team_idx + 1) * 5]
+        captain = team_members[0]
+
+        team = Team.objects.create(
+            tournament=tournament,
+            name=team_name,
+            captain=captain,
+            draft_order=team_idx + 1,
+        )
+        team.members.set(team_members)
+        teams.append(team)
+
+    print(f"  Created 4 teams: {', '.join(team_names)}")
+
+    # Create bracket games (6 games for 4-team double elimination)
+    # All games are PENDING - no completed games
+    bracket_structure = [
+        {
+            "round": 1,
+            "bracket_type": "winners",
+            "position": 0,
+            "radiant": teams[0],
+            "dire": teams[1],
+        },
+        {
+            "round": 1,
+            "bracket_type": "winners",
+            "position": 1,
+            "radiant": teams[2],
+            "dire": teams[3],
+        },
+        {
+            "round": 1,
+            "bracket_type": "losers",
+            "position": 0,
+            "radiant": None,
+            "dire": None,
+        },
+        {
+            "round": 2,
+            "bracket_type": "winners",
+            "position": 0,
+            "radiant": None,
+            "dire": None,
+        },
+        {
+            "round": 2,
+            "bracket_type": "losers",
+            "position": 0,
+            "radiant": None,
+            "dire": None,
+        },
+        {
+            "round": 1,
+            "bracket_type": "grand_finals",
+            "position": 0,
+            "radiant": None,
+            "dire": None,
+        },
+    ]
+
+    games = []
+    for bracket_info in bracket_structure:
+        game = Game.objects.create(
+            tournament=tournament,
+            round=bracket_info["round"],
+            bracket_type=bracket_info["bracket_type"],
+            position=bracket_info["position"],
+            elimination_type="double",
+            radiant_team=bracket_info.get("radiant"),
+            dire_team=bracket_info.get("dire"),
+            status="pending",
+        )
+        games.append(game)
+
+    # Set up bracket links for winner/loser advancement
+    if len(games) >= 6:
+        # Winners R1 M1 -> Winners Final (radiant) + Losers R1 (radiant)
+        games[0].next_game = games[3]
+        games[0].next_game_slot = "radiant"
+        games[0].loser_next_game = games[2]
+        games[0].loser_next_game_slot = "radiant"
+        games[0].save()
+
+        # Winners R1 M2 -> Winners Final (dire) + Losers R1 (dire)
+        games[1].next_game = games[3]
+        games[1].next_game_slot = "dire"
+        games[1].loser_next_game = games[2]
+        games[1].loser_next_game_slot = "dire"
+        games[1].save()
+
+        # Losers R1 -> Losers Final (radiant)
+        games[2].next_game = games[4]
+        games[2].next_game_slot = "radiant"
+        games[2].save()
+
+        # Winners Final -> Grand Final (radiant) + Losers Final (dire)
+        games[3].next_game = games[5]
+        games[3].next_game_slot = "radiant"
+        games[3].loser_next_game = games[4]
+        games[3].loser_next_game_slot = "dire"
+        games[3].save()
+
+        # Losers Final -> Grand Final (dire)
+        games[4].next_game = games[5]
+        games[4].next_game_slot = "dire"
+        games[4].save()
+
+    print(f"Created '{TOURNAMENT_NAME}' with 4 teams and 6 pending bracket games")
+
+    _flush_redis_cache()
+
+    return tournament
+
+
 def populate_all(force=False):
     """Run all population functions in the correct order."""
     populate_organizations_and_leagues(force)
@@ -2198,4 +2380,5 @@ def populate_all(force=False):
     populate_tournaments(force)
     populate_steam_matches(force)
     populate_bracket_linking_scenario(force)
+    populate_bracket_unset_winner_tournament(force)  # Dedicated E2E test tournament
     populate_demo_tournaments(force)  # Demo data for video recording

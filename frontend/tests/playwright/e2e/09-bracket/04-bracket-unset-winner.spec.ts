@@ -4,7 +4,10 @@
  * Tests the ability to unset a bracket match winner, clearing the result
  * and removing the team from downstream matches.
  *
- * Uses 'pending_bracket' tournament which has teams but pending games.
+ * Uses dedicated 'bracket_unset_winner' tournament with:
+ * - 4 teams in double elimination bracket
+ * - All games pending (no completed games)
+ * - Teams assigned to first round games
  */
 
 import {
@@ -19,10 +22,10 @@ let tournamentPk: number;
 test.describe('Bracket Unset Winner (e2e)', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
-    const tournament = await getTournamentByKey(context, 'pending_bracket');
+    const tournament = await getTournamentByKey(context, 'bracket_unset_winner');
 
     if (!tournament) {
-      throw new Error('Could not find pending_bracket tournament');
+      throw new Error('Could not find bracket_unset_winner tournament');
     }
 
     tournamentPk = tournament.pk;

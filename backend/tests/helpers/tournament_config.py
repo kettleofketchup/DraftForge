@@ -346,6 +346,9 @@ TEST_KEY_TO_NAME["pending_bracket"] = "Pending Bracket Test"
 TEST_KEY_TO_NAME["draft_test"] = "Draft Test"
 TEST_KEY_TO_NAME["large_tournament"] = "Large Tournament Test"
 
+# Dedicated tournament for bracket unset winner E2E test
+TEST_KEY_TO_NAME["bracket_unset_winner"] = "bracket:unsetWinner Tournament"
+
 # Add real tournament 38 for hero draft E2E testing
 TEST_KEY_TO_NAME["real_tournament"] = "Real Tournament 38"
 
