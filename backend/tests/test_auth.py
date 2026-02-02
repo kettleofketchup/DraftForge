@@ -489,7 +489,7 @@ def login_org_admin(request):
     user, created = createOrgAdminTestUser()
 
     # Make this user an admin of org 1 (DTX) if not already
-    from org.models import Organization
+    from app.models import Organization
 
     org = Organization.objects.filter(pk=1).first()
     if org and user not in org.admins.all():
@@ -512,7 +512,7 @@ def login_org_staff(request):
     user, created = createOrgStaffTestUser()
 
     # Make this user staff of org 1 (DTX) if not already
-    from org.models import Organization
+    from app.models import Organization
 
     org = Organization.objects.filter(pk=1).first()
     if org and user not in org.staff.all():
@@ -854,8 +854,7 @@ def create_claim_request(request):
 
     import uuid
 
-    from app.models import ProfileClaimRequest
-    from org.models import Organization
+    from app.models import Organization, ProfileClaimRequest
 
     organization_id = request.data.get("organization_id", 1)
     try:
@@ -875,10 +874,12 @@ def create_claim_request(request):
     target_nickname = request.data.get("target_nickname", f"Target Profile {unique_id}")
 
     # Create the claimer user (has Discord, no Steam)
+    # Discord IDs are snowflakes (large integers)
+    test_discord_id = str(random.randint(100000000000000000, 999999999999999999))
     claimer = CustomUser.objects.create(
         username=claimer_username,
         nickname=claimer_username,
-        discordId=f"test_claimer_{unique_id}",
+        discordId=test_discord_id,
         discordUsername=claimer_username,
         steamid=None,
     )
