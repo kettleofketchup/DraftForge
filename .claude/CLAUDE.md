@@ -197,8 +197,12 @@ just docker::frontend::build   # Build frontend image
 just docker::nginx::build      # Build nginx image
 
 # Test Database
+just docker::db::hash          # Output content hash for test-db sources
 just docker::db::build         # Build test-db image (skips if hash unchanged)
+just docker::db::pull          # Pull from GHCR (tries hash first, then latest)
+just docker::db::push          # Push to GHCR (both hash and latest tags)
 just db::reset-test            # Extract cached DB to backend/test.db.sqlite3
+just db::populate::fresh       # Bypass cache, run fresh populate
 
 # Docs
 just docs::serve         # Start MkDocs dev server

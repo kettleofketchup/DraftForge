@@ -65,31 +65,15 @@ jobs:
       env:
         DOCKER_BUILDKIT: 1
 
-    - name: Compute content hash
-      id: hash
-      run: |
-        HASH=$(./scripts/hash-test-db-sources.sh)
-        echo "hash=$HASH" >> $GITHUB_OUTPUT
-        echo "Content hash: $HASH"
-
     - name: Build test-db image
       run: just docker::db::build
       env:
         DOCKER_BUILDKIT: 1
 
-    - name: Push to GHCR (latest + hash tag)
-      run: |
-        HASH=${{ steps.hash.outputs.hash }}
-        # Tag and push with content hash (exact version)
-        docker tag draftforge/test-db:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$HASH
-        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$HASH
-        # Also push as latest
-        docker tag draftforge/test-db:latest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-        docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+    - name: Push to GHCR
+      run: just docker::db::push
 
     - name: Output image info
       run: |
-        echo "Test DB image pushed:"
-        echo "  - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.hash.outputs.hash }}"
-        echo "  - ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        echo "Test DB image pushed with hash: $(just docker::db::hash)"
         ls -lh backend/test.db.sqlite3
