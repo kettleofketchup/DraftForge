@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
 import axios from '~/components/api/axios'; // Assuming axios is configured for your API
+import { useLeagueStore } from '~/store/leagueStore';
+import { useOrgStore } from '~/store/orgStore';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
 import TournamentTabs from './tabs/TournamentTabs';
@@ -76,6 +78,36 @@ export const TournamentDetailPage: React.FC = () => {
       fetchTournament();
     }
   }, [pk, setTournament]);
+
+  // Set org context from tournament - fetch full org by PK
+  useEffect(() => {
+    if (tournament?.organization_pk) {
+      // Fetch full organization and store it
+      useOrgStore.getState().getOrganization(tournament.organization_pk);
+    } else {
+      useOrgStore.getState().setCurrentOrg(null);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      useOrgStore.getState().reset();
+    };
+  }, [tournament?.organization_pk]);
+
+  // Set league context from tournament - fetch full league by PK
+  useEffect(() => {
+    if (tournament?.league_pk) {
+      // Fetch full league and store it
+      useLeagueStore.getState().getLeague(tournament.league_pk);
+    } else {
+      useLeagueStore.getState().setCurrentLeague(null);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      useLeagueStore.getState().reset();
+    };
+  }, [tournament?.league_pk]);
 
   if (loading) {
     return (

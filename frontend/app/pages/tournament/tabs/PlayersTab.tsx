@@ -1,12 +1,11 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useState } from 'react';
 import { toast } from 'sonner';
 import { updateTournament } from '~/components/api/api';
-import type { TournamentType } from '~/components/tournament/types'; // Adjust the import path as necessary
-import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
+import type { TournamentType } from '~/components/tournament/types';
 import { SearchUserDropdown } from '~/components/user/searchUser';
-import type { UserClassType, UserType } from '~/components/user/types';
+import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
-import { UserCard } from '~/components/user/userCard';
+import { UserList } from '~/components/user';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { hasErrors } from '../hasErrors';
@@ -15,16 +14,15 @@ import { AddPlayerModal } from './players/addPlayerModal';
 const log = getLogger('PlayersTab');
 
 export const PlayersTab: React.FC = memo(() => {
-  const allUsers = useUserStore((state) => state.users); // Zustand setter
+  const allUsers = useUserStore((state) => state.users);
   const [addPlayerQuery, setAddPlayerQuery] = useState('');
-  const addUserQuery = useUserStore((state) => state.addUserQuery);
-  const setAddUserQuery = useUserStore((state) => state.setAddUserQuery); // Zustand setter
   const tournament = useUserStore((state) => state.tournament);
-  const setTournament = useUserStore((state) => state.setTournament); // Zustand settera
+  const setTournament = useUserStore((state) => state.setTournament);
   const query = useUserStore((state) => state.userQuery);
-  const setQuery = useUserStore((state) => state.setUserQuery); // Zustand setter
+  const setQuery = useUserStore((state) => state.setUserQuery);
 
-  useEffect(() => {}, [tournament.users]);
+  // Get the organization ID from the tournament
+  const orgId = tournament?.organization_pk ?? undefined;
   const addUserCallback = async (user: UserType) => {
     log.debug(`Adding user: ${user.username}`);
     // Implement the logic to remove the user from the tournament
@@ -70,54 +68,8 @@ export const PlayersTab: React.FC = memo(() => {
 
     setQuery(''); // Reset query after adding user
   };
-  const filteredUsers =
-    query === ''
-      ? tournament.users
-      : tournament.users?.filter((person) => {
-          const q = query.toLowerCase();
-          return (
-            person.username?.toLowerCase().includes(q) ||
-            person.nickname?.toLowerCase().includes(q)
-          );
-        });
-
-  const renderNoPlayers = () => {
-    return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="alert alert-info">
-          <span>No teams available for this tournament.</span>
-        </div>
-      </div>
-    );
-  };
-  const renderPlayers = () => {
-    return (
-      <ScrollArea className=" h-30%  mx-1 p-0 py-4">
-        <div
-          className="w-full content-center grid gap-2 mt-4 grid-cols-1
-        sm:grid-cols-2
-        lg:grid-cols-3
-         xl:grid-cols-4
-         2xl:grid-cols-5
-         3xl:grid-cols-6 justify-center [content-visibility: auto] sm:gap-x-4 md:gap-x-6 lg:gap-x-4"
-        >
-          {filteredUsers?.map((user) => (
-            <UserCard
-              user={user as UserClassType}
-              saveFunc={'save'}
-              key={`UserCard-${user.pk}`}
-              data-testid={`option-${user.username}`}
-              compact={true}
-              deleteButtonType="tournament"
-            />
-          ))}
-        </div>
-        <ScrollBar id="thisScrollBar" orientation="vertical" />
-      </ScrollArea>
-    );
-  };
-
-  const renderGames = () => {};
+  // Grid columns for tournament players
+  const gridCols = 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
   return (
     <div className="py-5 px-3 mx-auto container">
       {hasErrors()}
@@ -138,13 +90,21 @@ export const PlayersTab: React.FC = memo(() => {
             setQuery={setAddPlayerQuery}
             addPlayerCallback={addUserCallback}
             addedUsers={tournament.users ?? undefined}
+            orgId={orgId}
           />
         </div>
       </div>
 
-      {!tournament || !tournament.users || tournament.users.length === 0
-        ? renderNoPlayers()
-        : renderPlayers()}
+      <div className="mt-4">
+        <UserList
+          users={tournament?.users ?? []}
+          searchQuery={query}
+          compact={true}
+          deleteButtonType="tournament"
+          gridCols={gridCols}
+          emptyMessage="No players in this tournament"
+        />
+      </div>
     </div>
   );
 });
