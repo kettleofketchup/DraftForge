@@ -19,6 +19,7 @@ import { useUserStore } from '~/store/userStore';
 import { RolePositions } from './positions';
 import { UserRemoveButton } from './userCard/deleteButton';
 import UserEditModal from './userCard/editModal';
+import { LoginAsUserButton } from './userCard/LoginAsUserButton';
 const log = getLogger('UserCard');
 
 interface Props {
@@ -97,10 +98,18 @@ export const UserCard: React.FC<Props> = memo(
     };
 
     // Show "Claim Profile" button when:
-    // - This user doesn't have a Steam ID linked
-    // - Current user has a Steam ID (can claim)
+    // - Target user HAS Steam ID (manually added profile with steam identifier)
+    // - Target user has NO Discord ID (manually added, can't log in)
+    // - Current user HAS Discord ID (logged in, can claim)
+    // - Current user either has NO Steam ID or has the SAME Steam ID as target
     // - Current user is not this user
-    const canClaimProfile = !user.steamid && currentUser?.steamid && currentUser?.pk !== user.pk;
+    // Note: steamid is unique in the database. Claiming merges the profile.
+    const canClaimProfile =
+      user.steamid &&
+      !user.discordId &&
+      currentUser?.discordId &&
+      (!currentUser?.steamid || currentUser.steamid === user.steamid) &&
+      currentUser?.pk !== user.pk;
 
     const claimProfileButton = () => {
       if (!canClaimProfile) return null;
@@ -182,6 +191,7 @@ export const UserCard: React.FC<Props> = memo(
               </CardDescription>
             )}
             <CardAction className="flex items-center gap-1">
+              <LoginAsUserButton user={user} />
               {(currentUser.is_staff || currentUser.is_superuser) && (
                 <UserEditModal user={new User(user)} />
               )}

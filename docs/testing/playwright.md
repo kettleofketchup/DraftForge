@@ -149,13 +149,40 @@ The Playwright config defines three projects:
 
 ## Authentication
 
-### Fixtures
+> **Full documentation:** See [Authentication Test Fixtures](auth/fixtures.md) for complete details on all login fixtures, usage examples, and how to add new test users.
 
-Tests use custom fixtures for authentication:
+### Login Fixtures
+
+Tests use custom fixtures for authentication. All login fixtures are available in tests by importing from `../../fixtures`:
 
 ```typescript
 import { test, expect } from '../../fixtures';
+```
 
+#### Available Login Fixtures
+
+| Fixture | User | Purpose |
+|---------|------|---------|
+| `loginAdmin` | `kettleofketchup` | Site superuser with Steam ID. Full admin access. |
+| `loginStaff` | `hurk_` | Site staff member. Staff-level access. |
+| `loginUser` | `bucketoffish55` | Regular user. No Steam ID, basic access. |
+| `loginUserClaimer` | `user_claimer` | User for testing claim/merge flow. Has same Steam ID as `claimable_profile`. |
+| `loginOrgAdmin` | `org_admin_tester` | Organization admin (admin of org 1). |
+| `loginOrgStaff` | `org_staff_tester` | Organization staff member (staff of org 1). |
+| `loginLeagueAdmin` | `league_admin_tester` | League admin (admin of league 1). |
+| `loginLeagueStaff` | `league_staff_tester` | League staff member (staff of league 1). |
+
+#### Test Data Users (No Login)
+
+These users exist in the test database but cannot log in (no Discord ID):
+
+| User | Purpose |
+|------|---------|
+| `claimable_profile` | User with Steam ID but no Discord. Used to test claim/merge feature. Has same Steam ID as `user_claimer`. |
+
+### Basic Usage
+
+```typescript
 test('admin can edit tournament', async ({ page, loginAdmin }) => {
   await loginAdmin();
   await page.goto('/tournament/1');
@@ -173,7 +200,40 @@ test('user can view tournament', async ({ page, loginUser }) => {
 });
 ```
 
+### Organization/League Role Testing
+
+```typescript
+test('org admin can manage organization', async ({ page, loginOrgAdmin }) => {
+  await loginOrgAdmin();
+  await page.goto('/organizations/1');
+  // ... test org admin functionality
+});
+
+test('league staff can view league', async ({ page, loginLeagueStaff }) => {
+  await loginLeagueStaff();
+  await page.goto('/leagues/1');
+  // ...
+});
+```
+
+### Claim Profile Testing
+
+The `loginUserClaimer` fixture sets up two users with matching Steam IDs for testing the claim/merge feature:
+
+```typescript
+test('user can claim profile', async ({ page, loginUserClaimer }) => {
+  // This login also ensures claimable_profile exists
+  await loginUserClaimer();
+
+  await page.goto('/users');
+  // claimable_profile should show claim button
+  // (same Steam ID, no Discord ID)
+});
+```
+
 ### Login As Specific User
+
+For testing user-specific flows (e.g., captains):
 
 ```typescript
 test('captain can make picks', async ({ page, loginAsUser }) => {
@@ -185,6 +245,8 @@ test('captain can make picks', async ({ page, loginAsUser }) => {
 ```
 
 ### Login By Discord ID
+
+Discord IDs are stable across populate runs (unlike PKs):
 
 ```typescript
 test('specific captain flow', async ({ context, loginAsDiscordId }) => {

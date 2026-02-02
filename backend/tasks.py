@@ -226,12 +226,27 @@ def db_populate_demo_tournaments(
 
 
 @task
+def db_populate_test_auth_users(
+    c, path: Path = paths.TEST_ENV_FILE, force: bool = False
+):
+    """Populate test authentication users for Playwright/Cypress testing."""
+    load_dotenv(path)
+
+    cmd = "python manage.py populate_test_auth_users"
+    if force:
+        cmd += " --force"
+    with c.cd(paths.BACKEND_PATH.absolute()):
+        c.run(cmd, pty=True)
+
+
+@task
 def populate_all(c):
     paths.TEST_DB_PATH.unlink(missing_ok=True)
     paths.TEST_DB_PATH.touch()
     db_migrate_test(c)
     db_populate_organizations(c, paths.TEST_ENV_FILE)
     db_populate_users(c, paths.TEST_ENV_FILE)
+    db_populate_test_auth_users(c, paths.TEST_ENV_FILE)  # Test auth users
     db_populate_tournaments(c, paths.TEST_ENV_FILE)
     db_populate_steam_mock(c, paths.TEST_ENV_FILE)
     db_populate_test_tournaments(c, paths.TEST_ENV_FILE)
@@ -243,6 +258,7 @@ def populate_all(c):
 ns_db.add_task(db_makemigrations, "makemigrations")
 ns_db_populate.add_task(db_populate_organizations, "organizations")
 ns_db_populate.add_task(db_populate_users, "users")
+ns_db_populate.add_task(db_populate_test_auth_users, "test-auth-users")
 ns_db_populate.add_task(db_populate_tournaments, "tournaments")
 ns_db_populate.add_task(db_populate_steam, "steam")
 ns_db_populate.add_task(db_populate_steam_mock, "steam-mock")

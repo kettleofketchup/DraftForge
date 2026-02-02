@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from app.models import ProfileClaimRequest
 from app.serializers import PositionsSerializer
 
 from .models import OrgUser
@@ -75,4 +76,63 @@ class OrgUserSerializer(serializers.ModelSerializer):
             "avatarUrl",
             "mmr",
             "league_mmr",
+        )
+
+
+class ProfileClaimRequestSerializer(serializers.ModelSerializer):
+    """Serializer for profile claim requests."""
+
+    claimer_username = serializers.CharField(source="claimer.username", read_only=True)
+    claimer_discord_id = serializers.CharField(
+        source="claimer.discordId", read_only=True
+    )
+    claimer_avatar = serializers.CharField(source="claimer.avatarUrl", read_only=True)
+
+    target_nickname = serializers.CharField(
+        source="target_user.nickname", read_only=True
+    )
+    target_steamid = serializers.IntegerField(
+        source="target_user.steamid", read_only=True
+    )
+    target_mmr = serializers.IntegerField(source="target_user.mmr", read_only=True)
+
+    organization_name = serializers.CharField(
+        source="organization.name", read_only=True
+    )
+
+    reviewed_by_username = serializers.CharField(
+        source="reviewed_by.username", read_only=True, allow_null=True
+    )
+
+    class Meta:
+        model = ProfileClaimRequest
+        fields = (
+            "id",
+            "claimer",
+            "claimer_username",
+            "claimer_discord_id",
+            "claimer_avatar",
+            "target_user",
+            "target_nickname",
+            "target_steamid",
+            "target_mmr",
+            "organization",
+            "organization_name",
+            "status",
+            "reviewed_by",
+            "reviewed_by_username",
+            "rejection_reason",
+            "created_at",
+            "reviewed_at",
+        )
+        read_only_fields = (
+            "id",
+            "claimer",
+            "target_user",
+            "organization",
+            "status",
+            "reviewed_by",
+            "rejection_reason",
+            "created_at",
+            "reviewed_at",
         )

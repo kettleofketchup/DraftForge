@@ -7,6 +7,17 @@ from django.db import models, transaction
 
 from app.models import CustomUser, Game, PositionsModel, Team
 
+# Import centralized test data
+from tests.data import (
+    DTX_LEAGUE_NAME,
+    DTX_ORG_NAME,
+    DTX_STEAM_LEAGUE_ID,
+    TEST_LEAGUE_NAME,
+    TEST_ORG_NAME,
+    TEST_STEAM_LEAGUE_ID,
+    TOURNAMENT_USERS,
+)
+
 # Dota 2 themed usernames for mock data
 MOCK_USERNAMES = [
     "phantom_lancer",
@@ -222,14 +233,7 @@ def _ensure_league_user(user, org_user, league):
 
 from tests.test_auth import createTestStaffUser, createTestSuperUser, createTestUser
 
-# Organization/League constants for test data
-DTX_ORG_NAME = "DTX"  # Main DTX organization
-DTX_LEAGUE_NAME = "DTX League"
-DTX_STEAM_LEAGUE_ID = 17929  # Default Steam league ID used throughout the codebase
-
-TEST_ORG_NAME = "Test Organization"
-TEST_LEAGUE_NAME = "Test League"
-TEST_STEAM_LEAGUE_ID = 17930  # Different Steam league ID for testing
+# Note: Organization/League constants are imported from tests.data at the top of the file
 
 
 def populate_organizations_and_leagues(force=False):
@@ -286,8 +290,10 @@ def populate_organizations_and_leagues(force=False):
             "timezone": "America/New_York",  # US East default
         },
     )
-    # Add organization to league (ManyToMany)
-    dtx_league.organizations.add(dtx_org)
+    # Set organization on league (ForeignKey)
+    if dtx_league.organization != dtx_org:
+        dtx_league.organization = dtx_org
+        dtx_league.save()
     action = "Created" if created else "Updated"
     print(
         f"  {action} league: {DTX_LEAGUE_NAME} (steam_league_id={DTX_STEAM_LEAGUE_ID})"
@@ -323,7 +329,10 @@ def populate_organizations_and_leagues(force=False):
             "timezone": "America/New_York",  # US East default
         },
     )
-    test_league.organizations.add(test_org)
+    # Set organization on league (ForeignKey)
+    if test_league.organization != test_org:
+        test_league.organization = test_org
+        test_league.save()
     action = "Created" if created else "Updated"
     print(
         f"  {action} league: {TEST_LEAGUE_NAME} (steam_league_id={TEST_STEAM_LEAGUE_ID})"
@@ -552,7 +561,7 @@ def populate_tournaments(force=False):
             tournament.users.set(selected_users)
 
             # Create OrgUser and LeagueUser records for tournament users
-            org = league.organizations.first()
+            org = league.organization
             if org:
                 for user in selected_users:
                     org_user = _ensure_org_user(user, org)
@@ -1017,7 +1026,7 @@ def populate_bracket_linking_scenario(force=False):
     tournament.users.set(team_users)
 
     # Create OrgUser and LeagueUser records for tournament users
-    org = dtx_league.organizations.first()
+    org = dtx_league.organization
     if org:
         for user in team_users:
             org_user = _ensure_org_user(user, org)
@@ -1434,7 +1443,7 @@ def populate_real_tournament_38(force=False):
     tournament.users.set(all_users)
 
     # Create OrgUser and LeagueUser records for tournament users
-    org = dtx_league.organizations.first()
+    org = dtx_league.organization
     if org:
         for user in all_users:
             org_user = _ensure_org_user(user, org)
@@ -1585,249 +1594,31 @@ def populate_real_tournament_38(force=False):
 # Demo Tournament Data (for video recording)
 # =============================================================================
 
-# Real Tournament 38 user data - shared between demo tournaments
-# Updated 2026-01-29 with latest production data including Steam IDs and positions
+# TOURNAMENT_USERS is imported from tests.data at the top of the file
+# This dict provides backward-compatible access for functions that expect dict format
+
+
+def _test_user_to_dict(test_user):
+    """Convert TestUser Pydantic model to dict format for backward compatibility."""
+    result = {
+        "steam_id": test_user.steam_id,
+        "mmr": test_user.mmr or 3000,
+        "discord_id": test_user.discord_id,
+    }
+    if test_user.positions:
+        result["positions"] = {
+            "carry": test_user.positions.carry,
+            "mid": test_user.positions.mid,
+            "offlane": test_user.positions.offlane,
+            "soft_support": test_user.positions.soft_support,
+            "hard_support": test_user.positions.hard_support,
+        }
+    return result
+
+
+# Legacy dict format for backward compatibility
 REAL_TOURNAMENT_USERS = {
-    "just__khang": {
-        "steam_id": 237494518,
-        "mmr": 4600,
-        "discord_id": "279963469141377024",
-        "positions": {
-            "carry": 2,
-            "mid": 3,
-            "offlane": 1,
-            "soft_support": 3,
-            "hard_support": 5,
-        },
-    },
-    "clarexlauda": {
-        "steam_id": 150363706,
-        "mmr": 2000,
-        "discord_id": "990297849688391831",
-        "positions": {
-            "carry": 3,
-            "mid": 0,
-            "offlane": 0,
-            "soft_support": 2,
-            "hard_support": 1,
-        },
-    },
-    "heffdawgz": {
-        "steam_id": 84657820,
-        "mmr": 5800,
-        "discord_id": "214624382935367682",
-        "positions": {
-            "carry": 0,
-            "mid": 1,
-            "offlane": 0,
-            "soft_support": 0,
-            "hard_support": 0,
-        },
-    },
-    "pushingshots": {
-        "steam_id": 104427945,
-        "mmr": 2725,
-        "discord_id": "403758532161437706",
-        "positions": {
-            "carry": 3,
-            "mid": 5,
-            "offlane": 0,
-            "soft_support": 1,
-            "hard_support": 2,
-        },
-    },
-    "anil98765": {
-        "steam_id": 104151469,
-        "mmr": 2000,
-        "discord_id": "435984979902595083",
-        "positions": {
-            "carry": 0,
-            "mid": 0,
-            "offlane": 0,
-            "soft_support": 4,
-            "hard_support": 5,
-        },
-    },
-    "tornope": {
-        "steam_id": 174372053,
-        "mmr": 3500,
-        "discord_id": "376476737904836614",
-        "positions": {
-            "carry": 1,
-            "mid": 0,
-            "offlane": 3,
-            "soft_support": 0,
-            "hard_support": 0,
-        },
-    },
-    "nimstria1": {
-        "steam_id": 171468462,
-        "mmr": 500,
-        "discord_id": "1303996935501381632",
-        "positions": {
-            "carry": 0,
-            "mid": 0,
-            "offlane": 0,
-            "soft_support": 1,
-            "hard_support": 1,
-        },
-    },
-    "creemy__": {
-        "steam_id": 114010086,
-        "mmr": 4400,
-        "discord_id": "359131134820483083",
-        "positions": {
-            "carry": 1,
-            "mid": 0,
-            "offlane": 2,
-            "soft_support": 2,
-            "hard_support": 2,
-        },
-    },
-    "ethan0688_": {
-        "steam_id": 875238678,
-        "mmr": 6600,
-        "discord_id": "1325607754177581066",
-        "positions": {
-            "carry": 2,
-            "mid": 1,
-            "offlane": 3,
-            "soft_support": 4,
-            "hard_support": 5,
-        },
-    },
-    "hassanzulfi": {
-        "steam_id": 115198530,
-        "mmr": 2700,
-        "discord_id": "405344576480608257",
-        "positions": {
-            "carry": 0,
-            "mid": 0,
-            "offlane": 1,
-            "soft_support": 2,
-            "hard_support": 3,
-        },
-    },
-    "sir_t_rex": {
-        "steam_id": 93840608,
-        "mmr": 4500,
-        "discord_id": "158695781216288768",
-        "positions": {
-            "carry": 1,
-            "mid": 2,
-            "offlane": 3,
-            "soft_support": 0,
-            "hard_support": 0,
-        },
-    },
-    "abaybay1392": {
-        "steam_id": 299870746,
-        "mmr": 6700,
-        "discord_id": "501861539033382933",
-        "positions": {
-            "carry": 1,
-            "mid": 1,
-            "offlane": 1,
-            "soft_support": 2,
-            "hard_support": 2,
-        },
-    },
-    "p0styp0sty": {
-        "steam_id": 275837954,
-        "mmr": 122,
-        "discord_id": "556931015147520001",
-        "positions": {
-            "carry": 0,
-            "mid": 0,
-            "offlane": 0,
-            "soft_support": 1,
-            "hard_support": 2,
-        },
-    },
-    "reacher_z": {
-        "steam_id": 84874902,
-        "mmr": 400,
-        "discord_id": "1164441465959743540",
-        "positions": {
-            "carry": 5,
-            "mid": 4,
-            "offlane": 3,
-            "soft_support": 2,
-            "hard_support": 1,
-        },
-    },
-    "vrm.mtl": {
-        "steam_id": 151410512,
-        "mmr": 6500,
-        "discord_id": "764290890617192469",
-        "positions": {
-            "carry": 2,
-            "mid": 1,
-            "offlane": 3,
-            "soft_support": 0,
-            "hard_support": 0,
-        },
-    },
-    "gglive": {
-        "steam_id": 1101709346,
-        "mmr": 9000,
-        "discord_id": "584468301988757504",
-        "positions": {
-            "carry": 0,
-            "mid": 3,
-            "offlane": 0,
-            "soft_support": 2,
-            "hard_support": 1,
-        },
-    },
-    "thekingauto": {
-        "steam_id": 97505772,
-        "mmr": 2920,
-        "discord_id": "899703742012747797",
-        "positions": {
-            "carry": 1,
-            "mid": 2,
-            "offlane": 3,
-            "soft_support": 0,
-            "hard_support": 0,
-        },
-    },
-    "leafael.": {
-        "steam_id": 1098211999,
-        "mmr": 4268,
-        "discord_id": "740972649651634198",
-        "positions": {
-            "carry": 3,
-            "mid": 0,
-            "offlane": 0,
-            "soft_support": 1,
-            "hard_support": 3,
-        },
-    },
-    "benevolentgremlin": {
-        "steam_id": 150218787,
-        "mmr": 6800,
-        "discord_id": "186688726187900929",
-        "positions": {
-            "carry": 1,
-            "mid": 0,
-            "offlane": 4,
-            "soft_support": 1,
-            "hard_support": 4,
-        },
-    },
-    "bearthebear": {
-        "steam_id": 240083333,
-        "mmr": 2600,
-        "discord_id": "251396038856802305",
-        "positions": {
-            "carry": 1,
-            "mid": 4,
-            "offlane": 4,
-            "soft_support": 3,
-            "hard_support": 4,
-        },
-    },
+    username: _test_user_to_dict(user) for username, user in TOURNAMENT_USERS.items()
 }
 
 
@@ -1992,7 +1783,7 @@ def populate_demo_herodraft_tournament(force=False):
     tournament.users.set(all_users)
 
     # Create LeagueUser records for tournament users
-    org = dtx_league.organizations.first()
+    org = dtx_league.organization
     if org:
         for user in all_users:
             org_user = _ensure_org_user(user, org)
@@ -2102,7 +1893,7 @@ def populate_demo_captaindraft_tournament(force=False):
     tournament.users.set(users)
 
     # Create LeagueUser records for tournament users
-    org = dtx_league.organizations.first()
+    org = dtx_league.organization
     if org:
         for user in users:
             org_user = _ensure_org_user(user, org)
@@ -2169,7 +1960,7 @@ def populate_demo_snake_draft_tournament(force=False):
     tournament.users.set(users)
 
     # Create LeagueUser records for tournament users
-    org = dtx_league.organizations.first()
+    org = dtx_league.organization
     if org:
         for user in users:
             org_user = _ensure_org_user(user, org)
@@ -2253,7 +2044,7 @@ def populate_demo_shuffle_draft_tournament(force=False):
     tournament.users.set(users)
 
     # Create LeagueUser records for tournament users
-    org = dtx_league.organizations.first()
+    org = dtx_league.organization
     if org:
         for user in users:
             org_user = _ensure_org_user(user, org)
@@ -2296,10 +2087,149 @@ def populate_demo_tournaments(force=False):
     populate_demo_shuffle_draft_tournament(force)
 
 
+def populate_test_auth_users(force=False):
+    """
+    Create test users for authentication testing (Playwright/Cypress).
+
+    Reference: docs/testing/auth/fixtures.md
+    If you update these users, also update the documentation!
+
+    These users have specific PKs defined in tests/data/users.py to ensure
+    consistency between test runs.
+    """
+    from social_django.models import UserSocialAuth
+
+    from tests.data.users import (
+        ADMIN_USER,
+        CLAIMABLE_USER,
+        LEAGUE_ADMIN_USER,
+        LEAGUE_STAFF_USER,
+        ORG_ADMIN_USER,
+        ORG_STAFF_USER,
+        REGULAR_USER,
+        STAFF_USER,
+        USER_CLAIMER,
+        TestUser,
+    )
+
+    print("Creating test auth users...")
+
+    def create_user_with_pk(user_data: TestUser, is_claimable=False):
+        """Create or update a user with a specific PK."""
+        pk = user_data.pk
+        username = user_data.username
+        discord_id = user_data.discord_id
+        steam_id = (
+            user_data.get_steam_id_64()
+        )  # Use method to handle both steam_id and steam_id_64
+        nickname = user_data.nickname or username
+        is_staff = user_data.is_staff
+        is_superuser = user_data.is_superuser
+        mmr = user_data.mmr or random.randint(2000, 6000)
+
+        # Check if user already exists with this PK
+        user = CustomUser.objects.filter(pk=pk).first()
+
+        if user:
+            # Update existing user
+            user.username = username
+            user.discordId = discord_id
+            user.discordUsername = username
+            user.steamid = steam_id
+            user.nickname = nickname
+            user.is_staff = is_staff
+            user.is_superuser = is_superuser
+            if not user.mmr:
+                user.mmr = mmr
+            user.save()
+            print(f"  Updated: {nickname or username} (pk={pk})")
+        else:
+            # Create new user with specific PK
+            user = CustomUser(
+                pk=pk,
+                username=username,
+                discordId=discord_id,
+                discordUsername=username,
+                steamid=steam_id,
+                nickname=nickname,
+                is_staff=is_staff,
+                is_superuser=is_superuser,
+                mmr=mmr,
+            )
+            if is_claimable:
+                user.set_unusable_password()
+            else:
+                user.set_password("cypress")
+            user.save()
+            print(f"  Created: {nickname or username} (pk={pk})")
+
+        # Create social auth for users with Discord ID (so they can log in)
+        if discord_id and not is_claimable:
+            UserSocialAuth.objects.update_or_create(
+                user=user,
+                provider="discord",
+                defaults={
+                    "uid": discord_id,
+                    "extra_data": {
+                        "access_token": "test",
+                        "refresh_token": "test",
+                        "expires": 9999999999,
+                        "sessionid": "test",
+                        "csrftoken": "test",
+                    },
+                },
+            )
+
+        return user
+
+    # Create site-level users
+    admin = create_user_with_pk(ADMIN_USER)
+    staff = create_user_with_pk(STAFF_USER)
+    regular = create_user_with_pk(REGULAR_USER)
+
+    # Create claim profile test users
+    claimable = create_user_with_pk(CLAIMABLE_USER, is_claimable=True)
+    claimer = create_user_with_pk(USER_CLAIMER)
+
+    # Create org role users
+    org_admin = create_user_with_pk(ORG_ADMIN_USER)
+    org_staff = create_user_with_pk(ORG_STAFF_USER)
+
+    # Create league role users
+    league_admin = create_user_with_pk(LEAGUE_ADMIN_USER)
+    league_staff = create_user_with_pk(LEAGUE_STAFF_USER)
+
+    # Assign org/league roles
+    from app.models import League, Organization
+
+    # Org roles
+    org = Organization.objects.filter(pk=ORG_ADMIN_USER.org_id or 1).first()
+    if org:
+        if org_admin not in org.admins.all():
+            org.admins.add(org_admin)
+            print(f"  Added {org_admin.username} as admin of {org.name}")
+        if org_staff not in org.staff.all():
+            org.staff.add(org_staff)
+            print(f"  Added {org_staff.username} as staff of {org.name}")
+
+    # League roles
+    league = League.objects.filter(pk=LEAGUE_ADMIN_USER.league_id or 1).first()
+    if league:
+        if league_admin not in league.admins.all():
+            league.admins.add(league_admin)
+            print(f"  Added {league_admin.username} as admin of {league.name}")
+        if league_staff not in league.staff.all():
+            league.staff.add(league_staff)
+            print(f"  Added {league_staff.username} as staff of {league.name}")
+
+    print(f"Test auth users created/updated successfully!")
+
+
 def populate_all(force=False):
     """Run all population functions in the correct order."""
     populate_organizations_and_leagues(force)
     populate_users(force)
+    populate_test_auth_users(force)  # Test auth users for Playwright/Cypress
     populate_real_tournament_38(force)  # MOVED FIRST - gets pk 1
     populate_tournaments(force)
     populate_steam_matches(force)

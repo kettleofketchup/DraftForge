@@ -1,32 +1,37 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useUserStore } from '~/store/userStore';
 
 export function useLeagues(organizationId?: number) {
   const leagues = useUserStore((state) => state.leagues);
+  const leaguesOrgId = useUserStore((state) => state.leaguesOrgId);
   const getLeagues = useUserStore((state) => state.getLeagues);
-  const [isLoading, setIsLoading] = useState(true);
+
+  const targetOrgId = organizationId ?? 'all';
 
   const refetch = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      await getLeagues(organizationId);
-    } finally {
-      setIsLoading(false);
-    }
+    // Force refetch by resetting state
+    useUserStore.setState({ leaguesOrgId: null });
+    await getLeagues(organizationId);
   }, [getLeagues, organizationId]);
 
   useEffect(() => {
-    refetch();
-  }, [refetch]);
+    // Only fetch if we haven't loaded leagues for this org
+    if (leaguesOrgId !== targetOrgId) {
+      getLeagues(organizationId);
+    }
+  }, [targetOrgId, leaguesOrgId, getLeagues, organizationId]);
 
   // Filter to ensure we only show leagues for the current org
   const filteredLeagues = useMemo(
     () =>
       organizationId
-        ? leagues.filter((l) => l.organizations?.some((org) => org.pk === organizationId))
+        ? leagues.filter((l) => l.organization?.pk === organizationId)
         : leagues,
     [leagues, organizationId],
   );
+
+  // Loading if we haven't fetched for this org yet
+  const isLoading = leaguesOrgId !== targetOrgId;
 
   return {
     leagues: filteredLeagues,

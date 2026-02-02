@@ -1,14 +1,19 @@
 """
-Django signals for Team member management.
+Django signals for Team and Tournament member management.
 
 Handles:
 - Captain/deputy succession when members are removed
 - Team deletion when last member is removed
 - Cascade removal from tournament.users to team.members
+- Auto-add tournament users to organization and league
 """
+
+import logging
 
 from django.db.models.signals import m2m_changed
 from django.dispatch import receiver
+
+log = logging.getLogger(__name__)
 
 
 @receiver(m2m_changed, sender="app.Team_members")
@@ -78,3 +83,67 @@ def handle_tournament_user_removal(sender, instance, action, pk_set, **kwargs):
             continue
         # This will trigger handle_team_member_removal signal
         team.members.remove(*members_to_remove)
+
+
+@receiver(m2m_changed, sender="app.Tournament_users")
+def handle_tournament_user_addition(sender, instance, action, pk_set, **kwargs):
+    """
+    Auto-add users to organization and league when added to a tournament.
+
+    When users are added to a tournament:
+    1. Create OrgUser for the league's organization (if not exists)
+    2. Create LeagueUser for the league (if not exists)
+    """
+    if action != "post_add":
+        return
+
+    tournament = instance
+    added_pks = pk_set
+
+    # Skip if tournament has no league
+    if not tournament.league:
+        return
+
+    league = tournament.league
+    org = league.organization
+
+    # Skip if league has no organization
+    if not org:
+        return
+
+    # Import models here to avoid circular imports
+    from league.models import LeagueUser
+    from org.models import OrgUser
+
+    from .models import CustomUser
+
+    # Get the users that were added
+    added_users = CustomUser.objects.filter(pk__in=added_pks)
+
+    for user in added_users:
+        # Step 1: Create OrgUser if it doesn't exist
+        org_user, org_created = OrgUser.objects.get_or_create(
+            user=user,
+            organization=org,
+            defaults={"mmr": user.mmr or 0},
+        )
+        if org_created:
+            log.info(
+                f"Created OrgUser for {user.username} in org {org.name} "
+                f"(via tournament {tournament.name})"
+            )
+
+        # Step 2: Create LeagueUser if it doesn't exist
+        league_user, league_created = LeagueUser.objects.get_or_create(
+            user=user,
+            league=league,
+            defaults={
+                "org_user": org_user,
+                "mmr": org_user.mmr,
+            },
+        )
+        if league_created:
+            log.info(
+                f"Created LeagueUser for {user.username} in league {league.name} "
+                f"(via tournament {tournament.name})"
+            )
