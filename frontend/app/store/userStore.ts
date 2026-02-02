@@ -92,6 +92,8 @@ interface UserState {
   // Organizations
   organizations: OrganizationType[];
   organization: OrganizationType | null;
+  organizationPk: number | null; // Track which org is loaded
+  organizationsLoaded: boolean; // Track if orgs list is loaded
   setOrganizations: (orgs: OrganizationType[]) => void;
   setOrganization: (org: OrganizationType | null) => void;
   getOrganizations: () => Promise<void>;
@@ -100,6 +102,7 @@ interface UserState {
   // Leagues
   leagues: LeagueType[];
   league: LeagueType | null;
+  leaguesOrgId: number | null | 'all'; // Track which org's leagues are loaded ('all' for no filter)
   setLeagues: (leagues: LeagueType[]) => void;
   setLeague: (league: LeagueType | null) => void;
   getLeagues: (orgId?: number) => Promise<void>;
@@ -382,37 +385,56 @@ export const useUserStore = create<UserState>()(
       // Organizations
       organizations: [] as OrganizationType[],
       organization: null,
-      setOrganizations: (orgs) => set({ organizations: orgs }),
-      setOrganization: (org) => set({ organization: org }),
+      organizationPk: null,
+      organizationsLoaded: false,
+      setOrganizations: (orgs) => set({ organizations: orgs, organizationsLoaded: true }),
+      setOrganization: (org) => set({ organization: org, organizationPk: org?.pk ?? null }),
       getOrganizations: async () => {
+        // Skip if already loaded
+        if (get().organizationsLoaded && get().organizations.length > 0) {
+          log.debug('Organizations already loaded, skipping fetch');
+          return;
+        }
         try {
           const response = await getOrganizations();
-          set({ organizations: response });
+          set({ organizations: response, organizationsLoaded: true });
           log.debug('Organizations fetched successfully:', response);
         } catch (error) {
           log.error('Error fetching organizations:', error);
         }
       },
       getOrganization: async (pk: number) => {
+        // Skip if already loaded for this pk
+        if (get().organizationPk === pk && get().organization) {
+          log.debug('Organization already loaded:', pk);
+          return;
+        }
         try {
           const response = await fetchOrganization(pk);
-          set({ organization: response });
+          set({ organization: response, organizationPk: pk });
           log.debug('Organization fetched successfully:', response);
         } catch (error) {
           log.error('Error fetching organization:', error);
-          set({ organization: null });
+          set({ organization: null, organizationPk: null });
         }
       },
 
       // Leagues
       leagues: [] as LeagueType[],
       league: null,
+      leaguesOrgId: null,
       setLeagues: (leagues) => set({ leagues }),
       setLeague: (league) => set({ league }),
       getLeagues: async (orgId?: number) => {
+        const targetOrgId = orgId ?? 'all';
+        // Skip if already loaded for this org
+        if (get().leaguesOrgId === targetOrgId && get().leagues.length > 0) {
+          log.debug('Leagues already loaded for org:', targetOrgId);
+          return;
+        }
         try {
           const response = await getLeagues(orgId);
-          set({ leagues: response });
+          set({ leagues: response, leaguesOrgId: targetOrgId });
           log.debug('Leagues fetched successfully:', response);
         } catch (error) {
           log.error('Error fetching leagues:', error);

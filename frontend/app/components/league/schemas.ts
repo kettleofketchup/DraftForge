@@ -12,13 +12,14 @@ const LeagueOrganizationSchema = z.object({
   name: z.string(),
   logo: z.string().optional(),
   league_count: z.number().optional(),
+  users_count: z.number().optional(),
   created_at: z.string().optional(),
 });
 
 export const LeagueSchema = z.object({
   pk: z.number().optional(),
-  organizations: z.array(LeagueOrganizationSchema).optional(),
-  organization_ids: z.array(z.number()).optional(),
+  organization: LeagueOrganizationSchema.nullable().optional(),
+  organization_id: z.number().optional(),
   organization_name: z.string().nullable().optional(), // Backwards compatibility
   steam_league_id: z.number().min(1, 'Steam League ID is required'),
   name: z.string().min(1, 'Name is required').max(255),
@@ -29,13 +30,14 @@ export const LeagueSchema = z.object({
   admin_ids: z.array(z.number()).optional(),
   staff_ids: z.array(z.number()).optional(),
   tournament_count: z.number().optional(),
+  users_count: z.number().optional(),
   last_synced: z.string().nullable().optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
 });
 
 export const CreateLeagueSchema = z.object({
-  organization_ids: z.array(z.number()).min(1, 'At least one organization is required'),
+  organization_id: z.number().min(1, 'Organization is required'),
   steam_league_id: z.number().min(1, 'Steam League ID is required'),
   name: z.string().min(1, 'Name is required').max(255),
   description: z.string().max(10000),

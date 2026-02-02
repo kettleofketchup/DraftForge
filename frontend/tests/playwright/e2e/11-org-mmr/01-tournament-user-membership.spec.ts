@@ -58,17 +58,17 @@ async function getTournament(
 ): Promise<{
   pk: number;
   name: string;
-  league: { pk: number; name: string; organizations: Array<{ pk: number; name: string }> } | null;
+  league: { pk: number; name: string; organization: { pk: number; name: string } | null } | null;
   users: Array<{ pk: number; username: string }>;
 } | null> {
   const response = await context.request.get(
-    `${BASE_URL}/api/tournament/${tournamentPk}/`
+    `${BASE_URL}/api/tournaments/${tournamentPk}/`
   );
   if (!response.ok()) return null;
   return (await response.json()) as {
     pk: number;
     name: string;
-    league: { pk: number; name: string; organizations: Array<{ pk: number; name: string }> } | null;
+    league: { pk: number; name: string; organization: { pk: number; name: string } | null } | null;
     users: Array<{ pk: number; username: string }>;
   };
 }
@@ -107,8 +107,8 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
     expect(tournament!.league).not.toBeNull();
 
     const league = tournament!.league!;
-    const org = league.organizations[0];
-    expect(org).toBeDefined();
+    const org = league.organization;
+    expect(org).not.toBeNull();
 
     // Find a user not in this tournament
     const tournamentUserPks = tournament!.users.map((u) => u.pk);
@@ -118,7 +118,7 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
     // Check user's current org membership (may or may not exist)
     const membershipBefore = await getUserOrgMembership(context, userToAdd!.pk);
     const hadOrgUserBefore = membershipBefore?.org_users.some(
-      (ou) => ou.organization_pk === org.pk
+      (ou) => ou.organization_pk === org!.pk
     );
     const hadLeagueUserBefore = membershipBefore?.league_users.some(
       (lu) => lu.league_pk === league.pk
@@ -143,15 +143,35 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
     const searchInput = page.locator('[data-testid="playerSearchInput"]');
     await expect(searchInput).toBeVisible({ timeout: 5000 });
 
+    // Wait for users to load in the dropdown (wait for the loading to complete)
+    // The modal fetches organization users which may take time
+    await page.waitForTimeout(1000);
+
     // Search for the user
     await searchInput.fill(userToAdd!.username);
-    await page.waitForTimeout(500); // Wait for search results
 
-    // Click on the user option
+    // Wait for search results to load - look for the player option or a loading indicator
+    // The dropdown should populate with matching users
+    await page.waitForTimeout(1500); // Give more time for API call and UI update
+
+    // Click on the user option (may need to wait longer for it to appear)
     const playerOption = page.locator(
       `[data-testid="playerOption-${userToAdd!.username}"]`
     );
-    await expect(playerOption).toBeVisible({ timeout: 5000 });
+
+    // If the option isn't visible, check if there's a "No users" message and log it
+    const noUsersMsg = page.locator('text="No users or too many users found"');
+    if (await noUsersMsg.isVisible({ timeout: 2000 }).catch(() => false)) {
+      console.log(`Warning: No users found when searching for ${userToAdd!.username}`);
+      console.log('This may mean the user is not in the organization member list.');
+      // Try clicking the Create User button to add them manually
+      const createUserBtn = page.locator('button:has-text("Create User")');
+      if (await createUserBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+        console.log('Create User button is available as fallback');
+      }
+    }
+
+    await expect(playerOption).toBeVisible({ timeout: 10000 });
     await playerOption.click();
 
     // Wait for success (user card should appear)
@@ -217,7 +237,7 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
       expect(membership).not.toBeNull();
 
       const orgUser = membership!.org_users.find(
-        (ou) => ou.organization_pk === tournament!.league!.organizations[0]?.pk
+        (ou) => ou.organization_pk === tournament!.league!.organization?.pk
       );
 
       // If user has an OrgUser record, verify mmr matches

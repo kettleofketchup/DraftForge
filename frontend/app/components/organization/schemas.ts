@@ -16,6 +16,7 @@ export const OrganizationSchema = z.object({
   default_league: z.number().nullable().optional(),
   league_count: z.number().optional(),
   tournament_count: z.number().optional(),
+  users_count: z.number().optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
 });

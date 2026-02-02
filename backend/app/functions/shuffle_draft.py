@@ -45,7 +45,7 @@ def get_team_total_mmr(team, organization=None) -> int:
     if organization is None:
         tournament = team.tournament
         if tournament and tournament.league:
-            organization = tournament.league.organizations.first()
+            organization = tournament.league.organization
 
     # If still no organization, fall back to direct user.mmr (legacy behavior)
     if organization is None:

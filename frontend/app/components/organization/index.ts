@@ -6,3 +6,4 @@ export { OrganizationCard } from './OrganizationCard';
 export { OrganizationPopover } from './OrganizationPopover';
 export { CreateOrganizationModal } from './forms/CreateOrganizationModal';
 export { EditOrganizationModal } from './forms/EditOrganizationModal';
+export { ClaimsTab } from './tabs';
