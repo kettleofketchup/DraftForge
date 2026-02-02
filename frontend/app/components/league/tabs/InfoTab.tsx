@@ -2,7 +2,7 @@ import { Award, Users, FileText } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { Badge } from '~/components/ui/badge';
-import { UserAvatar } from '~/components/user/UserAvatar';
+import { UserStrip } from '~/components/user/UserStrip';
 import type { LeagueType } from '../schemas';
 
 interface Props {
@@ -67,13 +67,18 @@ export const InfoTab: React.FC<Props> = ({ league }) => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-col gap-2">
               {league.admins.map((admin) => (
-                <div key={admin.pk} className="flex items-center gap-2">
-                  <UserAvatar user={admin} size="md" />
-                  <span className="text-sm">{admin.nickname || admin.username}</span>
-                  <Badge variant="secondary" className="text-xs">Admin</Badge>
-                </div>
+                <UserStrip
+                  key={admin.pk}
+                  user={admin}
+                  compact
+                  leagueId={league.pk}
+                  organizationId={league.organization?.pk}
+                  actionSlot={
+                    <Badge variant="secondary" className="text-xs">Admin</Badge>
+                  }
+                />
               ))}
             </div>
           </CardContent>

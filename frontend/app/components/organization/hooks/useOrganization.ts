@@ -3,23 +3,27 @@ import { useUserStore } from '~/store/userStore';
 
 export function useOrganization(pk: number | undefined) {
   const organization = useUserStore((state) => state.organization);
+  const organizationPk = useUserStore((state) => state.organizationPk);
   const getOrganization = useUserStore((state) => state.getOrganization);
 
   const refetch = useCallback(() => {
     if (pk) {
+      // Force refetch by resetting state first
+      useUserStore.setState({ organizationPk: null });
       getOrganization(pk);
     }
   }, [pk, getOrganization]);
 
   useEffect(() => {
-    if (pk && (!organization || organization.pk !== pk)) {
-      refetch();
+    // Only fetch if pk is set and we haven't loaded this org yet
+    if (pk && organizationPk !== pk) {
+      getOrganization(pk);
     }
-  }, [pk, organization, refetch]);
+  }, [pk, organizationPk, getOrganization]);
 
   return {
-    organization: organization?.pk === pk ? organization : null,
-    isLoading: !organization || organization.pk !== pk,
+    organization: organizationPk === pk ? organization : null,
+    isLoading: organizationPk !== pk,
     refetch,
   };
 }

@@ -5,6 +5,7 @@ import type { UserType } from '~/components/user/types';
 import { PlusIconButton } from '~/components/ui/buttons';
 import { FormDialog } from '~/components/ui/dialogs';
 import UserCreateModal from '~/components/user/userCard/createModal';
+import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 import { AddPlayerDropdown } from './addPlayerDropdown';
 
@@ -20,6 +21,7 @@ interface Props {
   setQuery: React.Dispatch<React.SetStateAction<string>>;
   addPlayerCallback?: (user: UserType) => Promise<void>;
   removePlayerCallback?: (e: FormEvent, user: UserType) => Promise<void>;
+  orgId?: number;
 }
 
 export const AddPlayerModal: React.FC<Props> = ({
@@ -28,19 +30,36 @@ export const AddPlayerModal: React.FC<Props> = ({
   removePlayerCallback,
   query,
   setQuery,
+  orgId,
 }) => {
   const [open, setOpen] = useState(false);
   const currentUser = useUserStore((state) => state.currentUser);
   const isStaff = useUserStore((state) => state.isStaff);
-  const users = useUserStore((state) => state.users);
+
+  // Global users fallback
+  const globalUsers = useUserStore((state) => state.users);
   const getUsers = useUserStore((state) => state.getUsers);
 
-  // Lazy load users when modal opens (only if not already loaded)
+  // Org-specific users (preferred when orgId is provided)
+  const orgUsers = useOrgStore((state) => state.orgUsers);
+  const getOrgUsers = useOrgStore((state) => state.getOrgUsers);
+  const orgUsersLoading = useOrgStore((state) => state.orgUsersLoading);
+
+  // Determine which users to show
+  const users = orgId ? orgUsers : globalUsers;
+
+  // Lazy load users when modal opens
   useEffect(() => {
-    if (open && users.length === 0) {
-      getUsers();
+    if (open) {
+      if (orgId) {
+        // Load org-specific users
+        getOrgUsers(orgId);
+      } else if (globalUsers.length === 0) {
+        // Fallback to global users
+        getUsers();
+      }
     }
-  }, [open, users.length, getUsers]);
+  }, [open, orgId, globalUsers.length, getOrgUsers, getUsers]);
 
   if (!isStaff()) {
     return (
@@ -63,7 +82,11 @@ export const AddPlayerModal: React.FC<Props> = ({
         open={open}
         onOpenChange={setOpen}
         title="Add Users to Tournament"
-        description="Search for a user to add to the tournament. You can search by name or username."
+        description={
+          orgId
+            ? 'Search for organization members to add to the tournament.'
+            : 'Search for a user to add to the tournament. You can search by name or username.'
+        }
         submitLabel="Done"
         isSubmitting={false}
         onSubmit={() => {
@@ -74,13 +97,25 @@ export const AddPlayerModal: React.FC<Props> = ({
       >
         <div className="flex flex-col justify-start align-start items-start content-start w-full gap-4 mb-4">
           <div className="justify-self-start self-start w-full">
-            <AddPlayerDropdown
-              query={query}
-              setQuery={setQuery}
-              addPlayerCallback={addPlayerCallback}
-              removePlayerCallback={removePlayerCallback}
-              addedUsers={addedUsers}
-            />
+            {orgUsersLoading && orgId ? (
+              <div className="text-sm text-gray-500">
+                Loading organization members...
+              </div>
+            ) : (
+              <AddPlayerDropdown
+                users={users}
+                query={query}
+                setQuery={setQuery}
+                addPlayerCallback={addPlayerCallback}
+                removePlayerCallback={removePlayerCallback}
+                addedUsers={addedUsers}
+                placeholder={
+                  orgId
+                    ? 'Search organization members...'
+                    : 'Search all users...'
+                }
+              />
+            )}
           </div>
         </div>
         <div className="flex flex-row gap-x-4 sm:gap-x-8 justify-center align-center items-center w-full">
