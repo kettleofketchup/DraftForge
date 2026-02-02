@@ -1,6 +1,6 @@
 import { generateMeta } from '~/lib/seo';
 import { fetchOrganization } from '~/components/api/api';
-import { Building2, ExternalLink, Pencil, Plus } from 'lucide-react';
+import { Building2, ClipboardList, ExternalLink, Pencil, Plus, Users } from 'lucide-react';
 import type { Route } from './+types/organization';
 
 export async function loader({ params }: Route.LoaderArgs) {
@@ -34,11 +34,14 @@ export function meta({ data }: Route.MetaArgs) {
     description: 'Organization profile and events',
   });
 }
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
-import { EditOrganizationModal, useOrganization } from '~/components/organization';
+import { ClaimsTab, EditOrganizationModal, useOrganization } from '~/components/organization';
 import { Button } from '~/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
+import { UserList } from '~/components/user';
+import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 
 // Discord icon component
@@ -61,6 +64,17 @@ export default function OrganizationDetailPage() {
   const currentUser = useUserStore((state) => state.currentUser);
   const [createLeagueOpen, setCreateLeagueOpen] = useState(false);
   const [editOrgOpen, setEditOrgOpen] = useState(false);
+  const [activeTab, setActiveTab] = useUrlTabs('leagues');
+
+  // Org users from store
+  const { orgUsers, orgUsersLoading, orgUsersOrgId, getOrgUsers } = useOrgStore();
+
+  // Fetch org users when switching to users tab
+  useEffect(() => {
+    if (activeTab === 'users' && pk) {
+      getOrgUsers(pk);
+    }
+  }, [activeTab, pk, getOrgUsers]);
 
   const isOrgAdmin =
     currentUser?.is_superuser ||
@@ -147,32 +161,78 @@ export default function OrganizationDetailPage() {
           </div>
         </div>
 
-        {/* Leagues Section */}
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold">Leagues</h2>
-          {isOrgAdmin && (
-            <Button onClick={() => setCreateLeagueOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Create League
-            </Button>
-          )}
-        </div>
+        {/* Tabs Section */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="leagues" data-testid="org-tab-leagues">
+              Leagues ({leagues.length})
+            </TabsTrigger>
+            <TabsTrigger value="users" data-testid="org-tab-users">
+              <Users className="w-4 h-4 mr-2" />
+              Users ({orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUsers.length})
+            </TabsTrigger>
+            {isOrgAdmin && (
+              <TabsTrigger value="claims" data-testid="org-tab-claims">
+                <ClipboardList className="w-4 h-4 mr-2" />
+                Claims
+              </TabsTrigger>
+            )}
+          </TabsList>
 
-        {leaguesLoading ? (
-          <div className="text-center py-8 text-muted-foreground">
-            Loading leagues...
-          </div>
-        ) : leagues.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">
-            No leagues found
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {leagues.map((league) => (
-              <LeagueCard key={league.pk} league={league} />
-            ))}
-          </div>
-        )}
+          {/* Leagues Tab */}
+          <TabsContent value="leagues">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Leagues</h2>
+              {isOrgAdmin && (
+                <Button onClick={() => setCreateLeagueOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create League
+                </Button>
+              )}
+            </div>
+
+            {leaguesLoading ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Loading leagues...
+              </div>
+            ) : leagues.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No leagues found
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {leagues.map((league) => (
+                  <LeagueCard key={league.pk} league={league} />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Users Tab */}
+          <TabsContent value="users">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Organization Members</h2>
+              <span className="text-sm text-muted-foreground">
+                {orgUsers.length} {orgUsers.length === 1 ? 'member' : 'members'}
+              </span>
+            </div>
+
+            <UserList
+              users={orgUsers}
+              isLoading={orgUsersLoading}
+              showSearch={orgUsers.length > 5}
+              searchPlaceholder="Search members..."
+              emptyMessage="No members in this organization"
+            />
+          </TabsContent>
+
+          {/* Claims Tab (Admin only) */}
+          {isOrgAdmin && pk && (
+            <TabsContent value="claims">
+              <ClaimsTab organizationId={pk} />
+            </TabsContent>
+          )}
+        </Tabs>
 
         {pk && (
           <CreateLeagueModal

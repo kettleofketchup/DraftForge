@@ -61,10 +61,26 @@ class LeagueMatchService:
         }
 
         # Create missing ratings
+        # Get organization for MMR lookup
+        org = league.organization
+
         for player in all_players:
             if player.pk not in existing_ratings:
+                # Get MMR from OrgUser if organization exists
+                base_mmr = 0
+                if org:
+                    from org.models import OrgUser
+
+                    try:
+                        org_user = OrgUser.objects.get(user=player, organization=org)
+                        base_mmr = org_user.mmr or 0
+                    except OrgUser.DoesNotExist:
+                        base_mmr = player.mmr or 0  # Fallback to legacy
+                else:
+                    base_mmr = player.mmr or 0  # Fallback to legacy
+
                 existing_ratings[player.pk] = LeagueRating.objects.create(
-                    league=league, player=player, base_mmr=player.mmr or 0
+                    league=league, player=player, base_mmr=base_mmr
                 )
 
         winner_ratings = [existing_ratings[p.pk] for p in winners]
