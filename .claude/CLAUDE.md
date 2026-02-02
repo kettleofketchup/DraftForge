@@ -196,6 +196,10 @@ just docker::backend::build    # Build backend image
 just docker::frontend::build   # Build frontend image
 just docker::nginx::build      # Build nginx image
 
+# Test Database
+just docker::db::build         # Build test-db image (skips if hash unchanged)
+just db::reset-test            # Extract cached DB to backend/test.db.sqlite3
+
 # Docs
 just docs::serve         # Start MkDocs dev server
 just docs::build         # Build static docs site
