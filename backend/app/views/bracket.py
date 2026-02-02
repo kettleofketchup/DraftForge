@@ -237,7 +237,27 @@ def advance_winner(request, game_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    winner_slot = request.data.get("winner")  # 'radiant' or 'dire'
+    winner = request.data.get("winner")
+
+    # Handle unset case
+    if winner is None:
+        if game.winning_team:
+            # Find losing team to clear their placement
+            losing_team = (
+                game.dire_team
+                if game.winning_team == game.radiant_team
+                else game.radiant_team
+            )
+            if losing_team and losing_team.placement:
+                losing_team.placement = None
+                losing_team.save()
+
+        game.winning_team = None
+        game.status = "scheduled"
+        game.save()
+        return Response(BracketGameSerializer(game).data)
+
+    winner_slot = winner  # 'radiant' or 'dire'
     if winner_slot not in ["radiant", "dire"]:
         return Response(
             {"error": "Invalid winner slot"}, status=status.HTTP_400_BAD_REQUEST
