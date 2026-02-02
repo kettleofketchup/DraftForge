@@ -148,7 +148,8 @@ def generate_mock_discord_members(count=100):
         used_usernames.add(username)
 
         # Generate a fake Discord ID (snowflake format - 18 digit number)
-        discord_id = str(100000000000000000 + i)
+        # Use 200... range to avoid conflict with test auth users (100...)
+        discord_id = str(200000000000000000 + i)
 
         member = {
             "user": {
