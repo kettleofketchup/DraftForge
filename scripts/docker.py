@@ -61,14 +61,14 @@ def docker_build(
     # Use --push for registry, --load for local Docker daemon
     output_flag = "--push" if push else "--load"
 
-    # Cache args - only use registry cache when pushing or explicitly enabled
+    # Cache args:
     # --cache-from is safe even if cache doesn't exist (buildx handles gracefully)
+    # --cache-to requires write permissions, so only use when pushing
     cache_args = ""
     if use_cache or push:
-        cache_args = (
-            f"--cache-from type=registry,ref={cache_ref} "
-            f"--cache-to type=registry,ref={cache_ref},mode=max "
-        )
+        cache_args = f"--cache-from type=registry,ref={cache_ref} "
+    if push:
+        cache_args += f"--cache-to type=registry,ref={cache_ref},mode=max "
 
     cmd = (
         f"docker buildx build "
