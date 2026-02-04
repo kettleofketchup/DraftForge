@@ -40,7 +40,7 @@ class TimeoutTestCase(TransactionTestCase):
         # Create tournament and teams
         self.tournament = Tournament.objects.create(
             name="Test Tournament",
-            owner=self.captain1,
+            date_played=timezone.now(),
         )
         self.team1 = Team.objects.create(
             tournament=self.tournament,
@@ -83,8 +83,14 @@ class TimeoutTestCase(TransactionTestCase):
         )
 
         # Build draft rounds
-        build_draft_rounds(self.draft)
+        build_draft_rounds(self.draft, self.draft_team1, self.draft_team2)
         self.draft.refresh_from_db()
+
+        # Activate the first round (normally done by start_draft)
+        first_round = self.draft.rounds.first()
+        first_round.state = "active"
+        first_round.started_at = timezone.now()
+        first_round.save()
 
     def test_no_timeout_when_within_grace_period(self):
         """Test no auto-pick when within grace period."""
@@ -211,7 +217,7 @@ class TickBroadcasterTestCase(TransactionTestCase):
         )
         self.tournament = Tournament.objects.create(
             name="Test Tournament",
-            owner=self.captain1,
+            date_played=timezone.now(),
         )
         self.team1 = Team.objects.create(
             tournament=self.tournament,
@@ -248,14 +254,18 @@ class TickBroadcasterTestCase(TransactionTestCase):
         # Clean up
         stop_tick_broadcaster(self.draft.id)
 
-    def test_start_tick_broadcaster_prevents_duplicate(self):
+    @patch("app.tasks.herodraft_tick.should_continue_ticking")
+    def test_start_tick_broadcaster_prevents_duplicate(self, mock_should_continue):
         """Test starting tick broadcaster twice doesn't create duplicate."""
+        # Keep the loop running by returning True (will be stopped via stop_tick_broadcaster)
+        mock_should_continue.return_value = (True, "")
+
         start_tick_broadcaster(self.draft.id)
 
         with _lock:
             task_info1 = _active_tick_tasks.get(self.draft.id)
 
-        # Try to start again
+        # Try to start again - should return same task
         start_tick_broadcaster(self.draft.id)
 
         with _lock:
@@ -300,7 +310,7 @@ class BroadcastTickTestCase(TransactionTestCase):
         )
         self.tournament = Tournament.objects.create(
             name="Test Tournament",
-            owner=self.captain1,
+            date_played=timezone.now(),
         )
         self.team1 = Team.objects.create(
             tournament=self.tournament,
@@ -335,7 +345,13 @@ class BroadcastTickTestCase(TransactionTestCase):
             is_radiant=False,
             reserve_time_remaining=90000,
         )
-        build_draft_rounds(self.draft)
+        build_draft_rounds(self.draft, self.draft_team1, self.draft_team2)
+
+        # Activate the first round (normally done by start_draft)
+        first_round = self.draft.rounds.first()
+        first_round.state = "active"
+        first_round.started_at = timezone.now()
+        first_round.save()
 
     @patch("app.tasks.herodraft_tick.get_channel_layer")
     def test_broadcast_tick_includes_team_ids(self, mock_get_channel_layer):
@@ -344,7 +360,7 @@ class BroadcastTickTestCase(TransactionTestCase):
         mock_channel_layer.group_send = AsyncMock()
         mock_get_channel_layer.return_value = mock_channel_layer
 
-        # Activate round
+        # Get the active round
         active_round = self.draft.rounds.filter(state="active").first()
         active_round.started_at = timezone.now()
         active_round.save()
