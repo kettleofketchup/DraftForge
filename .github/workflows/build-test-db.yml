@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'backend/tests/populate.py'
+      - 'backend/tests/populate/*.py'
+      - 'backend/tests/data/*.py'
       - 'backend/tests/helpers/tournament_config.py'
       - 'backend/app/management/commands/populate_*.py'
       - 'backend/**/migrations/*.py'

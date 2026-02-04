@@ -66,3 +66,8 @@ herodraft-headed:
 [group('test::pw')]
 all *args:
     {{inv}} test.playwright.all {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+
+# Run only @cicd tagged tests (fast smoke tests for CI/CD)
+[group('test::pw')]
+cicd *args:
+    {{inv}} test.playwright.cicd {{ if args != "" { "--args='" + args + "'" } else { "" } }}

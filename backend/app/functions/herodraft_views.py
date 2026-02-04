@@ -18,6 +18,7 @@ from app.functions.herodraft import (
     trigger_roll,
 )
 from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent, HeroDraftState
+from app.permissions_org import IsTournamentStaff
 from app.serializers import HeroDraftEventSerializer, HeroDraftSerializer
 
 log = logging.getLogger(__name__)
@@ -147,7 +148,10 @@ def get_herodraft(request, draft_pk):
         200: Draft data
         404: Draft not found
     """
-    draft = _get_draft_with_prefetch(draft_pk)
+    try:
+        draft = _get_draft_with_prefetch(draft_pk)
+    except HeroDraft.DoesNotExist:
+        return Response({"error": "Draft not found"}, status=404)
     return Response(HeroDraftSerializer(draft).data)
 
 
@@ -479,7 +483,7 @@ def abandon_draft(request, draft_pk):
     """
     Abandon a hero draft.
 
-    Can be called by an admin or a captain in the draft.
+    Can be called by tournament staff or a captain in the draft.
     Transitions the draft to "abandoned" state.
 
     Returns:
@@ -488,6 +492,8 @@ def abandon_draft(request, draft_pk):
         404: Draft not found
         400: Draft already completed or abandoned
     """
+    from app.permissions_org import can_edit_tournament
+
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
 
     # Check if draft is already in a terminal state
@@ -497,11 +503,13 @@ def abandon_draft(request, draft_pk):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Check authorization: must be admin or captain in this draft
+    # Check authorization: must be tournament staff or captain in this draft
     is_captain = _user_is_captain_in_draft(draft, request.user)
-    is_admin = request.user.is_staff
+    is_staff = False
+    if draft.game and draft.game.tournament:
+        is_staff = can_edit_tournament(request.user, draft.game.tournament)
 
-    if not is_captain and not is_admin:
+    if not is_captain and not is_staff:
         return Response(
             {"error": "You are not authorized to abandon this draft"},
             status=status.HTTP_403_FORBIDDEN,
@@ -512,14 +520,14 @@ def abandon_draft(request, draft_pk):
     draft.save()
 
     log.info(
-        f"HeroDraft {draft.pk} abandoned by user {request.user.pk} (admin={is_admin})"
+        f"HeroDraft {draft.pk} abandoned by user {request.user.pk} (staff={is_staff})"
     )
 
     # Create event for audit trail
     HeroDraftEvent.objects.create(
         draft=draft,
         event_type="draft_abandoned",
-        metadata={"abandoned_by": request.user.pk, "was_admin": is_admin},
+        metadata={"abandoned_by": request.user.pk, "was_staff": is_staff},
     )
 
     broadcast_herodraft_event(draft, "draft_abandoned")
@@ -529,25 +537,19 @@ def abandon_draft(request, draft_pk):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsTournamentStaff])
 def reset_draft(request, draft_pk):
     """
     Reset a hero draft back to waiting_for_captains state.
 
-    Can only be called by an admin.
+    Requires tournament staff access.
     Deletes all rounds and events, resets team states.
 
     Returns:
         200: Reset draft data
-        403: User is not an admin
+        403: User is not tournament staff
         404: Draft not found
     """
-    if not request.user.is_staff:
-        return Response(
-            {"error": "Only admins can reset a draft"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
 
     # Delete all rounds
@@ -587,29 +589,13 @@ def reset_draft(request, draft_pk):
     return Response(HeroDraftSerializer(draft).data)
 
 
-def _user_is_league_staff(draft: HeroDraft, user) -> bool:
-    """Check if the user is league staff for the draft's tournament."""
-    if user.is_staff:
-        return True
-    # Check if user is league staff through the tournament/league hierarchy
-    # Game has a direct tournament FK, which may have a league
-    if draft.game and draft.game.tournament and draft.game.tournament.league:
-        league = draft.game.tournament.league
-        # Check league admins and staff ManyToMany fields
-        return (
-            league.admins.filter(pk=user.pk).exists()
-            or league.staff.filter(pk=user.pk).exists()
-        )
-    return False
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def pause_draft(request, draft_pk):
     """
     Manually pause a hero draft.
 
-    Can be called by a captain in the draft or league staff.
+    Can be called by a captain in the draft or tournament staff.
     Transitions the draft to "paused" state with is_manual_pause=True.
 
     Returns:
@@ -618,6 +604,8 @@ def pause_draft(request, draft_pk):
         404: Draft not found
         400: Invalid state for this operation
     """
+    from app.permissions_org import can_edit_tournament
+
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
 
     # Can only pause during drafting
@@ -627,9 +615,11 @@ def pause_draft(request, draft_pk):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Check authorization: must be captain or league staff
+    # Check authorization: must be captain or tournament staff
     is_captain = _user_is_captain_in_draft(draft, request.user)
-    is_staff = _user_is_league_staff(draft, request.user)
+    is_staff = False
+    if draft.game and draft.game.tournament:
+        is_staff = can_edit_tournament(request.user, draft.game.tournament)
 
     if not is_captain and not is_staff:
         return Response(
@@ -677,7 +667,7 @@ def resume_draft(request, draft_pk):
     """
     Resume a manually paused hero draft.
 
-    Can be called by a captain in the draft or league staff.
+    Can be called by a captain in the draft or tournament staff.
     Transitions the draft to "resuming" state (3-second countdown).
 
     Returns:
@@ -686,6 +676,8 @@ def resume_draft(request, draft_pk):
         404: Draft not found
         400: Invalid state for this operation
     """
+    from app.permissions_org import can_edit_tournament
+
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
 
     # Can only resume from paused state
@@ -695,9 +687,11 @@ def resume_draft(request, draft_pk):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Check authorization: must be captain or league staff
+    # Check authorization: must be captain or tournament staff
     is_captain = _user_is_captain_in_draft(draft, request.user)
-    is_staff = _user_is_league_staff(draft, request.user)
+    is_staff = False
+    if draft.game and draft.game.tournament:
+        is_staff = can_edit_tournament(request.user, draft.game.tournament)
 
     if not is_captain and not is_staff:
         return Response(

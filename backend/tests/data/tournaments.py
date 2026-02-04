@@ -2,10 +2,99 @@
 Test Tournament Configuration
 
 Pre-defined tournaments for testing.
+All teams are imported from tests/data/teams.py to avoid duplication.
+
+Tournament Types:
+- TestTournament: Pre-defined teams with TestUser objects
+- DynamicTournamentConfig: Dynamically created with mock users/teams
 """
 
 from tests.data.leagues import DTX_STEAM_LEAGUE_ID
-from tests.data.models import TestTeam, TestTournament
+from tests.data.models import DynamicTournamentConfig, TestTournament
+from tests.data.teams import (
+    BRACKET_UNSET_WINNER_TEAMS,
+    HERODRAFT_TEAMS,
+    REAL_TOURNAMENT_38_TEAMS,
+)
+
+# =============================================================================
+# Dynamic Tournament Configs
+# These tournaments are created with generated mock users and teams.
+# pk values are assigned sequentially for consistent database access.
+# =============================================================================
+
+# All 6 bracket games completed - used for bracket badges, match stats tests
+COMPLETED_BRACKET_CONFIG = DynamicTournamentConfig(
+    pk=1,
+    name="Completed Bracket Test",
+    user_count=20,
+    team_count=4,
+    tournament_type="double_elimination",
+    league_name="DTX League",
+    completed_game_count=6,  # All 6 bracket games completed
+    match_id_base=9000000001,
+)
+
+# 2 games completed, 4 pending - used for partial bracket tests
+PARTIAL_BRACKET_CONFIG = DynamicTournamentConfig(
+    pk=2,
+    name="Partial Bracket Test",
+    user_count=20,
+    team_count=4,
+    tournament_type="double_elimination",
+    league_name="DTX League",
+    completed_game_count=2,  # 2 games completed, 4 pending
+    match_id_base=9000000101,
+)
+
+# 0 games completed, all pending - used for pending bracket tests
+PENDING_BRACKET_CONFIG = DynamicTournamentConfig(
+    pk=3,
+    name="Pending Bracket Test",
+    user_count=20,
+    team_count=4,
+    tournament_type="double_elimination",
+    league_name="DTX League",
+    completed_game_count=0,  # All games pending
+    match_id_base=9000000201,
+)
+
+# Used for captain draft and shuffle draft tests
+DRAFT_TEST_CONFIG = DynamicTournamentConfig(
+    pk=4,
+    name="Draft Test",
+    user_count=30,
+    team_count=6,
+    tournament_type="double_elimination",
+    league_name="DTX League",
+)
+
+# Larger tournament for general testing
+LARGE_TOURNAMENT_CONFIG = DynamicTournamentConfig(
+    pk=5,
+    name="Large Tournament Test",
+    user_count=40,
+    team_count=8,
+    tournament_type="single_elimination",
+    league_name="DTX League",
+)
+
+# Test League tournament - used for multi-org/league testing
+TEST_LEAGUE_TOURNAMENT_CONFIG = DynamicTournamentConfig(
+    pk=6,
+    name="Test League Tournament",
+    user_count=20,
+    team_count=4,
+    tournament_type="double_elimination",
+    league_name="Test League",
+)
+
+# Bracket test configs (for steam match population)
+BRACKET_TEST_CONFIGS: list[DynamicTournamentConfig] = [
+    COMPLETED_BRACKET_CONFIG,
+    PARTIAL_BRACKET_CONFIG,
+    PENDING_BRACKET_CONFIG,
+]
 
 # =============================================================================
 # Real Tournament 38
@@ -19,56 +108,7 @@ REAL_TOURNAMENT_38: TestTournament = TestTournament(
     steam_league_id=DTX_STEAM_LEAGUE_ID,
     league_name="DTX League",
     date_played="2026-01-18",
-    teams=[
-        TestTeam(
-            name="gglive's Team",
-            captain_username="gglive",
-            member_usernames=[
-                "gglive",
-                "anil98765",
-                "hassanzulfi",
-                "abaybay1392",
-                "reacher_z",
-            ],
-            draft_order=1,
-        ),
-        TestTeam(
-            name="benevolentgremlin's Team",
-            captain_username="benevolentgremlin",
-            member_usernames=[
-                "benevolentgremlin",
-                "clarexlauda",
-                "creemy__",
-                "sir_t_rex",
-                "bearthebear",
-            ],
-            draft_order=2,
-        ),
-        TestTeam(
-            name="ethan0688_'s Team",
-            captain_username="ethan0688_",
-            member_usernames=[
-                "ethan0688_",
-                "just__khang",
-                "heffdawgz",
-                "pushingshots",
-                "p0styp0sty",
-            ],
-            draft_order=3,
-        ),
-        TestTeam(
-            name="vrm.mtl's Team",
-            captain_username="vrm.mtl",
-            member_usernames=[
-                "vrm.mtl",
-                "tornope",
-                "nimstria1",
-                "thekingauto",
-                "leafael.",
-            ],
-            draft_order=4,
-        ),
-    ],
+    teams=REAL_TOURNAMENT_38_TEAMS,
 )
 
 # =============================================================================
@@ -82,39 +122,20 @@ DEMO_HERODRAFT_TOURNAMENT: TestTournament = TestTournament(
     state="ongoing",
     steam_league_id=DTX_STEAM_LEAGUE_ID,
     league_name="DTX League",
-    teams=[
-        TestTeam(
-            name="Team A",
-            captain_username="ethan0688_",
-            member_usernames=[
-                "ethan0688_",
-                "just__khang",
-                "heffdawgz",
-                "pushingshots",
-                "p0styp0sty",
-            ],
-            draft_order=1,
-        ),
-        TestTeam(
-            name="Team B",
-            captain_username="vrm.mtl",
-            member_usernames=[
-                "vrm.mtl",
-                "tornope",
-                "nimstria1",
-                "thekingauto",
-                "leafael.",
-            ],
-            draft_order=2,
-        ),
-    ],
+    teams=HERODRAFT_TEAMS,
 )
 
 # =============================================================================
-# All Tournaments (for iteration)
+# Bracket Unset Winner Tournament
+# Used for E2E testing the "unset winner" bracket management flow
+# Creates a 4-team double elimination with ALL games PENDING (no completed games)
 # =============================================================================
 
-ALL_TOURNAMENTS: list[TestTournament] = [
-    REAL_TOURNAMENT_38,
-    DEMO_HERODRAFT_TOURNAMENT,
-]
+BRACKET_UNSET_WINNER_TOURNAMENT: TestTournament = TestTournament(
+    name="bracket:unsetWinner Tournament",
+    tournament_type="double_elimination",
+    state="in_progress",
+    steam_league_id=DTX_STEAM_LEAGUE_ID,
+    league_name="DTX League",
+    teams=BRACKET_UNSET_WINNER_TEAMS,
+)

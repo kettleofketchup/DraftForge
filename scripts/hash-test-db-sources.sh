@@ -6,6 +6,8 @@ cd "$(git rev-parse --show-toplevel)"
 
 find backend -type f \( \
     -path "backend/tests/populate.py" -o \
+    -path "backend/tests/populate/*.py" -o \
+    -path "backend/tests/data/*.py" -o \
     -path "backend/tests/helpers/tournament_config.py" -o \
     -path "backend/app/management/commands/populate_*.py" -o \
     -path "backend/*/migrations/*.py" -o \

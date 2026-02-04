@@ -149,7 +149,7 @@ def can_edit_tournament(user, tournament):
     """
     Check if user can edit a tournament.
 
-    Requires league admin access (if tournament has a league).
+    Checks hierarchy: site admin/staff → org admin/staff → league admin/staff.
 
     Args:
         user: The user to check
@@ -161,16 +161,19 @@ def can_edit_tournament(user, tournament):
     if not user.is_authenticated:
         return False
 
-    # Superuser can edit anything
+    # Site admin/staff can edit anything
     if user.is_superuser or user.is_staff:
         return True
 
-    # If tournament has a league, check league admin access
+    # If tournament has a league, check league staff access
+    # (which includes org admin/staff through has_league_staff_access)
     if tournament.league:
-        return has_league_admin_access(user, tournament.league)
+        return has_league_staff_access(user, tournament.league)
 
-    # No league - fall back to org admin if we can find the org
-    # This shouldn't normally happen but provides a fallback
+    # No league - fall back to org staff if we can find the org
+    if tournament.league and tournament.league.organization:
+        return has_org_staff_access(user, tournament.league.organization)
+
     return False
 
 
@@ -218,6 +221,54 @@ class CanEditTournament(permissions.BasePermission):
         return can_edit_tournament(request.user, obj)
 
 
+class CanEditTeam(permissions.BasePermission):
+    """Permission check for team editing via tournament access."""
+
+    message = "You do not have permission to edit this team."
+
+    def has_permission(self, request, view):
+        """Allow authenticated users to proceed to object-level check."""
+        return request.user and request.user.is_authenticated
+
+    def has_object_permission(self, request, view, obj):
+        # Team belongs to a tournament
+        if obj.tournament:
+            return can_edit_tournament(request.user, obj.tournament)
+        return False
+
+
+class CanEditDraft(permissions.BasePermission):
+    """Permission check for draft editing via tournament access."""
+
+    message = "You do not have permission to edit this draft."
+
+    def has_permission(self, request, view):
+        """Allow authenticated users to proceed to object-level check."""
+        return request.user and request.user.is_authenticated
+
+    def has_object_permission(self, request, view, obj):
+        # Draft belongs to a tournament
+        if obj.tournament:
+            return can_edit_tournament(request.user, obj.tournament)
+        return False
+
+
+class CanEditDraftRound(permissions.BasePermission):
+    """Permission check for draft round editing via tournament access."""
+
+    message = "You do not have permission to edit this draft round."
+
+    def has_permission(self, request, view):
+        """Allow authenticated users to proceed to object-level check."""
+        return request.user and request.user.is_authenticated
+
+    def has_object_permission(self, request, view, obj):
+        # DraftRound belongs to Draft which belongs to Tournament
+        if obj.draft and obj.draft.tournament:
+            return can_edit_tournament(request.user, obj.draft.tournament)
+        return False
+
+
 class CanManageGame(permissions.BasePermission):
     """Permission check for game management (declare winner, link steam match)."""
 
@@ -229,3 +280,63 @@ class CanManageGame(permissions.BasePermission):
 
     def has_object_permission(self, request, view, obj):
         return can_manage_game(request.user, obj)
+
+
+class IsTournamentStaff(permissions.BasePermission):
+    """Permission check for tournament staff access.
+
+    Checks hierarchy: site admin/staff → org admin/staff → league admin/staff.
+    Supports URL kwargs: tournament_id, game_id, game_pk, draft_pk.
+    """
+
+    message = "You do not have permission to modify this tournament."
+
+    def has_permission(self, request, view):
+        """Check tournament staff access."""
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        # Import here to avoid circular imports
+        from app.models import Game, HeroDraft, Tournament
+
+        tournament = None
+
+        # Try tournament_id first
+        tournament_id = view.kwargs.get("tournament_id")
+        if tournament_id:
+            try:
+                tournament = Tournament.objects.select_related("league").get(
+                    pk=tournament_id
+                )
+            except Tournament.DoesNotExist:
+                return False
+
+        # Try game_id or game_pk
+        if not tournament:
+            game_id = view.kwargs.get("game_id") or view.kwargs.get("game_pk")
+            if game_id:
+                try:
+                    game = Game.objects.select_related("tournament__league").get(
+                        pk=game_id
+                    )
+                    tournament = game.tournament
+                except Game.DoesNotExist:
+                    return False
+
+        # Try draft_pk (for herodraft views)
+        if not tournament:
+            draft_pk = view.kwargs.get("draft_pk")
+            if draft_pk:
+                try:
+                    draft = HeroDraft.objects.select_related(
+                        "game__tournament__league"
+                    ).get(pk=draft_pk)
+                    if draft.game:
+                        tournament = draft.game.tournament
+                except HeroDraft.DoesNotExist:
+                    return False
+
+        if not tournament:
+            return False
+
+        return can_edit_tournament(request.user, tournament)
