@@ -83,6 +83,10 @@ class TestTournamentConfig(BaseModel):
     bracket_games_completed: int = Field(
         default=0, description="How many bracket games should have results"
     )
+    create_pending_bracket: bool = Field(
+        default=False,
+        description="Create bracket structure with pending games (no winners) and bracket links",
+    )
 
     # Special test user handling
     first_captain_is_test_user: bool = Field(
@@ -120,6 +124,9 @@ class TestTournamentConfig(BaseModel):
 
         if self.bracket_games_completed > 0:
             self._create_bracket_games()
+
+        if self.create_pending_bracket:
+            self._create_pending_bracket_games()
 
         if self.first_captain_is_test_user:
             self._set_test_user_as_captain()
@@ -236,6 +243,88 @@ class TestTournamentConfig(BaseModel):
             BracketGameConfig(round=2, bracket_type="losers", position=0),
             BracketGameConfig(round=1, bracket_type="grand_finals", position=0),
         ]
+
+    def _create_pending_bracket_games(self) -> None:
+        """Create bracket games with pending status and bracket links (no winners)."""
+        from app.models import Game
+
+        teams = list(self._tournament.teams.order_by("draft_order").all()[:4])
+        if len(teams) < 4:
+            log.warning(f"Need 4 teams for bracket, found {len(teams)}")
+            return
+
+        # Create 6 games for 4-team double elimination - all PENDING
+        bracket_structure = [
+            {
+                "round": 1,
+                "bracket_type": "winners",
+                "position": 0,
+                "radiant": teams[0],
+                "dire": teams[1],
+            },
+            {
+                "round": 1,
+                "bracket_type": "winners",
+                "position": 1,
+                "radiant": teams[2],
+                "dire": teams[3],
+            },
+            {"round": 1, "bracket_type": "losers", "position": 0},
+            {"round": 2, "bracket_type": "winners", "position": 0},
+            {"round": 2, "bracket_type": "losers", "position": 0},
+            {"round": 1, "bracket_type": "grand_finals", "position": 0},
+        ]
+
+        games = []
+        for bracket_info in bracket_structure:
+            game = Game.objects.create(
+                tournament=self._tournament,
+                round=bracket_info["round"],
+                bracket_type=bracket_info["bracket_type"],
+                position=bracket_info["position"],
+                elimination_type="double",
+                radiant_team=bracket_info.get("radiant"),
+                dire_team=bracket_info.get("dire"),
+                status="pending",
+            )
+            games.append(game)
+
+        # Set up bracket links for winner/loser advancement
+        if len(games) >= 6:
+            # Winners R1 M1 -> Winners Final (radiant) + Losers R1 (radiant)
+            games[0].next_game = games[3]
+            games[0].next_game_slot = "radiant"
+            games[0].loser_next_game = games[2]
+            games[0].loser_next_game_slot = "radiant"
+            games[0].save()
+
+            # Winners R1 M2 -> Winners Final (dire) + Losers R1 (dire)
+            games[1].next_game = games[3]
+            games[1].next_game_slot = "dire"
+            games[1].loser_next_game = games[2]
+            games[1].loser_next_game_slot = "dire"
+            games[1].save()
+
+            # Losers R1 -> Losers Final (radiant)
+            games[2].next_game = games[4]
+            games[2].next_game_slot = "radiant"
+            games[2].save()
+
+            # Winners Final -> Grand Final (radiant) + Losers Final (dire)
+            games[3].next_game = games[5]
+            games[3].next_game_slot = "radiant"
+            games[3].loser_next_game = games[4]
+            games[3].loser_next_game_slot = "dire"
+            games[3].save()
+
+            # Losers Final -> Grand Final (dire)
+            games[4].next_game = games[5]
+            games[4].next_game_slot = "dire"
+            games[4].save()
+
+        log.info(
+            f"Created {len(games)} pending bracket games for '{self._tournament.name}'"
+        )
 
     def _set_test_user_as_captain(self) -> None:
         """Make test user the first captain for auth testing."""
