@@ -6,6 +6,7 @@ Creates mock Steam matches and bracket games for tournaments.
 from django.db import models
 
 from app.models import CustomUser, Game
+from tests.data.tournaments import BRACKET_TEST_TOURNAMENTS
 
 from .constants import DTX_STEAM_LEAGUE_ID
 from .utils import flush_redis_cache
@@ -28,24 +29,22 @@ def populate_steam_matches(force=False):
 
     print("Populating Steam matches and bracket games...")
 
-    # Find tournaments with at least 4 teams
-    tournaments = list(
-        Tournament.objects.annotate(team_count=models.Count("teams"))
-        .filter(team_count__gte=4)
-        .order_by("pk")[:3]
-    )
+    # Find tournaments by name from Pydantic configs
+    tournament_names = [t.name for t in BRACKET_TEST_TOURNAMENTS]
+    db_tournaments = {
+        t.name: t for t in Tournament.objects.filter(name__in=tournament_names)
+    }
 
-    if len(tournaments) < 3:
-        print(
-            f"Need 3 tournaments with 4+ teams, found {len(tournaments)}. Run populate_tournaments first."
-        )
+    if len(db_tournaments) < len(BRACKET_TEST_TOURNAMENTS):
+        missing = set(tournament_names) - set(db_tournaments.keys())
+        print(f"Missing tournaments: {missing}. Run populate_tournaments first.")
         return
 
     # Check for existing mock matches (IDs starting with 9000000000)
     existing_matches = Match.objects.filter(
         match_id__gte=9000000000, match_id__lt=9100000000
     )
-    existing_games = Game.objects.filter(tournament__in=tournaments)
+    existing_games = Game.objects.filter(tournament__in=db_tournaments.values())
 
     if existing_matches.exists() or existing_games.exists():
         if force:
@@ -83,32 +82,11 @@ def populate_steam_matches(force=False):
         },  # Match 5: Grand Final
     ]
 
-    # Tournament scenarios:
-    # T1: All 6 games completed (indexes 0-5)
-    # T2: 2 games completed (indexes 0-1), 4 pending (indexes 2-5)
-    # T3: 0 games completed (all 6 pending)
-    tournament_configs = [
-        {
-            "tournament": tournaments[0],
-            "completed_count": 6,
-            "match_id_base": 9000000001,
-        },
-        {
-            "tournament": tournaments[1],
-            "completed_count": 2,
-            "match_id_base": 9000000101,
-        },
-        {
-            "tournament": tournaments[2],
-            "completed_count": 0,
-            "match_id_base": 9000000201,
-        },
-    ]
-
-    for config in tournament_configs:
-        tournament = config["tournament"]
-        completed_count = config["completed_count"]
-        match_id_base = config["match_id_base"]
+    # Use tournament configs from Pydantic models
+    for tournament_config in BRACKET_TEST_TOURNAMENTS:
+        tournament = db_tournaments[tournament_config.name]
+        completed_count = tournament_config.completed_game_count or 0
+        match_id_base = tournament_config.match_id_base or 9000000001
 
         teams = list(tournament.teams.all()[:4])
         if len(teams) < 4:

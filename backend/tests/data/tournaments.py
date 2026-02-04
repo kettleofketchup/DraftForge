@@ -14,6 +14,48 @@ from tests.data.teams import (
 )
 
 # =============================================================================
+# Bracket Test Tournaments
+# Used for Steam match population and bracket game testing
+# =============================================================================
+
+COMPLETED_BRACKET_TOURNAMENT: TestTournament = TestTournament(
+    name="Completed Bracket Test",
+    tournament_type="double_elimination",
+    state="past",
+    steam_league_id=DTX_STEAM_LEAGUE_ID,
+    league_name="DTX League",
+    completed_game_count=6,  # All 6 bracket games completed
+    match_id_base=9000000001,
+)
+
+PARTIAL_BRACKET_TOURNAMENT: TestTournament = TestTournament(
+    name="Partial Bracket Test",
+    tournament_type="double_elimination",
+    state="past",
+    steam_league_id=DTX_STEAM_LEAGUE_ID,
+    league_name="DTX League",
+    completed_game_count=2,  # 2 games completed, 4 pending
+    match_id_base=9000000101,
+)
+
+PENDING_BRACKET_TOURNAMENT: TestTournament = TestTournament(
+    name="Pending Bracket Test",
+    tournament_type="double_elimination",
+    state="past",
+    steam_league_id=DTX_STEAM_LEAGUE_ID,
+    league_name="DTX League",
+    completed_game_count=0,  # All games pending
+    match_id_base=9000000201,
+)
+
+# List of bracket test tournaments (in order for steam population)
+BRACKET_TEST_TOURNAMENTS: list[TestTournament] = [
+    COMPLETED_BRACKET_TOURNAMENT,
+    PARTIAL_BRACKET_TOURNAMENT,
+    PENDING_BRACKET_TOURNAMENT,
+]
+
+# =============================================================================
 # Real Tournament 38
 # Based on production Tournament 38 data for testing Steam league sync
 # =============================================================================

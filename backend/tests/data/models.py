@@ -110,3 +110,6 @@ class TestTournament(BaseModel):
     date_played: str | None = None  # ISO format date string
     teams: list[TestTeam] = []  # Teams in this tournament
     user_usernames: list[str] = []  # All users in tournament (if not using teams)
+    # Steam match population settings
+    completed_game_count: int | None = None  # Number of bracket games to mark completed
+    match_id_base: int | None = None  # Base match ID for mock Steam matches
