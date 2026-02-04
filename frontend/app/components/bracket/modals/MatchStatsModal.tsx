@@ -23,6 +23,7 @@ import { Badge } from '~/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { BarChart3, Link2, Loader2, RotateCcw, Swords, UserLock } from 'lucide-react';
 import { useUserStore } from '~/store/userStore';
+import { useIsLeagueStaff } from '~/hooks/usePermissions';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { useBracketStore } from '~/store/bracketStore';
 import { useCreateHeroDraft, useResetHeroDraft } from '~/hooks/useHeroDraft';
@@ -46,6 +47,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
   const isStaff = useUserStore((state) => state.isStaff());
   const currentUser = useUserStore((state) => state.currentUser);
   const tournament = useUserStore((state) => state.tournament);
+  const isLeagueStaff = useIsLeagueStaff(tournament?.league);
 
   // Subscribe to match directly from store for reactive updates
   const storeMatch = useBracketStore((state) =>
@@ -217,7 +219,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
           )}
 
           {/* Unset Winner - only show if match has winner */}
-          {isStaff && match.status === 'completed' && match.winner && (
+          {isLeagueStaff && match.status === 'completed' && match.winner && (
             <div className="border-t pt-4">
               <Button
                 variant="outline"
