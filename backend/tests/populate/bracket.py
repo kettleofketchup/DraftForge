@@ -402,20 +402,20 @@ def populate_bracket_unset_winner_tournament(force=False):
     for team_config in team_configs:
         # Get users by username from database
         team_members = []
-        for username in team_config.member_usernames:
-            user = CustomUser.objects.filter(username=username).first()
+        for member in team_config.members:
+            user = CustomUser.objects.filter(username=member.username).first()
             if user:
                 team_members.append(user)
             else:
-                print(f"  Warning: User '{username}' not found")
+                print(f"  Warning: User '{member.username}' not found")
 
         if not team_members:
             print(f"  Warning: No members found for team '{team_config.name}'")
             continue
 
-        # Captain is first member
+        # Get captain
         captain = CustomUser.objects.filter(
-            username=team_config.captain_username
+            username=team_config.captain.username
         ).first()
         if not captain and team_members:
             captain = team_members[0]

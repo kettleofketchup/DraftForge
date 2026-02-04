@@ -87,8 +87,8 @@ class TestTeam(BaseModel):
 
     pk: int | None = None  # Set after creation
     name: str
-    captain_username: str  # Reference to TestUser by username
-    member_usernames: list[str] = []  # References to TestUser by username
+    captain: "TestUser"  # Captain user object
+    members: list["TestUser"] = []  # Member user objects (including captain)
     draft_order: int | None = None
     tournament_name: str | None = None  # Reference to TestTournament by name
 
