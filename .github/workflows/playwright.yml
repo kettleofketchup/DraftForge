@@ -170,9 +170,7 @@ jobs:
         CI: true
 
     - name: Run Playwright tests (@cicd tagged smoke tests)
-      run: |
-        npx playwright test --grep "@cicd" --project=chromium --project=herodraft --workers=1 -x
-      working-directory: frontend
+      run: just test::pw::cicd --workers=1 -x
       env:
         CI: true
 
