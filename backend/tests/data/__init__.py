@@ -54,11 +54,7 @@ from tests.data.teams import (
 )
 
 # Tournaments
-from tests.data.tournaments import (
-    ALL_TOURNAMENTS,
-    DEMO_HERODRAFT_TOURNAMENT,
-    REAL_TOURNAMENT_38,
-)
+from tests.data.tournaments import DEMO_HERODRAFT_TOURNAMENT, REAL_TOURNAMENT_38
 
 # Users
 from tests.data.users import (
@@ -124,5 +120,4 @@ __all__ = [
     # Tournaments
     "REAL_TOURNAMENT_38",
     "DEMO_HERODRAFT_TOURNAMENT",
-    "ALL_TOURNAMENTS",
 ]

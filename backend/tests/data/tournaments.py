@@ -89,17 +89,7 @@ TEST_LEAGUE_TOURNAMENT_CONFIG = DynamicTournamentConfig(
     league_name="Test League",
 )
 
-# All dynamic tournament configs (in creation order)
-DYNAMIC_TOURNAMENT_CONFIGS: list[DynamicTournamentConfig] = [
-    COMPLETED_BRACKET_CONFIG,
-    PARTIAL_BRACKET_CONFIG,
-    PENDING_BRACKET_CONFIG,
-    DRAFT_TEST_CONFIG,
-    LARGE_TOURNAMENT_CONFIG,
-    TEST_LEAGUE_TOURNAMENT_CONFIG,
-]
-
-# Bracket test configs (subset for steam population)
+# Bracket test configs (for steam match population)
 BRACKET_TEST_CONFIGS: list[DynamicTournamentConfig] = [
     COMPLETED_BRACKET_CONFIG,
     PARTIAL_BRACKET_CONFIG,
@@ -149,13 +139,3 @@ BRACKET_UNSET_WINNER_TOURNAMENT: TestTournament = TestTournament(
     league_name="DTX League",
     teams=BRACKET_UNSET_WINNER_TEAMS,
 )
-
-# =============================================================================
-# All Tournaments (for iteration)
-# =============================================================================
-
-ALL_TOURNAMENTS: list[TestTournament] = [
-    REAL_TOURNAMENT_38,
-    DEMO_HERODRAFT_TOURNAMENT,
-    BRACKET_UNSET_WINNER_TOURNAMENT,
-]
