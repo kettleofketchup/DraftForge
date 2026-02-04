@@ -8,6 +8,7 @@ from datetime import date, timedelta
 from django.db import transaction
 
 from app.models import CustomUser, Game, PositionsModel, Team
+from tests.data.models import TestUser
 
 from .constants import DTX_STEAM_LEAGUE_ID, TEST_STEAM_LEAGUE_ID, TOURNAMENT_USERS
 from .utils import (
@@ -278,12 +279,9 @@ def populate_real_tournament_38(force=False):
 
     print(f"Creating '{tournament_config.name}' with real production data...")
 
-    def create_or_get_user(username):
-        """Create or get a user from TOURNAMENT_USERS data (Pydantic models)."""
-        test_user = TOURNAMENT_USERS.get(username)
-        if not test_user:
-            raise ValueError(f"User '{username}' not found in TOURNAMENT_USERS")
-
+    def create_or_get_user(test_user: TestUser):
+        """Create or get a user from a TestUser Pydantic model."""
+        username = test_user.username
         steam_id = test_user.steam_id
         mmr = test_user.mmr or 3000
         discord_id = test_user.discord_id
@@ -378,17 +376,17 @@ def populate_real_tournament_38(force=False):
     print("  Creating users and teams...")
     # Use team configs from Pydantic models (already in draft order)
     for team_config in team_configs:
-        # Create captain (data comes from TOURNAMENT_USERS Pydantic models)
-        captain = create_or_get_user(team_config.captain_username)
+        # Create captain (data comes from TestUser Pydantic models)
+        captain = create_or_get_user(team_config.captain)
         all_users.append(captain)
 
-        # Create team members (captain is included in member_usernames)
+        # Create team members (captain is included in members)
         team_members = []
-        for member_username in team_config.member_usernames:
-            member = create_or_get_user(member_username)
-            team_members.append(member)
-            if member not in all_users:
-                all_users.append(member)
+        for member in team_config.members:
+            db_member = create_or_get_user(member)
+            team_members.append(db_member)
+            if db_member not in all_users:
+                all_users.append(db_member)
 
         # Create team with captain
         team = Team.objects.create(
