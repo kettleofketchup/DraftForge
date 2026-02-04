@@ -266,10 +266,10 @@ def populate_all(c):
     db_populate_steam_mock(c, paths.TEST_ENV_FILE)
     db_populate_test_tournaments(c, paths.TEST_ENV_FILE)
     db_populate_bracket_linking(c, paths.TEST_ENV_FILE)
+    db_populate_real_tournament(c, paths.TEST_ENV_FILE)  # Creates TOURNAMENT_USERS
     db_populate_bracket_unset_winner(
         c, paths.TEST_ENV_FILE
-    )  # Bracket unset winner test
-    db_populate_real_tournament(c, paths.TEST_ENV_FILE)
+    )  # Uses TOURNAMENT_USERS - must run after real_tournament
     db_populate_demo_tournaments(c, paths.TEST_ENV_FILE)
 
 
