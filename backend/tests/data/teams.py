@@ -40,56 +40,32 @@ leafael = TOURNAMENT_USERS["leafael."]
 
 GGLIVE_TEAM: TestTeam = TestTeam(
     name="gglive's Team",
-    captain_username=gglive.username,
-    member_usernames=[
-        gglive.username,
-        anil98765.username,
-        hassanzulfi.username,
-        abaybay1392.username,
-        reacher_z.username,
-    ],
+    captain=gglive,
+    members=[gglive, anil98765, hassanzulfi, abaybay1392, reacher_z],
     draft_order=1,
     tournament_name="Real Tournament 38",
 )
 
 BENEVOLENTGREMLIN_TEAM: TestTeam = TestTeam(
     name="benevolentgremlin's Team",
-    captain_username=benevolentgremlin.username,
-    member_usernames=[
-        benevolentgremlin.username,
-        clarexlauda.username,
-        creemy__.username,
-        sir_t_rex.username,
-        bearthebear.username,
-    ],
+    captain=benevolentgremlin,
+    members=[benevolentgremlin, clarexlauda, creemy__, sir_t_rex, bearthebear],
     draft_order=2,
     tournament_name="Real Tournament 38",
 )
 
 ETHAN_TEAM: TestTeam = TestTeam(
     name="ethan0688_'s Team",
-    captain_username=ethan0688_.username,
-    member_usernames=[
-        ethan0688_.username,
-        just__khang.username,
-        heffdawgz.username,
-        pushingshots.username,
-        p0styp0sty.username,
-    ],
+    captain=ethan0688_,
+    members=[ethan0688_, just__khang, heffdawgz, pushingshots, p0styp0sty],
     draft_order=3,
     tournament_name="Real Tournament 38",
 )
 
 VRM_MTL_TEAM: TestTeam = TestTeam(
     name="vrm.mtl's Team",
-    captain_username=vrm_mtl.username,
-    member_usernames=[
-        vrm_mtl.username,
-        tornope.username,
-        nimstria1.username,
-        thekingauto.username,
-        leafael.username,
-    ],
+    captain=vrm_mtl,
+    members=[vrm_mtl, tornope, nimstria1, thekingauto, leafael],
     draft_order=4,
     tournament_name="Real Tournament 38",
 )
@@ -112,27 +88,15 @@ REAL_TOURNAMENT_38_TEAMS: list[TestTeam] = [
 # HeroDraft uses Team A and Team B
 HERODRAFT_TEAM_A: TestTeam = TestTeam(
     name="Team A",
-    captain_username=ethan0688_.username,
-    member_usernames=[
-        ethan0688_.username,
-        just__khang.username,
-        heffdawgz.username,
-        pushingshots.username,
-        p0styp0sty.username,
-    ],
+    captain=ethan0688_,
+    members=[ethan0688_, just__khang, heffdawgz, pushingshots, p0styp0sty],
     draft_order=1,
 )
 
 HERODRAFT_TEAM_B: TestTeam = TestTeam(
     name="Team B",
-    captain_username=vrm_mtl.username,
-    member_usernames=[
-        vrm_mtl.username,
-        tornope.username,
-        nimstria1.username,
-        thekingauto.username,
-        leafael.username,
-    ],
+    captain=vrm_mtl,
+    members=[vrm_mtl, tornope, nimstria1, thekingauto, leafael],
     draft_order=2,
 )
 
@@ -145,56 +109,32 @@ HERODRAFT_TEAMS: list[TestTeam] = [HERODRAFT_TEAM_A, HERODRAFT_TEAM_B]
 
 UNSET_ALPHA_TEAM: TestTeam = TestTeam(
     name="Unset Alpha",
-    captain_username=gglive.username,
-    member_usernames=[
-        gglive.username,
-        anil98765.username,
-        hassanzulfi.username,
-        abaybay1392.username,
-        reacher_z.username,
-    ],
+    captain=gglive,
+    members=[gglive, anil98765, hassanzulfi, abaybay1392, reacher_z],
     draft_order=1,
     tournament_name="bracket:unsetWinner Tournament",
 )
 
 UNSET_BETA_TEAM: TestTeam = TestTeam(
     name="Unset Beta",
-    captain_username=benevolentgremlin.username,
-    member_usernames=[
-        benevolentgremlin.username,
-        clarexlauda.username,
-        creemy__.username,
-        sir_t_rex.username,
-        bearthebear.username,
-    ],
+    captain=benevolentgremlin,
+    members=[benevolentgremlin, clarexlauda, creemy__, sir_t_rex, bearthebear],
     draft_order=2,
     tournament_name="bracket:unsetWinner Tournament",
 )
 
 UNSET_GAMMA_TEAM: TestTeam = TestTeam(
     name="Unset Gamma",
-    captain_username=ethan0688_.username,
-    member_usernames=[
-        ethan0688_.username,
-        just__khang.username,
-        heffdawgz.username,
-        pushingshots.username,
-        p0styp0sty.username,
-    ],
+    captain=ethan0688_,
+    members=[ethan0688_, just__khang, heffdawgz, pushingshots, p0styp0sty],
     draft_order=3,
     tournament_name="bracket:unsetWinner Tournament",
 )
 
 UNSET_DELTA_TEAM: TestTeam = TestTeam(
     name="Unset Delta",
-    captain_username=vrm_mtl.username,
-    member_usernames=[
-        vrm_mtl.username,
-        tornope.username,
-        nimstria1.username,
-        thekingauto.username,
-        leafael.username,
-    ],
+    captain=vrm_mtl,
+    members=[vrm_mtl, tornope, nimstria1, thekingauto, leafael],
     draft_order=4,
     tournament_name="bracket:unsetWinner Tournament",
 )
