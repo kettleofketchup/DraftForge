@@ -346,7 +346,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
     expect(hasDraftContent).toBe(true);
   });
 
-  test('should allow captain to make a pick when it is their turn', async ({
+  test('@cicd should allow captain to make a pick when it is their turn', async ({
     page,
     loginUser,
   }) => {
