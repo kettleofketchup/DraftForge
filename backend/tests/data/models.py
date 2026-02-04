@@ -99,7 +99,7 @@ class TestTeam(BaseModel):
 
 
 class TestTournament(BaseModel):
-    """Test tournament configuration."""
+    """Test tournament configuration for tournaments with pre-defined teams."""
 
     pk: int | None = None  # Set after creation
     name: str
@@ -113,3 +113,31 @@ class TestTournament(BaseModel):
     # Steam match population settings
     completed_game_count: int | None = None  # Number of bracket games to mark completed
     match_id_base: int | None = None  # Base match ID for mock Steam matches
+
+
+class DynamicTournamentConfig(BaseModel):
+    """Configuration for dynamically created tournaments with mock users/teams.
+
+    These tournaments are created with generated users and teams,
+    unlike TestTournament which uses pre-defined TestUser/TestTeam objects.
+    """
+
+    pk: int  # Required - used for consistent database access
+    name: str
+    user_count: int  # Number of mock users to create
+    team_count: int  # Number of teams to create
+    tournament_type: str = "double_elimination"
+    league_name: str = "DTX League"  # Reference to league by name
+    # Steam match population settings
+    completed_game_count: int | None = None  # Number of bracket games to mark completed
+    match_id_base: int | None = None  # Base match ID for mock Steam matches
+
+    def create(self) -> "Tournament":  # noqa: F821
+        """Create this tournament in the database.
+
+        Returns:
+            Tournament: The created Django Tournament model instance
+        """
+        from tests.populate.tournaments import create_dynamic_tournament
+
+        return create_dynamic_tournament(self)
