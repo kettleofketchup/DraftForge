@@ -107,26 +107,19 @@ jobs:
       run: |
         # Strategy 1: Try to pull from GHCR (hash first, then latest)
         if just docker::db::pull; then
-          just db::reset-test
-
-          # Check if we got exact hash match or need migrations
+          # Check if we got exact hash match
           HASH=$(just docker::db::hash)
           EXISTING=$(docker inspect --format='{{index .Config.Labels "org.draftforge.test-db.content-hash"}}' draftforge/test-db:latest 2>/dev/null || echo "")
 
           if [[ "$HASH" == "$EXISTING" ]]; then
-            echo "✓ Exact hash match - no migrations needed"
+            just db::reset-test
+            echo "✓ Exact hash match - using cached database"
             exit 0
           fi
 
-          # Got latest, need to run migrations
-          echo "Running migrations on top of latest..."
-          if just db::migrate::test; then
-            echo "✓ Using pre-populated test database with migrations applied"
-            exit 0
-          else
-            echo "✗ Migrations failed, falling back to full populate..."
-            rm -f backend/test.db.sqlite3
-          fi
+          # Hash mismatch - test data may have changed, need full repopulate
+          echo "Hash mismatch (expected: ${HASH:0:12}..., got: ${EXISTING:0:12}...)"
+          echo "Test data may have changed, falling back to full populate..."
         fi
 
         # Strategy 2: Fallback - populate from scratch
