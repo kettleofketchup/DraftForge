@@ -36,11 +36,36 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     await loginStaff();
   });
 
-  test('sanity: bracket page loads for unset winner test', async ({ page }) => {
+  test('@cicd sanity: staff can set and unset bracket winner', async ({ page }) => {
     await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
 
     const bracketContainer = page.locator('[data-testid="bracketContainer"]');
     await expect(bracketContainer).toBeVisible({ timeout: 15000 });
+
+    // Wait for bracket to fully render
+    await page.waitForLoadState('networkidle');
+
+    // Click first match node to open dialog
+    const matchNode = page.locator('[data-testid="bracket-match-node"]').first();
+    await matchNode.click({ force: true });
+
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+
+    // Set a winner (radiant)
+    const setWinnerButton = dialog.locator('[data-testid="radiantWinsButton"]');
+    await expect(setWinnerButton).toBeVisible({ timeout: 5000 });
+    await setWinnerButton.click();
+
+    // Unset Winner button should now appear
+    const unsetButton = dialog.locator('[data-testid="unsetWinnerButton"]');
+    await expect(unsetButton).toBeVisible({ timeout: 5000 });
+
+    // Click Unset Winner to clear the result
+    await unsetButton.click();
+
+    // Set Winner buttons should reappear after unsetting
+    await expect(setWinnerButton).toBeVisible({ timeout: 5000 });
   });
 
   test('staff can unset a bracket game winner', async ({ page }) => {
