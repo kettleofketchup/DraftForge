@@ -44,6 +44,7 @@ from tests.data.organizations import (
 from tests.data.teams import (
     ALL_TEAMS,
     BENEVOLENTGREMLIN_TEAM,
+    BRACKET_UNSET_WINNER_TEAMS,
     ETHAN_TEAM,
     GGLIVE_TEAM,
     HERODRAFT_TEAM_A,
@@ -54,7 +55,11 @@ from tests.data.teams import (
 )
 
 # Tournaments
-from tests.data.tournaments import DEMO_HERODRAFT_TOURNAMENT, REAL_TOURNAMENT_38
+from tests.data.tournaments import (
+    BRACKET_UNSET_WINNER_TOURNAMENT,
+    DEMO_HERODRAFT_TOURNAMENT,
+    REAL_TOURNAMENT_38,
+)
 
 # Users
 from tests.data.users import (
@@ -116,8 +121,10 @@ __all__ = [
     "HERODRAFT_TEAM_A",
     "HERODRAFT_TEAM_B",
     "HERODRAFT_TEAMS",
+    "BRACKET_UNSET_WINNER_TEAMS",
     "ALL_TEAMS",
     # Tournaments
     "REAL_TOURNAMENT_38",
     "DEMO_HERODRAFT_TOURNAMENT",
+    "BRACKET_UNSET_WINNER_TOURNAMENT",
 ]
