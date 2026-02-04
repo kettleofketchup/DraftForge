@@ -1052,7 +1052,12 @@ class Draft(models.Model):
             logging.debug(
                 f"Rebuilding team {team.name} for tournament {self.tournament.name}"
             )
-            team.members.clear()
+            # Remove all members except captain to avoid triggering empty team deletion
+            # (using remove() instead of clear() keeps captain as member during operation)
+            members_to_remove = list(team.members.exclude(pk=team.captain.pk))
+            if members_to_remove:
+                team.members.remove(*members_to_remove)
+            # Ensure captain is a member (in case they weren't already)
             team.members.add(team.captain)
 
         # Skip re-adding draft choices if we're just clearing for a restart

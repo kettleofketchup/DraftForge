@@ -19,12 +19,18 @@ log = logging.getLogger(__name__)
 @receiver(m2m_changed, sender="app.Team_members")
 def handle_team_member_removal(sender, instance, action, pk_set, **kwargs):
     """Handle captain/deputy succession when members are removed."""
-    # Only handle post_remove - skip post_clear to allow rebuild_teams() to work
-    # (rebuild_teams calls clear() then add(), and we don't want deletion between)
+    team = instance
+
+    # Handle post_clear - delete team if empty
+    if action == "post_clear":
+        if team.members.count() == 0:
+            team.delete()
+        return
+
+    # Only handle post_remove for removal logic
     if action != "post_remove":
         return
 
-    team = instance
     removed_pks = pk_set
 
     # Guard: Team is now empty → delete it

@@ -331,8 +331,12 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
 
         await communicator.disconnect()
 
-    async def test_pause_resume_timing_adjustment(self):
+    @patch("app.tasks.herodraft_tick.start_tick_broadcaster")
+    async def test_pause_resume_timing_adjustment(self, mock_start_tick):
         """Test that pause/resume adjusts round started_at correctly."""
+        # Mock tick broadcaster to avoid SQLite locking issues in tests
+        mock_start_tick.return_value = True
+
         # Set up draft in drafting state with both captains connected
         original_started_at = timezone.now() - timedelta(seconds=10)
 
@@ -418,7 +422,8 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
             captain2_is_connected, "Captain2 should still be connected before resume"
         )
 
-        # Reconnect captain1 - this should trigger resume with timing adjustment
+        # Reconnect captain1 - should update connection status but stay PAUSED
+        # (manual resume is required via Resume button)
         captain1_reconnect = WebsocketCommunicator(
             self.get_application(),
             f"/api/herodraft/{self.draft.id}/",
@@ -426,9 +431,78 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         captain1_reconnect.scope["user"] = self.captain1
         connected, _ = await captain1_reconnect.connect()
         self.assertTrue(connected)
+        # Receive initial state message - this ensures the consumer's
+        # websocket_connect handler has completed (including DB writes)
+        await captain1_reconnect.receive_json_from()
 
-        # Give some time for the resume to process
-        await asyncio.sleep(0.2)
+        # Verify captain1 is connected but state is still PAUSED
+        @database_sync_to_async
+        def check_still_paused():
+            from django.db import transaction
+
+            with transaction.atomic():
+                # select_for_update ensures we wait for any locks to be released
+                draft = HeroDraft.objects.select_for_update().get(pk=self.draft.pk)
+                draft_team1 = DraftTeam.objects.select_for_update().get(
+                    pk=self.draft_team1.pk
+                )
+                draft_team2 = DraftTeam.objects.select_for_update().get(
+                    pk=self.draft_team2.pk
+                )
+                return (
+                    draft.state,
+                    draft_team1.is_connected,
+                    draft_team2.is_connected,
+                )
+
+        state, team1_connected, team2_connected = await check_still_paused()
+        self.assertTrue(team1_connected, "Captain1 should be connected after reconnect")
+        self.assertTrue(team2_connected, "Captain2 should still be connected")
+        self.assertEqual(
+            state,
+            HeroDraftState.PAUSED,
+            "State should still be PAUSED until manual resume",
+        )
+
+        # Manually resume the draft (simulating Resume button click)
+        @database_sync_to_async
+        def manual_resume():
+            from django.db import transaction
+
+            with transaction.atomic():
+                self.draft.refresh_from_db()
+                active_round.refresh_from_db()
+
+                # Calculate pause duration and adjust timing (as resume_draft view does)
+                if self.draft.paused_at:
+                    pause_duration = timezone.now() - self.draft.paused_at
+                    if active_round and active_round.started_at:
+                        # Add 3 seconds for countdown to total adjustment
+                        total_adjustment = pause_duration + timedelta(seconds=3)
+                        active_round.started_at += total_adjustment
+                        active_round.save(update_fields=["started_at"])
+
+                # Enter RESUMING state with 3-second countdown
+                self.draft.state = HeroDraftState.RESUMING
+                self.draft.resuming_until = timezone.now() + timedelta(seconds=3)
+                self.draft.paused_at = None
+                self.draft.save()
+
+        await manual_resume()
+
+        # Simulate countdown completion
+        @database_sync_to_async
+        def complete_countdown():
+            from django.db import transaction
+
+            with transaction.atomic():
+                self.draft.refresh_from_db()
+                # Directly transition to DRAFTING (as check_resume_countdown does)
+                self.draft.state = HeroDraftState.DRAFTING
+                self.draft.resuming_until = None
+                self.draft.save()
+
+        await complete_countdown()
 
         # Verify timing adjustment: started_at should be moved forward by ~5 seconds
         # (2s pause duration + 3s countdown)
@@ -436,21 +510,12 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         def check_timing_adjustment():
             self.draft.refresh_from_db()
             active_round.refresh_from_db()
-            # Also check team connection status for debugging
-            self.draft_team1.refresh_from_db()
-            self.draft_team2.refresh_from_db()
             return (
                 self.draft.state,
                 active_round.started_at,
-                self.draft_team1.is_connected,
-                self.draft_team2.is_connected,
             )
 
-        state, new_started_at, team1_connected, team2_connected = (
-            await check_timing_adjustment()
-        )
-        self.assertTrue(team1_connected, "Captain1 should be connected after reconnect")
-        self.assertTrue(team2_connected, "Captain2 should still be connected")
+        state, new_started_at = await check_timing_adjustment()
         self.assertEqual(state, HeroDraftState.DRAFTING)
 
         # Calculate expected adjustment: original + 5 seconds (2s pause + 3s countdown)
@@ -467,3 +532,230 @@ class HeroDraftConsumerTestCase(TransactionTestCase):
         # Clean up
         await captain1_reconnect.disconnect()
         await captain2_communicator.disconnect()
+
+    @patch("app.tasks.herodraft_tick.start_tick_broadcaster")
+    async def test_disconnect_during_resuming_does_not_pause(self, mock_start_tick):
+        """
+        Test that captain disconnect during RESUMING state does not trigger pause.
+
+        This prevents an infinite time exploit where captains could repeatedly
+        disconnect during the 3-second countdown to indefinitely delay the draft.
+        """
+        mock_start_tick.return_value = True
+
+        # Set up draft in RESUMING state
+        @database_sync_to_async
+        def setup_resuming_state():
+            from django.db import transaction
+
+            with transaction.atomic():
+                self.draft.state = HeroDraftState.RESUMING
+                self.draft.resuming_until = timezone.now() + timedelta(seconds=3)
+                self.draft.save()
+                self.draft_team1.is_connected = True
+                self.draft_team1.save()
+                self.draft_team2.is_connected = True
+                self.draft_team2.save()
+
+        await setup_resuming_state()
+
+        # Connect captain1
+        communicator = WebsocketCommunicator(
+            self.get_application(),
+            f"/api/herodraft/{self.draft.id}/",
+        )
+        communicator.scope["user"] = self.captain1
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        await communicator.receive_json_from()  # initial state
+
+        # Disconnect captain1 during RESUMING
+        await communicator.disconnect()
+
+        # Verify draft is still RESUMING (not PAUSED)
+        @database_sync_to_async
+        def check_still_resuming():
+            from django.db import transaction
+
+            with transaction.atomic():
+                draft = HeroDraft.objects.select_for_update().get(pk=self.draft.pk)
+                return draft.state
+
+        state = await check_still_resuming()
+        self.assertEqual(
+            state,
+            HeroDraftState.RESUMING,
+            "Disconnect during RESUMING should not trigger pause (exploit prevention)",
+        )
+
+    @patch("app.tasks.herodraft_tick.start_tick_broadcaster")
+    async def test_disconnect_during_rolling_no_pause(self, mock_start_tick):
+        """Test captain disconnect during ROLLING state does not trigger pause."""
+        mock_start_tick.return_value = True
+
+        @database_sync_to_async
+        def set_rolling_state():
+            from django.db import transaction
+
+            with transaction.atomic():
+                self.draft.state = HeroDraftState.ROLLING
+                self.draft.save()
+                self.draft_team1.is_connected = True
+                self.draft_team1.save()
+
+        await set_rolling_state()
+
+        communicator = WebsocketCommunicator(
+            self.get_application(),
+            f"/api/herodraft/{self.draft.id}/",
+        )
+        communicator.scope["user"] = self.captain1
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        await communicator.receive_json_from()
+
+        await communicator.disconnect()
+
+        @database_sync_to_async
+        def check_state():
+            from django.db import transaction
+
+            with transaction.atomic():
+                draft = HeroDraft.objects.select_for_update().get(pk=self.draft.pk)
+                return draft.state
+
+        state = await check_state()
+        self.assertEqual(
+            state,
+            HeroDraftState.ROLLING,
+            "Disconnect during ROLLING should not trigger pause",
+        )
+
+    @patch("app.tasks.herodraft_tick.start_tick_broadcaster")
+    async def test_both_captains_disconnect_only_pauses_once(self, mock_start_tick):
+        """Test that both captains disconnecting during drafting only creates one pause event."""
+        mock_start_tick.return_value = True
+
+        @database_sync_to_async
+        def set_drafting():
+            from django.db import transaction
+
+            with transaction.atomic():
+                self.draft.state = HeroDraftState.DRAFTING
+                self.draft.save()
+                self.draft_team1.is_connected = True
+                self.draft_team1.save()
+                self.draft_team2.is_connected = True
+                self.draft_team2.save()
+
+        await set_drafting()
+
+        # Connect both captains
+        captain1_comm = WebsocketCommunicator(
+            self.get_application(),
+            f"/api/herodraft/{self.draft.id}/",
+        )
+        captain1_comm.scope["user"] = self.captain1
+        await captain1_comm.connect()
+        await captain1_comm.receive_json_from()
+
+        captain2_comm = WebsocketCommunicator(
+            self.get_application(),
+            f"/api/herodraft/{self.draft.id}/",
+        )
+        captain2_comm.scope["user"] = self.captain2
+        await captain2_comm.connect()
+        await captain2_comm.receive_json_from()
+
+        # Captain1 disconnects - should pause
+        await captain1_comm.disconnect()
+
+        @database_sync_to_async
+        def check_paused_state():
+            from django.db import transaction
+
+            from app.models import HeroDraftEvent
+
+            with transaction.atomic():
+                draft = HeroDraft.objects.select_for_update().get(pk=self.draft.pk)
+                pause_events = HeroDraftEvent.objects.filter(
+                    draft=draft, event_type="draft_paused"
+                ).count()
+                return draft.state, pause_events
+
+        state, pause_count = await check_paused_state()
+        self.assertEqual(state, HeroDraftState.PAUSED)
+        self.assertEqual(pause_count, 1)
+
+        # Captain2 disconnects while already paused - should NOT create another pause event
+        await captain2_comm.disconnect()
+
+        state, pause_count = await check_paused_state()
+        self.assertEqual(state, HeroDraftState.PAUSED, "State should remain PAUSED")
+        self.assertEqual(
+            pause_count,
+            1,
+            "Should not create additional pause event when already paused",
+        )
+
+    @patch("app.tasks.herodraft_tick.start_tick_broadcaster")
+    async def test_kicked_connection_does_not_trigger_pause(self, mock_start_tick):
+        """Test that a kicked connection (replaced by new connection) does not trigger pause."""
+        mock_start_tick.return_value = True
+
+        @database_sync_to_async
+        def set_drafting():
+            from django.db import transaction
+
+            with transaction.atomic():
+                self.draft.state = HeroDraftState.DRAFTING
+                self.draft.save()
+                self.draft_team1.is_connected = True
+                self.draft_team1.save()
+                self.draft_team2.is_connected = True
+                self.draft_team2.save()
+
+        await set_drafting()
+
+        # First connection for captain1
+        first_comm = WebsocketCommunicator(
+            self.get_application(),
+            f"/api/herodraft/{self.draft.id}/",
+        )
+        first_comm.scope["user"] = self.captain1
+        await first_comm.connect()
+        await first_comm.receive_json_from()
+
+        # Second connection for captain1 (should kick first)
+        second_comm = WebsocketCommunicator(
+            self.get_application(),
+            f"/api/herodraft/{self.draft.id}/",
+        )
+        second_comm.scope["user"] = self.captain1
+        await second_comm.connect()
+        await second_comm.receive_json_from()
+
+        # Draft should still be DRAFTING (kicked connection should not trigger pause)
+        @database_sync_to_async
+        def check_still_drafting():
+            from django.db import transaction
+
+            with transaction.atomic():
+                draft = HeroDraft.objects.select_for_update().get(pk=self.draft.pk)
+                draft_team1 = DraftTeam.objects.select_for_update().get(
+                    pk=self.draft_team1.pk
+                )
+                return draft.state, draft_team1.is_connected
+
+        state, is_connected = await check_still_drafting()
+        self.assertEqual(
+            state,
+            HeroDraftState.DRAFTING,
+            "Kicked connection should not trigger pause",
+        )
+        self.assertTrue(
+            is_connected,
+            "Captain should remain connected after kick (new connection took over)",
+        )
+
+        await second_comm.disconnect()

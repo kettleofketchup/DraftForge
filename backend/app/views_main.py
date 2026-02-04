@@ -41,6 +41,9 @@ from .models import (
 )
 from .permissions import IsStaff
 from .permissions_org import (
+    CanEditDraft,
+    CanEditDraftRound,
+    CanEditTeam,
     CanEditTournament,
     CanManageGame,
     IsLeagueAdmin,
@@ -489,16 +492,19 @@ class TeamView(viewsets.ModelViewSet):
         return Response(data)
 
     def get_permissions(self):
-        self.permission_classes = [IsStaff]
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
+        elif self.action in ["update", "partial_update", "destroy"]:
+            self.permission_classes = [CanEditTeam]
+        else:
+            self.permission_classes = [IsAuthenticated]
         return super(TeamView, self).get_permissions()
 
     def patch(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
 
 
-@permission_classes((IsStaff,))
+@permission_classes((IsAuthenticated,))
 class DraftView(viewsets.ModelViewSet):
     serializer_class = DraftSerializer
     queryset = Draft.objects.all()
@@ -554,19 +560,20 @@ class DraftView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    @permission_classes((IsStaff,))
     def patch(self, request, *args, **kwargs):
-        print(request.data)
         return self.partial_update(request, *args, **kwargs)
 
     def get_permissions(self):
-        self.permission_classes = [IsStaff]
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
+        elif self.action in ["update", "partial_update", "destroy"]:
+            self.permission_classes = [CanEditDraft]
+        else:
+            self.permission_classes = [IsAuthenticated]
         return super(DraftView, self).get_permissions()
 
 
-@permission_classes((IsStaff,))
+@permission_classes((IsAuthenticated,))
 class DraftRoundView(viewsets.ModelViewSet):
     serializer_class = DraftRoundSerializer
     queryset = DraftRound.objects.all()
@@ -620,15 +627,16 @@ class DraftRoundView(viewsets.ModelViewSet):
         data = get_data()
         return Response(data)
 
-    @permission_classes((IsStaff,))
     def patch(self, request, *args, **kwargs):
-        print(request.data)
         return self.partial_update(request, *args, **kwargs)
 
     def get_permissions(self):
-        self.permission_classes = [IsStaff]
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
+        elif self.action in ["update", "partial_update", "destroy"]:
+            self.permission_classes = [CanEditDraftRound]
+        else:
+            self.permission_classes = [IsAuthenticated]
         return super(DraftRoundView, self).get_permissions()
 
 
@@ -1053,22 +1061,37 @@ class LeagueView(viewsets.ModelViewSet):
         return super().get_permissions()
 
     def create(self, request, *args, **kwargs):
-        # Check permission for any provided organizations
-        org_ids = request.data.get("organization_ids", [])
-        if org_ids:
-            for org_id in org_ids:
-                try:
-                    org = Organization.objects.get(pk=org_id)
-                    if not has_org_admin_access(request.user, org):
-                        return Response(
-                            {"detail": "Must be organization admin to create league"},
-                            status=status.HTTP_403_FORBIDDEN,
-                        )
-                except Organization.DoesNotExist:
+        # Check permission for organization (singular field from serializer)
+        org_id = request.data.get("organization")
+        if org_id:
+            try:
+                org = Organization.objects.get(pk=org_id)
+                if not has_org_admin_access(request.user, org):
                     return Response(
-                        {"detail": f"Organization {org_id} not found"},
-                        status=status.HTTP_404_NOT_FOUND,
+                        {"detail": "Must be organization admin to create league"},
+                        status=status.HTTP_403_FORBIDDEN,
                     )
+            except Organization.DoesNotExist:
+                return Response(
+                    {"detail": f"Organization {org_id} not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        # Also check organization_ids if provided (for backwards compatibility)
+        org_ids = request.data.get("organization_ids", [])
+        for org_id in org_ids:
+            try:
+                org = Organization.objects.get(pk=org_id)
+                if not has_org_admin_access(request.user, org):
+                    return Response(
+                        {"detail": "Must be organization admin to create league"},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            except Organization.DoesNotExist:
+                return Response(
+                    {"detail": f"Organization {org_id} not found"},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
         return super().create(request, *args, **kwargs)
 
     def list(self, request, *args, **kwargs):

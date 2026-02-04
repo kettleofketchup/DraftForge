@@ -23,6 +23,7 @@ from social_django.utils import load_strategy, psa
 from app.broadcast import broadcast_event
 from app.models import CustomUser, Draft, DraftEvent, DraftRound, Team, Tournament
 from app.permissions import IsStaff
+from app.permissions_org import CanEditDraft, can_edit_tournament
 from app.serializers import (
     DraftRoundSerializer,
     DraftSerializer,
@@ -75,20 +76,29 @@ def pick_player_for_round(request):
         return Response(serializer.errors, status=400)
 
     try:
-        draft_round = DraftRound.objects.get(pk=draft_round_pk)
+        draft_round = DraftRound.objects.select_related("draft__tournament").get(
+            pk=draft_round_pk
+        )
     except DraftRound.DoesNotExist:
         return Response({"error": "Draft round not found"}, status=404)
 
-    is_staff = request.user.is_staff
+    # Check authorization: tournament staff OR captain for this round
+    is_tournament_staff = False
+    if draft_round.draft and draft_round.draft.tournament:
+        is_tournament_staff = can_edit_tournament(
+            request.user, draft_round.draft.tournament
+        )
     is_captain_for_round = draft_round.captain == request.user
 
-    if not (is_staff or is_captain_for_round):
+    if not (is_tournament_staff or is_captain_for_round):
         log.warning(
             f"User {request.user.username} attempted to pick for round {draft_round_pk} "
-            f"but is not staff or captain (captain is {draft_round.captain.username})"
+            f"but is not tournament staff or captain (captain is {draft_round.captain.username})"
         )
         return Response(
-            {"error": "Only staff or the captain for this round can make picks"},
+            {
+                "error": "Only tournament staff or the captain for this round can make picks"
+            },
             status=403,
         )
 
@@ -165,8 +175,9 @@ class CreateTournamentTeamRequestSerializer(serializers.Serializer):
 
 
 @api_view(["POST"])
-@permission_classes([IsStaff])
+@permission_classes([IsAuthenticated])
 def create_team_from_captain(request):
+    """Create a team from a captain. Requires tournament staff access."""
     serializer = CreateTournamentTeamRequestSerializer(data=request.data)
 
     if serializer.is_valid():
@@ -177,13 +188,20 @@ def create_team_from_captain(request):
         return Response(serializer.errors, status=400)
 
     try:
-        tournament = Tournament.objects.get(pk=tournament_pk)
+        tournament = Tournament.objects.select_related("league").get(pk=tournament_pk)
         user = CustomUser.objects.get(pk=user_pk)
 
     except Tournament.DoesNotExist:
         return Response({"error": "Tournament not found"}, status=404)
     except CustomUser.DoesNotExist:
         return Response({"error": "User not found"}, status=404)
+
+    # Check tournament staff permission
+    if not can_edit_tournament(request.user, tournament):
+        return Response(
+            {"error": "You do not have permission to create teams in this tournament"},
+            status=403,
+        )
 
         # Create a new team and add the user as a member (or captain)
     try:
@@ -232,8 +250,9 @@ class CreateDraftRounds(serializers.Serializer):
 
 
 @api_view(["POST"])
-@permission_classes([IsStaff])
+@permission_classes([IsAuthenticated])
 def generate_draft_rounds(request):
+    """Generate draft rounds for a tournament. Requires tournament staff access."""
     serializer = CreateDraftRounds(data=request.data)
 
     if serializer.is_valid():
@@ -243,12 +262,17 @@ def generate_draft_rounds(request):
         return Response(serializer.errors, status=400)
 
     try:
-        tournament = Tournament.objects.get(pk=tournament_pk)
+        tournament = Tournament.objects.select_related("league").get(pk=tournament_pk)
 
     except Tournament.DoesNotExist:
         return Response({"error": "Tournament not found"}, status=404)
 
-        # Create a new team and add the user as a member (or captain)
+    # Check tournament staff permission
+    if not can_edit_tournament(request.user, tournament):
+        return Response(
+            {"error": "You do not have permission to generate draft rounds"},
+            status=403,
+        )
 
     try:
         draft = tournament.draft
@@ -274,8 +298,9 @@ def generate_draft_rounds(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsStaff])
+@permission_classes([IsAuthenticated])
 def rebuild_team(request):
+    """Rebuild teams in a tournament. Requires tournament staff access."""
     serializer = CreateDraftRounds(data=request.data)
 
     if serializer.is_valid():
@@ -285,12 +310,17 @@ def rebuild_team(request):
         return Response(serializer.errors, status=400)
 
     try:
-        tournament = Tournament.objects.get(pk=tournament_pk)
+        tournament = Tournament.objects.select_related("league").get(pk=tournament_pk)
 
     except Tournament.DoesNotExist:
         return Response({"error": "Tournament not found"}, status=404)
 
-        # Create a new team and add the user as a member (or captain)
+    # Check tournament staff permission
+    if not can_edit_tournament(request.user, tournament):
+        return Response(
+            {"error": "You do not have permission to rebuild teams"},
+            status=403,
+        )
 
     # Ensure draft exists
     try:
@@ -365,11 +395,12 @@ class UndoPickSerializer(serializers.Serializer):
 
 
 @api_view(["POST"])
-@permission_classes([IsStaff])
+@permission_classes([IsAuthenticated])
 def undo_last_pick(request):
     """
     Undo the last pick in a draft.
 
+    Requires tournament staff access.
     This removes the last draft round (if it has a choice) and restores
     the player to the available pool.
 
@@ -379,6 +410,7 @@ def undo_last_pick(request):
     Returns:
         200: Success with updated tournament data
         400: No picks to undo
+        403: Not authorized
         404: Draft not found
     """
     serializer = UndoPickSerializer(data=request.data)
@@ -389,9 +421,16 @@ def undo_last_pick(request):
         return Response(serializer.errors, status=400)
 
     try:
-        draft = Draft.objects.get(pk=draft_pk)
+        draft = Draft.objects.select_related("tournament").get(pk=draft_pk)
     except Draft.DoesNotExist:
         return Response({"error": "Draft not found"}, status=404)
+
+    # Check tournament staff permission
+    if not draft.tournament or not can_edit_tournament(request.user, draft.tournament):
+        return Response(
+            {"error": "You do not have permission to undo picks in this draft"},
+            status=403,
+        )
 
     # Find the last round with a choice
     last_round_with_choice = (
