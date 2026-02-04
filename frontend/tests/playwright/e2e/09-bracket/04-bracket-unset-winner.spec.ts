@@ -45,9 +45,26 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     // Wait for bracket to fully render
     await page.waitForLoadState('networkidle');
 
+    // Debug: Check if user is logged in via API call from browser
+    const userApiResponse = await page.evaluate(async () => {
+      try {
+        const response = await fetch('/api/v1/users/me/', {
+          credentials: 'include',
+        });
+        if (response.ok) {
+          return await response.json();
+        }
+        return { error: `HTTP ${response.status}` };
+      } catch (e) {
+        return { error: String(e) };
+      }
+    });
+    console.log('User from /api/v1/users/me/:', JSON.stringify(userApiResponse, null, 2));
+
     // Find a match with teams and Set Winner buttons
     const matchNodes = page.locator('[data-testid="bracket-match-node"]');
     const nodeCount = await matchNodes.count();
+    console.log(`Found ${nodeCount} match nodes`);
     const dialog = page.locator('[data-testid="matchStatsModal"]');
 
     let foundMatch = false;
@@ -55,11 +72,17 @@ test.describe('Bracket Unset Winner (e2e)', () => {
       await matchNodes.nth(i).click({ force: true });
 
       const isVisible = await dialog.isVisible().catch(() => false);
+      console.log(`Node ${i}: dialog visible = ${isVisible}`);
       if (!isVisible) continue;
+
+      // Debug: Get dialog content to see what's shown
+      const dialogContent = await dialog.textContent();
+      console.log(`Node ${i} dialog content (first 300 chars):`, dialogContent?.substring(0, 300));
 
       // Check for Set Winner buttons (only visible when match has teams)
       const setWinnerButton = dialog.locator('[data-testid="radiantWinsButton"]');
       const btnVisible = await setWinnerButton.isVisible({ timeout: 1000 }).catch(() => false);
+      console.log(`Node ${i}: setWinnerButton visible = ${btnVisible}`);
 
       if (btnVisible) {
         foundMatch = true;
