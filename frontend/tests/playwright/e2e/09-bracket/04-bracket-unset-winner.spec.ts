@@ -45,27 +45,46 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     // Wait for bracket to fully render
     await page.waitForLoadState('networkidle');
 
-    // Click first match node to open dialog
-    const matchNode = page.locator('[data-testid="bracket-match-node"]').first();
-    await matchNode.click({ force: true });
-
+    // Find a match with teams and Set Winner buttons
+    const matchNodes = page.locator('[data-testid="bracket-match-node"]');
+    const nodeCount = await matchNodes.count();
     const dialog = page.locator('[data-testid="matchStatsModal"]');
-    await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    // Set a winner (radiant)
-    const setWinnerButton = dialog.locator('[data-testid="radiantWinsButton"]');
-    await expect(setWinnerButton).toBeVisible({ timeout: 5000 });
-    await setWinnerButton.click();
+    let foundMatch = false;
+    for (let i = 0; i < Math.min(nodeCount, 6); i++) {
+      await matchNodes.nth(i).click({ force: true });
 
-    // Unset Winner button should now appear
-    const unsetButton = dialog.locator('[data-testid="unsetWinnerButton"]');
-    await expect(unsetButton).toBeVisible({ timeout: 5000 });
+      const isVisible = await dialog.isVisible().catch(() => false);
+      if (!isVisible) continue;
 
-    // Click Unset Winner to clear the result
-    await unsetButton.click();
+      // Check for Set Winner buttons (only visible when match has teams)
+      const setWinnerButton = dialog.locator('[data-testid="radiantWinsButton"]');
+      const btnVisible = await setWinnerButton.isVisible({ timeout: 1000 }).catch(() => false);
 
-    // Set Winner buttons should reappear after unsetting
-    await expect(setWinnerButton).toBeVisible({ timeout: 5000 });
+      if (btnVisible) {
+        foundMatch = true;
+
+        // Set a winner (radiant)
+        await setWinnerButton.click();
+
+        // Unset Winner button should now appear
+        const unsetButton = dialog.locator('[data-testid="unsetWinnerButton"]');
+        await expect(unsetButton).toBeVisible({ timeout: 5000 });
+
+        // Click Unset Winner to clear the result
+        await unsetButton.click();
+
+        // Set Winner buttons should reappear after unsetting
+        await expect(setWinnerButton).toBeVisible({ timeout: 5000 });
+        break;
+      }
+
+      // Close modal and try next node
+      await page.keyboard.press('Escape');
+      await dialog.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
+    }
+
+    expect(foundMatch, 'Could not find a match with teams and Set Winner buttons').toBe(true);
   });
 
   test('staff can unset a bracket game winner', async ({ page }) => {
