@@ -6,7 +6,7 @@ Creates mock Steam matches and bracket games for tournaments.
 from django.db import models
 
 from app.models import CustomUser, Game
-from tests.data.tournaments import BRACKET_TEST_TOURNAMENTS
+from tests.data.tournaments import BRACKET_TEST_CONFIGS
 
 from .constants import DTX_STEAM_LEAGUE_ID
 from .utils import flush_redis_cache
@@ -30,12 +30,12 @@ def populate_steam_matches(force=False):
     print("Populating Steam matches and bracket games...")
 
     # Find tournaments by name from Pydantic configs
-    tournament_names = [t.name for t in BRACKET_TEST_TOURNAMENTS]
+    tournament_names = [t.name for t in BRACKET_TEST_CONFIGS]
     db_tournaments = {
         t.name: t for t in Tournament.objects.filter(name__in=tournament_names)
     }
 
-    if len(db_tournaments) < len(BRACKET_TEST_TOURNAMENTS):
+    if len(db_tournaments) < len(BRACKET_TEST_CONFIGS):
         missing = set(tournament_names) - set(db_tournaments.keys())
         print(f"Missing tournaments: {missing}. Run populate_tournaments first.")
         return
@@ -83,7 +83,7 @@ def populate_steam_matches(force=False):
     ]
 
     # Use tournament configs from Pydantic models
-    for tournament_config in BRACKET_TEST_TOURNAMENTS:
+    for tournament_config in BRACKET_TEST_CONFIGS:
         tournament = db_tournaments[tournament_config.name]
         completed_count = tournament_config.completed_game_count or 0
         match_id_base = tournament_config.match_id_base or 9000000001

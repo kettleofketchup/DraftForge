@@ -3,10 +3,14 @@ Test Tournament Configuration
 
 Pre-defined tournaments for testing.
 All teams are imported from tests/data/teams.py to avoid duplication.
+
+Tournament Types:
+- TestTournament: Pre-defined teams with TestUser objects
+- DynamicTournamentConfig: Dynamically created with mock users/teams
 """
 
 from tests.data.leagues import DTX_STEAM_LEAGUE_ID
-from tests.data.models import TestTournament
+from tests.data.models import DynamicTournamentConfig, TestTournament
 from tests.data.teams import (
     BRACKET_UNSET_WINNER_TEAMS,
     HERODRAFT_TEAMS,
@@ -14,45 +18,92 @@ from tests.data.teams import (
 )
 
 # =============================================================================
-# Bracket Test Tournaments
-# Used for Steam match population and bracket game testing
+# Dynamic Tournament Configs
+# These tournaments are created with generated mock users and teams.
+# pk values are assigned sequentially for consistent database access.
 # =============================================================================
 
-COMPLETED_BRACKET_TOURNAMENT: TestTournament = TestTournament(
+# All 6 bracket games completed - used for bracket badges, match stats tests
+COMPLETED_BRACKET_CONFIG = DynamicTournamentConfig(
+    pk=1,
     name="Completed Bracket Test",
+    user_count=20,
+    team_count=4,
     tournament_type="double_elimination",
-    state="past",
-    steam_league_id=DTX_STEAM_LEAGUE_ID,
     league_name="DTX League",
     completed_game_count=6,  # All 6 bracket games completed
     match_id_base=9000000001,
 )
 
-PARTIAL_BRACKET_TOURNAMENT: TestTournament = TestTournament(
+# 2 games completed, 4 pending - used for partial bracket tests
+PARTIAL_BRACKET_CONFIG = DynamicTournamentConfig(
+    pk=2,
     name="Partial Bracket Test",
+    user_count=20,
+    team_count=4,
     tournament_type="double_elimination",
-    state="past",
-    steam_league_id=DTX_STEAM_LEAGUE_ID,
     league_name="DTX League",
     completed_game_count=2,  # 2 games completed, 4 pending
     match_id_base=9000000101,
 )
 
-PENDING_BRACKET_TOURNAMENT: TestTournament = TestTournament(
+# 0 games completed, all pending - used for pending bracket tests
+PENDING_BRACKET_CONFIG = DynamicTournamentConfig(
+    pk=3,
     name="Pending Bracket Test",
+    user_count=20,
+    team_count=4,
     tournament_type="double_elimination",
-    state="past",
-    steam_league_id=DTX_STEAM_LEAGUE_ID,
     league_name="DTX League",
     completed_game_count=0,  # All games pending
     match_id_base=9000000201,
 )
 
-# List of bracket test tournaments (in order for steam population)
-BRACKET_TEST_TOURNAMENTS: list[TestTournament] = [
-    COMPLETED_BRACKET_TOURNAMENT,
-    PARTIAL_BRACKET_TOURNAMENT,
-    PENDING_BRACKET_TOURNAMENT,
+# Used for captain draft and shuffle draft tests
+DRAFT_TEST_CONFIG = DynamicTournamentConfig(
+    pk=4,
+    name="Draft Test",
+    user_count=30,
+    team_count=6,
+    tournament_type="double_elimination",
+    league_name="DTX League",
+)
+
+# Larger tournament for general testing
+LARGE_TOURNAMENT_CONFIG = DynamicTournamentConfig(
+    pk=5,
+    name="Large Tournament Test",
+    user_count=40,
+    team_count=8,
+    tournament_type="single_elimination",
+    league_name="DTX League",
+)
+
+# Test League tournament - used for multi-org/league testing
+TEST_LEAGUE_TOURNAMENT_CONFIG = DynamicTournamentConfig(
+    pk=6,
+    name="Test League Tournament",
+    user_count=20,
+    team_count=4,
+    tournament_type="double_elimination",
+    league_name="Test League",
+)
+
+# All dynamic tournament configs (in creation order)
+DYNAMIC_TOURNAMENT_CONFIGS: list[DynamicTournamentConfig] = [
+    COMPLETED_BRACKET_CONFIG,
+    PARTIAL_BRACKET_CONFIG,
+    PENDING_BRACKET_CONFIG,
+    DRAFT_TEST_CONFIG,
+    LARGE_TOURNAMENT_CONFIG,
+    TEST_LEAGUE_TOURNAMENT_CONFIG,
+]
+
+# Bracket test configs (subset for steam population)
+BRACKET_TEST_CONFIGS: list[DynamicTournamentConfig] = [
+    COMPLETED_BRACKET_CONFIG,
+    PARTIAL_BRACKET_CONFIG,
+    PENDING_BRACKET_CONFIG,
 ]
 
 # =============================================================================

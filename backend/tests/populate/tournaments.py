@@ -8,7 +8,7 @@ from datetime import date, timedelta
 from django.db import transaction
 
 from app.models import CustomUser, Game, PositionsModel, Team
-from tests.data.models import TestUser
+from tests.data.models import DynamicTournamentConfig, TestUser
 
 from .constants import DTX_STEAM_LEAGUE_ID, TEST_STEAM_LEAGUE_ID, TOURNAMENT_USERS
 from .utils import (
@@ -19,9 +19,162 @@ from .utils import (
 )
 
 
+def create_dynamic_tournament(config: DynamicTournamentConfig, force: bool = False):
+    """Create a tournament from a DynamicTournamentConfig.
+
+    Args:
+        config: The DynamicTournamentConfig with tournament settings
+        force: If True, recreate tournament even if it exists
+
+    Returns:
+        Tournament: The created or existing Tournament instance
+    """
+    from app.models import League, Tournament
+
+    # Check if tournament already exists
+    existing = Tournament.objects.filter(name=config.name).first()
+    if existing and not force:
+        print(
+            f"Tournament '{config.name}' already exists (pk={existing.pk}), skipping..."
+        )
+        return existing
+
+    if existing and force:
+        print(f"Deleting existing tournament '{config.name}' for recreation...")
+        existing.delete()
+
+    # Get the league by name
+    league = League.objects.filter(name=config.league_name).first()
+    if not league:
+        print(
+            f"League '{config.league_name}' not found. Run populate_organizations_and_leagues first."
+        )
+        return None
+
+    # Get users with Steam IDs for team membership
+    users_with_steam = list(
+        CustomUser.objects.filter(steamid__isnull=False).exclude(steamid=0)
+    )
+    all_users = list(CustomUser.objects.all())
+
+    if len(all_users) < config.user_count:
+        print(
+            f"Not enough users ({len(all_users)}) for tournament '{config.name}' (needs {config.user_count})"
+        )
+        return None
+
+    # Generate random date (within last 3 months to next 3 months)
+    base_date = date.today()
+    random_days = random.randint(-90, 90)
+    tournament_date = base_date + timedelta(days=random_days)
+
+    # Set state based on date
+    if tournament_date < base_date:
+        state = "past"
+    elif tournament_date > base_date:
+        state = "future"
+    else:
+        state = "in_progress"
+
+    with transaction.atomic():
+        # Create tournament with specific pk if provided
+        tournament = Tournament.objects.create(
+            pk=config.pk,
+            name=config.name,
+            date_played=tournament_date,
+            state=state,
+            tournament_type=config.tournament_type,
+            league=league,
+            steam_league_id=league.steam_league_id,
+        )
+
+        # Select random users for this tournament
+        selected_users = random.sample(
+            all_users, min(config.user_count, len(all_users))
+        )
+        tournament.users.set(selected_users)
+
+        # Create OrgUser and LeagueUser records
+        org = league.organization
+        if org:
+            for user in selected_users:
+                org_user = ensure_org_user(user, org)
+                ensure_league_user(user, org_user, league)
+
+        # Create teams (5 players per team)
+        team_name_pool = [
+            "Team Alpha",
+            "Team Beta",
+            "Team Gamma",
+            "Team Delta",
+            "Team Epsilon",
+            "Team Zeta",
+            "Team Eta",
+            "Team Theta",
+        ]
+        team_size = 5
+        required_users = config.team_count * team_size
+        users_for_teams = users_with_steam[:required_users]
+
+        if len(users_for_teams) >= required_users:
+            for team_idx in range(config.team_count):
+                team_name = (
+                    team_name_pool[team_idx]
+                    if team_idx < len(team_name_pool)
+                    else f"Team {team_idx + 1}"
+                )
+                team_members = users_for_teams[
+                    team_idx * team_size : (team_idx + 1) * team_size
+                ]
+                captain = team_members[0] if team_members else None
+
+                team = Team.objects.create(
+                    tournament=tournament,
+                    name=team_name,
+                    captain=captain,
+                    draft_order=team_idx + 1,
+                )
+                team.members.set(team_members)
+
+        tournament.save()
+
+        print(
+            f"Created tournament '{config.name}' (pk={tournament.pk}) with {len(selected_users)} users, "
+            f"{tournament.teams.count()} teams (type: {config.tournament_type}, league: {league.name})"
+        )
+
+        return tournament
+
+
+def create_dyn_tournaments(force: bool = False):
+    """Create all dynamic tournaments from data/tournaments.py.
+
+    Imports all objects from tests.data.tournaments and creates any
+    that are DynamicTournamentConfig instances.
+
+    Args:
+        force: If True, recreate tournaments even if they exist
+
+    Returns:
+        list[Tournament]: List of created Tournament instances
+    """
+    from tests.data import tournaments as tournament_data
+
+    created = []
+    for name in dir(tournament_data):
+        obj = getattr(tournament_data, name)
+        if isinstance(obj, DynamicTournamentConfig):
+            tournament = create_dynamic_tournament(obj, force=force)
+            if tournament:
+                created.append(tournament)
+
+    print(f"Created {len(created)} dynamic tournaments")
+    return created
+
+
 def populate_tournaments(force=False):
     """
-    Creates 6 tournaments:
+    Creates 6 tournaments from DynamicTournamentConfig objects:
     - 5 tournaments assigned to DTX League (steam_league_id=17929)
     - 1 tournament assigned to Test League (steam_league_id=17930)
 
@@ -55,169 +208,10 @@ def populate_tournaments(force=False):
         print("Leagues not found. Run populate_organizations_and_leagues first.")
         return
 
-    # Tournament configurations
-    # Names are descriptive of what feature each tournament tests
-    # Player counts match team counts (teams x 5 players per team)
-    # All use DTX league by default
-    tournament_configs = [
-        # All 6 bracket games completed - used for bracket badges, match stats tests
-        {
-            "name": "Completed Bracket Test",
-            "users": 20,
-            "teams": 4,
-            "type": "double_elimination",
-            "league": dtx_league,
-        },
-        # 2 games completed, 4 pending - used for partial bracket tests
-        {
-            "name": "Partial Bracket Test",
-            "users": 20,
-            "teams": 4,
-            "type": "double_elimination",
-            "league": dtx_league,
-        },
-        # 0 games completed, all pending - used for pending bracket tests
-        {
-            "name": "Pending Bracket Test",
-            "users": 20,
-            "teams": 4,
-            "type": "double_elimination",
-            "league": dtx_league,
-        },
-        # Used for captain draft and shuffle draft tests
-        {
-            "name": "Draft Test",
-            "users": 30,
-            "teams": 6,
-            "type": "double_elimination",
-            "league": dtx_league,
-        },
-        # Larger tournament for general testing
-        {
-            "name": "Large Tournament Test",
-            "users": 40,
-            "teams": 8,
-            "type": "single_elimination",
-            "league": dtx_league,
-        },
-        # Test League tournament - used for multi-org/league testing
-        {
-            "name": "Test League Tournament",
-            "users": 20,
-            "teams": 4,
-            "type": "double_elimination",
-            "league": test_league,
-        },
-    ]
+    # Create all dynamic tournaments from Pydantic configs
+    tournaments = create_dyn_tournaments(force=force)
 
-    tournaments_created = 0
-
-    for i, config in enumerate(tournament_configs):
-        tournament_name = config["name"]
-        user_count = config["users"]
-        tournament_type = config["type"]
-        league = config["league"]
-
-        # Check if tournament with this name already exists
-        if Tournament.objects.filter(name=tournament_name).exists() and not force:
-            print(f"Tournament '{tournament_name}' already exists, skipping...")
-            continue
-
-        # Generate random date (within last 3 months to next 3 months)
-        base_date = date.today()
-        random_days = random.randint(-90, 90)
-        tournament_date = base_date + timedelta(days=random_days)
-
-        # Set state based on date
-        if tournament_date < base_date:
-            state = "past"
-        elif tournament_date > base_date:
-            state = "future"
-        else:
-            state = "in_progress"
-
-        with transaction.atomic():
-            # Create tournament with league assignment
-            tournament = Tournament.objects.create(
-                name=tournament_name,
-                date_played=tournament_date,
-                state=state,
-                tournament_type=tournament_type,
-                league=league,
-                steam_league_id=league.steam_league_id,
-            )
-
-            # Get random users for this tournament
-            # Need users with Steam IDs for match generation
-            users_with_steam = list(
-                CustomUser.objects.filter(steamid__isnull=False).exclude(steamid=0)
-            )
-            all_users = list(CustomUser.objects.all())
-
-            # Prioritize users with Steam IDs for team membership
-            selected_users = random.sample(all_users, min(user_count, len(all_users)))
-
-            # Add users to tournament
-            tournament.users.set(selected_users)
-
-            # Create OrgUser and LeagueUser records for tournament users
-            org = league.organization
-            if org:
-                for user in selected_users:
-                    org_user = ensure_org_user(user, org)
-                    ensure_league_user(user, org_user, league)
-
-            # Create teams based on config (5 players per team: 1 captain + 4 members)
-            team_name_pool = [
-                "Team Alpha",
-                "Team Beta",
-                "Team Gamma",
-                "Team Delta",
-                "Team Epsilon",
-                "Team Zeta",
-                "Team Eta",
-                "Team Theta",
-            ]
-            team_count = config.get("teams", 4)
-            team_size = 5
-            required_users = team_count * team_size
-
-            # Get users with Steam IDs for team membership
-            users_for_teams = users_with_steam[:required_users]
-
-            if len(users_for_teams) >= required_users:
-                for team_idx in range(team_count):
-                    team_name = (
-                        team_name_pool[team_idx]
-                        if team_idx < len(team_name_pool)
-                        else f"Team {team_idx + 1}"
-                    )
-                    team_members = users_for_teams[
-                        team_idx * team_size : (team_idx + 1) * team_size
-                    ]
-                    captain = team_members[0] if team_members else None
-
-                    team = Team.objects.create(
-                        tournament=tournament,
-                        name=team_name,
-                        captain=captain,
-                        draft_order=team_idx + 1,
-                    )
-                    team.members.set(team_members)  # Captain included in members
-
-            tournament.save()
-
-            team_count = tournament.teams.count()
-            print(
-                f"Created tournament '{tournament_name}' with {len(selected_users)} users, "
-                f"{team_count} teams (type: {tournament_type}, state: {state}, "
-                f"league: {league.name})"
-            )
-            tournaments_created += 1
-
-    print(
-        f"Created {tournaments_created} new tournaments. Total tournaments in database: {Tournament.objects.count()}"
-    )
+    print(f"Total tournaments in database: {Tournament.objects.count()}")
 
 
 def populate_real_tournament_38(force=False):
