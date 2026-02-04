@@ -49,7 +49,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     const matchNode = page.locator('[data-testid="bracket-match-node"]').first();
     await matchNode.click({ force: true });
 
-    const dialog = page.locator('[role="dialog"]');
+    const dialog = page.locator('[data-testid="matchStatsModal"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
     // Set a winner (radiant)
@@ -86,7 +86,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     for (let i = 0; i < Math.min(nodeCount, 5); i++) {
       await matchNodes.nth(i).click({ force: true });
 
-      const dialog = page.locator('[role="dialog"]');
+      const dialog = page.locator('[data-testid="matchStatsModal"]');
       const isVisible = await dialog.isVisible().catch(() => false);
 
       if (isVisible) {
@@ -118,7 +118,7 @@ test.describe('Bracket Unset Winner (e2e)', () => {
     expect(foundMatch, 'Could not find a pending match with Set Winner buttons in the bracket').toBe(true);
 
     // Close the current modal
-    const dialog = page.locator('[role="dialog"]');
+    const dialog = page.locator('[data-testid="matchStatsModal"]');
     if (await dialog.isVisible().catch(() => false)) {
       await page.keyboard.press('Escape');
       await dialog.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});

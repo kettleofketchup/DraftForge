@@ -148,7 +148,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl" data-testid="matchStatsModal">
         <DialogHeader>
           <DialogTitle data-testid="match-details-header">Match Details</DialogTitle>
           <DialogDescription>
