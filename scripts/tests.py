@@ -312,6 +312,24 @@ def playwright_all(c, args=""):
         c.run(f"DOCKER_HOST={docker_host} npx playwright test {args}".strip())
 
 
+@task
+def playwright_cicd(c, args=""):
+    """Run only @cicd tagged Playwright tests (fast smoke tests).
+
+    These are quick sanity tests that verify core features work.
+    Use for CI/CD pipelines where speed matters.
+
+    Args:
+        args: Additional arguments to pass to Playwright
+    """
+    flush_test_redis(c)
+    docker_host = get_docker_host()
+    with c.cd(paths.FRONTEND_PATH):
+        c.run(
+            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" --project=chromium --project=herodraft {args}'.strip()
+        )
+
+
 # Add tasks to playwright collection
 ns_playwright.add_task(playwright_install, "install")
 ns_playwright.add_task(playwright_headless, "headless")
@@ -328,6 +346,7 @@ ns_playwright.add_task(playwright_league, "league")
 ns_playwright.add_task(playwright_herodraft, "herodraft")
 ns_playwright.add_task(playwright_herodraft_headed, "herodraft-headed")
 ns_playwright.add_task(playwright_all, "all")
+ns_playwright.add_task(playwright_cicd, "cicd")
 
 ns_test.add_collection(ns_playwright, "playwright")
 
