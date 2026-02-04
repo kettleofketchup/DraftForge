@@ -23,6 +23,7 @@ import { Badge } from '~/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { BarChart3, Link2, Loader2, RotateCcw, Swords, UserLock } from 'lucide-react';
 import { useUserStore } from '~/store/userStore';
+import { useIsLeagueStaff } from '~/hooks/usePermissions';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { useBracketStore } from '~/store/bracketStore';
 import { useCreateHeroDraft, useResetHeroDraft } from '~/hooks/useHeroDraft';
@@ -40,13 +41,26 @@ interface MatchStatsModalProps {
   onOpenHeroDraft?: (draftId: number) => void;
 }
 
-export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpenHeroDraft }: MatchStatsModalProps) {
+export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraftId, onOpenHeroDraft }: MatchStatsModalProps) {
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
   const isStaff = useUserStore((state) => state.isStaff());
   const currentUser = useUserStore((state) => state.currentUser);
   const tournament = useUserStore((state) => state.tournament);
-  const { setMatchWinner, advanceWinner, loadBracket } = useBracketStore();
+  const isLeagueStaff = useIsLeagueStaff(tournament?.league);
+
+  // Subscribe to match directly from store for reactive updates
+  const storeMatch = useBracketStore((state) =>
+    matchProp ? state.matches.find(m => m.id === matchProp.id) : null
+  );
+  // Use store match if available (has latest state), otherwise fall back to prop
+  const match = storeMatch ?? matchProp;
+
+  const setMatchWinner = useBracketStore((state) => state.setMatchWinner);
+  const advanceWinner = useBracketStore((state) => state.advanceWinner);
+  const loadBracket = useBracketStore((state) => state.loadBracket);
+  const unsetMatchWinner = useBracketStore((state) => state.unsetMatchWinner);
+
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -62,6 +76,10 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
   const handleSetWinner = (winner: 'radiant' | 'dire') => {
     setMatchWinner(match.id, winner);
     advanceWinner(match.id);
+  };
+
+  const handleUnsetWinner = () => {
+    unsetMatchWinner(match.id);
   };
 
   const handleLinkUpdated = () => {
@@ -132,7 +150,7 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl" data-testid="matchStatsModal">
         <DialogHeader>
           <DialogTitle data-testid="match-details-header">Match Details</DialogTitle>
           <DialogDescription>
@@ -197,6 +215,21 @@ export function MatchStatsModal({ match, isOpen, onClose, initialDraftId, onOpen
                   {match.direTeam.captain ? DisplayName(match.direTeam.captain) : match.direTeam.name} Wins
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Unset Winner - only show if match has winner */}
+          {isLeagueStaff && match.status === 'completed' && match.winner && (
+            <div className="border-t pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleUnsetWinner}
+                data-testid="unsetWinnerButton"
+              >
+                <RotateCcw className="w-4 h-4 mr-1" />
+                Unset Winner
+              </Button>
             </div>
           )}
 

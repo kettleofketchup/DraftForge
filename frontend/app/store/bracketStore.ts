@@ -3,8 +3,8 @@ import type { Node, Edge } from '@xyflow/react';
 import type { BracketMatch, SeedingMethod } from '~/components/bracket/types';
 import type { TeamType } from '~/components/tournament/types.d';
 import { generateBracket, reseedBracket } from '~/components/bracket/utils/bracketFactory';
-import { api } from '~/components/api/axios';
-import { BracketResponseSchema, type BracketMatchDTO as ApiBracketMatch } from '~/components/bracket/schemas';
+import { saveBracket as saveBracketAPI, loadBracket as loadBracketAPI } from '~/components/api/bracketAPI';
+import type { BracketMatchDTO as ApiBracketMatch } from '~/components/bracket/schemas';
 import { getLogger } from '~/lib/logger';
 
 const log = getLogger('bracketStore');
@@ -104,6 +104,7 @@ interface BracketStore {
   removeTeamFromSlot: (matchId: string, slot: 'radiant' | 'dire') => void;
   setMatchWinner: (matchId: string, winner: 'radiant' | 'dire') => void;
   advanceWinner: (matchId: string) => void;
+  unsetMatchWinner: (matchId: string) => void;
 
   // Persistence
   saveBracket: (tournamentId: number) => Promise<void>;
@@ -206,18 +207,53 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
     }
   },
 
+  unsetMatchWinner: (matchId) => {
+    const match = get().matches.find((m) => m.id === matchId);
+    if (!match?.winner) return;
+
+    const winningTeam = match.winner === 'radiant' ? match.radiantTeam : match.direTeam;
+    const losingTeam = match.winner === 'radiant' ? match.direTeam : match.radiantTeam;
+
+    log.debug('Unsetting match winner', { matchId, previousWinner: match.winner });
+
+    set((state) => ({
+      matches: state.matches.map((m) => {
+        if (m.id === matchId) {
+          return { ...m, winner: undefined, status: 'pending' as const };
+        }
+        // Clear winning team from next match slot
+        if (match.nextMatchId && m.id === match.nextMatchId) {
+          const slot = match.nextMatchSlot;
+          if (slot === 'radiant' && m.radiantTeam?.pk === winningTeam?.pk) {
+            return { ...m, radiantTeam: undefined };
+          }
+          if (slot === 'dire' && m.direTeam?.pk === winningTeam?.pk) {
+            return { ...m, direTeam: undefined };
+          }
+        }
+        // Clear losing team from losers bracket slot
+        if (match.loserNextMatchId && m.id === match.loserNextMatchId) {
+          const slot = match.loserNextMatchSlot;
+          if (slot === 'radiant' && m.radiantTeam?.pk === losingTeam?.pk) {
+            return { ...m, radiantTeam: undefined };
+          }
+          if (slot === 'dire' && m.direTeam?.pk === losingTeam?.pk) {
+            return { ...m, direTeam: undefined };
+          }
+        }
+        return m;
+      }),
+      isDirty: true,
+    }));
+  },
+
   saveBracket: async (tournamentId) => {
     log.debug('Saving bracket', { tournamentId });
     set({ isLoading: true });
     try {
-      const response = await api.post(`/bracket/tournaments/${tournamentId}/save/`, {
-        matches: get().matches,
-      });
-      // Parse response to get saved matches with their new gameId (pk) values
-      const data = BracketResponseSchema.parse(response.data);
+      const data = await saveBracketAPI(tournamentId, get().matches);
       const savedMatches = data.matches.map(m => mapApiMatchToMatch(m, data.matches));
 
-      // Update state with saved matches (now have gameId from backend)
       set({
         matches: savedMatches,
         isDirty: false,
@@ -227,7 +263,7 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
       log.debug('Bracket saved successfully', { matchCount: savedMatches.length });
     } catch (error) {
       log.error('Failed to save bracket', error);
-      set({ isLoading: false }); // Ensure loading is reset on error
+      set({ isLoading: false });
       throw error;
     }
   },
@@ -249,8 +285,7 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
     }
 
     try {
-      const response = await api.get(`/bracket/tournaments/${tournamentId}/`);
-      const data = BracketResponseSchema.parse(response.data);
+      const data = await loadBracketAPI(tournamentId);
 
       // Check if user made changes during fetch - don't overwrite their work
       if (get().isDirty) {

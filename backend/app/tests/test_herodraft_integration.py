@@ -67,18 +67,19 @@ class HeroDraftAPITest(TestCase):
         # Django REST Framework returns 403 for unauthenticated requests by default
         self.assertIn(response.status_code, [401, 403])
 
-    def test_cannot_create_duplicate_draft(self):
-        """Cannot create a second draft for a game that already has one."""
+    def test_create_duplicate_draft_returns_existing(self):
+        """Creating a draft for a game that already has one returns the existing draft."""
         self.client.force_authenticate(user=self.captain1)
 
         # Create first draft
         response1 = self.client.post(f"/api/games/{self.game.id}/create-herodraft/")
         self.assertEqual(response1.status_code, 201)
+        first_draft_id = response1.data["id"]
 
-        # Try to create second draft
+        # Try to create second draft - should return existing draft with 200
         response2 = self.client.post(f"/api/games/{self.game.id}/create-herodraft/")
-        self.assertEqual(response2.status_code, 400)
-        self.assertIn("already has a hero draft", response2.data["error"])
+        self.assertEqual(response2.status_code, 200)
+        self.assertEqual(response2.data["id"], first_draft_id)
 
     def test_full_ready_flow(self):
         """Both captains can ready up and state changes to rolling."""
