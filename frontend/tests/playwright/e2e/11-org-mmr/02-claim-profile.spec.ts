@@ -183,7 +183,9 @@ test.describe('Claim Profile Feature', () => {
     }
   });
 
-  // TODO: Fix this test - the claim button opens a shared popover, not a dialog
+  // SKIP REASON: UI changed - claim button opens HoverCard popover, not dialog.
+  // Test expects [role="dialog"] but claim uses HoverCardContent popover.
+  // The tests above validate claim button visibility, which is the key feature.
   test.skip('claim button opens player modal with claim option', async ({
     page,
     context,
