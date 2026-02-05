@@ -6,13 +6,8 @@
 
 import type { OrganizationType, OrganizationsType } from '~/components/organization/schemas';
 import type { UserType } from '~/index';
+import type { AddMemberPayload, AddUserResponse } from './types';
 import axios from './axios';
-
-// Response types
-interface AddUserResponse {
-  status: string;
-  user: UserType;
-}
 
 interface TransferOwnershipResponse {
   status: string;
@@ -157,5 +152,51 @@ export async function approveClaimRequest(claimId: number): Promise<{ message: s
 
 export async function rejectClaimRequest(claimId: number, reason?: string): Promise<{ message: string }> {
   const response = await axios.post<{ message: string }>(`/claim-requests/${claimId}/reject/`, { reason });
+  return response.data;
+}
+
+// Organization Members
+export async function addOrgMember(
+  orgId: number,
+  payload: AddMemberPayload,
+): Promise<UserType> {
+  const response = await axios.post<AddUserResponse>(
+    `/organizations/${orgId}/members/`,
+    payload,
+  );
+  return response.data.user;
+}
+
+// Discord member search
+export interface DiscordSearchResult {
+  user: {
+    id: string;
+    username: string;
+    global_name?: string;
+    avatar?: string;
+  };
+  nick?: string;
+  has_site_account: boolean;
+  site_user_pk: number | null;
+}
+
+export async function searchDiscordMembers(
+  orgId: number,
+  query: string,
+): Promise<DiscordSearchResult[]> {
+  const response = await axios.get<{ results: DiscordSearchResult[] }>(
+    `/discord/search-discord-members/`,
+    { params: { q: query, org_id: orgId } },
+  );
+  return response.data.results;
+}
+
+export async function refreshDiscordMembers(
+  orgId: number,
+): Promise<{ refreshed: boolean; count: number }> {
+  const response = await axios.post<{ refreshed: boolean; count: number }>(
+    `/discord/refresh-discord-members/`,
+    { org_id: orgId },
+  );
   return response.data;
 }
