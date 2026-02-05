@@ -1,0 +1,144 @@
+{
+  "redirects": [
+    {
+      "category": "invoke",
+      "enabled": true,
+      "pattern": "\\binv(oke)?\\s+",
+      "just_command": "just <module>::<recipe>",
+      "reason": "Project migrated from invoke to just. Convert task.name to module::name"
+    },
+    {
+      "category": "invoke",
+      "enabled": true,
+      "pattern": "poetry run inv",
+      "just_command": "just <module>::<recipe>",
+      "reason": "No need for poetry run - just auto-activates venv"
+    },
+    {
+      "category": "invoke",
+      "enabled": true,
+      "pattern": "\\.venv/bin/(python -m )?invoke",
+      "just_command": "just <module>::<recipe>",
+      "reason": "No need for direct venv invoke - just auto-activates venv"
+    },
+    {
+      "category": "npm",
+      "enabled": true,
+      "pattern": "^npm install",
+      "just_command": "just npm::install",
+      "reason": "Runs npm install in the correct frontend/ directory"
+    },
+    {
+      "category": "npm",
+      "enabled": true,
+      "pattern": "^npm run dev",
+      "just_command": "just npm::dev",
+      "reason": "Runs npm dev in the correct frontend/ directory"
+    },
+    {
+      "category": "npm",
+      "enabled": true,
+      "pattern": "^npm run build",
+      "just_command": "just npm::build",
+      "reason": "Runs npm build in the correct frontend/ directory"
+    },
+    {
+      "category": "npm",
+      "enabled": true,
+      "pattern": "^npm run typecheck",
+      "just_command": "just npm::typecheck",
+      "reason": "Runs typecheck in the correct frontend/ directory"
+    },
+    {
+      "category": "npm",
+      "enabled": true,
+      "pattern": "^npm run lint",
+      "just_command": "just npm::lint",
+      "reason": "Runs lint in the correct frontend/ directory"
+    },
+    {
+      "category": "npm",
+      "enabled": true,
+      "pattern": "^npm (add|run)",
+      "just_command": "just npm::run <args>",
+      "reason": "Wraps npm commands with correct frontend/ working directory"
+    },
+    {
+      "category": "python",
+      "enabled": true,
+      "pattern": "python manage\\.py",
+      "just_command": "just py::manage <args>",
+      "reason": "Auto-activates venv and sets correct backend/ working directory"
+    },
+    {
+      "category": "python",
+      "enabled": true,
+      "pattern": "python -m pytest",
+      "just_command": "just py::test <args>",
+      "reason": "Runs pytest with DISABLE_CACHE=true and correct venv/directory"
+    },
+    {
+      "category": "python",
+      "enabled": true,
+      "pattern": "python manage\\.py migrate",
+      "just_command": "just py::migrate",
+      "reason": "Runs migrations with DISABLE_CACHE=true in correct directory"
+    },
+    {
+      "category": "python",
+      "enabled": true,
+      "pattern": "python manage\\.py makemigrations",
+      "just_command": "just py::makemigrations",
+      "reason": "Runs makemigrations with correct venv and directory"
+    },
+    {
+      "category": "python",
+      "enabled": true,
+      "pattern": "python manage\\.py shell",
+      "just_command": "just py::shell",
+      "reason": "Opens Django shell with DISABLE_CACHE=true"
+    },
+    {
+      "category": "playwright",
+      "enabled": true,
+      "pattern": "npx playwright",
+      "just_command": "just test::pw::<recipe>",
+      "reason": "Use just test::pw::headless, test::pw::headed, test::pw::ui, or test::pw::debug"
+    },
+    {
+      "category": "poetry",
+      "enabled": true,
+      "pattern": "^poetry install",
+      "just_command": "just update::deps",
+      "reason": "Project bootstrap handles poetry install via ./dev"
+    },
+    {
+      "category": "poetry",
+      "enabled": true,
+      "pattern": "^poetry (add|remove)",
+      "just_command": "just update::deps (after manual poetry add)",
+      "reason": "Run poetry add/remove manually, then just update::deps to sync"
+    },
+    {
+      "category": "docker",
+      "enabled": true,
+      "pattern": "docker compose.*(up|down|build|logs|ps|restart|stop)",
+      "just_command": "just dev::<up|down|build|logs|ps|restart|stop>",
+      "reason": "Use just dev:: or just test:: recipes which set correct compose files and env"
+    },
+    {
+      "category": "venv",
+      "enabled": true,
+      "pattern": "(source\\s+|\\. )\\.venv/bin/activate",
+      "just_command": "(not needed)",
+      "reason": "just recipes auto-activate the venv - no manual activation required"
+    },
+    {
+      "category": "docs",
+      "enabled": true,
+      "pattern": "mkdocs (serve|build)",
+      "just_command": "just docs::serve or just docs::build",
+      "reason": "Uses project-standard docs build with correct environment"
+    }
+  ]
+}
