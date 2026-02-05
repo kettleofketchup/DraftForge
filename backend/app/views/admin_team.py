@@ -700,10 +700,7 @@ def add_league_member(request, league_id):
         League.objects.select_related("organization"), pk=league_id
     )
 
-    has_access = league.organization and has_org_admin_access(
-        request.user, league.organization
-    )
-    if not has_access and not request.user.is_superuser:
+    if not has_league_admin_access(request.user, league):
         return Response(
             {"error": "You do not have permission"},
             status=status.HTTP_403_FORBIDDEN,
