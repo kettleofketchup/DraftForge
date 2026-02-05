@@ -103,9 +103,7 @@ test.describe('League Page - Tab Navigation (e2e)', () => {
     await leaguePage.assertTabActive('tournaments');
   });
 
-  // Skip: React Router client-side navigation doesn't push history entries that
-  // Playwright's goBack() can navigate. This is an SPA limitation, not a bug.
-  test.skip('should handle browser back/forward navigation', async ({ page }) => {
+  test('should handle browser back/forward navigation', async ({ page }) => {
     const leaguePage = new LeaguePage(page);
     await leaguePage.goto(testLeagueId, 'info');
 

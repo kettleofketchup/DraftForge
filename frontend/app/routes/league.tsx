@@ -84,7 +84,8 @@ export default function LeaguePage() {
 
   const handleTabChange = (newTab: string) => {
     setActiveTab(newTab);
-    navigate(`/leagues/${leagueId}/${newTab}`, { replace: true });
+    // Don't use replace: true - we want history entries for browser back/forward
+    navigate(`/leagues/${leagueId}/${newTab}`);
   };
 
   // Filter tournaments for this league
