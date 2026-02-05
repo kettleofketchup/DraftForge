@@ -204,11 +204,7 @@ test.describe('HeroDraft Captain Connection Management', () => {
     await context1.close();
   });
 
-  // SKIP REASON: Complex multi-context WebSocket test with 3 browser contexts.
-  // The connection kick FEATURE works (verified by tests above). This test verifies
-  // edge case behavior: different captains don't kick each other, only same-user tabs.
-  // TODO: Consider if this edge case needs test coverage or is sufficiently covered by unit tests.
-  test.skip('should only kick captain connections, not spectators', async ({
+  test('should only kick captain connections, not spectators', async ({
     browser,
     heroDraft,
   }) => {

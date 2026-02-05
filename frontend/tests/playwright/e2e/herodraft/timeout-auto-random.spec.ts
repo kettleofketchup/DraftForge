@@ -279,13 +279,14 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
     const isAWinner = await winnerChoiceFirstA.isVisible({ timeout: 2000 }).catch(() => false);
 
     if (isAWinner) {
-      await winnerChoiceFirstA.click();
-      await expect(captainB.page.getByTestId('herodraft-remaining-radiant')).toBeVisible({ timeout: 10000 });
-      await captainB.page.getByTestId('herodraft-remaining-radiant').click();
+      // Use helper which properly confirms the dialog
+      await captainA.draftPage.selectWinnerChoice('first_pick');
+      // Use helper which waits for loser choices container
+      await captainB.draftPage.selectLoserChoice('radiant');
     } else {
-      await captainB.page.getByTestId('herodraft-choice-first-pick').click();
-      await expect(captainA.page.getByTestId('herodraft-remaining-radiant')).toBeVisible({ timeout: 10000 });
-      await captainA.page.getByTestId('herodraft-remaining-radiant').click();
+      // Captain B is the winner
+      await captainB.draftPage.selectWinnerChoice('first_pick');
+      await captainA.draftPage.selectLoserChoice('radiant');
     }
 
     // Wait for drafting phase - use longer timeout for stability
@@ -325,7 +326,7 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
   // with the choosing phase UI flow. The auto-random pick FEATURE is fully implemented
   // (force_herodraft_timeout endpoint, auto_random_pick function, WebSocket broadcasts).
   // TODO: Refactor setupToDraftingPhase to use more reliable waits for choosing phase.
-  test.skip('auto-random pick is triggered on timeout and broadcast to all clients', async () => {
+  test('auto-random pick is triggered on timeout and broadcast to all clients', async () => {
     test.setTimeout(120000);
 
     const draftPk = testInfo.pk;
@@ -378,7 +379,7 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
 
   // SKIP REASON: Same setupToDraftingPhase infrastructure issue as above.
   // Feature works - test setup needs refactoring.
-  test.skip('multiple consecutive timeouts complete multiple rounds', async () => {
+  test('multiple consecutive timeouts complete multiple rounds', async () => {
     test.setTimeout(120000);
 
     const draftPk = testInfo.pk;
@@ -427,7 +428,7 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
 
   // SKIP REASON: Same setupToDraftingPhase infrastructure issue as above.
   // Feature works - test setup needs refactoring.
-  test.skip('timeout advances through different round types (bans and picks)', async () => {
+  test('timeout advances through different round types (bans and picks)', async () => {
     test.setTimeout(180000);
 
     const draftPk = testInfo.pk;
@@ -492,7 +493,7 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
 
   // SKIP REASON: Same setupToDraftingPhase infrastructure issue as above.
   // Feature works - test setup needs refactoring.
-  test.skip('draft completes when all rounds timeout', async () => {
+  test('draft completes when all rounds timeout', async () => {
     test.setTimeout(300000); // 5 minutes for full draft
 
     const draftPk = testInfo.pk;

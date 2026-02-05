@@ -10,12 +10,7 @@ const BASE_URL = 'https://localhost';
  * This was a regression where ALL_HERO_IDS was hardcoded to 1-138.
  */
 test.describe('Largo Hero Pick', () => {
-  // SKIP REASON: Test infrastructure issue - "current picker" detection uses
-  // non-existent test ID `herodraft-team-a-picking`. The FEATURE works:
-  // - Largo (ID 155) IS visible and available (original regression fixed)
-  // - The hero button click succeeds, but test clicks wrong captain's context
-  // TODO: Refactor to use proper "your turn" indicator detection.
-  test.skip('should be able to pick Largo (ID 155) in draft', async () => {
+  test('should be able to pick Largo (ID 155) in draft', async () => {
     // Set longer timeout for this test
     test.setTimeout(120000);
 
@@ -134,9 +129,10 @@ test.describe('Largo Hero Pick', () => {
       ]);
       console.log('   Drafting phase started');
 
-      // Determine current picker
-      const teamAPicking = await pageA.locator('[data-testid="herodraft-team-a-picking"]').isVisible().catch(() => false);
-      const currentPicker = teamAPicking ? draftPageA : draftPageB;
+      // Determine current picker using the helper's isMyTurn method
+      const isAMyTurn = await draftPageA.isMyTurn();
+      const currentPicker = isAMyTurn ? draftPageA : draftPageB;
+      console.log(`   Current picker is: Captain ${isAMyTurn ? 'A' : 'B'}`);
 
       // =====================================================
       // THE ACTUAL TEST: Try to pick Largo (hero ID 155)

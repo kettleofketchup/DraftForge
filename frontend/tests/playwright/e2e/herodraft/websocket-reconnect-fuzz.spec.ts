@@ -50,10 +50,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
     return { page, draftPage };
   }
 
-  // SKIP REASON: Multi-context WebSocket stress test with timing-sensitive setup.
-  // The reconnection FEATURE works - this tests edge case behavior during waiting phase.
-  // TODO: Refactor to use more reliable setup that doesn't depend on phase transitions.
-  test.skip('should maintain state through multiple connection drops during waiting phase', async () => {
+  test('should maintain state through multiple connection drops during waiting phase', async () => {
     const browser = await chromium.launch({
       headless: true,
       args: ['--disable-web-security', '--ignore-certificate-errors', '--no-sandbox'],
@@ -162,10 +159,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
     }
   });
 
-  // SKIP REASON: Multi-context WebSocket stress test with complex phase transitions.
-  // The reconnection FEATURE works - this tests state recovery during drafting.
-  // Depends on choosing phase UI which has timing variability.
-  test.skip('should recover draft state after reconnection during drafting phase', async () => {
+  test('should recover draft state after reconnection during drafting phase', async () => {
     const browser = await chromium.launch({
       headless: true,
       args: ['--disable-web-security', '--ignore-certificate-errors', '--no-sandbox'],
@@ -252,9 +246,9 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
 
       console.log('Drafting phase started');
 
-      // Make first pick
-      const teamAPicking = await draftPageA.isTeamAPicking();
-      let currentPicker = teamAPicking ? draftPageA : draftPageB;
+      // Make first pick - determine who's picking using isMyTurn()
+      const isAMyTurn = await draftPageA.isMyTurn();
+      let currentPicker = isAMyTurn ? draftPageA : draftPageB;
       let pickedHeroId = 1; // Anti-Mage
 
       await currentPicker.pickHero(pickedHeroId);
@@ -262,7 +256,7 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
 
       // FUZZ: Drop the current picker's connection right after picking
       console.log('FUZZ: Dropping current picker connection...');
-      if (teamAPicking) {
+      if (isAMyTurn) {
         await contextA.close();
         contextA = null;
       } else {
