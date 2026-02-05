@@ -82,6 +82,13 @@ function combineDateAndTime(dateStr: string, timeStr: string): string {
   return `${dateStr}T${timeStr}:00`;
 }
 
+// Helper to parse a yyyy-MM-dd string as local midnight.
+// new Date('yyyy-MM-dd') parses as UTC, causing off-by-one-day errors
+// in timezones behind UTC. Appending T00:00:00 forces local-time parsing.
+function localDate(dateStr: string): Date {
+  return new Date(dateStr + 'T00:00:00');
+}
+
 const TournamentEditSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
   state: z.enum(STATE_VALUES).nullable().optional(),
@@ -316,7 +323,7 @@ export function TournamentEditModal({
                         data-testid="tournament-date-picker"
                       >
                         {selectedDate ? (
-                          format(new Date(selectedDate), 'PPP')
+                          format(localDate(selectedDate), 'PPP')
                         ) : (
                           <span>Pick a date</span>
                         )}
@@ -327,7 +334,7 @@ export function TournamentEditModal({
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
                       mode="single"
-                      selected={selectedDate ? new Date(selectedDate) : undefined}
+                      selected={selectedDate ? localDate(selectedDate) : undefined}
                       onSelect={(date) => {
                         if (date) {
                           setSelectedDate(format(date, 'yyyy-MM-dd'));
@@ -403,7 +410,16 @@ export function TournamentEditModal({
             <FormItem>
               <FormLabel>League</FormLabel>
               <Select
-                onValueChange={(value) => field.onChange(value === "none" ? null : Number(value))}
+                onValueChange={(value) => {
+                  const leagueId = value === "none" ? null : Number(value);
+                  field.onChange(leagueId);
+                  if (leagueId && leagues) {
+                    const selectedLeague = leagues.find((l: LeagueType) => l.pk === leagueId);
+                    if (selectedLeague?.timezone) {
+                      form.setValue('timezone', selectedLeague.timezone);
+                    }
+                  }
+                }}
                 value={field.value?.toString() ?? "none"}
               >
                 <FormControl>
