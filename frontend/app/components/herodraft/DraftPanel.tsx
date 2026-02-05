@@ -75,14 +75,14 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
       {/* Headers */}
       <div className="flex shrink-0 border-b border-gray-700">
         <div className="flex-1 py-1 px-2 text-center">
-          <h3 className="text-xs font-bold text-green-400">RADIANT</h3>
+          <h3 className="text-xs font-bold text-gray-300">RADIANT</h3>
           <p className="text-[9px] text-muted-foreground truncate">
             {radiantTeam?.captain ? DisplayName(radiantTeam.captain) : ''}
           </p>
         </div>
         <div className="w-6 sm:w-8 md:w-10 lg:w-12 shrink-0" /> {/* Center spacer */}
         <div className="flex-1 py-1 px-2 text-center">
-          <h3 className="text-xs font-bold text-red-400">DIRE</h3>
+          <h3 className="text-xs font-bold text-gray-300">DIRE</h3>
           <p className="text-[9px] text-muted-foreground truncate">
             {direTeam?.captain ? DisplayName(direTeam.captain) : ''}
           </p>
@@ -116,14 +116,14 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
               <div className="flex items-start gap-0.5">
                 {/* Ban indicator - red X outside left, aligned to top */}
                 {isBan && isCompleted && (
-                  <span className="text-[10px] sm:text-xs leading-none text-red-500 font-bold">✕</span>
+                  <span className="text-xs sm:text-sm leading-none text-red-500 font-bold">✕</span>
                 )}
                 {/* Hero image */}
                 <div
                   className={cn(
                     'overflow-hidden border transition-all relative',
                     isCompleted
-                      ? isRadiant ? 'border-green-500/70' : 'border-red-500/70'
+                      ? isPick ? 'border-green-500/70' : 'border-red-500/70'
                       : 'border-gray-600',
                     isActive && 'border-yellow-400 border-2',
                     imgSize
@@ -141,8 +141,8 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                     </>
                   ) : (
                     <div className={cn(
-                      'w-full h-full flex items-center justify-center text-[7px] font-medium',
-                      isRadiant ? 'bg-green-900/40 text-green-500/60' : 'bg-red-900/40 text-red-500/60'
+                      'w-full h-full flex items-center justify-center text-[9px] sm:text-[10px] font-medium',
+                      isPick ? 'bg-green-900/40 text-green-500/60' : 'bg-red-900/40 text-red-500/60'
                     )}>
                       {isBan ? 'BAN' : 'PICK'}
                     </div>
@@ -150,7 +150,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                 </div>
                 {/* Pick indicator - green checkmark outside right, aligned to top */}
                 {isPick && isCompleted && (
-                  <span className="text-[10px] sm:text-xs leading-none text-green-500 font-bold">✓</span>
+                  <span className="text-xs sm:text-sm leading-none text-green-500 font-bold">✓</span>
                 )}
               </div>
             );
@@ -188,14 +188,14 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                       isActive
                         ? 'bg-yellow-400'
                         : isCompleted
-                          ? isRadiant ? 'bg-green-500/50' : 'bg-red-500/50'
+                          ? isPick ? 'bg-green-500/50' : 'bg-red-500/50'
                           : 'bg-gray-600'
                     )}
                   />
                   {/* Number circle */}
                   <div
                     className={cn(
-                      'relative z-10 w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 rounded-full flex items-center justify-center text-[8px] sm:text-[10px] md:text-xs font-bold',
+                      'relative z-10 w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 rounded-full flex items-center justify-center text-[10px] sm:text-xs md:text-sm font-bold',
                       isActive
                         ? 'bg-yellow-400 text-black'
                         : isCompleted
