@@ -56,9 +56,10 @@ export async function visitAndWaitForHydration(
   // Wait for DOMContentLoaded which indicates initial HTML is parsed
   await page.waitForLoadState('domcontentloaded');
 
-  // Give React a moment to hydrate (short timeout instead of networkidle
-  // since the app may have polling/websockets that keep network active)
-  await page.waitForTimeout(500);
+  // Give React/React Router time to hydrate and initialize routing state.
+  // 1500ms is needed because: 1) React hydration, 2) Router initialization,
+  // 3) Initial data fetches. Shorter timeouts cause flaky tab state tests.
+  await page.waitForTimeout(1500);
 
   // Final check that body is still visible after hydration
   await page.locator('body').waitFor({ state: 'visible' });
