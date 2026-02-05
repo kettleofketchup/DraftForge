@@ -183,4 +183,67 @@ test.describe('Claim Profile Feature', () => {
     }
   });
 
+  test('clicking claim button opens PlayerModal with claim action', async ({
+    page,
+    context,
+    loginUserClaimer,
+  }) => {
+    // Login as user_claimer
+    await loginUserClaimer();
+
+    // Verify login
+    const currentUser = await getCurrentUser(context);
+    expect(currentUser).not.toBeNull();
+    console.log(`Logged in as ${currentUser!.username} (pk=${currentUser!.pk})`);
+
+    // Get the claimable_profile user
+    const response = await context.request.get(`${API_URL}/users/`);
+    const users = (await response.json()) as Array<{ pk: number; username: string | null; steamid: number | null; discordId: string | null; nickname: string | null }>;
+    const claimable = users.find(u => u.nickname === 'Claimable Profile' || u.steamid === 76561198099999999);
+
+    if (!claimable) {
+      console.log('Claimable profile not found - skipping test');
+      test.skip();
+      return;
+    }
+    console.log(`Found claimable user: nickname=${claimable.nickname} (pk=${claimable.pk})`);
+
+    // Navigate to users page
+    await page.goto('/users');
+    await page.waitForLoadState('domcontentloaded');
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+
+    // Wait for users to load
+    await page.waitForSelector('[data-testid^="usercard-"]', { timeout: 15000 });
+
+    // Search for the claimable user
+    const searchInput = page.locator('[data-testid="userSearchInput"], input[placeholder*="Search"]').first();
+    if (await searchInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await searchInput.fill('Claimable Profile');
+      await page.waitForTimeout(500);
+    }
+
+    // Find and click the claim button on the user card
+    const claimBtnOnCard = page.locator(`[data-testid="claim-profile-btn-${claimable.pk}"]`);
+    await expect(claimBtnOnCard).toBeVisible({ timeout: 10000 });
+
+    // Close any open popovers by pressing Escape, then click
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+
+    // Force click to bypass any overlays that might intercept
+    await claimBtnOnCard.click({ force: true });
+
+    // Verify the PlayerModal opens
+    const modal = page.locator('[role="dialog"]');
+    await expect(modal).toBeVisible({ timeout: 5000 });
+
+    // Verify the claim button is visible inside the modal
+    const claimBtnInModal = page.locator(`[data-testid="claim-profile-modal-btn-${claimable.pk}"]`);
+    await expect(claimBtnInModal).toBeVisible({ timeout: 5000 });
+
+    console.log('PlayerModal opened with claim button visible!');
+  });
+
 });
