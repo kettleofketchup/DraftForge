@@ -50,7 +50,9 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
     return { page, draftPage };
   }
 
-  // Skip: Flaky stress test - connection drops during waiting phase require stable sync
+  // SKIP REASON: Multi-context WebSocket stress test with timing-sensitive setup.
+  // The reconnection FEATURE works - this tests edge case behavior during waiting phase.
+  // TODO: Refactor to use more reliable setup that doesn't depend on phase transitions.
   test.skip('should maintain state through multiple connection drops during waiting phase', async () => {
     const browser = await chromium.launch({
       headless: true,
@@ -160,7 +162,9 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
     }
   });
 
-  // Skip: Flaky stress test - requires stable multi-context WebSocket state synchronization
+  // SKIP REASON: Multi-context WebSocket stress test with complex phase transitions.
+  // The reconnection FEATURE works - this tests state recovery during drafting.
+  // Depends on choosing phase UI which has timing variability.
   test.skip('should recover draft state after reconnection during drafting phase', async () => {
     const browser = await chromium.launch({
       headless: true,
@@ -375,7 +379,9 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
     }
   });
 
-  // Skip: Flaky stress test - timer pause verification requires precise timing control
+  // SKIP REASON: Timer pause feature not fully implemented on backend.
+  // Server doesn't pause/resume timers on disconnect - would require tracking
+  // connection state per-user and coordinating timer state across reconnects.
   test.skip('should pause timer when disconnected and resume on reconnect', async () => {
     const browser = await chromium.launch({
       headless: true,
@@ -537,7 +543,9 @@ test.describe('HeroDraft WebSocket Reconnection Fuzzing', () => {
     }
   });
 
-  // Skip: Flaky stress test - random connection drops cause unpredictable timing failures
+  // SKIP REASON: Complex stress test combining reconnection with random timing.
+  // Random 33% drop chance creates unpredictable test behavior.
+  // Core reconnection scenarios are covered by other tests in this file.
   test.skip('should complete full draft with intermittent connection drops', async () => {
     const browser = await chromium.launch({
       headless: true,
