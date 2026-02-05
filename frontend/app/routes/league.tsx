@@ -40,6 +40,7 @@ import { Button } from '~/components/ui/button';
 import { useLeague, LeagueTabs, EditLeagueModal } from '~/components/league';
 import { useUserStore } from '~/store/userStore';
 import { useOrgStore } from '~/store/orgStore';
+import { useLeagueStore } from '~/store/leagueStore';
 import { useIsLeagueAdmin } from '~/hooks/usePermissions';
 
 export default function LeaguePage() {
@@ -68,16 +69,16 @@ export default function LeaguePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  // Set org context from league's organization
+  // Set org and league context for child components (e.g. UsersTab)
   useEffect(() => {
     if (league) {
-      const org = league.organization ?? null;
-      useOrgStore.getState().setCurrentOrg(org);
+      useOrgStore.getState().setCurrentOrg(league.organization ?? null);
+      useLeagueStore.getState().setCurrentLeague(league);
     }
 
-    // Cleanup on unmount
     return () => {
       useOrgStore.getState().setCurrentOrg(null);
+      useLeagueStore.getState().setCurrentLeague(null);
     };
   }, [league]);
 

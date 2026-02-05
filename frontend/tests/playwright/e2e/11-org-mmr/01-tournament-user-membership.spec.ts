@@ -140,7 +140,9 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
     await addPlayerBtn.click();
 
     // Wait for modal and search input
-    const searchInput = page.locator('[data-testid="playerSearchInput"]');
+    const modal = page.locator('[data-testid="add-user-modal"]');
+    await expect(modal).toBeVisible({ timeout: 5000 });
+    const searchInput = modal.locator('[data-testid="add-user-search"]');
     await expect(searchInput).toBeVisible({ timeout: 5000 });
 
     // Wait for users to load in the dropdown (wait for the loading to complete)
@@ -154,10 +156,10 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
     // The dropdown should populate with matching users
     await page.waitForTimeout(1500); // Give more time for API call and UI update
 
-    // Click on the user option (may need to wait longer for it to appear)
-    const playerOption = page.locator(
-      `[data-testid="playerOption-${userToAdd!.username}"]`
-    );
+    // Click the add button for the user (scoped to modal, use first() in case of duplicates)
+    const addUserBtn = modal.locator(
+      `[data-testid="add-user-btn-${userToAdd!.username}"]`
+    ).first();
 
     // If the option isn't visible, check if there's a "No users" message and log it
     const noUsersMsg = page.locator('text="No users or too many users found"');
@@ -171,8 +173,8 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
       }
     }
 
-    await expect(playerOption).toBeVisible({ timeout: 10000 });
-    await playerOption.click();
+    await expect(addUserBtn).toBeVisible({ timeout: 10000 });
+    await addUserBtn.click();
 
     // Wait for success (user card should appear)
     const userCard = page.locator(

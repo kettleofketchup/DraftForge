@@ -93,6 +93,7 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
                   size="sm"
                   onClick={() => handleAdd(result)}
                   disabled={addingPk === result.pk}
+                  data-testid={`add-user-btn-${result.username}`}
                 >
                   {addingPk === result.pk ? '...' : '+'}
                 </Button>
