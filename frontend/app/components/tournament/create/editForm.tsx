@@ -257,7 +257,7 @@ export const TournamentEditForm: React.FC<Props> = ({
                 <FormLabel>Tournament Date & Time</FormLabel>
                 <div className="flex gap-2">
                   {/* Date Picker */}
-                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen} modal={true}>
                     <PopoverTrigger asChild>
                       <FormControl>
                         <Button
