@@ -163,6 +163,13 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     }
   }, [isConnected, isCaptainForHeartbeat, startHeartbeat]);
 
+  // Auto-dismiss confirm dialog when round changes (fixes #72)
+  // Handles: timer expiry (random pick), opponent completing turn, any round transition
+  useEffect(() => {
+    setConfirmHeroId(null);
+    setSelectedHeroId(null);
+  }, [draft?.current_round, setSelectedHeroId]);
+
   // Show toast when kicked
   useEffect(() => {
     if (wasKicked) {
@@ -342,6 +349,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     : false;
 
   const isCaptain = draft?.draft_teams.some((t) => t.captain?.pk === currentUser?.pk);
+  // Captain-only turn check for hero grid (fixes #98 - team members shouldn't pick)
+  const isMyCaptainTurn = currentPickingTeam?.captain?.pk === currentUser?.pk;
   // Find my team - either as captain or as a member
   const myTeam = draft?.draft_teams.find((t) =>
     t.captain?.pk === currentUser?.pk ||
@@ -425,8 +434,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                     <h2 className="text-2xl font-bold" data-testid="herodraft-flip-winner">
                       {rollWinnerTeam?.captain ? DisplayName(rollWinnerTeam.captain) : 'Unknown'} won the flip!
                     </h2>
-                    {rollWinnerTeam?.id === myTeam?.id ? (
-                      // Winner's turn - but check if they already made their choice
+                    {isCaptain && rollWinnerTeam?.id === myTeam?.id ? (
+                      // Winner captain's turn - check if they already made their choice
                       myTeam.is_first_pick !== null || myTeam.is_radiant !== null ? (
                         // Winner already made their choice, waiting for loser
                         <p data-testid="herodraft-winner-waiting">
@@ -467,12 +476,12 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                           </div>
                         </div>
                       )
-                    ) : myTeam && rollWinnerTeam?.is_first_pick === null && rollWinnerTeam?.is_radiant === null ? (
-                      // Loser waits until winner makes their first choice
+                    ) : isCaptain && myTeam && rollWinnerTeam?.is_first_pick === null && rollWinnerTeam?.is_radiant === null ? (
+                      // Loser captain waits until winner makes their first choice
                       <p data-testid="herodraft-waiting-for-winner">
                         Waiting for {rollWinnerTeam?.captain ? DisplayName(rollWinnerTeam.captain) : 'winner'} to choose...
                       </p>
-                    ) : myTeam ? (
+                    ) : isCaptain && myTeam ? (
                       <div className="space-y-2" data-testid="herodraft-loser-choices">
                         <p>Choose the remaining option:</p>
                         <div className="flex gap-4 justify-center" data-testid="herodraft-remaining-choice-buttons">
@@ -518,6 +527,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                           )}
                         </div>
                       </div>
+                    ) : isOnTeam ? (
+                      <p data-testid="herodraft-team-spectating">Waiting for your captain to choose...</p>
                     ) : (
                       <p data-testid="herodraft-spectating">Spectating...</p>
                     )}
@@ -554,10 +565,10 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                   <div className="basis-1/2 md:basis-1/2 lg:basis-7/12 xl:basis-4/5 h-full min-w-0 overflow-hidden" data-testid="herodraft-hero-grid-container">
                     <HeroGrid
                       onHeroClick={handleHeroClick}
-                      disabled={!isMyTurn || draft.state !== "drafting"}
+                      disabled={!isMyCaptainTurn || draft.state !== "drafting"}
                       showActionButton={isCaptain ?? false}
                       currentAction={currentAction}
-                      isMyTurn={isMyTurn}
+                      isMyTurn={isMyCaptainTurn}
                     />
                   </div>
 
