@@ -4,46 +4,56 @@
 
 **Issue:** [#123 - Refactor: Consolidate button styling with brand gradient system](https://github.com/kettleofketchup/DraftForge/issues/123)
 
-**Goal:** Establish a two-tier brand button system (primary gradient + secondary translucent) and migrate all hardcoded emerald buttons to use it.
+**Goal:** Establish a consistent brand style system (primary gradient, secondary translucent, error background) and migrate all hardcoded emerald buttons to use it.
 
-**Architecture:** Add `brandSecondary` constant to `styles.ts`. Update `PrimaryButton` to default to brand gradient + 3D depth. Add `brand` color option to `SecondaryButton`. Migrate all 6 hardcoded emerald buttons + 1 unstyled submit button.
+**Architecture:** Add `brandSecondary` and `brandErrorBg` constants to `styles.ts`. Update `PrimaryButton` to default to brand gradient + 3D depth. Add `brand` color option to `SecondaryButton`. Migrate all 6 hardcoded emerald buttons + 1 unstyled submit button.
+
+**Design Principles:**
+- Dark UI, neon-accented, gaming-styled = **muted surfaces + bright accents**
+- Error surfaces use deep wine/red tones, NOT bright red — blends with the violet theme
+- Palette: container `#3b0a0a` (deep wine), card `#7f1d1d`, action `#ef4444`, optional `red-900 → violet-900` gradient
 
 **Tech Stack:** React, TypeScript, TailwindCSS, shadcn/ui Button
 
 ---
 
-### Task 1: Add `brandSecondary` to styles.ts
+### Task 1: Add `brandSecondary` and error surface constants to styles.ts
 
 **Files:**
 - Modify: `frontend/app/components/ui/buttons/styles.ts:6`
 
-**Step 1: Add the brandSecondary constant**
+**Step 1: Add the new brand constants**
 
 After the existing `brandGradient` line (line 6), add:
 
 ```ts
 // Brand secondary - supporting/contextual actions
 export const brandSecondary = 'bg-violet-500/15 border border-violet-400/20 text-violet-200 hover:bg-violet-500/25';
+
+// Brand error surfaces - muted deep wine/red tones for error containers
+// Design: dark UI = muted surfaces + bright accents. Never bright-red backgrounds.
+export const brandErrorBg = 'bg-gradient-to-r from-red-900/40 to-violet-900/40 border border-red-500/20';
+export const brandErrorCard = 'bg-red-900/60 border border-red-500/15';
 ```
 
 **Step 2: Export from index.ts**
 
-Modify `frontend/app/components/ui/buttons/index.ts` line 2 to include the new export:
+Modify `frontend/app/components/ui/buttons/index.ts` line 2 to include the new exports:
 
 ```ts
-export { brandGradient, brandSecondary, button3DBase, button3DDisabled, button3DVariants } from './styles';
+export { brandErrorBg, brandErrorCard, brandGradient, brandSecondary, button3DBase, button3DDisabled, button3DVariants } from './styles';
 ```
 
 **Step 3: Verify TypeScript compiles**
 
-Run: `cd /home/kettle/git_repos/website/.worktrees/brand-buttons && npx tsc --noEmit --pretty 2>&1 | grep -E "brandSecondary|styles\.ts" | head -5`
-Expected: No errors related to brandSecondary or styles.ts
+Run: `cd /home/kettle/git_repos/website/.worktrees/brand-buttons && npx tsc --noEmit --pretty 2>&1 | grep -E "brandSecondary|brandError|styles\.ts" | head -5`
+Expected: No errors related to new constants or styles.ts
 
 **Step 4: Commit**
 
 ```bash
 git add frontend/app/components/ui/buttons/styles.ts frontend/app/components/ui/buttons/index.ts
-git commit -m "feat: add brandSecondary style constant (closes #123 partial)"
+git commit -m "feat: add brandSecondary and brandError style constants (#123)"
 ```
 
 ---
@@ -454,7 +464,54 @@ git commit -m "refactor: tournament editForm uses SubmitButton with brand stylin
 
 ---
 
-### Task 11: Final TypeScript check and visual verification
+### Task 11: Migrate tournament hasErrors.tsx to brand error surfaces
+
+**Files:**
+- Modify: `frontend/app/pages/tournament/hasErrors.tsx`
+
+**Context:** The current error UI uses `bg-red-950` for the container and `bg-red-500/80` for cards. The bright red cards break the DraftForge "muted surfaces + bright accents" pattern. Deep wine tones with a subtle violet blend fit the brand.
+
+**Step 1: Add imports**
+
+Add at the top of the file:
+```ts
+import { brandErrorBg, brandErrorCard } from '~/components/ui/buttons';
+```
+
+**Step 2: Replace container styling**
+
+On line 60, replace:
+```tsx
+<div className="flex flex-col items-start justify-center p-4 bg-red-950 rounded-lg shadow-md w-full mb-4">
+```
+
+With:
+```tsx
+<div className={`flex flex-col items-start justify-center p-4 ${brandErrorBg} rounded-lg shadow-md w-full mb-4`}>
+```
+
+**Step 3: Replace card styling**
+
+On line 70, replace:
+```tsx
+<div className="bg-red-500/80 p-3 rounded-lg" key={user.pk}>
+```
+
+With:
+```tsx
+<div className={`${brandErrorCard} p-3 rounded-lg`} key={user.pk}>
+```
+
+**Step 4: Commit**
+
+```bash
+git add frontend/app/pages/tournament/hasErrors.tsx
+git commit -m "refactor: tournament hasErrors uses brand error surfaces instead of bright red"
+```
+
+---
+
+### Task 12: Final TypeScript check and visual verification
 
 **Step 1: Run full TypeScript check**
 
@@ -474,6 +531,7 @@ Verify in browser:
 - EditIconButton instances: Show brand gradient (circular)
 - Tournament edit form: Submit button shows brand gradient + 3D
 - FormDialog submit buttons: Still show brand gradient (unchanged)
+- Tournament hasErrors section: Muted wine-to-violet gradient container, deep red cards (not bright)
 
 **Step 3: Run Playwright tests**
 
