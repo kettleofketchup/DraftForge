@@ -116,7 +116,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
             const octagonClip = '[clip-path:polygon(25%_0%,75%_0%,100%_30%,100%_70%,75%_100%,25%_100%,0%_70%,0%_30%)]';
 
             const heroSlot = (
-              <div className="flex items-start gap-0.5">
+              <div className="flex items-center gap-0.5">
                 {/* Ban indicator - red X outside left, aligned to top */}
                 {isBan && isCompleted && (
                   <span className="text-xs sm:text-sm leading-none text-red-500 font-bold">✕</span>
