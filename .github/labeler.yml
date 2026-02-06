@@ -1,0 +1,62 @@
+# PR Labeler - auto-labels PRs based on changed file paths
+# Used by: .github/workflows/pr-labeler.yml (actions/labeler@v5)
+
+Draft:
+  - changed-files:
+      - any-glob-to-any-file:
+          - frontend/app/components/draft/**
+          - frontend/app/components/teamdraft/**
+          - frontend/app/components/herodraft/**
+          - backend/app/**/shuffle_draft*
+          - backend/app/**/snake_draft*
+          - backend/app/**/hero_draft*
+          - backend/app/views/draft*
+
+Tournament:
+  - changed-files:
+      - any-glob-to-any-file:
+          - frontend/app/components/tournament/**
+          - backend/app/**/tournament*
+          - backend/app/views/tournament*
+
+brackets:
+  - changed-files:
+      - any-glob-to-any-file:
+          - frontend/app/components/bracket/**
+          - backend/app/**/bracket*
+
+User:
+  - changed-files:
+      - any-glob-to-any-file:
+          - frontend/app/components/user/**
+          - backend/app/**/auth*
+          - backend/app/**/social*
+          - backend/app/views/user*
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - '*.md'
+          - mkdocs.yml
+
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - frontend/**
+
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - backend/**
+
+infrastructure:
+  - changed-files:
+      - any-glob-to-any-file:
+          - docker/**
+          - nginx/**
+          - .github/**
+          - Dockerfile*
+          - justfile
+          - pyproject.toml
+          - poetry.lock
