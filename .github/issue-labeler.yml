@@ -1,5 +1,5 @@
 # Issue Labeler - auto-labels issues based on title/body keywords
-# Used by: .github/workflows/issue-labeler.yml (github/issue-labeler@v3)
+# Used by: .github/workflows/issue-labeler.yml (github/issue-labeler@v3.4)
 
 bug:
   - "(bug|broken|crash|error|fail|fix|issue|problem|wrong)"
