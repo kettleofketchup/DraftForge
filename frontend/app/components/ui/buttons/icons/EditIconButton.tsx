@@ -7,7 +7,7 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
-import { brandGradient, button3DBase } from '../styles';
+import { brandDepthColors, brandGradient, button3DBase } from '../styles';
 
 export interface EditIconButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {
@@ -18,7 +18,7 @@ export interface EditIconButtonProps
 }
 
 /**
- * An edit icon button with green theme styling.
+ * An edit icon button with brand gradient styling.
  * Optionally displays a tooltip on hover.
  *
  * @example
@@ -37,7 +37,7 @@ const EditIconButton = React.forwardRef<HTMLButtonElement, EditIconButtonProps>(
           'rounded-full',
           brandGradient,
           button3DBase,
-          'border-b-violet-700 shadow-violet-900/50',
+          brandDepthColors,
           '[&_svg]:text-white',
           className
         )}
