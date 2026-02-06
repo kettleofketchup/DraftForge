@@ -6,7 +6,7 @@
 export const brandGradient = 'bg-gradient-to-r from-violet-500 to-blue-500 hover:from-violet-400 hover:to-blue-400 text-white';
 
 // Brand secondary - supporting/contextual actions
-export const brandSecondary = 'bg-violet-500/15 border border-violet-400/20 text-violet-200 hover:bg-violet-500/25';
+export const brandSecondary = 'bg-violet-500/20 border border-violet-400/30 text-violet-100 hover:bg-violet-500/30';
 
 // Brand 3D depth colors - violet border-bottom and shadow for brand gradient buttons
 export const brandDepthColors = 'border-b-violet-700 shadow-violet-900/50';

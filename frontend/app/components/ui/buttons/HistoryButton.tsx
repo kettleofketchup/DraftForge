@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { History } from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
-import { SecondaryButton } from './SecondaryButton';
+import { PrimaryButton } from './PrimaryButton';
 import {
   Tooltip,
   TooltipContent,
@@ -10,7 +10,7 @@ import {
 import { cn } from '~/lib/utils';
 
 export interface HistoryButtonProps
-  extends Omit<React.ComponentProps<typeof SecondaryButton>, 'children'> {
+  extends Omit<React.ComponentProps<typeof PrimaryButton>, 'children'> {
   /** Number of events to display in badge */
   eventCount?: number;
   /** Whether there's a new event (shows destructive badge) */
@@ -47,9 +47,8 @@ const HistoryButton = React.forwardRef<HTMLButtonElement, HistoryButtonProps>(
     ref
   ) => {
     const button = (
-      <SecondaryButton
+      <PrimaryButton
         ref={ref}
-        color="brand"
         className={cn('relative', className)}
         {...props}
       >
@@ -64,7 +63,7 @@ const HistoryButton = React.forwardRef<HTMLButtonElement, HistoryButtonProps>(
             {eventCount}
           </Badge>
         )}
-      </SecondaryButton>
+      </PrimaryButton>
     );
 
     return (
