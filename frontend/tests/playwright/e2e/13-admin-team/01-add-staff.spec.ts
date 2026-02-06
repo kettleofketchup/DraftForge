@@ -18,6 +18,8 @@
 import { test, expect, visitAndWaitForHydration } from '../../fixtures';
 
 const API_URL = 'https://localhost/api';
+const TARGET_USERNAME = 'bucketoffish55';
+const TARGET_USER_PK = 1003;
 
 /** Helper: get org PK from league 1 detail endpoint. */
 async function getOrgAndLeaguePks(context: import('@playwright/test').BrowserContext) {
@@ -58,27 +60,16 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
 
     // Click Edit button to open EditOrganizationModal
-    const editBtn = page.locator('button', { hasText: 'Edit' });
+    const editBtn = page.locator('[data-testid="edit-organization-button"]');
     await expect(editBtn).toBeVisible({ timeout: 5000 });
     await editBtn.click();
 
     // Wait for modal to open
     await expect(page.locator('[data-testid="edit-organization-modal"]')).toBeVisible({ timeout: 5000 });
 
-    // Expand Admin Team section if collapsed
-    const adminTeamHeader = page.locator('button', { hasText: 'Admin Team' });
-    await expect(adminTeamHeader).toBeVisible({ timeout: 5000 });
-
-    // Check if Staff section is visible (section is expanded)
-    const staffHeading = page.locator('h4', { hasText: 'Staff' });
-    if (!(await staffHeading.isVisible())) {
-      await adminTeamHeader.click();
-    }
-    await expect(staffHeading).toBeVisible({ timeout: 3000 });
-
     // Click "Add Staff" button
-    const addStaffBtn = page.locator('button', { hasText: 'Add Staff' });
-    await expect(addStaffBtn).toBeVisible({ timeout: 3000 });
+    const addStaffBtn = page.locator('[data-testid="add-staff-btn"]');
+    await expect(addStaffBtn).toBeVisible({ timeout: 5000 });
     await addStaffBtn.click();
 
     // AddUserModal should open
@@ -90,16 +81,11 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     await expect(searchInput).toBeVisible();
     await searchInput.fill('bucket');
 
-    // Wait for search results
-    await expect(modal.getByRole('heading', { name: 'Site Users' })).toBeVisible({ timeout: 5000 });
+    // Wait for search result to appear via data-testid
+    const addBtn = modal.locator(`[data-testid="add-user-btn-${TARGET_USERNAME}"]`);
+    await expect(addBtn).toBeVisible({ timeout: 10000 });
 
-    // Wait for a result with the username to appear and click Add
-    const userResult = modal.locator('text=bucketoffish55').first();
-    await expect(userResult).toBeVisible({ timeout: 10000 });
-
-    // Find the Add button near this user result
-    const addBtn = modal.locator('button', { hasText: 'Add' }).first();
-    await expect(addBtn).toBeVisible({ timeout: 3000 });
+    // Click the Add button for this user
     await addBtn.click();
 
     // Should show success toast
@@ -108,12 +94,11 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     // Close the AddUserModal
     await page.keyboard.press('Escape');
 
-    // Verify the user now appears in the Staff section
-    const staffSection = page.locator('div', { has: staffHeading });
-    await expect(staffSection.locator('text=bucketoffish55')).toBeVisible({ timeout: 5000 });
+    // Verify the user now appears in the Admin Team section
+    await expect(page.locator(`[data-testid="team-member-${TARGET_USERNAME}"]`)).toBeVisible({ timeout: 5000 });
 
     // Cleanup: remove the user from org staff via API
-    await removeOrgStaffMember(page.context(), orgPk, 1003);
+    await removeOrgStaffMember(page.context(), orgPk, TARGET_USER_PK);
   });
 
   test('@cicd league admin can add staff via AdminTeamSection modal', async ({ page, loginLeagueAdmin }) => {
@@ -131,19 +116,9 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     // Wait for edit modal
     await expect(page.locator('[data-testid="edit-league-modal-heading"]')).toBeVisible({ timeout: 5000 });
 
-    // Expand Admin Team section if collapsed
-    const adminTeamHeader = page.locator('button', { hasText: 'Admin Team' });
-    await expect(adminTeamHeader).toBeVisible({ timeout: 5000 });
-
-    const staffHeading = page.locator('h4', { hasText: 'Staff' });
-    if (!(await staffHeading.isVisible())) {
-      await adminTeamHeader.click();
-    }
-    await expect(staffHeading).toBeVisible({ timeout: 3000 });
-
     // Click "Add Staff" button
-    const addStaffBtn = page.locator('button', { hasText: 'Add Staff' });
-    await expect(addStaffBtn).toBeVisible({ timeout: 3000 });
+    const addStaffBtn = page.locator('[data-testid="add-staff-btn"]');
+    await expect(addStaffBtn).toBeVisible({ timeout: 5000 });
     await addStaffBtn.click();
 
     // AddUserModal should open
@@ -155,15 +130,11 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     await expect(searchInput).toBeVisible();
     await searchInput.fill('bucket');
 
-    // Wait for search results
-    await expect(modal.getByRole('heading', { name: 'Site Users' })).toBeVisible({ timeout: 5000 });
-
-    const userResult = modal.locator('text=bucketoffish55').first();
-    await expect(userResult).toBeVisible({ timeout: 10000 });
+    // Wait for search result to appear via data-testid
+    const addBtn = modal.locator(`[data-testid="add-user-btn-${TARGET_USERNAME}"]`);
+    await expect(addBtn).toBeVisible({ timeout: 10000 });
 
     // Click Add
-    const addBtn = modal.locator('button', { hasText: 'Add' }).first();
-    await expect(addBtn).toBeVisible({ timeout: 3000 });
     await addBtn.click();
 
     // Should show success toast
@@ -172,11 +143,10 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     // Close the AddUserModal
     await page.keyboard.press('Escape');
 
-    // Verify the user now appears in the Staff section
-    const staffSection = page.locator('div', { has: staffHeading });
-    await expect(staffSection.locator('text=bucketoffish55')).toBeVisible({ timeout: 5000 });
+    // Verify the user now appears in the Admin Team section
+    await expect(page.locator(`[data-testid="team-member-${TARGET_USERNAME}"]`)).toBeVisible({ timeout: 5000 });
 
     // Cleanup: remove the user from league staff via API
-    await removeLeagueStaffMember(page.context(), leaguePk, 1003);
+    await removeLeagueStaffMember(page.context(), leaguePk, TARGET_USER_PK);
   });
 });
