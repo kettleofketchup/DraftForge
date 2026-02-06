@@ -59,7 +59,7 @@ function DialogContent({
   closeButtonTestId?: string
 }) {
   const closeButtonStyles = closeButtonVariant === 'destructive'
-    ? "bg-gradient-to-r from-red-700 to-violet-900 hover:from-red-600 hover:to-violet-800 text-white outline-none border border-red-500/50 rounded-md p-1.5 opacity-100 shadow-lg active:translate-y-0.5 transition-colors duration-150"
+    ? "bg-violet-900 bg-gradient-to-r from-red-700 to-violet-900 hover:from-red-600 hover:to-violet-800 text-white outline-none ring-1 ring-red-500/50 rounded-md p-1.5 opacity-100 shadow-lg active:translate-y-0.5 transition-colors duration-150"
     : "ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none";
 
   return (
