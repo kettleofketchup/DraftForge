@@ -5,6 +5,15 @@
 // Brand gradient - single source of truth for primary action buttons
 export const brandGradient = 'bg-gradient-to-r from-violet-500 to-blue-500 hover:from-violet-400 hover:to-blue-400 text-white';
 
+// Brand secondary - supporting/contextual actions
+export const brandSecondary = 'bg-violet-500/15 border border-violet-400/20 text-violet-200 hover:bg-violet-500/25';
+
+// Brand error surfaces - muted deep wine/red tones for error containers.
+// Uses raw Tailwind colors (not semantic --error/--primary) because error surfaces
+// need deep wine/muted tones, not the bright accent status colors.
+export const brandErrorBg = 'bg-gradient-to-r from-red-900/40 to-violet-900/40 border border-red-500/20';
+export const brandErrorCard = 'bg-red-900/60 border border-red-500/15';
+
 // Base 3D button effect classes (active state removed for disabled buttons via CSS)
 export const button3DBase =
   'shadow-lg shadow-black/30 border-b-4 active:border-b-0 active:translate-y-1 transition-all duration-75';

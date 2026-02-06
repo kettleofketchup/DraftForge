@@ -1,5 +1,5 @@
 // Shared styles
-export { button3DBase, button3DDisabled, button3DVariants } from './styles';
+export { brandErrorBg, brandErrorCard, brandGradient, brandSecondary, button3DBase, button3DDisabled, button3DVariants } from './styles';
 export type { Button3DVariant } from './styles';
 
 // Base Buttons
