@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { brandGradient, button3DBase, button3DDisabled } from './styles';
+import { brandDepthColors, brandGradient, button3DBase, button3DDisabled } from './styles';
 
 export type PrimaryButtonColor = 'green' | 'blue' | 'yellow';
 
@@ -19,7 +19,7 @@ const colorClasses: Record<PrimaryButtonColor, string> = {
   yellow: 'bg-yellow-600 hover:bg-yellow-500 text-black border-b-yellow-800 shadow-yellow-900/50',
 };
 
-const brandExtras = 'border-b-violet-700 shadow-violet-900/50 [&_svg]:text-white [&_svg]:fill-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]';
+const brandExtras = `${brandDepthColors} [&_svg]:text-white [&_svg]:fill-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]`;
 
 const PrimaryButton = React.forwardRef<HTMLButtonElement, PrimaryButtonProps>(
   ({ color, className, children, depth = true, ...props }, ref) => {

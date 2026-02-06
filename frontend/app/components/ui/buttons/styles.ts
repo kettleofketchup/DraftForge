@@ -8,6 +8,9 @@ export const brandGradient = 'bg-gradient-to-r from-violet-500 to-blue-500 hover
 // Brand secondary - supporting/contextual actions
 export const brandSecondary = 'bg-violet-500/15 border border-violet-400/20 text-violet-200 hover:bg-violet-500/25';
 
+// Brand 3D depth colors - violet border-bottom and shadow for brand gradient buttons
+export const brandDepthColors = 'border-b-violet-700 shadow-violet-900/50';
+
 // Brand error surfaces - muted deep wine/red tones for error containers.
 // Uses raw Tailwind colors (not semantic --error/--primary) because error surfaces
 // need deep wine/muted tones, not the bright accent status colors.
@@ -30,7 +33,7 @@ const iconMuted = 'disabled:[&_svg]:text-gray-600 disabled:[&_svg]:fill-gray-600
 export const button3DVariants = {
   destructive: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} bg-red-600 text-white hover:bg-red-500 border-b-red-800 shadow-red-900/50`,
   warning: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} bg-orange-500 text-white hover:bg-orange-400 border-b-orange-700 shadow-orange-900/50`,
-  success: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} ${brandGradient} border-b-violet-700 shadow-violet-900/50`,
+  success: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} ${brandGradient} ${brandDepthColors}`,
   primary: `${button3DBase} ${button3DDisabled} bg-primary text-primary-foreground hover:bg-primary/90 border-b-primary/50`,
   secondary: `${button3DBase} ${button3DDisabled} bg-secondary text-secondary-foreground hover:bg-secondary/80 border-b-secondary/50`,
   outline: `${button3DBase} ${button3DDisabled} border-b-gray-600`,
