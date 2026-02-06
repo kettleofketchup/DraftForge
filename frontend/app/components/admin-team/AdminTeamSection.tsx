@@ -1,16 +1,18 @@
 /**
  * Admin Team management section for organizations and leagues.
  * Provides UI for managing owner, admins, and staff.
+ * Uses AddUserModal for searching and adding users.
  * Uses local state to avoid full page re-renders on updates.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Crown, Shield, User, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Crown, Plus, Shield, User, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { UserType } from '~/components/user/types';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { LeagueType } from '~/components/league/schemas';
+import type { AddMemberPayload } from '~/components/api/api';
 import {
   addOrgAdmin,
   removeOrgAdmin,
@@ -28,14 +30,12 @@ import {
   useIsLeagueAdmin,
   useIsSuperuser,
 } from '~/hooks/usePermissions';
-import { UserSearchInput } from './UserSearchInput';
+import { AddUserModal } from '~/components/user/AddUserModal';
+import { Button } from '~/components/ui/button';
 
 interface AdminTeamSectionProps {
-  // For organization management
   organization?: OrganizationType | null;
-  // For league management
   league?: LeagueType | null;
-  // Callback when team is updated
   onUpdate?: () => void;
 }
 
@@ -115,6 +115,8 @@ export function AdminTeamSection({
   const [isExpanded, setIsExpanded] = useState(true);
   const [transferTarget, setTransferTarget] = useState<UserType | null>(null);
   const [showTransferConfirm, setShowTransferConfirm] = useState(false);
+  const [showAddAdmin, setShowAddAdmin] = useState(false);
+  const [showAddStaff, setShowAddStaff] = useState(false);
 
   const isSuperuser = useIsSuperuser();
   const isOrgOwner = useIsOrganizationOwner(organization);
@@ -124,7 +126,7 @@ export function AdminTeamSection({
   const isOrgMode = !!organization && !league;
   const entityId = isOrgMode ? organization?.pk : league?.pk;
 
-  // Local state for team members - avoids full page re-render on updates
+  // Local state for team members
   const [localOwner, setLocalOwner] = useState<UserType | null | undefined>(
     isOrgMode ? organization?.owner : null
   );
@@ -135,14 +137,14 @@ export function AdminTeamSection({
     (isOrgMode ? organization?.staff : league?.staff) || []
   );
 
-  // Sync local state when props change (e.g., modal reopens with new data)
+  // Sync local state when props change
   useEffect(() => {
     setLocalOwner(isOrgMode ? organization?.owner : null);
     setLocalAdmins((isOrgMode ? organization?.admins : league?.admins) || []);
     setLocalStaff((isOrgMode ? organization?.staff : league?.staff) || []);
   }, [organization, league, isOrgMode]);
 
-  // Determine permissions
+  // Permissions
   const canManageAdmins = isOrgMode
     ? isOrgOwner || isOrgAdmin || isSuperuser
     : isLeagueAdmin || isSuperuser;
@@ -152,27 +154,21 @@ export function AdminTeamSection({
   const canManageStaff = canManageAdmins;
   const canTransferOwnership = isOrgMode && (isOrgOwner || isSuperuser);
 
-  // Add admin mutation
+  // --- Mutations ---
+
   const addAdminMutation = useMutation({
     mutationFn: async (userId: number) => {
       if (!entityId) throw new Error('No entity ID');
-      if (isOrgMode) {
-        return addOrgAdmin(entityId, userId);
-      } else {
-        return addLeagueAdmin(entityId, userId);
-      }
+      return isOrgMode ? addOrgAdmin(entityId, userId) : addLeagueAdmin(entityId, userId);
     },
     onSuccess: (user) => {
       toast.success('Admin added');
       setLocalAdmins((prev) => [...prev, user]);
       onUpdate?.();
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
-  // Remove admin mutation
   const removeAdminMutation = useMutation({
     mutationFn: async (userId: number) => {
       if (!entityId) throw new Error('No entity ID');
@@ -188,32 +184,22 @@ export function AdminTeamSection({
       setLocalAdmins((prev) => prev.filter((a) => a.pk !== userId));
       onUpdate?.();
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
-  // Add staff mutation
   const addStaffMutation = useMutation({
     mutationFn: async (userId: number) => {
       if (!entityId) throw new Error('No entity ID');
-      if (isOrgMode) {
-        return addOrgStaff(entityId, userId);
-      } else {
-        return addLeagueStaff(entityId, userId);
-      }
+      return isOrgMode ? addOrgStaff(entityId, userId) : addLeagueStaff(entityId, userId);
     },
     onSuccess: (user) => {
       toast.success('Staff added');
       setLocalStaff((prev) => [...prev, user]);
       onUpdate?.();
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
-  // Remove staff mutation
   const removeStaffMutation = useMutation({
     mutationFn: async (userId: number) => {
       if (!entityId) throw new Error('No entity ID');
@@ -229,12 +215,9 @@ export function AdminTeamSection({
       setLocalStaff((prev) => prev.filter((s) => s.pk !== userId));
       onUpdate?.();
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
-  // Transfer ownership mutation
   const transferOwnershipMutation = useMutation({
     mutationFn: async (userId: number) => {
       if (!entityId) throw new Error('No entity ID');
@@ -242,22 +225,72 @@ export function AdminTeamSection({
     },
     onSuccess: (newOwner) => {
       toast.success('Ownership transferred');
-      // Old owner becomes admin
       if (localOwner) {
         setLocalAdmins((prev) => [...prev, localOwner]);
       }
-      // New owner is removed from admins
       setLocalAdmins((prev) => prev.filter((a) => a.pk !== newOwner.pk));
-      // Set new owner
       setLocalOwner(newOwner);
       setShowTransferConfirm(false);
       setTransferTarget(null);
       onUpdate?.();
     },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
+    onError: (error: Error) => toast.error(error.message),
   });
+
+  // --- AddUserModal handlers ---
+
+  const adminPkSet = useMemo(() => {
+    const pks = new Set<number>();
+    if (localOwner?.pk) pks.add(localOwner.pk);
+    for (const a of localAdmins) {
+      if (a.pk) pks.add(a.pk);
+    }
+    return pks;
+  }, [localOwner, localAdmins]);
+
+  const staffPkSet = useMemo(() => {
+    const pks = new Set<number>();
+    for (const s of localStaff) {
+      if (s.pk) pks.add(s.pk);
+    }
+    return pks;
+  }, [localStaff]);
+
+  const handleAddAdmin = useCallback(
+    async (payload: AddMemberPayload): Promise<UserType> => {
+      if (!payload.user_id) throw new Error('User ID required');
+      return new Promise((resolve, reject) => {
+        addAdminMutation.mutate(payload.user_id!, {
+          onSuccess: (user) => resolve(user),
+          onError: (err) => reject(err),
+        });
+      });
+    },
+    [addAdminMutation]
+  );
+
+  const handleAddStaff = useCallback(
+    async (payload: AddMemberPayload): Promise<UserType> => {
+      if (!payload.user_id) throw new Error('User ID required');
+      return new Promise((resolve, reject) => {
+        addStaffMutation.mutate(payload.user_id!, {
+          onSuccess: (user) => resolve(user),
+          onError: (err) => reject(err),
+        });
+      });
+    },
+    [addStaffMutation]
+  );
+
+  const isAdminAdded = useCallback(
+    (user: UserType) => user.pk != null && adminPkSet.has(user.pk),
+    [adminPkSet]
+  );
+
+  const isStaffAdded = useCallback(
+    (user: UserType) => user.pk != null && staffPkSet.has(user.pk),
+    [staffPkSet]
+  );
 
   const handleTransferClick = (user: UserType) => {
     setTransferTarget(user);
@@ -269,6 +302,16 @@ export function AdminTeamSection({
       transferOwnershipMutation.mutate(transferTarget.pk);
     }
   };
+
+  const entityContext = useMemo(() => {
+    if (isOrgMode && organization?.pk) {
+      return { orgId: organization.pk };
+    }
+    if (league?.pk) {
+      return { orgId: league.organization?.pk, leagueId: league.pk };
+    }
+    return {};
+  }, [isOrgMode, organization, league]);
 
   if (!entityId) return null;
 
@@ -322,10 +365,22 @@ export function AdminTeamSection({
 
           {/* Admins Section */}
           <div>
-            <h4 className="font-medium mb-2 flex items-center gap-2">
-              <Shield className="h-4 w-4 text-blue-500" />
-              Admins
-            </h4>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-medium flex items-center gap-2">
+                <Shield className="h-4 w-4 text-blue-500" />
+                Admins
+              </h4>
+              {canManageAdmins && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddAdmin(true)}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Admin
+                </Button>
+              )}
+            </div>
             <div className="space-y-2">
               {localAdmins.length > 0 ? (
                 localAdmins.map((admin) => (
@@ -344,27 +399,26 @@ export function AdminTeamSection({
                 <p className="text-sm text-gray-500 italic">No admins</p>
               )}
             </div>
-            {canManageAdmins && (
-              <div className="mt-3">
-                <UserSearchInput
-                  onSelect={(user) => user.pk && addAdminMutation.mutate(user.pk)}
-                  placeholder="Search to add admin..."
-                  isLoading={addAdminMutation.isPending}
-                  excludeIds={[
-                    ...localAdmins.map((a) => a.pk).filter(Boolean) as number[],
-                    localOwner?.pk,
-                  ].filter(Boolean) as number[]}
-                />
-              </div>
-            )}
           </div>
 
           {/* Staff Section */}
           <div>
-            <h4 className="font-medium mb-2 flex items-center gap-2">
-              <User className="h-4 w-4 text-gray-500" />
-              Staff
-            </h4>
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-medium flex items-center gap-2">
+                <User className="h-4 w-4 text-gray-500" />
+                Staff
+              </h4>
+              {canManageStaff && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddStaff(true)}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Staff
+                </Button>
+              )}
+            </div>
             <div className="space-y-2">
               {localStaff.length > 0 ? (
                 localStaff.map((member) => (
@@ -381,16 +435,6 @@ export function AdminTeamSection({
                 <p className="text-sm text-gray-500 italic">No staff</p>
               )}
             </div>
-            {canManageStaff && (
-              <div className="mt-3">
-                <UserSearchInput
-                  onSelect={(user) => user.pk && addStaffMutation.mutate(user.pk)}
-                  placeholder="Search to add staff..."
-                  isLoading={addStaffMutation.isPending}
-                  excludeIds={localStaff.map((s) => s.pk).filter(Boolean) as number[]}
-                />
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -436,6 +480,38 @@ export function AdminTeamSection({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Add Admin Modal */}
+      {canManageAdmins && (
+        <AddUserModal
+          open={showAddAdmin}
+          onOpenChange={setShowAddAdmin}
+          title={isOrgMode
+            ? `Add Admin to ${organization?.name || 'Organization'}`
+            : `Add Admin to ${league?.name || 'League'}`
+          }
+          entityContext={entityContext}
+          onAdd={handleAddAdmin}
+          isAdded={isAdminAdded}
+          hasDiscordServer={false}
+        />
+      )}
+
+      {/* Add Staff Modal */}
+      {canManageStaff && (
+        <AddUserModal
+          open={showAddStaff}
+          onOpenChange={setShowAddStaff}
+          title={isOrgMode
+            ? `Add Staff to ${organization?.name || 'Organization'}`
+            : `Add Staff to ${league?.name || 'League'}`
+          }
+          entityContext={entityContext}
+          onAdd={handleAddStaff}
+          isAdded={isStaffAdded}
+          hasDiscordServer={false}
+        />
       )}
     </div>
   );
