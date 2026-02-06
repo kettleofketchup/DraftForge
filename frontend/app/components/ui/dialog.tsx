@@ -80,7 +80,7 @@ function DialogContent({
             data-slot="dialog-close"
             data-testid={closeButtonTestId || "dialog-close-button"}
             className={cn(
-              "absolute -top-3 -right-3 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+              "absolute top-2 right-2 z-10 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
               closeButtonStyles
             )}
           >
