@@ -40,6 +40,21 @@ async function removeLeagueStaffMember(context: import('@playwright/test').Brows
   await context.request.delete(`${API_URL}/leagues/${leaguePk}/staff/${userPk}/`);
 }
 
+/**
+ * Fill a React controlled input using the native HTMLInputElement value setter.
+ * Works in nested Radix Dialog contexts where Playwright's fill() and
+ * pressSequentially() fail due to focus trap interference between dialogs.
+ */
+async function fillReactInput(input: import('@playwright/test').Locator, value: string) {
+  await input.evaluate((el, val) => {
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, 'value',
+    )?.set;
+    nativeInputValueSetter?.call(el, val);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }, value);
+}
+
 test.describe('Admin Team - Add Staff (@cicd)', () => {
   let orgPk: number;
   let leaguePk: number;
@@ -72,39 +87,19 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     await expect(addStaffBtn).toBeVisible({ timeout: 5000 });
     await addStaffBtn.click();
 
-    // AddUserModal should open
+    // AddUserModal should open (nested inside EditOrganizationModal)
     const modal = page.locator('[data-testid="add-user-modal"]');
     await expect(modal).toBeVisible({ timeout: 5000 });
 
-    // Search for the regular user - click to focus, then type character by character
-    // (fill() may not properly trigger React state updates in nested dialog context)
+    // Wait for dialog animation and focus management to settle
+    await page.waitForTimeout(500);
+
+    // Search for the regular user using React-compatible value setter
+    // (Playwright fill/pressSequentially fail in nested Radix Dialog contexts
+    //  due to focus trap interference between outer and inner dialogs)
     const searchInput = modal.locator('[data-testid="add-user-search"]');
     await expect(searchInput).toBeVisible();
-    await searchInput.click();
-
-    // Set up response listener BEFORE typing to capture the search API call
-    const searchResponsePromise = page.waitForResponse(
-      (resp) => resp.url().includes('/users/search/') && resp.status() === 200,
-      { timeout: 15000 },
-    ).catch((e) => {
-      console.error('[test] Search API response never received from page XHR:', e.message);
-      return null;
-    });
-
-    await searchInput.pressSequentially('bucket', { delay: 50 });
-
-    // Wait for the search API response from the page
-    const searchResponse = await searchResponsePromise;
-    if (searchResponse) {
-      const body = await searchResponse.json();
-      console.log(`[test] Page search XHR returned ${body.length} results`);
-    } else {
-      // If no response, try using fill() as fallback
-      console.log('[test] pressSequentially did not trigger search, trying fill()');
-      await searchInput.fill('');
-      await searchInput.fill('bucket');
-      await page.waitForTimeout(1000);
-    }
+    await fillReactInput(searchInput, 'bucket');
 
     // Wait for search result to appear via data-testid
     const addBtn = modal.locator(`[data-testid="add-user-btn-${TARGET_USERNAME}"]`);
@@ -150,31 +145,13 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     const modal = page.locator('[data-testid="add-user-modal"]');
     await expect(modal).toBeVisible({ timeout: 5000 });
 
-    // Search - click to focus, then type character by character
+    // Wait for dialog animation and focus management to settle
+    await page.waitForTimeout(500);
+
+    // Search using React-compatible value setter
     const searchInput = modal.locator('[data-testid="add-user-search"]');
     await expect(searchInput).toBeVisible();
-    await searchInput.click();
-
-    const searchResponsePromise = page.waitForResponse(
-      (resp) => resp.url().includes('/users/search/') && resp.status() === 200,
-      { timeout: 15000 },
-    ).catch((e) => {
-      console.error('[test] Search API response never received from page XHR:', e.message);
-      return null;
-    });
-
-    await searchInput.pressSequentially('bucket', { delay: 50 });
-
-    const searchResponse = await searchResponsePromise;
-    if (searchResponse) {
-      const body = await searchResponse.json();
-      console.log(`[test] Page search XHR returned ${body.length} results`);
-    } else {
-      console.log('[test] pressSequentially did not trigger search, trying fill()');
-      await searchInput.fill('');
-      await searchInput.fill('bucket');
-      await page.waitForTimeout(1000);
-    }
+    await fillReactInput(searchInput, 'bucket');
 
     // Wait for search result to appear via data-testid
     const addBtn = modal.locator(`[data-testid="add-user-btn-${TARGET_USERNAME}"]`);
