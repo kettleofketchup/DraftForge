@@ -88,21 +88,18 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     await addStaffBtn.click();
 
     // AddUserModal should open (nested inside EditOrganizationModal)
-    const modal = page.locator('[data-testid="add-user-modal"]');
-    await expect(modal).toBeVisible({ timeout: 5000 });
-
-    // Wait for dialog animation and focus management to settle
-    await page.waitForTimeout(500);
+    await expect(page.locator('[data-testid="add-user-modal"]')).toBeVisible({ timeout: 5000 });
 
     // Search for the regular user using React-compatible value setter
     // (Playwright fill/pressSequentially fail in nested Radix Dialog contexts
     //  due to focus trap interference between outer and inner dialogs)
-    const searchInput = modal.locator('[data-testid="add-user-search"]');
-    await expect(searchInput).toBeVisible();
+    // Use page-level locator (not modal-scoped) to avoid portal DOM scoping issues
+    const searchInput = page.locator('[data-testid="add-user-search"]');
+    await expect(searchInput).toBeVisible({ timeout: 5000 });
     await fillReactInput(searchInput, 'bucket');
 
     // Wait for search result to appear via data-testid
-    const addBtn = modal.locator(`[data-testid="add-user-btn-${TARGET_USERNAME}"]`);
+    const addBtn = page.locator(`[data-testid="add-user-btn-${TARGET_USERNAME}"]`);
     await expect(addBtn).toBeVisible({ timeout: 10000 });
 
     // Click the Add button for this user
@@ -142,19 +139,15 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     await addStaffBtn.click();
 
     // AddUserModal should open
-    const modal = page.locator('[data-testid="add-user-modal"]');
-    await expect(modal).toBeVisible({ timeout: 5000 });
-
-    // Wait for dialog animation and focus management to settle
-    await page.waitForTimeout(500);
+    await expect(page.locator('[data-testid="add-user-modal"]')).toBeVisible({ timeout: 5000 });
 
     // Search using React-compatible value setter
-    const searchInput = modal.locator('[data-testid="add-user-search"]');
-    await expect(searchInput).toBeVisible();
+    const searchInput = page.locator('[data-testid="add-user-search"]');
+    await expect(searchInput).toBeVisible({ timeout: 5000 });
     await fillReactInput(searchInput, 'bucket');
 
     // Wait for search result to appear via data-testid
-    const addBtn = modal.locator(`[data-testid="add-user-btn-${TARGET_USERNAME}"]`);
+    const addBtn = page.locator(`[data-testid="add-user-btn-${TARGET_USERNAME}"]`);
     await expect(addBtn).toBeVisible({ timeout: 10000 });
 
     // Click Add
