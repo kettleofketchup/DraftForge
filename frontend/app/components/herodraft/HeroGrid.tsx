@@ -41,7 +41,7 @@ const HeroButton = memo(function HeroButton({
         }}
         // Don't use HTML disabled - it prevents hover states for spectators
         className={cn(
-          'size-[20px] sm:size-[24px] md:size-[28px] lg:size-[36px] xl:size-[48px] 2xl:size-[56px] p-0.5',
+          'size-[20px] sm:size-[24px] md:size-[28px] lg:size-[36px] xl:size-[48px] 2xl:size-[56px] shrink-0 p-0.5',
           'rounded-full bg-gradient-to-b from-slate-600 to-slate-800',
           'border border-slate-500/50 shadow-md shadow-black/50',
           'hover:from-slate-500 hover:to-slate-700 hover:scale-110 hover:z-10 hover:shadow-lg hover:shadow-black/60',
@@ -206,7 +206,7 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
           return (
             <div
               key={attr}
-              className={cn('rounded p-1.5 flex-1 min-h-0', ATTRIBUTE_COLORS[attr])}
+              className={cn('rounded p-1.5 flex-1 min-h-0 overflow-y-auto', ATTRIBUTE_COLORS[attr])}
               data-testid={`herodraft-attr-section-${attr}`}
             >
               <h3 className="text-[10px] font-semibold mb-1 text-white/70" data-testid={`herodraft-attr-label-${attr}`}>
