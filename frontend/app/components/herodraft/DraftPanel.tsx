@@ -91,7 +91,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
 
       {/* Draft timeline */}
       <ScrollArea className="flex-1 min-h-0" type="always">
-        <div className="flex flex-col py-4">
+        <div className="flex flex-col gap-1 py-4">
           {sortedRounds.map((round) => {
             const team = draft.draft_teams.find((t) => t.id === round.draft_team);
             const isRadiant = team?.is_radiant;
@@ -103,87 +103,88 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
             const isBan = round.action_type === 'ban';
             const isCompleted = round.state === 'completed';
 
-            // Slot heights - responsive sizes (sm -> md -> lg -> xl)
-            // Bans: smaller, Picks: larger
-            const slotHeight = isPick
-              ? 'h-7 sm:h-8 md:h-9 lg:h-10 xl:h-12'
-              : 'h-5 sm:h-6 md:h-7 lg:h-8 xl:h-9';
-            const imgSize = isPick
-              ? 'w-12 h-7 sm:w-14 sm:h-8 md:w-16 md:h-9 lg:w-20 lg:h-10 xl:w-24 xl:h-12'
-              : 'w-9 h-5 sm:w-10 sm:h-6 md:w-12 md:h-7 lg:w-14 lg:h-8 xl:w-16 xl:h-9';
+            // Container width matches pick width so bans center-align with picks
+            const slotWidth = 'w-12 sm:w-14 md:w-16 lg:w-20 xl:w-24';
+            const pickHeight = 'h-7 sm:h-8 md:h-9 lg:h-10 xl:h-12';
+            const banSize = 'w-10 h-6 sm:w-12 sm:h-7 md:w-14 md:h-8 lg:w-16 lg:h-9 xl:w-20 xl:h-11';
 
-            // Octagon clip-path for ban slots (stop-sign shape)
-            const octagonClip = '[clip-path:polygon(25%_0%,75%_0%,100%_30%,100%_70%,75%_100%,25%_100%,0%_70%,0%_30%)]';
+            // Octagon clip-path adjusted for ~1.7:1 wide aspect ratio
+            const octagonClip = '[clip-path:polygon(15%_0%,85%_0%,100%_25%,100%_75%,85%_100%,15%_100%,0%_75%,0%_25%)]';
+
+            // Indicator on outer side: left for Radiant, right for Dire
+            const indicator = isCompleted && (
+              isBan
+                ? <span className="text-xs sm:text-sm leading-none text-red-500 font-bold">✕</span>
+                : isPick
+                  ? <span className="text-xs sm:text-sm leading-none text-green-500 font-bold">✓</span>
+                  : null
+            );
 
             const heroSlot = (
-              <div className="flex items-center gap-0.5">
-                {/* Ban indicator - red X outside left, aligned to top */}
-                {isBan && isCompleted && (
-                  <span className="text-xs sm:text-sm leading-none text-red-500 font-bold">✕</span>
-                )}
+              <div className={cn('flex items-center gap-1.5 px-1', !isRadiant && 'flex-row-reverse')}>
+                {/* Indicator on outer side (left for Radiant, right for Dire) */}
+                {indicator}
 
-                {isBan ? (
-                  // Octagon ban slot with red glow
-                  <div className={cn(
-                    'transition-all',
-                    isActive
-                      ? 'drop-shadow-[0_0_6px_rgba(250,204,21,0.8)]'
-                      : isCompleted
-                        ? 'drop-shadow-[0_0_6px_rgba(239,68,68,0.6)]'
-                        : 'drop-shadow-[0_0_4px_rgba(239,68,68,0.3)]'
-                  )}>
+                {/* Fixed-width container so bans and picks share the same center */}
+                <div className={cn(slotWidth, 'flex items-center justify-center')}>
+                  {isBan ? (
+                    // Octagon ban slot with red glow
+                    <div className={cn(
+                      'transition-all',
+                      isActive
+                        ? 'drop-shadow-[0_0_6px_rgba(250,204,21,0.8)]'
+                        : isCompleted
+                          ? 'drop-shadow-[0_0_6px_rgba(239,68,68,0.6)]'
+                          : 'drop-shadow-[0_0_4px_rgba(239,68,68,0.3)]'
+                    )}>
+                      <div
+                        className={cn(
+                          octagonClip,
+                          'p-[3px] transition-all',
+                          isActive ? 'bg-yellow-400' : isCompleted ? 'bg-red-500/70' : 'bg-red-900/60',
+                          banSize
+                        )}
+                        data-testid={`herodraft-round-${round.round_number}-hero`}
+                        data-hero-id={round.hero_id}
+                      >
+                        <div className={cn(octagonClip, 'w-full h-full overflow-hidden relative')}>
+                          {heroImg ? (
+                            <>
+                              <img src={heroImg} alt={heroName} className="w-full h-full object-cover" />
+                              {isCompleted && (
+                                <div className="absolute inset-0 bg-red-600/20" />
+                              )}
+                            </>
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold bg-red-950/60 text-red-400 [text-shadow:0_0_4px_rgba(0,0,0,0.8)]">
+                              BAN
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    // Rectangular pick slot
                     <div
                       className={cn(
-                        octagonClip,
-                        'p-[3px] transition-all',
-                        isActive ? 'bg-yellow-400' : isCompleted ? 'bg-red-500/70' : 'bg-red-900/60',
-                        imgSize
+                        'overflow-hidden border transition-all relative',
+                        isCompleted ? 'border-green-500/70' : 'border-gray-600',
+                        isActive && 'border-yellow-400 border-2',
+                        slotWidth, pickHeight
                       )}
                       data-testid={`herodraft-round-${round.round_number}-hero`}
                       data-hero-id={round.hero_id}
                     >
-                      <div className={cn(octagonClip, 'w-full h-full overflow-hidden relative')}>
-                        {heroImg ? (
-                          <>
-                            <img src={heroImg} alt={heroName} className="w-full h-full object-cover" />
-                            {isCompleted && (
-                              <div className="absolute inset-0 bg-red-600/20" />
-                            )}
-                          </>
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-[9px] sm:text-[10px] font-medium bg-red-900/40 text-red-500/60">
-                            BAN
-                          </div>
-                        )}
-                      </div>
+                      {heroImg ? (
+                        <img src={heroImg} alt={heroName} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold bg-green-950/60 text-green-400 [text-shadow:0_0_4px_rgba(0,0,0,0.8)]">
+                          PICK
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ) : (
-                  // Rectangular pick slot
-                  <div
-                    className={cn(
-                      'overflow-hidden border transition-all relative',
-                      isCompleted ? 'border-green-500/70' : 'border-gray-600',
-                      isActive && 'border-yellow-400 border-2',
-                      imgSize
-                    )}
-                    data-testid={`herodraft-round-${round.round_number}-hero`}
-                    data-hero-id={round.hero_id}
-                  >
-                    {heroImg ? (
-                      <img src={heroImg} alt={heroName} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-[9px] sm:text-[10px] font-medium bg-green-900/40 text-green-500/60">
-                        PICK
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Pick indicator - green checkmark outside right, aligned to top */}
-                {isPick && isCompleted && (
-                  <span className="text-xs sm:text-sm leading-none text-green-500 font-bold">✓</span>
-                )}
+                  )}
+                </div>
               </div>
             );
 
@@ -200,7 +201,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
               <div
                 key={round.id}
                 ref={isActive ? activeRoundRef : undefined}
-                className={cn('flex items-center', slotHeight)}
+                className="flex items-center"
                 data-testid={`herodraft-round-${round.round_number}`}
                 data-round-active={isActive}
                 data-round-state={round.state}
