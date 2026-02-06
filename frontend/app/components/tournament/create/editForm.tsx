@@ -81,6 +81,13 @@ function combineDateAndTime(dateStr: string, timeStr: string): string {
   return `${dateStr}T${timeStr}:00`;
 }
 
+// Helper to parse a yyyy-MM-dd string as local midnight.
+// new Date('yyyy-MM-dd') parses as UTC, causing off-by-one-day errors
+// in timezones behind UTC. Appending T00:00:00 forces local-time parsing.
+function localDate(dateStr: string): Date {
+  return new Date(dateStr + 'T00:00:00');
+}
+
 interface Props {
   tourn: TournamentClassType;
   form?: TournamentClassType;
@@ -250,7 +257,7 @@ export const TournamentEditForm: React.FC<Props> = ({
                 <FormLabel>Tournament Date & Time</FormLabel>
                 <div className="flex gap-2">
                   {/* Date Picker */}
-                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen} modal={true}>
                     <PopoverTrigger asChild>
                       <FormControl>
                         <Button
@@ -262,7 +269,7 @@ export const TournamentEditForm: React.FC<Props> = ({
                           data-testid="tournament-date-picker"
                         >
                           {selectedDate ? (
-                            format(new Date(selectedDate), 'PPP')
+                            format(localDate(selectedDate), 'PPP')
                           ) : (
                             <span>Pick a date</span>
                           )}
@@ -273,7 +280,7 @@ export const TournamentEditForm: React.FC<Props> = ({
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
-                        selected={selectedDate ? new Date(selectedDate) : undefined}
+                        selected={selectedDate ? localDate(selectedDate) : undefined}
                         onSelect={(date) => {
                           if (date) {
                             setSelectedDate(format(date, 'yyyy-MM-dd'));
@@ -349,9 +356,16 @@ export const TournamentEditForm: React.FC<Props> = ({
               <FormItem>
                 <FormLabel>League (Optional)</FormLabel>
                 <Select
-                  onValueChange={(value) =>
-                    field.onChange(value === 'none' ? null : parseInt(value, 10))
-                  }
+                  onValueChange={(value) => {
+                    const leagueId = value === 'none' ? null : parseInt(value, 10);
+                    field.onChange(leagueId);
+                    if (leagueId && leagues) {
+                      const selectedLeague = leagues.find((l: LeagueType) => l.pk === leagueId);
+                      if (selectedLeague?.timezone) {
+                        form.setValue('timezone', selectedLeague.timezone);
+                      }
+                    }
+                  }}
                   value={field.value?.toString() || 'none'}
                 >
                   <FormControl>
