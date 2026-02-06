@@ -46,7 +46,7 @@ const ChevronNavButton = React.forwardRef<
         brandGradient,
         button3DBase,
         brandDepthColors,
-        '[&_svg]:text-white',
+        '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
         className
       )}
       {...props}
