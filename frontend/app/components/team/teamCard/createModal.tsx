@@ -2,7 +2,7 @@ import { getLogger } from '~/lib/logger';
 
 import { PlusCircleIcon } from 'lucide-react';
 import React, { useState } from 'react';
-import { Button } from '~/components/ui/button';
+import { PrimaryButton } from '~/components/ui/buttons';
 import { FormDialog } from '~/components/ui/dialogs';
 import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
 import { User } from '~/components/user/user';
@@ -60,20 +60,13 @@ export const TeamCreateModal: React.FC<Props> = (props) => {
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button
+            <PrimaryButton
               size="lg"
-              variant="default"
-              className={
-                'bg-emerald-600 hover:bg-emerald-500 text-white' +
-                ' shadow-lg shadow-emerald-900/50 border-b-4 border-b-emerald-800' +
-                ' active:border-b-0 active:translate-y-1 transition-all duration-75' +
-                ' hover:shadow-emerald-500/50'
-              }
               onClick={() => setOpen(true)}
             >
               <PlusCircleIcon size="lg" className="text-white p-2" />
               Create Team
-            </Button>
+            </PrimaryButton>
           </TooltipTrigger>
           <TooltipContent>
             <p>Create Team</p>
