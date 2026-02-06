@@ -68,7 +68,7 @@ function UserRow({
     user.guildNickname || user.discordNickname || user.nickname || user.username;
 
   return (
-    <div className="flex items-center justify-between py-2 px-3 bg-base-200 rounded-lg">
+    <div className="flex items-center justify-between py-2 px-3 bg-base-200 rounded-lg" data-testid={`team-member-${user.username}`}>
       <div className="flex items-center gap-3">
         {roleIcon[role]}
         <img
@@ -365,6 +365,7 @@ export function AdminTeamSection({
                   variant="outline"
                   size="sm"
                   onClick={() => setShowAddAdmin(true)}
+                  data-testid="add-admin-btn"
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   Add Admin
@@ -403,6 +404,7 @@ export function AdminTeamSection({
                   variant="outline"
                   size="sm"
                   onClick={() => setShowAddStaff(true)}
+                  data-testid="add-staff-btn"
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   Add Staff
