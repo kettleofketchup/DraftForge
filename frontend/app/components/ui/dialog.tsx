@@ -3,6 +3,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { XIcon } from "lucide-react"
 
 import { cn } from "~/lib/utils"
+import { brandErrorBg } from "~/components/ui/buttons/styles"
 
 function Dialog({
   ...props
@@ -59,7 +60,7 @@ function DialogContent({
   closeButtonTestId?: string
 }) {
   const closeButtonStyles = closeButtonVariant === 'destructive'
-    ? "bg-red-600 hover:bg-red-500 text-white rounded-md p-1.5 opacity-100 shadow-lg border-b-2 border-b-red-800 active:border-b-0 active:translate-y-0.5 transition-all"
+    ? cn(brandErrorBg, "text-white rounded-md p-1.5 opacity-100 shadow-lg active:translate-y-0.5 transition-all")
     : "ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none";
 
   return (
