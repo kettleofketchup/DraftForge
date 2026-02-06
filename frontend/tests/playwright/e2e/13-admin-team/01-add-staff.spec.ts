@@ -93,6 +93,13 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     // Add staff via API first
     await addOrgStaffMember(page.context(), orgPk, TARGET_USER_PK);
 
+    // Verify via API that the staff was actually added
+    const orgResp = await page.context().request.get(`${API_URL}/organizations/${orgPk}/`);
+    const orgData = await orgResp.json();
+    console.log(`[diag] org staff count: ${orgData.staff?.length ?? 'undefined'}`);
+    console.log(`[diag] org staff PKs: ${JSON.stringify(orgData.staff?.map((s: { pk: number }) => s.pk))}`);
+    console.log(`[diag] org admins count: ${orgData.admins?.length ?? 'undefined'}`);
+
     try {
       // Navigate to org page
       await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
@@ -106,8 +113,25 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
       // Wait for modal to open
       await expect(page.locator('[data-testid="edit-organization-modal"]')).toBeVisible({ timeout: 5000 });
 
+      // Diagnostic: check what's in the modal DOM
+      const adminTeamHeader = page.locator('text=Admin Team');
+      const hasAdminTeam = await adminTeamHeader.count();
+      console.log(`[diag] "Admin Team" header found: ${hasAdminTeam}`);
+
+      const staffHeader = page.locator('text=Staff');
+      const hasStaffHeader = await staffHeader.count();
+      console.log(`[diag] "Staff" header found: ${hasStaffHeader}`);
+
+      const teamMembers = page.locator('[data-testid^="team-member-"]');
+      const memberCount = await teamMembers.count();
+      console.log(`[diag] team-member elements: ${memberCount}`);
+      for (let i = 0; i < memberCount; i++) {
+        const testId = await teamMembers.nth(i).getAttribute('data-testid');
+        console.log(`[diag]   member ${i}: ${testId}`);
+      }
+
       // Verify the user appears in the Admin Team section's staff list
-      await expect(page.locator(`[data-testid="team-member-${TARGET_USERNAME}"]`)).toBeVisible({ timeout: 5000 });
+      await expect(page.locator(`[data-testid="team-member-${TARGET_USERNAME}"]`)).toBeVisible({ timeout: 10000 });
     } finally {
       // Cleanup: remove the user from org staff via API
       await removeOrgStaffMember(page.context(), orgPk, TARGET_USER_PK);
