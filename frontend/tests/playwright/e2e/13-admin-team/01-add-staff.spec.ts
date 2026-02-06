@@ -33,30 +33,46 @@ async function getOrgAndLeaguePks(context: import('@playwright/test').BrowserCon
   return { orgPk, leaguePk: data.pk as number };
 }
 
+/** Helper: get CSRF token from context cookies. */
+async function getCsrfToken(context: import('@playwright/test').BrowserContext): Promise<string> {
+  const cookies = await context.cookies();
+  return cookies.find(c => c.name === 'csrftoken')?.value || '';
+}
+
 /** Helper: add a user to org staff via API. */
 async function addOrgStaffMember(context: import('@playwright/test').BrowserContext, orgPk: number, userPk: number) {
+  const csrfToken = await getCsrfToken(context);
   const resp = await context.request.post(`${API_URL}/organizations/${orgPk}/staff/`, {
     data: { user_id: userPk },
+    headers: { 'X-CSRFToken': csrfToken },
   });
   if (!resp.ok()) throw new Error(`Failed to add org staff: ${resp.status()}`);
 }
 
 /** Helper: remove a user from org staff via API (cleanup). */
 async function removeOrgStaffMember(context: import('@playwright/test').BrowserContext, orgPk: number, userPk: number) {
-  await context.request.delete(`${API_URL}/organizations/${orgPk}/staff/${userPk}/`);
+  const csrfToken = await getCsrfToken(context);
+  await context.request.delete(`${API_URL}/organizations/${orgPk}/staff/${userPk}/`, {
+    headers: { 'X-CSRFToken': csrfToken },
+  });
 }
 
 /** Helper: add a user to league staff via API. */
 async function addLeagueStaffMember(context: import('@playwright/test').BrowserContext, leaguePk: number, userPk: number) {
+  const csrfToken = await getCsrfToken(context);
   const resp = await context.request.post(`${API_URL}/leagues/${leaguePk}/staff/`, {
     data: { user_id: userPk },
+    headers: { 'X-CSRFToken': csrfToken },
   });
   if (!resp.ok()) throw new Error(`Failed to add league staff: ${resp.status()}`);
 }
 
 /** Helper: remove a user from league staff via API (cleanup). */
 async function removeLeagueStaffMember(context: import('@playwright/test').BrowserContext, leaguePk: number, userPk: number) {
-  await context.request.delete(`${API_URL}/leagues/${leaguePk}/staff/${userPk}/`);
+  const csrfToken = await getCsrfToken(context);
+  await context.request.delete(`${API_URL}/leagues/${leaguePk}/staff/${userPk}/`, {
+    headers: { 'X-CSRFToken': csrfToken },
+  });
 }
 
 test.describe('Admin Team - Add Staff (@cicd)', () => {
