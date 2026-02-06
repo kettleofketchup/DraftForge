@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { createTournament, updateTournament } from '~/components/api/api';
 import type { LeagueType } from '~/components/league/schemas';
 import { Button } from '~/components/ui/button';
+import { SubmitButton } from '~/components/ui/buttons';
 import { Calendar } from '~/components/ui/calendar';
 import { DialogClose } from '~/components/ui/dialog';
 import {
@@ -410,19 +411,13 @@ export const TournamentEditForm: React.FC<Props> = ({
                 Cancel
               </Button>
             </DialogClose>
-            <Button
-              type="submit"
-              disabled={isSubmitting}
+            <SubmitButton
+              loading={isSubmitting}
+              loadingText={isEditing ? 'Saving...' : 'Creating...'}
               data-testid="tournament-submit-button"
             >
-              {isSubmitting
-                ? isEditing
-                  ? 'Saving...'
-                  : 'Creating...'
-                : isEditing
-                  ? 'Save Changes'
-                  : 'Create Tournament'}
-            </Button>
+              {isEditing ? 'Save Changes' : 'Create Tournament'}
+            </SubmitButton>
           </div>
         </form>
       </Form>

@@ -22,6 +22,7 @@ import {
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { Button } from '~/components/ui/button';
+import { SubmitButton } from '~/components/ui/buttons';
 import { UpdateProfile } from '~/components/api/api';
 import { useUserStore } from '~/store/userStore';
 import type { UserType } from '~/components/user/types';
@@ -216,9 +217,12 @@ export function EditProfileModal({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? 'Saving...' : 'Save Changes'}
-              </Button>
+              <SubmitButton
+                loading={form.formState.isSubmitting}
+                loadingText="Saving..."
+              >
+                Save Changes
+              </SubmitButton>
             </div>
           </form>
         </Form>
