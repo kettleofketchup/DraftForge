@@ -112,42 +112,74 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
               ? 'w-12 h-7 sm:w-14 sm:h-8 md:w-16 md:h-9 lg:w-20 lg:h-10 xl:w-24 xl:h-12'
               : 'w-9 h-5 sm:w-10 sm:h-6 md:w-12 md:h-7 lg:w-14 lg:h-8 xl:w-16 xl:h-9';
 
+            // Octagon clip-path for ban slots (stop-sign shape)
+            const octagonClip = '[clip-path:polygon(25%_0%,75%_0%,100%_30%,100%_70%,75%_100%,25%_100%,0%_70%,0%_30%)]';
+
             const heroSlot = (
               <div className="flex items-start gap-0.5">
                 {/* Ban indicator - red X outside left, aligned to top */}
                 {isBan && isCompleted && (
                   <span className="text-xs sm:text-sm leading-none text-red-500 font-bold">✕</span>
                 )}
-                {/* Hero image */}
-                <div
-                  className={cn(
-                    'overflow-hidden border transition-all relative',
-                    isCompleted
-                      ? isPick ? 'border-green-500/70' : 'border-red-500/70'
-                      : 'border-gray-600',
-                    isActive && 'border-yellow-400 border-2',
-                    imgSize
-                  )}
-                  data-testid={`herodraft-round-${round.round_number}-hero`}
-                  data-hero-id={round.hero_id}
-                >
-                  {heroImg ? (
-                    <>
-                      <img src={heroImg} alt={heroName} className="w-full h-full object-cover" />
-                      {/* Red tint overlay for bans */}
-                      {isBan && isCompleted && (
-                        <div className="absolute inset-0 bg-red-600/20" />
+
+                {isBan ? (
+                  // Octagon ban slot with red glow
+                  <div className={cn(
+                    'transition-all',
+                    isActive
+                      ? 'drop-shadow-[0_0_6px_rgba(250,204,21,0.8)]'
+                      : isCompleted
+                        ? 'drop-shadow-[0_0_6px_rgba(239,68,68,0.6)]'
+                        : 'drop-shadow-[0_0_4px_rgba(239,68,68,0.3)]'
+                  )}>
+                    <div
+                      className={cn(
+                        octagonClip,
+                        'p-[2px] transition-all',
+                        isActive ? 'bg-yellow-400' : isCompleted ? 'bg-red-500/70' : 'bg-red-900/60',
+                        imgSize
                       )}
-                    </>
-                  ) : (
-                    <div className={cn(
-                      'w-full h-full flex items-center justify-center text-[9px] sm:text-[10px] font-medium',
-                      isPick ? 'bg-green-900/40 text-green-500/60' : 'bg-red-900/40 text-red-500/60'
-                    )}>
-                      {isBan ? 'BAN' : 'PICK'}
+                      data-testid={`herodraft-round-${round.round_number}-hero`}
+                      data-hero-id={round.hero_id}
+                    >
+                      <div className={cn(octagonClip, 'w-full h-full overflow-hidden relative')}>
+                        {heroImg ? (
+                          <>
+                            <img src={heroImg} alt={heroName} className="w-full h-full object-cover" />
+                            {isCompleted && (
+                              <div className="absolute inset-0 bg-red-600/20" />
+                            )}
+                          </>
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[9px] sm:text-[10px] font-medium bg-red-900/40 text-red-500/60">
+                            BAN
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  // Rectangular pick slot
+                  <div
+                    className={cn(
+                      'overflow-hidden border transition-all relative',
+                      isCompleted ? 'border-green-500/70' : 'border-gray-600',
+                      isActive && 'border-yellow-400 border-2',
+                      imgSize
+                    )}
+                    data-testid={`herodraft-round-${round.round_number}-hero`}
+                    data-hero-id={round.hero_id}
+                  >
+                    {heroImg ? (
+                      <img src={heroImg} alt={heroName} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-[9px] sm:text-[10px] font-medium bg-green-900/40 text-green-500/60">
+                        PICK
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Pick indicator - green checkmark outside right, aligned to top */}
                 {isPick && isCompleted && (
                   <span className="text-xs sm:text-sm leading-none text-green-500 font-bold">✓</span>
