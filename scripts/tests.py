@@ -510,8 +510,8 @@ def _generate_bracket(c, tournament_pk):
         return False
 
 
-def _run_demo_in_docker(c, spec="", workers=1):
-    """Run Playwright demo tests inside frontend Docker container.
+def _run_demo(c, spec="", workers=1):
+    """Run Playwright demo tests on the host.
 
     Args:
         c: Invoke context
@@ -520,20 +520,17 @@ def _run_demo_in_docker(c, spec="", workers=1):
     """
     flush_test_redis(c)
 
-    # Build the Playwright command
+    docker_host = get_docker_host()
     grep_arg = f'--grep "{spec}"' if spec else ""
     playwright_cmd = (
-        f"npx playwright test --config=playwright.demo.config.ts "
+        f"DOCKER_HOST={docker_host} npx playwright test --config=playwright.demo.config.ts "
         f"--workers={workers} {grep_arg}"
     ).strip()
 
-    print(f"  Running in Docker: {playwright_cmd}")
+    print(f"  Running: {playwright_cmd}")
 
-    # Execute inside the frontend container (FORCE_COLOR=0 disables ANSI escape codes)
-    c.run(
-        f'docker exec frontend sh -c "cd /app && FORCE_COLOR=0 {playwright_cmd}"',
-        warn=True,
-    )
+    with c.cd(paths.FRONTEND_PATH):
+        c.run(playwright_cmd, warn=True)
 
 
 def _copy_demo_videos(c):
@@ -629,7 +626,7 @@ def demo_create(c, spec=""):
             _reset_demo_data(c, demo_key)
 
     # Run demos in Docker
-    _run_demo_in_docker(c, spec=spec, workers=1)
+    _run_demo(c, spec=spec, workers=1)
 
     # Copy videos
     _copy_demo_videos(c)
@@ -643,7 +640,7 @@ def demo_shuffle(c):
     """
     print("=== Shuffle Draft Demo ===")
     _reset_demo_data(c, "shuffle")
-    _run_demo_in_docker(c, spec="shuffle")
+    _run_demo(c, spec="shuffle")
     _copy_demo_videos(c)
 
 
@@ -655,7 +652,7 @@ def demo_snake(c):
     """
     print("=== Snake Draft Demo ===")
     _reset_demo_data(c, "snake")
-    _run_demo_in_docker(c, spec="snake")
+    _run_demo(c, spec="snake")
     _copy_demo_videos(c)
 
 
@@ -667,7 +664,7 @@ def demo_herodraft(c):
     """
     print("=== HeroDraft Demo ===")
     _reset_demo_data(c, "herodraft")
-    _run_demo_in_docker(c, spec="herodraft")
+    _run_demo(c, spec="herodraft")
     _copy_demo_videos(c)
 
 
@@ -687,7 +684,7 @@ def demo_all(c):
             reset_keys_done.add(reset_key)
 
     # Run all demos sequentially (1 worker to avoid CPU overload)
-    _run_demo_in_docker(c, workers=1)
+    _run_demo(c, workers=1)
 
     # Copy videos
     _copy_demo_videos(c)
@@ -1005,7 +1002,7 @@ def demo_snapshots(c):
         _generate_bracket(c, reset_data["tournament_pk"])
 
     flush_test_redis(c)
-    _run_demo_in_docker(c, spec="Site Snapshots")
+    _run_demo(c, spec="Site Snapshots")
     _copy_demo_snapshots(c)
 
 
