@@ -259,27 +259,17 @@ export function AdminTeamSection({
   const handleAddAdmin = useCallback(
     async (payload: AddMemberPayload): Promise<UserType> => {
       if (!payload.user_id) throw new Error('User ID required');
-      return new Promise((resolve, reject) => {
-        addAdminMutation.mutate(payload.user_id!, {
-          onSuccess: (user) => resolve(user),
-          onError: (err) => reject(err),
-        });
-      });
+      return addAdminMutation.mutateAsync(payload.user_id);
     },
-    [addAdminMutation]
+    [addAdminMutation.mutateAsync]
   );
 
   const handleAddStaff = useCallback(
     async (payload: AddMemberPayload): Promise<UserType> => {
       if (!payload.user_id) throw new Error('User ID required');
-      return new Promise((resolve, reject) => {
-        addStaffMutation.mutate(payload.user_id!, {
-          onSuccess: (user) => resolve(user),
-          onError: (err) => reject(err),
-        });
-      });
+      return addStaffMutation.mutateAsync(payload.user_id);
     },
-    [addStaffMutation]
+    [addStaffMutation.mutateAsync]
   );
 
   const isAdminAdded = useCallback(
