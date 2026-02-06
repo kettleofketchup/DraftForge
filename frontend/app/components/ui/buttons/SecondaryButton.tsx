@@ -1,9 +1,9 @@
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { button3DBase, button3DDisabled } from './styles';
+import { brandSecondary, button3DBase, button3DDisabled } from './styles';
 
-export type BorderColor = 'green' | 'blue' | 'purple' | 'orange' | 'red' | 'sky' | 'cyan' | 'lime';
+export type BorderColor = 'green' | 'blue' | 'purple' | 'orange' | 'red' | 'sky' | 'cyan' | 'lime' | 'brand';
 
 export interface SecondaryButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
@@ -24,6 +24,7 @@ const borderColorClasses: Record<BorderColor, string> = {
   sky: 'border border-sky-600',
   cyan: 'border border-cyan-600',
   lime: 'border border-lime-500',
+  brand: 'border border-violet-400/20',
 };
 
 const bgColorClasses: Record<BorderColor, string> = {
@@ -35,6 +36,7 @@ const bgColorClasses: Record<BorderColor, string> = {
   sky: 'bg-sky-800 hover:bg-sky-700 text-white border-b-sky-950 shadow-sky-900/50',
   cyan: 'bg-cyan-700 hover:bg-cyan-600 text-white border-b-cyan-900 shadow-cyan-900/50',
   lime: 'bg-lime-700 hover:bg-lime-600 text-white border-b-lime-900 shadow-lime-900/50',
+  brand: brandSecondary,
 };
 
 /**
@@ -59,15 +61,17 @@ const bgColorClasses: Record<BorderColor, string> = {
 const SecondaryButton = React.forwardRef<
   HTMLButtonElement,
   SecondaryButtonProps
->(({ borderColor, color, className, children, depth = true, ...props }, ref) => {
+>(({ borderColor, color, className, children, depth, ...props }, ref) => {
+  const isBrand = color === 'brand' || borderColor === 'brand';
+  const useDepth = depth ?? !isBrand;
   return (
     <Button
       ref={ref}
       variant="secondary"
       className={cn(
-        depth && button3DBase,
-        depth && button3DDisabled,
-        depth && '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
+        useDepth && button3DBase,
+        useDepth && button3DDisabled,
+        useDepth && '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
         borderColor && borderColorClasses[borderColor],
         color && bgColorClasses[color],
         className
