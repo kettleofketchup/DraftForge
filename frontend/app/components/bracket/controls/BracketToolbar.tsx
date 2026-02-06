@@ -4,7 +4,7 @@ import {
   CancelButton,
   ConfirmButton,
   DestructiveButton,
-  SecondaryButton,
+  PrimaryButton,
   SubmitButton,
 } from '~/components/ui/buttons';
 import {
@@ -79,14 +79,13 @@ export function BracketToolbar({
       {/* Generate / Reseed dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <SecondaryButton
+          <PrimaryButton
             disabled={!canGenerate}
-            color="cyan"
             data-testid={hasMatches ? 'reseedBracketButton' : 'generateBracketButton'}
           >
             {hasMatches ? 'Reseed Bracket' : 'Generate Bracket'}
             <ChevronDown className="h-4 w-4 ml-1" />
-          </SecondaryButton>
+          </PrimaryButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
           <DropdownMenuItem
