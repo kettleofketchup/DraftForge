@@ -47,7 +47,8 @@ const NavButton = React.forwardRef<HTMLButtonElement, NavButtonProps>(
           depth && button3DDisabled,
           brandGradient,
           brandDepthColors,
-          '[&_svg]:text-white',
+          '[text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]',
+          '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
           className
         )}
         {...props}
