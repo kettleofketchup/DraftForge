@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { TEAMS_BUTTONS_WIDTH } from '~/components/constants';
 import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { Button } from '~/components/ui/button';
+import { PrimaryButton } from '~/components/ui/buttons';
 import {
   Dialog,
   DialogClose,
@@ -33,12 +34,12 @@ export const CaptainSelectionModal: React.FC = () => {
         <Tooltip>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
-              <Button
-                className={`w-[${TEAMS_BUTTONS_WIDTH}] bg-yellow-400 hover:bg-yellow-200 text-black`}
+              <PrimaryButton
+                className={`w-[${TEAMS_BUTTONS_WIDTH}]`}
               >
                 <Crown className="mr-2" />
                 Pick Captains
-              </Button>
+              </PrimaryButton>
             </DialogTrigger>
           </TooltipTrigger>
           <TooltipContent>
