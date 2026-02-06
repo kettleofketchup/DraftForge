@@ -60,7 +60,7 @@ function DialogContent({
   closeButtonTestId?: string
 }) {
   const closeButtonStyles = closeButtonVariant === 'destructive'
-    ? cn(brandErrorPrimary, "border-0 rounded-md p-1.5 opacity-100 shadow-lg active:translate-y-0.5 transition-all")
+    ? cn(brandErrorPrimary, "border-0 outline-none rounded-md p-1.5 opacity-100 shadow-lg active:translate-y-0.5 transition-all")
     : "ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none";
 
   return (
