@@ -2,6 +2,9 @@
  * Shared button style constants for 3D effects and variants
  */
 
+// Brand gradient - single source of truth for primary action buttons
+export const brandGradient = 'bg-gradient-to-r from-violet-500 to-blue-500 hover:from-violet-400 hover:to-blue-400 text-white';
+
 // Base 3D button effect classes (active state removed for disabled buttons via CSS)
 export const button3DBase =
   'shadow-lg shadow-black/30 border-b-4 active:border-b-0 active:translate-y-1 transition-all duration-75';
@@ -18,7 +21,7 @@ const iconMuted = 'disabled:[&_svg]:text-gray-600 disabled:[&_svg]:fill-gray-600
 export const button3DVariants = {
   destructive: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} bg-red-600 text-white hover:bg-red-500 border-b-red-800 shadow-red-900/50`,
   warning: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} bg-orange-500 text-white hover:bg-orange-400 border-b-orange-700 shadow-orange-900/50`,
-  success: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} bg-green-600 text-white hover:bg-green-500 border-b-green-800 shadow-green-900/50`,
+  success: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} ${brandGradient} border-b-violet-700 shadow-violet-900/50`,
   primary: `${button3DBase} ${button3DDisabled} bg-primary text-primary-foreground hover:bg-primary/90 border-b-primary/50`,
   secondary: `${button3DBase} ${button3DDisabled} bg-secondary text-secondary-foreground hover:bg-secondary/80 border-b-secondary/50`,
   outline: `${button3DBase} ${button3DDisabled} border-b-gray-600`,

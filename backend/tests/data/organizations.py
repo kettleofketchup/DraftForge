@@ -17,6 +17,7 @@ DTX_ORG: TestOrganization = TestOrganization(
     description="DTX - A Dota 2 amateur tournament organization.",
     rules_template="Standard DTX tournament rules apply.",
     timezone="America/New_York",
+    discord_server_id="734185035623825559",
 )
 
 TEST_ORG: TestOrganization = TestOrganization(

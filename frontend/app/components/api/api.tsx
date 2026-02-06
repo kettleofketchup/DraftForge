@@ -35,6 +35,11 @@ export {
   approveClaimRequest,
   rejectClaimRequest,
   type ProfileClaimRequest,
+  // Member management
+  addOrgMember,
+  searchDiscordMembers,
+  refreshDiscordMembers,
+  type DiscordSearchResult,
 } from './orgAPI';
 
 // Re-export league API
@@ -50,8 +55,15 @@ export {
   addLeagueStaff,
   removeLeagueStaff,
   getLeagueUsers,
+  addLeagueMember,
 } from './leagueAPI';
+
+// Re-export shared types
+export type { AddMemberPayload, AddUserResponse } from './types';
+
 import type {
+  AddMemberPayload,
+  AddUserResponse,
   CreateTeamFromCaptainAPI,
   DraftStyleMMRsAPIReturn,
   GetDraftStyleMMRsAPI,
@@ -342,7 +354,31 @@ export async function getHomeStats(): Promise<HomeStats> {
 
 
 // Admin Team API
-export async function searchUsers(query: string): Promise<UserType[]> {
-  const response = await axios.get<UserType[]>(`/users/search/?q=${encodeURIComponent(query)}`);
+export interface SearchUserResult extends UserType {
+  membership?: 'league' | 'org' | 'other_org' | null;
+  membership_label?: string | null;
+}
+
+export async function searchUsers(
+  query: string,
+  orgId?: number,
+  leagueId?: number,
+): Promise<SearchUserResult[]> {
+  const params: Record<string, string | number> = { q: query };
+  if (orgId) params.org_id = orgId;
+  if (leagueId) params.league_id = leagueId;
+  const response = await axios.get<SearchUserResult[]>('/users/search/', { params });
   return response.data;
+}
+
+// Tournament Members
+export async function addTournamentMember(
+  tournamentId: number,
+  payload: AddMemberPayload,
+): Promise<UserType> {
+  const response = await axios.post<AddUserResponse>(
+    `/tournaments/${tournamentId}/members/`,
+    payload,
+  );
+  return response.data.user;
 }

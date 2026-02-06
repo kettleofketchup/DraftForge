@@ -36,7 +36,9 @@ test.describe('Undo Pick', () => {
   });
 
   test.describe('Undo Button Visibility', () => {
-    // Skip: Undo button visibility depends on complex draft state that's difficult to control in tests
+    // SKIP REASON: Requires specific draft state with curDraftRound.choice set.
+    // Test data setup is complex - need tournament mid-draft with picks made.
+    // The "no picks" test validates basic visibility logic for staff.
     test.skip('should show undo button for staff when picks have been made', async ({
       page,
       loginAdmin,
@@ -108,8 +110,7 @@ test.describe('Undo Pick', () => {
       await expect(dialog.locator('[data-testid="undoPickButton"]')).toBeVisible();
     });
 
-    // Skip: Flaky - depends on tournament state and tab navigation timing
-    test.skip('should NOT show undo button for non-staff users', async ({
+    test('should NOT show undo button for non-staff users', async ({
       page,
       loginUser,
     }) => {
@@ -196,7 +197,10 @@ test.describe('Undo Pick', () => {
   });
 
   test.describe('Undo Functionality', () => {
-    // Skip: Undo functionality depends on complex draft state that's difficult to control in tests
+    // SKIP REASON: Requires draft state with undoable picks. Complex setup:
+    // 1. Start draft, make pick, navigate back to see undo button
+    // 2. Click undo, confirm dialog, verify player returns to pool
+    // Test data doesn't reliably support this flow.
     test.skip('should undo the last pick when confirmed', async ({
       page,
       loginAdmin,
@@ -291,7 +295,9 @@ test.describe('Undo Pick', () => {
       await expect(dialog.locator('[data-testid="pickPlayerButton"]')).toBeVisible();
     });
 
-    // Skip: Undo functionality depends on complex draft state that's difficult to control in tests
+    // SKIP REASON: Dialog interaction test requiring complex draft state.
+    // Lower priority than core undo functionality test. Cancel button is
+    // standard AlertDialog component - no custom logic to test.
     test.skip('should cancel undo when cancel is clicked', async ({
       page,
       loginAdmin,

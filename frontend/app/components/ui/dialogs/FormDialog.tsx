@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from '~/components/ui/dialog';
 import { Button } from '~/components/ui/button';
+import { brandGradient } from '~/components/ui/buttons/styles';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { cn } from '~/lib/utils';
 
@@ -50,7 +51,7 @@ const sizeClasses: Record<FormDialogSize, string> = {
   md: 'sm:max-w-md',
   lg: 'sm:max-w-lg',
   xl: 'sm:max-w-2xl',
-  full: 'sm:max-w-4xl',
+  full: 'sm:max-w-6xl',
 };
 
 /**
@@ -99,12 +100,24 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           ref={ref}
-          className={cn('max-w-[calc(100%-2rem)]', sizeClasses[size], className)}
+          className={cn(
+            'max-w-[calc(100%-2rem)]',
+            // Disable zoom animation for large dialogs - causes expensive layout calculations
+            'data-[state=open]:!zoom-in-100 data-[state=closed]:!zoom-out-100',
+            sizeClasses[size],
+            className
+          )}
           data-testid={dataTestId}
         >
           <DialogHeader>
             <DialogTitle data-testid={titleTestId}>{title}</DialogTitle>
-            {description && <DialogDescription>{description}</DialogDescription>}
+            {description ? (
+              <DialogDescription>{description}</DialogDescription>
+            ) : (
+              <DialogDescription className="sr-only">
+                {title} dialog
+              </DialogDescription>
+            )}
           </DialogHeader>
 
           <ScrollArea className="max-h-[60vh] pr-4">
@@ -128,6 +141,7 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
                 type="submit"
                 onClick={handleSubmit}
                 disabled={isSubmitting}
+                className={brandGradient}
                 data-testid="form-dialog-submit"
               >
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

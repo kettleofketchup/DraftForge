@@ -2,7 +2,7 @@ import { Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { button3DVariants } from './styles';
+import { brandGradient, button3DVariants } from './styles';
 
 export type ConfirmButtonVariant = 'default' | 'destructive' | 'warning' | 'success';
 
@@ -58,7 +58,7 @@ const ConfirmButton = React.forwardRef<HTMLButtonElement, ConfirmButtonProps>(
       default: depth ? button3DVariants.primary : 'bg-primary text-primary-foreground hover:bg-primary/90',
       destructive: depth ? button3DVariants.destructive : 'bg-red-600 text-white hover:bg-red-500',
       warning: depth ? button3DVariants.warning : 'bg-orange-500 text-white hover:bg-orange-400',
-      success: depth ? button3DVariants.success : 'bg-green-600 text-white hover:bg-green-500',
+      success: depth ? button3DVariants.success : brandGradient,
     };
 
     const loadingText = {
