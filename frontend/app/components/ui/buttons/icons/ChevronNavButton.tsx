@@ -2,6 +2,7 @@ import { ChevronsLeft, ChevronsRight } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
+import { brandDepthColors, brandGradient, button3DBase } from '../styles';
 
 export type ChevronDirection = 'left' | 'right';
 
@@ -42,9 +43,9 @@ const ChevronNavButton = React.forwardRef<
       size="icon"
       className={cn(
         'rounded-full',
-        'bg-sky-700 hover:bg-sky-600 text-white',
-        'shadow-lg shadow-sky-900/50 border-b-4 border-b-sky-900',
-        'active:border-b-0 active:translate-y-1 transition-all duration-75',
+        brandGradient,
+        button3DBase,
+        brandDepthColors,
         '[&_svg]:text-white',
         className
       )}
