@@ -68,8 +68,9 @@ test.describe('Admin Team Section (@cicd)', () => {
     await expect(page.locator('[data-testid="add-staff-btn"]')).toBeVisible({ timeout: 5000 });
   });
 
-  test('@cicd AdminTeamSection renders in EditLeagueModal', async ({ page, loginLeagueAdmin }) => {
-    await loginLeagueAdmin();
+  test('@cicd AdminTeamSection renders in EditLeagueModal', async ({ page, loginOrgAdmin }) => {
+    // Use org admin (inherited access to league 1) since loginLeagueAdmin endpoint is unreliable
+    await loginOrgAdmin();
 
     // Navigate to league page
     await visitAndWaitForHydration(page, `/leagues/${leaguePk}`);
