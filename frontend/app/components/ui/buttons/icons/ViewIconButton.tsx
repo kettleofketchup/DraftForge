@@ -7,7 +7,7 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
-import { brandSecondary } from '../styles';
+import { brandDepthColors, brandGradient, button3DBase } from '../styles';
 
 export interface ViewIconButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {
@@ -16,7 +16,7 @@ export interface ViewIconButtonProps
 }
 
 /**
- * A view icon button with brand secondary styling and circular shape.
+ * A view icon button with brand gradient styling and circular shape.
  * Optionally displays a tooltip on hover.
  *
  * @example
@@ -32,10 +32,10 @@ const ViewIconButton = React.forwardRef<HTMLButtonElement, ViewIconButtonProps>(
         size="icon"
         className={cn(
           'rounded-full',
-          brandSecondary,
-          'shadow-sm',
-          'active:translate-y-0.5 transition-all duration-75',
-          '[&_svg]:text-violet-200',
+          brandGradient,
+          button3DBase,
+          brandDepthColors,
+          '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
           className
         )}
         {...props}
