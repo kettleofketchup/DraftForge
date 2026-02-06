@@ -81,11 +81,12 @@ function TabsTrigger({
         "data-[state=inactive]:hover:text-violet-100 dark:data-[state=inactive]:hover:text-violet-200",
         "data-[state=inactive]:hover:border-violet-500 dark:data-[state=inactive]:hover:border-violet-500",
         "data-[state=inactive]:hover:shadow-md data-[state=inactive]:hover:-translate-y-0.5",
-        // Active state - bright primary
-        "data-[state=active]:bg-violet-500 dark:data-[state=active]:bg-violet-400",
-        "data-[state=active]:text-white dark:data-[state=active]:text-violet-950",
-        "data-[state=active]:border data-[state=active]:border-violet-400 dark:data-[state=active]:border-violet-300",
-        "data-[state=active]:shadow-lg data-[state=active]:shadow-violet-500/50",
+        // Active state - brand gradient
+        "data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-blue-500",
+        "data-[state=active]:text-white",
+        "data-[state=active]:border-b-4 data-[state=active]:border-b-violet-700",
+        "data-[state=active]:shadow-lg data-[state=active]:shadow-violet-900/50",
+        "data-[state=active]:[text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]",
         "data-[state=active]:-translate-y-0.5",
         // Focus styles
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
