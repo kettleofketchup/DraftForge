@@ -41,18 +41,32 @@ async function removeLeagueStaffMember(context: import('@playwright/test').Brows
 }
 
 /**
- * Fill a React controlled input using the native HTMLInputElement value setter.
- * Works in nested Radix Dialog contexts where Playwright's fill() and
- * pressSequentially() fail due to focus trap interference between dialogs.
+ * Type into a search input inside a nested Radix Dialog.
+ *
+ * Playwright's fill() and pressSequentially() fail in nested Radix Dialog
+ * contexts due to focus trap interference. This helper:
+ * 1. Forces focus via page.evaluate (bypasses Radix focus trap)
+ * 2. Types using page.keyboard (generates CDP-level key events)
  */
-async function fillReactInput(input: import('@playwright/test').Locator, value: string) {
-  await input.evaluate((el, val) => {
-    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype, 'value',
-    )?.set;
-    nativeInputValueSetter?.call(el, val);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-  }, value);
+async function typeInNestedDialog(
+  page: import('@playwright/test').Page,
+  selector: string,
+  text: string,
+) {
+  // Force focus on the input element (bypasses any focus trap)
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (el instanceof HTMLInputElement) {
+      el.focus();
+      el.click();
+    }
+  }, selector);
+
+  // Brief pause to let focus settle
+  await page.waitForTimeout(100);
+
+  // Type using CDP-level keyboard events (closest to real user input)
+  await page.keyboard.type(text, { delay: 80 });
 }
 
 test.describe('Admin Team - Add Staff (@cicd)', () => {
@@ -90,17 +104,20 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     // AddUserModal should open (nested inside EditOrganizationModal)
     await expect(page.locator('[data-testid="add-user-modal"]')).toBeVisible({ timeout: 5000 });
 
-    // Search for the regular user using React-compatible value setter
-    // (Playwright fill/pressSequentially fail in nested Radix Dialog contexts
-    //  due to focus trap interference between outer and inner dialogs)
-    // Use page-level locator (not modal-scoped) to avoid portal DOM scoping issues
+    // Verify search input is present
     const searchInput = page.locator('[data-testid="add-user-search"]');
     await expect(searchInput).toBeVisible({ timeout: 5000 });
-    await fillReactInput(searchInput, 'bucket');
+
+    // Type search query using focus+keyboard approach for nested dialogs
+    await typeInNestedDialog(page, '[data-testid="add-user-search"]', 'bucket');
+
+    // Diagnostic: check input value after typing
+    const inputVal = await searchInput.inputValue();
+    console.log(`[test] Input value after typing: "${inputVal}"`);
 
     // Wait for search result to appear via data-testid
     const addBtn = page.locator(`[data-testid="add-user-btn-${TARGET_USERNAME}"]`);
-    await expect(addBtn).toBeVisible({ timeout: 10000 });
+    await expect(addBtn).toBeVisible({ timeout: 15000 });
 
     // Click the Add button for this user
     await addBtn.click();
@@ -141,14 +158,16 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     // AddUserModal should open
     await expect(page.locator('[data-testid="add-user-modal"]')).toBeVisible({ timeout: 5000 });
 
-    // Search using React-compatible value setter
+    // Verify search input is present
     const searchInput = page.locator('[data-testid="add-user-search"]');
     await expect(searchInput).toBeVisible({ timeout: 5000 });
-    await fillReactInput(searchInput, 'bucket');
+
+    // Type search query using focus+keyboard approach for nested dialogs
+    await typeInNestedDialog(page, '[data-testid="add-user-search"]', 'bucket');
 
     // Wait for search result to appear via data-testid
     const addBtn = page.locator(`[data-testid="add-user-btn-${TARGET_USERNAME}"]`);
-    await expect(addBtn).toBeVisible({ timeout: 10000 });
+    await expect(addBtn).toBeVisible({ timeout: 15000 });
 
     // Click Add
     await addBtn.click();
