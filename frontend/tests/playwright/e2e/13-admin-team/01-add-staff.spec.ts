@@ -42,11 +42,14 @@ async function getCsrfToken(context: import('@playwright/test').BrowserContext):
 /** Helper: add a user to org staff via API. */
 async function addOrgStaffMember(context: import('@playwright/test').BrowserContext, orgPk: number, userPk: number) {
   const csrfToken = await getCsrfToken(context);
+  console.log(`[add-staff] POST /organizations/${orgPk}/staff/ with user_id=${userPk}, csrfToken=${csrfToken ? 'present' : 'MISSING'}`);
   const resp = await context.request.post(`${API_URL}/organizations/${orgPk}/staff/`, {
     data: { user_id: userPk },
     headers: { 'X-CSRFToken': csrfToken },
   });
-  if (!resp.ok()) throw new Error(`Failed to add org staff: ${resp.status()}`);
+  const body = await resp.json().catch(() => resp.text());
+  console.log(`[add-staff] Response: ${resp.status()} ${JSON.stringify(body)}`);
+  if (!resp.ok()) throw new Error(`Failed to add org staff: ${resp.status()} ${JSON.stringify(body)}`);
 }
 
 /** Helper: remove a user from org staff via API (cleanup). */
