@@ -7,6 +7,7 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
+import { brandGradient, button3DBase } from '../styles';
 
 export interface PlusIconButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {
@@ -31,9 +32,9 @@ const PlusIconButton = React.forwardRef<HTMLButtonElement, PlusIconButtonProps>(
         size="icon"
         className={cn(
           'rounded-full',
-          'bg-emerald-600 hover:bg-emerald-500 text-white',
-          'shadow-lg shadow-emerald-900/50 border-b-4 border-b-emerald-800',
-          'active:border-b-0 active:translate-y-1 transition-all duration-75',
+          brandGradient,
+          button3DBase,
+          'border-b-violet-700 shadow-violet-900/50',
           '[&_svg]:text-white',
           className
         )}
