@@ -23,7 +23,10 @@ import {
 // Tournament PK fetched in beforeAll
 let tournamentPk: number;
 
-// Skip: All tests depend on bracket_linking tournament and bracket generation working correctly
+// SKIP REASON: Test data issue - bracket_linking tournament doesn't have generated bracket.
+// Same issue as bracket badges tests - tournaments show "No bracket generated yet".
+// Tests need bracket fixtures populated with actual bracket data (games, matches).
+// Feature: LinkSteamMatchModal.tsx exists and is implemented.
 test.describe.skip('Bracket Match Linking (e2e)', () => {
   test.beforeAll(async ({ browser }) => {
     // Get the tournament pk for the bracket linking test scenario
@@ -460,7 +463,8 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
       });
     });
 
-    // Skip: View Details tests are flaky due to bracket state not persisting reliably between describe blocks
+    // SKIP REASON: View Details tests depend on bracket state from previous describe blocks.
+    // E2E tests run in isolation - state doesn't persist between describe blocks.
     test.describe.skip('View Details Functionality', () => {
       test.beforeEach(async ({ page }) => {
         await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
@@ -500,7 +504,8 @@ test.describe.skip('Bracket Match Linking (e2e)', () => {
     });
   }); // End Staff User Tests
 
-  // Skip: Non-staff tests are flaky due to bracket state not persisting reliably
+  // SKIP REASON: Depends on bracket state from staff tests above.
+  // E2E tests run in isolation - state doesn't persist between describe blocks.
   test.describe.skip('Non-Staff User Access', () => {
     test.beforeEach(async ({ context, loginUser }) => {
       // Clear all storage to prevent stale user data from previous tests

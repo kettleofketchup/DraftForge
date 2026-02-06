@@ -133,7 +133,8 @@ class CustomUser(AbstractUser):
         self.discordId = data["user"]["id"]
         self.avatar = data["user"]["avatar"]
         self.discordUsername = data["user"]["username"]
-        self.nickname = data.get("nick", "")
+        # Use server nick first, then global_name, then empty string
+        self.nickname = data.get("nick") or data["user"].get("global_name") or ""
         return self
 
     def check_and_update_avatar(self):
@@ -1818,6 +1819,7 @@ class OrgLog(models.Model):
         ("remove_admin", "Remove Admin"),
         ("add_staff", "Add Staff"),
         ("remove_staff", "Remove Staff"),
+        ("add_member", "Add Member"),
         ("transfer_ownership", "Transfer Ownership"),
         ("create", "Create Organization"),
         ("update", "Update Organization"),
@@ -1871,6 +1873,7 @@ class LeagueLog(models.Model):
         ("remove_admin", "Remove Admin"),
         ("add_staff", "Add Staff"),
         ("remove_staff", "Remove Staff"),
+        ("add_member", "Add Member"),
         ("link_organization", "Link Organization"),
         ("unlink_organization", "Unlink Organization"),
         ("create", "Create League"),

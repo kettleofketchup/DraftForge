@@ -210,7 +210,9 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       }
     });
 
-    // Skip: This test is flaky due to timing issues with modal after reseed
+    // SKIP REASON: Timing issue - modal appears before reseed completes.
+    // Needs waitForLoadState coordination between reseed dialog close and
+    // next action. The winner selection test above validates core functionality.
     test.skip('should advance loser to losers bracket after winner selection', async ({
       page,
     }) => {

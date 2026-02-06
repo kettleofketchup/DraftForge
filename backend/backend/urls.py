@@ -52,9 +52,12 @@ from app.views import (
 )
 from app.views.admin_team import (
     add_league_admin,
+    add_league_member,
     add_league_staff,
     add_org_admin,
+    add_org_member,
     add_org_staff,
+    add_tournament_member,
     remove_league_admin,
     remove_league_staff,
     remove_org_admin,
@@ -248,6 +251,22 @@ urlpatterns = [
         "api/leagues/<int:league_id>/staff/<int:user_id>/",
         remove_league_staff,
         name="remove_league_staff",
+    ),
+    # Member management
+    path(
+        "api/organizations/<int:org_id>/members/",
+        add_org_member,
+        name="add_org_member",
+    ),
+    path(
+        "api/leagues/<int:league_id>/members/",
+        add_league_member,
+        name="add_league_member",
+    ),
+    path(
+        "api/tournaments/<int:tournament_id>/members/",
+        add_tournament_member,
+        name="add_tournament_member",
     ),
 ]
 

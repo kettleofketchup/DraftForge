@@ -10,8 +10,7 @@ const BASE_URL = 'https://localhost';
  * This was a regression where ALL_HERO_IDS was hardcoded to 1-138.
  */
 test.describe('Largo Hero Pick', () => {
-  // Skip: Flaky multi-context WebSocket test - hero selection requires stable connection sync
-  test.skip('should be able to pick Largo (ID 155) in draft', async () => {
+  test('should be able to pick Largo (ID 155) in draft', async () => {
     // Set longer timeout for this test
     test.setTimeout(120000);
 
@@ -130,9 +129,10 @@ test.describe('Largo Hero Pick', () => {
       ]);
       console.log('   Drafting phase started');
 
-      // Determine current picker
-      const teamAPicking = await pageA.locator('[data-testid="herodraft-team-a-picking"]').isVisible().catch(() => false);
-      const currentPicker = teamAPicking ? draftPageA : draftPageB;
+      // Determine current picker using the helper's isMyTurn method
+      const isAMyTurn = await draftPageA.isMyTurn();
+      const currentPicker = isAMyTurn ? draftPageA : draftPageB;
+      console.log(`   Current picker is: Captain ${isAMyTurn ? 'A' : 'B'}`);
 
       // =====================================================
       // THE ACTUAL TEST: Try to pick Largo (hero ID 155)

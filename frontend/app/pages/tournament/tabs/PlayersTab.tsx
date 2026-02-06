@@ -1,73 +1,57 @@
-import { memo, useState } from 'react';
-import { toast } from 'sonner';
-import { updateTournament } from '~/components/api/api';
-import type { TournamentType } from '~/components/tournament/types';
+import { Plus } from 'lucide-react';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { addTournamentMember } from '~/components/api/api';
+import type { AddMemberPayload } from '~/components/api/api';
+import { Button } from '~/components/ui/button';
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { UserType } from '~/components/user/types';
-import { User } from '~/components/user/user';
 import { UserList } from '~/components/user';
-import { getLogger } from '~/lib/logger';
+import { AddUserModal } from '~/components/user/AddUserModal';
 import { useUserStore } from '~/store/userStore';
+import { useOrgStore } from '~/store/orgStore';
 import { hasErrors } from '../hasErrors';
-import { AddPlayerModal } from './players/addPlayerModal';
-
-const log = getLogger('PlayersTab');
 
 export const PlayersTab: React.FC = memo(() => {
-  const allUsers = useUserStore((state) => state.users);
-  const [addPlayerQuery, setAddPlayerQuery] = useState('');
   const tournament = useUserStore((state) => state.tournament);
   const setTournament = useUserStore((state) => state.setTournament);
   const query = useUserStore((state) => state.userQuery);
   const setQuery = useUserStore((state) => state.setUserQuery);
+  const isStaff = useUserStore((state) => state.isStaff);
+  const currentOrg = useOrgStore((s) => s.currentOrg);
+  const [showAddUser, setShowAddUser] = useState(false);
 
-  // Get the organization ID from the tournament
-  const orgId = tournament?.organization_pk ?? undefined;
-  const addUserCallback = async (user: UserType) => {
-    log.debug(`Adding user: ${user.username}`);
-    // Implement the logic to remove the user from the tournament
-    if (user.pk && tournament.user_ids && user.pk in tournament.user_ids) {
-      log.error('User already exists in the tournament');
-      return;
-    }
-    const updatedUsers = tournament.users?.map((u) => u.pk);
+  const tournamentUsers = tournament?.users ?? [];
 
-    const thisUser = new User(user as UserType);
-    if (!thisUser.pk) {
-      thisUser.dbFetch();
-    }
-    if (updatedUsers?.includes(thisUser.pk)) {
-      log.error('User in the  tournament');
-      return;
-    }
-    const updatedTournament = {
-      user_ids: [...(updatedUsers || []), thisUser.pk],
-    };
+  // AddUserModal callbacks
+  const handleAddMember = useCallback(
+    async (payload: AddMemberPayload) => {
+      if (!tournament?.pk) throw new Error('No tournament');
+      const user = await addTournamentMember(tournament.pk, payload);
+      // Optimistic update — append user to tournament's users array
+      const current = useUserStore.getState().tournament;
+      if (current) {
+        setTournament({
+          ...current,
+          users: [...(current.users ?? []), user],
+        });
+      }
+      return user;
+    },
+    [tournament?.pk, setTournament]
+  );
 
-    if (tournament.pk === undefined || tournament.pk === null) {
-      log.error('Tournament primary key is missing');
-      return;
-    }
-    toast.promise(
-      updateTournament(
-        tournament.pk,
-        updatedTournament as Partial<TournamentType>,
-      ),
-      {
-        loading: `Adding User ${thisUser.username}.`,
-        success: (data) => {
-          setTournament(data);
-          return `${thisUser.username} has been added`;
-        },
-        error: (err: any) => {
-          log.error('Failed to update tournament', err);
-          return `${thisUser.username} could not be added`;
-        },
-      },
-    );
+  const addedPkSet = useMemo(
+    () => new Set(tournamentUsers.map((u) => u.pk)),
+    [tournamentUsers]
+  );
+  const isUserAdded = useCallback(
+    (user: UserType) => user.pk != null && addedPkSet.has(user.pk),
+    [addedPkSet]
+  );
 
-    setQuery(''); // Reset query after adding user
-  };
+  const hasDiscordServer = Boolean(currentOrg?.discord_server_id);
+  const canEdit = isStaff();
+
   // Grid columns for tournament players
   const gridCols = 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
   return (
@@ -77,27 +61,28 @@ export const PlayersTab: React.FC = memo(() => {
       <div className="grid grid-cols-2 gap-5 items-start pt-5  ">
         <div className="flex self-center place-self-stretch">
           <SearchUserDropdown
-            users={tournament?.users || []}
+            users={tournamentUsers}
             query={query}
             setQuery={(val) => typeof val === 'string' ? setQuery(val) : setQuery(val(''))}
             data-testid="playerSearchDropdown"
           />
         </div>
         <div className="flex px-5 place-self-end">
-          <AddPlayerModal
-            users={allUsers}
-            query={addPlayerQuery}
-            setQuery={setAddPlayerQuery}
-            addPlayerCallback={addUserCallback}
-            addedUsers={tournament.users ?? undefined}
-            orgId={orgId}
-          />
+          {canEdit && (
+            <Button
+              onClick={() => setShowAddUser(true)}
+              data-testid="tournamentAddPlayerBtn"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Player
+            </Button>
+          )}
         </div>
       </div>
 
       <div className="mt-4">
         <UserList
-          users={tournament?.users ?? []}
+          users={tournamentUsers}
           searchQuery={query}
           compact={true}
           deleteButtonType="tournament"
@@ -105,6 +90,22 @@ export const PlayersTab: React.FC = memo(() => {
           emptyMessage="No players in this tournament"
         />
       </div>
+
+      {canEdit && (
+        <AddUserModal
+          open={showAddUser}
+          onOpenChange={setShowAddUser}
+          title={`Add Player to ${tournament?.name || 'Tournament'}`}
+          entityContext={{
+            orgId: currentOrg?.pk,
+            leagueId: tournament?.league_pk ?? undefined,
+            tournamentId: tournament?.pk ?? undefined,
+          }}
+          onAdd={handleAddMember}
+          isAdded={isUserAdded}
+                    hasDiscordServer={hasDiscordServer}
+        />
+      )}
     </div>
   );
 });

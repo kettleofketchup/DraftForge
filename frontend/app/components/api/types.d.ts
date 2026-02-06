@@ -1,3 +1,15 @@
+import type { UserType } from '~/index';
+
+export interface AddMemberPayload {
+  user_id?: number;
+  discord_id?: string;  // Backend looks up Discord data from its own cache
+}
+
+export interface AddUserResponse {
+  status: string;
+  user: UserType;
+}
+
 export interface CreateTeamFromCaptainAPI {
   tournament_pk: number;
   user_pk: number;

@@ -34,13 +34,17 @@ export function meta({ data }: Route.MetaArgs) {
     description: 'Organization profile and events',
   });
 }
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
+import { addOrgMember } from '~/components/api/api';
+import type { AddMemberPayload } from '~/components/api/api';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
 import { ClaimsTab, EditOrganizationModal, useOrganization } from '~/components/organization';
 import { Button } from '~/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
 import { UserList } from '~/components/user';
+import { AddUserModal } from '~/components/user/AddUserModal';
+import type { UserType } from '~/components/user/types';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 
@@ -64,10 +68,12 @@ export default function OrganizationDetailPage() {
   const currentUser = useUserStore((state) => state.currentUser);
   const [createLeagueOpen, setCreateLeagueOpen] = useState(false);
   const [editOrgOpen, setEditOrgOpen] = useState(false);
+  const [showAddUser, setShowAddUser] = useState(false);
   const [activeTab, setActiveTab] = useUrlTabs('leagues');
 
   // Org users from store
   const { orgUsers, orgUsersLoading, orgUsersOrgId, getOrgUsers } = useOrgStore();
+  const currentOrg = useOrgStore((s) => s.currentOrg);
 
   // Fetch org users when switching to users tab
   useEffect(() => {
@@ -80,6 +86,34 @@ export default function OrganizationDetailPage() {
     currentUser?.is_superuser ||
     organization?.owner?.pk === currentUser?.pk ||
     organization?.admins?.some((a) => a.pk === currentUser?.pk);
+
+  // Staff can add members but not edit org settings
+  const canAddMembers =
+    isOrgAdmin ||
+    organization?.staff?.some((s) => s.pk === currentUser?.pk);
+
+  // AddUserModal callbacks
+  const handleAddMember = useCallback(
+    async (payload: AddMemberPayload) => {
+      if (!pk) throw new Error('No organization');
+      const user = await addOrgMember(pk, payload);
+      const { orgUsers, setOrgUsers } = useOrgStore.getState();
+      setOrgUsers([...orgUsers, user]);
+      return user;
+    },
+    [pk]
+  );
+
+  const addedPkSet = useMemo(
+    () => new Set(orgUsers.map((u) => u.pk)),
+    [orgUsers]
+  );
+  const isUserAdded = useCallback(
+    (user: UserType) => user.pk != null && addedPkSet.has(user.pk),
+    [addedPkSet]
+  );
+
+  const hasDiscordServer = Boolean(organization?.discord_server_id);
 
   if (orgLoading) {
     return (
@@ -212,9 +246,21 @@ export default function OrganizationDetailPage() {
           <TabsContent value="users">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Organization Members</h2>
-              <span className="text-sm text-muted-foreground">
-                {orgUsers.length} {orgUsers.length === 1 ? 'member' : 'members'}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground">
+                  {orgUsers.length} {orgUsers.length === 1 ? 'member' : 'members'}
+                </span>
+                {canAddMembers && (
+                  <Button
+                    size="sm"
+                    onClick={() => setShowAddUser(true)}
+                    data-testid="org-add-member-btn"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Member
+                  </Button>
+                )}
+              </div>
             </div>
 
             <UserList
@@ -248,6 +294,18 @@ export default function OrganizationDetailPage() {
             onOpenChange={setEditOrgOpen}
             organization={organization}
             onSuccess={refetch}
+          />
+        )}
+
+        {canAddMembers && pk && (
+          <AddUserModal
+            open={showAddUser}
+            onOpenChange={setShowAddUser}
+            title={`Add Member to ${organization?.name || 'Organization'}`}
+            entityContext={{ orgId: pk }}
+            onAdd={handleAddMember}
+            isAdded={isUserAdded}
+                        hasDiscordServer={hasDiscordServer}
           />
         )}
     </div>
