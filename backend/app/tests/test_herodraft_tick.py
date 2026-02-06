@@ -15,6 +15,8 @@ from app.tasks.herodraft_tick import (
     _lock,
     broadcast_tick,
     check_timeout,
+    get_redis_client,
+    should_continue_ticking,
     start_tick_broadcaster,
     stop_tick_broadcaster,
 )
@@ -400,3 +402,85 @@ class BroadcastTickTestCase(TransactionTestCase):
 
         # Should not have called group_send
         self.assertFalse(mock_channel_layer.group_send.called)
+
+
+class ShouldContinueTickingTestCase(TransactionTestCase):
+    """Test cases for should_continue_ticking logic."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.captain1 = User.objects.create_user(
+            username="captain1",
+            password="testpass123",
+        )
+        self.captain2 = User.objects.create_user(
+            username="captain2",
+            password="testpass123",
+        )
+        self.tournament = Tournament.objects.create(
+            name="Test Tournament",
+            date_played=timezone.now(),
+        )
+        self.team1 = Team.objects.create(
+            tournament=self.tournament,
+            name="Team 1",
+            captain=self.captain1,
+        )
+        self.team2 = Team.objects.create(
+            tournament=self.tournament,
+            name="Team 2",
+            captain=self.captain2,
+        )
+        self.game = Game.objects.create(
+            tournament=self.tournament,
+            radiant_team=self.team1,
+            dire_team=self.team2,
+        )
+        self.draft = HeroDraft.objects.create(
+            game=self.game,
+            state="drafting",
+        )
+        self.r = get_redis_client()
+
+    def test_resuming_continues_with_zero_connections(self):
+        """Tick loop must continue in RESUMING state even with no WebSocket connections.
+
+        Regression test for #94: admin pause → resume with 0 connections caused
+        the tick loop to exit before completing the RESUMING → DRAFTING countdown.
+        """
+        self.draft.state = "resuming"
+        self.draft.resuming_until = timezone.now() + timedelta(seconds=3)
+        self.draft.save()
+
+        # Ensure connection count is 0
+        conn_key = f"herodraft:connections:{self.draft.id}"
+        self.r.delete(conn_key)
+
+        should_continue, reason = should_continue_ticking(self.draft.id, self.r)
+
+        self.assertTrue(should_continue)
+        self.assertEqual(reason, "")
+
+    def test_drafting_stops_with_zero_connections(self):
+        """Tick loop should stop in DRAFTING state when no connections exist."""
+        self.draft.state = "drafting"
+        self.draft.save()
+
+        # Ensure connection count is 0
+        conn_key = f"herodraft:connections:{self.draft.id}"
+        self.r.delete(conn_key)
+
+        should_continue, reason = should_continue_ticking(self.draft.id, self.r)
+
+        self.assertFalse(should_continue)
+        self.assertEqual(reason, "no_connections")
+
+    def test_paused_state_stops_ticking(self):
+        """Tick loop should stop when draft is in PAUSED state."""
+        self.draft.state = "paused"
+        self.draft.save()
+
+        should_continue, reason = should_continue_ticking(self.draft.id, self.r)
+
+        self.assertFalse(should_continue)
+        self.assertEqual(reason, "draft_state_paused")

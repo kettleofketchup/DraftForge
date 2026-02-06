@@ -424,18 +424,23 @@ def should_continue_ticking(draft_id: int, r: redis.Redis) -> tuple[bool, str]:
     """
     from app.models import HeroDraft, HeroDraftState
 
-    # Check connection count
-    conn_count = get_connection_count(draft_id)
-    if conn_count <= 0:
-        return False, "no_connections"
-
-    # Check draft state - allow DRAFTING and RESUMING (countdown before resume)
+    # Check draft state first - allow DRAFTING and RESUMING (countdown before resume)
     try:
         draft = HeroDraft.objects.get(id=draft_id)
         if draft.state not in (HeroDraftState.DRAFTING, HeroDraftState.RESUMING):
             return False, f"draft_state_{draft.state}"
     except HeroDraft.DoesNotExist:
         return False, "draft_not_found"
+
+    # RESUMING countdown must complete regardless of connection count,
+    # because admins resume via REST API and clients may reconnect after.
+    if draft.state == HeroDraftState.RESUMING:
+        return True, ""
+
+    # For DRAFTING, stop if no WebSocket clients are connected
+    conn_count = get_connection_count(draft_id)
+    if conn_count <= 0:
+        return False, "no_connections"
 
     return True, ""
 
