@@ -87,6 +87,11 @@ export default function OrganizationDetailPage() {
     organization?.owner?.pk === currentUser?.pk ||
     organization?.admins?.some((a) => a.pk === currentUser?.pk);
 
+  // Staff can add members but not edit org settings
+  const canAddMembers =
+    isOrgAdmin ||
+    organization?.staff?.some((s) => s.pk === currentUser?.pk);
+
   // AddUserModal callbacks
   const handleAddMember = useCallback(
     async (payload: AddMemberPayload) => {
@@ -108,7 +113,7 @@ export default function OrganizationDetailPage() {
     [addedPkSet]
   );
 
-  const hasDiscordServer = Boolean(currentOrg?.discord_server_id);
+  const hasDiscordServer = Boolean(organization?.discord_server_id);
 
   if (orgLoading) {
     return (
@@ -245,7 +250,7 @@ export default function OrganizationDetailPage() {
                 <span className="text-sm text-muted-foreground">
                   {orgUsers.length} {orgUsers.length === 1 ? 'member' : 'members'}
                 </span>
-                {isOrgAdmin && (
+                {canAddMembers && (
                   <Button
                     size="sm"
                     onClick={() => setShowAddUser(true)}
@@ -292,7 +297,7 @@ export default function OrganizationDetailPage() {
           />
         )}
 
-        {isOrgAdmin && pk && (
+        {canAddMembers && pk && (
           <AddUserModal
             open={showAddUser}
             onOpenChange={setShowAddUser}
@@ -300,8 +305,7 @@ export default function OrganizationDetailPage() {
             entityContext={{ orgId: pk }}
             onAdd={handleAddMember}
             isAdded={isUserAdded}
-            entityLabel={organization?.name || 'Organization'}
-            hasDiscordServer={hasDiscordServer}
+                        hasDiscordServer={hasDiscordServer}
           />
         )}
     </div>

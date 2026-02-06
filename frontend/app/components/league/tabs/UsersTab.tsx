@@ -91,8 +91,7 @@ export const UsersTab: React.FC<Props> = ({ leaguePk }) => {
           }}
           onAdd={handleAddMember}
           isAdded={isUserAdded}
-          entityLabel={currentLeague?.name || 'League'}
-          hasDiscordServer={hasDiscordServer}
+                    hasDiscordServer={hasDiscordServer}
         />
       )}
     </div>

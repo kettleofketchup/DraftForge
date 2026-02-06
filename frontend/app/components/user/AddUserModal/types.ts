@@ -14,7 +14,6 @@ export interface AddUserModalProps {
   entityContext: EntityContext;
   onAdd: (payload: AddMemberPayload) => Promise<UserType>;
   isAdded: (user: UserType) => boolean;
-  entityLabel: string;
   /** Whether the org has a Discord server configured (checks discord_server_id) */
   hasDiscordServer: boolean;
 }
@@ -24,7 +23,8 @@ export interface SiteUserResultsProps {
   loading: boolean;
   onAdd: (payload: AddMemberPayload) => Promise<void>;
   isAdded: (user: UserType) => boolean;
-  entityLabel: string;
+  /** Current query length to show "type at least N chars" message */
+  queryLength: number;
 }
 
 export interface DiscordMemberResultsProps {
@@ -33,7 +33,6 @@ export interface DiscordMemberResultsProps {
   onAdd: (payload: AddMemberPayload) => Promise<void>;
   isAdded: (user: UserType) => boolean;
   isDiscordUserAdded: (discordId: string) => boolean;
-  entityLabel: string;
   orgId?: number;
   onRefresh: () => Promise<void>;
   refreshing: boolean;

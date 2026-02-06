@@ -1,18 +1,19 @@
 import React, { useCallback, useState } from 'react';
-import { Button } from '~/components/ui/button';
 import { Badge } from '~/components/ui/badge';
+import { ConfirmButton } from '~/components/ui/buttons';
+import { ScrollArea } from '~/components/ui/scroll-area';
 import { UserStrip } from '~/components/user/UserStrip';
 import { toast } from 'sonner';
-import type { SearchUserResult, AddMemberPayload } from '~/components/api/api';
+import type { SearchUserResult } from '~/components/api/api';
 import type { SiteUserResultsProps } from './types';
 
 function MembershipBadge({ result }: { result: SearchUserResult }) {
   if (!result.membership) return null;
 
   const config: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline'; className: string }> = {
-    league: { label: 'League Member', variant: 'secondary', className: 'text-info' },
-    org: { label: 'Org Member', variant: 'secondary', className: 'text-success' },
-    other_org: { label: `Other: ${result.membership_label}`, variant: 'outline', className: 'text-warning' },
+    league: { label: 'League Member', variant: 'outline', className: 'border-info text-info' },
+    org: { label: 'Org Member', variant: 'outline', className: 'border-success text-success' },
+    other_org: { label: `Other: ${result.membership_label}`, variant: 'outline', className: 'border-warning text-warning' },
   };
 
   const { label, variant, className } = config[result.membership] ?? {
@@ -28,12 +29,14 @@ function MembershipBadge({ result }: { result: SearchUserResult }) {
   );
 }
 
+const MIN_QUERY_LENGTH = 3;
+
 export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
   results,
   loading,
   onAdd,
   isAdded,
-  entityLabel,
+  queryLength,
 }) => {
   const [addingPk, setAddingPk] = useState<number | null>(null);
 
@@ -63,6 +66,14 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
     );
   }
 
+  if (queryLength < MIN_QUERY_LENGTH) {
+    return (
+      <div className="py-8 text-center text-sm text-muted-foreground">
+        Type at least {MIN_QUERY_LENGTH} characters to search
+      </div>
+    );
+  }
+
   if (results.length === 0) {
     return (
       <div className="py-8 text-center text-sm text-muted-foreground">
@@ -72,37 +83,41 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      {results.map((result) => {
-        const added = result.pk ? isAdded(result) : false;
+    <ScrollArea className="h-96">
+      <div className="flex flex-col gap-1 pr-4">
+        {results.map((result) => {
+          const added = result.pk ? isAdded(result) : false;
 
-        return (
-          <UserStrip
-            key={result.pk}
-            user={result}
-            compact
-            contextSlot={<MembershipBadge result={result} />}
-            actionSlot={
-              added ? (
-                <span className="text-xs text-muted-foreground">
-                  Already in {entityLabel}
-                </span>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleAdd(result)}
-                  disabled={addingPk === result.pk}
-                  data-testid={`add-user-btn-${result.username}`}
-                >
-                  {addingPk === result.pk ? '...' : '+'}
-                </Button>
-              )
-            }
-            className={added ? 'opacity-50' : ''}
-          />
-        );
-      })}
-    </div>
+          return (
+            <UserStrip
+              key={result.pk}
+              user={result}
+              compact
+              showPositions={false}
+              contextSlot={<MembershipBadge result={result} />}
+              actionSlot={
+                added ? (
+                  <span className="text-xs text-muted-foreground">
+                    Already added
+                  </span>
+                ) : (
+                  <ConfirmButton
+                    variant="success"
+                    size="sm"
+                    depth={false}
+                    onClick={() => handleAdd(result)}
+                    loading={addingPk === result.pk}
+                    data-testid={`add-user-btn-${result.username}`}
+                  >
+                    +
+                  </ConfirmButton>
+                )
+              }
+              className={added ? 'opacity-50' : ''}
+            />
+          );
+        })}
+      </div>
+    </ScrollArea>
   );
 };

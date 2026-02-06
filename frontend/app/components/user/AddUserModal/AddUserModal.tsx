@@ -27,7 +27,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
   entityContext,
   onAdd,
   isAdded,
-  entityLabel,
   hasDiscordServer,
 }) => {
   const [query, setQuery] = useState('');
@@ -92,9 +91,11 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       }
       if (payload.discord_id) {
         setAddedDiscordIds((prev) => new Set(prev).add(payload.discord_id!));
+        // Invalidate site user search so the new user appears there too
+        queryClient.invalidateQueries({ queryKey: ['userSearch'] });
       }
     },
-    [onAdd]
+    [onAdd, queryClient]
   );
 
   const checkIsAdded = useCallback(
@@ -125,7 +126,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       title={title}
       onSubmit={() => handleOpenChange(false)}
       submitLabel="Done"
-      size="xl"
+      size="full"
       showFooter={false}
       data-testid="add-user-modal"
     >
@@ -140,6 +141,19 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           autoFocus
           data-testid="add-user-search"
         />
+        {/* Loading bar */}
+        {siteQuery.isFetching && (
+          <div className="absolute bottom-0 left-0 right-0 h-0.5 overflow-hidden rounded-b">
+            <div className="h-full w-1/3 bg-primary animate-[loading_1s_ease-in-out_infinite]"
+                 style={{ animation: 'loading 1s ease-in-out infinite' }} />
+            <style>{`
+              @keyframes loading {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(400%); }
+              }
+            `}</style>
+          </div>
+        )}
         {query.length > 0 && query.length < MIN_QUERY_LENGTH && (
           <p className="mt-1 text-xs text-muted-foreground">
             Type at least {MIN_QUERY_LENGTH} characters to search
@@ -147,8 +161,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
         )}
       </div>
 
-      {/* Desktop: two columns, Mobile: tabs */}
-      <div className="hidden md:grid md:grid-cols-2 md:gap-4">
+      {/* Desktop: two columns */}
+      <div className="hidden lg:grid lg:grid-cols-2 lg:gap-4">
         <div>
           <h3 className="mb-2 text-sm font-medium text-foreground">
             Site Users
@@ -158,7 +172,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             loading={siteQuery.isFetching}
             onAdd={handleAdd}
             isAdded={checkIsAdded}
-            entityLabel={entityLabel}
+            queryLength={debouncedQuery.length}
           />
         </div>
         <div>
@@ -171,7 +185,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             onAdd={handleAdd}
             isAdded={checkIsAdded}
             isDiscordUserAdded={checkIsDiscordUserAdded}
-            entityLabel={entityLabel}
             orgId={entityContext.orgId}
             onRefresh={handleRefresh}
             refreshing={refreshing}
@@ -180,8 +193,8 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
         </div>
       </div>
 
-      {/* Mobile: tabs */}
-      <div className="md:hidden">
+      {/* Mobile/Tablet: tabs */}
+      <div className="lg:hidden">
         <Tabs defaultValue="site">
           <TabsList className="w-full">
             <TabsTrigger value="site" className="flex-1">
@@ -197,7 +210,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               loading={siteQuery.isFetching}
               onAdd={handleAdd}
               isAdded={checkIsAdded}
-              entityLabel={entityLabel}
+              queryLength={debouncedQuery.length}
             />
           </TabsContent>
           <TabsContent value="discord">
@@ -207,7 +220,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               onAdd={handleAdd}
               isAdded={checkIsAdded}
               isDiscordUserAdded={checkIsDiscordUserAdded}
-              entityLabel={entityLabel}
               orgId={entityContext.orgId}
               onRefresh={handleRefresh}
               refreshing={refreshing}

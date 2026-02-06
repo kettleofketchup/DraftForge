@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Button } from '~/components/ui/button';
+import { ConfirmButton } from '~/components/ui/buttons';
 import type { DiscordSearchResult } from '~/components/api/api';
 import { cn } from '~/lib/utils';
 
@@ -83,14 +83,15 @@ export const DiscordMemberStrip = React.memo(function DiscordMemberStrip({
             {disabledLabel || 'Added'}
           </span>
         ) : (
-          <Button
-            variant="outline"
+          <ConfirmButton
+            variant="success"
             size="sm"
+            depth={false}
             onClick={handleClick}
-            disabled={adding}
+            loading={adding}
           >
-            {adding ? '...' : '+'}
-          </Button>
+            +
+          </ConfirmButton>
         )}
       </div>
     </div>

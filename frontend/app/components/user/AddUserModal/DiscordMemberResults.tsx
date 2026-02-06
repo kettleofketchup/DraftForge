@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { Button } from '~/components/ui/button';
+import { ScrollArea } from '~/components/ui/scroll-area';
 import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { DiscordMemberStrip } from '~/components/user/DiscordMemberStrip';
@@ -10,9 +11,7 @@ export const DiscordMemberResults: React.FC<DiscordMemberResultsProps> = ({
   results,
   loading,
   onAdd,
-  isAdded,
   isDiscordUserAdded,
-  entityLabel,
   onRefresh,
   refreshing,
   hasDiscordServer,
@@ -73,22 +72,24 @@ export const DiscordMemberResults: React.FC<DiscordMemberResultsProps> = ({
           No Discord members found
         </div>
       ) : (
-        <div className="flex flex-col gap-1">
-          {results.map((member) => {
-            const isDisabled = isDiscordUserAdded(member.user.id);
+        <ScrollArea className="h-96">
+          <div className="flex flex-col gap-1 pr-4">
+            {results.map((member) => {
+              const isDisabled = isDiscordUserAdded(member.user.id);
 
-            return (
-              <DiscordMemberStrip
-                key={member.user.id}
-                member={member}
-                onAdd={handleAdd}
-                disabled={isDisabled}
-                disabledLabel={`Already in ${entityLabel}`}
-                adding={addingId === member.user.id}
-              />
-            );
-          })}
-        </div>
+              return (
+                <DiscordMemberStrip
+                  key={member.user.id}
+                  member={member}
+                  onAdd={handleAdd}
+                  disabled={isDisabled}
+                  disabledLabel="Already added"
+                  adding={addingId === member.user.id}
+                />
+              );
+            })}
+          </div>
+        </ScrollArea>
       )}
     </div>
   );

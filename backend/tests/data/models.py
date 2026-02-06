@@ -62,6 +62,7 @@ class TestOrganization(BaseModel):
     rules_template: str = ""
     timezone: str = "America/New_York"
     default_league_id: int | None = None
+    discord_server_id: str | None = None  # Discord server ID for the organization
 
 
 class TestLeague(BaseModel):

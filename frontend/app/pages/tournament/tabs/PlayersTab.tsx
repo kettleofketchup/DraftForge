@@ -103,8 +103,7 @@ export const PlayersTab: React.FC = memo(() => {
           }}
           onAdd={handleAddMember}
           isAdded={isUserAdded}
-          entityLabel={tournament?.name || 'Tournament'}
-          hasDiscordServer={hasDiscordServer}
+                    hasDiscordServer={hasDiscordServer}
         />
       )}
     </div>
