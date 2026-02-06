@@ -40,32 +40,6 @@ async function removeLeagueStaffMember(context: import('@playwright/test').Brows
   await context.request.delete(`${API_URL}/leagues/${leaguePk}/staff/${userPk}/`);
 }
 
-/** Diagnostic: verify search API works directly via context.request. */
-async function verifySearchAPI(context: import('@playwright/test').BrowserContext, orgPk: number) {
-  const searchUrl = `${API_URL}/users/search/?q=bucket&org_id=${orgPk}`;
-  console.log(`[diag] Calling search API directly: ${searchUrl}`);
-  const resp = await context.request.get(searchUrl);
-  const status = resp.status();
-  console.log(`[diag] Search API status: ${status}`);
-  if (!resp.ok()) {
-    const body = await resp.text();
-    console.error(`[diag] Search API error body: ${body}`);
-    throw new Error(`Search API returned ${status}: ${body.slice(0, 200)}`);
-  }
-  const data = await resp.json();
-  console.log(`[diag] Search API returned ${data.length} results`);
-  if (data.length > 0) {
-    console.log(`[diag] First result: ${JSON.stringify(data[0])}`);
-  }
-  const found = data.find((u: { username?: string }) => u.username === TARGET_USERNAME);
-  if (!found) {
-    console.error(`[diag] Target user "${TARGET_USERNAME}" NOT found in results. Usernames: ${data.map((u: { username?: string }) => u.username).join(', ')}`);
-  } else {
-    console.log(`[diag] Target user "${TARGET_USERNAME}" found in results`);
-  }
-  return data;
-}
-
 test.describe('Admin Team - Add Staff (@cicd)', () => {
   let orgPk: number;
   let leaguePk: number;
@@ -80,9 +54,6 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
 
   test('@cicd org admin can add staff via AdminTeamSection modal', async ({ page, loginOrgAdmin }) => {
     await loginOrgAdmin();
-
-    // Diagnostic: verify search API works directly before UI test
-    await verifySearchAPI(page.context(), orgPk);
 
     // Navigate to org page
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
@@ -105,10 +76,35 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     const modal = page.locator('[data-testid="add-user-modal"]');
     await expect(modal).toBeVisible({ timeout: 5000 });
 
-    // Search for the regular user (username: bucketoffish55)
+    // Search for the regular user - click to focus, then type character by character
+    // (fill() may not properly trigger React state updates in nested dialog context)
     const searchInput = modal.locator('[data-testid="add-user-search"]');
     await expect(searchInput).toBeVisible();
-    await searchInput.fill('bucket');
+    await searchInput.click();
+
+    // Set up response listener BEFORE typing to capture the search API call
+    const searchResponsePromise = page.waitForResponse(
+      (resp) => resp.url().includes('/users/search/') && resp.status() === 200,
+      { timeout: 15000 },
+    ).catch((e) => {
+      console.error('[test] Search API response never received from page XHR:', e.message);
+      return null;
+    });
+
+    await searchInput.pressSequentially('bucket', { delay: 50 });
+
+    // Wait for the search API response from the page
+    const searchResponse = await searchResponsePromise;
+    if (searchResponse) {
+      const body = await searchResponse.json();
+      console.log(`[test] Page search XHR returned ${body.length} results`);
+    } else {
+      // If no response, try using fill() as fallback
+      console.log('[test] pressSequentially did not trigger search, trying fill()');
+      await searchInput.fill('');
+      await searchInput.fill('bucket');
+      await page.waitForTimeout(1000);
+    }
 
     // Wait for search result to appear via data-testid
     const addBtn = modal.locator(`[data-testid="add-user-btn-${TARGET_USERNAME}"]`);
@@ -154,10 +150,31 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
     const modal = page.locator('[data-testid="add-user-modal"]');
     await expect(modal).toBeVisible({ timeout: 5000 });
 
-    // Search for the regular user
+    // Search - click to focus, then type character by character
     const searchInput = modal.locator('[data-testid="add-user-search"]');
     await expect(searchInput).toBeVisible();
-    await searchInput.fill('bucket');
+    await searchInput.click();
+
+    const searchResponsePromise = page.waitForResponse(
+      (resp) => resp.url().includes('/users/search/') && resp.status() === 200,
+      { timeout: 15000 },
+    ).catch((e) => {
+      console.error('[test] Search API response never received from page XHR:', e.message);
+      return null;
+    });
+
+    await searchInput.pressSequentially('bucket', { delay: 50 });
+
+    const searchResponse = await searchResponsePromise;
+    if (searchResponse) {
+      const body = await searchResponse.json();
+      console.log(`[test] Page search XHR returned ${body.length} results`);
+    } else {
+      console.log('[test] pressSequentially did not trigger search, trying fill()');
+      await searchInput.fill('');
+      await searchInput.fill('bucket');
+      await page.waitForTimeout(1000);
+    }
 
     // Wait for search result to appear via data-testid
     const addBtn = modal.locator(`[data-testid="add-user-btn-${TARGET_USERNAME}"]`);
