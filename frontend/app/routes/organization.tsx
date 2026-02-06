@@ -160,6 +160,7 @@ export default function OrganizationDetailPage() {
                     <PrimaryButton
                       size="sm"
                       onClick={() => setEditOrgOpen(true)}
+                      data-testid="edit-organization-button"
                     >
                       <Pencil className="w-4 h-4 mr-2" />
                       Edit
