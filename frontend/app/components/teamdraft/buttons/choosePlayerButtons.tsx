@@ -11,7 +11,7 @@ import {
   AlertDialogTrigger,
 } from '~/components/ui/alert-dialog';
 import { Button } from '~/components/ui/button';
-import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
+import { CancelButton, ConfirmButton, PrimaryButton } from '~/components/ui/buttons';
 import type { UserType } from '~/index';
 import { DisplayName } from '~/components/user/avatar';
 import { getLogger } from '~/lib/logger';
@@ -130,7 +130,7 @@ export const ChoosePlayerButton: React.FC<{
       <div data-testid="available-player">
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button size="sm" className="text-xs px-2" data-testid="pickPlayerButton">Pick</Button>
+            <PrimaryButton size="sm" className="text-xs px-2" data-testid="pickPlayerButton">Pick</PrimaryButton>
           </AlertDialogTrigger>
           <AlertDialogContent className="bg-green-900 border-green-700">
             <AlertDialogHeader>
