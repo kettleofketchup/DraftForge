@@ -2,7 +2,7 @@ import { Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { addLeagueMember } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
-import { Button } from '~/components/ui/button';
+import { PrimaryButton } from '~/components/ui/buttons';
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import type { UserType } from '~/components/user/types';
@@ -60,14 +60,14 @@ export const UsersTab: React.FC<Props> = ({ leaguePk }) => {
             {leagueUsers.length} {leagueUsers.length === 1 ? 'member' : 'members'}
           </span>
           {canEdit && (
-            <Button
+            <PrimaryButton
               size="sm"
               onClick={() => setShowAddUser(true)}
               data-testid="league-add-member-btn"
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Member
-            </Button>
+            </PrimaryButton>
           )}
         </div>
       </div>
