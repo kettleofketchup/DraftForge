@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { UserClassType, UserType } from '~/components/user';
+import { brandErrorBg, brandErrorCard } from '~/components/ui/buttons';
 import UserEditModal from '~/components/user/userCard/editModal';
 import { getLogger } from '~/lib/logger';
+import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 const log = getLogger('hasErrors');
 
@@ -57,7 +59,7 @@ export const hasErrors = () => {
   return (
     <>
       {usersWithIssues.length > 0 && (
-        <div className="flex flex-col items-start justify-center p-4 bg-red-950 rounded-lg shadow-md w-full mb-4">
+        <div className={cn('flex flex-col items-start justify-center p-4 rounded-lg shadow-md w-full mb-4', brandErrorBg)}>
           <div className="flex flex-col sm:flex-row gap-5 w-full">
             <div className="text-red-500 font-bold text-center w-full pb-5">
               <span className="text-lg">⚠️</span> {usersWithIssues.length} player{usersWithIssues.length !== 1 ? 's have' : ' has'} incomplete profiles
@@ -67,7 +69,7 @@ export const hasErrors = () => {
           <div className="w-full">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 w-full">
               {usersWithIssues.map(({ user, issues }) => (
-                <div className="bg-red-500/80 p-3 rounded-lg" key={user.pk}>
+                <div className={cn('p-3 rounded-lg', brandErrorCard)} key={user.pk}>
                   <div className="text-white text-center underline underline-offset-2 font-bold mb-2">
                     {user.nickname || user.username}
                   </div>
