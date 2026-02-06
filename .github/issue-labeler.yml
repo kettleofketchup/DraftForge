@@ -1,0 +1,17 @@
+# Issue Labeler - auto-labels issues based on title/body keywords
+# Used by: .github/workflows/issue-labeler.yml (github/issue-labeler@v3)
+
+bug:
+  - "(bug|broken|crash|error|fail|fix|issue|problem|wrong)"
+Draft:
+  - "(draft|drafting|snake.?draft|shuffle.?draft|hero.?draft|captain.?mode)"
+Tournament:
+  - "(tournament|tourney|bracket.?stage|group.?stage|playoff|elimination)"
+brackets:
+  - "(bracket|seeding|match.?tree|double.?elim|single.?elim)"
+User:
+  - "(user|profile|login|auth|sign.?in|sign.?up|discord.?oauth|account)"
+enhancement:
+  - "(feature|enhancement|request|add|improve|new|support|implement)"
+documentation:
+  - "(docs|documentation|readme|guide|tutorial|instructions)"
