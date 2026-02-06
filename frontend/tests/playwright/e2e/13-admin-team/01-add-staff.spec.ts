@@ -40,6 +40,32 @@ async function removeLeagueStaffMember(context: import('@playwright/test').Brows
   await context.request.delete(`${API_URL}/leagues/${leaguePk}/staff/${userPk}/`);
 }
 
+/** Diagnostic: verify search API works directly via context.request. */
+async function verifySearchAPI(context: import('@playwright/test').BrowserContext, orgPk: number) {
+  const searchUrl = `${API_URL}/users/search/?q=bucket&org_id=${orgPk}`;
+  console.log(`[diag] Calling search API directly: ${searchUrl}`);
+  const resp = await context.request.get(searchUrl);
+  const status = resp.status();
+  console.log(`[diag] Search API status: ${status}`);
+  if (!resp.ok()) {
+    const body = await resp.text();
+    console.error(`[diag] Search API error body: ${body}`);
+    throw new Error(`Search API returned ${status}: ${body.slice(0, 200)}`);
+  }
+  const data = await resp.json();
+  console.log(`[diag] Search API returned ${data.length} results`);
+  if (data.length > 0) {
+    console.log(`[diag] First result: ${JSON.stringify(data[0])}`);
+  }
+  const found = data.find((u: { username?: string }) => u.username === TARGET_USERNAME);
+  if (!found) {
+    console.error(`[diag] Target user "${TARGET_USERNAME}" NOT found in results. Usernames: ${data.map((u: { username?: string }) => u.username).join(', ')}`);
+  } else {
+    console.log(`[diag] Target user "${TARGET_USERNAME}" found in results`);
+  }
+  return data;
+}
+
 test.describe('Admin Team - Add Staff (@cicd)', () => {
   let orgPk: number;
   let leaguePk: number;
@@ -54,6 +80,9 @@ test.describe('Admin Team - Add Staff (@cicd)', () => {
 
   test('@cicd org admin can add staff via AdminTeamSection modal', async ({ page, loginOrgAdmin }) => {
     await loginOrgAdmin();
+
+    // Diagnostic: verify search API works directly before UI test
+    await verifySearchAPI(page.context(), orgPk);
 
     // Navigate to org page
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
