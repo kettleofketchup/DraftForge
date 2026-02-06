@@ -16,6 +16,8 @@ export const brandDepthColors = 'border-b-violet-700 shadow-violet-900/50';
 // need deep wine/muted tones, not the bright accent status colors.
 export const brandErrorBg = 'bg-gradient-to-r from-red-900/40 to-violet-900/40 border border-red-500/20';
 export const brandErrorCard = 'bg-red-900/60 border border-red-500/15';
+// Brand error primary - lighter red for interactive error elements (buttons, close icons)
+export const brandErrorPrimary = 'bg-gradient-to-r from-red-700/80 to-red-900/80 border border-red-500/40 hover:from-red-600/80 hover:to-red-800/80 text-white';
 
 // Base 3D button effect classes (active state removed for disabled buttons via CSS)
 export const button3DBase =

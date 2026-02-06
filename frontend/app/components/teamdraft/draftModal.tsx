@@ -2,7 +2,7 @@ import { BarChart3, ChevronUp, ClipboardPen, EyeIcon, History, Users } from 'luc
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button } from '~/components/ui/button';
-import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
+import { PrimaryButton } from '~/components/ui/buttons';
 import { brandErrorBg } from '~/components/ui/buttons/styles';
 import {
   Collapsible,
@@ -596,10 +596,10 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
                     )}
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <SecondaryButton color="brand" onClick={() => setDraftStyleOpen(true)}>
+                        <PrimaryButton onClick={() => setDraftStyleOpen(true)}>
                           <BarChart3 className="h-4 w-4 mr-2" />
                           Stats
-                        </SecondaryButton>
+                        </PrimaryButton>
                       </TooltipTrigger>
                       <TooltipContent>View Draft Balance Stats</TooltipContent>
                     </Tooltip>
@@ -623,10 +623,10 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
                 {/* Balance stats - visible to everyone */}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <SecondaryButton color="lime" onClick={() => setDraftStyleOpen(true)}>
+                    <PrimaryButton onClick={() => setDraftStyleOpen(true)}>
                       <BarChart3 className="h-4 w-4 mr-2" />
                       Stats
-                    </SecondaryButton>
+                    </PrimaryButton>
                   </TooltipTrigger>
                   <TooltipContent>View Draft Balance Stats</TooltipContent>
                 </Tooltip>
