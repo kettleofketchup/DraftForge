@@ -17,7 +17,7 @@ import {
 } from '~/components/league';
 import type { LeagueType } from '~/components/league/schemas';
 import { useOrganizations } from '~/components/organization';
-import { Button } from '~/components/ui/button';
+import { PrimaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import {
   Select,
@@ -170,10 +170,10 @@ export default function LeaguesPage() {
             <h1 className="text-2xl font-bold">Leagues</h1>
           </div>
           {canCreate && (
-            <Button onClick={() => setCreateModalOpen(true)}>
+            <PrimaryButton onClick={() => setCreateModalOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
               Create League
-            </Button>
+            </PrimaryButton>
           )}
         </div>
 
