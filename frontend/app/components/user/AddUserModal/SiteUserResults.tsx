@@ -92,6 +92,7 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
             <UserStrip
               key={result.pk}
               user={result}
+              data-testid={`site-user-result-${result.username}`}
               compact
               showPositions={false}
               contextSlot={<MembershipBadge result={result} />}
