@@ -135,7 +135,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                     <div
                       className={cn(
                         octagonClip,
-                        'p-[2px] transition-all',
+                        'p-[3px] transition-all',
                         isActive ? 'bg-yellow-400' : isCompleted ? 'bg-red-500/70' : 'bg-red-900/60',
                         imgSize
                       )}
