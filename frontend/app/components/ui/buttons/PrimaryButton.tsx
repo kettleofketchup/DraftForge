@@ -19,7 +19,7 @@ const colorClasses: Record<PrimaryButtonColor, string> = {
   yellow: 'bg-yellow-600 hover:bg-yellow-500 text-black border-b-yellow-800 shadow-yellow-900/50',
 };
 
-const brandExtras = `${brandDepthColors} [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)] [&_svg]:text-white [&_svg]:fill-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]`;
+const brandExtras = `${brandDepthColors} [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)] [&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]`;
 
 const PrimaryButton = React.forwardRef<HTMLButtonElement, PrimaryButtonProps>(
   ({ color, className, children, depth = true, ...props }, ref) => {
