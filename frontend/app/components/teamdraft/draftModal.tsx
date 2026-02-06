@@ -2,7 +2,8 @@ import { BarChart3, ChevronUp, ClipboardPen, EyeIcon, History, Users } from 'luc
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { Button } from '~/components/ui/button';
-import { SecondaryButton } from '~/components/ui/buttons';
+import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
+import { brandErrorBg } from '~/components/ui/buttons/styles';
 import {
   Collapsible,
   CollapsibleContent,
@@ -451,13 +452,8 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     );
 
     // Determine button styling and label based on draft state and user role
-    // Completed: "View Completed Team Draft" - purple (everyone)
-    // Staff: "Start Team Draft" (admin mode) - blue
-    // Captain: "Live Team Draft" (participant mode) - green
-    // Everyone else: "View Team Draft" (view-only mode) - gray
     let buttonLabel: string;
     let buttonIcon: React.ReactNode;
-    let buttonStyle: string;
     let tooltipText: string;
     let testId: string;
 
@@ -465,25 +461,21 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
       // Draft is complete - show view completed for everyone
       buttonLabel = 'View Completed Team Draft';
       buttonIcon = <EyeIcon />;
-      buttonStyle = 'bg-purple-700 hover:bg-purple-600';
       tooltipText = 'View the completed team draft results';
       testId = 'viewCompletedTeamDraftButton';
     } else if (isStaff()) {
       buttonLabel = 'Start Team Draft';
       buttonIcon = <ClipboardPen />;
-      buttonStyle = 'bg-sky-800 hover:bg-sky-600';
       tooltipText = 'Administer the Team Draft';
       testId = 'startTeamDraftButton';
     } else if (isCaptain) {
       buttonLabel = 'Live Team Draft';
       buttonIcon = <EyeIcon />;
-      buttonStyle = 'bg-green-800 hover:bg-green-600';
       tooltipText = 'Watch the live team draft in progress';
       testId = 'liveTeamDraftButton';
     } else {
       buttonLabel = 'View Team Draft';
       buttonIcon = <EyeIcon />;
-      buttonStyle = 'bg-gray-700 hover:bg-gray-600';
       tooltipText = 'View the team draft (read-only)';
       testId = 'viewTeamDraftButton';
     }
@@ -492,13 +484,13 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
       <Tooltip>
         <TooltipTrigger asChild>
           <DialogTrigger asChild>
-            <Button
-              className={`w-[${TEAMS_BUTTONS_WIDTH}] ${buttonStyle} text-white`}
+            <PrimaryButton
+              className={cn(`w-[${TEAMS_BUTTONS_WIDTH}]`)}
               data-testid={testId}
             >
               {buttonIcon}
               {buttonLabel}
-            </Button>
+            </PrimaryButton>
           </DialogTrigger>
         </TooltipTrigger>
         <TooltipContent>
@@ -604,7 +596,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
                     )}
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <SecondaryButton color="lime" onClick={() => setDraftStyleOpen(true)}>
+                        <SecondaryButton color="brand" onClick={() => setDraftStyleOpen(true)}>
                           <BarChart3 className="h-4 w-4 mr-2" />
                           Stats
                         </SecondaryButton>
