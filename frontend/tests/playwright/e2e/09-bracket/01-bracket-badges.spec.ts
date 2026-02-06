@@ -25,7 +25,11 @@ let completedBracketPk: number;
 let partialBracketPk: number;
 let pendingBracketPk: number;
 
-// Skip: All tests require specific double elimination bracket structure with completed games
+// SKIP REASON: Test data issue - tournaments don't have generated brackets.
+// The page shows "No bracket generated yet" for completed_bracket, partial_bracket,
+// and pending_bracket tournaments. Tests need bracket fixtures to be set up
+// with actual bracket data (games, match results) before tests can run.
+// Feature: BracketBadge.tsx exists and is implemented.
 test.describe.skip('Bracket Badges (e2e)', () => {
   test.beforeAll(async ({ browser }) => {
     // Get tournament PKs by key (stable across populate changes)
@@ -72,7 +76,9 @@ test.describe.skip('Bracket Badges (e2e)', () => {
     await expect(bracketContainer).toBeVisible({ timeout: 15000 });
   });
 
-  // Skip: Requires specific double elimination bracket structure with loser paths
+  // SKIP REASON: Requires test data with specific double elimination bracket
+  // structure where loser paths are configured. Test data needs badges A/B
+  // positioned on winners R1 matches pointing to losers bracket.
   test.skip('should display bracket badges on winners bracket matches', async ({ page }) => {
     // Completed Bracket Test has completed bracket with badges
     await visitAndWaitForHydration(page, `/tournament/${completedBracketPk}/games`);
@@ -91,7 +97,9 @@ test.describe.skip('Bracket Badges (e2e)', () => {
     await expect(badgeBRight).toBeAttached();
   });
 
-  // Skip: Requires specific double elimination bracket structure with loser paths
+  // SKIP REASON: Same as above - requires bracket with loser path badges.
+  // Test data needs bracket-badge-A-left-top and bracket-badge-B-left-bottom
+  // test IDs on losers bracket slots.
   test.skip('should display corresponding badges on losers bracket slots', async ({ page }) => {
     await visitAndWaitForHydration(page, `/tournament/${completedBracketPk}/games`);
 
@@ -108,7 +116,8 @@ test.describe.skip('Bracket Badges (e2e)', () => {
     await expect(badgeBLeftBottom).toBeAttached();
   });
 
-  // Skip: Requires specific double elimination bracket structure with loser paths
+  // SKIP REASON: Same as above - requires bracket with loser path badges.
+  // Test verifies badge-letter-A and badge-letter-B test IDs exist with content.
   test.skip('should show badge letters with distinct colors', async ({ page }) => {
     await visitAndWaitForHydration(page, `/tournament/${completedBracketPk}/games`);
 

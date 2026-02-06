@@ -33,6 +33,9 @@ interface UserStripProps {
   /** Show border around the strip (default true) */
   showBorder?: boolean;
 
+  /** Show position badges (default true) */
+  showPositions?: boolean;
+
   /** Additional CSS classes */
   className?: string;
 
@@ -69,6 +72,7 @@ const userStripPropsAreEqual = (
   // Display options
   if (prev.compact !== next.compact) return false;
   if (prev.showBorder !== next.showBorder) return false;
+  if (prev.showPositions !== next.showPositions) return false;
 
   // Styling
   if (prev.className !== next.className) return false;
@@ -85,6 +89,7 @@ export const UserStrip = memo(
     organizationId,
     compact = false,
     showBorder = true,
+    showPositions = true,
     className,
     'data-testid': testId,
   }: UserStripProps) => {
@@ -203,7 +208,7 @@ export const UserStrip = memo(
             </span>
           </PlayerPopover>
           {/* Row 2: Positions - fillEmpty ensures consistent width */}
-          <div className="mt-0.5">{positions}</div>
+          {showPositions && <div className="mt-0.5">{positions}</div>}
         </div>
 
         {/* Column 3: MMR (stacked vertically - Base on top, League below) */}

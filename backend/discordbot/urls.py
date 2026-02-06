@@ -5,6 +5,8 @@ from .services.users import (
     get_discord_voice_channel_activity,
     get_organization_discord_members,
     get_user_guilds,
+    refresh_discord_members,
+    search_discord_members,
 )
 from .views import discord_interactions
 
@@ -23,4 +25,14 @@ urlpatterns = [
         name="organization-discord-members",
     ),
     path("interactions/", discord_interactions, name="discord-interactions"),
+    path(
+        "search-discord-members/",
+        search_discord_members,
+        name="search-discord-members",
+    ),
+    path(
+        "refresh-discord-members/",
+        refresh_discord_members,
+        name="refresh-discord-members",
+    ),
 ]

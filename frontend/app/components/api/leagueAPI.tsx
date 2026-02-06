@@ -6,13 +6,8 @@
 
 import type { LeagueType, LeaguesType, LeagueMatchType } from '~/components/league/schemas';
 import type { UserType } from '~/index';
+import type { AddMemberPayload, AddUserResponse } from './types';
 import axios from './axios';
-
-// Response types
-interface AddUserResponse {
-  status: string;
-  user: UserType;
-}
 
 // League CRUD
 export async function getLeagues(organizationId?: number): Promise<LeaguesType> {
@@ -84,4 +79,16 @@ export async function removeLeagueStaff(leagueId: number, userId: number): Promi
 export async function getLeagueUsers(leagueId: number): Promise<UserType[]> {
   const response = await axios.get<UserType[]>(`/leagues/${leagueId}/users/`);
   return response.data;
+}
+
+// League Members
+export async function addLeagueMember(
+  leagueId: number,
+  payload: AddMemberPayload,
+): Promise<UserType> {
+  const response = await axios.post<AddUserResponse>(
+    `/leagues/${leagueId}/members/`,
+    payload,
+  );
+  return response.data.user;
 }

@@ -127,7 +127,7 @@ export class TournamentPage {
 
     // Player management
     this.addPlayerButton = page.locator('[data-testid="tournamentAddPlayerBtn"]');
-    this.playerSearchInput = page.locator('[data-testid="playerSearchInput"]');
+    this.playerSearchInput = page.locator('[data-testid="add-user-search"]');
 
     // Tournament creation
     this.createButton = page.locator('[data-testid="tournament-create-button"]');
@@ -297,10 +297,10 @@ export class TournamentPage {
     // Type username in search
     await this.playerSearchInput.fill(username);
 
-    // Wait for and click the player option
-    const playerOption = this.page.locator(`[data-testid="playerOption-${username}"]`);
-    await playerOption.waitFor({ state: 'visible' });
-    await playerOption.click();
+    // Wait for and click the add button for the user
+    const addUserBtn = this.page.locator(`[data-testid="add-user-btn-${username}"]`);
+    await addUserBtn.waitFor({ state: 'visible' });
+    await addUserBtn.click();
 
     // Wait for success message
     await expect(

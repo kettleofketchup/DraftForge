@@ -50,6 +50,7 @@ def populate_organizations_and_leagues(force=False):
             "logo": "",
             "rules_template": "Standard DTX tournament rules apply.",
             "timezone": "America/New_York",  # US East default
+            "discord_server_id": "734185035623825559",  # DTX Discord server
         },
     )
     action = "Created" if created else "Updated"

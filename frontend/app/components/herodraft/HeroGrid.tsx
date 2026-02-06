@@ -56,6 +56,7 @@ const HeroButton = memo(function HeroButton({
         data-hero-name={hero.name}
         data-hero-available={available}
         data-hero-selected={isSelected}
+        data-hero-disabled={disabled}
       >
         <img
           src={hero.icon}

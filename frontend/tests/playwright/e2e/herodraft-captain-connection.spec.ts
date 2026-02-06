@@ -36,8 +36,7 @@ const test = base.extend<{
 });
 
 test.describe('HeroDraft Captain Connection Management', () => {
-  // Skip: Flaky multi-context WebSocket test - connection kick verification is timing-sensitive
-  test.skip('should kick old connection when captain opens new tab', async ({
+  test('should kick old connection when captain opens new tab', async ({
     browser,
     heroDraft,
   }) => {
@@ -205,8 +204,7 @@ test.describe('HeroDraft Captain Connection Management', () => {
     await context1.close();
   });
 
-  // Skip: Flaky multi-context WebSocket test - spectator verification is timing-sensitive
-  test.skip('should only kick captain connections, not spectators', async ({
+  test('should only kick captain connections, not spectators', async ({
     browser,
     heroDraft,
   }) => {

@@ -238,29 +238,62 @@ export class HeroDraftPage {
   async selectWinnerChoice(
     choice: 'first_pick' | 'second_pick' | 'radiant' | 'dire'
   ): Promise<void> {
+    console.log(`[selectWinnerChoice] Selecting ${choice}...`);
     const testIdMap = {
       first_pick: 'herodraft-choice-first-pick',
       second_pick: 'herodraft-choice-second-pick',
       radiant: 'herodraft-choice-radiant',
       dire: 'herodraft-choice-dire',
     };
-    await this.page.locator(`[data-testid="${testIdMap[choice]}"]`).click();
-    // Wait for and click confirm button in the dialog
-    await this.page.locator('[data-testid="herodraft-confirm-choice-submit"]').click();
+    const choiceButton = this.page.locator(`[data-testid="${testIdMap[choice]}"]`);
+    await choiceButton.waitFor({ state: 'visible', timeout: 10000 });
+    await choiceButton.click();
+
+    // Wait for confirm dialog to appear
+    const confirmDialog = this.page.locator('[data-testid="herodraft-confirm-choice-dialog"]');
+    await confirmDialog.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Click confirm button
+    const confirmButton = this.page.locator('[data-testid="herodraft-confirm-choice-submit"]');
+    await confirmButton.waitFor({ state: 'visible', timeout: 3000 });
+    await confirmButton.click();
+
+    // Wait for dialog to close
+    await confirmDialog.waitFor({ state: 'hidden', timeout: 10000 });
+    console.log(`[selectWinnerChoice] Choice ${choice} confirmed!`);
   }
 
   async selectLoserChoice(
     choice: 'first_pick' | 'second_pick' | 'radiant' | 'dire'
   ): Promise<void> {
+    console.log(`[selectLoserChoice] Selecting ${choice}...`);
     const testIdMap = {
       first_pick: 'herodraft-remaining-first-pick',
       second_pick: 'herodraft-remaining-second-pick',
       radiant: 'herodraft-remaining-radiant',
       dire: 'herodraft-remaining-dire',
     };
-    await this.page.locator(`[data-testid="${testIdMap[choice]}"]`).click();
-    // Wait for and click confirm button in the dialog
-    await this.page.locator('[data-testid="herodraft-confirm-choice-submit"]').click();
+
+    // First wait for loser choices container to appear (depends on WebSocket update)
+    const loserChoicesContainer = this.page.locator('[data-testid="herodraft-loser-choices"]');
+    await loserChoicesContainer.waitFor({ state: 'visible', timeout: 15000 });
+
+    const choiceButton = this.page.locator(`[data-testid="${testIdMap[choice]}"]`);
+    await choiceButton.waitFor({ state: 'visible', timeout: 5000 });
+    await choiceButton.click();
+
+    // Wait for confirm dialog to appear
+    const confirmDialog = this.page.locator('[data-testid="herodraft-confirm-choice-dialog"]');
+    await confirmDialog.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Click confirm button
+    const confirmButton = this.page.locator('[data-testid="herodraft-confirm-choice-submit"]');
+    await confirmButton.waitFor({ state: 'visible', timeout: 3000 });
+    await confirmButton.click();
+
+    // Wait for dialog to close
+    await confirmDialog.waitFor({ state: 'hidden', timeout: 10000 });
+    console.log(`[selectLoserChoice] Choice ${choice} confirmed!`);
   }
 
   async assertFlipWinner(): Promise<void> {
@@ -491,49 +524,178 @@ export class HeroDraftPage {
   }
 
   /**
-   * Pick an available hero by ID, with confirmation.
+   * Wait for it to be the current user's turn to pick/ban.
+   * Checks the data-hero-disabled attribute on hero buttons.
    */
-  async pickHero(heroId: number): Promise<void> {
-    console.log(`[pickHero] Attempting to pick hero ${heroId}...`);
+  async waitForMyTurn(timeout = 10000): Promise<void> {
+    console.log(`[waitForMyTurn] Waiting for turn...`);
+    // Wait for any hero button to have data-hero-disabled="false"
+    const enabledHero = this.page.locator('[data-hero-disabled="false"][data-hero-available="true"]').first();
+    await enabledHero.waitFor({ state: 'visible', timeout });
+    console.log(`[waitForMyTurn] Turn detected!`);
+  }
 
-    // Check if hero button is enabled before trying to click
+  /**
+   * Check if it's currently the user's turn to pick/ban.
+   */
+  async isMyTurn(): Promise<boolean> {
+    // Check if any hero has data-hero-disabled="false" and data-hero-available="true"
+    const enabledHero = this.page.locator('[data-hero-disabled="false"][data-hero-available="true"]').first();
+    return enabledHero.isVisible().catch(() => false);
+  }
+
+  /**
+   * Pick an available hero by ID, with confirmation.
+   * Waits for the user's turn before attempting to pick.
+   */
+  async pickHero(heroId: number, options?: { waitForTurn?: boolean }): Promise<void> {
+    const waitForTurn = options?.waitForTurn ?? true;
+    console.log(`[pickHero] Attempting to pick hero ${heroId} (waitForTurn=${waitForTurn})...`);
+
     const heroButton = this.page.locator(`[data-testid="herodraft-hero-${heroId}"]`);
-    const isDisabled = await heroButton.isDisabled().catch(() => true);
-    console.log(`[pickHero] Hero ${heroId} disabled: ${isDisabled}`);
 
-    if (isDisabled) {
-      // Log the current draft state for debugging
-      const currentAction = await this.page.locator('[data-testid="herodraft-current-action"]').textContent().catch(() => 'unknown');
-      const teamAPicking = await this.isTeamAPicking();
-      const teamBPicking = await this.isTeamBPicking();
-      console.log(`[pickHero] Current action: ${currentAction}, Team A picking: ${teamAPicking}, Team B picking: ${teamBPicking}`);
-      throw new Error(`Hero ${heroId} is disabled - cannot pick. Current action: ${currentAction}, Team A picking: ${teamAPicking}, Team B picking: ${teamBPicking}`);
+    // Wait for hero button to exist
+    await heroButton.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Check if hero is available
+    const isAvailable = await heroButton.getAttribute('data-hero-available');
+    if (isAvailable !== 'true') {
+      throw new Error(`Hero ${heroId} is not available (already picked/banned)`);
     }
 
-    await this.clickHero(heroId);
-    console.log(`[pickHero] Clicked hero ${heroId}, waiting for confirm dialog...`);
-    await this.assertConfirmDialogVisible();
-    console.log(`[pickHero] Confirm dialog visible, confirming...`);
-    await this.confirmHeroSelection();
-    console.log(`[pickHero] Confirmed, waiting for draft update...`);
+    // Optionally wait for it to be user's turn
+    if (waitForTurn) {
+      // Check if heroes are currently disabled (not user's turn)
+      const isHeroDisabled = await heroButton.getAttribute('data-hero-disabled');
+      if (isHeroDisabled === 'true') {
+        console.log(`[pickHero] Waiting for turn (hero disabled)...`);
+        await this.waitForMyTurn();
+      }
+    }
+
+    // Double-check hero is still available after waiting
+    const stillAvailable = await heroButton.getAttribute('data-hero-available');
+    if (stillAvailable !== 'true') {
+      throw new Error(`Hero ${heroId} became unavailable while waiting for turn`);
+    }
+
+    // Click the hero
+    console.log(`[pickHero] Clicking hero ${heroId}...`);
+    await heroButton.scrollIntoViewIfNeeded();
+    await heroButton.click();
+
+    // Wait for confirm dialog to appear
+    console.log(`[pickHero] Waiting for confirm dialog...`);
+    const confirmDialog = this.page.locator('[data-testid="herodraft-confirm-dialog"]');
+    await confirmDialog.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Click confirm button
+    console.log(`[pickHero] Clicking confirm button...`);
+    const confirmButton = this.page.locator('[data-testid="herodraft-confirm-submit"]');
+    await confirmButton.waitFor({ state: 'visible', timeout: 3000 });
+    await confirmButton.click();
+
+    // Wait for dialog to close (indicates submission started)
+    await confirmDialog.waitFor({ state: 'hidden', timeout: 10000 });
+    console.log(`[pickHero] Hero ${heroId} pick submitted!`);
+
+    // Wait for WebSocket update to propagate
     await this.waitForDraftUpdate();
     console.log(`[pickHero] Hero ${heroId} pick complete!`);
   }
 
   /**
    * Pick the first available hero.
+   * Waits for the user's turn before attempting to pick.
    */
-  async pickFirstAvailableHero(): Promise<number> {
+  async pickFirstAvailableHero(options?: { waitForTurn?: boolean }): Promise<number> {
+    const waitForTurn = options?.waitForTurn ?? true;
+    console.log(`[pickFirstAvailableHero] Finding first available hero (waitForTurn=${waitForTurn})...`);
+
+    // Optionally wait for turn
+    if (waitForTurn) {
+      const isEnabled = await this.isMyTurn();
+      if (!isEnabled) {
+        console.log(`[pickFirstAvailableHero] Waiting for turn...`);
+        await this.waitForMyTurn();
+      }
+    }
+
+    // Find first hero that is available and not disabled
     const availableHero = this.page
-      .locator('[data-hero-available="true"]')
+      .locator('[data-hero-available="true"][data-hero-disabled="false"]')
       .first();
+
+    await availableHero.waitFor({ state: 'visible', timeout: 5000 });
     const heroId = await availableHero.getAttribute('data-hero-id');
+    const heroIdNum = heroId ? parseInt(heroId) : 0;
 
+    console.log(`[pickFirstAvailableHero] Picking hero ${heroIdNum}...`);
+
+    // Click the hero
+    await availableHero.scrollIntoViewIfNeeded();
     await availableHero.click();
-    await this.assertConfirmDialogVisible();
-    await this.confirmHeroSelection();
-    await this.waitForDraftUpdate();
 
-    return heroId ? parseInt(heroId) : 0;
+    // Wait for confirm dialog
+    const confirmDialog = this.page.locator('[data-testid="herodraft-confirm-dialog"]');
+    await confirmDialog.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Click confirm
+    const confirmButton = this.page.locator('[data-testid="herodraft-confirm-submit"]');
+    await confirmButton.waitFor({ state: 'visible', timeout: 3000 });
+    await confirmButton.click();
+
+    // Wait for dialog to close
+    await confirmDialog.waitFor({ state: 'hidden', timeout: 10000 });
+
+    // Wait for WebSocket update
+    await this.waitForDraftUpdate();
+    console.log(`[pickFirstAvailableHero] Hero ${heroIdNum} pick complete!`);
+
+    return heroIdNum;
+  }
+
+  /**
+   * Ban a hero by ID, with confirmation.
+   * This is an alias for pickHero since the same UI is used for both picks and bans.
+   * The action type (pick vs ban) is determined by the current round type.
+   */
+  async banHero(heroId: number, options?: { waitForTurn?: boolean }): Promise<void> {
+    console.log(`[banHero] Banning hero ${heroId}...`);
+    await this.pickHero(heroId, options);
+  }
+
+  /**
+   * Ban the first available hero.
+   * This is an alias for pickFirstAvailableHero since the same UI is used for both.
+   */
+  async banFirstAvailableHero(options?: { waitForTurn?: boolean }): Promise<number> {
+    console.log(`[banFirstAvailableHero] Banning first available hero...`);
+    return this.pickFirstAvailableHero(options);
+  }
+
+  /**
+   * Wait for the opponent to complete their pick/ban.
+   * Waits for heroes to become disabled (not user's turn) then enabled again (user's turn).
+   */
+  async waitForOpponentPick(timeout = 30000): Promise<void> {
+    console.log(`[waitForOpponentPick] Waiting for opponent to pick...`);
+
+    // First wait for heroes to be disabled (opponent's turn started)
+    const anyHero = this.page.locator('[data-hero-available="true"]').first();
+    await anyHero.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Wait until it's our turn again
+    await this.waitForMyTurn(timeout);
+    console.log(`[waitForOpponentPick] Opponent pick complete, it's our turn!`);
+  }
+
+  /**
+   * Wait for the draft to reach a specific phase.
+   */
+  async waitForDraftPhase(phase: 'waiting' | 'rolling' | 'choosing' | 'drafting' | 'completed', timeout = 30000): Promise<void> {
+    console.log(`[waitForDraftPhase] Waiting for ${phase} phase...`);
+    await this.waitForPhaseTransition(phase, timeout);
+    console.log(`[waitForDraftPhase] Reached ${phase} phase!`);
   }
 }

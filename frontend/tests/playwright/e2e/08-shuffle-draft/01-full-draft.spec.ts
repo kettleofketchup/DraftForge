@@ -65,7 +65,10 @@ test.describe('Shuffle Draft - Full Flow', () => {
     await expect(page.locator('[data-testid="team-avg-mmr-label"]').first()).toBeVisible();
   });
 
-  // TODO: This test needs a tournament with draft initialized, not completed_bracket
+  // SKIP REASON: Requires tournament in pre-draft state to configure draft style.
+  // The completed_bracket tournament has already completed its draft.
+  // Test coverage: Captain Login Scenarios tests below cover shuffle draft
+  // functionality using shuffle_draft_captain_turn tournament.
   test.skip('should open draft modal and configure shuffle draft style', async ({
     page,
     loginAdmin,
@@ -126,7 +129,10 @@ test.describe('Shuffle Draft - Full Flow', () => {
     await expect(page.locator('[role="dialog"]')).toBeVisible();
   });
 
-  // TODO: This test needs a tournament with draft initialized, not completed_bracket
+  // SKIP REASON: Requires tournament in pre-draft state to complete full flow.
+  // The completed_bracket tournament has already completed its draft.
+  // Test coverage: Captain Login Scenarios tests below cover making picks
+  // using shuffle_draft_captain_turn tournament.
   test.skip('should complete shuffle draft flow with picks', async ({
     page,
     loginAdmin,

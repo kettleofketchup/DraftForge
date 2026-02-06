@@ -31,6 +31,7 @@ from app.models import (
     Tournament,
 )
 from app.permissions import IsStaff
+from app.permissions_org import has_org_staff_access
 from app.serializers import (
     DraftRoundSerializer,
     DraftSerializer,
@@ -262,3 +263,137 @@ def get_organization_discord_members(request, pk):
     except Exception as e:
         log.error(f"Error fetching Discord members for org {pk}: {e}")
         return JsonResponse({"error": str(e)}, status=500)
+
+
+DISCORD_MEMBERS_CACHE_TTL = 3600  # 1 hour
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def search_discord_members(request):
+    """
+    Search Discord members for a specific organization's Discord server.
+    Results are cached in Redis for 1 hour.
+    """
+    query = request.query_params.get("q", "").strip().lower()
+    org_id = request.query_params.get("org_id")
+
+    if not org_id:
+        return JsonResponse({"error": "org_id is required"}, status=400)
+
+    if len(query) < 3:
+        return JsonResponse(
+            {"error": "Search query must be at least 3 characters"}, status=400
+        )
+
+    try:
+        org = Organization.objects.get(pk=int(org_id))
+    except (Organization.DoesNotExist, ValueError):
+        return JsonResponse({"error": "Organization not found"}, status=404)
+
+    if not has_org_staff_access(request.user, org):
+        return JsonResponse(
+            {"error": "You do not have access to this organization"}, status=403
+        )
+
+    if not org.discord_server_id:
+        return JsonResponse(
+            {"error": "Organization has no Discord server configured"}, status=400
+        )
+
+    # Use SEPARATE cache key from get_discord_members_data's internal 15s cache
+    cache_key = f"discord_members_search_{org.discord_server_id}"
+    members = cache.get(cache_key)
+
+    if members is None:
+        try:
+            members = get_discord_members_data(guild_id=org.discord_server_id)
+        except Exception as e:
+            log.error(f"Error fetching Discord members for org {org.pk}: {e}")
+            return JsonResponse(
+                {"error": "Failed to fetch Discord members"}, status=502
+            )
+        cache.set(cache_key, members, timeout=DISCORD_MEMBERS_CACHE_TTL)
+
+    # Filter by query
+    filtered = []
+    for member in members:
+        user = member.get("user", {})
+        username = (user.get("username") or "").lower()
+        global_name = (user.get("global_name") or "").lower()
+        nick = (member.get("nick") or "").lower()
+
+        if query in username or query in global_name or query in nick:
+            filtered.append(member)
+
+        if len(filtered) >= 20:
+            break
+
+    # Cross-reference with site accounts
+    discord_ids = [m["user"]["id"] for m in filtered]
+    linked_users = dict(
+        CustomUser.objects.filter(discordId__in=discord_ids).values_list(
+            "discordId", "pk"
+        )
+    )
+
+    results = []
+    for member in filtered:
+        discord_id = member["user"]["id"]
+        site_pk = linked_users.get(discord_id)
+        results.append(
+            {
+                "user": member["user"],
+                "nick": member.get("nick"),
+                "has_site_account": site_pk is not None,
+                "site_user_pk": site_pk,
+            }
+        )
+
+    return JsonResponse({"results": results})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def refresh_discord_members(request):
+    """Refresh Discord members cache for a specific organization."""
+    org_id = request.data.get("org_id")
+
+    if not org_id:
+        return JsonResponse({"error": "org_id is required"}, status=400)
+
+    try:
+        org = Organization.objects.get(pk=int(org_id))
+    except (Organization.DoesNotExist, ValueError):
+        return JsonResponse({"error": "Organization not found"}, status=404)
+
+    if not has_org_staff_access(request.user, org):
+        return JsonResponse(
+            {"error": "You do not have access to this organization"}, status=403
+        )
+
+    if not org.discord_server_id:
+        return JsonResponse(
+            {"error": "Organization has no Discord server configured"}, status=400
+        )
+
+    # Rate limit: 5-minute cooldown per org
+    cooldown_key = f"discord_refresh_cooldown_{org.discord_server_id}"
+    if cache.get(cooldown_key):
+        return JsonResponse(
+            {"error": "Please wait before refreshing again"}, status=429
+        )
+
+    # Clear search cache and re-fetch
+    cache_key = f"discord_members_search_{org.discord_server_id}"
+    cache.delete(cache_key)
+
+    try:
+        members = get_discord_members_data(guild_id=org.discord_server_id)
+    except Exception as e:
+        log.error(f"Error refreshing Discord members for org {org.pk}: {e}")
+        return JsonResponse({"error": "Failed to fetch Discord members"}, status=502)
+    cache.set(cache_key, members, timeout=DISCORD_MEMBERS_CACHE_TTL)
+    cache.set(cooldown_key, True, timeout=300)  # 5-minute cooldown
+
+    return JsonResponse({"refreshed": True, "count": len(members)})
