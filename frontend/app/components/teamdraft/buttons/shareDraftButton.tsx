@@ -2,7 +2,7 @@ import { Share2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '~/components/ui/button';
-import { SecondaryButton } from '~/components/ui/buttons';
+import { PrimaryButton } from '~/components/ui/buttons';
 import { InfoDialog } from '~/components/ui/dialogs';
 import { Input } from '~/components/ui/input';
 import {
@@ -29,20 +29,19 @@ export const ShareDraftButton = () => {
   return (
     <>
       {/* Desktop: Full button with text and dialog */}
-      <SecondaryButton
-        color="sky"
+      <PrimaryButton
         onClick={() => setDialogOpen(true)}
         className="hidden lg:inline-flex"
       >
         <Share2 className="mr-2 h-4 w-4" /> Share
-      </SecondaryButton>
+      </PrimaryButton>
 
       {/* Mobile/Tablet: Icon-only button with popover */}
       <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <PopoverTrigger asChild>
-          <SecondaryButton color="sky" className="lg:hidden">
+          <PrimaryButton className="lg:hidden">
             <Share2 className="h-4 w-4" />
-          </SecondaryButton>
+          </PrimaryButton>
         </PopoverTrigger>
         <PopoverContent className="w-80" align="end">
           <div className="space-y-2">
