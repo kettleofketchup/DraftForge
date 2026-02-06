@@ -8,9 +8,7 @@ export function useOrganization(pk: number | undefined) {
 
   const refetch = useCallback(() => {
     if (pk) {
-      // Force refetch by resetting state first
-      useUserStore.setState({ organizationPk: null });
-      getOrganization(pk);
+      getOrganization(pk, true);
     }
   }, [pk, getOrganization]);
 

@@ -97,7 +97,7 @@ interface UserState {
   setOrganizations: (orgs: OrganizationType[]) => void;
   setOrganization: (org: OrganizationType | null) => void;
   getOrganizations: () => Promise<void>;
-  getOrganization: (pk: number) => Promise<void>;
+  getOrganization: (pk: number, force?: boolean) => Promise<void>;
 
   // Leagues
   leagues: LeagueType[];
@@ -403,9 +403,9 @@ export const useUserStore = create<UserState>()(
           log.error('Error fetching organizations:', error);
         }
       },
-      getOrganization: async (pk: number) => {
-        // Skip if already loaded for this pk
-        if (get().organizationPk === pk && get().organization) {
+      getOrganization: async (pk: number, force = false) => {
+        // Skip if already loaded for this pk (unless forced)
+        if (!force && get().organizationPk === pk && get().organization) {
           log.debug('Organization already loaded:', pk);
           return;
         }
