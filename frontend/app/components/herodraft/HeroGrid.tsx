@@ -41,7 +41,7 @@ const HeroButton = memo(function HeroButton({
         }}
         // Don't use HTML disabled - it prevents hover states for spectators
         className={cn(
-          'size-[20px] sm:size-[24px] md:size-[28px] lg:size-[36px] xl:size-[48px] 2xl:size-[56px] shrink-0 p-0.5',
+          'size-[28px] sm:size-[32px] md:size-[36px] lg:size-[42px] xl:size-[48px] 2xl:size-[56px] shrink-0 p-0.5',
           'rounded-full bg-gradient-to-b from-slate-600 to-slate-800',
           'border border-slate-500/50 shadow-md shadow-black/50',
           'hover:from-slate-500 hover:to-slate-700 hover:scale-110 hover:z-10 hover:shadow-lg hover:shadow-black/60',
