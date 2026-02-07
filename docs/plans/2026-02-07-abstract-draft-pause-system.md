@@ -319,3 +319,61 @@ Three independently deployable phases. **Deployment constraint**: Phase 2 should
 - `frontend/app/components/teamdraft/liveView.tsx` — Timer display
 - `frontend/app/components/teamdraft/buttons/draftStyleModal.tsx` — Timer config UI
 - `frontend/app/components/herodraft/HeroDraftModal.tsx` — Extract pause overlay to shared component
+- `backend/app/views_main.py` — `select_related("config")` in `TournamentView.get_queryset()`, `TournamentConfig` in `cached_as` dependencies
+
+## Review Suggestions (Round 2)
+
+All 5 review agents found **0 critical issues**. Below are the important items and suggestions grouped by area.
+
+### Tick Service
+
+**Important:**
+- Expand backward-compatible import list to include `get_redis_client`, `stop_tick_broadcaster`, and any test-facing symbols — not just the 4 currently listed.
+
+**Suggestions:**
+- Specify `check_continue` PAUSED-means-continue behavior in base class contract (tick loop stays alive during PAUSED; only COMPLETED/ABANDONED exit).
+- Fold config read into existing `get_tick_data` query via `.select_related("tournament__config")` to avoid a second DB hit per tick.
+
+### Pause Model
+
+**Important:**
+- `paused_at` field needs `default=timezone.now` to prevent missing-value errors when created programmatically.
+- Crash recovery must also handle drafts stuck in RESUMING with expired `resuming_until` — close the open PauseEvent and transition to DRAFTING.
+- `reset_draft` (herodraft reset endpoint) must delete PauseEvents: `draft.pause_events.all().delete()`.
+
+**Suggestions:**
+- Capture `now = timezone.now()` once and pass through to avoid timing skew in duration calculation across multiple PauseEvents in the same tick.
+- Add `__str__` to abstract PauseEvent (`f"{self.pause_type} at {self.paused_at}"`).
+
+### Tournament Config
+
+**Important:**
+- `signals.py` needs `post_save` import added (currently only imports `m2m_changed`).
+- `views_main.py` is missing from the File Changes Summary — needs `select_related("config")` in `get_queryset()` and `TournamentConfig` added to `cached_as` in both `list()` and `retrieve()`.
+
+**Suggestions:**
+- Document idempotency of `get_or_create` + signal + data migration belt-and-suspenders approach.
+- Specify whether `pk` is included in `TournamentConfigSerializer` fields (recommend excluding it — frontend doesn't need it).
+- Add `__str__` method to `TournamentConfig` (`f"Config for {self.tournament}"`).
+
+### Migration Phasing
+
+**Important:**
+- Phase 2 write-both has a double-counting risk: if new drafts use PauseEvent subtraction but `started_at` is also being adjusted, pause time is subtracted twice. Fix: add `use_pause_events` boolean on `HeroDraft` (default `False` for existing, `True` for new Phase 2 drafts). Only use PauseEvent subtraction when flag is `True`; those drafts stop adjusting `started_at`.
+- Migration files missing from File Changes Summary — Phase 1 needs at least 2 migrations (schema + data migration for existing tournaments).
+
+**Suggestions:**
+- Add deployment verification query: `HeroDraft.objects.exclude(state__in=['completed', 'abandoned']).exists()` before deploying Phase 2.
+- `DraftConsumer.connect()` code sample references `self.tournament` which doesn't exist in current consumer — note that Phase 3 implementation must resolve `Draft -> Tournament -> TournamentConfig` chain.
+- `check_resume_countdown()` in Phase 2 must also close the open PauseEvent (set `resumed_at`) when RESUMING -> DRAFTING transition completes.
+
+### Frontend Patterns
+
+**Important:**
+- Enumerate new `draftWebSocketStore.ts` interface members: `startHeartbeat`, `stopHeartbeat`, `reconnect`, `_heartbeatInterval`.
+- Switch from `as WebSocketMessage` type assertion to Zod `safeParse` in `draftWebSocketStore` message handler (matches herodraft pattern).
+- `WebSocketMessage` type in `draftEvent.ts` must evolve to include tick/pause message variants.
+
+**Suggestions:**
+- `DraftPauseOverlay` props should include `canResume` (permission-gated) and `onReconnect` (for manual reconnection attempts).
+- Timer display component needs explicit file name/placement (suggest `frontend/app/components/teamdraft/TimerBar.tsx`).
