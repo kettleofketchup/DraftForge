@@ -19,7 +19,7 @@
 
 **Step 1: Add TournamentConfig model after HeroDraftEvent**
 
-Add the import at the top of models.py (near existing validator imports):
+Add the import at the top of models.py (after the `django.db` imports, around line 6-10 — there are no existing validator imports):
 
 ```python
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -201,13 +201,13 @@ feat: add pause fields to Draft, temporal fields to DraftRound
 
 **Step 1: Update imports and add signal**
 
-Add `post_save` to the existing signals import (line 2):
+Add `post_save` to the existing signals import (line 13):
 
 ```python
 from django.db.models.signals import m2m_changed, post_save
 ```
 
-Add signal handler after the existing handlers (after line 155):
+Add signal handler at the end of the file (after the last existing handler ~line 155):
 
 ```python
 @receiver(post_save, sender="app.Tournament")
@@ -355,10 +355,8 @@ feat: add migrations for TournamentConfig, PauseEvent, Draft/DraftRound fields
 Add before `TournamentSerializer` (before line 725), with the necessary import:
 
 ```python
-from app.models import TournamentConfig
+TournamentConfig,  # add to existing `from .models import (...)` block at line 11
 ```
-
-(Add to the existing model import block at the top of the file.)
 
 ```python
 class TournamentConfigSerializer(serializers.ModelSerializer):
@@ -416,7 +414,7 @@ In `TournamentView.get_queryset()` (line 348), chain `select_related`:
 
 **Step 2: Add TournamentConfig to cached_as in list()**
 
-Add `TournamentConfig` import at the top (with existing model imports). Then add to the `@cached_as` decorator in `list()` (line 360):
+Add `TournamentConfig` to the existing `from .models import (...)` block at the top of `views_main.py`. Then add to the `@cached_as` decorator in `list()` (line 360):
 
 ```python
         @cached_as(
@@ -641,8 +639,8 @@ class DraftTickService(ABC):
         ...
 
     @abstractmethod
-    async def should_continue_ticking(self) -> tuple[bool, str]:
-        """Check if tick loop should continue.
+    def should_continue_ticking(self) -> tuple[bool, str]:
+        """Check if tick loop should continue. Called inside @database_sync_to_async.
 
         Returns (should_continue, reason_if_stopping).
         Tick loop stays alive during PAUSED/RESUMING states.
@@ -758,6 +756,8 @@ class DraftTickService(ABC):
 
 def stop_all_broadcasters():
     """Stop all active tick broadcasters. Called on shutdown."""
+    r = get_redis_client()
+
     with _lock:
         task_keys = list(_active_tick_tasks.keys())
 
@@ -768,6 +768,12 @@ def stop_all_broadcasters():
         if task_info:
             task_info.stop_event.set()
             task_info.thread.join(timeout=2.0)
+        # Clean up Redis lock
+        try:
+            lock_key = f"draft:tick_lock:{draft_type}:{draft_id}"
+            r.delete(lock_key)
+        except Exception:
+            pass
         with _lock:
             _active_tick_tasks.pop(task_key, None)
 
@@ -817,19 +823,16 @@ from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
 from django.utils import timezone
 
-from app.tasks.draft_tick import DraftTickService, get_redis_client  # noqa: F401
+from app.tasks.draft_tick import (  # noqa: F401
+    DraftTickService,
+    _active_tick_tasks,
+    _lock,
+    get_redis_client,
+    stop_all_broadcasters,
+)
 
 log = logging.getLogger(__name__)
 
-# Re-export for backward compat (consumers.py imports these)
-from app.tasks.draft_tick import get_redis_client  # noqa: F811, F401
-from app.tasks.draft_tick import stop_all_broadcasters  # noqa: F401
-
-# Legacy key patterns preserved exactly
-CONN_COUNT_KEY = "herodraft:connections:{draft_id}"
-LOCK_KEY = "herodraft:tick_lock:{draft_id}"
-LOCK_TIMEOUT = 10
-CAPTAIN_HEARTBEAT_KEY = "herodraft:{draft_id}:captain:{user_id}:heartbeat"
 HEARTBEAT_STALE_SECONDS = 9
 
 
@@ -1243,14 +1246,51 @@ def stop_tick_broadcaster(draft_id: int):
     """Stop the tick broadcaster for a draft."""
     svc = HeroDraftTickService(draft_id)
     svc.stop()
+
+
+async def broadcast_tick(draft_id: int):
+    """Broadcast current timing state to all connected clients."""
+    svc = HeroDraftTickService(draft_id)
+    return await svc.broadcast_tick()
+
+
+async def check_timeout(draft_id: int):
+    """Check if current round has timed out and auto-pick if needed."""
+    svc = HeroDraftTickService(draft_id)
+    return await svc.check_timeout()
+
+
+async def check_resume_countdown(draft_id: int):
+    """Check if RESUMING countdown is complete and transition to DRAFTING."""
+    svc = HeroDraftTickService(draft_id)
+    return await svc.check_resume_countdown()
+
+
+async def check_captain_heartbeats(draft_id: int):
+    """Check if any captain's heartbeat is stale and trigger disconnect if so."""
+    svc = HeroDraftTickService(draft_id)
+    return await svc.check_captain_heartbeats()
+
+
+def should_continue_ticking(draft_id: int, r=None) -> tuple[bool, str]:
+    """Check if tick loop should continue.
+
+    The `r` parameter is accepted for backward compat but ignored
+    (the service gets its own Redis client internally).
+    """
+    svc = HeroDraftTickService(draft_id)
+    return svc.should_continue_ticking()
 ```
 
-**Step 2: Verify existing imports still work**
+**Step 2: Verify ALL existing imports still work**
 
-Check that `consumers.py` imports resolve. The file imports:
+Check that all import sites resolve. The test file imports:
+- `from app.tasks.herodraft_tick import (_active_tick_tasks, _lock, broadcast_tick, check_timeout, get_redis_client, should_continue_ticking, start_tick_broadcaster, stop_tick_broadcaster)`
+
+And `consumers.py` imports:
 - `from app.tasks.herodraft_tick import (start_tick_broadcaster, increment_connection_count, decrement_connection_count, get_connection_count, get_redis_client)`
 
-All of these are still exported from `herodraft_tick.py`.
+All of these are now either module-level wrapper functions or re-exports from `draft_tick.py`. The `_active_tick_tasks` dict uses `(draft_type, draft_id)` tuple keys — existing tests that check `self.draft.id in _active_tick_tasks` will need to use `("herodraft", self.draft.id)` instead. **This is an accepted test update, not a backward-compat break** (tests are internal, not a public API).
 
 **Step 3: Commit**
 
@@ -1284,9 +1324,6 @@ from app.models import (
     HeroDraft,
     HeroDraftPauseEvent,
     HeroDraftRound,
-    League,
-    Organization,
-    TeamDraftPauseEvent,
     Tournament,
     TournamentConfig,
 )
@@ -1294,11 +1331,8 @@ from app.models import (
 
 class TournamentConfigTests(TestCase):
     def setUp(self):
-        self.org = Organization.objects.create(name="Test Org")
-        self.league = League.objects.create(name="Test League", organization=self.org)
         self.tournament = Tournament.objects.create(
             name="Test Tournament",
-            league=self.league,
             date_played=timezone.now(),
         )
 
@@ -1348,12 +1382,10 @@ class PauseEventTests(TestCase):
 
     def test_herodraft_pause_event_duration_closed(self):
         """Duration of a closed pause event should be resumed_at - paused_at."""
-        from app.models import Game, Team
+        from app.models import Game
 
-        org = Organization.objects.create(name="Org")
-        league = League.objects.create(name="League", organization=org)
         tournament = Tournament.objects.create(
-            name="T", league=league, date_played=timezone.now()
+            name="T", date_played=timezone.now()
         )
         game = Game.objects.create(tournament=tournament)
         draft = HeroDraft.objects.create(game=game)
@@ -1374,10 +1406,8 @@ class PauseEventTests(TestCase):
         """Duration of an open pause event should be now - paused_at."""
         from app.models import Game
 
-        org = Organization.objects.create(name="Org")
-        league = League.objects.create(name="League", organization=org)
         tournament = Tournament.objects.create(
-            name="T", league=league, date_played=timezone.now()
+            name="T", date_played=timezone.now()
         )
         game = Game.objects.create(tournament=tournament)
         draft = HeroDraft.objects.create(game=game)
@@ -1396,10 +1426,8 @@ class PauseEventTests(TestCase):
     def test_pause_event_str(self):
         from app.models import Game
 
-        org = Organization.objects.create(name="Org")
-        league = League.objects.create(name="League", organization=org)
         tournament = Tournament.objects.create(
-            name="T", league=league, date_played=timezone.now()
+            name="T", date_played=timezone.now()
         )
         game = Game.objects.create(tournament=tournament)
         draft = HeroDraft.objects.create(game=game)
@@ -1413,10 +1441,8 @@ class PauseEventTests(TestCase):
         """When a round is deleted, pause event round FK should become NULL."""
         from app.models import DraftTeam, Game, Team
 
-        org = Organization.objects.create(name="Org")
-        league = League.objects.create(name="League", organization=org)
         tournament = Tournament.objects.create(
-            name="T", league=league, date_played=timezone.now()
+            name="T", date_played=timezone.now()
         )
         game = Game.objects.create(tournament=tournament)
         draft = HeroDraft.objects.create(game=game)
@@ -1444,10 +1470,8 @@ class PauseEventTests(TestCase):
 class DraftPauseFieldsTests(TestCase):
     def test_draft_has_pause_fields(self):
         """Draft model should have pause fields."""
-        org = Organization.objects.create(name="Org")
-        league = League.objects.create(name="League", organization=org)
         tournament = Tournament.objects.create(
-            name="T", league=league, date_played=timezone.now()
+            name="T", date_played=timezone.now()
         )
         draft = Draft.objects.create(tournament=tournament)
         self.assertIsNone(draft.paused_at)
@@ -1456,10 +1480,8 @@ class DraftPauseFieldsTests(TestCase):
 
     def test_draft_round_has_temporal_fields(self):
         """DraftRound model should have started_at and completed_at."""
-        org = Organization.objects.create(name="Org")
-        league = League.objects.create(name="League", organization=org)
         tournament = Tournament.objects.create(
-            name="T", league=league, date_played=timezone.now()
+            name="T", date_played=timezone.now()
         )
         draft = Draft.objects.create(tournament=tournament)
         user = CustomUser.objects.create_user(
@@ -1491,15 +1513,23 @@ test: add tests for TournamentConfig, PauseEvent, and Draft pause fields
 
 ---
 
-### Task 13: Run existing herodraft tick tests to verify no regressions
+### Task 13: Update existing tick tests for tuple keys and run regression suite
 
-**Step 1: Run existing tick tests**
+**Step 1: Update `_active_tick_tasks` assertions in `test_herodraft_tick.py`**
+
+The `_active_tick_tasks` dict now uses `("herodraft", draft_id)` tuple keys instead of plain `draft_id` ints. Update all assertions in `backend/app/tests/test_herodraft_tick.py`:
+
+- `self.assertIn(self.draft.id, _active_tick_tasks)` → `self.assertIn(("herodraft", self.draft.id), _active_tick_tasks)`
+- `_active_tick_tasks.get(self.draft.id)` → `_active_tick_tasks.get(("herodraft", self.draft.id))`
+- `_active_tick_tasks[self.draft.id]` → `_active_tick_tasks[("herodraft", self.draft.id)]`
+
+**Step 2: Run existing tick tests**
 
 ```bash
 cd /home/kettle/git_repos/website/.worktrees/abstract-draft-pause && just test::run 'python manage.py test app.tests.test_herodraft_tick -v 2'
 ```
 
-Expected: All existing tests pass with zero changes needed.
+Expected: All tests pass after the key format updates.
 
 **Step 2: Run full test suite**
 
