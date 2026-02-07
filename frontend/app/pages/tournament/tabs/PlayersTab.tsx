@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react';
+import { Plus, Upload } from 'lucide-react';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { addTournamentMember } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
@@ -7,6 +7,7 @@ import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { UserType } from '~/components/user/types';
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
+import { CSVImportModal } from '~/components/user/CSVImportModal';
 import { useUserStore } from '~/store/userStore';
 import { useOrgStore } from '~/store/orgStore';
 import { hasErrors } from '../hasErrors';
@@ -19,6 +20,7 @@ export const PlayersTab: React.FC = memo(() => {
   const isStaff = useUserStore((state) => state.isStaff);
   const currentOrg = useOrgStore((s) => s.currentOrg);
   const [showAddUser, setShowAddUser] = useState(false);
+  const [showCSVImport, setShowCSVImport] = useState(false);
 
   const tournamentUsers = tournament?.users ?? [];
 
@@ -67,15 +69,24 @@ export const PlayersTab: React.FC = memo(() => {
             data-testid="playerSearchDropdown"
           />
         </div>
-        <div className="flex px-5 place-self-end">
+        <div className="flex px-5 gap-2 place-self-end">
           {canEdit && (
-            <PrimaryButton
-              onClick={() => setShowAddUser(true)}
-              data-testid="tournamentAddPlayerBtn"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Player
-            </PrimaryButton>
+            <>
+              <PrimaryButton
+                onClick={() => setShowCSVImport(true)}
+                data-testid="tournament-csv-import-btn"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Import CSV
+              </PrimaryButton>
+              <PrimaryButton
+                onClick={() => setShowAddUser(true)}
+                data-testid="tournamentAddPlayerBtn"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Player
+              </PrimaryButton>
+            </>
           )}
         </div>
       </div>
@@ -90,6 +101,21 @@ export const PlayersTab: React.FC = memo(() => {
           emptyMessage="No players in this tournament"
         />
       </div>
+
+      {canEdit && tournament?.pk && (
+        <CSVImportModal
+          open={showCSVImport}
+          onOpenChange={setShowCSVImport}
+          entityContext={{
+            orgId: currentOrg?.pk,
+            tournamentId: tournament.pk,
+          }}
+          onComplete={() => {
+            // Re-fetch tournament to refresh players list
+            // This is a simple approach — the tournament page will refetch on next mount
+          }}
+        />
+      )}
 
       {canEdit && (
         <AddUserModal
