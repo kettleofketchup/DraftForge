@@ -170,6 +170,22 @@ def reset_herodraft(request, draft_pk):
         draft_team.reserve_time_remaining = 90000  # 90 seconds default
         draft_team.save()
 
+    # Clear Redis captain channel/heartbeat keys to prevent stale kick triggers
+    try:
+        from app.tasks.herodraft_tick import get_redis_client
+
+        r = get_redis_client()
+        for draft_team in draft.draft_teams.all():
+            captain = draft_team.tournament_team.captain
+            if captain:
+                for key_pattern in [
+                    f"herodraft:{draft.pk}:captain:{captain.pk}:channel",
+                    f"herodraft:{draft.pk}:captain:{captain.pk}:heartbeat",
+                ]:
+                    r.delete(key_pattern)
+    except Exception:
+        pass  # Redis may not be available in some test environments
+
     # Log reset event
     HeroDraftEvent.objects.create(
         draft=draft,
