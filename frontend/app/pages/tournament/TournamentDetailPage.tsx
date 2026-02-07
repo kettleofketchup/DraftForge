@@ -85,8 +85,8 @@ export const TournamentDetailPage: React.FC = () => {
 
     fetchTournament(true);
 
-    // Poll every second to work around Redis cache invalidation issues
-    const interval = setInterval(() => fetchTournament(false), 1000);
+    // Poll every 10 seconds to work around Redis cache invalidation issues
+    const interval = setInterval(() => fetchTournament(false), 10000);
     return () => clearInterval(interval);
   }, [pk, setTournament]);
 
