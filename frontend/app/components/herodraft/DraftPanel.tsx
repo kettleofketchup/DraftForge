@@ -71,7 +71,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
   }, [activeRoundNumber]);
 
   return (
-    <div className="h-full flex flex-col bg-black/90 overflow-hidden" data-testid="herodraft-panel">
+    <div className="h-full flex flex-col bg-background overflow-hidden" data-testid="herodraft-panel">
       {/* Headers */}
       <div className="flex shrink-0 border-b border-gray-700">
         <div className="flex-1 py-1 px-2 text-center">

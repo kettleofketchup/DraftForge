@@ -144,7 +144,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
   // Determine background color based on turn and action
   const getTopBarBackground = () => {
     if (!isMyTurn || draft.state !== "drafting") {
-      return "bg-black/90";
+      return "bg-background";
     }
     return currentAction === "ban" ? "bg-red-900/90" : "bg-green-900/90";
   };
