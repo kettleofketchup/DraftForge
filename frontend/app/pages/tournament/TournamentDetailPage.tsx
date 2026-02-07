@@ -56,27 +56,38 @@ export const TournamentDetailPage: React.FC = () => {
     }
   }, [slug, setActiveTab, setLive, setAutoAdvance, setPendingDraftId, setPendingMatchId, navigate]);
   useEffect(() => {
-    if (pk) {
-      const fetchTournament = async () => {
+    if (!pk) return;
+
+    const fetchTournament = async (isInitial: boolean) => {
+      if (isInitial) {
         setLoading(true);
         setError(null);
         // Clear stale tournament data immediately when pk changes
         // This prevents showing old tournament data while loading
         setTournament(null as unknown as typeof tournament);
-        try {
-          const response = await axios.get(`/tournaments/${pk}/`);
-          setTournament(response.data);
-        } catch (err) {
-          log.error('Failed to fetch tournament:', err);
+      }
+      try {
+        const response = await axios.get(`/tournaments/${pk}/`);
+        setTournament(response.data);
+      } catch (err) {
+        log.error('Failed to fetch tournament:', err);
+        if (isInitial) {
           setError(
             'Failed to load tournament details. Please try again later.',
           );
-        } finally {
+        }
+      } finally {
+        if (isInitial) {
           setLoading(false);
         }
-      };
-      fetchTournament();
-    }
+      }
+    };
+
+    fetchTournament(true);
+
+    // Poll every second to work around Redis cache invalidation issues
+    const interval = setInterval(() => fetchTournament(false), 1000);
+    return () => clearInterval(interval);
   }, [pk, setTournament]);
 
   // Set org context from tournament - fetch full org by PK
