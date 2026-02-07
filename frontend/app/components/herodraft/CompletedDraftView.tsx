@@ -1,7 +1,7 @@
 // frontend/app/components/herodraft/CompletedDraftView.tsx
 import { useMemo } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { Button } from '~/components/ui/button';
+import { PrimaryButton } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 import { getHeroIcon, getHeroName } from '~/lib/dota/heroes';
 import { DisplayName } from '~/components/user/avatar';
@@ -146,8 +146,7 @@ export function CompletedDraftView({ draft, onViewFullDraft }: CompletedDraftVie
 
       {/* View Full Draft button */}
       {onViewFullDraft && (
-        <Button
-          variant="outline"
+        <PrimaryButton
           size="lg"
           onClick={onViewFullDraft}
           className="mt-8"
@@ -155,7 +154,7 @@ export function CompletedDraftView({ draft, onViewFullDraft }: CompletedDraftVie
         >
           <History className="w-5 h-5 mr-2" />
           View Full Draft
-        </Button>
+        </PrimaryButton>
       )}
     </div>
   );

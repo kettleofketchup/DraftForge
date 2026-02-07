@@ -11,7 +11,7 @@ import {
   AlertDialogTrigger,
 } from '~/components/ui/alert-dialog';
 import { Button } from '~/components/ui/button';
-import { CancelButton, ConfirmButton, PrimaryButton } from '~/components/ui/buttons';
+import { CancelButton, ConfirmButton, PrimaryButton, brandSuccessBg } from '~/components/ui/buttons';
 import type { UserType } from '~/index';
 import { DisplayName } from '~/components/user/avatar';
 import { getLogger } from '~/lib/logger';
@@ -132,7 +132,7 @@ export const ChoosePlayerButton: React.FC<{
           <AlertDialogTrigger asChild>
             <PrimaryButton size="sm" className="text-xs px-2" data-testid="pickPlayerButton">Pick</PrimaryButton>
           </AlertDialogTrigger>
-          <AlertDialogContent className="bg-green-900 border-green-700">
+          <AlertDialogContent className={`bg-green-900 ${brandSuccessBg}`}>
             <AlertDialogHeader>
               <AlertDialogTitle>Choose player {DisplayName(user)}</AlertDialogTitle>
               <AlertDialogDescription className="text-green-100">
@@ -141,7 +141,7 @@ export const ChoosePlayerButton: React.FC<{
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel asChild>
-                <CancelButton variant="destructive">Cancel</CancelButton>
+                <CancelButton>Cancel</CancelButton>
               </AlertDialogCancel>
               <AlertDialogAction asChild onClick={handleChange}>
                 <ConfirmButton data-testid="confirmPickButton">Confirm Pick</ConfirmButton>

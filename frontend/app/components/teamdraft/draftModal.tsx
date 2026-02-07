@@ -514,7 +514,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
       {draftDialogButton()}
 
       <DialogContent
-        className={cn(DIALOG_CSS_FULLSCREEN, 'bg-gray-900')}
+        className={cn(DIALOG_CSS_FULLSCREEN)}
         closeButtonVariant="destructive"
         closeButtonTestId="close-draft-modal"
       >
@@ -596,7 +596,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
                     )}
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <SecondaryButton color="brand" onClick={() => setDraftStyleOpen(true)}>
+                        <SecondaryButton onClick={() => setDraftStyleOpen(true)}>
                           <BarChart3 className="h-4 w-4 mr-2" />
                           Stats
                         </SecondaryButton>
@@ -623,7 +623,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
                 {/* Balance stats - visible to everyone */}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <SecondaryButton color="brand" onClick={() => setDraftStyleOpen(true)}>
+                    <SecondaryButton onClick={() => setDraftStyleOpen(true)}>
                       <BarChart3 className="h-4 w-4 mr-2" />
                       Stats
                     </SecondaryButton>
