@@ -82,8 +82,7 @@ function TabsTrigger({
         // Active state - brand gradient
         "data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-blue-500",
         "data-[state=active]:text-white",
-        // Uses same values as brandGlow from styles.ts
-        "data-[state=active]:shadow-[0_4px_0_0_theme(colors.violet.500),0_8px_20px_-4px_theme(colors.blue.500/40)]",
+        "data-[state=active]:shadow-brand-glow",
         "data-[state=active]:[text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]",
         "data-[state=active]:-translate-y-0.5",
         // Focus styles
