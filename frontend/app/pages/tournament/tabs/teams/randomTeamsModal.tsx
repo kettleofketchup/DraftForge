@@ -61,6 +61,8 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
   teamSize = 5,
 }) => {
   const tournament = useUserStore((state) => state.tournament);
+  const isStaff = useUserStore((state) => state.isStaff());
+  const TriggerButton = isStaff ? PrimaryButton : SecondaryButton;
 
   // Don't run createTeams until modal is opened - it's expensive (O(n²) with 100 iterations)
   const [teams, setTeams] = useState<TeamType[]>([]);
@@ -84,14 +86,14 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
         <Tooltip>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
-              <PrimaryButton
+              <TriggerButton
                 className={`w-[${TEAMS_BUTTONS_WIDTH}] flex w-200px sm:w-auto`}
                 data-testid="createTeamsBtn"
                 aria-label="Open create teams modal"
               >
                 <UsersRound className="mr-2" />
                 Create Teams
-              </PrimaryButton>
+              </TriggerButton>
             </DialogTrigger>
           </TooltipTrigger>
           <TooltipContent>

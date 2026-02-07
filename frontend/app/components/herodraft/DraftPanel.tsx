@@ -40,11 +40,15 @@ function getHeroName(heroId: number | null): string {
 export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
   const activeRoundRef = useRef<HTMLDivElement>(null);
 
-  // Memoize team lookups
-  const { radiantTeam, direTeam } = useMemo(() => {
+  // Order teams: first pick on left, second pick on right
+  // Falls back to array order when is_first_pick is null (pre-coin-flip)
+  const { leftTeam, rightTeam } = useMemo(() => {
+    const first = draft.draft_teams.find((t) => t.is_first_pick === true);
+    const second = draft.draft_teams.find((t) => t.is_first_pick === false);
+    if (first && second) return { leftTeam: first, rightTeam: second };
     const radiant = draft.draft_teams.find((t) => t.is_radiant);
     const dire = draft.draft_teams.find((t) => !t.is_radiant);
-    return { radiantTeam: radiant, direTeam: dire };
+    return { leftTeam: radiant ?? draft.draft_teams[0], rightTeam: dire ?? draft.draft_teams[1] };
   }, [draft.draft_teams]);
 
   // Sort rounds by round_number for proper order
@@ -76,16 +80,20 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
       {/* Headers */}
       <div className="flex shrink-0 border-b border-gray-700">
         <div className="flex-1 py-1 px-2 text-center">
-          <h3 className="text-xs font-bold text-gray-300">RADIANT</h3>
+          <h3 className={cn("text-xs font-bold", leftTeam?.is_radiant ? "text-green-400" : "text-red-400")}>
+            {leftTeam?.is_radiant ? 'RADIANT' : 'DIRE'}
+          </h3>
           <p className="text-[9px] text-muted-foreground truncate">
-            {radiantTeam?.captain ? DisplayName(radiantTeam.captain) : ''}
+            {leftTeam?.captain ? DisplayName(leftTeam.captain) : ''}
           </p>
         </div>
         <div className="w-6 sm:w-8 md:w-10 lg:w-12 shrink-0" /> {/* Center spacer */}
         <div className="flex-1 py-1 px-2 text-center">
-          <h3 className="text-xs font-bold text-gray-300">DIRE</h3>
+          <h3 className={cn("text-xs font-bold", rightTeam?.is_radiant ? "text-green-400" : "text-red-400")}>
+            {rightTeam?.is_radiant ? 'RADIANT' : 'DIRE'}
+          </h3>
           <p className="text-[9px] text-muted-foreground truncate">
-            {direTeam?.captain ? DisplayName(direTeam.captain) : ''}
+            {rightTeam?.captain ? DisplayName(rightTeam.captain) : ''}
           </p>
         </div>
       </div>
@@ -95,7 +103,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
         <div className="flex flex-col gap-1 py-4">
           {sortedRounds.map((round) => {
             const team = draft.draft_teams.find((t) => t.id === round.draft_team);
-            const isRadiant = team?.is_radiant;
+            const isLeft = team?.id === leftTeam?.id;
             const heroImg = getHeroImage(round.hero_id);
             const heroName = getHeroName(round.hero_id);
             // Highlight the first non-completed round (active or planned)
@@ -109,8 +117,10 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
             const pickHeight = 'h-7 sm:h-8 md:h-9 lg:h-10 xl:h-12';
             const banSize = 'w-10 h-6 sm:w-12 sm:h-7 md:w-14 md:h-8 lg:w-16 lg:h-9 xl:w-20 xl:h-11';
 
-            // Octagon clip-path adjusted for ~1.7:1 wide aspect ratio
+            // Octagon clip-path adjusted for ~1.7:1 wide aspect ratio (hero slots)
             const octagonClip = '[clip-path:polygon(15%_0%,85%_0%,100%_25%,100%_75%,85%_100%,15%_100%,0%_75%,0%_25%)]';
+            // Octagon clip-path for square elements (round number indicators)
+            const octagonSquare = '[clip-path:polygon(30%_0%,70%_0%,100%_30%,100%_70%,70%_100%,30%_100%,0%_70%,0%_30%)]';
 
             // Indicator on outer side: left for Radiant, right for Dire
             const indicator = isCompleted && (
@@ -122,7 +132,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
             );
 
             const heroSlot = (
-              <div className={cn('flex items-center gap-1.5 px-1', !isRadiant && 'flex-row-reverse')}>
+              <div className={cn('flex items-center gap-1.5 px-1', !isLeft && 'flex-row-reverse')}>
                 {/* Indicator on outer side (left for Radiant, right for Dire) */}
                 {indicator}
 
@@ -169,7 +179,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                     <div
                       className={cn(
                         'overflow-hidden border transition-all relative',
-                        isCompleted ? 'border-green-500/70' : 'border-gray-600',
+                        isCompleted ? 'border-green-500/70' : isBan ? 'border-red-500/40' : 'border-green-500/40',
                         isActive && 'border-yellow-400 border-2',
                         slotWidth, pickHeight
                       )}
@@ -192,7 +202,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
             const wrappedSlot = heroName ? (
               <Tooltip>
                 <TooltipTrigger asChild>{heroSlot}</TooltipTrigger>
-                <TooltipContent side={isRadiant ? 'left' : 'right'} className="text-xs">
+                <TooltipContent side={isLeft ? 'left' : 'right'} className="text-xs">
                   {heroName}
                 </TooltipContent>
               </Tooltip>
@@ -209,7 +219,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
               >
                 {/* Radiant side */}
                 <div className="flex-1 flex justify-end items-center pr-0.5">
-                  {isRadiant && wrappedSlot}
+                  {isLeft && wrappedSlot}
                 </div>
 
                 {/* Center number with line */}
@@ -218,7 +228,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                   <div
                     className={cn(
                       'absolute top-1/2 -translate-y-1/2 h-px',
-                      isRadiant ? 'right-1/2 left-0' : 'left-1/2 right-0',
+                      isLeft ? 'right-1/2 left-0' : 'left-1/2 right-0',
                       isActive
                         ? 'bg-yellow-400'
                         : isCompleted
@@ -226,24 +236,40 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
                           : 'bg-gray-600'
                     )}
                   />
-                  {/* Number circle */}
+                  {/* Number indicator — octagon for bans, square for picks */}
+                  {/* Outer wrapper provides highlight border via padding + clip-path */}
                   <div
                     className={cn(
-                      'relative z-10 w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 rounded-full flex items-center justify-center text-[10px] sm:text-xs md:text-sm font-bold',
+                      'relative z-10',
+                      isBan ? octagonSquare : 'rounded-[2px]',
                       isActive
-                        ? 'bg-yellow-400 text-black'
-                        : isCompleted
-                          ? 'bg-gray-700 text-gray-400'
-                          : 'bg-gray-800 text-gray-500 border border-gray-600'
+                        ? isBan
+                          ? 'bg-yellow-400 p-[2px] w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8'
+                          : 'bg-yellow-400 p-[2px] w-6 h-6 sm:w-7 sm:h-7 md:w-8 md:h-8'
+                        : 'w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7'
                     )}
                   >
-                    {round.round_number}
+                    <div
+                      className={cn(
+                        'w-full h-full flex items-center justify-center text-[10px] sm:text-xs md:text-sm font-bold leading-none',
+                        isBan ? octagonSquare : 'rounded-[2px]',
+                        isActive
+                          ? isBan ? 'bg-red-900 text-yellow-400' : 'bg-green-900 text-yellow-400'
+                          : isBan
+                            ? 'bg-red-900 text-red-400'
+                            : isCompleted
+                              ? 'bg-green-900 text-green-400'
+                              : 'bg-green-950 text-green-500'
+                      )}
+                    >
+                      {round.round_number}
+                    </div>
                   </div>
                 </div>
 
                 {/* Dire side */}
                 <div className="flex-1 flex justify-start items-center pl-0.5">
-                  {!isRadiant && wrappedSlot}
+                  {!isLeft && wrappedSlot}
                 </div>
               </div>
             );

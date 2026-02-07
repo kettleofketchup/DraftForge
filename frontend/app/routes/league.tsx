@@ -36,7 +36,7 @@ import { useState, useEffect } from 'react';
 import { Trophy, Building2, Loader2, Pencil } from 'lucide-react';
 
 import { Badge } from '~/components/ui/badge';
-import { Button } from '~/components/ui/button';
+import { PrimaryButton } from '~/components/ui/buttons';
 import { useLeague, LeagueTabs, EditLeagueModal } from '~/components/league';
 import { useUserStore } from '~/store/userStore';
 import { useOrgStore } from '~/store/orgStore';
@@ -139,15 +139,14 @@ export default function LeaguePage() {
           </div>
 
           {canEdit && (
-            <Button
-              variant="outline"
+            <PrimaryButton
               size="sm"
               onClick={() => setEditModalOpen(true)}
               data-testid="edit-league-button"
             >
               <Pencil className="h-4 w-4 mr-2" />
               Edit League
-            </Button>
+            </PrimaryButton>
           )}
         </div>
 

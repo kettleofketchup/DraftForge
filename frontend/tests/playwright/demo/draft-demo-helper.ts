@@ -165,8 +165,10 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   await setupPage.reload();
   await waitForHydration(setupPage);
 
-  // Navigate to Teams tab
-  await setupPage.locator('[data-testid="teamsTab"]').click();
+  // Navigate to Teams tab (wait for it to be visible after reload)
+  const teamsTabAfterReload = setupPage.locator('[data-testid="teamsTab"]');
+  await teamsTabAfterReload.waitFor({ state: 'visible', timeout: 15000 });
+  await teamsTabAfterReload.click();
   await setupPage.waitForTimeout(300);
 
   // Re-open draft modal

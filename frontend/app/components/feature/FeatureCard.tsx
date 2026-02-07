@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { cn } from '~/lib/utils';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
+import { SecondaryButton } from '~/components/ui/buttons';
 import {
   Dialog,
   DialogContent,
@@ -284,7 +285,7 @@ export const FeatureCard = ({
           <div className="mt-3 flex flex-wrap gap-2 justify-center">
             {/* Learn More - External docs link */}
             {docsUrl && (
-              <Button size="sm" variant="outline" asChild>
+              <SecondaryButton size="sm" asChild>
                 <a
                   href={docsUrl}
                   target="_blank"
@@ -293,7 +294,7 @@ export const FeatureCard = ({
                   <BookOpen className="w-3 h-3 mr-1" />
                   Learn More
                 </a>
-              </Button>
+              </SecondaryButton>
             )}
 
             {/* Action Button - Internal navigation */}

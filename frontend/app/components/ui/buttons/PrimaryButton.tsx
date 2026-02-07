@@ -30,6 +30,7 @@ const PrimaryButton = React.forwardRef<HTMLButtonElement, PrimaryButtonProps>(
         className={cn(
           depth && button3DBase,
           depth && button3DDisabled,
+          !depth && 'shadow-lg shadow-black/30',
           isBrand ? [brandGradient, brandExtras] : colorClasses[color],
           className
         )}

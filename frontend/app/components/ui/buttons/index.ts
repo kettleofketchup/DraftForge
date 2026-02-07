@@ -1,5 +1,5 @@
 // Shared styles
-export { brandBg, brandDepthColors, brandErrorBg, brandErrorCard, brandErrorPrimary, brandGlow, brandGradient, brandSecondary, button3DBase, button3DDisabled, button3DVariants } from './styles';
+export { brandBg, brandDepthColors, brandErrorBg, brandErrorCard, brandErrorPrimary, brandGlow, brandGradient, brandSecondary, brandSecondary3D, brandSecondaryOpaque, brandSecondaryOpaque3D, brandSuccessBg, button3DBase, button3DDisabled, button3DVariants } from './styles';
 export type { Button3DVariant } from './styles';
 
 // Base Buttons
@@ -25,7 +25,7 @@ export { PrimaryButton } from './PrimaryButton';
 export type { PrimaryButtonColor, PrimaryButtonProps } from './PrimaryButton';
 
 export { SecondaryButton } from './SecondaryButton';
-export type { BorderColor, SecondaryButtonProps } from './SecondaryButton';
+export type { SecondaryColor, SecondaryButtonProps } from './SecondaryButton';
 
 export { SubmitButton } from './SubmitButton';
 export type { SubmitButtonProps } from './SubmitButton';

@@ -19,7 +19,7 @@ import { DisplayName } from "~/components/user/avatar";
 import { getHeroIcon, getHeroName as getHeroNameFromLib } from "~/lib/dota/heroes";
 import { CaptainToast, HeroActionToast } from "./DraftToasts";
 import { Send, ArrowLeft, Users, Pause, Play } from "lucide-react";
-import { HistoryButton } from "~/components/ui/buttons";
+import { HistoryButton, PrimaryButton, SecondaryButton } from "~/components/ui/buttons";
 import {
   Tooltip,
   TooltipContent,
@@ -420,9 +420,9 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                     <h2 className="text-2xl font-bold" data-testid="herodraft-rolling-title">Both Captains Ready!</h2>
                     <p data-testid="herodraft-rolling-instruction">Click to trigger the coin flip</p>
                     {isCaptain && (
-                      <Button onClick={handleTriggerRoll} disabled={isSubmitting} data-testid="herodraft-flip-coin-button">
+                      <PrimaryButton onClick={handleTriggerRoll} disabled={isSubmitting} data-testid="herodraft-flip-coin-button">
                         {isSubmitting ? "Flipping..." : "Flip Coin"}
-                      </Button>
+                      </PrimaryButton>
                     )}
                   </div>
                 </div>
@@ -445,34 +445,34 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                         <div className="space-y-2" data-testid="herodraft-winner-choices">
                           <p>Choose your preference:</p>
                           <div className="flex gap-4 justify-center" data-testid="herodraft-choice-buttons">
-                            <Button
+                            <SecondaryButton
                               onClick={() => setPendingChoice({ type: "pick_order", value: "first" })}
                               disabled={isSubmitting}
                               data-testid="herodraft-choice-first-pick"
                             >
                               {isSubmitting ? "..." : "First Pick"}
-                            </Button>
-                            <Button
+                            </SecondaryButton>
+                            <SecondaryButton
                               onClick={() => setPendingChoice({ type: "pick_order", value: "second" })}
                               disabled={isSubmitting}
                               data-testid="herodraft-choice-second-pick"
                             >
                               {isSubmitting ? "..." : "Second Pick"}
-                            </Button>
-                            <Button
+                            </SecondaryButton>
+                            <SecondaryButton
                               onClick={() => setPendingChoice({ type: "side", value: "radiant" })}
                               disabled={isSubmitting}
                               data-testid="herodraft-choice-radiant"
                             >
                               {isSubmitting ? "..." : "Radiant"}
-                            </Button>
-                            <Button
+                            </SecondaryButton>
+                            <SecondaryButton
                               onClick={() => setPendingChoice({ type: "side", value: "dire" })}
                               disabled={isSubmitting}
                               data-testid="herodraft-choice-dire"
                             >
                               {isSubmitting ? "..." : "Dire"}
-                            </Button>
+                            </SecondaryButton>
                           </div>
                         </div>
                       )
@@ -487,7 +487,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                         <div className="flex gap-4 justify-center" data-testid="herodraft-remaining-choice-buttons">
                           {rollWinnerTeam?.is_first_pick === null && (
                             <>
-                              <Button
+                              <SecondaryButton
                                 onClick={() =>
                                   setPendingChoice({ type: "pick_order", value: "first" })
                                 }
@@ -495,8 +495,8 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                                 data-testid="herodraft-remaining-first-pick"
                               >
                                 {isSubmitting ? "..." : "First Pick"}
-                              </Button>
-                              <Button
+                              </SecondaryButton>
+                              <SecondaryButton
                                 onClick={() =>
                                   setPendingChoice({ type: "pick_order", value: "second" })
                                 }
@@ -504,25 +504,25 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                                 data-testid="herodraft-remaining-second-pick"
                               >
                                 {isSubmitting ? "..." : "Second Pick"}
-                              </Button>
+                              </SecondaryButton>
                             </>
                           )}
                           {rollWinnerTeam?.is_radiant === null && (
                             <>
-                              <Button
+                              <SecondaryButton
                                 onClick={() => setPendingChoice({ type: "side", value: "radiant" })}
                                 disabled={isSubmitting}
                                 data-testid="herodraft-remaining-radiant"
                               >
                                 {isSubmitting ? "..." : "Radiant"}
-                              </Button>
-                              <Button
+                              </SecondaryButton>
+                              <SecondaryButton
                                 onClick={() => setPendingChoice({ type: "side", value: "dire" })}
                                 disabled={isSubmitting}
                                 data-testid="herodraft-remaining-dire"
                               >
                                 {isSubmitting ? "..." : "Dire"}
-                              </Button>
+                              </SecondaryButton>
                             </>
                           )}
                         </div>
@@ -619,25 +619,23 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                   {draft.state === "drafting" && (isCaptain || currentUser?.is_staff) && (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
+                        <PrimaryButton
                           size="sm"
                           onClick={handlePause}
                           disabled={isSubmitting}
                           data-testid="herodraft-pause-btn"
-                          className="flex items-center text-xs sm:text-sm border-yellow-500 text-yellow-500 hover:bg-yellow-500/20"
+                          className="flex items-center text-xs sm:text-sm"
                         >
                           <Pause className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
                           <span className="hidden sm:inline">Pause</span>
-                        </Button>
+                        </PrimaryButton>
                       </TooltipTrigger>
                       <TooltipContent>Pause the draft</TooltipContent>
                     </Tooltip>
                   )}
                   {/* View Teams button - shown when viewing full draft on completed state */}
                   {draft.state === "completed" && showFullDraft && (
-                    <Button
-                      variant="outline"
+                    <PrimaryButton
                       size="sm"
                       onClick={() => setShowFullDraft(false)}
                       data-testid="herodraft-view-teams-btn"
@@ -645,7 +643,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                     >
                       <Users className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
                       <span className="hidden sm:inline">View Teams</span>
-                    </Button>
+                    </PrimaryButton>
                   )}
                   <HistoryButton
                     data-testid="herodraft-history-btn"
@@ -654,8 +652,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                     tooltipText="Draft History"
                     size="sm"
                   />
-                  <Button
-                    variant="secondary"
+                  <PrimaryButton
                     size="sm"
                     onClick={handleClose}
                     data-testid="herodraft-close-btn"
@@ -663,7 +660,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                   >
                     <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 sm:mr-2" />
                     <span className="hidden sm:inline">Back to Bracket</span>
-                  </Button>
+                  </PrimaryButton>
                 </div>
               </div>
 
@@ -707,36 +704,32 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                           </p>
                           <div className="flex flex-col gap-2 items-center">
                             {canResume && allCaptainsConnected && (
-                              <Button
-                                variant="default"
+                              <PrimaryButton
+                                color="green"
                                 onClick={handleResume}
                                 disabled={isSubmitting}
-                                className="bg-green-600 hover:bg-green-700 text-white"
                                 data-testid="herodraft-resume-btn"
                               >
                                 <Play className="h-4 w-4 mr-2" />
                                 {isSubmitting ? "Resuming..." : "Resume Draft"}
-                              </Button>
+                              </PrimaryButton>
                             )}
                             {!allCaptainsConnected && (
-                              <Button
-                                variant="outline"
+                              <SecondaryButton
                                 onClick={reconnect}
-                                className="text-white border-yellow-400 hover:bg-yellow-400/20"
                                 data-testid="herodraft-reconnect-btn"
                               >
                                 Reconnect
-                              </Button>
+                              </SecondaryButton>
                             )}
-                            <Button
-                              variant="secondary"
+                            <SecondaryButton
                               size="sm"
                               onClick={handleClose}
                               data-testid="herodraft-paused-close-btn"
                             >
                               <ArrowLeft className="h-4 w-4 mr-2" />
                               Back to Bracket
-                            </Button>
+                            </SecondaryButton>
                           </div>
                         </>
                       )}
@@ -765,15 +758,14 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                       >
                         Refresh Page
                       </Button>
-                      <Button
-                        variant="secondary"
+                      <PrimaryButton
                         size="sm"
                         onClick={handleClose}
                         data-testid="herodraft-kicked-close-btn"
                       >
                         <ArrowLeft className="h-4 w-4 mr-2" />
                         Back to Bracket
-                      </Button>
+                      </PrimaryButton>
                     </div>
                   </div>
                 </div>

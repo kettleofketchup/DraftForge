@@ -40,7 +40,6 @@ import { addOrgMember } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
 import { ClaimsTab, EditOrganizationModal, useOrganization } from '~/components/organization';
-import { Button } from '~/components/ui/button';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
 import { UserList } from '~/components/user';
@@ -158,14 +157,13 @@ export default function OrganizationDetailPage() {
                 <div className="flex items-start justify-between mb-2">
                   <h1 className="text-3xl font-bold">{organization.name}</h1>
                   {isOrgAdmin && (
-                    <Button
-                      variant="outline"
+                    <PrimaryButton
                       size="sm"
                       onClick={() => setEditOrgOpen(true)}
                     >
                       <Pencil className="w-4 h-4 mr-2" />
                       Edit
-                    </Button>
+                    </PrimaryButton>
                   )}
                 </div>
 

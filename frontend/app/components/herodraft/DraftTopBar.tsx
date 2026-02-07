@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { PlayerPopover } from "~/components/player";
 import { cn } from "~/lib/utils";
+import { brandBg } from "~/components/ui/buttons/styles";
 import type { HeroDraft, HeroDraftTick } from "~/components/herodraft/types";
 import type { UserType } from "~/components/user/types.d";
 import { DisplayName } from "~/components/user/avatar";
@@ -48,9 +49,15 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
     heroDraftSelectors.isMyTurn(state, currentUser?.pk)
   );
 
-  // Safely access teams with bounds checking
-  const teamA = draft.draft_teams?.[0] ?? null;
-  const teamB = draft.draft_teams?.[1] ?? null;
+  // Order teams: first pick on left (teamA), second pick on right (teamB)
+  // Falls back to array order when is_first_pick is null (pre-coin-flip)
+  const [teamA, teamB] = useMemo(() => {
+    const teams = draft.draft_teams ?? [];
+    const first = teams.find((t) => t.is_first_pick === true);
+    const second = teams.find((t) => t.is_first_pick === false);
+    if (first && second) return [first, second];
+    return [teams[0] ?? null, teams[1] ?? null];
+  }, [draft.draft_teams]);
 
   // Derive active team from tick first, then fall back to state
   // This prevents race conditions where state updates but tick hasn't arrived yet
@@ -151,11 +158,11 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
 
   return (
     <div
-      className={cn(getTopBarBackground(), "border-b border-gray-800 shrink-0 transition-colors duration-300")}
+      className={cn(getTopBarBackground(), brandBg, "border-b border-gray-800 shrink-0 transition-colors duration-300")}
       data-testid="herodraft-topbar"
     >
-      {/* Row 1: Teams - Captain on outer edges, members flowing inward */}
-      <div className="flex items-center justify-between p-1 sm:p-2" data-testid="herodraft-teams-row">
+      {/* Row 1: Teams - grid matches Row 2 so VS aligns over grace timer */}
+      <div className="grid grid-cols-3 sm:grid-cols-5 items-center p-1 sm:p-2" data-testid="herodraft-teams-row">
         {/* Team A: Captain on left, members flowing right */}
         <div className="flex items-center gap-0.5 sm:gap-1" data-testid="herodraft-team-a">
           {/* Captain - hidden below md */}
@@ -168,51 +175,60 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
           </div>
         </div>
 
+        {/* Progress A - hidden on mobile, visible sm+ */}
+        <div className="hidden sm:block">
+          {(draft.state === "drafting" || draft.state === "completed") && (
+            <div className="text-center text-[10px] sm:text-xs text-muted-foreground" data-testid="herodraft-team-a-progress">
+              {teamAProgress.completed}/{teamAProgress.total}
+            </div>
+          )}
+        </div>
+
         {/* Center: VS or YOUR TURN indicator */}
-        <div className="flex items-center gap-2 sm:gap-4">
-          {draft.state === "drafting" || draft.state === "completed" ? (
-            <>
-              <div className="text-center text-[10px] sm:text-xs text-muted-foreground" data-testid="herodraft-team-a-progress">
-                {teamAProgress.completed}/{teamAProgress.total}
-              </div>
-              <div className="text-center" data-testid="herodraft-vs-section">
-                {isMyTurn && draft.state === "drafting" ? (
-                  <div
-                    className="flex flex-col items-center animate-pulse-scale"
-                    data-testid="herodraft-your-turn-indicator"
-                  >
-                    <span className={cn(
-                      "text-xs sm:text-sm font-bold tracking-wide",
-                      currentAction === "ban" ? "text-red-300" : "text-green-300"
-                    )}>
-                      YOUR TURN
-                    </span>
-                    <span className={cn(
-                      "text-xl sm:text-3xl font-black tracking-wider",
-                      currentAction === "ban"
-                        ? "text-red-400 drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]"
-                        : "text-green-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.5)]"
-                    )}>
-                      {currentAction.toUpperCase()}
-                    </span>
-                  </div>
-                ) : (
-                  <span className="text-lg sm:text-2xl font-bold text-muted-foreground">VS</span>
-                )}
-              </div>
-              <div className="text-center text-[10px] sm:text-xs text-muted-foreground" data-testid="herodraft-team-b-progress">
-                {teamBProgress.completed}/{teamBProgress.total}
-              </div>
-            </>
+        <div className="text-center flex items-center justify-center gap-2" data-testid="herodraft-vs-section">
+          {/* Mobile-only progress counts inline with VS */}
+          {(draft.state === "drafting" || draft.state === "completed") && (
+            <span className="text-[10px] text-muted-foreground sm:hidden">{teamAProgress.completed}/{teamAProgress.total}</span>
+          )}
+          {isMyTurn && draft.state === "drafting" ? (
+            <div
+              className="flex flex-col items-center animate-pulse-scale"
+              data-testid="herodraft-your-turn-indicator"
+            >
+              <span className={cn(
+                "text-xs sm:text-sm font-bold tracking-wide",
+                currentAction === "ban" ? "text-red-300" : "text-green-300"
+              )}>
+                YOUR TURN
+              </span>
+              <span className={cn(
+                "text-xl sm:text-3xl font-black tracking-wider",
+                currentAction === "ban"
+                  ? "text-red-400 drop-shadow-[0_0_10px_rgba(248,113,113,0.5)]"
+                  : "text-green-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.5)]"
+              )}>
+                {currentAction.toUpperCase()}
+              </span>
+            </div>
           ) : (
-            <div className="text-center" data-testid="herodraft-vs-section">
-              <span className="text-lg sm:text-2xl font-bold text-muted-foreground">VS</span>
+            <span className="text-lg sm:text-2xl font-bold text-muted-foreground">VS</span>
+          )}
+          {(draft.state === "drafting" || draft.state === "completed") && (
+            <span className="text-[10px] text-muted-foreground sm:hidden">{teamBProgress.completed}/{teamBProgress.total}</span>
+          )}
+        </div>
+
+        {/* Progress B - hidden on mobile, visible sm+ */}
+        <div className="hidden sm:block">
+          {(draft.state === "drafting" || draft.state === "completed") && (
+            <div className="text-center text-[10px] sm:text-xs text-muted-foreground" data-testid="herodraft-team-b-progress">
+              {teamBProgress.completed}/{teamBProgress.total}
             </div>
           )}
         </div>
 
         {/* Team B: Members flowing left, Captain on right */}
-        <div className="flex items-center gap-0.5 sm:gap-1" data-testid="herodraft-team-b">
+        <div className="flex items-center justify-end gap-0.5 sm:gap-1" data-testid="herodraft-team-b">
           {/* Team members (reversed order so they flow toward center) - hidden below lg */}
           <div className="hidden lg:flex items-center gap-0.5 sm:gap-1">
             {[...teamBMembers].reverse().map((member, idx) => renderPlayer(member, false, `herodraft-team-b-member-${idx}`))}
