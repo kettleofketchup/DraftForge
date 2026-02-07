@@ -65,6 +65,7 @@ from app.views.admin_team import (
     search_users,
     transfer_org_ownership,
 )
+from app.views.csv_import import import_csv_org
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from org.views import ClaimRequestViewSet
@@ -251,6 +252,12 @@ urlpatterns = [
         "api/leagues/<int:league_id>/staff/<int:user_id>/",
         remove_league_staff,
         name="remove_league_staff",
+    ),
+    # CSV Import
+    path(
+        "api/organizations/<int:org_id>/import-csv/",
+        import_csv_org,
+        name="import_csv_org",
     ),
     # Member management
     path(
