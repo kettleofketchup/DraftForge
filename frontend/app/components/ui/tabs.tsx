@@ -82,8 +82,7 @@ function TabsTrigger({
         // Active state - brand gradient
         "data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-blue-500",
         "data-[state=active]:text-white",
-        "data-[state=active]:border-b-4 data-[state=active]:border-b-violet-700",
-        "data-[state=active]:shadow-lg data-[state=active]:shadow-violet-900/50",
+        "data-[state=active]:shadow-[0_4px_0_0_theme(colors.violet.700),0_10px_15px_-3px_theme(colors.violet.900/50)]",
         "data-[state=active]:[text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]",
         "data-[state=active]:-translate-y-0.5",
         // Focus styles
