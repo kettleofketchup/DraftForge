@@ -14,6 +14,9 @@ export const brandBg = 'bg-gradient-to-br from-primary/10 via-transparent to-acc
 // Brand 3D depth colors - violet border-bottom and shadow for brand gradient buttons
 export const brandDepthColors = 'border-b-violet-700 shadow-violet-900/50';
 
+// Brand glow shadow - visible on dark backgrounds, matches brand gradient
+export const brandGlow = 'shadow-[0_4px_0_0_theme(colors.violet.500),0_8px_20px_-4px_theme(colors.blue.500/40)]';
+
 // Brand error surfaces - muted deep wine/red tones for error containers.
 // Uses raw Tailwind colors (not semantic --error/--primary) because error surfaces
 // need deep wine/muted tones, not the bright accent status colors.
