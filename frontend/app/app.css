@@ -189,7 +189,7 @@ button:focus-visible {
   --color-text-muted: var(--text-muted);
 
   /* Brand shadows */
-  --shadow-brand-glow: 0 4px 0 0 var(--color-violet-500), 0 8px 20px -4px color-mix(in oklch, var(--color-blue-500) 40%, transparent);
+  --shadow-brand-glow: 0 4px 0 0 var(--color-violet-900), 0 8px 16px -4px color-mix(in oklch, var(--color-violet-950) 60%, transparent);
 }
 
 :root {
