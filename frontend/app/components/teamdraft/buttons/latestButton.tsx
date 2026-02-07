@@ -10,10 +10,11 @@ export const LatestRoundButton: React.FC<LatestRoundButtonProps> = ({
 }) => {
   return (
     <NavButton
-      direction="latest"
       onClick={goToLatestRound}
       disabled={disabled}
       aria-label="Go to the latest draft round"
-    />
+    >
+      Latest
+    </NavButton>
   );
 };

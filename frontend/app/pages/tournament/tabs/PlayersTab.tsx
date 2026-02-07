@@ -2,7 +2,7 @@ import { Plus } from 'lucide-react';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { addTournamentMember } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
-import { Button } from '~/components/ui/button';
+import { PrimaryButton } from '~/components/ui/buttons';
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { UserType } from '~/components/user/types';
 import { UserList } from '~/components/user';
@@ -69,13 +69,13 @@ export const PlayersTab: React.FC = memo(() => {
         </div>
         <div className="flex px-5 place-self-end">
           {canEdit && (
-            <Button
+            <PrimaryButton
               onClick={() => setShowAddUser(true)}
               data-testid="tournamentAddPlayerBtn"
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Player
-            </Button>
+            </PrimaryButton>
           )}
         </div>
       </div>

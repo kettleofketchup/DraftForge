@@ -187,9 +187,16 @@ button:focus-visible {
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
+
+  /* Brand shadows */
+  --shadow-brand-glow: 0 4px 8px -2px rgba(0, 0, 0, 0.4), 0 8px 20px -4px rgba(0, 0, 0, 0.3);
+
 }
 
 :root {
+  /* Brand surface gradients (background-image, not background-color — avoids tailwind-merge conflicts) */
+  --brand-bg: linear-gradient(to bottom right, hsl(var(--primary) / 0.1), transparent, hsl(var(--accent) / 0.1));
+  --brand-success-bg: linear-gradient(135deg, rgba(5, 150, 105, 0.28) 0%, rgba(67, 56, 202, 0.18) 60%, rgba(124, 58, 237, 0.12) 100%);
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -379,6 +386,19 @@ button:focus-visible {
   }
   body {
     @apply bg-background text-foreground;
+  }
+  /* Brand gradient overlay for all dialogs — uses background-image so it
+     coexists with Tailwind's bg-background (background-color).
+     Cannot use Tailwind utilities because tailwind-merge treats bg-gradient-*
+     and bg-* as the same group, dropping the solid background-color. */
+  [data-slot="dialog-content"],
+  [data-slot="alert-dialog-content"] {
+    background-image: linear-gradient(
+      to bottom right,
+      color-mix(in oklch, var(--color-primary) 10%, transparent),
+      transparent,
+      color-mix(in oklch, var(--color-accent) 10%, transparent)
+    );
   }
 }
 

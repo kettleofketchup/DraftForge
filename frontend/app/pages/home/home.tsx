@@ -16,6 +16,7 @@ import { getHomeStats } from '~/components/api/api';
 import { FeatureCard } from '~/components/feature/FeatureCard';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
+import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 
 // Video/GIF assets (mounted at public/assets/docs in dev, copied during build)
 const ASSETS_BASE = '/assets/docs';
@@ -145,13 +146,13 @@ export default function HomePage() {
             transition={{ duration: 0.6, delay: 0.3 }}
             className="flex flex-col sm:flex-row gap-4 justify-center"
           >
-            <Button size="lg" className="" asChild>
+            <PrimaryButton size="lg" depth={false} asChild>
               <Link to="/tournaments">
                 Browse Tournaments
                 <ChevronRight className="w-4 h-4" />
               </Link>
-            </Button>
-            <Button size="lg" className="secondary" asChild>
+            </PrimaryButton>
+            <SecondaryButton size="lg" asChild>
               <a
                 href="https://discord.gg/6xYb7RUn8a"
                 target="_blank"
@@ -159,7 +160,7 @@ export default function HomePage() {
               >
                 Join Discord
               </a>
-            </Button>
+            </SecondaryButton>
           </motion.div>
 
           {/* Stats */}
@@ -281,14 +282,10 @@ export default function HomePage() {
                 to create unforgettable competitive experiences.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button size="lg" className="!text-black" asChild>
+                <PrimaryButton size="lg" depth={false} asChild>
                   <Link to="/tournaments">Get Started</Link>
-                </Button>
-                <Button
-                  size="lg"
-                  variant="secondary"
-                  asChild
-                >
+                </PrimaryButton>
+                <SecondaryButton size="lg" asChild>
                   <a
                     href="https://kettleofketchup.github.io/DraftForge/"
                     target="_blank"
@@ -296,7 +293,7 @@ export default function HomePage() {
                   >
                     Learn More
                   </a>
-                </Button>
+                </SecondaryButton>
               </div>
             </div>
           </div>

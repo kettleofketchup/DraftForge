@@ -6,6 +6,7 @@ import { Input } from '~/components/ui/input';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { cn } from '~/lib/utils';
+import { brandGradient, brandDepthColors } from '~/components/ui/buttons/styles';
 import { useUserStore } from '~/store/userStore';
 import { DisplayName } from '~/components/user/avatar';
 import { UserStrip } from '~/components/user/UserStrip';
@@ -307,7 +308,10 @@ export const AvailablePlayersSection = memo(() => {
                   size="sm"
                   variant={positionFilter === pos ? 'default' : 'outline'}
                   onClick={() => setPositionFilter(pos)}
-                  className="text-xs px-2 py-0.5 h-6"
+                  className={cn(
+                    "text-xs px-2 py-0.5 h-6",
+                    positionFilter === pos && `${brandGradient} ${brandDepthColors} border-b-2 [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`
+                  )}
                 >
                   {POSITION_LABELS[pos]}
                 </Button>
@@ -323,7 +327,10 @@ export const AvailablePlayersSection = memo(() => {
                   size="sm"
                   variant={pickOrderFilter === filter ? 'default' : 'outline'}
                   onClick={() => setPickOrderFilter(filter)}
-                  className="text-xs px-2 py-0.5 h-6"
+                  className={cn(
+                    "text-xs px-2 py-0.5 h-6",
+                    pickOrderFilter === filter && `${brandGradient} ${brandDepthColors} border-b-2 [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`
+                  )}
                   disabled
                 >
                   {PICK_ORDER_LABELS[filter]}
@@ -340,7 +347,10 @@ export const AvailablePlayersSection = memo(() => {
                   size="sm"
                   variant={leagueStatsFilter === filter ? 'default' : 'outline'}
                   onClick={() => setLeagueStatsFilter(filter)}
-                  className="text-xs px-2 py-0.5 h-6"
+                  className={cn(
+                    "text-xs px-2 py-0.5 h-6",
+                    leagueStatsFilter === filter && `${brandGradient} ${brandDepthColors} border-b-2 [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]`
+                  )}
                   disabled
                 >
                   {LEAGUE_STATS_LABELS[filter]}

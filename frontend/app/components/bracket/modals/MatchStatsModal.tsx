@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '~/components/ui/alert-dialog';
-import { Button } from '~/components/ui/button';
+import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { Badge } from '~/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { BarChart3, Link2, Loader2, RotateCcw, Swords, UserLock } from 'lucide-react';
@@ -198,22 +198,20 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
             <div className="border-t pt-4">
               <p className="text-sm text-muted-foreground mb-2">Set Winner:</p>
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
+                <SecondaryButton
                   className="flex-1"
                   onClick={() => handleSetWinner('radiant')}
                   data-testid="radiantWinsButton"
                 >
                   {match.radiantTeam.captain ? DisplayName(match.radiantTeam.captain) : match.radiantTeam.name} Wins
-                </Button>
-                <Button
-                  variant="outline"
+                </SecondaryButton>
+                <SecondaryButton
                   className="flex-1"
                   onClick={() => handleSetWinner('dire')}
                   data-testid="direWinsButton"
                 >
                   {match.direTeam.captain ? DisplayName(match.direTeam.captain) : match.direTeam.name} Wins
-                </Button>
+                </SecondaryButton>
               </div>
             </div>
           )}
@@ -221,15 +219,14 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
           {/* Unset Winner - only show if match has winner */}
           {isLeagueStaff && match.status === 'completed' && match.winner && (
             <div className="border-t pt-4">
-              <Button
-                variant="outline"
+              <SecondaryButton
                 size="sm"
                 onClick={handleUnsetWinner}
                 data-testid="unsetWinnerButton"
               >
                 <RotateCcw className="w-4 h-4 mr-1" />
                 Unset Winner
-              </Button>
+              </SecondaryButton>
             </div>
           )}
 
@@ -265,8 +262,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
               <div className="border-t pt-4">
                 <div className="flex flex-col gap-2">
                   <div className="flex gap-2 flex-wrap">
-                    <Button
-                      variant="outline"
+                    <PrimaryButton
                       size="sm"
                       onClick={handleOpenDraft}
                       disabled={createDraftMutation.isPending || gameNotSaved}
@@ -279,10 +275,9 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
                         <Swords className="w-4 h-4 mr-1" />
                       )}
                       {match.herodraft_id ? 'View Draft' : 'Start Draft'}
-                    </Button>
+                    </PrimaryButton>
                   {isStaff && match.herodraft_id && (
-                    <Button
-                      variant="outline"
+                    <SecondaryButton
                       size="sm"
                       onClick={() => setShowResetConfirm(true)}
                       disabled={resetDraftMutation.isPending}
@@ -294,7 +289,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
                         <RotateCcw className="w-4 h-4 mr-1" />
                       )}
                       Restart Draft
-                    </Button>
+                    </SecondaryButton>
                   )}
                   </div>
                   {gameNotSaved && (
@@ -315,14 +310,13 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
                   Steam Match ID: {match.steamMatchId}
                 </p>
                 {isGameComplete && (
-                  <Button
-                    variant="secondary"
+                  <SecondaryButton
                     size="sm"
                     onClick={() => setShowStatsModal(true)}
                   >
                     <BarChart3 className="w-4 h-4 mr-1" />
                     View Stats
-                  </Button>
+                  </SecondaryButton>
                 )}
               </div>
             </div>
@@ -331,8 +325,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
           {/* Staff: Link Steam Match button */}
           {isStaff && (
             <div className="border-t pt-4">
-              <Button
-                variant="outline"
+              <SecondaryButton
                 size="sm"
                 onClick={() => setShowLinkModal(true)}
                 data-testid="link-steam-match-btn"
@@ -341,7 +334,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
                 {match.steamMatchId
                   ? `Linked: Match #${match.steamMatchId}`
                   : 'Link Steam Match'}
-              </Button>
+              </SecondaryButton>
             </div>
           )}
         </div>
