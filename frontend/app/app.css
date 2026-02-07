@@ -187,6 +187,9 @@ button:focus-visible {
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
+
+  /* Brand shadows */
+  --shadow-brand-glow: 0 4px 0 0 var(--color-violet-500), 0 8px 20px -4px color-mix(in oklch, var(--color-blue-500) 40%, transparent);
 }
 
 :root {
