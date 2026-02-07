@@ -14,7 +14,7 @@ Unify the herodraft and team draft systems by extracting a shared tick service, 
 
 Extract the herodraft tick loop (`herodraft_tick.py`) into a generic `DraftTickService` base class. The tick loop runs every 1 second and performs 5 steps:
 
-1. Check resume countdown (RESUMING → DRAFTING)
+1. Check resume countdown (RESUMING -> DRAFTING)
 2. Check captain heartbeats (detect stale connections)
 3. Broadcast tick (timing data to WebSocket clients)
 4. Check timeout (delegate to subclass)
@@ -28,6 +28,8 @@ Steps 1, 2, 3, and 5 are identical across all draft types. Only step 4 varies.
 class DraftTickService:
     """Generic tick loop for any timed draft."""
 
+    # Default key patterns for new draft types.
+    # Subclasses may override to preserve legacy patterns.
     LOCK_KEY = "draft:tick_lock:{draft_type}:{draft_id}"
     CONN_KEY = "draft:connections:{draft_type}:{draft_id}"
     HEARTBEAT_KEY = "draft:{draft_type}:{draft_id}:captain:{user_id}:heartbeat"
@@ -59,9 +61,13 @@ class DraftTickService:
 
 Concrete subclasses:
 
-- **`HeroDraftTickService`**: `on_timeout()` auto-picks a random hero. Refactored from existing `herodraft_tick.py`.
-- **`TeamDraftTickService`**: `on_timeout()` picks a random available player (reads `pick_timeout_strategy` from `TournamentConfig`).
+- **`HeroDraftTickService`**: `on_timeout()` auto-picks a random hero. Refactored from existing `herodraft_tick.py`. **Overrides all Redis key properties to preserve legacy patterns** (`herodraft:tick_lock:{draft_id}`, `herodraft:connections:{draft_id}`, etc.) to avoid duplicate tick loops during deployment.
+- **`TeamDraftTickService`**: `on_timeout()` picks a random available player (reads `pick_timeout_strategy` from `TournamentConfig`). Uses the new generic key patterns.
 - **Future `AuctionTickService`**: `on_timeout()` closes the current bid round.
+
+**Import compatibility**: `herodraft_tick.py` must maintain backward-compatible module-level functions (`start_tick_broadcaster`, `increment_connection_count`, `decrement_connection_count`, `get_connection_count`) that delegate to `HeroDraftTickService`. All existing import sites in `consumers.py` continue to work without changes in Phase 1.
+
+**Config reads**: The tick service re-reads `TournamentConfig` from the database each tick (single-row `select_related` read) rather than caching in memory, so admin config changes take effect within 1 second.
 
 ### 2. Abstract PauseEvent Model
 
@@ -80,35 +86,48 @@ class PauseEvent(models.Model):
     ]
 
     pause_type = models.CharField(max_length=16, choices=PAUSE_TYPE_CHOICES)
-    paused_by = models.ForeignKey(User, null=True, on_delete=models.SET_NULL)
+    paused_by = models.ForeignKey(
+        User, null=True, on_delete=models.SET_NULL,
+        related_name="+"  # No reverse relation needed
+    )
     paused_at = models.DateTimeField()
     resumed_at = models.DateTimeField(null=True, blank=True)
     reason = models.TextField(blank=True, default="")
 
     class Meta:
         abstract = True
+        ordering = ["-paused_at"]
 
     @property
     def duration(self):
+        """Returns pause duration. For open (in-progress) pauses, returns
+        elapsed time since pause started to avoid silent under-counting."""
         if self.resumed_at:
             return self.resumed_at - self.paused_at
-        return None
+        return timezone.now() - self.paused_at
 ```
 
 Concrete models:
 
-- **`HeroDraftPauseEvent(PauseEvent)`**: FK to `HeroDraft`
-- **`TeamDraftPauseEvent(PauseEvent)`**: FK to `Draft`
+- **`HeroDraftPauseEvent(PauseEvent)`**: FK to `HeroDraft`, optional FK to `HeroDraftRound` (the round active when pause occurred — useful for scoping time calculations and analytics)
+- **`TeamDraftPauseEvent(PauseEvent)`**: FK to `Draft`, optional FK to `DraftRound`
 
-**Time calculation change**: Instead of adjusting `started_at` on resume, the tick service calculates elapsed active time by subtracting total paused duration from wall-clock elapsed time:
+**Time calculation**: Instead of adjusting `started_at` on resume, the tick service calculates elapsed active time by subtracting total paused duration. Pause events are scoped to the active round:
 
 ```python
+pause_events = draft.pause_events.filter(round=current_round)
 total_paused = sum(
-    (pe.duration for pe in pause_events if pe.duration),
+    (pe.duration for pe in pause_events),
     timedelta()
 )
-active_elapsed = (now - round.started_at) - total_paused
+active_elapsed = (now - current_round.started_at) - total_paused
 ```
+
+**`resumed_at` timing**: Set when the RESUMING -> DRAFTING transition completes (after the countdown), not when the resume button is pressed. This naturally includes the countdown duration in the paused time, matching the current behavior where `started_at` adjustment includes the 3-second countdown.
+
+**Transaction safety**: PauseEvent creation must happen inside the same `select_for_update` transaction that transitions the draft state to PAUSED, preventing race conditions between consumer disconnect and heartbeat stale detection.
+
+**Crash recovery**: On tick service startup, check for open pause events (no `resumed_at`). If the draft is no longer paused, close them with `resumed_at = now`. The `duration` property's fallback to `timezone.now() - paused_at` handles the case where the tick service queries mid-pause.
 
 ### 3. Pause State on Draft Models
 
@@ -120,7 +139,16 @@ Both `HeroDraft` and `Draft` models get the same pause fields. `HeroDraft` alrea
 | `resuming_until` | DateTimeField (nullable) | When resume countdown ends |
 | `is_manual_pause` | BooleanField | Manual vs auto-pause |
 
-The tick service reads these through a common interface (duck typing / protocol), so it doesn't care which model it's operating on.
+The tick service reads these through a common interface (duck typing), so it doesn't care which model it's operating on.
+
+**DraftRound temporal fields**: `DraftRound` (team draft) currently has no `started_at` or `completed_at` fields, but the tick service needs `round.started_at` to calculate elapsed time. `HeroDraftRound` already has these. Add to `DraftRound` in Phase 1:
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `started_at` | DateTimeField (nullable) | When round became active |
+| `completed_at` | DateTimeField (nullable) | When pick was made |
+
+Populate `started_at` when a round becomes active, `completed_at` when a pick is submitted.
 
 ### 4. TournamentConfig Model
 
@@ -128,6 +156,8 @@ New model for tournament-level configuration. Replaces hardcoded values across b
 
 ```python
 # backend/app/models.py
+
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 class TournamentConfig(models.Model):
     tournament = models.OneToOneField(
@@ -142,21 +172,39 @@ class TournamentConfig(models.Model):
     pick_timeout_strategy = models.CharField(
         max_length=16, choices=PICK_TIMEOUT_CHOICES, default="random"
     )
-    grace_time_ms = models.IntegerField(default=30000)       # 30s per pick
-    reserve_time_ms = models.IntegerField(default=90000)     # 90s pool per team
+    grace_time_ms = models.IntegerField(
+        default=30000,
+        validators=[MinValueValidator(5000), MaxValueValidator(120000)]
+    )
+    reserve_time_ms = models.IntegerField(
+        default=90000,
+        validators=[MinValueValidator(0), MaxValueValidator(300000)]
+    )
     enable_pick_timer = models.BooleanField(default=False)   # Off for backwards compat
     pause_on_disconnect = models.BooleanField(default=True)
-    resume_countdown_ms = models.IntegerField(default=3000)  # 3s countdown
+    resume_countdown_ms = models.IntegerField(
+        default=3000,
+        validators=[MinValueValidator(1000), MaxValueValidator(10000)]
+    )
 ```
 
-Auto-created when a Tournament is created. Serialized as nested `config` field in existing tournament API responses.
+**Auto-creation**: Use a `post_save` signal on `Tournament` with `created=True` guard (consistent with existing `app/signals.py` patterns). Data migration in Phase 1 creates configs for all existing tournaments with defaults.
 
-**Frontend Zod schema:**
+```python
+# backend/app/signals.py
+
+@receiver(post_save, sender=Tournament)
+def create_tournament_config(sender, instance, created, **kwargs):
+    if created:
+        TournamentConfig.objects.get_or_create(tournament=instance)
+```
+
+**Serializer**: Add `TournamentConfigSerializer(ModelSerializer)` as a nested `config = TournamentConfigSerializer(read_only=True)` field on `TournamentSerializer`. Update `TournamentView.get_queryset()` to include `select_related("config")`. Add `TournamentConfig` to `cached_as` model dependencies in both `list()` and `retrieve()` methods.
+
+**Frontend Zod schema** — add to the existing `schemas.ts` file (not a new `.tsx` file):
 
 ```typescript
-// frontend/app/components/tournament/config.tsx
-
-import { z } from "zod";
+// frontend/app/components/tournament/schemas.ts (add to existing file)
 
 export const TournamentConfigSchema = z.object({
   pick_timeout_strategy: z.enum(["random"]),
@@ -168,63 +216,85 @@ export const TournamentConfigSchema = z.object({
 });
 
 export type TournamentConfig = z.infer<typeof TournamentConfigSchema>;
+
+// Update existing TournamentSchema:
+export const TournamentSchema = z.object({
+  // ... existing fields ...
+  config: TournamentConfigSchema.optional(),
+});
 ```
 
 ### 5. Team Draft WebSocket Upgrade
 
-The existing `DraftConsumer` at `api/draft/<draft_id>/` gains the same lifecycle as `HeroDraftConsumer`:
+The existing `DraftConsumer` at `api/draft/<draft_id>/` gains the same lifecycle as `HeroDraftConsumer`. **All new behavior is gated behind `enable_pick_timer`** — when disabled (default), `DraftConsumer` behaves exactly as today with zero overhead.
 
-**Connect:**
+```python
+# In DraftConsumer.connect():
+config = getattr(self.tournament, 'config', None)
+self.timers_enabled = config and config.enable_pick_timer
+if not self.timers_enabled:
+    return  # Skip all timer/heartbeat/connection logic
+```
+
+**Connect** (when timers enabled):
 - Track connection count in Redis
 - Identify if user is captain for current round
-- Start `TeamDraftTickService` if `enable_pick_timer` is true in tournament config
+- Start `TeamDraftTickService`
 
-**Disconnect:**
+**Disconnect** (when timers enabled):
 - Decrement connection count
 - Mark captain disconnected
 - Auto-pause if `pause_on_disconnect` is true and draft is in active picking state
 
-**Heartbeat:**
+**Heartbeat** (when timers enabled):
 - Same Redis key pattern as herodraft
 - Same 9-second stale detection threshold
 - Stale captain triggers auto-pause
 
-**Tick broadcast:**
+**Tick broadcast** (when timers enabled):
 - Grace time remaining, reserve time per captain, active captain ID
 - Pause/resume state changes
 
-**Pick submission stays HTTP** — `choosePlayerHook.tsx` still calls `PickPlayerForRound()`. The WebSocket is receive-only for timer/pause events. The tick service validates picks are within the time window server-side.
+**Pick submission stays HTTP** — `choosePlayerHook.tsx` still calls `PickPlayerForRound()`. The WebSocket is receive-only for timer/pause events. The tick service validates picks are within the time window server-side (gated behind `enable_pick_timer`).
 
 **Frontend changes:**
 
-- `useDraftLive.ts`: Connect WebSocket when `enable_pick_timer` is true, fall back to polling when disabled
-- Timer display component in team draft UI (grace timer + reserve time)
-- Shared `DraftPauseOverlay` component extracted from herodraft's pause overlay pattern
-- Timer configuration in draft style settings modal (`draftStyleModal.tsx`)
+- **`draftWebSocketStore.ts`**: Add tick state (`TeamDraftTick`), heartbeat start/stop actions, and pause selectors (analogous to `heroDraftStore.ts`). This store already manages the team draft WebSocket connection via `getWebSocketManager()`.
+- **`useDraftLive.ts`**: Remains as the polling fallback when `enable_pick_timer` is false. When timers are enabled, components read from `draftWebSocketStore` instead.
+- **`teamdraft/schemas.ts`**: Add Zod schemas for team draft tick/pause WebSocket messages (matching the herodraft pattern in `herodraft/schemas.ts`).
+- **Timer display component** in team draft UI (grace timer + reserve time).
+- **Shared `DraftPauseOverlay`** component in `frontend/app/components/reusable/DraftPauseOverlay.tsx`. Props interface abstracts over both draft model shapes (accepts `isPaused`, `isResuming`, `countdown`, `allConnected`, `isManualPause`, `onResume`, `onClose`).
+- Timer configuration in draft style settings modal (`draftStyleModal.tsx`).
 
 ### 6. Migration Path
 
-Three independently deployable phases:
+Three independently deployable phases. **Deployment constraint**: Phase 2 should be deployed when no herodrafts are in progress, to avoid time calculation inconsistencies between old `started_at`-adjusted rounds and new PauseEvent-tracked rounds.
 
 **Phase 1 — Foundation (no behavior changes):**
-- Add `TournamentConfig` model + migration
+- Add `TournamentConfig` model with validators + `post_save` signal + migration
 - Data migration: auto-create config for all existing tournaments with defaults
-- Add abstract `PauseEvent` model + concrete `HeroDraftPauseEvent`, `TeamDraftPauseEvent`
+- Add abstract `PauseEvent` model + concrete `HeroDraftPauseEvent`, `TeamDraftPauseEvent` (with round FK)
 - Add pause fields to `Draft` model (`paused_at`, `resuming_until`, `is_manual_pause`)
-- Extract `DraftTickService` base class from `herodraft_tick.py`
-- Refactor existing code into `HeroDraftTickService` subclass — zero behavior change
-- Frontend: add `TournamentConfigSchema`, wire into tournament serializer
+- Add `started_at`, `completed_at` to `DraftRound` model (nullable, for Phase 3 time validation)
+- Extract `DraftTickService` base class into `backend/app/tasks/draft_tick.py`
+- Refactor into `HeroDraftTickService` subclass — **preserves legacy Redis key patterns**, maintains backward-compatible module-level functions — zero behavior change
+- Backend: `TournamentConfigSerializer` nested in `TournamentSerializer`, `select_related("config")`, `cached_as` dependency
+- Frontend: add `TournamentConfigSchema` to `tournament/schemas.ts`, update `TournamentSchema` with optional `config` field
 
 **Phase 2 — Herodraft reads from config:**
-- Herodraft tick service reads `grace_time_ms`, `reserve_time_ms`, `resume_countdown_ms` from `TournamentConfig`
-- Herodraft pause/resume creates `HeroDraftPauseEvent` records
-- Time calculations migrate from `started_at` adjustment to PauseEvent-based subtraction
+- Herodraft tick service reads `grace_time_ms`, `reserve_time_ms`, `resume_countdown_ms` from `TournamentConfig` instead of hardcoded defaults
+- Herodraft pause/resume creates `HeroDraftPauseEvent` records (write-both: continue adjusting `started_at` AND create PauseEvent records for transition safety)
+- Replace hardcoded `reserve_time_remaining = 90000` in `herodraft_views.py` reset with config read
+- Time calculations switch to PauseEvent-based subtraction for newly created drafts only
 - All existing herodraft tests must still pass
 
 **Phase 3 — Team draft timers:**
 - `TeamDraftTickService` with `on_timeout()` picking random player
-- `DraftConsumer` upgraded with heartbeat/connection tracking
-- Frontend WebSocket + timer UI + pause overlay
+- `DraftConsumer` upgraded with heartbeat/connection/tick lifecycle, all gated behind `enable_pick_timer`
+- Populate `DraftRound.started_at`/`completed_at` in pick flow
+- `pick_player_for_round()` validates time window when `enable_pick_timer` is true
+- Frontend: `draftWebSocketStore.ts` gains tick/heartbeat/pause state + team draft tick Zod schemas
+- Frontend: timer UI + `DraftPauseOverlay` in `components/reusable/`
 - `enable_pick_timer` defaults to `False` — existing tournaments unaffected
 - New tournaments can opt in via tournament config
 
@@ -232,70 +302,20 @@ Three independently deployable phases:
 
 ### New Files
 - `backend/app/tasks/draft_tick.py` — `DraftTickService` base class
-- `frontend/app/components/tournament/config.tsx` — `TournamentConfigSchema`
+- `frontend/app/components/reusable/DraftPauseOverlay.tsx` — Shared pause overlay component
 
 ### Modified Files
-- `backend/app/models.py` — `TournamentConfig`, `PauseEvent`, `HeroDraftPauseEvent`, `TeamDraftPauseEvent`, pause fields on `Draft`
-- `backend/app/tasks/herodraft_tick.py` — Refactored to `HeroDraftTickService` extending `DraftTickService`
-- `backend/app/consumers.py` — `DraftConsumer` gains heartbeat/connection/tick lifecycle
+- `backend/app/models.py` — `TournamentConfig`, `PauseEvent`, `HeroDraftPauseEvent`, `TeamDraftPauseEvent`, pause fields on `Draft`, temporal fields on `DraftRound`
+- `backend/app/signals.py` — `post_save` signal for `TournamentConfig` auto-creation
+- `backend/app/tasks/herodraft_tick.py` — Refactored to `HeroDraftTickService` extending `DraftTickService`, maintains backward-compatible module-level functions
+- `backend/app/consumers.py` — `DraftConsumer` gains heartbeat/connection/tick lifecycle (gated behind `enable_pick_timer`)
 - `backend/app/functions/herodraft_views.py` — Pause/resume creates PauseEvent records, reads config
 - `backend/app/functions/tournament.py` — `pick_player_for_round()` validates time window when timers enabled
-- `backend/app/serializers.py` — Tournament serializer gains nested `config` field
-- `frontend/app/components/teamdraft/hooks/useDraftLive.ts` — WebSocket mode when timers enabled
+- `backend/app/serializers.py` — `TournamentConfigSerializer`, nested in `TournamentSerializer` with `select_related` and `cached_as`
+- `frontend/app/components/tournament/schemas.ts` — `TournamentConfigSchema`, updated `TournamentSchema`
+- `frontend/app/components/teamdraft/schemas.ts` — Team draft tick/pause WebSocket message schemas
+- `frontend/app/store/draftWebSocketStore.ts` — Tick state, heartbeat, pause selectors
+- `frontend/app/components/teamdraft/hooks/useDraftLive.ts` — Polling fallback (unchanged when timers disabled)
 - `frontend/app/components/teamdraft/liveView.tsx` — Timer display
 - `frontend/app/components/teamdraft/buttons/draftStyleModal.tsx` — Timer config UI
 - `frontend/app/components/herodraft/HeroDraftModal.tsx` — Extract pause overlay to shared component
-
-## Review Findings
-
-### Critical
-
-1. **Redis key migration during Phase 1**: Changing from `herodraft:tick_lock:{draft_id}` to `draft:tick_lock:herodraft:{draft_id}` during Phase 1 could cause duplicate tick loops on any live herodraft. The old lock key would be abandoned while the new key doesn't exist yet, allowing a second broadcaster to acquire the new lock.
-
-   **Mitigation**: Phase 1 `HeroDraftTickService` must use the **existing** Redis key patterns (`herodraft:*`). Introduce the new `draft:{draft_type}:*` pattern only in the `DraftTickService` base class as a default, and let `HeroDraftTickService` override all key properties to match the legacy format. Migrate keys in a later phase when no drafts are live, or add dual-key cleanup logic.
-
-2. **Phase 2 time calculation transition**: Switching from `started_at` adjustment to PauseEvent-based subtraction mid-flight could break in-progress drafts. If a draft was paused/resumed before the Phase 2 deploy, its `started_at` was already adjusted — but there are no `HeroDraftPauseEvent` records for those historical pauses.
-
-   **Mitigation**: Phase 2 must be **write-both, read-old** initially: continue adjusting `started_at` AND create PauseEvent records. Only switch to PauseEvent-based reads once all active drafts were created after Phase 2 deployed, or add a migration flag per draft.
-
-### Important
-
-3. **Open pause event on crash**: If the tick service crashes or the server restarts while a draft is paused, there will be an unclosed `PauseEvent` (no `resumed_at`). The `duration` property returns `None` for these, so `total_paused` calculation would silently skip them, under-counting pause time.
-
-   **Mitigation**: On tick service startup, check for open pause events and either close them (if draft is no longer paused) or include `now - paused_at` as ongoing pause duration in the calculation.
-
-4. **Module-level import compatibility**: `herodraft_tick.py` currently uses module-level Redis and Django imports. The new `draft_tick.py` base class must avoid importing anything that requires Django to be fully initialized at import time, or use lazy imports.
-
-   **Mitigation**: Use `django.utils.module_loading.import_string` or local imports inside methods for Django-dependent code in the base class.
-
-5. **TournamentConfig auto-creation**: The plan says "auto-created when a Tournament is created" but doesn't specify the mechanism. Using a `post_save` signal is the Django convention, but signals can be fragile in tests.
-
-   **Mitigation**: Use a `post_save` signal on `Tournament` with `created=True` check. Also add `TournamentConfig` creation to the test fixture setup to avoid signal-dependent test fragility.
-
-6. **Django validators on TournamentConfig**: The Zod schema has `min`/`max` constraints but the Django model uses plain `IntegerField` with no validators. Server-side data could violate frontend expectations.
-
-   **Mitigation**: Add `MinValueValidator`/`MaxValueValidator` to `grace_time_ms`, `reserve_time_ms`, and `resume_countdown_ms` fields matching the Zod constraints.
-
-7. **Missing DraftRound temporal fields**: `DraftRound` (team draft) currently has no `started_at` or `completed_at` fields, but the tick service needs `round.started_at` to calculate elapsed time. `HeroDraftRound` already has these fields.
-
-   **Mitigation**: Add `started_at` and `completed_at` DateTimeFields to `DraftRound` in Phase 1 migration. Populate `started_at` when a round becomes active, `completed_at` when a pick is made.
-
-8. **Frontend schema location**: The plan puts `TournamentConfigSchema` in `config.tsx`, but the existing pattern is `schemas.ts` files (e.g., `herodraft/schemas.ts`). Also, `.tsx` implies JSX which a pure Zod schema file doesn't need.
-
-   **Mitigation**: Place the schema in `frontend/app/components/tournament/schemas.ts` to match existing patterns. If `schemas.ts` already exists there, add to it.
-
-9. **DraftConsumer timer gating**: `DraftConsumer` must check `enable_pick_timer` from `TournamentConfig` before starting the tick service. If the config doesn't exist (pre-Phase-1 tournaments), it should gracefully fall back to the current behavior (no timers).
-
-   **Mitigation**: Use `getattr(tournament, 'config', None)` with a fallback to defaults, or catch `TournamentConfig.DoesNotExist`.
-
-10. **Cache invalidation on TournamentConfig changes**: If an admin changes timer settings mid-tournament, the tick service (which may cache config in memory) won't pick up the change until restart.
-
-    **Mitigation**: The tick service should re-read config from DB each tick (it's a single-row read), or subscribe to a Redis pub/sub channel for config change notifications.
-
-### Suggestions
-
-11. **Protocol class for duck typing**: Rather than relying on implicit duck typing between `HeroDraft` and `Draft`, define an explicit `DraftProtocol` (Python `typing.Protocol`) that both models satisfy. This provides IDE autocomplete and catches interface mismatches at type-check time.
-
-12. **Reuse existing WebSocketManager**: The frontend already has `frontend/app/lib/websocket/WebSocketManager.ts`. The team draft WebSocket should use this rather than creating a new connection manager, to stay consistent with herodraft's approach.
-
-13. **PauseEvent round reference**: Consider adding an optional FK to the active round on `PauseEvent`, so you can query which round was active when the pause occurred. Useful for analytics and debugging.
