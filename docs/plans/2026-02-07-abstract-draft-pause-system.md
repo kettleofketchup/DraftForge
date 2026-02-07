@@ -339,7 +339,7 @@ All 5 review agents found **0 critical issues**. Below are the important items a
 **Important:**
 - `paused_at` field needs `default=timezone.now` to prevent missing-value errors when created programmatically.
 - Crash recovery must also handle drafts stuck in RESUMING with expired `resuming_until` — close the open PauseEvent and transition to DRAFTING.
-- `reset_draft` (herodraft reset endpoint) must delete PauseEvents: `draft.pause_events.all().delete()`.
+- `reset_draft` does NOT delete PauseEvents — they are audit log records. The round FK on PauseEvents uses `on_delete=SET_NULL`, so when `reset_draft` deletes rounds, old events get `round=None`. Time calculations filter by `round=current_round`, so orphaned events are naturally excluded.
 
 **Suggestions:**
 - Capture `now = timezone.now()` once and pass through to avoid timing skew in duration calculation across multiple PauseEvents in the same tick.
