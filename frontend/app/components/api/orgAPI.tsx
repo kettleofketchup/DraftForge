@@ -200,3 +200,48 @@ export async function refreshDiscordMembers(
   );
   return response.data;
 }
+
+// CSV Import
+export interface CSVImportRow {
+  steam_friend_id?: string;
+  discord_id?: string;
+  base_mmr?: number | null;
+  team_name?: string;
+}
+
+export interface CSVImportResultRow {
+  row: number;
+  status: 'added' | 'skipped' | 'error';
+  reason?: string;
+  warning?: string;
+  created?: boolean;
+  team?: string;
+  user?: UserType;
+}
+
+export interface CSVImportResponse {
+  summary: { added: number; skipped: number; created: number; errors: number };
+  results: CSVImportResultRow[];
+}
+
+export async function importCSVToOrg(
+  orgId: number,
+  rows: CSVImportRow[],
+): Promise<CSVImportResponse> {
+  const response = await axios.post<CSVImportResponse>(
+    `/organizations/${orgId}/import-csv/`,
+    { rows },
+  );
+  return response.data;
+}
+
+export async function importCSVToTournament(
+  tournamentId: number,
+  rows: CSVImportRow[],
+): Promise<CSVImportResponse> {
+  const response = await axios.post<CSVImportResponse>(
+    `/tournaments/${tournamentId}/import-csv/`,
+    { rows },
+  );
+  return response.data;
+}
