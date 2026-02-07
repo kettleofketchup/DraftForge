@@ -5,12 +5,13 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Performance Optimizations:
  * - fullyParallel: true - Tests run in parallel within files
- * - workers: 50% of CPUs locally, 2 in CI (shared database limitation)
+ * - workers: 1 by default (herodraft tests share a single draft + Redis keys)
+ * - Override with --workers=2 or PLAYWRIGHT_WORKERS=2 for chromium-only runs
  * - Sharding support for CI: --shard=1/4 etc
  *
  * Projects:
  * - chromium: General E2E tests with parallel execution
- * - herodraft: Sequential execution for multi-browser draft scenarios
+ * - herodraft: Sequential execution for multi-browser draft scenarios (depends on chromium)
  */
 export default defineConfig({
   globalSetup: './tests/playwright/global-setup.ts',
@@ -32,9 +33,10 @@ export default defineConfig({
   // Retry flaky tests: 2 in CI, 1 locally to catch timing issues early
   retries: process.env.CI ? 2 : 1,
 
-  // Workers: Use 2 workers locally to reduce CPU load, 2 in CI (shared database)
-  // Can override with --workers flag or PLAYWRIGHT_WORKERS env var
-  workers: 2,
+  // Workers: Default to 1 to prevent herodraft parallel conflicts (shared draft + Redis keys).
+  // Herodraft tests all use the same draft; parallel execution causes captain kick conflicts.
+  // Override with --workers=2 for chromium-only runs, or via PLAYWRIGHT_WORKERS env var.
+  workers: process.env.PLAYWRIGHT_WORKERS ? parseInt(process.env.PLAYWRIGHT_WORKERS) : 1,
 
   // Reporters: html + list locally, add github reporter in CI
   reporter: [
@@ -99,7 +101,10 @@ export default defineConfig({
           ],
         },
       },
-      // Override parallel settings for herodraft tests (multi-browser coordination)
+      // Herodraft tests share a single draft in the DB + Redis captain channel keys,
+      // so they must not run in parallel with each other. Run after chromium project
+      // to avoid competing for workers, and disable parallel execution.
+      dependencies: ['chromium'],
       fullyParallel: false,
     },
     {
