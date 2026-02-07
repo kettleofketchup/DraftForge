@@ -64,7 +64,6 @@ export const GamesTab: React.FC = memo(() => {
           <div className="flex items-center gap-2">
             {isStaff && viewMode === 'bracket' && (
               <SecondaryButton
-                color="purple"
                 size="sm"
                 onClick={() => setShowAutoAssign(true)}
                 data-testid="auto-assign-btn"

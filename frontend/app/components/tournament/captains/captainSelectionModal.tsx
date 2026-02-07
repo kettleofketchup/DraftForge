@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { TEAMS_BUTTONS_WIDTH } from '~/components/constants';
 import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { Button } from '~/components/ui/button';
-import { PrimaryButton } from '~/components/ui/buttons';
+import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import {
   Dialog,
   DialogClose,
@@ -26,6 +26,8 @@ import { CaptainTable } from './captainTable';
 
 export const CaptainSelectionModal: React.FC = () => {
   const tournament = useUserStore((state) => state.tournament);
+  const isStaff = useUserStore((state) => state.isStaff());
+  const TriggerButton = isStaff ? PrimaryButton : SecondaryButton;
   const [open, setOpen] = useState(false);
 
   const dialogButton = () => {
@@ -34,12 +36,12 @@ export const CaptainSelectionModal: React.FC = () => {
         <Tooltip>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
-              <PrimaryButton
+              <TriggerButton
                 className={`w-[${TEAMS_BUTTONS_WIDTH}]`}
               >
                 <Crown className="mr-2" />
                 Pick Captains
-              </PrimaryButton>
+              </TriggerButton>
             </DialogTrigger>
           </TooltipTrigger>
           <TooltipContent>
