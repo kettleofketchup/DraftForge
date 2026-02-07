@@ -49,7 +49,6 @@ const HistoryButton = React.forwardRef<HTMLButtonElement, HistoryButtonProps>(
     const button = (
       <SecondaryButton
         ref={ref}
-        color="orange"
         className={cn('relative', className)}
         {...props}
       >

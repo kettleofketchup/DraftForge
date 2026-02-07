@@ -32,6 +32,11 @@ export function TechnologyStack() {
       description: 'UI Components',
       colorClass: 'text-warning',
     },
+    {
+      name: 'WebSockets',
+      description: 'Authenticated & Anonymous',
+      colorClass: 'text-purple-400',
+    },
   ];
 
   return (

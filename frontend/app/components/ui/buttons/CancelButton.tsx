@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { button3DVariants } from './styles';
+import { brandSecondaryOpaque, brandSecondaryOpaque3D, button3DVariants } from './styles';
 
 export type CancelButtonVariant = 'default' | 'success' | 'destructive';
 
@@ -36,7 +36,7 @@ export interface CancelButtonProps
 const CancelButton = React.forwardRef<HTMLButtonElement, CancelButtonProps>(
   ({ children = 'Cancel', className, depth = true, variant = 'default', ...props }, ref) => {
     const variantStyles = {
-      default: depth ? button3DVariants.outline : '',
+      default: depth ? brandSecondaryOpaque3D : brandSecondaryOpaque,
       success: depth ? button3DVariants.success : 'bg-green-600 text-white hover:bg-green-500',
       destructive: depth ? button3DVariants.destructive : 'bg-red-600 text-white hover:bg-red-500',
     };
@@ -44,7 +44,8 @@ const CancelButton = React.forwardRef<HTMLButtonElement, CancelButtonProps>(
     return (
       <Button
         ref={ref}
-        variant={variant === 'default' ? 'outline' : undefined}
+        // No variant prop — brand styles fully control appearance via className.
+        // Passing variant="outline" introduces dark: prefixed classes that override brand bg.
         className={cn(variantStyles[variant], className)}
         {...props}
       >

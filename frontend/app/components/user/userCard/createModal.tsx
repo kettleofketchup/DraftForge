@@ -16,8 +16,7 @@ import { useUserStore } from '~/store/userStore';
 
 import { PlusCircleIcon } from 'lucide-react';
 
-import { Button } from '~/components/ui/button';
-import { CancelButton, SubmitButton } from '~/components/ui/buttons';
+import { CancelButton, PrimaryButton, SubmitButton } from '~/components/ui/buttons';
 import {
   Dialog,
   DialogClose,
@@ -97,19 +96,12 @@ export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
           <Tooltip>
             <TooltipTrigger asChild>
               <DialogTrigger asChild>
-                <Button
+                <PrimaryButton
                   size="lg"
-                  variant="default"
-                  className={
-                    'bg-emerald-600 hover:bg-emerald-500 text-white' +
-                    ' shadow-lg shadow-emerald-900/50 border-b-4 border-b-emerald-800' +
-                    ' active:border-b-0 active:translate-y-1 transition-all duration-75' +
-                    ' hover:shadow-emerald-500/50'
-                  }
                 >
                   <PlusCircleIcon className="text-white" />
                   Create User
-                </Button>
+                </PrimaryButton>
               </DialogTrigger>
             </TooltipTrigger>
             <TooltipContent>

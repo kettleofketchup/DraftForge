@@ -40,7 +40,7 @@ import { addOrgMember } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
 import { ClaimsTab, EditOrganizationModal, useOrganization } from '~/components/organization';
-import { Button } from '~/components/ui/button';
+import { PrimaryButton } from '~/components/ui/buttons';
 import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
@@ -157,14 +157,13 @@ export default function OrganizationDetailPage() {
                 <div className="flex items-start justify-between mb-2">
                   <h1 className="text-3xl font-bold">{organization.name}</h1>
                   {isOrgAdmin && (
-                    <Button
-                      variant="outline"
+                    <PrimaryButton
                       size="sm"
                       onClick={() => setEditOrgOpen(true)}
                     >
                       <Pencil className="w-4 h-4 mr-2" />
                       Edit
-                    </Button>
+                    </PrimaryButton>
                   )}
                 </div>
 
@@ -218,10 +217,10 @@ export default function OrganizationDetailPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Leagues</h2>
               {isOrgAdmin && (
-                <Button onClick={() => setCreateLeagueOpen(true)}>
+                <PrimaryButton onClick={() => setCreateLeagueOpen(true)}>
                   <Plus className="w-4 h-4 mr-2" />
                   Create League
-                </Button>
+                </PrimaryButton>
               )}
             </div>
 
@@ -251,14 +250,14 @@ export default function OrganizationDetailPage() {
                   {orgUsers.length} {orgUsers.length === 1 ? 'member' : 'members'}
                 </span>
                 {canAddMembers && (
-                  <Button
+                  <PrimaryButton
                     size="sm"
                     onClick={() => setShowAddUser(true)}
                     data-testid="org-add-member-btn"
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     Add Member
-                  </Button>
+                  </PrimaryButton>
                 )}
               </div>
             </div>

@@ -72,20 +72,18 @@ function TabsTrigger({
         "text-sm font-medium whitespace-nowrap cursor-pointer",
         "transition-all duration-150 ease-out",
         "shadow-sm",
-        // Inactive state - lighter purple
-        "data-[state=inactive]:bg-violet-800/50 dark:data-[state=inactive]:bg-violet-800/40",
-        "data-[state=inactive]:text-violet-200 dark:data-[state=inactive]:text-violet-300",
-        "data-[state=inactive]:border data-[state=inactive]:border-violet-600/50 dark:data-[state=inactive]:border-violet-600/40",
-        // Hover - approaching primary (inactive only)
-        "data-[state=inactive]:hover:bg-violet-700/60 dark:data-[state=inactive]:hover:bg-violet-700/50",
-        "data-[state=inactive]:hover:text-violet-100 dark:data-[state=inactive]:hover:text-violet-200",
-        "data-[state=inactive]:hover:border-violet-500 dark:data-[state=inactive]:hover:border-violet-500",
+        // Inactive state - brand secondary
+        "data-[state=inactive]:bg-violet-500/20",
+        "data-[state=inactive]:text-violet-100",
+        "data-[state=inactive]:border data-[state=inactive]:border-violet-400/30",
+        // Hover (inactive only)
+        "data-[state=inactive]:hover:bg-violet-500/30",
         "data-[state=inactive]:hover:shadow-md data-[state=inactive]:hover:-translate-y-0.5",
-        // Active state - bright primary
-        "data-[state=active]:bg-violet-500 dark:data-[state=active]:bg-violet-400",
-        "data-[state=active]:text-white dark:data-[state=active]:text-violet-950",
-        "data-[state=active]:border data-[state=active]:border-violet-400 dark:data-[state=active]:border-violet-300",
-        "data-[state=active]:shadow-lg data-[state=active]:shadow-violet-500/50",
+        // Active state - brand gradient
+        "data-[state=active]:bg-gradient-to-r data-[state=active]:from-violet-500 data-[state=active]:to-blue-500",
+        "data-[state=active]:text-white",
+        "data-[state=active]:shadow-brand-glow",
+        "data-[state=active]:[text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]",
         "data-[state=active]:-translate-y-0.5",
         // Focus styles
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",

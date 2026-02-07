@@ -7,7 +7,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '~/components/ui/alert-dialog';
-import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
+import { CancelButton, ConfirmButton, brandSuccessBg } from '~/components/ui/buttons';
 import type { CancelButtonVariant, ConfirmButtonVariant } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
@@ -40,7 +40,7 @@ export interface ConfirmDialogProps {
 
 // Content background styling per variant
 const contentVariantStyles = {
-  default: '',
+  default: `bg-green-900 ${brandSuccessBg}`,
   destructive: 'bg-red-950/95 border-red-800',
   warning: 'bg-orange-950/95 border-orange-800',
 };

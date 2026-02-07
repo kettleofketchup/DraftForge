@@ -1,7 +1,7 @@
 import { PlusCircleIcon } from 'lucide-react';
 import { useState } from 'react';
 import { DIALOG_CSS } from '~/components/reusable/modal';
-import { Button } from '~/components/ui/button';
+import { PrimaryButton } from '~/components/ui/buttons';
 import {
   Dialog,
   DialogContent,
@@ -37,20 +37,13 @@ export const TournamentCreateModal: React.FC<Props> = () => {
         <Tooltip>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
-              <Button
+              <PrimaryButton
                 size="lg"
-                variant="default"
-                className={
-                  'bg-emerald-600 hover:bg-emerald-500 text-white' +
-                  ' shadow-lg shadow-emerald-900/50 border-b-4 border-b-emerald-800' +
-                  ' active:border-b-0 active:translate-y-1 transition-all duration-75' +
-                  ' hover:shadow-emerald-500/50'
-                }
                 data-testid="tournament-create-button"
               >
                 <PlusCircleIcon className="text-white" />
                 Create Tournament
-              </Button>
+              </PrimaryButton>
             </DialogTrigger>
           </TooltipTrigger>
           <TooltipContent>
