@@ -2,6 +2,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { heroes } from 'dotaconstants';
 import { Input } from '~/components/ui/input';
+import { ScrollArea } from '~/components/ui/scroll-area';
 import { useHeroDraftStore } from '~/store/heroDraftStore';
 import { cn } from '~/lib/utils';
 import { heroMatchesSearch } from '~/lib/dota/heroes';
@@ -204,9 +205,9 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
         {ATTRIBUTE_ORDER.map((attr) => {
           const heroesForAttr = heroList.filter((h) => h.attr === attr);
           return (
-            <div
+            <ScrollArea
               key={attr}
-              className={cn('rounded p-1.5 flex-1 min-h-0 overflow-y-auto', ATTRIBUTE_COLORS[attr])}
+              className={cn('rounded p-1.5 flex-1 min-h-0', ATTRIBUTE_COLORS[attr])}
               data-testid={`herodraft-attr-section-${attr}`}
             >
               <h3 className="text-[10px] font-semibold mb-1 text-white/70" data-testid={`herodraft-attr-label-${attr}`}>
@@ -234,7 +235,7 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
                   );
                 })}
               </div>
-            </div>
+            </ScrollArea>
           );
         })}
       </div>
