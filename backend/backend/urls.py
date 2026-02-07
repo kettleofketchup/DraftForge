@@ -65,7 +65,7 @@ from app.views.admin_team import (
     search_users,
     transfer_org_ownership,
 )
-from app.views.csv_import import import_csv_org
+from app.views.csv_import import import_csv_org, import_csv_tournament
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from org.views import ClaimRequestViewSet
@@ -258,6 +258,11 @@ urlpatterns = [
         "api/organizations/<int:org_id>/import-csv/",
         import_csv_org,
         name="import_csv_org",
+    ),
+    path(
+        "api/tournaments/<int:tournament_id>/import-csv/",
+        import_csv_tournament,
+        name="import_csv_tournament",
     ),
     # Member management
     path(

@@ -227,3 +227,135 @@ def import_csv_org(request, org_id):
         )
 
     return Response({"summary": summary, "results": results})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def import_csv_tournament(request, tournament_id):
+    """
+    Bulk-import users to a tournament from parsed CSV data.
+
+    Expects JSON: {"rows": [{"steam_friend_id": "...", "discord_id": "...", "base_mmr": 5000, "team_name": "..."}, ...]}
+    """
+    tournament = get_object_or_404(
+        Tournament.objects.select_related("league__organization"), pk=tournament_id
+    )
+
+    # Check access via league's org
+    has_access = False
+    if tournament.league and tournament.league.organization:
+        has_access = has_org_staff_access(request.user, tournament.league.organization)
+    if not has_access and not request.user.is_superuser:
+        return Response(
+            {"error": "You do not have permission"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    org = tournament.league.organization if tournament.league else None
+    rows = request.data.get("rows", [])
+    if not isinstance(rows, list):
+        return Response(
+            {"error": "rows must be a list"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if len(rows) > MAX_ROWS:
+        return Response(
+            {"error": f"Too many rows (max {MAX_ROWS})"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    results = []
+    summary = {"added": 0, "skipped": 0, "created": 0, "errors": 0}
+
+    # Cache for team_name -> Team (get_or_create within this import)
+    team_cache = {}
+
+    for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            results.append(
+                {"row": i + 1, "status": "error", "reason": "Invalid row format"}
+            )
+            summary["errors"] += 1
+            continue
+        user, created, warning, error = _resolve_user_for_csv_row(row)
+
+        if error:
+            results.append({"row": i + 1, "status": "error", "reason": error})
+            summary["errors"] += 1
+            continue
+
+        # Parse base_mmr
+        base_mmr, mmr_err = _parse_int(row.get("base_mmr"), "base_mmr")
+        if mmr_err:
+            results.append({"row": i + 1, "status": "error", "reason": mmr_err})
+            summary["errors"] += 1
+            continue
+
+        # Check if already in tournament
+        if tournament.users.filter(pk=user.pk).exists():
+            results.append(
+                {
+                    "row": i + 1,
+                    "status": "skipped",
+                    "reason": "Already in tournament",
+                    "user": TournamentUserSerializer(user).data,
+                }
+            )
+            summary["skipped"] += 1
+            continue
+
+        # Create OrgUser if tournament has an org (savepoint for SQLite)
+        if org:
+            try:
+                with transaction.atomic():
+                    OrgUser.objects.create(
+                        user=user, organization=org, mmr=base_mmr or 0
+                    )
+            except IntegrityError:
+                # Already a member of the org -- update MMR if provided
+                if base_mmr is not None:
+                    OrgUser.objects.filter(user=user, organization=org).update(
+                        mmr=base_mmr
+                    )
+
+        # Add to tournament
+        tournament.users.add(user)
+
+        # Handle team assignment
+        team_name = (row.get("team_name") or "").strip()
+        if team_name:
+            if team_name not in team_cache:
+                team, _ = Team.objects.get_or_create(
+                    name=team_name,
+                    tournament=tournament,
+                )
+                team_cache[team_name] = team
+            team_cache[team_name].members.add(user)
+
+        if created:
+            summary["created"] += 1
+
+        result = {
+            "row": i + 1,
+            "status": "added",
+            "user": TournamentUserSerializer(user).data,
+            "created": created,
+        }
+        if warning:
+            result["warning"] = warning
+        if team_name:
+            result["team"] = team_name
+
+        results.append(result)
+        summary["added"] += 1
+
+        # Log the action (for the org that owns this tournament)
+        if org:
+            OrgLog.objects.create(
+                organization=org,
+                actor=request.user,
+                action="add_member",
+                target_user=user,
+            )
+
+    return Response({"summary": summary, "results": results})
