@@ -5,6 +5,7 @@ import { Input } from '~/components/ui/input';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { useHeroDraftStore } from '~/store/heroDraftStore';
 import { cn } from '~/lib/utils';
+import { brandBg } from '~/components/ui/buttons/styles';
 import { heroMatchesSearch } from '~/lib/dota/heroes';
 import { FastTooltip } from '~/components/ui/tooltip';
 
@@ -188,7 +189,7 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
     : '';
 
   return (
-    <div className={cn("flex flex-col h-full overflow-hidden relative", actionOverlay)} data-testid="herodraft-hero-grid">
+    <div className={cn("flex flex-col h-full overflow-hidden relative", brandBg, actionOverlay)} data-testid="herodraft-hero-grid">
       <div className="p-2 shrink-0" data-testid="herodraft-search-container">
         <Input
           ref={searchInputRef}

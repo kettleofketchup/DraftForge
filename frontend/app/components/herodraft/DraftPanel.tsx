@@ -2,6 +2,7 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { heroes } from 'dotaconstants';
 import { cn } from '~/lib/utils';
+import { brandBg } from '~/components/ui/buttons/styles';
 import type { HeroDraft, HeroDraftRound } from '~/components/herodraft/types';
 import { DisplayName } from '~/components/user/avatar';
 import {
@@ -71,7 +72,7 @@ export function DraftPanel({ draft, currentRound }: DraftPanelProps) {
   }, [activeRoundNumber]);
 
   return (
-    <div className="h-full flex flex-col bg-background overflow-hidden" data-testid="herodraft-panel">
+    <div className={cn("h-full flex flex-col overflow-hidden", brandBg)} data-testid="herodraft-panel">
       {/* Headers */}
       <div className="flex shrink-0 border-b border-gray-700">
         <div className="flex-1 py-1 px-2 text-center">
