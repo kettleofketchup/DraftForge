@@ -366,7 +366,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
     <>
       <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
         <DialogContent
-          className="!fixed !inset-0 !translate-x-0 !translate-y-0 !top-0 !left-0 !max-w-none !w-full !h-full !p-0 !gap-0 !rounded-none !border-0 bg-gray-900 overflow-hidden"
+          className="!fixed !inset-0 !translate-x-0 !translate-y-0 !top-0 !left-0 !max-w-none !w-full !h-full !p-0 !gap-0 !rounded-none !border-0 bg-background overflow-hidden"
           showCloseButton={false}
           data-testid="herodraft-modal"
           // Prevent closing from backdrop clicks or escape key - only close via the Close button
@@ -379,7 +379,7 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
             <DialogDescription>Captain's Mode hero draft interface</DialogDescription>
           </VisuallyHidden>
           {draft && (
-            <div className="flex flex-col h-full w-full bg-gray-900 overflow-hidden" data-testid="herodraft-container">
+            <div className="flex flex-col h-full w-full bg-background overflow-hidden" data-testid="herodraft-container">
               {/* Top Bar */}
               <DraftTopBar draft={draft} tick={tick} />
 
