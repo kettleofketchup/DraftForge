@@ -2,12 +2,14 @@ import { ChevronDown, ClipboardPen, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { Button } from '~/components/ui/button';
+import { brandErrorBg } from '~/components/ui/buttons/styles';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
+import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import { getDraftLabel, getDraftUrl } from './utils';
 
@@ -45,7 +47,10 @@ export const ActiveDraftBanner: React.FC = () => {
   return (
     <div
       data-testid="active-draft-banner"
-      className="hidden md:flex w-full bg-red-600 text-white px-4 py-2 items-center justify-center gap-3"
+      className={cn(
+        'hidden md:flex w-full text-white px-4 py-2 items-center justify-center gap-3',
+        brandErrorBg,
+      )}
     >
       <ClipboardPen className="w-5 h-5 flex-shrink-0" />
 
@@ -70,7 +75,7 @@ export const ActiveDraftBanner: React.FC = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-white hover:bg-red-700 h-7 px-2"
+                className="text-white hover:bg-white/10 h-7 px-2"
               >
                 Select <ChevronDown className="ml-1 h-4 w-4" />
               </Button>
@@ -88,7 +93,7 @@ export const ActiveDraftBanner: React.FC = () => {
 
       <button
         onClick={() => setDismissed(true)}
-        className="ml-auto p-1 hover:bg-red-700 rounded"
+        className="ml-auto p-1 hover:bg-white/10 rounded"
         aria-label="Dismiss banner"
       >
         <X className="w-4 h-4" />

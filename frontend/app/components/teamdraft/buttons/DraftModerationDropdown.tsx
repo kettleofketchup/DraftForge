@@ -1,6 +1,7 @@
 import { OctagonAlert, Settings, ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '~/components/ui/button';
+import { brandErrorBg } from '~/components/ui/buttons/styles';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import {
   DropdownMenu,
@@ -10,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
+import { cn } from '~/lib/utils';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { initDraftHook } from '../hooks/initDraftHook';
@@ -66,7 +68,7 @@ export const DraftModerationDropdown: React.FC<DraftModerationDropdownProps> = (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="gap-2">
+          <Button variant="outline" className={cn('gap-2 text-white', brandErrorBg)}>
             <ShieldAlert className="h-4 w-4" />
             <span className="hidden sm:inline">Moderation</span>
           </Button>

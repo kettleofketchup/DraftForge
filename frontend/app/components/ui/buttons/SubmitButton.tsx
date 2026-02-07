@@ -15,7 +15,7 @@ export interface SubmitButtonProps
 }
 
 /**
- * A submit button with green theme styling and 3D depth effects for form submissions.
+ * A submit button with brand gradient styling and 3D depth effects for form submissions.
  * Automatically sets type="submit" and handles loading states.
  *
  * @example

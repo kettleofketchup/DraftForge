@@ -2,8 +2,10 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { heroes } from 'dotaconstants';
 import { Input } from '~/components/ui/input';
+import { ScrollArea } from '~/components/ui/scroll-area';
 import { useHeroDraftStore } from '~/store/heroDraftStore';
 import { cn } from '~/lib/utils';
+import { brandBg } from '~/components/ui/buttons/styles';
 import { heroMatchesSearch } from '~/lib/dota/heroes';
 import { FastTooltip } from '~/components/ui/tooltip';
 
@@ -41,7 +43,7 @@ const HeroButton = memo(function HeroButton({
         }}
         // Don't use HTML disabled - it prevents hover states for spectators
         className={cn(
-          'size-[20px] sm:size-[24px] md:size-[28px] lg:size-[36px] xl:size-[48px] 2xl:size-[56px] p-0.5',
+          'size-[24px] sm:size-[28px] md:size-[32px] lg:size-[40px] xl:size-[48px] 2xl:size-[56px] shrink-0 p-0.5',
           'rounded-full bg-gradient-to-b from-slate-600 to-slate-800',
           'border border-slate-500/50 shadow-md shadow-black/50',
           'hover:from-slate-500 hover:to-slate-700 hover:scale-110 hover:z-10 hover:shadow-lg hover:shadow-black/60',
@@ -187,7 +189,7 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
     : '';
 
   return (
-    <div className={cn("flex flex-col h-full overflow-hidden relative", actionOverlay)} data-testid="herodraft-hero-grid">
+    <div className={cn("flex flex-col h-full overflow-hidden relative", brandBg, actionOverlay)} data-testid="herodraft-hero-grid">
       <div className="p-2 shrink-0" data-testid="herodraft-search-container">
         <Input
           ref={searchInputRef}
@@ -204,7 +206,7 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
         {ATTRIBUTE_ORDER.map((attr) => {
           const heroesForAttr = heroList.filter((h) => h.attr === attr);
           return (
-            <div
+            <ScrollArea
               key={attr}
               className={cn('rounded p-1.5 flex-1 min-h-0', ATTRIBUTE_COLORS[attr])}
               data-testid={`herodraft-attr-section-${attr}`}
@@ -234,7 +236,7 @@ export function HeroGrid({ onHeroClick, disabled, showActionButton, currentActio
                   );
                 })}
               </div>
-            </div>
+            </ScrollArea>
           );
         })}
       </div>

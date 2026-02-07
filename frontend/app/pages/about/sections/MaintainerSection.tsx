@@ -1,6 +1,6 @@
 import { Beer, Binary, Code, Gamepad2, HeartPlus } from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
-import { Button } from '~/components/ui/button';
+import { PrimaryButton } from '~/components/ui/buttons';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -40,9 +40,9 @@ export function MaintainerSection() {
               target="_blank"
               rel="noopener noreferrer"
             >
-              <Button>
+              <PrimaryButton>
                 <Beer className="h-16 w-16 hover:animate-spin" /> Buy me a beer
-              </Button>
+              </PrimaryButton>
             </a>
           </TooltipTrigger>
           <TooltipContent>

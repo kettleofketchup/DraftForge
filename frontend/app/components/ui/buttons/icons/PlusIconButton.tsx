@@ -7,6 +7,7 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
+import { brandDepthColors, brandGradient, button3DBase } from '../styles';
 
 export interface PlusIconButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {
@@ -15,7 +16,7 @@ export interface PlusIconButtonProps
 }
 
 /**
- * A plus/add icon button with green theme styling.
+ * A plus/add icon button with brand gradient styling.
  * Optionally displays a tooltip on hover.
  *
  * @example
@@ -31,10 +32,10 @@ const PlusIconButton = React.forwardRef<HTMLButtonElement, PlusIconButtonProps>(
         size="icon"
         className={cn(
           'rounded-full',
-          'bg-emerald-600 hover:bg-emerald-500 text-white',
-          'shadow-lg shadow-emerald-900/50 border-b-4 border-b-emerald-800',
-          'active:border-b-0 active:translate-y-1 transition-all duration-75',
-          '[&_svg]:text-white',
+          brandGradient,
+          button3DBase,
+          brandDepthColors,
+          '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
           className
         )}
         {...props}

@@ -2,7 +2,7 @@ import { ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { button3DVariants } from './styles';
+import { brandDepthColors, brandGradient, button3DBase, button3DDisabled } from './styles';
 
 export type NavDirection = 'prev' | 'next' | 'latest';
 
@@ -43,7 +43,12 @@ const NavButton = React.forwardRef<HTMLButtonElement, NavButtonProps>(
       <Button
         ref={ref}
         className={cn(
-          depth ? button3DVariants.nav : 'bg-sky-700 text-white hover:bg-sky-600',
+          depth && button3DBase,
+          depth && button3DDisabled,
+          brandGradient,
+          brandDepthColors,
+          '[text-shadow:_0_1px_2px_rgba(0,0,0,0.5)]',
+          '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
           className
         )}
         {...props}

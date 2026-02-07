@@ -12,17 +12,23 @@ This theme uses a violet/indigo primary palette with cyan accents for an esports
 
 ## Color Palette
 
-### Primary (Brand) - Violet
+### Primary (Brand) - Violet-to-Blue Gradient
 
-| Variable | Tailwind | Usage |
-|----------|----------|-------|
-| `--primary` | violet-600 | Main buttons, highlights |
-| `--primary-hover` | violet-500 | Hover states |
-| `--primary-active` | violet-700 | Active/pressed states |
+| Token | Tailwind Classes | Usage |
+|-------|-----------------|-------|
+| `--primary` | `bg-primary` (violet-400 dark) | Base brand color: focus rings, links, badges |
+| `brandGradient` | `bg-gradient-to-r from-violet-500 to-blue-500 hover:from-violet-400 hover:to-blue-400 text-white` | Primary CTA buttons |
+| `brandSecondary` | `bg-gradient-to-r from-violet-500/30 to-blue-500/20 ring-1 ring-violet-300/60 text-violet-100 hover:from-violet-500/40 hover:to-blue-500/30` | Supporting/contextual actions |
+
+Primary CTA buttons use the brand gradient via `<PrimaryButton>`, not flat `bg-primary`. The `--primary` CSS variable remains the base brand color for non-button contexts.
 
 ```tsx
-<Button>Primary Action</Button>
-<button className="bg-primary hover:bg-primary-hover">Click</button>
+// Primary CTA (brand gradient + 3D depth)
+<PrimaryButton>Create Tournament</PrimaryButton>
+<PrimaryButton depth={false}>Flat Variant</PrimaryButton>
+
+// Secondary brand action (violet gradient + ring outline)
+<SecondaryButton>Edit Settings</SecondaryButton>
 ```
 
 ### Secondary - Indigo
@@ -89,7 +95,9 @@ Use accents **intentionally** - don't scatter random colors.
 |--------|-------|-------|-------|
 | Success | emerald-400 | `text-success`, `bg-success` | Match won, completed |
 | Warning | amber-400 | `text-warning`, `bg-warning` | Achievements, rankings |
-| Error | rose-500 | `text-error`, `bg-destructive` | Errors, delete actions |
+| Error (text/badges) | rose-500 | `text-error`, `bg-destructive` | Inline errors, delete buttons |
+| Error (surfaces) | red-900/violet-900 | `brandErrorBg` | Error containers — muted wine gradient |
+| Error (cards) | red-900/60 | `brandErrorCard` | Error cards within containers |
 | Info | sky-400 | `text-info`, `bg-info` | Informational callouts |
 | Selection | violet-500 | `bg-selection` | Selected items |
 
@@ -100,6 +108,8 @@ Use accents **intentionally** - don't scatter random colors.
 <span className="text-error">Connection Lost</span>
 <Badge className="bg-info">New Feature</Badge>
 ```
+
+> **Error surfaces** use raw Tailwind colors (`red-900`, `violet-900`) instead of semantic `--error` tokens. This is intentional: error containers need deep wine/muted tones to maintain the "muted surfaces + bright accents" pattern. The semantic `rose-500` error token is for bright inline accents.
 
 ---
 
@@ -149,6 +159,83 @@ Use accents **intentionally** - don't scatter random colors.
 
 ---
 
+## Brand Button System
+
+### Style Constants
+
+All brand style constants are exported from `~/components/ui/buttons`:
+
+| Constant | Tailwind Classes | Usage |
+|----------|-----------------|-------|
+| `brandGradient` | `bg-gradient-to-r from-violet-500 to-blue-500 hover:from-violet-400 hover:to-blue-400 text-white` | Primary CTA color |
+| `brandSecondary` | `bg-gradient-to-r from-violet-500/30 to-blue-500/20 ring-1 ring-violet-300/60 text-violet-100 hover:from-violet-500/40 hover:to-blue-500/30` | Supporting actions |
+| `brandErrorBg` | `bg-gradient-to-r from-red-900/40 to-violet-900/40 border border-red-500/20` | Error container surfaces |
+| `brandErrorCard` | `bg-red-900/60 border border-red-500/15` | Error cards |
+| `brandSuccessBg` | `[background-image:var(--brand-success-bg)]` | Success dialog surfaces (confirm dialogs) |
+| `brandSecondaryOpaque` | `bg-violet-950 border border-violet-400/30 text-violet-100 hover:bg-violet-900` | Secondary on colored backgrounds (dialogs) |
+| `brandBg` | `[background-image:var(--brand-bg)]` | Subtle surface background (default on dialogs) |
+| `brandGlow` | `shadow-brand-glow` | Brand glow shadow |
+
+### Brand Surface Background (`brandBg`)
+
+All `Dialog` and `AlertDialog` content areas automatically include the `brandBg` gradient overlay. This provides a subtle violet-to-accent gradient on top of the solid `bg-background` base color.
+
+**Why CSS variables?** `brandBg` uses `[background-image:var(--brand-bg)]` instead of Tailwind's `bg-gradient-to-*` utilities. This is critical because `tailwind-merge` treats `bg-gradient-to-*` and `bg-{color}` as the same CSS group — so a gradient would silently strip `bg-background` from the dialog, making it translucent. Using the arbitrary property `[background-image:...]` sets only `background-image` (the gradient overlay) without touching `background-color`, so both coexist.
+
+The same pattern is used by `brandSuccessBg` for success dialog surfaces.
+
+```tsx
+// brandBg is automatic on Dialog/AlertDialog — no extra class needed
+<DialogContent>...</DialogContent>
+
+// For custom surfaces, import and apply manually
+import { brandBg } from '~/components/ui/buttons/styles';
+<div className={cn("bg-background", brandBg)}>Branded surface</div>
+```
+
+### 3D Depth Effects
+
+Buttons support a `depth` prop for 3D press effects:
+
+```tsx
+// 3D button (default for PrimaryButton)
+<PrimaryButton>Create</PrimaryButton>
+
+// Flat button
+<PrimaryButton depth={false}>Create</PrimaryButton>
+```
+
+The 3D system uses `button3DBase` (shadow, border-b-4, active press) and `button3DDisabled` (muted disabled state).
+
+### Button Policy
+
+**All new buttons should use `PrimaryButton` or `SecondaryButton`** unless there is a specific reason not to (e.g., icon-only buttons, dropdown triggers, shadcn component internals).
+
+- **PrimaryButton**: Guides the user toward the most important action on screen — the button they're most likely to click. There should typically be one primary action per view/section.
+- **SecondaryButton**: Everything else — supporting actions, cancel/back, contextual options.
+
+Do **not** use `<Button>` directly for user-facing actions. Reserve `<Button>` for structural/internal uses only (dropdown triggers, combobox triggers, shadcn wrappers).
+
+### Button Selection Guide
+
+| Context | Component | Visual |
+|---------|-----------|--------|
+| Main CTA / most-clicked action | `<PrimaryButton>` | Brand gradient + 3D |
+| Form submission | `<SubmitButton>` | Brand gradient + 3D |
+| Dialog confirmation | `<ConfirmButton variant="success">` | Brand gradient + 3D |
+| Destructive dialog action | `<ConfirmButton variant="destructive">` | Red + 3D |
+| Warning dialog action | `<ConfirmButton variant="warning">` | Orange + 3D |
+| Supporting/contextual action | `<SecondaryButton>` | Violet gradient + ring |
+| Cancel/back/dismiss | `<SecondaryButton>` or `<CancelButton>` | Translucent violet |
+| Colored contextual action | `<SecondaryButton color="sky">` | Colored background + 3D |
+| Navigation action | `<NavButton>` | Sky blue + 3D |
+| Edit action | `<EditButton>` | Purple + 3D |
+| Destructive page action | `<DestructiveButton>` | Red + 3D |
+
+> `PrimaryButton`, `SubmitButton`, and `ConfirmButton variant="success"` share the brand gradient visual. Choose based on HTML semantics and context, not appearance.
+
+---
+
 ## Border Colors
 
 | Class | Usage |
@@ -176,23 +263,25 @@ Use accents **intentionally** - don't scatter random colors.
 ### Buttons
 
 ```tsx
-// Primary (violet)
-<Button>Primary</Button>
-<button className="btn btn-primary">Primary</button>
+// Primary CTA (brand gradient + 3D depth)
+<PrimaryButton>Create Tournament</PrimaryButton>
+<PrimaryButton size="lg">Large CTA</PrimaryButton>
 
-// Secondary (indigo)
-<Button variant="secondary">Secondary</Button>
+// Form submission
+<SubmitButton loading={isSubmitting}>Save Changes</SubmitButton>
 
-// Ghost
-<Button variant="ghost">Ghost</Button>
+// Dialog confirmation
+<ConfirmButton variant="success">Approve</ConfirmButton>
+<ConfirmButton variant="destructive">Delete</ConfirmButton>
 
-// Destructive (rose)
-<Button variant="destructive">Delete</Button>
+// Secondary (default brand violet gradient + ring)
+<SecondaryButton>Settings</SecondaryButton>
 
-// With gradient
-<button className="gradient-button rounded-lg px-4 py-2 text-white">
-  Gradient Button
-</button>
+// Secondary with colored background + 3D
+<SecondaryButton color="cyan" depth>Colored Action</SecondaryButton>
+
+// Avoid using <Button> directly for user-facing actions.
+// Reserve for structural uses: dropdown triggers, combobox triggers, etc.
 ```
 
 ### Links & Tabs
@@ -268,6 +357,16 @@ gradient-button       // Button gradient
 glow-hover            // Hover glow effect
 text-glow-violet      // Glowing text
 border-glow           // Neon border
+
+// Brand tokens (import from ~/components/ui/buttons)
+brandGradient          // Primary CTA gradient (violet-to-blue)
+brandSecondary         // Violet gradient + ring for secondary actions
+brandErrorBg           // Muted wine error container
+brandErrorCard         // Dark red error card
+brandSuccessBg         // Success dialog surface gradient
+brandSecondaryOpaque   // Opaque violet for colored backgrounds
+brandBg                // Subtle brand surface gradient
+brandGlow              // Brand glow shadow
 ```
 
 ### Color Values (oklch)
