@@ -825,3 +825,352 @@ class DraftRestartTest(TestCase):
             "After restart, first captain should be based on captain MMR only, "
             f"not total team MMR. Expected cap1 (4000 MMR), got {first_round.captain.username}",
         )
+
+
+class DraftRestartFuzzTest(TestCase):
+    """Fuzz test draft restart across varying team counts, pick depths, and repeated restarts."""
+
+    def _create_tournament(self, num_teams, players_per_team, mmr_base=3000):
+        """Helper: create a tournament with N teams and M available players per team."""
+        admin = CustomUser.objects.create_user(
+            username="fuzz_admin", password="test", is_staff=True
+        )
+        tournament = Tournament.objects.create(
+            name="Fuzz Tournament", date_played=date.today()
+        )
+
+        captains = []
+        teams = []
+        for i in range(num_teams):
+            cap = CustomUser.objects.create_user(
+                username=f"fuzz_cap{i}",
+                password="test",
+                mmr=mmr_base + i * 500,
+            )
+            captains.append(cap)
+            team = Team.objects.create(
+                name=f"Fuzz Team {i}", captain=cap, tournament=tournament
+            )
+            team.members.add(cap)
+            teams.append(team)
+            tournament.users.add(cap)
+
+        players = []
+        for i in range(num_teams * players_per_team):
+            p = CustomUser.objects.create_user(
+                username=f"fuzz_player{i}",
+                password="test",
+                mmr=2000 + i * 100,
+            )
+            players.append(p)
+            tournament.users.add(p)
+
+        draft = Draft.objects.create(tournament=tournament, draft_style="shuffle")
+        draft.build_rounds()
+
+        return admin, tournament, draft, captains, teams, players
+
+    def _make_picks(self, draft, num_picks, players):
+        """Helper: make N picks on the draft using available players."""
+        from app.functions.shuffle_draft import assign_next_shuffle_captain
+
+        rounds = list(draft.draft_rounds.order_by("pick_number"))
+        picked = 0
+        for i, rnd in enumerate(rounds):
+            if picked >= num_picks:
+                break
+            if not rnd.captain:
+                # Need captain assigned first
+                assign_next_shuffle_captain(draft)
+                rnd.refresh_from_db()
+            if not rnd.captain:
+                break
+            # Pick the next available player
+            remaining = list(draft.users_remaining)
+            if not remaining:
+                break
+            rnd.pick_player(remaining[0])
+            picked += 1
+            # Assign next captain after pick
+            if picked < num_picks:
+                assign_next_shuffle_captain(draft)
+
+        return picked
+
+    def _restart_draft(self, admin, tournament):
+        """Helper: restart draft via the API endpoint."""
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        response = client.post(
+            "/api/tournaments/init-draft",
+            {"tournament_pk": tournament.pk},
+        )
+        return response
+
+    def _assert_draft_invariants(self, draft, num_teams, msg=""):
+        """Assert core invariants that must hold after every restart."""
+        prefix = f"[{msg}] " if msg else ""
+
+        # Refresh from DB
+        draft.refresh_from_db()
+        rounds = list(draft.draft_rounds.order_by("pick_number"))
+
+        # 1. Correct number of rounds
+        expected_rounds = num_teams * 4
+        self.assertEqual(
+            len(rounds),
+            expected_rounds,
+            f"{prefix}Expected {expected_rounds} rounds, got {len(rounds)}",
+        )
+
+        # 2. All choices cleared
+        for rnd in rounds:
+            self.assertIsNone(
+                rnd.choice,
+                f"{prefix}Round {rnd.pick_number} should have no choice after restart",
+            )
+
+        # 3. Pick numbers are sequential 1..N
+        pick_numbers = [r.pick_number for r in rounds]
+        self.assertEqual(
+            pick_numbers,
+            list(range(1, expected_rounds + 1)),
+            f"{prefix}Pick numbers should be sequential",
+        )
+
+        # 4. First round has a captain assigned
+        self.assertIsNotNone(
+            rounds[0].captain,
+            f"{prefix}First round must have a captain",
+        )
+
+        # 5. Remaining rounds have null captains (shuffle style)
+        for rnd in rounds[1:]:
+            self.assertIsNone(
+                rnd.captain,
+                f"{prefix}Round {rnd.pick_number} should have null captain",
+            )
+
+        # 6. First captain is the lowest-MMR captain
+        from app.functions.shuffle_draft import get_team_total_mmr
+
+        teams = list(draft.tournament.teams.all())
+        mmrs = {t.captain.pk: get_team_total_mmr(t) for t in teams}
+        lowest_pk = min(mmrs, key=mmrs.get)
+        self.assertEqual(
+            rounds[0].captain.pk,
+            lowest_pk,
+            f"{prefix}First captain should be lowest MMR captain",
+        )
+
+        # 7. Teams are captain-only (all non-captain members cleared)
+        for team in teams:
+            members = list(team.members.all())
+            self.assertEqual(
+                len(members),
+                1,
+                f"{prefix}Team '{team.name}' should only have captain, has {len(members)}",
+            )
+            self.assertEqual(
+                members[0].pk,
+                team.captain.pk,
+                f"{prefix}Team '{team.name}' sole member should be captain",
+            )
+
+        # 8. latest_round points to the first round
+        self.assertEqual(
+            draft.latest_round,
+            rounds[0].pk,
+            f"{prefix}latest_round should point to first round",
+        )
+
+        # 9. Serialized draft_rounds are in pick_number order
+        from app.serializers import DraftSerializer
+
+        serialized = DraftSerializer(draft).data
+        serialized_pick_numbers = [r["pick_number"] for r in serialized["draft_rounds"]]
+        self.assertEqual(
+            serialized_pick_numbers,
+            list(range(1, expected_rounds + 1)),
+            f"{prefix}Serialized rounds must be in pick_number order",
+        )
+
+    def test_restart_with_no_picks_made(self):
+        """Restart immediately after init with 0 picks."""
+        admin, tournament, draft, captains, teams, players = self._create_tournament(
+            num_teams=3, players_per_team=4
+        )
+
+        response = self._restart_draft(admin, tournament)
+        self.assertEqual(response.status_code, 201)
+        self._assert_draft_invariants(draft, 3, "no picks")
+
+    def test_restart_after_partial_picks(self):
+        """Restart after making some picks but not finishing."""
+        admin, tournament, draft, captains, teams, players = self._create_tournament(
+            num_teams=3, players_per_team=4
+        )
+
+        picked = self._make_picks(draft, 4, players)
+        self.assertGreater(picked, 0, "Should have made at least 1 pick")
+
+        response = self._restart_draft(admin, tournament)
+        self.assertEqual(response.status_code, 201)
+        self._assert_draft_invariants(draft, 3, f"after {picked} picks")
+
+    def test_restart_after_full_draft(self):
+        """Restart after all rounds are picked."""
+        admin, tournament, draft, captains, teams, players = self._create_tournament(
+            num_teams=2, players_per_team=4
+        )
+
+        total_rounds = draft.draft_rounds.count()
+        picked = self._make_picks(draft, total_rounds, players)
+        self.assertEqual(picked, total_rounds, "Should have completed all picks")
+
+        response = self._restart_draft(admin, tournament)
+        self.assertEqual(response.status_code, 201)
+        self._assert_draft_invariants(draft, 2, "full draft complete")
+
+    def test_double_restart(self):
+        """Restart twice in a row without any picks between."""
+        admin, tournament, draft, captains, teams, players = self._create_tournament(
+            num_teams=4, players_per_team=4
+        )
+
+        self._make_picks(draft, 3, players)
+
+        response = self._restart_draft(admin, tournament)
+        self.assertEqual(response.status_code, 201)
+        self._assert_draft_invariants(draft, 4, "first restart")
+
+        response = self._restart_draft(admin, tournament)
+        self.assertEqual(response.status_code, 201)
+        self._assert_draft_invariants(draft, 4, "second restart")
+
+    def test_restart_pick_restart_cycle(self):
+        """Restart, make picks, restart again — multiple cycles."""
+        admin, tournament, draft, captains, teams, players = self._create_tournament(
+            num_teams=2, players_per_team=6
+        )
+
+        for cycle in range(3):
+            response = self._restart_draft(admin, tournament)
+            self.assertEqual(response.status_code, 201)
+            draft.refresh_from_db()
+            self._assert_draft_invariants(draft, 2, f"cycle {cycle} restart")
+
+            # Make a few picks
+            self._make_picks(draft, 2, players)
+
+    def test_restart_with_varying_team_sizes(self):
+        """Restart works correctly for 2, 3, 4, and 5 teams."""
+        for num_teams in [2, 3, 4, 5]:
+            with self.subTest(num_teams=num_teams):
+                # Clean up between subtests
+                CustomUser.objects.all().delete()
+                Tournament.objects.all().delete()
+
+                admin, tournament, draft, captains, teams, players = (
+                    self._create_tournament(num_teams=num_teams, players_per_team=4)
+                )
+
+                # Make some picks
+                self._make_picks(draft, num_teams, players)
+
+                response = self._restart_draft(admin, tournament)
+                self.assertEqual(response.status_code, 201)
+                self._assert_draft_invariants(draft, num_teams, f"{num_teams} teams")
+
+    def test_restart_preserves_old_round_pks_do_not_leak(self):
+        """Old DraftRound PKs should not exist after restart."""
+        admin, tournament, draft, captains, teams, players = self._create_tournament(
+            num_teams=2, players_per_team=4
+        )
+
+        old_pks = set(draft.draft_rounds.values_list("pk", flat=True))
+
+        self._make_picks(draft, 3, players)
+
+        response = self._restart_draft(admin, tournament)
+        self.assertEqual(response.status_code, 201)
+
+        new_pks = set(draft.draft_rounds.values_list("pk", flat=True))
+
+        # Old PKs should all be gone (deleted and recreated)
+        self.assertTrue(
+            old_pks.isdisjoint(new_pks),
+            f"Old round PKs {old_pks} should not overlap with new PKs {new_pks}",
+        )
+
+    def test_serialized_latest_round_matches_first_round_pk(self):
+        """API response latest_round should match the PK of the first round."""
+        admin, tournament, draft, captains, teams, players = self._create_tournament(
+            num_teams=3, players_per_team=4
+        )
+
+        self._make_picks(draft, 5, players)
+
+        response = self._restart_draft(admin, tournament)
+        self.assertEqual(response.status_code, 201)
+
+        data = response.data
+        draft_data = data.get("draft")
+        self.assertIsNotNone(draft_data, "Response should include draft")
+
+        rounds = draft_data["draft_rounds"]
+        self.assertGreater(len(rounds), 0, "Should have draft rounds")
+
+        # latest_round should be the PK of the first round (pick_number=1)
+        first_round_pk = rounds[0]["pk"]
+        self.assertEqual(
+            draft_data["latest_round"],
+            first_round_pk,
+            "latest_round should point to the first round after restart",
+        )
+
+    def test_restart_with_equal_captain_mmrs(self):
+        """Restart when all captains have equal MMR (tie scenario)."""
+        admin = CustomUser.objects.create_user(
+            username="eq_admin", password="test", is_staff=True
+        )
+        tournament = Tournament.objects.create(
+            name="Equal MMR Tournament", date_played=date.today()
+        )
+
+        captains = []
+        for i in range(3):
+            cap = CustomUser.objects.create_user(
+                username=f"eq_cap{i}", password="test", mmr=5000
+            )
+            captains.append(cap)
+            team = Team.objects.create(
+                name=f"Eq Team {i}", captain=cap, tournament=tournament
+            )
+            team.members.add(cap)
+            tournament.users.add(cap)
+
+        for i in range(12):
+            p = CustomUser.objects.create_user(
+                username=f"eq_player{i}", password="test", mmr=3000
+            )
+            tournament.users.add(p)
+
+        draft = Draft.objects.create(tournament=tournament, draft_style="shuffle")
+        draft.build_rounds()
+
+        self._make_picks(
+            draft, 4, list(CustomUser.objects.filter(username__startswith="eq_player"))
+        )
+
+        response = self._restart_draft(admin, tournament)
+        self.assertEqual(response.status_code, 201)
+
+        draft.refresh_from_db()
+        rounds = list(draft.draft_rounds.order_by("pick_number"))
+
+        # All invariants should hold — first captain is determined by tie-break
+        self.assertEqual(len(rounds), 12)
+        self.assertIsNotNone(rounds[0].captain)
+        for rnd in rounds:
+            self.assertIsNone(rnd.choice)
