@@ -14,6 +14,7 @@ import { SharedPopoverProvider } from '~/components/ui/shared-popover-context';
 import { SharedPopoverRenderer } from '~/components/ui/shared-popover-renderer';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { getLogger } from '~/lib/logger';
+import { Sentry } from '~/lib/sentry';
 import type { Route } from './+types/root';
 import './app.css';
 import { ActiveDraftBanner } from './components/teamdraft/ActiveDraftBanner';
@@ -122,9 +123,12 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       error.status === 404
         ? 'The requested page could not be found.'
         : error.statusText || details;
-  } else if (import.meta.env.DEV && error && error instanceof Error) {
-    details = error.message;
-    stack = error.stack;
+  } else if (error && error instanceof Error) {
+    Sentry.captureException(error);
+    if (import.meta.env.DEV) {
+      details = error.message;
+      stack = error.stack;
+    }
   }
 
   return (
