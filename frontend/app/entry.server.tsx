@@ -40,7 +40,7 @@ export default function handleRequest(
 export function handleError(error: unknown, { request }: { request: Request }) {
   // In production, Sentry is loaded via instrument.server.mjs (--import flag).
   // captureException is a no-op when the SDK isn't initialized.
-  import('@sentry/react-router')
+  import(/* @vite-ignore */ '@sentry/react-router')
     .then((Sentry) => Sentry.captureException(error))
     .catch(() => {});
 
