@@ -522,6 +522,135 @@ Same request/response format as organization import. Additional per-row fields:
 | 403 | User lacks org staff access |
 | 404 | Organization or tournament not found |
 
+## Auction House
+
+Real-time auction-based team formation with salary cap budgets and nomination rotation.
+
+!!! info "Planned Feature"
+    Auction House is a planned feature. See [Auction House](../features/planned/auction-house.md) for the full design.
+
+### Auction CRUD
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/tournaments/{id}/create-auction/` | Create auction for tournament | Org Staff |
+| POST | `/api/seasons/{id}/create-auction/` | Create auction for season | League Admin |
+| GET | `/api/auctions/{id}/` | Get auction state (teams, budgets, lots, current phase) | No |
+| POST | `/api/auctions/{id}/pause/` | Admin pause auction | Org Staff |
+| POST | `/api/auctions/{id}/resume/` | Admin resume auction | Org Staff |
+| POST | `/api/auctions/{id}/abort/` | Abort auction | Org Staff |
+| GET | `/api/auctions/{id}/results/` | Final results and spending breakdown | No |
+
+**Response (auction state):**
+
+```json
+{
+  "id": 1,
+  "status": "bidding",
+  "tournament": 5,
+  "season": null,
+  "config": { "budget": 2000, "min_bid": 5, "bid_timer": 20, "..." : "..." },
+  "teams": [
+    { "team_id": 1, "name": "Team Phoenix", "budget_remaining": 1200, "players_won": 2, "pause_count": 0 }
+  ],
+  "current_lot": {
+    "lot_number": 5,
+    "player": { "pk": 10, "username": "mid_player" },
+    "nominator": "Team Dragon",
+    "highest_bid": 350,
+    "highest_bidder": "Team Phoenix",
+    "time_remaining": 8
+  },
+  "remaining_pool_count": 12
+}
+```
+
+**Response (results):**
+
+```json
+{
+  "auction_id": 1,
+  "status": "completed",
+  "teams": [
+    {
+      "team_id": 1,
+      "team_name": "Team Phoenix",
+      "budget_start": 2000,
+      "budget_spent": 1847,
+      "players": [
+        { "user": { "pk": 10, "username": "star_player" }, "cost": 800, "lot_number": 3 },
+        { "user": { "pk": 30, "username": "pos4" }, "cost": 0, "lot_number": null, "fallback": true }
+      ]
+    }
+  ],
+  "lots": [
+    { "lot_number": 1, "player": { "pk": 5, "username": "mid_player" }, "winning_team": "Team Dragon", "winning_bid": 650, "bid_count": 8 }
+  ]
+}
+```
+
+### AuctionConfig (Cascading)
+
+Configuration inherits down: Organization → League → Season → Tournament. Null fields inherit from parent.
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/organizations/{id}/auction-config/` | Get org-level config | No |
+| PUT | `/api/organizations/{id}/auction-config/` | Set org-level config | Org Admin |
+| GET | `/api/leagues/{id}/auction-config/` | Get league-level config | No |
+| PUT | `/api/leagues/{id}/auction-config/` | Set league-level config | League Admin |
+| GET | `/api/seasons/{id}/auction-config/` | Get season-level config | No |
+| PUT | `/api/seasons/{id}/auction-config/` | Set season-level config | League Admin |
+| GET | `/api/tournaments/{id}/auction-config/` | Get tournament-level config | No |
+| PUT | `/api/tournaments/{id}/auction-config/` | Set tournament-level config | Org Staff |
+| GET | `/api/tournaments/{id}/auction-config/resolved/` | Get fully merged config | No |
+
+**Request/Response:**
+
+```json
+{
+  "budget": 2000,
+  "min_bid": 5,
+  "bid_timer": null,
+  "bid_extension_timer": null,
+  "nomination_timer": null,
+  "unsold_behavior": null,
+  "max_roster_size": null,
+  "fallback_mode": null,
+  "max_pauses_per_captain": null,
+  "reconnect_timeout": null
+}
+```
+
+### Auction WebSocket
+
+**Endpoint:** `/api/auction/{auction_id}/`
+
+Real-time bidding via Daphne WebSocket (same pattern as HeroDraft).
+
+**Client Messages:**
+
+| Message | Payload | Description |
+|---------|---------|-------------|
+| `start` | — | Admin triggers auction start |
+| `nominate` | `{ player_id: int }` | Captain nominates a player |
+| `bid` | `{ amount: int }` | Place bid on current lot |
+
+**Server Events:**
+
+| Event | Description |
+|-------|-------------|
+| `auction_started` | Auction state, budgets, pool |
+| `nomination_turn` | Captain ID, timer |
+| `nomination` | Lot details, player, opening bid |
+| `bid_placed` | Team, amount, time remaining |
+| `lot_sold` | Winner, price, updated budgets |
+| `lot_unsold` | Auto-assigned to nominator at min_bid |
+| `fallback_pick` | Team, player, team MMR |
+| `captain_disconnected` / `captain_reconnected` | Team ID, pause count |
+| `auction_paused` / `auction_resumed` | Timestamp, reason |
+| `auction_completed` | Final results |
+
 ## Drafts (Player Draft)
 
 | Method | Endpoint | Description |

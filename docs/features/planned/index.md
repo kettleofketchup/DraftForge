@@ -94,3 +94,22 @@ Bulk-add users to organizations and tournaments via CSV file upload, with client
 - Three-step modal: Upload → Preview → Results
 
 **Status:** :material-pencil: Design Complete | [GitHub #132](https://github.com/kettleofketchup/DraftForge/issues/132)
+
+---
+
+## Auction House
+
+Alternative team formation method where captains bid on players using a virtual salary cap budget, with nomination rotation and real-time WebSocket bidding.
+
+[:material-arrow-right: Auction House](auction-house.md)
+
+**Key Features:**
+
+- Nomination rotation with real-time bidding via WebSocket
+- Salary cap budget with configurable starting amount
+- Anti-sniping bid extension timer
+- Cascading AuctionConfig (org → league → season → tournament)
+- Shuffle draft fallback when budget runs out
+- Captain disconnect handling with pause budgets
+
+**Status:** :material-pencil: Design Complete

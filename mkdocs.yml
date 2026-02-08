@@ -86,6 +86,7 @@ nav:
           - Dota 2 Lobbies: features/planned/dota-lobbies.md
           - Discord Integration: features/planned/discord-integration.md
           - CSV Import: features/planned/csv-import.md
+          - Auction House: features/planned/auction-house.md
   - Architecture:
       - Overview: architecture/overview.md
       - Docker Setup: architecture/docker.md
