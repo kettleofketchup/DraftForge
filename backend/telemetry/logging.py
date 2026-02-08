@@ -11,9 +11,32 @@ from structlog.typing import Processor
 _configured = False
 
 
+class _OTelInternalFilter(logging.Filter):
+    """Prevent OTel's own log messages from being re-ingested by the OTel handler."""
+
+    def filter(self, record):
+        return not record.name.startswith("opentelemetry")
+
+
+def _add_otel_trace_context(logger, method_name, event_dict):
+    """Inject OpenTelemetry trace/span IDs into log events for correlation."""
+    try:
+        from opentelemetry import trace
+
+        span = trace.get_current_span()
+        if span and span.is_recording():
+            ctx = span.get_span_context()
+            event_dict["trace_id"] = format(ctx.trace_id, "032x")
+            event_dict["span_id"] = format(ctx.span_id, "016x")
+    except ImportError:
+        pass
+    return event_dict
+
+
 def configure_logging(
     level: str = "INFO",
     format: Literal["json", "pretty"] = "json",
+    otel_logger_provider=None,
 ) -> None:
     """
     Configure structlog for the application.
@@ -21,6 +44,7 @@ def configure_logging(
     Args:
         level: Minimum log level (DEBUG, INFO, WARNING, ERROR)
         format: Output format - 'json' for production, 'pretty' for development
+        otel_logger_provider: Optional OTel LoggerProvider to ship logs via OTLP
     """
     global _configured
 
@@ -33,6 +57,7 @@ def configure_logging(
         structlog.processors.TimeStamper(fmt="iso", key="timestamp"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.UnicodeDecoder(),
+        _add_otel_trace_context,
     ]
 
     if format == "json":
@@ -72,6 +97,18 @@ def configure_logging(
     root_logger = logging.getLogger()
     root_logger.handlers = [handler]
     root_logger.setLevel(getattr(logging, level.upper(), logging.INFO))
+
+    # Add OTel log export handler (ships logs to Loki via OTLP)
+    if otel_logger_provider is not None:
+        from opentelemetry.sdk._logs import LoggingHandler
+
+        otel_handler = LoggingHandler(
+            level=logging.INFO,  # Don't export DEBUG to Loki
+            logger_provider=otel_logger_provider,
+        )
+        # Prevent OTel's own logs from being re-ingested (infinite recursion)
+        otel_handler.addFilter(_OTelInternalFilter())
+        root_logger.addHandler(otel_handler)
 
     # Quiet noisy third-party loggers
     for logger_name in ["urllib3", "requests", "httpx", "httpcore"]:
