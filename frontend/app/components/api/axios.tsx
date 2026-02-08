@@ -1,3 +1,4 @@
+import { Sentry } from '~/lib/sentry';
 import axios from 'axios';
 
 import { getCsrfToken } from './utils';
@@ -34,6 +35,15 @@ api.interceptors.request.use((config) => {
   }
 
   return config;
+});
+
+api.interceptors.response.use(undefined, (error) => {
+  // Capture API errors in Sentry (skip 4xx client errors except 429)
+  const status = error.response?.status;
+  if (!status || status >= 500 || status === 429) {
+    Sentry.captureException(error);
+  }
+  return Promise.reject(error);
 });
 
 export default api;
