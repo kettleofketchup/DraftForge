@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Crown, Plus, Shield, User, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Crown, Loader2, Plus, Shield, User, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { UserType } from '~/components/user/types';
 import type { OrganizationType } from '~/components/organization/schemas';
@@ -32,6 +32,7 @@ import {
 } from '~/hooks/usePermissions';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { Button } from '~/components/ui/button';
+import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
 
 interface AdminTeamSectionProps {
   organization?: OrganizationType | null;
@@ -80,27 +81,33 @@ function UserRow({
       </div>
       <div className="flex gap-2">
         {canTransfer && onTransfer && (
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             onClick={onTransfer}
-            className="btn btn-xs btn-ghost text-yellow-600"
+            className="text-yellow-600"
             title="Transfer ownership"
           >
             Transfer
-          </button>
+          </Button>
         )}
         {canRemove && onRemove && (
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             onClick={onRemove}
             disabled={isRemoving}
-            className="btn btn-xs btn-ghost text-error"
+            className="text-destructive"
             title="Remove"
           >
             {isRemoving ? (
-              <span className="loading loading-spinner loading-xs" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <X className="h-4 w-4" />
             )}
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -309,6 +316,7 @@ export function AdminTeamSection({
     <div className="border border-base-300 rounded-lg overflow-hidden">
       {/* Header */}
       <button
+        type="button"
         onClick={() => setIsExpanded(!isExpanded)}
         className="w-full flex items-center justify-between p-4 bg-base-200 hover:bg-base-300 transition-colors"
       >
@@ -362,6 +370,7 @@ export function AdminTeamSection({
               </h4>
               {canManageAdmins && (
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => setShowAddAdmin(true)}
@@ -401,6 +410,7 @@ export function AdminTeamSection({
               </h4>
               {canManageStaff && (
                 <Button
+                  type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => setShowAddStaff(true)}
@@ -449,26 +459,23 @@ export function AdminTeamSection({
               You will become an admin after the transfer.
             </p>
             <div className="modal-action">
-              <button
+              <CancelButton
+                type="button"
                 onClick={() => {
                   setShowTransferConfirm(false);
                   setTransferTarget(null);
                 }}
-                className="btn"
               >
                 Cancel
-              </button>
-              <button
+              </CancelButton>
+              <ConfirmButton
+                type="button"
+                variant="warning"
                 onClick={confirmTransfer}
-                disabled={transferOwnershipMutation.isPending}
-                className="btn btn-warning"
+                loading={transferOwnershipMutation.isPending}
               >
-                {transferOwnershipMutation.isPending ? (
-                  <span className="loading loading-spinner loading-sm" />
-                ) : (
-                  'Transfer'
-                )}
-              </button>
+                Transfer
+              </ConfirmButton>
             </div>
           </div>
         </div>
