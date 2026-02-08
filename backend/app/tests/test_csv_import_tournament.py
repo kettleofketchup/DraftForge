@@ -51,7 +51,7 @@ class TournamentCSVImportTest(TestCase):
         )
         resp = self.client.post(
             self.url,
-            {"rows": [{"steam_friend_id": "76561198012345678", "base_mmr": 5000}]},
+            {"rows": [{"steam_friend_id": "76561198012345678", "mmr": 5000}]},
             format="json",
         )
         self.assertEqual(resp.status_code, 200)
@@ -76,7 +76,7 @@ class TournamentCSVImportTest(TestCase):
                 "rows": [
                     {
                         "steam_friend_id": "76561198012345678",
-                        "base_mmr": 5000,
+                        "mmr": 5000,
                         "team_name": "Team Alpha",
                     }
                 ]
@@ -133,7 +133,7 @@ class TournamentCSVImportTest(TestCase):
         resp = self.client.post(
             self.url,
             {
-                "rows": [{"steam_friend_id": "76561198012345678", "base_mmr": 6000}],
+                "rows": [{"steam_friend_id": "76561198012345678", "mmr": 6000}],
                 "update_mmr": True,
                 "mmr_target": "organization",
             },
@@ -159,7 +159,7 @@ class TournamentCSVImportTest(TestCase):
         resp = self.client.post(
             self.url,
             {
-                "rows": [{"steam_friend_id": "76561198012345678", "base_mmr": 7000}],
+                "rows": [{"steam_friend_id": "76561198012345678", "mmr": 7000}],
                 "update_mmr": True,
                 "mmr_target": "league",
             },
@@ -185,7 +185,7 @@ class TournamentCSVImportTest(TestCase):
         resp = self.client.post(
             self.url,
             {
-                "rows": [{"steam_friend_id": "76561198012345678", "base_mmr": 9000}],
+                "rows": [{"steam_friend_id": "76561198012345678", "mmr": 9000}],
             },
             format="json",
         )

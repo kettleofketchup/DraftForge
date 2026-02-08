@@ -110,7 +110,6 @@ def reset_csv_import(request):
             existing.nickname = user_data.nickname
             existing.discordId = user_data.discord_id
             existing.steamid = user_data.get_steam_id_64()
-            existing.mmr = user_data.mmr or 3000
             existing.save()
         else:
             positions = PositionsModel.objects.create()
@@ -120,7 +119,6 @@ def reset_csv_import(request):
                 nickname=user_data.nickname,
                 discordId=user_data.discord_id,
                 steamid=user_data.get_steam_id_64(),
-                mmr=user_data.mmr or 3000,
                 positions=positions,
             )
             user.set_unusable_password()

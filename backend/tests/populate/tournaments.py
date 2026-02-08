@@ -320,7 +320,6 @@ def populate_real_tournament_38(force=False):
                 discordId=discord_id,
                 username=username,
                 steamid=steamid_64,
-                mmr=mmr,
                 positions=positions,
             )
             print(
@@ -332,8 +331,6 @@ def populate_real_tournament_38(force=False):
                 user.steamid = steamid_64
             if user.username != username:
                 user.username = username
-            if user.mmr != mmr:
-                user.mmr = mmr
             # Update positions if we have real data
             if pos_data and user.positions:
                 user.positions.carry = pos_data.carry

@@ -124,7 +124,6 @@ def createTestSuperUser() -> tuple[CustomUser, bool]:
         steamid=ADMIN_USER.get_steam_id_64(),
         is_staff=ADMIN_USER.is_staff,
         is_superuser=ADMIN_USER.is_superuser,
-        mmr=random.randint(2000, 6000),
     )
     user.set_password("cypress")
     user.save()
@@ -155,7 +154,6 @@ def createTestStaffUser() -> tuple[CustomUser, bool]:
         steamid=STAFF_USER.get_steam_id_64(),
         is_staff=STAFF_USER.is_staff,
         is_superuser=STAFF_USER.is_superuser,
-        mmr=random.randint(2000, 6000),
     )
     user.set_password("cypress")
     user.save()
@@ -189,7 +187,6 @@ def createTestUser() -> tuple[CustomUser, bool]:
         steamid=REGULAR_USER.get_steam_id_64(),
         is_staff=REGULAR_USER.is_staff,
         is_superuser=REGULAR_USER.is_superuser,
-        mmr=random.randint(2000, 6000),
     )
     user.set_password("cypress")
     user.save()
@@ -228,7 +225,6 @@ def createClaimableTestUser() -> tuple[CustomUser, bool]:
         discordUsername=None,
         steamid=CLAIMABLE_USER.get_steam_id_64(),
         nickname=CLAIMABLE_USER.nickname or "Claimable Profile",
-        mmr=CLAIMABLE_USER.mmr or 4500,
     )
     user.set_unusable_password()
     user.save()
@@ -264,7 +260,6 @@ def createUserClaimerTestUser() -> tuple[CustomUser, bool]:
         discordUsername=USER_CLAIMER.username,
         nickname=USER_CLAIMER.nickname or "User Claimer",
         steamid=USER_CLAIMER.get_steam_id_64(),  # None
-        mmr=random.randint(2000, 6000),
     )
     user.set_password("cypress")
     user.save()
@@ -295,7 +290,6 @@ def createOrgAdminTestUser() -> tuple[CustomUser, bool]:
         discordUsername=ORG_ADMIN_USER.username,
         nickname=ORG_ADMIN_USER.nickname or "Org Admin Tester",
         steamid=ORG_ADMIN_USER.get_steam_id_64(),
-        mmr=random.randint(2000, 6000),
     )
     user.set_password("cypress")
     user.save()
@@ -326,7 +320,6 @@ def createOrgStaffTestUser() -> tuple[CustomUser, bool]:
         discordUsername=ORG_STAFF_USER.username,
         nickname=ORG_STAFF_USER.nickname or "Org Staff Tester",
         steamid=ORG_STAFF_USER.get_steam_id_64(),
-        mmr=random.randint(2000, 6000),
     )
     user.set_password("cypress")
     user.save()
@@ -357,7 +350,6 @@ def createLeagueAdminTestUser() -> tuple[CustomUser, bool]:
         discordUsername=LEAGUE_ADMIN_USER.username,
         nickname=LEAGUE_ADMIN_USER.nickname or "League Admin Tester",
         steamid=LEAGUE_ADMIN_USER.get_steam_id_64(),
-        mmr=random.randint(2000, 6000),
     )
     user.set_password("cypress")
     user.save()
@@ -388,7 +380,6 @@ def createLeagueStaffTestUser() -> tuple[CustomUser, bool]:
         discordUsername=LEAGUE_STAFF_USER.username,
         nickname=LEAGUE_STAFF_USER.nickname or "League Staff Tester",
         steamid=LEAGUE_STAFF_USER.get_steam_id_64(),
-        mmr=random.randint(2000, 6000),
     )
     user.set_password("cypress")
     user.save()
@@ -653,7 +644,6 @@ def login_as_discord_id(request):
                 "username": user.username,
                 "discordUsername": user.discordUsername,
                 "discordId": user.discordId,
-                "mmr": user.mmr,
             },
         },
         status=status.HTTP_200_OK,
@@ -744,7 +734,6 @@ def create_claimable_user(request):
     user = CustomUser.objects.create(
         username=username,
         nickname=nickname,
-        mmr=mmr,
         discordId=None,
         discordUsername=None,
         steamid=None,
@@ -892,7 +881,6 @@ def create_claim_request(request):
         nickname=target_nickname,
         discordId=None,
         steamid=target_steamid,
-        mmr=random.randint(2000, 6000),
     )
     target_user.set_unusable_password()
     target_user.save()

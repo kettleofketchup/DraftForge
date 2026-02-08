@@ -122,7 +122,6 @@ def populate_csv_import_data(force=False):
             nickname=user_data.nickname,
             discordId=user_data.discord_id,
             steamid=user_data.get_steam_id_64(),
-            mmr=user_data.mmr or 3000,
             positions=positions,
         )
         user.set_unusable_password()
