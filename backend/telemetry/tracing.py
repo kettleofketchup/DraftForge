@@ -48,7 +48,7 @@ def init_tracing() -> None:
     try:
         # Import OTel modules
         from opentelemetry import trace
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
             OTLPSpanExporter,
         )
         from opentelemetry.sdk.resources import SERVICE_NAME, Resource
@@ -62,12 +62,14 @@ def init_tracing() -> None:
         headers = os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "")
 
         # Parse headers (format: "key1=value1,key2=value2")
+        from urllib.parse import unquote
+
         header_dict: dict[str, str] = {}
         if headers:
             for pair in headers.split(","):
                 if "=" in pair:
                     key, value = pair.split("=", 1)
-                    header_dict[key.strip()] = value.strip()
+                    header_dict[key.strip()] = unquote(value.strip())
 
         # Create resource
         resource = Resource.create(
