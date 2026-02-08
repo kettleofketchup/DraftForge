@@ -1,17 +1,17 @@
-import type * as SentryType from '@sentry/react-router';
+const SENTRY_PKG = '@sentry/react-router';
 
 const DSN =
   'https://54c5b2164095f34b34dfb66072ca90f5@o4510850673213440.ingest.us.sentry.io/4510850704867328';
 
-// Holds the Sentry namespace once loaded; starts as a no-op stub
-let _sentry: typeof SentryType | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _sentry: any = null;
 
 export async function initSentry() {
   if (typeof window === 'undefined') return;
   if (import.meta.env.DEV) return;
 
   try {
-    const Sentry = await import(/* @vite-ignore */ '@sentry/react-router');
+    const Sentry = await import(/* @vite-ignore */ SENTRY_PKG);
     _sentry = Sentry;
 
     Sentry.init({
@@ -37,13 +37,16 @@ export async function initSentry() {
  * No-op-safe Sentry proxy. All calls are silently ignored if Sentry
  * failed to load or hasn't been initialized.
  */
-export const Sentry = new Proxy({} as typeof SentryType, {
-  get(_target, prop) {
-    if (_sentry) return (_sentry as Record<string | symbol, unknown>)[prop];
-    // Return a no-op function for any method call
-    if (prop === 'captureException' || prop === 'captureMessage') {
-      return () => {};
-    }
-    return undefined;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const Sentry: any = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      if (_sentry) return _sentry[prop];
+      if (prop === 'captureException' || prop === 'captureMessage') {
+        return () => {};
+      }
+      return undefined;
+    },
   },
-});
+);
