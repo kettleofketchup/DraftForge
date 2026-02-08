@@ -11,7 +11,7 @@ export async function initSentry() {
   if (import.meta.env.DEV) return;
 
   try {
-    const Sentry = await import('@sentry/react-router');
+    const Sentry = await import(/* @vite-ignore */ '@sentry/react-router');
     _sentry = Sentry;
 
     Sentry.init({
