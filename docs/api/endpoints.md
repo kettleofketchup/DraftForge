@@ -426,6 +426,102 @@ Omit `season_team_ids` to import all teams from the tournament's linked season.
     - Re-importing when teams already exist will error unless existing teams are removed first
     - LeagueUser references are resolved to CustomUser for Tournament Team compatibility
 
+## CSV Import
+
+Bulk-import users into organizations or tournaments via pre-parsed CSV data.
+
+!!! info "Planned Feature"
+    CSV Import is a planned feature. See [CSV Import](../features/planned/csv-import.md) for the full design.
+
+### Organization CSV Import
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/organizations/{id}/import-csv/` | Bulk-import users to org | Org Staff |
+
+**Request Body:**
+
+```json
+{
+  "rows": [
+    {
+      "steam_friend_id": "76561198012345678",
+      "discord_id": "123456789012345678",
+      "base_mmr": 5000
+    }
+  ]
+}
+```
+
+**Response:**
+
+```json
+{
+  "summary": {
+    "added": 2,
+    "skipped": 1,
+    "created": 1,
+    "errors": 0
+  },
+  "results": [
+    {
+      "row": 1,
+      "status": "added",
+      "user": { "pk": 10, "username": "player1", "avatar": "..." },
+      "created": false
+    },
+    {
+      "row": 2,
+      "status": "added",
+      "user": { "pk": 50, "username": "steam_76561198099999999" },
+      "created": true,
+      "warning": "Steam ID already linked to different Discord ID — provided Discord ID was ignored"
+    },
+    {
+      "row": 3,
+      "status": "skipped",
+      "reason": "Already a member",
+      "user": { "pk": 5, "username": "existing_member" }
+    }
+  ]
+}
+```
+
+| Summary Field | Description |
+|---------------|-------------|
+| `added` | Users successfully added to the organization |
+| `skipped` | Users already in the organization |
+| `created` | New stub users created (subset of `added`) |
+| `errors` | Rows that failed to process |
+
+### Tournament CSV Import
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/tournaments/{id}/import-csv/` | Bulk-import users to tournament | Org Staff |
+
+Same request/response format as organization import. Additional per-row fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `team_name` | string | Optional team assignment (request) |
+| `team` | string | Team name assigned (response) |
+
+!!! note "Tournament Import Behavior"
+    - Creates OrgUser in parent organization if user is not already a member
+    - Adds user to `tournament.users` M2M
+    - Creates Team by name if `team_name` provided and team doesn't exist
+    - Groups rows with same `team_name` into the same team
+    - Maximum 500 rows per import
+
+### CSV Import Error Responses
+
+| Status | Condition |
+|--------|-----------|
+| 400 | `rows` is not a list, or exceeds 500 row limit |
+| 403 | User lacks org staff access |
+| 404 | Organization or tournament not found |
+
 ## Drafts (Player Draft)
 
 | Method | Endpoint | Description |
