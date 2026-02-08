@@ -4,6 +4,8 @@ import {
   Award,
   ChevronRight,
   Code2,
+  FileSpreadsheet,
+  Gavel,
   GitBranch,
   Shield,
   Swords,
@@ -258,6 +260,22 @@ export default function HomePage() {
               delay={0.6}
               comingSoon
               docsPath="/features/planned/discord-integration/"
+            />
+            <FeatureCard
+              icon={FileSpreadsheet}
+              title="CSV Import"
+              description="Bulk-add users to organizations and tournaments via CSV upload with conflict detection and team assignment."
+              delay={0.7}
+              badgeText="In Testing"
+              docsPath="/features/planned/csv-import/"
+            />
+            <FeatureCard
+              icon={Gavel}
+              title="Auction Draft"
+              description="Captain nomination bidding with salary caps, real-time WebSocket auctions, and shuffle draft fallback."
+              delay={0.8}
+              comingSoon
+              docsPath="/features/planned/auction-house/"
             />
           </div>
         </div>
