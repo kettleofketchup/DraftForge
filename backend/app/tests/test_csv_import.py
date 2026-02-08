@@ -32,7 +32,7 @@ class OrgCSVImportTest(TestCase):
         )
         resp = self.client.post(
             self.url,
-            {"rows": [{"steam_friend_id": "76561198012345678", "base_mmr": 5000}]},
+            {"rows": [{"steam_friend_id": "76561198012345678", "mmr": 5000}]},
             format="json",
         )
         self.assertEqual(resp.status_code, 200)
@@ -44,7 +44,7 @@ class OrgCSVImportTest(TestCase):
         """Row with unknown steam_friend_id creates a stub user + OrgUser."""
         resp = self.client.post(
             self.url,
-            {"rows": [{"steam_friend_id": "76561198099999999", "base_mmr": 3000}]},
+            {"rows": [{"steam_friend_id": "76561198099999999", "mmr": 3000}]},
             format="json",
         )
         self.assertEqual(resp.status_code, 200)
@@ -65,7 +65,7 @@ class OrgCSVImportTest(TestCase):
         )
         resp = self.client.post(
             self.url,
-            {"rows": [{"discord_id": "123456789012345678", "base_mmr": 4000}]},
+            {"rows": [{"discord_id": "123456789012345678", "mmr": 4000}]},
             format="json",
         )
         self.assertEqual(resp.status_code, 200)
@@ -85,7 +85,7 @@ class OrgCSVImportTest(TestCase):
         OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
         resp = self.client.post(
             self.url,
-            {"rows": [{"steam_friend_id": "76561198011111111", "base_mmr": 2000}]},
+            {"rows": [{"steam_friend_id": "76561198011111111", "mmr": 2000}]},
             format="json",
         )
         self.assertEqual(resp.status_code, 200)
@@ -96,13 +96,13 @@ class OrgCSVImportTest(TestCase):
 
     def test_import_row_with_no_identifier_errors(self):
         """Row without steam_friend_id or discord_id reports error."""
-        resp = self.client.post(self.url, {"rows": [{"base_mmr": 5000}]}, format="json")
+        resp = self.client.post(self.url, {"rows": [{"mmr": 5000}]}, format="json")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["summary"]["errors"], 1)
         self.assertIn("No identifier", resp.data["results"][0]["reason"])
 
     def test_import_conflict_detection(self):
-        """Row with steam + discord where existing user has different discord flags warning."""
+        """Row with steam + discord where existing user has different discord is an error."""
         pos = PositionsModel.objects.create()
         CustomUser.objects.create_user(
             username="conflictuser",
@@ -118,18 +118,68 @@ class OrgCSVImportTest(TestCase):
                     {
                         "steam_friend_id": "76561198022222222",
                         "discord_id": "111111111111111111",
-                        "base_mmr": 4000,
+                        "mmr": 4000,
                     }
                 ]
             },
             format="json",
         )
         self.assertEqual(resp.status_code, 200)
-        # Should still add the user but include a warning
-        self.assertEqual(resp.data["summary"]["added"], 1)
+        self.assertEqual(resp.data["summary"]["errors"], 1)
+        self.assertEqual(resp.data["summary"]["added"], 0)
         result = resp.data["results"][0]
-        self.assertIn("warning", result)
-        self.assertIn("999999999999999999", result["warning"])
+        self.assertEqual(result["status"], "error")
+        self.assertIn("different Discord account", result["reason"])
+        self.assertIn("conflict_users", result)
+
+    def test_import_update_mmr_for_existing_member(self):
+        """update_mmr=True updates MMR for existing org members."""
+        pos = PositionsModel.objects.create()
+        user = CustomUser.objects.create_user(
+            username="existing",
+            password="pass",
+            positions=pos,
+            steamid=76561198011111111,
+        )
+        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        resp = self.client.post(
+            self.url,
+            {
+                "rows": [{"steam_friend_id": "76561198011111111", "mmr": 5000}],
+                "update_mmr": True,
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["summary"]["updated"], 1)
+        self.assertEqual(resp.data["summary"]["skipped"], 0)
+        result = resp.data["results"][0]
+        self.assertEqual(result["status"], "updated")
+        org_user = OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_user.mmr, 5000)
+
+    def test_import_update_mmr_false_skips(self):
+        """update_mmr=False (default) skips existing members without updating MMR."""
+        pos = PositionsModel.objects.create()
+        user = CustomUser.objects.create_user(
+            username="existing",
+            password="pass",
+            positions=pos,
+            steamid=76561198011111111,
+        )
+        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        resp = self.client.post(
+            self.url,
+            {
+                "rows": [{"steam_friend_id": "76561198011111111", "mmr": 5000}],
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["summary"]["skipped"], 1)
+        self.assertEqual(resp.data["summary"]["updated"], 0)
+        org_user = OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_user.mmr, 1000)  # Unchanged
 
     def test_import_requires_staff_access(self):
         """Non-staff/non-admin user gets 403."""
@@ -157,7 +207,7 @@ class OrgCSVImportTest(TestCase):
         client.force_authenticate(staff_user)
         resp = client.post(
             self.url,
-            {"rows": [{"steam_friend_id": "76561198099999999", "base_mmr": 3000}]},
+            {"rows": [{"steam_friend_id": "76561198099999999", "mmr": 3000}]},
             format="json",
         )
         self.assertEqual(resp.status_code, 200)
@@ -184,7 +234,7 @@ class OrgCSVImportTest(TestCase):
         """Row with only discord_id and no match creates a stub user."""
         resp = self.client.post(
             self.url,
-            {"rows": [{"discord_id": "555555555555555555", "base_mmr": 2500}]},
+            {"rows": [{"discord_id": "555555555555555555", "mmr": 2500}]},
             format="json",
         )
         self.assertEqual(resp.status_code, 200)
@@ -193,3 +243,34 @@ class OrgCSVImportTest(TestCase):
         self.assertIsNotNone(user)
         org_user = OrgUser.objects.get(user=user, organization=self.org)
         self.assertEqual(org_user.mmr, 2500)
+
+    def test_import_name_sets_nickname_on_new_stub(self):
+        """CSV row with name sets nickname on newly created stub user."""
+        resp = self.client.post(
+            self.url,
+            {"rows": [{"steam_friend_id": "76561198099999999", "name": "PlayerOne"}]},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["summary"]["created"], 1)
+        user = CustomUser.objects.get(steamid=76561198099999999)
+        self.assertEqual(user.nickname, "PlayerOne")
+
+    def test_import_name_sets_nickname_on_existing_user_without_nickname(self):
+        """CSV row with name sets nickname on existing user if nickname is empty."""
+        pos = PositionsModel.objects.create()
+        user = CustomUser.objects.create_user(
+            username="nonickname",
+            password="pass",
+            positions=pos,
+            steamid=76561198011111111,
+        )
+        self.assertFalse(user.nickname)  # no nickname set
+        resp = self.client.post(
+            self.url,
+            {"rows": [{"steam_friend_id": "76561198011111111", "name": "GivenName"}]},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.nickname, "GivenName")

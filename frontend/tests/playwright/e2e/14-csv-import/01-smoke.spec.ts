@@ -59,7 +59,12 @@ test.describe('CSV Import - Org', () => {
     await context.close();
   });
 
-  test.beforeEach(async ({ loginAdmin }) => {
+  test.beforeEach(async ({ context, loginAdmin }) => {
+    // Reset CSV import data to clean state before each test
+    const resetResp = await context.request.post(`${API_URL}/tests/csv-import/reset/`);
+    if (!resetResp.ok()) {
+      throw new Error(`CSV reset failed: ${resetResp.status()}`);
+    }
     await loginAdmin();
   });
 
@@ -151,7 +156,12 @@ test.describe('CSV Import - Tournament', () => {
     }
   });
 
-  test.beforeEach(async ({ loginAdmin }) => {
+  test.beforeEach(async ({ context, loginAdmin }) => {
+    // Reset CSV import data to clean state before each test
+    const resetResp = await context.request.post(`${API_URL}/tests/csv-import/reset/`);
+    if (!resetResp.ok()) {
+      throw new Error(`CSV reset failed: ${resetResp.status()}`);
+    }
     await loginAdmin();
   });
 

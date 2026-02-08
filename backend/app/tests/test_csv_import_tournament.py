@@ -12,6 +12,7 @@ from app.models import (
     Team,
     Tournament,
 )
+from league.models import LeagueUser
 from org.models import OrgUser
 
 
@@ -116,6 +117,83 @@ class TournamentCSVImportTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         team = Team.objects.get(name="Team Beta", tournament=self.tournament)
         self.assertEqual(team.members.count(), 2)
+
+    def test_import_update_mmr_org_level(self):
+        """update_mmr=True with mmr_target=organization updates OrgUser.mmr."""
+        pos = PositionsModel.objects.create()
+        user = CustomUser.objects.create_user(
+            username="player",
+            password="pass",
+            positions=pos,
+            steamid=76561198012345678,
+        )
+        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        self.tournament.users.add(user)
+
+        resp = self.client.post(
+            self.url,
+            {
+                "rows": [{"steam_friend_id": "76561198012345678", "base_mmr": 6000}],
+                "update_mmr": True,
+                "mmr_target": "organization",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["summary"]["updated"], 1)
+        org_user = OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_user.mmr, 6000)
+
+    def test_import_update_mmr_league_level(self):
+        """update_mmr=True with mmr_target=league updates LeagueUser.mmr."""
+        pos = PositionsModel.objects.create()
+        user = CustomUser.objects.create_user(
+            username="player",
+            password="pass",
+            positions=pos,
+            steamid=76561198012345678,
+        )
+        org_user = OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        self.tournament.users.add(user)
+
+        resp = self.client.post(
+            self.url,
+            {
+                "rows": [{"steam_friend_id": "76561198012345678", "base_mmr": 7000}],
+                "update_mmr": True,
+                "mmr_target": "league",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["summary"]["updated"], 1)
+        league_user = LeagueUser.objects.get(user=user, league=self.league)
+        self.assertEqual(league_user.mmr, 7000)
+
+    def test_import_skips_existing_without_update_mmr(self):
+        """Without update_mmr, existing tournament users are skipped."""
+        pos = PositionsModel.objects.create()
+        user = CustomUser.objects.create_user(
+            username="player",
+            password="pass",
+            positions=pos,
+            steamid=76561198012345678,
+        )
+        OrgUser.objects.create(user=user, organization=self.org, mmr=1000)
+        self.tournament.users.add(user)
+
+        resp = self.client.post(
+            self.url,
+            {
+                "rows": [{"steam_friend_id": "76561198012345678", "base_mmr": 9000}],
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["summary"]["skipped"], 1)
+        self.assertEqual(resp.data["summary"]["updated"], 0)
+        org_user = OrgUser.objects.get(user=user, organization=self.org)
+        self.assertEqual(org_user.mmr, 1000)  # Unchanged
 
     def test_import_requires_permission(self):
         """Non-admin user gets 403."""
