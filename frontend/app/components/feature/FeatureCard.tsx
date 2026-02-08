@@ -60,10 +60,12 @@ const LazyImage = ({
   src,
   alt,
   className,
+  imgClassName,
 }: {
   src: string;
   alt: string;
   className?: string;
+  imgClassName?: string;
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [deferredSrc, setDeferredSrc] = useState<string | null>(null);
@@ -122,7 +124,7 @@ const LazyImage = ({
         <img
           src={deferredSrc}
           alt={alt}
-          className={cn('w-full h-auto object-contain rounded-lg', isLoading && 'opacity-0')}
+          className={cn('w-full h-auto object-contain rounded-lg', imgClassName, isLoading && 'opacity-0')}
           onLoad={() => setIsLoading(false)}
         />
       )}
@@ -258,12 +260,11 @@ export const FeatureCard = ({
                 className="relative overflow-hidden rounded-lg border border-primary/20 cursor-pointer group aspect-video"
                 onClick={() => setIsModalOpen(true)}
               >
-                {/* Frozen first frame - CSS pauses animation */}
-                <img
+                <LazyImage
                   src={thumbnailSrc}
                   alt={`${title} preview`}
-                  className="absolute inset-0 w-full h-full object-cover object-top"
-                  style={{ animationPlayState: 'paused' }}
+                  className="absolute inset-0 w-full h-full"
+                  imgClassName="h-full object-cover object-top"
                 />
                 {/* Overlay with play icon */}
                 <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:bg-black/50 transition-colors">
