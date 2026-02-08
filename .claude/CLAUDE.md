@@ -311,73 +311,6 @@ just test::pw::spec league        # League tests only
 just test::pw::spec herodraft     # HeroDraft tests only
 ```
 
-## Test Data & Fixtures
-
-### Architecture
-
-Test data lives in two layers:
-
-1. **Data definitions** (`backend/tests/data/`) - Pydantic models defining orgs, leagues, tournaments, users, teams
-2. **Populate functions** (`backend/tests/populate/`) - Functions that create DB records from the data definitions
-
-The populate orchestrator (`populate_all()` in `__init__.py`) runs all populate functions in dependency order.
-
-### Feature-Specific Test Isolation
-
-**IMPORTANT**: Feature-specific E2E tests MUST use their own dedicated test data. Never reuse existing organizations, leagues, or tournaments from other test suites.
-
-When adding a new feature that needs E2E testing:
-
-1. **Create dedicated data definitions** in `tests/data/`:
-   - New `TestOrganization` in `organizations.py` (with unique pk)
-   - New `TestLeague` in `leagues.py` (with unique pk and steam_league_id)
-   - New `TestTournament` in `tournaments.py` (if testing tournament features)
-   - New test users in `users.py` (if needed, with unique pk range)
-
-2. **Create a populate module** in `tests/populate/`:
-   - `populate_{feature}.py` - Creates org/league/tournament/users for the feature
-   - Add admin user as org admin (so E2E tests can log in and access)
-   - Wire into `__init__.py` (`populate_all()` + imports + `__all__`)
-
-3. **Create fixture files** (if needed):
-   - Static files committed to `frontend/tests/playwright/fixtures/{feature}/`
-   - Populate function can regenerate them but must handle Docker gracefully (the backend container can't write to the frontend volume)
-
-4. **E2E tests look up test data by name**, not by hardcoded pk:
-   ```typescript
-   // GOOD - finds the dedicated org by name
-   const orgsResp = await context.request.get(`${API_URL}/organizations/`);
-   const csvOrg = orgs.find(o => o.name === 'CSV Import Org');
-
-   // BAD - hardcoded pk or borrowing from other test suites
-   const orgPk = 1; // DTX org - don't use this!
-   ```
-
-### Existing Test Data
-
-| Entity | Name | PK | Purpose |
-|--------|------|----|---------|
-| Org | DTX | 1 | Main test org (tournaments, drafts, brackets) |
-| Org | Test Organization | 2 | Basic E2E tests |
-| Org | CSV Import Org | 3 | CSV import feature tests |
-| League | DTX League | 1 | Main test league (steam_league_id=17929) |
-| League | Test League | 2 | Basic E2E tests (steam_league_id=17930) |
-| League | CSV Import League | 3 | CSV import tests (steam_league_id=17931) |
-
-### Running Populate
-
-```bash
-# Full populate (all test data)
-just db::populate::all
-
-# Fresh populate (bypasses cache)
-just db::populate::fresh
-
-# Specific populate function (in Docker)
-docker compose -f docker/docker-compose.test.yaml run --rm --entrypoint "" backend \
-  python manage.py shell -c "from tests.populate.csv_import import populate_csv_import_data; populate_csv_import_data(force=True)"
-```
-
 ## Documentation
 
 Project documentation uses MkDocs Material:
@@ -436,6 +369,7 @@ just test::run 'python manage.py test app.tests -v 2'
 ## Skills Available
 
 - `just` - Just command runner (auto-activates venv, works in worktrees)
+- `testing` - Test infrastructure (populate system, Playwright fixtures, feature-isolated test data)
 - `visual-debugging` - Chrome MCP browser automation for debugging
 
 ## Demo Video Recording
