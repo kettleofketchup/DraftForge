@@ -2014,7 +2014,7 @@ Run: `mkdir -p /home/kettle/git_repos/website/.worktrees/backend-telemetry/docs/
 
 Create `docs/dev/telemetry/index.md`:
 
-```markdown
+````text
 # Telemetry
 
 DTX uses structured logging and optional distributed tracing for observability.
@@ -2056,13 +2056,13 @@ def my_function():
 - [Context Guide](context.md) - Adding context to new endpoints
 - [Local Observability](local-observability.md) - Running Jaeger locally
 - [Reference](reference.md) - Environment variable reference
-```
+````
 
 **Step 3: Create architecture.md**
 
 Create `docs/dev/telemetry/architecture.md`:
 
-```markdown
+````text
 # Telemetry Architecture
 
 ## Overview
@@ -2136,13 +2136,13 @@ Binds context to background tasks:
 2. **Opt-in tracing**: OTel disabled unless explicitly enabled
 3. **Consistent context**: Same fields everywhere
 4. **OTel conventions**: Field names follow semantic conventions
-```
+````
 
 **Step 4: Create remaining documentation files**
 
 Create `docs/dev/telemetry/logging.md`:
 
-```markdown
+````text
 # Logging Guide
 
 ## Getting a Logger
@@ -2203,11 +2203,11 @@ These are automatically added by middleware:
 ```json
 {"timestamp":"2026-01-20T14:32:15Z","level":"info","event":"user_created","user_id":42,"request.id":"abc-123"}
 ```
-```
+````
 
 Create `docs/dev/telemetry/tracing.md`:
 
-```markdown
+````text
 # Tracing Guide
 
 ## Overview
@@ -2243,11 +2243,11 @@ OTEL_TRACES_SAMPLER_ARG=0.1  # 10% of traces
 ## Local Development
 
 See [Local Observability](local-observability.md) for running Jaeger locally.
-```
+````
 
 Create `docs/dev/telemetry/context.md`:
 
-```markdown
+````text
 # Adding Context Guide
 
 ## Adding Labels for New URL Patterns
@@ -2294,11 +2294,11 @@ def my_view(request):
         _user_id=request.user.pk,
     )
 ```
-```
+````
 
 Create `docs/dev/telemetry/local-observability.md`:
 
-```markdown
+````text
 # Local Observability
 
 ## Running Jaeger Locally
@@ -2325,11 +2325,11 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 ```bash
 docker compose -f docker/docker-compose.observability.yaml down
 ```
-```
+````
 
 Create `docs/dev/telemetry/reference.md`:
 
-```markdown
+````text
 # Environment Variable Reference
 
 ## Logging
@@ -2357,7 +2357,7 @@ Create `docs/dev/telemetry/reference.md`:
 | `LOG_FORMAT` | `pretty` | `json` | `json` |
 | `LOG_LEVEL` | `DEBUG` | `INFO` | `ERROR` |
 | `OTEL_ENABLED` | `false` | `false` | `false` |
-```
+````
 
 **Step 5: Update mkdocs.yml**
 
