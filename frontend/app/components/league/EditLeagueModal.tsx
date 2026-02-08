@@ -162,14 +162,15 @@ export function EditLeagueModal({
           )}
         />
 
-        {/* Admin Team Section */}
-        {isLeagueAdmin && (
-          <AdminTeamSection
-            league={league}
-            onUpdate={onSuccess}
-          />
-        )}
       </Form>
+
+      {/* Admin Team Section - outside Form to prevent button clicks from submitting the league edit form */}
+      {isLeagueAdmin && (
+        <AdminTeamSection
+          league={league}
+          onUpdate={onSuccess}
+        />
+      )}
     </FormDialog>
   );
 }
