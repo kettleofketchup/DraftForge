@@ -6,6 +6,7 @@
  */
 
 import { getLogger } from '~/lib/logger';
+import { Sentry } from '~/lib/sentry';
 import type {
   ConnectionOptions,
   ConnectionState,
@@ -273,6 +274,7 @@ class WebSocketManager {
         message = JSON.parse(event.data);
       } catch (err) {
         log.error('Failed to parse WebSocket message:', err);
+        Sentry.captureException(err, { tags: { source: 'websocket', url } });
         conn.options.telemetry?.onMessageParseError?.(url, err as Error);
         return;
       }
@@ -353,6 +355,10 @@ class WebSocketManager {
 
     if (attempts > maxAttempts) {
       log.error(`Max reconnect attempts (${maxAttempts}) exceeded for ${conn.url}`);
+      Sentry.captureMessage(
+        `WebSocket max reconnect attempts exceeded: ${conn.url}`,
+        'warning',
+      );
       this.updateState(conn, {
         status: 'disconnected',
         error: `Connection lost. Max reconnection attempts exceeded.`,
