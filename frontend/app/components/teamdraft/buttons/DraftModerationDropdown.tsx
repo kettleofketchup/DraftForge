@@ -47,7 +47,7 @@ export const DraftModerationDropdown: React.FC<DraftModerationDropdownProps> = (
       return;
     }
 
-    initDraftHook({
+    await initDraftHook({
       tournament,
       setTournament,
       setDraft,
@@ -55,7 +55,6 @@ export const DraftModerationDropdown: React.FC<DraftModerationDropdownProps> = (
       setCurDraftRound,
       setDraftIndex,
     });
-    setDraftIndex(0);
     setConfirmOpen(false);
   };
 

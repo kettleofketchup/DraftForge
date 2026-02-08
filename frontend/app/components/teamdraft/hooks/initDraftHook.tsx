@@ -38,7 +38,8 @@ export const initDraftHook = async ({
     tournament_pk: tournament.pk,
   };
 
-  toast.promise(initDraftRounds(data), {
+  const promise = initDraftRounds(data);
+  toast.promise(promise, {
     loading: `Initializing draft rounds...`,
     success: (data) => {
       log.debug('DraftRebuild sucess, data:', data);
@@ -60,4 +61,5 @@ export const initDraftHook = async ({
       return `Failed to Reinitialize tournament draft: ${val}`;
     },
   });
+  return promise;
 };

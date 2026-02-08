@@ -1314,6 +1314,9 @@ class DraftRound(models.Model):
         help_text="Stores tie resolution: {tied_teams, roll_rounds, winner_id}",
     )
 
+    class Meta:
+        ordering = ["pick_number"]
+
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
         # Invalidate specific tournament and draft when picks are made

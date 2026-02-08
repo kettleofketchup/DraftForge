@@ -124,7 +124,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     const i = draft?.draft_rounds?.findIndex(
       (round: DraftRoundType) => round.pk === newDraft.pk,
     );
-    if (i) setDraftIndex(i);
+    if (i !== undefined && i >= 0) setDraftIndex(i);
     log.debug('Set draft round to latest:', { newDraft, i });
     log.debug('Current round after update:', curDraftRound);
   };
