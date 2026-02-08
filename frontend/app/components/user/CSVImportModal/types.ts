@@ -3,7 +3,9 @@ import type { EntityContext } from '~/components/user/AddUserModal/types';
 export interface CSVRow {
   steam_friend_id?: string;
   discord_id?: string;
-  base_mmr?: string;
+  discord_username?: string;
+  name?: string;
+  mmr?: string;
   team_name?: string;
 }
 

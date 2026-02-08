@@ -111,8 +111,9 @@ export const PlayersTab: React.FC = memo(() => {
             tournamentId: tournament.pk,
           }}
           onComplete={() => {
-            // Re-fetch tournament to refresh players list
-            // This is a simple approach — the tournament page will refetch on next mount
+            // Re-fetch tournament to refresh the players list in the store
+            const { getCurrentTournament } = useUserStore.getState();
+            getCurrentTournament();
           }}
         />
       )}

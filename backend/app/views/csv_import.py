@@ -2,6 +2,7 @@
 
 import logging
 
+from cacheops import invalidate_obj
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status
@@ -19,6 +20,7 @@ from app.models import (
 )
 from app.permissions_org import has_org_staff_access
 from app.serializers import TournamentUserSerializer
+from league.models import LeagueUser
 from org.models import OrgUser
 
 log = logging.getLogger(__name__)
@@ -41,67 +43,90 @@ def _resolve_user_for_csv_row(row):
     """
     Resolve or create a user from a CSV row.
 
-    Returns (user, created, warning, error) tuple.
+    Returns (user, created, error, conflict_users) tuple.
     - user: CustomUser instance or None
     - created: bool - True if a new stub user was created
-    - warning: str or None - conflict warning message
     - error: str or None - error message (user will be None)
+    - conflict_users: list[CustomUser] or None - users involved in ID conflict
     """
     steam_id_str = row.get("steam_friend_id")
     discord_id_str = row.get("discord_id")
+    discord_username_str = row.get("discord_username")
 
     steam_id, steam_err = _parse_int(steam_id_str, "steam_friend_id")
     if steam_err:
-        return None, False, None, steam_err
+        return None, False, steam_err, None
 
     # Clean discord_id (strip whitespace, treat empty as None)
     discord_id = str(discord_id_str).strip() if discord_id_str else None
     if discord_id == "" or discord_id == "None":
         discord_id = None
 
-    if steam_id is None and discord_id is None:
+    # Clean discord_username
+    discord_username = (
+        str(discord_username_str).strip() if discord_username_str else None
+    )
+    if discord_username == "" or discord_username == "None":
+        discord_username = None
+
+    if steam_id is None and discord_id is None and discord_username is None:
         return (
             None,
             False,
+            "No identifier provided (need steam_friend_id, discord_id, or discord_username)",
             None,
-            "No identifier provided (need steam_friend_id or discord_id)",
         )
 
-    warning = None
     user = None
     created = False
 
-    # Lookup by both identifiers
+    # Lookup by identifiers
     steam_user = (
         CustomUser.objects.filter(steamid=steam_id).first() if steam_id else None
     )
     discord_user = (
         CustomUser.objects.filter(discordId=discord_id).first() if discord_id else None
     )
+    # Lookup by discord_username if no discord_id match
+    if discord_user is None and discord_username:
+        discord_user = CustomUser.objects.filter(
+            discordUsername__iexact=discord_username
+        ).first()
 
-    # Conflict detection: both identifiers resolve to different users
+    # Conflict: both identifiers resolve to different users
     if steam_user and discord_user and steam_user.pk != discord_user.pk:
-        warning = (
-            f"Steam ID {steam_id} belongs to user #{steam_user.pk} but "
-            f"Discord ID {discord_id} belongs to user #{discord_user.pk} — "
-            f"using Steam match"
+        steam_name = steam_user.nickname or steam_user.username or f"#{steam_user.pk}"
+        discord_name = (
+            discord_user.nickname or discord_user.username or f"#{discord_user.pk}"
         )
-        user = steam_user
+        return (
+            None,
+            False,
+            f"Steam ID and Discord ID belong to different users: "
+            f"{steam_name} (Steam) vs {discord_name} (Discord)",
+            [steam_user, discord_user],
+        )
     elif steam_user:
         user = steam_user
-        # Warn if user's discord doesn't match provided discord
+        # Conflict: user's discord doesn't match provided discord
         if discord_id and user.discordId and user.discordId != discord_id:
-            warning = (
-                f"Steam ID {steam_id} is already linked to Discord ID "
-                f"{user.discordId} — provided Discord ID {discord_id} was ignored"
+            name = user.nickname or user.username or f"#{user.pk}"
+            return (
+                None,
+                False,
+                f"{name} is already linked to a different Discord account",
+                [steam_user],
             )
     elif discord_user:
         user = discord_user
-        # Warn if user's steam doesn't match provided steam
+        # Conflict: user's steam doesn't match provided steam
         if steam_id and user.steamid and user.steamid != steam_id:
-            warning = (
-                f"Discord ID {discord_id} is already linked to Steam ID "
-                f"{user.steamid} — provided Steam ID {steam_id} was ignored"
+            name = user.nickname or user.username or f"#{user.pk}"
+            return (
+                None,
+                False,
+                f"{name} is already linked to a different Steam account",
+                [discord_user],
             )
 
     # Create stub user if no match (with retry for race conditions)
@@ -117,6 +142,16 @@ def _resolve_user_for_csv_row(row):
                     user.discordId = discord_id
                     if not user.username:
                         user.username = f"discord_{discord_id}"
+                elif discord_username is not None:
+                    user.discordUsername = discord_username
+                    if not user.username:
+                        user.username = f"discord_{discord_username}"
+                # Set nickname from 'name' column if provided
+                name = row.get("name")
+                if name:
+                    name = str(name).strip()
+                    if name:
+                        user.nickname = name
                 user.save()
                 created = True
         except IntegrityError:
@@ -125,10 +160,14 @@ def _resolve_user_for_csv_row(row):
                 user = CustomUser.objects.filter(steamid=steam_id).first()
             if user is None and discord_id is not None:
                 user = CustomUser.objects.filter(discordId=discord_id).first()
+            if user is None and discord_username is not None:
+                user = CustomUser.objects.filter(
+                    discordUsername__iexact=discord_username
+                ).first()
             if user is None:
-                return None, False, None, "Failed to create user (conflict)"
+                return None, False, "Failed to create user (conflict)", None
 
-    return user, created, warning, None
+    return user, created, None, None
 
 
 @api_view(["POST"])
@@ -137,7 +176,7 @@ def import_csv_org(request, org_id):
     """
     Bulk-import users to an organization from parsed CSV data.
 
-    Expects JSON: {"rows": [{"steam_friend_id": "...", "discord_id": "...", "base_mmr": 5000}, ...]}
+    Expects JSON: {"rows": [{"steam_friend_id": "...", "discord_id": "...", "mmr": 5000}, ...]}
     """
     org = get_object_or_404(Organization, pk=org_id)
 
@@ -148,6 +187,14 @@ def import_csv_org(request, org_id):
         )
 
     rows = request.data.get("rows", [])
+    update_mmr = bool(request.data.get("update_mmr", False))
+    log.info(
+        "CSV org import: update_mmr=%s, raw=%r, rows=%d",
+        update_mmr,
+        request.data.get("update_mmr"),
+        len(rows) if isinstance(rows, list) else 0,
+    )
+
     if not isinstance(rows, list):
         return Response(
             {"error": "rows must be a list"},
@@ -160,7 +207,7 @@ def import_csv_org(request, org_id):
         )
 
     results = []
-    summary = {"added": 0, "skipped": 0, "created": 0, "errors": 0}
+    summary = {"added": 0, "skipped": 0, "created": 0, "errors": 0, "updated": 0}
 
     for i, row in enumerate(rows):
         if not isinstance(row, dict):
@@ -169,38 +216,67 @@ def import_csv_org(request, org_id):
             )
             summary["errors"] += 1
             continue
-        user, created, warning, error = _resolve_user_for_csv_row(row)
+        user, created, error, conflict_users = _resolve_user_for_csv_row(row)
 
         if error:
-            results.append({"row": i + 1, "status": "error", "reason": error})
+            err_result = {"row": i + 1, "status": "error", "reason": error}
+            if conflict_users:
+                err_result["conflict_users"] = [
+                    TournamentUserSerializer(u).data for u in conflict_users
+                ]
+            results.append(err_result)
             summary["errors"] += 1
             continue
 
         # Parse base_mmr
-        base_mmr, mmr_err = _parse_int(row.get("base_mmr"), "base_mmr")
+        base_mmr, mmr_err = _parse_int(row.get("mmr"), "mmr")
         if mmr_err:
             results.append({"row": i + 1, "status": "error", "reason": mmr_err})
             summary["errors"] += 1
             continue
 
+        # Set nickname from CSV 'name' column if user has no nickname
+        csv_name = (row.get("name") or "").strip()
+        if csv_name and not user.nickname:
+            user.nickname = csv_name
+            user.save(update_fields=["nickname"])
+
         # Try to create OrgUser (savepoint needed for SQLite IntegrityError recovery)
         try:
             with transaction.atomic():
-                org_user = OrgUser.objects.create(
+                OrgUser.objects.create(
                     user=user,
                     organization=org,
                     mmr=base_mmr or 0,
                 )
         except IntegrityError:
-            results.append(
-                {
-                    "row": i + 1,
-                    "status": "skipped",
-                    "reason": "Already a member",
-                    "user": TournamentUserSerializer(user).data,
-                }
+            log.info(
+                "Row %d: existing member, update_mmr=%s, base_mmr=%r",
+                i + 1,
+                update_mmr,
+                base_mmr,
             )
-            summary["skipped"] += 1
+            if update_mmr and base_mmr is not None:
+                OrgUser.objects.filter(user=user, organization=org).update(mmr=base_mmr)
+                results.append(
+                    {
+                        "row": i + 1,
+                        "status": "updated",
+                        "reason": f"MMR updated to {base_mmr}",
+                        "user": TournamentUserSerializer(user).data,
+                    }
+                )
+                summary["updated"] += 1
+            else:
+                results.append(
+                    {
+                        "row": i + 1,
+                        "status": "skipped",
+                        "reason": "Already a member",
+                        "user": TournamentUserSerializer(user).data,
+                    }
+                )
+                summary["skipped"] += 1
             continue
 
         if created:
@@ -212,8 +288,6 @@ def import_csv_org(request, org_id):
             "user": TournamentUserSerializer(user).data,
             "created": created,
         }
-        if warning:
-            result["warning"] = warning
 
         results.append(result)
         summary["added"] += 1
@@ -229,13 +303,27 @@ def import_csv_org(request, org_id):
     return Response({"summary": summary, "results": results})
 
 
+def _update_mmr_for_target(user, org, league, mmr_target, base_mmr):
+    """Update MMR at the specified target level (organization or league)."""
+    if mmr_target == "league" and league and org:
+        org_user = OrgUser.objects.filter(user=user, organization=org).first()
+        if org_user:
+            LeagueUser.objects.update_or_create(
+                user=user,
+                league=league,
+                defaults={"org_user": org_user, "mmr": base_mmr},
+            )
+    elif org:
+        OrgUser.objects.filter(user=user, organization=org).update(mmr=base_mmr)
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def import_csv_tournament(request, tournament_id):
     """
     Bulk-import users to a tournament from parsed CSV data.
 
-    Expects JSON: {"rows": [{"steam_friend_id": "...", "discord_id": "...", "base_mmr": 5000, "team_name": "..."}, ...]}
+    Expects JSON: {"rows": [{"steam_friend_id": "...", "discord_id": "...", "mmr": 5000, "team_name": "..."}, ...]}
     """
     tournament = get_object_or_404(
         Tournament.objects.select_related("league__organization"), pk=tournament_id
@@ -252,7 +340,20 @@ def import_csv_tournament(request, tournament_id):
         )
 
     org = tournament.league.organization if tournament.league else None
+    league = tournament.league
     rows = request.data.get("rows", [])
+    update_mmr = bool(request.data.get("update_mmr", False))
+    mmr_target = request.data.get(
+        "mmr_target", "organization"
+    )  # "organization" | "league"
+    log.info(
+        "CSV tournament import: update_mmr=%s, mmr_target=%s, raw_update_mmr=%r, rows=%d",
+        update_mmr,
+        mmr_target,
+        request.data.get("update_mmr"),
+        len(rows) if isinstance(rows, list) else 0,
+    )
+
     if not isinstance(rows, list):
         return Response(
             {"error": "rows must be a list"},
@@ -263,9 +364,14 @@ def import_csv_tournament(request, tournament_id):
             {"error": f"Too many rows (max {MAX_ROWS})"},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    if mmr_target == "league" and not league:
+        return Response(
+            {"error": "Tournament has no league for league-level MMR"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     results = []
-    summary = {"added": 0, "skipped": 0, "created": 0, "errors": 0}
+    summary = {"added": 0, "skipped": 0, "created": 0, "errors": 0, "updated": 0}
 
     # Cache for team_name -> Team (get_or_create within this import)
     team_cache = {}
@@ -277,31 +383,54 @@ def import_csv_tournament(request, tournament_id):
             )
             summary["errors"] += 1
             continue
-        user, created, warning, error = _resolve_user_for_csv_row(row)
+        user, created, error, conflict_users = _resolve_user_for_csv_row(row)
 
         if error:
-            results.append({"row": i + 1, "status": "error", "reason": error})
+            err_result = {"row": i + 1, "status": "error", "reason": error}
+            if conflict_users:
+                err_result["conflict_users"] = [
+                    TournamentUserSerializer(u).data for u in conflict_users
+                ]
+            results.append(err_result)
             summary["errors"] += 1
             continue
 
         # Parse base_mmr
-        base_mmr, mmr_err = _parse_int(row.get("base_mmr"), "base_mmr")
+        base_mmr, mmr_err = _parse_int(row.get("mmr"), "mmr")
         if mmr_err:
             results.append({"row": i + 1, "status": "error", "reason": mmr_err})
             summary["errors"] += 1
             continue
 
+        # Set nickname from CSV 'name' column if user has no nickname
+        csv_name = (row.get("name") or "").strip()
+        if csv_name and not user.nickname:
+            user.nickname = csv_name
+            user.save(update_fields=["nickname"])
+
         # Check if already in tournament
         if tournament.users.filter(pk=user.pk).exists():
-            results.append(
-                {
-                    "row": i + 1,
-                    "status": "skipped",
-                    "reason": "Already in tournament",
-                    "user": TournamentUserSerializer(user).data,
-                }
-            )
-            summary["skipped"] += 1
+            if update_mmr and base_mmr is not None:
+                _update_mmr_for_target(user, org, league, mmr_target, base_mmr)
+                results.append(
+                    {
+                        "row": i + 1,
+                        "status": "updated",
+                        "reason": f"MMR updated to {base_mmr} ({mmr_target})",
+                        "user": TournamentUserSerializer(user).data,
+                    }
+                )
+                summary["updated"] += 1
+            else:
+                results.append(
+                    {
+                        "row": i + 1,
+                        "status": "skipped",
+                        "reason": "Already in tournament",
+                        "user": TournamentUserSerializer(user).data,
+                    }
+                )
+                summary["skipped"] += 1
             continue
 
         # Create OrgUser if tournament has an org (savepoint for SQLite)
@@ -317,6 +446,16 @@ def import_csv_tournament(request, tournament_id):
                     OrgUser.objects.filter(user=user, organization=org).update(
                         mmr=base_mmr
                     )
+
+        # For league-level MMR, also create/update LeagueUser
+        if league and mmr_target == "league" and base_mmr is not None:
+            org_user = OrgUser.objects.filter(user=user, organization=org).first()
+            if org_user:
+                LeagueUser.objects.update_or_create(
+                    user=user,
+                    league=league,
+                    defaults={"org_user": org_user, "mmr": base_mmr},
+                )
 
         # Add to tournament
         tournament.users.add(user)
@@ -341,8 +480,6 @@ def import_csv_tournament(request, tournament_id):
             "user": TournamentUserSerializer(user).data,
             "created": created,
         }
-        if warning:
-            result["warning"] = warning
         if team_name:
             result["team"] = team_name
 
@@ -357,5 +494,8 @@ def import_csv_tournament(request, tournament_id):
                 action="add_member",
                 target_user=user,
             )
+
+    # Invalidate tournament cache so refreshed data reflects MMR changes
+    invalidate_obj(tournament)
 
     return Response({"summary": summary, "results": results})

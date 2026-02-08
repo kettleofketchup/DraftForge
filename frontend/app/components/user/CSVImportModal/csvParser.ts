@@ -1,7 +1,7 @@
 import Papa from 'papaparse';
 import type { CSVRow, ValidatedRow } from './types';
 
-const VALID_HEADERS = ['steam_friend_id', 'discord_id', 'base_mmr', 'team_name'];
+const VALID_HEADERS = ['steam_friend_id', 'discord_id', 'discord_username', 'name', 'mmr', 'team_name'];
 
 export function parseCSV(file: File): Promise<Papa.ParseResult<CSVRow>> {
   return new Promise((resolve, reject) => {
@@ -19,15 +19,16 @@ export function validateRows(rows: CSVRow[]): ValidatedRow[] {
   return rows.map((row, index) => {
     const steamId = row.steam_friend_id?.trim();
     const discordId = row.discord_id?.trim();
-    const baseMmr = row.base_mmr?.trim();
+    const discordUsername = row.discord_username?.trim();
+    const mmr = row.mmr?.trim();
 
     // Must have at least one identifier
-    if (!steamId && !discordId) {
+    if (!steamId && !discordId && !discordUsername) {
       return {
         index,
         raw: row,
         status: 'error' as const,
-        message: 'Missing identifier (need steam_friend_id or discord_id)',
+        message: 'Missing identifier (need steam_friend_id, discord_id, or discord_username)',
       };
     }
 
@@ -51,13 +52,13 @@ export function validateRows(rows: CSVRow[]): ValidatedRow[] {
       };
     }
 
-    // Validate base_mmr is numeric if provided
-    if (baseMmr && !/^\d+$/.test(baseMmr)) {
+    // Validate mmr is numeric if provided
+    if (mmr && !/^\d+$/.test(mmr)) {
       return {
         index,
         raw: row,
         status: 'error' as const,
-        message: `Invalid base_mmr: ${baseMmr}`,
+        message: `Invalid mmr: ${mmr}`,
       };
     }
 

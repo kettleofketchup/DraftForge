@@ -205,32 +205,42 @@ export async function refreshDiscordMembers(
 export interface CSVImportRow {
   steam_friend_id?: string;
   discord_id?: string;
-  base_mmr?: number | null;
+  discord_username?: string;
+  name?: string;
+  mmr?: number | null;
   team_name?: string;
+}
+
+export type MMRTarget = 'organization' | 'league';
+
+export interface CSVImportOptions {
+  update_mmr?: boolean;
+  mmr_target?: MMRTarget;
 }
 
 export interface CSVImportResultRow {
   row: number;
-  status: 'added' | 'skipped' | 'error';
+  status: 'added' | 'skipped' | 'error' | 'updated';
   reason?: string;
-  warning?: string;
   created?: boolean;
   team?: string;
   user?: UserType;
+  conflict_users?: UserType[];
 }
 
 export interface CSVImportResponse {
-  summary: { added: number; skipped: number; created: number; errors: number };
+  summary: { added: number; skipped: number; created: number; errors: number; updated: number };
   results: CSVImportResultRow[];
 }
 
 export async function importCSVToOrg(
   orgId: number,
   rows: CSVImportRow[],
+  options?: CSVImportOptions,
 ): Promise<CSVImportResponse> {
   const response = await axios.post<CSVImportResponse>(
     `/organizations/${orgId}/import-csv/`,
-    { rows },
+    { rows, ...options },
   );
   return response.data;
 }
@@ -238,10 +248,11 @@ export async function importCSVToOrg(
 export async function importCSVToTournament(
   tournamentId: number,
   rows: CSVImportRow[],
+  options?: CSVImportOptions,
 ): Promise<CSVImportResponse> {
   const response = await axios.post<CSVImportResponse>(
     `/tournaments/${tournamentId}/import-csv/`,
-    { rows },
+    { rows, ...options },
   );
   return response.data;
 }
