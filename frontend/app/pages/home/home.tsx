@@ -241,7 +241,7 @@ export default function HomePage() {
               title="Team Management"
               description="Create and manage rosters, track player stats, and coordinate with Discord integration."
               delay={0.4}
-              docsPath="/features/team-management/"
+              docsPath="/features/planned/team-management/"
             />
             <FeatureCard
               icon={Award}

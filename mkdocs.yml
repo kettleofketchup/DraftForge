@@ -81,6 +81,7 @@ nav:
       - Hero Draft: features/herodraft.md
       - Planned:
           - Overview: features/planned/index.md
+          - Team Management & Seasons: features/planned/team-management.md
           - League Rating: features/planned/league-rating.md
           - Dota 2 Lobbies: features/planned/dota-lobbies.md
           - Discord Integration: features/planned/discord-integration.md
