@@ -75,3 +75,22 @@ Automated event management with Discord bot integration for tournament signups a
 - Direct message notifications
 
 **Status:** :material-lightbulb-outline: Planned | [GitHub #52](https://github.com/kettleofketchup/DraftForge/issues/52)
+
+---
+
+## CSV Import
+
+Bulk-add users to organizations and tournaments via CSV file upload, with client-side preview, conflict detection, and optional team assignment.
+
+[:material-arrow-right: CSV Import](csv-import.md)
+
+**Key Features:**
+
+- Client-side CSV parsing with Papa Parse
+- Steam Friend ID and Discord ID user resolution
+- Stub user creation for unregistered players
+- Conflict detection and per-row error reporting
+- Optional team assignment for tournament imports
+- Three-step modal: Upload → Preview → Results
+
+**Status:** :material-pencil: Design Complete | [GitHub #132](https://github.com/kettleofketchup/DraftForge/issues/132)
