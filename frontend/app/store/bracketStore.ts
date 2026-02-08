@@ -13,7 +13,7 @@ const log = getLogger('bracketStore');
  * Generate a consistent string ID for bracket matches
  * Format: {bracketType}-{round}-{position} e.g., "winners-1-0"
  */
-function generateMatchId(bracketType: string, round: number, position: number): string {
+export function generateMatchId(bracketType: string, round: number, position: number): string {
   // Use short prefixes for cleaner IDs
   const typePrefix: Record<string, string> = {
     winners: 'w',
@@ -28,7 +28,7 @@ function generateMatchId(bracketType: string, round: number, position: number): 
 /**
  * Converts API response match (snake_case) to frontend match (camelCase)
  */
-function mapApiMatchToMatch(apiMatch: ApiBracketMatch, allMatches: ApiBracketMatch[]): BracketMatch {
+export function mapApiMatchToMatch(apiMatch: ApiBracketMatch, allMatches: ApiBracketMatch[]): BracketMatch {
   // Generate consistent string ID from bracket structure
   const id = generateMatchId(apiMatch.bracket_type, apiMatch.round, apiMatch.position);
 

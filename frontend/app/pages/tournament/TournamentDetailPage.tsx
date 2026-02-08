@@ -1,40 +1,59 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { useShallow } from 'zustand/react/shallow';
-import axios from '~/components/api/axios'; // Assuming axios is configured for your API
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
+import { useTournament } from '~/hooks/useTournament';
+import { useTournamentSocket } from '~/hooks/useTournamentSocket';
+import type { TournamentType } from '~/components/tournament/types';
 import TournamentTabs from './tabs/TournamentTabs';
 
 import { getLogger } from '~/lib/logger';
 const log = getLogger('TournamentDetailPage');
+
 export const TournamentDetailPage: React.FC = () => {
   const { pk, '*': slug } = useParams<{ pk: string; '*': string }>();
   const navigate = useNavigate();
-  const tournament = useUserStore(useShallow((state) => state.tournament));
-  const setTournament = useUserStore((state) => state.setTournament);
+  const pkNum = pk ? parseInt(pk, 10) : null;
+
+  // TanStack Query for tournament data
+  const { data: tournament, isLoading, error } = useTournament(
+    pkNum && !Number.isNaN(pkNum) ? pkNum : null,
+  );
+
+  // WebSocket for real-time cache invalidation
+  useTournamentSocket(pkNum && !Number.isNaN(pkNum) ? pkNum : null);
+
+  // Compatibility shim: sync query data to userStore for ~35 existing consumers
+  // NOTE: This is one-way (query -> userStore). Files that call fetchTournament()
+  // directly and write to userStore will be overwritten on next refetch (~10s).
+  useEffect(() => {
+    if (tournament) {
+      useUserStore.getState().setTournament(tournament);
+    }
+    return () => {
+      // Clear stale tournament when navigating away so children don't see old data
+      useUserStore.getState().setTournament(null as unknown as TournamentType);
+    };
+  }, [tournament]);
+
+  // UI state from tournamentStore
   const setLive = useTournamentStore((state) => state.setLive);
   const setActiveTab = useTournamentStore((state) => state.setActiveTab);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
   const setAutoAdvance = useTournamentStore((state) => state.setAutoAdvance);
-  const autoAdvance = useTournamentStore((state) => state.autoAdvance);
   const setPendingDraftId = useTournamentStore((state) => state.setPendingDraftId);
   const setPendingMatchId = useTournamentStore((state) => state.setPendingMatchId);
 
+  // Parse URL slug for tabs and deep-linking
   useEffect(() => {
     const parts = slug?.split('/') || [];
-    // Map legacy "games" URL to "bracket" tab
     let tab = parts[0] || 'players';
     if (tab === 'games') {
       tab = 'bracket';
     }
     const isLive = parts[1] === 'draft';
-    // Parse draftId from URL: /tournament/:pk/bracket/draft/:draftId
     const draftId = parts[1] === 'draft' && parts[2] ? parseInt(parts[2], 10) : null;
-    // Parse matchId from URL: /tournament/:pk/bracket/match/:matchId
     const matchId = parts[1] === 'match' && parts[2] ? parts[2] : null;
 
     // Redirect /tournament/:pk/bracket/draft/:draftId to /herodraft/:draftId
@@ -43,84 +62,40 @@ export const TournamentDetailPage: React.FC = () => {
       return;
     }
 
-    // Batch state updates using unstable_batchedUpdates pattern via setTimeout
-    // This prevents multiple rerenders from sequential state updates
     setActiveTab(tab);
     setPendingDraftId(Number.isNaN(draftId) ? null : draftId);
     setPendingMatchId(matchId);
-
-    // Only update live/autoAdvance if they actually changed
     setLive(isLive);
     if (isLive) {
       setAutoAdvance(true);
     }
   }, [slug, setActiveTab, setLive, setAutoAdvance, setPendingDraftId, setPendingMatchId, navigate]);
-  useEffect(() => {
-    if (!pk) return;
 
-    const fetchTournament = async (isInitial: boolean) => {
-      if (isInitial) {
-        setLoading(true);
-        setError(null);
-        // Clear stale tournament data immediately when pk changes
-        // This prevents showing old tournament data while loading
-        setTournament(null as unknown as typeof tournament);
-      }
-      try {
-        const response = await axios.get(`/tournaments/${pk}/`);
-        setTournament(response.data);
-      } catch (err) {
-        log.error('Failed to fetch tournament:', err);
-        if (isInitial) {
-          setError(
-            'Failed to load tournament details. Please try again later.',
-          );
-        }
-      } finally {
-        if (isInitial) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchTournament(true);
-
-    // Poll every 10 seconds to work around Redis cache invalidation issues
-    const interval = setInterval(() => fetchTournament(false), 10000);
-    return () => clearInterval(interval);
-  }, [pk, setTournament]);
-
-  // Set org context from tournament - fetch full org by PK
+  // Set org context from tournament
   useEffect(() => {
     if (tournament?.organization_pk) {
-      // Fetch full organization and store it
       useOrgStore.getState().getOrganization(tournament.organization_pk);
     } else {
       useOrgStore.getState().setCurrentOrg(null);
     }
-
-    // Cleanup on unmount
     return () => {
       useOrgStore.getState().reset();
     };
   }, [tournament?.organization_pk]);
 
-  // Set league context from tournament - fetch full league by PK
+  // Set league context from tournament
   useEffect(() => {
     if (tournament?.league_pk) {
-      // Fetch full league and store it
       useLeagueStore.getState().getLeague(tournament.league_pk);
     } else {
       useLeagueStore.getState().setCurrentLeague(null);
     }
-
-    // Cleanup on unmount
     return () => {
       useLeagueStore.getState().reset();
     };
   }, [tournament?.league_pk]);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
         <span className="loading loading-spinner loading-lg"></span>
@@ -145,7 +120,7 @@ export const TournamentDetailPage: React.FC = () => {
               d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
             />
           </svg>
-          <span>{error}</span>
+          <span>Failed to load tournament details. Please try again later.</span>
         </div>
       </div>
     );
@@ -179,12 +154,12 @@ export const TournamentDetailPage: React.FC = () => {
       </h1>
     );
   };
+
   const title = () => {
     return (
       <>
         <div className="flex flex-row items-center mb-2">
           {tournamentName()}
-
           <span className="ml-4 text-base text-base-content/50 font-normal">
             played on {getDate()}
           </span>
@@ -192,6 +167,7 @@ export const TournamentDetailPage: React.FC = () => {
       </>
     );
   };
+
   return (
     <div
       className="container px-1 sm:mx-auto sm:p-4"
