@@ -38,6 +38,8 @@ export interface FeatureCardProps {
   description: string;
   delay?: number;
   comingSoon?: boolean;
+  /** Custom badge text (defaults to "Coming Soon" when comingSoon is true) */
+  badgeText?: string;
   /** Optional GIF source for thumbnail preview */
   gifSrc?: string;
   /** Quick preview media (GIFs) to show in modal Quick Preview tab */
@@ -163,6 +165,7 @@ export const FeatureCard = ({
   description,
   delay = 0,
   comingSoon,
+  badgeText,
   gifSrc,
   quickMedia,
   modalMedia,
@@ -212,13 +215,13 @@ export const FeatureCard = ({
         className={`card bg-base-200/50 backdrop-blur border border-primary/10 hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 relative ${comingSoon ? 'opacity-75' : ''}`}
         onMouseEnter={handlePrefetchVideos}
       >
-        {/* Coming Soon Badge - Top Right of Card */}
-        {comingSoon && (
+        {/* Status Badge - Top Right of Card */}
+        {(comingSoon || badgeText) && (
           <Badge
             variant="outline"
             className="absolute top-2 right-2 text-[10px] border-warning text-warning bg-base-200 px-1.5 py-0 z-10"
           >
-            Coming Soon
+            {badgeText || 'Coming Soon'}
           </Badge>
         )}
 
