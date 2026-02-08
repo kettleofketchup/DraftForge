@@ -2,7 +2,9 @@ import pytest
 from django.conf import settings
 from django.test import TestCase, override_settings
 
-from app.models import CustomUser, PositionsModel
+from app.models import CustomUser, League, Organization, PositionsModel
+from league.models import LeagueUser
+from org.models import OrgUser
 from steam.functions.mmr_calculation import (
     calculate_mmr_adjustment,
     get_league_avg_gpm,
@@ -18,8 +20,20 @@ class TestMMRCalculation(TestCase):
         self.user = CustomUser.objects.create_user(
             username="testplayer",
             password="testpass",
-            mmr=4000,
             positions=self.positions,
+        )
+        # Create org/league structure for MMR
+        self.org = Organization.objects.create(name="Test Org", owner=self.user)
+        self.league = League.objects.create(
+            name="Test League",
+            organization=self.org,
+            steam_league_id=12345,
+        )
+        self.org_user = OrgUser.objects.create(
+            user=self.user, organization=self.org, mmr=4000
+        )
+        self.league_user = LeagueUser.objects.create(
+            user=self.user, org_user=self.org_user, league=self.league, mmr=0
         )
 
     def test_calculate_mmr_adjustment_below_min_games(self):
@@ -88,7 +102,6 @@ class TestMMRCalculation(TestCase):
         baseline_user = CustomUser.objects.create_user(
             username="baseline_player",
             password="testpass",
-            mmr=3000,
             positions=baseline_positions,
         )
         LeaguePlayerStats.objects.create(
@@ -137,14 +150,14 @@ class TestMMRCalculation(TestCase):
             games_played=10,
             mmr_adjustment=200,
         )
-        update_user_league_mmr(self.user)
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.league_mmr, 4200)  # 4000 + 200
+        update_user_league_mmr(self.user, organization=self.org, league=self.league)
+        self.league_user.refresh_from_db()
+        self.assertEqual(self.league_user.mmr, 4200)  # 4000 + 200
 
     def test_update_user_league_mmr_no_base_mmr(self):
-        """Should set league_mmr to None if user has no base mmr."""
-        self.user.mmr = None
-        self.user.save()
-        update_user_league_mmr(self.user)
-        self.user.refresh_from_db()
-        self.assertIsNone(self.user.league_mmr)
+        """Should set league_mmr to 0 if user has no base mmr."""
+        self.org_user.mmr = 0
+        self.org_user.save()
+        update_user_league_mmr(self.user, organization=self.org, league=self.league)
+        self.league_user.refresh_from_db()
+        self.assertEqual(self.league_user.mmr, 0)
