@@ -1,6 +1,5 @@
 import { PassThrough } from 'node:stream';
 
-import * as Sentry from '@sentry/react-router';
 import { createReadableStreamFromReadable } from '@react-router/node';
 import type { EntryContext } from 'react-router';
 import { ServerRouter } from 'react-router';
@@ -39,7 +38,11 @@ export default function handleRequest(
 }
 
 export function handleError(error: unknown, { request }: { request: Request }) {
-  // captureException is a no-op when Sentry isn't initialized (dev/test)
-  Sentry.captureException(error);
+  // In production, Sentry is loaded via instrument.server.mjs (--import flag).
+  // captureException is a no-op when the SDK isn't initialized.
+  import('@sentry/react-router')
+    .then((Sentry) => Sentry.captureException(error))
+    .catch(() => {});
+
   console.error('Server error:', request.url, error);
 }
