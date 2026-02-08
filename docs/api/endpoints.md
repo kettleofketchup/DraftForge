@@ -196,9 +196,235 @@ Endpoints for Steam integration and league statistics.
   "admins": [{ "id": 1, "username": "admin" }],
   "staff": [{ "id": 2, "username": "staff" }],
   "tournaments": [{ "id": 1, "name": "Week 1" }],
-  "tournament_count": 4
+  "seasons": [{ "id": 1, "name": "Season 1", "status": "active" }],
+  "tournament_count": 4,
+  "season_count": 1
 }
 ```
+
+## Seasons
+
+Seasons organize tournaments within a league. A season contains a player pool (via signups), teams, and links to tournaments.
+
+!!! info "Planned Feature"
+    Seasons are a planned feature. See [Team Management & Seasons](../features/planned/team-management.md) for the full design.
+
+### Season CRUD
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/leagues/{id}/seasons/` | List seasons for a league | No |
+| POST | `/api/leagues/{id}/seasons/` | Create a season | League Admin |
+| GET | `/api/leagues/{id}/seasons/{season_id}/` | Get season details | No |
+| PUT | `/api/leagues/{id}/seasons/{season_id}/` | Update season | League Admin |
+| PATCH | `/api/leagues/{id}/seasons/{season_id}/` | Partial update season | League Admin |
+| DELETE | `/api/leagues/{id}/seasons/{season_id}/` | Delete season | League Admin |
+
+**Request Body (create/update):**
+
+```json
+{
+  "name": "Season 3",
+  "number": 3,
+  "status": "upcoming",
+  "start_date": "2026-03-01T00:00:00Z",
+  "end_date": "2026-06-01T00:00:00Z",
+  "signup_deadline": "2026-02-28T23:59:59Z",
+  "timezone": "America/New_York"
+}
+```
+
+**Response (detail):**
+
+```json
+{
+  "id": 1,
+  "league": 1,
+  "name": "Season 3",
+  "number": 3,
+  "status": "active",
+  "start_date": "2026-03-01T00:00:00Z",
+  "end_date": "2026-06-01T00:00:00Z",
+  "signup_deadline": "2026-02-28T23:59:59Z",
+  "timezone": "America/New_York",
+  "member_count": 24,
+  "team_count": 4,
+  "tournament_count": 3,
+  "created_at": "2026-02-01T00:00:00Z",
+  "updated_at": "2026-02-15T00:00:00Z"
+}
+```
+
+### Season Signups
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/seasons/{id}/signups/` | List all signups | League Staff |
+| GET | `/api/seasons/{id}/signups/me/` | Get current user's signup | LeagueUser |
+| POST | `/api/seasons/{id}/signups/` | Sign up for season | LeagueUser |
+| DELETE | `/api/seasons/{id}/signups/{signup_id}/` | Withdraw signup | Owner |
+| POST | `/api/seasons/{id}/signups/{signup_id}/accept/` | Accept signup | League Admin |
+| POST | `/api/seasons/{id}/signups/{signup_id}/reject/` | Reject signup | League Admin |
+| POST | `/api/seasons/{id}/signups/bulk-accept/` | Accept multiple signups | League Admin |
+
+**Request Body (sign up):**
+
+```json
+{
+  "note": "Prefer to play support"
+}
+```
+
+**Request Body (bulk accept):**
+
+```json
+{
+  "signup_ids": [1, 2, 3, 5]
+}
+```
+
+**Response (signup detail):**
+
+```json
+{
+  "id": 1,
+  "season": 1,
+  "league_user": {
+    "id": 5,
+    "user": { "id": 10, "username": "player1", "avatar": "https://..." },
+    "mmr": 4500
+  },
+  "status": "pending",
+  "note": "Prefer to play support",
+  "signed_up_at": "2026-02-10T14:30:00Z",
+  "reviewed_by": null,
+  "reviewed_at": null
+}
+```
+
+### Season Members
+
+Members are derived from accepted signups. These endpoints provide convenience access.
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/seasons/{id}/members/` | List accepted members | No |
+| POST | `/api/seasons/{id}/members/` | Add member directly (auto-accepts signup) | League Admin |
+| DELETE | `/api/seasons/{id}/members/{league_user_id}/` | Remove member | League Admin |
+
+**Request Body (direct add):**
+
+```json
+{
+  "league_user_id": 5
+}
+```
+
+**Response (member list item):**
+
+```json
+{
+  "id": 5,
+  "user": { "id": 10, "username": "player1", "avatar": "https://..." },
+  "mmr": 4500,
+  "signed_up_at": "2026-02-10T14:30:00Z"
+}
+```
+
+### Season Teams
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/api/seasons/{id}/teams/` | List season teams | No |
+| POST | `/api/seasons/{id}/teams/` | Create team | League Admin |
+| GET | `/api/seasons/{id}/teams/{team_id}/` | Get team details | No |
+| PUT | `/api/seasons/{id}/teams/{team_id}/` | Update team | League Admin |
+| PATCH | `/api/seasons/{id}/teams/{team_id}/` | Partial update | League Admin |
+| DELETE | `/api/seasons/{id}/teams/{team_id}/` | Delete team | League Admin |
+| POST | `/api/seasons/{id}/teams/{team_id}/logo/` | Upload team logo | League Admin |
+
+**Request Body (create/update):**
+
+```json
+{
+  "name": "Team Phoenix",
+  "captain_id": 5,
+  "deputy_captain_id": 8,
+  "member_ids": [5, 8, 12, 15, 20]
+}
+```
+
+**Request Body (logo upload):**
+
+Multipart form data with `logo` file field.
+
+**Response (team detail):**
+
+```json
+{
+  "id": 1,
+  "season": 1,
+  "name": "Team Phoenix",
+  "captain": {
+    "id": 5,
+    "user": { "id": 10, "username": "captain1", "avatar": "https://..." },
+    "mmr": 5000
+  },
+  "deputy_captain": {
+    "id": 8,
+    "user": { "id": 14, "username": "deputy1", "avatar": "https://..." },
+    "mmr": 4200
+  },
+  "members": [
+    { "id": 5, "user": { "id": 10, "username": "captain1" }, "mmr": 5000 },
+    { "id": 8, "user": { "id": 14, "username": "deputy1" }, "mmr": 4200 },
+    { "id": 12, "user": { "id": 18, "username": "player2" }, "mmr": 3800 },
+    { "id": 15, "user": { "id": 21, "username": "player3" }, "mmr": 3500 },
+    { "id": 20, "user": { "id": 26, "username": "player4" }, "mmr": 3200 }
+  ],
+  "logo": "/media/season_teams/team-phoenix.png",
+  "created_at": "2026-02-15T00:00:00Z",
+  "updated_at": "2026-02-15T00:00:00Z"
+}
+```
+
+### Tournament Team Import
+
+Import SeasonTeams into a tournament as Tournament Teams.
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/tournaments/{id}/import-season-teams/` | Import teams from season | Tournament Staff |
+
+**Request Body:**
+
+```json
+{
+  "season_team_ids": [1, 2, 3, 4]
+}
+```
+
+Omit `season_team_ids` to import all teams from the tournament's linked season.
+
+**Response:**
+
+```json
+{
+  "imported": 4,
+  "teams": [
+    { "id": 50, "name": "Team Phoenix", "season_team_source": 1 },
+    { "id": 51, "name": "Team Dragon", "season_team_source": 2 },
+    { "id": 52, "name": "Team Hydra", "season_team_source": 3 },
+    { "id": 53, "name": "Team Kraken", "season_team_source": 4 }
+  ]
+}
+```
+
+!!! note "Import Behavior"
+    - Tournament must have a linked season (`tournament.season` is set)
+    - Import creates independent copies — changes to SeasonTeams after import do not propagate
+    - Re-importing when teams already exist will error unless existing teams are removed first
+    - LeagueUser references are resolved to CustomUser for Tournament Team compatibility
 
 ## Drafts (Player Draft)
 

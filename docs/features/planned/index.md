@@ -4,6 +4,25 @@ Features currently in design or development for DraftForge.
 
 ---
 
+## Team Management & Seasons
+
+Persistent team management within leagues, organized by seasons. Teams are formed per-season via draft or manual creation, then imported into tournaments.
+
+[:material-arrow-right: Team Management & Seasons](team-management.md)
+
+**Key Features:**
+
+- Seasons as containers for teams within a league
+- Player signup flow with admin review
+- Per-season team formation (draft or manual)
+- Team logos
+- Tournament import from season teams
+- Deputy captains
+
+**Status:** :material-pencil: Design Complete
+
+---
+
 ## League Rating System
 
 A comprehensive rating system for tracking player skill across tournaments and leagues.
