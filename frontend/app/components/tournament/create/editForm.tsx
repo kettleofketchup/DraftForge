@@ -152,12 +152,12 @@ export const TournamentEditForm: React.FC<Props> = ({
     setIsSubmitting(true);
 
     try {
-      const payload: Partial<TournamentType> & { timezone?: string } = {
+      const payload: Partial<TournamentType> & { timezone?: string; league_id_write?: number | null } = {
         name: data.name,
         tournament_type: data.tournament_type,
         date_played: data.date_played,
         timezone: data.timezone,
-        league: data.league || null,
+        league_id_write: data.league || null,
       };
 
       if (isEditing) {
