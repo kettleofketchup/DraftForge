@@ -219,14 +219,15 @@ export function EditOrganizationModal({
           )}
         />
 
-        {/* Admin Team Section */}
-        {isOrgAdmin && (
-          <AdminTeamSection
-            organization={organization}
-            onUpdate={onSuccess}
-          />
-        )}
       </Form>
+
+      {/* Admin Team Section - outside Form to prevent button clicks from submitting the org edit form */}
+      {isOrgAdmin && (
+        <AdminTeamSection
+          organization={organization}
+          onUpdate={onSuccess}
+        />
+      )}
     </FormDialog>
   );
 }
