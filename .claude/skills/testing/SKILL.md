@@ -43,6 +43,24 @@ just test::setup
 just db::populate::all
 ```
 
+## Cacheops and Test State Resets
+
+Django cacheops is active in the test environment (1-hour TTL for Organization, League, etc.). **M2M changes (`.add()`, `.remove()`, `.clear()`) do NOT auto-invalidate cacheops cache.**
+
+When writing test reset endpoints or backend views that modify M2M fields:
+
+```python
+from cacheops import invalidate_obj
+
+org.admins.clear()
+org.admins.add(admin_user)
+invalidate_obj(org)  # REQUIRED after M2M changes
+```
+
+Without `invalidate_obj()`, subsequent GET requests return stale cached data — a common cause of flaky E2E tests where state resets appear to not take effect.
+
+See [references/backend-test-endpoints.md](references/backend-test-endpoints.md) for the full pattern.
+
 ## Reference Files
 
 | Reference | When to read |

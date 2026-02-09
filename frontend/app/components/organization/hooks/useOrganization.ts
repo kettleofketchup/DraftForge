@@ -1,27 +1,36 @@
 import { useCallback, useEffect } from 'react';
-import { useUserStore } from '~/store/userStore';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchOrganization } from '~/components/api/api';
+import { useOrgStore } from '~/store/orgStore';
+
+export const organizationQueryKey = (pk: number) => ['organization', pk] as const;
 
 export function useOrganization(pk: number | undefined) {
-  const organization = useUserStore((state) => state.organization);
-  const organizationPk = useUserStore((state) => state.organizationPk);
-  const getOrganization = useUserStore((state) => state.getOrganization);
+  const queryClient = useQueryClient();
+
+  const { data: organization, isLoading } = useQuery({
+    queryKey: organizationQueryKey(pk!),
+    queryFn: () => fetchOrganization(pk!),
+    enabled: !!pk,
+    staleTime: 0, // Override global 5min default so invalidateQueries() triggers immediate refetch
+  });
+
+  // Keep Zustand orgStore in sync so other consumers (AdminTeamSection, etc.) see live data
+  useEffect(() => {
+    if (organization) {
+      useOrgStore.getState().setCurrentOrg(organization);
+    }
+  }, [organization]);
 
   const refetch = useCallback(() => {
     if (pk) {
-      getOrganization(pk, true);
+      queryClient.invalidateQueries({ queryKey: organizationQueryKey(pk) });
     }
-  }, [pk, getOrganization]);
-
-  useEffect(() => {
-    // Only fetch if pk is set and we haven't loaded this org yet
-    if (pk && organizationPk !== pk) {
-      getOrganization(pk);
-    }
-  }, [pk, organizationPk, getOrganization]);
+  }, [pk, queryClient]);
 
   return {
-    organization: organizationPk === pk ? organization : null,
-    isLoading: organizationPk !== pk,
+    organization: organization ?? null,
+    isLoading,
     refetch,
   };
 }
