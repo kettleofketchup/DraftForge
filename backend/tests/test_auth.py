@@ -864,6 +864,14 @@ def reset_org_admin_team(request, org_pk: int):
     if org_staff:
         org.staff.add(org_staff)
 
+    # Invalidate cacheops cache — M2M .clear()/.add() may not auto-invalidate
+    try:
+        from cacheops import invalidate_obj
+
+        invalidate_obj(org)
+    except ImportError:
+        pass
+
     return Response(
         {
             "success": True,
