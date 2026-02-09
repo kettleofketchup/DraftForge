@@ -9,7 +9,7 @@ Tournament Types:
 - DynamicTournamentConfig: Dynamically created with mock users/teams
 """
 
-from tests.data.leagues import DTX_STEAM_LEAGUE_ID
+from tests.data.leagues import CSV_STEAM_LEAGUE_ID, DTX_STEAM_LEAGUE_ID
 from tests.data.models import DynamicTournamentConfig, TestTournament
 from tests.data.teams import (
     BRACKET_UNSET_WINNER_TEAMS,
@@ -138,4 +138,19 @@ BRACKET_UNSET_WINNER_TOURNAMENT: TestTournament = TestTournament(
     steam_league_id=DTX_STEAM_LEAGUE_ID,
     league_name="DTX League",
     teams=BRACKET_UNSET_WINNER_TEAMS,
+)
+
+# =============================================================================
+# CSV Import Tournament
+# Isolated tournament for CSV import E2E tests.
+# Starts empty (no users/teams) - CSV import adds them.
+# =============================================================================
+
+CSV_IMPORT_TOURNAMENT: TestTournament = TestTournament(
+    name="CSV Import Tournament",
+    tournament_type="double_elimination",
+    state="in_progress",
+    steam_league_id=CSV_STEAM_LEAGUE_ID,
+    league_name="CSV Import League",
+    teams=[],  # Empty - CSV import adds users
 )

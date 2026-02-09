@@ -53,11 +53,11 @@ class TournamentUserSerializer(serializers.ModelSerializer):
             "nickname",
             "avatar",
             "discordId",
+            "discordNickname",
             "positions",
             "steamid",
             "steam_account_id",
             "avatarUrl",
-            "mmr",
             "positions",
         )
 
@@ -667,15 +667,9 @@ class TeamSerializer(serializers.ModelSerializer):
         if tournament and tournament.league:
             org = tournament.league.organization
 
-        # If no organization, fall back to legacy user.mmr behavior
+        # If no organization, can't determine MMR
         if not org:
-            total = 0
-            if obj.captain and obj.captain.mmr:
-                total += obj.captain.mmr
-            for member in obj.members.all():
-                if member.mmr and member.pk != getattr(obj.captain, "pk", None):
-                    total += member.mmr
-            return total
+            return 0
 
         # Use OrgUser MMR
         total = 0
@@ -832,7 +826,7 @@ class TournamentSerializer(serializers.ModelSerializer):
                                     OrgUser(
                                         user=user,
                                         organization=org,
-                                        mmr=user.mmr or 0,
+                                        mmr=0,
                                     )
                                 )
                         if new_org_users:

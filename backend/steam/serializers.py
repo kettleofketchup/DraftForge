@@ -195,8 +195,8 @@ class LinkMatchRequestSerializer(serializers.Serializer):
 class LeaguePlayerStatsSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
     avatar = serializers.CharField(source="user.avatar", read_only=True)
-    base_mmr = serializers.IntegerField(source="user.mmr", read_only=True)
-    league_mmr = serializers.IntegerField(source="user.league_mmr", read_only=True)
+    base_mmr = serializers.SerializerMethodField()
+    league_mmr = serializers.SerializerMethodField()
     user_id = serializers.IntegerField(source="user.id", read_only=True)
 
     class Meta:
@@ -221,12 +221,32 @@ class LeaguePlayerStatsSerializer(serializers.ModelSerializer):
             "last_updated",
         ]
 
+    def get_base_mmr(self, obj):
+        from org.models import OrgUser
+
+        try:
+            org_user = OrgUser.objects.get(
+                user=obj.user, organization=obj.league.organization
+            )
+            return org_user.mmr or 0
+        except OrgUser.DoesNotExist:
+            return 0
+
+    def get_league_mmr(self, obj):
+        from league.models import LeagueUser
+
+        try:
+            league_user = LeagueUser.objects.get(user=obj.user, league=obj.league)
+            return league_user.mmr or 0
+        except LeagueUser.DoesNotExist:
+            return 0
+
 
 class LeaderboardSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
     avatar = serializers.CharField(source="user.avatar", read_only=True)
-    base_mmr = serializers.IntegerField(source="user.mmr", read_only=True)
-    league_mmr = serializers.IntegerField(source="user.league_mmr", read_only=True)
+    base_mmr = serializers.SerializerMethodField()
+    league_mmr = serializers.SerializerMethodField()
     user_id = serializers.IntegerField(source="user.id", read_only=True)
     avg_kda = serializers.SerializerMethodField()
 
@@ -248,6 +268,26 @@ class LeaderboardSerializer(serializers.ModelSerializer):
             "avg_gpm",
             "avg_xpm",
         ]
+
+    def get_base_mmr(self, obj):
+        from org.models import OrgUser
+
+        try:
+            org_user = OrgUser.objects.get(
+                user=obj.user, organization=obj.league.organization
+            )
+            return org_user.mmr or 0
+        except OrgUser.DoesNotExist:
+            return 0
+
+    def get_league_mmr(self, obj):
+        from league.models import LeagueUser
+
+        try:
+            league_user = LeagueUser.objects.get(user=obj.user, league=obj.league)
+            return league_user.mmr or 0
+        except LeagueUser.DoesNotExist:
+            return 0
 
     def get_avg_kda(self, obj):
         if obj.avg_deaths == 0:

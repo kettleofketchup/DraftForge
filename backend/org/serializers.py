@@ -94,7 +94,7 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
     target_steamid = serializers.IntegerField(
         source="target_user.steamid", read_only=True
     )
-    target_mmr = serializers.IntegerField(source="target_user.mmr", read_only=True)
+    target_mmr = serializers.SerializerMethodField()
 
     organization_name = serializers.CharField(
         source="organization.name", read_only=True
@@ -136,3 +136,14 @@ class ProfileClaimRequestSerializer(serializers.ModelSerializer):
             "created_at",
             "reviewed_at",
         )
+
+    def get_target_mmr(self, obj):
+        from org.models import OrgUser
+
+        try:
+            org_user = OrgUser.objects.get(
+                user=obj.target_user, organization=obj.organization
+            )
+            return org_user.mmr or 0
+        except OrgUser.DoesNotExist:
+            return 0
