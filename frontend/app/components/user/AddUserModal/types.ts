@@ -25,6 +25,10 @@ export interface SiteUserResultsProps {
   isAdded: (user: UserType) => boolean;
   /** Current query length to show "type at least N chars" message */
   queryLength: number;
+  /** Index of the keyboard-highlighted item, -1 means no highlight */
+  highlightedIndex: number;
+  /** Whether to show membership badges (default true) */
+  showMembership?: boolean;
 }
 
 export interface DiscordMemberResultsProps {
@@ -37,4 +41,6 @@ export interface DiscordMemberResultsProps {
   onRefresh: () => Promise<void>;
   refreshing: boolean;
   hasDiscordServer: boolean;
+  /** Index of the keyboard-highlighted item, -1 means no highlight */
+  highlightedIndex: number;
 }

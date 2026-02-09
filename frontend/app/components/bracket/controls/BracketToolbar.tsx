@@ -1,5 +1,5 @@
-import { ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronDown, RotateCcw, Save } from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   CancelButton,
   ConfirmButton,
@@ -21,6 +21,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '~/components/ui/alert-dialog';
+import {
+  MobileActionsDropdown,
+  type MobileAction,
+} from '~/components/ui/mobile-actions-dropdown';
 import { useBracketStore } from '~/store/bracketStore';
 import { useSaveBracket } from '~/hooks/useBracket';
 import type { TeamType } from '~/components/tournament/types';
@@ -64,9 +68,9 @@ export function BracketToolbar({
     setPendingSeedMethod(null);
   };
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     saveMutation.mutate(useBracketStore.getState().matches);
-  };
+  }, [saveMutation]);
 
   const handleReset = () => {
     resetBracket();
@@ -76,8 +80,31 @@ export function BracketToolbar({
   const minTeamsForBracket = 2;
   const canGenerate = teams.length >= minTeamsForBracket;
 
+  const mobileActions = useMemo<MobileAction[]>(() => {
+    if (!hasMatches) return [];
+    return [
+      {
+        key: 'save',
+        icon: <Save className="h-4 w-4" />,
+        label: 'Save',
+        onClick: handleSave,
+        variant: 'primary' as const,
+        disabled: !isDirty || saveMutation.isPending,
+        'data-testid': 'saveBracketButton-mobile',
+      },
+      {
+        key: 'reset',
+        icon: <RotateCcw className="h-4 w-4" />,
+        label: 'Reset',
+        onClick: () => setShowResetConfirm(true),
+        variant: 'destructive' as const,
+        'data-testid': 'resetBracketButton-mobile',
+      },
+    ];
+  }, [hasMatches, isDirty, saveMutation.isPending, handleSave]);
+
   return (
-    <div className="flex items-center gap-2 mb-4 p-2 bg-muted/50 rounded-lg relative z-10">
+    <div className="flex flex-wrap items-center gap-2 mb-4 p-2 bg-muted/50 rounded-lg relative z-10">
       {/* Generate / Reseed dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -85,7 +112,17 @@ export function BracketToolbar({
             disabled={!canGenerate}
             data-testid={hasMatches ? 'reseedBracketButton' : 'generateBracketButton'}
           >
-            {hasMatches ? 'Reseed Bracket' : 'Generate Bracket'}
+            {hasMatches ? (
+              <>
+                <span className="sm:hidden">Reseed</span>
+                <span className="hidden sm:inline">Reseed Bracket</span>
+              </>
+            ) : (
+              <>
+                <span className="sm:hidden">Generate</span>
+                <span className="hidden sm:inline">Generate Bracket</span>
+              </>
+            )}
             <ChevronDown className="h-4 w-4 ml-1" />
           </PrimaryButton>
         </DropdownMenuTrigger>
@@ -111,22 +148,37 @@ export function BracketToolbar({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Save button */}
+      {/* Mobile: actions dropdown for Save + Reset */}
+      {hasMatches && (
+        <MobileActionsDropdown
+          actions={mobileActions}
+          className="sm:hidden"
+          data-testid="bracketActionsDropdown"
+        />
+      )}
+
+      {/* Desktop: Save button */}
       {hasMatches && (
         <SubmitButton
           onClick={handleSave}
           disabled={!isDirty}
           loading={saveMutation.isPending}
           loadingText="Saving..."
+          className="hidden sm:inline-flex"
           data-testid="saveBracketButton"
         >
-          {isVirtual ? 'Save Bracket' : 'Save Changes'}
+          <Save className="h-4 w-4" />
+          Save
         </SubmitButton>
       )}
 
-      {/* Reset button */}
+      {/* Desktop: Reset button */}
       {hasMatches && (
-        <DestructiveButton onClick={() => setShowResetConfirm(true)}>
+        <DestructiveButton
+          onClick={() => setShowResetConfirm(true)}
+          className="hidden sm:inline-flex"
+        >
+          <RotateCcw className="h-4 w-4" />
           Reset
         </DestructiveButton>
       )}

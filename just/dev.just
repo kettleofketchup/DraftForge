@@ -82,3 +82,34 @@ release:
 [group('dev')]
 mac:
     {{inv}} dev.mac
+
+# Launch Chrome with remote debugging for Chrome DevTools MCP
+[group('dev')]
+chrome url="https://localhost":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if curl -s http://127.0.0.1:9222/json/version > /dev/null 2>&1; then
+        echo "Chrome debug session already running on :9222"
+        echo "Opening {{url}} in existing session..."
+        # Open URL in existing debug Chrome via CDP
+        curl -s "http://127.0.0.1:9222/json/new?{{url}}" > /dev/null 2>&1 || true
+        exit 0
+    fi
+    echo "Starting Chrome with remote debugging on :9222..."
+    DISPLAY=:0 google-chrome-stable \
+        --remote-debugging-port=9222 \
+        --user-data-dir="${HOME}/.chrome-debug" \
+        --ignore-certificate-errors \
+        --no-first-run \
+        --no-default-browser-check \
+        "{{url}}" &
+    disown
+    # Wait for debug port
+    for i in $(seq 1 10); do
+        if curl -s http://127.0.0.1:9222/json/version > /dev/null 2>&1; then
+            echo "Chrome ready — MCP can connect at http://127.0.0.1:9222"
+            exit 0
+        fi
+        sleep 0.5
+    done
+    echo "Chrome started but debug port not yet responding (may need a moment)"

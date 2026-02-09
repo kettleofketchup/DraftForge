@@ -32,8 +32,6 @@ export const links: Route.LinksFunction = () => [];
 export const meta: Route.MetaFunction = () => [
   { title: 'Tournament Tracker' },
   { name: 'description', content: 'Track your tournament progress' },
-  { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-  { charSet: 'utf-8' },
 ];
 
 // ✅ Dev-only scripts injected client-side only, never during SSR
@@ -79,6 +77,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark" data-theme="dark">
       <head suppressHydrationWarning={true}>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
       </head>

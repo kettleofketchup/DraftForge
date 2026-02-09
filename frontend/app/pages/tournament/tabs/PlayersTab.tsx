@@ -58,8 +58,8 @@ export const PlayersTab: React.FC = memo(() => {
     <div className="py-5 px-3 mx-auto container">
       {hasErrors()}
 
-      <div className="grid grid-cols-2 gap-5 items-start pt-5  ">
-        <div className="flex self-center place-self-stretch">
+      <div className="flex flex-col-reverse md:flex-row gap-3 items-stretch md:items-start pt-5">
+        <div className="flex flex-1">
           <SearchUserDropdown
             users={tournamentUsers}
             query={query}
@@ -67,17 +67,18 @@ export const PlayersTab: React.FC = memo(() => {
             data-testid="playerSearchDropdown"
           />
         </div>
-        <div className="flex px-5 place-self-end">
-          {canEdit && (
+        {canEdit && (
+          <div className="flex md:px-5 shrink-0">
             <PrimaryButton
               onClick={() => setShowAddUser(true)}
               data-testid="tournamentAddPlayerBtn"
+              className="w-full md:w-auto"
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Player
             </PrimaryButton>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-4">

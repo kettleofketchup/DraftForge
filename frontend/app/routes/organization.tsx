@@ -47,6 +47,7 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import type { UserType } from '~/components/user/types';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
+import { usePageNav } from '~/hooks/usePageNav';
 
 // Discord icon component
 const DiscordIcon = ({ className }: { className?: string }) => (
@@ -114,6 +115,21 @@ export default function OrganizationDetailPage() {
   );
 
   const hasDiscordServer = Boolean(organization?.discord_server_id);
+
+  // Page nav options for mobile navbar dropdown
+  const userCountDisplay = orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUsers.length;
+  const pageNavOptions = useMemo(() => {
+    const opts = [
+      { value: 'leagues', label: `Leagues (${leagues.length})` },
+      { value: 'users', label: `Users (${userCountDisplay})` },
+    ];
+    if (isOrgAdmin) {
+      opts.push({ value: 'claims', label: 'Claims' });
+    }
+    return opts;
+  }, [leagues.length, userCountDisplay, isOrgAdmin]);
+
+  usePageNav(organization ? pageNavOptions : null, activeTab, setActiveTab);
 
   if (orgLoading) {
     return (
@@ -197,7 +213,7 @@ export default function OrganizationDetailPage() {
 
         {/* Tabs Section */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="mb-4">
+          <TabsList className="hidden md:flex mb-4">
             <TabsTrigger value="leagues" data-testid="org-tab-leagues">
               Leagues ({leagues.length})
             </TabsTrigger>

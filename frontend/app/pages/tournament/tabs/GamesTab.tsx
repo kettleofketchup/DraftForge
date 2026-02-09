@@ -51,10 +51,10 @@ export const GamesTab: React.FC = memo(() => {
   };
 
   return (
-    <div className="py-5 px-3 mx-auto container" data-testid="gamesTab">
+    <div className="py-3 px-1 sm:py-5 sm:px-3" data-testid="gamesTab">
       {/* View mode tabs */}
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'bracket' | 'list')}>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
           <TabsList>
             <TabsTrigger value="bracket" data-testid="bracket-view-tab">Bracket View</TabsTrigger>
             <TabsTrigger value="list" data-testid="list-view-tab">List View</TabsTrigger>

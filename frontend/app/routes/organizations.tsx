@@ -120,14 +120,14 @@ export default function OrganizationsPage() {
   };
 
   return (
-    <div className="container mx-auto p-4">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <Building2 className="h-8 w-8 text-primary" />
-            <h1 className="text-2xl font-bold">Organizations</h1>
+    <div className="container mx-auto p-4 overflow-x-hidden">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
+          <div className="flex items-center gap-3 min-w-0">
+            <Building2 className="h-7 w-7 sm:h-8 sm:w-8 text-primary shrink-0" />
+            <h1 className="text-xl sm:text-2xl font-bold truncate">Organizations</h1>
           </div>
           {currentUser?.is_superuser && (
-            <PrimaryButton onClick={() => setCreateModalOpen(true)}>
+            <PrimaryButton onClick={() => setCreateModalOpen(true)} className="w-full sm:w-auto">
               <Plus className="w-4 h-4 mr-2" />
               Create Organization
             </PrimaryButton>
