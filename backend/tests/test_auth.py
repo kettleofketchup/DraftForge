@@ -832,6 +832,51 @@ def get_user_org_membership(request, user_pk: int):
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
+def reset_org_admin_team(request, org_pk: int):
+    """
+    TEST ONLY: Reset organization admin team to known state.
+
+    Resets admins to only ORG_ADMIN_USER and staff to only ORG_STAFF_USER.
+    Used by Playwright tests to ensure consistent state between test runs.
+    """
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from app.models import Organization
+
+    try:
+        org = Organization.objects.get(pk=org_pk)
+    except Organization.DoesNotExist:
+        return Response(
+            {"error": f"Organization with pk {org_pk} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Reset admins to only ORG_ADMIN_USER
+    org_admin = CustomUser.objects.filter(pk=ORG_ADMIN_USER.pk).first()
+    org.admins.clear()
+    if org_admin:
+        org.admins.add(org_admin)
+
+    # Reset staff to only ORG_STAFF_USER
+    org_staff = CustomUser.objects.filter(pk=ORG_STAFF_USER.pk).first()
+    org.staff.clear()
+    if org_staff:
+        org.staff.add(org_staff)
+
+    return Response(
+        {
+            "success": True,
+            "admins": [{"pk": u.pk, "username": u.username} for u in org.admins.all()],
+            "staff": [{"pk": u.pk, "username": u.username} for u in org.staff.all()],
+        }
+    )
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def create_claim_request(request):
     """
     TEST ONLY: Create a profile claim request for testing the admin claims flow.
