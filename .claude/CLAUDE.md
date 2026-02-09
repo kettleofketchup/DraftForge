@@ -195,6 +195,9 @@ just docker::all-pull          # Pull all images
 just docker::backend::build    # Build backend image
 just docker::frontend::build   # Build frontend image
 just docker::nginx::build      # Build nginx image
+just docker::release::build    # Build prod-only images (no -dev)
+just docker::release::push     # Build and push prod-only images
+just docker::release::pull     # Pull prod-only images (no -dev)
 
 # Test Database
 just docker::db::hash          # Output content hash for test-db sources

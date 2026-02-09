@@ -19,10 +19,12 @@ ns_docker_backend = Collection("backend")
 ns_docker_nginx = Collection("nginx")
 
 ns_docker_all = Collection("all")
+ns_docker_release = Collection("release")
 ns_docker.add_collection(ns_docker_frontend)
 ns_docker.add_collection(ns_docker_nginx)
 ns_docker.add_collection(ns_docker_backend)
 ns_docker.add_collection(ns_docker_all)
+ns_docker.add_collection(ns_docker_release)
 
 
 def docker_build(
@@ -321,6 +323,51 @@ ns_docker_nginx.add_task(docker_nginx_run, "run")
 ns_docker_all.add_task(docker_pull_all, "pull")
 ns_docker_all.add_task(docker_build_all, "build")
 ns_docker_all.add_task(docker_push_all, "push")
+
+# --- Release (prod-only) tasks ---
+
+
+@task
+def docker_release_build(c, push=False):
+    """Build production-only images (backend, frontend, nginx). No -dev."""
+    funcs = [
+        lambda: docker_build(c, *get_backend()[:4], push=push),
+        lambda: docker_frontend_build_prod(c, push=push),
+        lambda: docker_nginx_build(c, push=push),
+    ]
+    with alive_bar(total=3, title="Building Release Images") as bar:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(func): func for func in funcs}
+            for future in as_completed(futures):
+                future.result()
+                bar()
+
+
+@task
+def docker_release_push(c):
+    """Build and push production-only images."""
+    docker_release_build(c, push=True)
+
+
+@task
+def docker_release_pull(c):
+    """Pull production-only images (no -dev)."""
+    funcs = [
+        lambda: docker_pull(c, *get_backend()),
+        lambda: docker_pull(c, *get_frontend()),
+        lambda: docker_pull(c, *get_nginx()),
+    ]
+    with alive_bar(total=3, title="Pulling Release Images") as bar:
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(func): func for func in funcs}
+            for future in as_completed(futures):
+                future.result()
+                bar()
+
+
+ns_docker_release.add_task(docker_release_build, "build")
+ns_docker_release.add_task(docker_release_push, "push")
+ns_docker_release.add_task(docker_release_pull, "pull")
 
 # Test-specific builds
 ns_docker.add_task(docker_test_build, "test-build")
