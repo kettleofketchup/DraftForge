@@ -8,23 +8,22 @@ import { GameCreateModal } from '~/components/game/create/createGameModal';
 import { GameCard } from '~/components/game/gameCard/gameCard';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
-import { useBracketStore } from '~/store/bracketStore';
+import { useQueryClient } from '@tanstack/react-query';
 
 const log = getLogger('GamesTab');
 
 export const GamesTab: React.FC = memo(() => {
   const tournament = useUserStore((state) => state.tournament);
   const isStaff = useUserStore((state) => state.isStaff());
-  // Use getState() for actions to avoid subscribing to entire store
+  const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<'bracket' | 'list'>('bracket');
   const [showAutoAssign, setShowAutoAssign] = useState(false);
 
   const handleAutoAssignComplete = useCallback(() => {
     if (tournament?.pk) {
-      // Access loadBracket via getState to avoid subscription
-      useBracketStore.getState().loadBracket(tournament.pk);
+      queryClient.invalidateQueries({ queryKey: ['bracket', tournament.pk] });
     }
-  }, [tournament?.pk]);
+  }, [tournament?.pk, queryClient]);
 
   const renderNoGames = () => {
     return (

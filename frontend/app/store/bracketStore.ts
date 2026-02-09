@@ -3,7 +3,6 @@ import type { Node, Edge } from '@xyflow/react';
 import type { BracketMatch, SeedingMethod } from '~/components/bracket/types';
 import type { TeamType } from '~/components/tournament/types.d';
 import { generateBracket, reseedBracket } from '~/components/bracket/utils/bracketFactory';
-import { saveBracket as saveBracketAPI, loadBracket as loadBracketAPI } from '~/components/api/bracketAPI';
 import type { BracketMatchDTO as ApiBracketMatch } from '~/components/bracket/schemas';
 import { getLogger } from '~/lib/logger';
 
@@ -13,7 +12,7 @@ const log = getLogger('bracketStore');
  * Generate a consistent string ID for bracket matches
  * Format: {bracketType}-{round}-{position} e.g., "winners-1-0"
  */
-function generateMatchId(bracketType: string, round: number, position: number): string {
+export function generateMatchId(bracketType: string, round: number, position: number): string {
   // Use short prefixes for cleaner IDs
   const typePrefix: Record<string, string> = {
     winners: 'w',
@@ -28,7 +27,7 @@ function generateMatchId(bracketType: string, round: number, position: number): 
 /**
  * Converts API response match (snake_case) to frontend match (camelCase)
  */
-function mapApiMatchToMatch(apiMatch: ApiBracketMatch, allMatches: ApiBracketMatch[]): BracketMatch {
+export function mapApiMatchToMatch(apiMatch: ApiBracketMatch, allMatches: ApiBracketMatch[]): BracketMatch {
   // Generate consistent string ID from bracket structure
   const id = generateMatchId(apiMatch.bracket_type, apiMatch.round, apiMatch.position);
 
@@ -89,8 +88,6 @@ interface BracketStore {
   edges: Edge[];
   isDirty: boolean;
   isVirtual: boolean;
-  isLoading: boolean;
-  pollInterval: ReturnType<typeof setInterval> | null;
 
   // Actions
   setMatches: (matches: BracketMatch[]) => void;
@@ -107,13 +104,7 @@ interface BracketStore {
   unsetMatchWinner: (matchId: string) => void;
 
   // Persistence
-  saveBracket: (tournamentId: number) => Promise<void>;
-  loadBracket: (tournamentId: number) => Promise<void>;
   resetBracket: () => void;
-
-  // Polling
-  startPolling: (tournamentId: number, intervalMs?: number) => void;
-  stopPolling: () => void;
 }
 
 export const useBracketStore = create<BracketStore>()((set, get) => ({
@@ -122,8 +113,6 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
   edges: [],
   isDirty: false,
   isVirtual: true,
-  isLoading: false,
-  pollInterval: null,
 
   setMatches: (matches) => set({ matches, isDirty: true }),
   setNodes: (nodes) => set({ nodes }),
@@ -247,134 +236,14 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
     }));
   },
 
-  saveBracket: async (tournamentId) => {
-    log.debug('Saving bracket', { tournamentId });
-    set({ isLoading: true });
-    try {
-      const data = await saveBracketAPI(tournamentId, get().matches);
-      const savedMatches = data.matches.map(m => mapApiMatchToMatch(m, data.matches));
-
-      set({
-        matches: savedMatches,
-        isDirty: false,
-        isVirtual: false,
-        isLoading: false,
-      });
-      log.debug('Bracket saved successfully', { matchCount: savedMatches.length });
-    } catch (error) {
-      log.error('Failed to save bracket', error);
-      set({ isLoading: false });
-      throw error;
-    }
-  },
-
-  loadBracket: async (tournamentId) => {
-    // Skip if already loading to prevent concurrent requests
-    if (get().isLoading) {
-      return;
-    }
-
-    // Track if we need to update isLoading state
-    let shouldUpdateLoading = false;
-    const currentMatches = get().matches;
-
-    // Only show loading state on initial load (no matches yet)
-    if (currentMatches.length === 0) {
-      shouldUpdateLoading = true;
-      set({ isLoading: true });
-    }
-
-    try {
-      const data = await loadBracketAPI(tournamentId);
-
-      // Check if user made changes during fetch - don't overwrite their work
-      if (get().isDirty) {
-        return;
-      }
-
-      // Handle empty bracket from backend (e.g., after deletion)
-      if (data.matches.length === 0) {
-        // Only clear if we had matches before (avoid unnecessary updates)
-        if (currentMatches.length > 0) {
-          set({
-            matches: [],
-            nodes: [],
-            edges: [],
-            isDirty: false,
-            isVirtual: true,
-            isLoading: false,
-          });
-          shouldUpdateLoading = false;
-          log.debug('Bracket cleared (no matches from backend)');
-        }
-        return;
-      }
-
-      // Pass all matches to mapper so it can resolve next_game references
-      const mappedMatches = data.matches.map(m => mapApiMatchToMatch(m, data.matches));
-
-      // Compare with current matches to avoid unnecessary rerenders
-      if (currentMatches.length === mappedMatches.length) {
-        // Quick comparison using match IDs and key fields
-        const currentKey = currentMatches.map(m => `${m.id}-${m.winner}-${m.status}-${m.radiantTeam?.pk}-${m.direTeam?.pk}`).join('|');
-        const newKey = mappedMatches.map(m => `${m.id}-${m.winner}-${m.status}-${m.radiantTeam?.pk}-${m.direTeam?.pk}`).join('|');
-
-        if (currentKey === newKey) {
-          return;
-        }
-      }
-
-      set({
-        matches: mappedMatches,
-        isDirty: false,
-        isVirtual: false,
-        isLoading: false,
-      });
-      shouldUpdateLoading = false; // Already updated in the set above
-      log.debug('Bracket updated', { matchCount: mappedMatches.length });
-    } catch (error) {
-      log.error('Failed to load bracket', error);
-    } finally {
-      // Only update isLoading if we set it to true earlier and haven't updated yet
-      if (shouldUpdateLoading) {
-        set({ isLoading: false });
-      }
-    }
-  },
-
   resetBracket: () => {
     log.debug('Resetting bracket');
-    // Stop polling to prevent reloading old bracket from backend
-    get().stopPolling();
     set({
       matches: [],
       nodes: [],
       edges: [],
-      isDirty: false,
+      isDirty: true, // Prevents useBracketQuery from re-seeding until user saves or generates
       isVirtual: true,
     });
-  },
-
-  startPolling: (tournamentId, intervalMs = 5000) => {
-    get().stopPolling();
-    log.debug('Starting bracket polling', { tournamentId, intervalMs });
-
-    const interval = setInterval(() => {
-      // Only poll if not dirty (no unsaved changes)
-      if (!get().isDirty) {
-        get().loadBracket(tournamentId);
-      }
-    }, intervalMs);
-
-    set({ pollInterval: interval });
-  },
-
-  stopPolling: () => {
-    const interval = get().pollInterval;
-    if (interval) {
-      log.debug('Stopping bracket polling');
-      clearInterval(interval);
-      set({ pollInterval: null });
-    }
   },
 }));

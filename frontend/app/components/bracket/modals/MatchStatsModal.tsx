@@ -26,6 +26,7 @@ import { useUserStore } from '~/store/userStore';
 import { useIsLeagueStaff } from '~/hooks/usePermissions';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { useBracketStore } from '~/store/bracketStore';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCreateHeroDraft, useResetHeroDraft } from '~/hooks/useHeroDraft';
 import { DotaMatchStatsModal } from './DotaMatchStatsModal';
 import { LinkSteamMatchModal } from './LinkSteamMatchModal';
@@ -58,8 +59,8 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
 
   const setMatchWinner = useBracketStore((state) => state.setMatchWinner);
   const advanceWinner = useBracketStore((state) => state.advanceWinner);
-  const loadBracket = useBracketStore((state) => state.loadBracket);
   const unsetMatchWinner = useBracketStore((state) => state.unsetMatchWinner);
+  const queryClient = useQueryClient();
 
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -84,7 +85,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
 
   const handleLinkUpdated = () => {
     if (tournament?.pk) {
-      loadBracket(tournament.pk);
+      queryClient.invalidateQueries({ queryKey: ['bracket', tournament.pk] });
     }
   };
 
@@ -130,7 +131,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
 
         // Reload bracket to update herodraft_id in the match
         if (tournament?.pk) {
-          loadBracket(tournament.pk);
+          queryClient.invalidateQueries({ queryKey: ['bracket', tournament.pk] });
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';

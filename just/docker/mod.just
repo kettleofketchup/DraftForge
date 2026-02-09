@@ -6,6 +6,7 @@ inv := ". " + root / ".venv/bin/activate && cd " + root + " && inv"
 mod backend 'backend.just'
 mod frontend 'frontend.just'
 mod nginx 'nginx.just'
+mod release 'release.just'
 mod db 'db.just'
 
 [group('docker')]

@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from '~/components/ui/alert-dialog';
 import { useBracketStore } from '~/store/bracketStore';
+import { useSaveBracket } from '~/hooks/useBracket';
 import type { TeamType } from '~/components/tournament/types';
 import type { SeedingMethod } from '../types';
 
@@ -36,8 +37,9 @@ export function BracketToolbar({
   teams,
   hasMatches,
 }: BracketToolbarProps) {
-  const { generateBracket, reseedBracket, saveBracket, resetBracket, isLoading, isDirty, isVirtual } =
+  const { generateBracket, reseedBracket, resetBracket, isDirty, isVirtual } =
     useBracketStore();
+  const saveMutation = useSaveBracket(tournamentId);
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
@@ -63,7 +65,7 @@ export function BracketToolbar({
   };
 
   const handleSave = () => {
-    saveBracket(tournamentId);
+    saveMutation.mutate(useBracketStore.getState().matches);
   };
 
   const handleReset = () => {
@@ -114,7 +116,7 @@ export function BracketToolbar({
         <SubmitButton
           onClick={handleSave}
           disabled={!isDirty}
-          loading={isLoading}
+          loading={saveMutation.isPending}
           loadingText="Saving..."
           data-testid="saveBracketButton"
         >
