@@ -7,6 +7,7 @@ import { useUserStore } from '../../store/userStore';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { LoginWithDiscordButton } from './login';
 import { MobileNav } from './MobileNav';
+import { PageNavBar } from './PageNavBar';
 
 const GITHUB_REPO_URL = 'https://github.com/kettleofketchup/draftforge';
 const DOCS_URL = 'https://kettleofketchup.github.io/DraftForge/';
@@ -604,7 +605,7 @@ export const ResponsiveAppBar: React.FC = memo(() => {
       >
         <div className="navbar-start flex-1">
           <MobileNav />
-          <MobileHomeLink />
+          <PageNavBar />
           <SiteLogo />
           <NavLinks className="hidden md:flex" />
         </div>

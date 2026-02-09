@@ -1,8 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Badge } from '~/components/ui/badge';
 import { ConfirmButton } from '~/components/ui/buttons';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { UserStrip } from '~/components/user/UserStrip';
+import { cn } from '~/lib/utils';
 import { toast } from 'sonner';
 import type { SearchUserResult } from '~/components/api/api';
 import type { SiteUserResultsProps } from './types';
@@ -37,8 +38,20 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
   onAdd,
   isAdded,
   queryLength,
+  highlightedIndex,
+  showMembership = true,
 }) => {
   const [addingPk, setAddingPk] = useState<number | null>(null);
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (highlightedIndex >= 0 && itemRefs.current[highlightedIndex]) {
+      itemRefs.current[highlightedIndex]?.scrollIntoView({
+        block: 'nearest',
+      });
+    }
+  }, [highlightedIndex]);
 
   const handleAdd = useCallback(
     async (user: SearchUserResult) => {
@@ -84,38 +97,47 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
 
   return (
     <ScrollArea className="h-96">
-      <div className="flex flex-col gap-1 pr-4">
-        {results.map((result) => {
+      <div className="flex flex-col gap-1 p-1 pr-4">
+        {results.map((result, index) => {
           const added = result.pk ? isAdded(result) : false;
+          const highlighted = index === highlightedIndex;
 
           return (
-            <UserStrip
+            <div
               key={result.pk}
-              user={result}
-              data-testid={`site-user-result-${result.username}`}
-              compact
-              showPositions={false}
-              contextSlot={<MembershipBadge result={result} />}
-              actionSlot={
-                added ? (
-                  <span className="text-xs text-muted-foreground">
-                    Already added
-                  </span>
-                ) : (
-                  <ConfirmButton
-                    variant="success"
-                    size="sm"
-                    depth={false}
-                    onClick={() => handleAdd(result)}
-                    loading={addingPk === result.pk}
-                    data-testid={`add-user-btn-${result.username}`}
-                  >
-                    +
-                  </ConfirmButton>
-                )
-              }
-              className={added ? 'opacity-50' : ''}
-            />
+              ref={(el) => { itemRefs.current[index] = el; }}
+              className={cn(
+                'rounded-lg',
+                highlighted && 'ring-2 ring-primary ring-offset-1 ring-offset-background',
+              )}
+            >
+              <UserStrip
+                user={result}
+                data-testid={`site-user-result-${result.username}`}
+                compact
+                showPositions={false}
+                contextSlot={showMembership ? <MembershipBadge result={result} /> : undefined}
+                actionSlot={
+                  added ? (
+                    <span className="text-xs text-muted-foreground">
+                      Already added
+                    </span>
+                  ) : (
+                    <ConfirmButton
+                      variant="success"
+                      size="sm"
+                      depth={false}
+                      onClick={() => handleAdd(result)}
+                      loading={addingPk === result.pk}
+                      data-testid={`add-user-btn-${result.username}`}
+                    >
+                      +
+                    </ConfirmButton>
+                  )
+                }
+                className={added ? 'opacity-50' : ''}
+              />
+            </div>
           );
         })}
       </div>

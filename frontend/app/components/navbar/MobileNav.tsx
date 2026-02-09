@@ -97,6 +97,14 @@ const BugIcon = () => (
   </svg>
 );
 
+const HomeIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" aria-hidden="true">
+    <path d="M3 12l9-9 9 9" />
+    <path d="M5 10v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V10" />
+    <path d="M9 21v-6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v6" />
+  </svg>
+);
+
 interface MobileNavLinkProps {
   to?: string;
   href?: string;
@@ -186,6 +194,12 @@ export function MobileNav() {
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 py-2">
             Navigation
           </div>
+          <MobileNavLink
+            to="/"
+            icon={<HomeIcon />}
+            title="Home"
+            subtitle="Back to start"
+          />
           <MobileNavLink
             to="/about"
             icon={<AboutIcon />}

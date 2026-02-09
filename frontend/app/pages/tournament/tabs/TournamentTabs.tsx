@@ -1,12 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '~/components/ui/select';
 import { GamesTab } from './GamesTab';
 import { PlayersTab } from './PlayersTab';
 import { TeamsTab } from './TeamsTab';
@@ -16,6 +9,7 @@ import { useNavigate, useParams } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useUserStore } from '~/store/userStore';
+import { usePageNav } from '~/hooks/usePageNav';
 
 export default function TournamentTabs() {
   const { pk } = useParams<{ pk: string }>();
@@ -54,11 +48,14 @@ export default function TournamentTabs() {
     }
     return tournament.games.length;
   }, [tournament.games]);
-  const tabOptions = [
+  const tabOptions = useMemo(() => [
     { value: 'players', label: `Players (${playerCount})` },
     { value: 'teams', label: `Teams (${teamCount})` },
     { value: 'bracket', label: `Bracket (${gameCount})` },
-  ];
+  ], [playerCount, teamCount, gameCount]);
+
+  // Register page-level nav tabs in the global navbar (mobile only)
+  usePageNav(tabOptions, activeTab, handleTabChange);
 
   return (
     <Tabs
@@ -66,25 +63,6 @@ export default function TournamentTabs() {
       onValueChange={handleTabChange}
       className="w-full"
     >
-      {/* Mobile: Compact dropdown selector */}
-      <div className="md:hidden px-2 pb-2">
-        <Select value={activeTab} onValueChange={handleTabChange}>
-          <SelectTrigger
-            className="w-full h-9 bg-muted/50"
-            data-testid="tournamentTabsDropdown"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {tabOptions.map((tab) => (
-              <SelectItem key={tab.value} value={tab.value}>
-                {tab.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       {/* Desktop: Full tabs */}
       <ScrollArea className="hidden md:block w-full whitespace-nowrap pb-2">
         <TabsList

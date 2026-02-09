@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FormDialog } from '~/components/ui/dialogs/FormDialog';
 import { Input } from '~/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Search } from 'lucide-react';
+import { cn } from '~/lib/utils';
 import {
   searchUsers,
   searchDiscordMembers,
@@ -12,6 +13,7 @@ import {
 import type { AddMemberPayload } from '~/components/api/api';
 import { toast } from 'sonner';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
+import { useListKeyboardNav } from '~/hooks/useListKeyboardNav';
 import { SiteUserResults } from './SiteUserResults';
 import { DiscordMemberResults } from './DiscordMemberResults';
 import type { AddUserModalProps } from './types';
@@ -52,6 +54,16 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
 
   const siteResults = siteQuery.data ?? [];
   const discordResults = discordQuery.data ?? [];
+
+  // Detect desktop layout (lg breakpoint = 1024px)
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia('(min-width: 1024px)');
+    setIsDesktop(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, []);
 
   // Reset state when modal closes
   const handleOpenChange = useCallback(
@@ -119,6 +131,69 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     [addedDiscordIds, addedUsers, discordResults, isAdded]
   );
 
+  // Sort results: non-added users first
+  const sortedSiteResults = useMemo(
+    () => [...siteResults].sort((a, b) => {
+      const aAdded = a.pk ? checkIsAdded(a) : false;
+      const bAdded = b.pk ? checkIsAdded(b) : false;
+      if (aAdded === bAdded) return 0;
+      return aAdded ? 1 : -1;
+    }),
+    [siteResults, checkIsAdded],
+  );
+
+  const sortedDiscordResults = useMemo(
+    () => [...discordResults].sort((a, b) => {
+      const aAdded = checkIsDiscordUserAdded(a.user.id);
+      const bAdded = checkIsDiscordUserAdded(b.user.id);
+      if (aAdded === bAdded) return 0;
+      return aAdded ? 1 : -1;
+    }),
+    [discordResults, checkIsDiscordUserAdded],
+  );
+
+  // Keyboard-select handler: adds the user at the given column/index
+  const handleKeySelect = useCallback(
+    async (column: 'site' | 'discord', index: number) => {
+      if (column === 'site') {
+        const result = sortedSiteResults[index];
+        if (!result?.pk || checkIsAdded(result)) return;
+        try {
+          await handleAdd({ user_id: result.pk });
+          toast.success(`Added ${result.nickname || result.username}`);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Failed to add user');
+        }
+      } else {
+        const member = sortedDiscordResults[index];
+        if (!member || checkIsDiscordUserAdded(member.user.id)) return;
+        const payload: AddMemberPayload = member.has_site_account
+          ? { user_id: member.site_user_pk! }
+          : { discord_id: member.user.id };
+        try {
+          await handleAdd(payload);
+          toast.success(`Added ${member.nick || member.user.global_name || member.user.username}`);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : 'Failed to add user');
+        }
+      }
+    },
+    [sortedSiteResults, sortedDiscordResults, checkIsAdded, checkIsDiscordUserAdded, handleAdd],
+  );
+
+  const {
+    highlightedIndex,
+    activeColumn,
+    setActiveColumn,
+    handleKeyDown,
+  } = useListKeyboardNav({
+    siteCount: sortedSiteResults.length,
+    discordCount: sortedDiscordResults.length,
+    hasDiscordColumn: hasDiscordServer,
+    onSelect: handleKeySelect,
+    isDesktop,
+  });
+
   return (
     <FormDialog
       open={open}
@@ -137,6 +212,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           placeholder="Search by username, nickname, or Steam ID..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={handleKeyDown}
           className="pl-9"
           data-testid="add-user-search"
         />
@@ -163,23 +239,30 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       {/* Desktop: two columns */}
       <div className="hidden lg:grid lg:grid-cols-2 lg:gap-4">
         <div>
-          <h3 className="mb-2 text-sm font-medium text-foreground">
+          <h3 className={cn(
+            "mb-2 text-sm font-medium",
+            activeColumn === 'site' ? 'text-primary' : 'text-foreground',
+          )}>
             Site Users
           </h3>
           <SiteUserResults
-            results={siteResults}
+            results={sortedSiteResults}
             loading={siteQuery.isFetching}
             onAdd={handleAdd}
             isAdded={checkIsAdded}
             queryLength={debouncedQuery.length}
+            highlightedIndex={activeColumn === 'site' ? highlightedIndex : -1}
           />
         </div>
         <div>
-          <h3 className="mb-2 text-sm font-medium text-foreground">
+          <h3 className={cn(
+            "mb-2 text-sm font-medium",
+            activeColumn === 'discord' ? 'text-primary' : 'text-foreground',
+          )}>
             Discord Members
           </h3>
           <DiscordMemberResults
-            results={discordResults}
+            results={sortedDiscordResults}
             loading={discordQuery.isFetching}
             onAdd={handleAdd}
             isAdded={checkIsAdded}
@@ -188,13 +271,17 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             onRefresh={handleRefresh}
             refreshing={refreshing}
             hasDiscordServer={hasDiscordServer}
+            highlightedIndex={activeColumn === 'discord' ? highlightedIndex : -1}
           />
         </div>
       </div>
 
       {/* Mobile/Tablet: tabs */}
       <div className="lg:hidden">
-        <Tabs defaultValue="site">
+        <Tabs
+          defaultValue="site"
+          onValueChange={(val) => setActiveColumn(val as 'site' | 'discord')}
+        >
           <TabsList className="w-full">
             <TabsTrigger value="site" className="flex-1">
               Site Users
@@ -205,16 +292,18 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           </TabsList>
           <TabsContent value="site">
             <SiteUserResults
-              results={siteResults}
+              results={sortedSiteResults}
               loading={siteQuery.isFetching}
               onAdd={handleAdd}
               isAdded={checkIsAdded}
               queryLength={debouncedQuery.length}
+              highlightedIndex={activeColumn === 'site' ? highlightedIndex : -1}
+              showMembership={false}
             />
           </TabsContent>
           <TabsContent value="discord">
             <DiscordMemberResults
-              results={discordResults}
+              results={sortedDiscordResults}
               loading={discordQuery.isFetching}
               onAdd={handleAdd}
               isAdded={checkIsAdded}
@@ -223,6 +312,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               onRefresh={handleRefresh}
               refreshing={refreshing}
               hasDiscordServer={hasDiscordServer}
+              highlightedIndex={activeColumn === 'discord' ? highlightedIndex : -1}
             />
           </TabsContent>
         </Tabs>
