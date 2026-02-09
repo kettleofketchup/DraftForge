@@ -97,10 +97,11 @@ export const UserStrip = memo(
     const userWithLeague = user as UserType & { league_mmr?: number };
 
     // Memoize display names to avoid recalculating
-    const { fullName, displayedName } = useMemo(
+    const { fullName, displayedName, displayedNameMobile } = useMemo(
       () => ({
         fullName: DisplayName(user),
         displayedName: DisplayName(user, 20),
+        displayedNameMobile: DisplayName(user, 15),
       }),
       [user?.username, user?.nickname],
     );
@@ -182,7 +183,7 @@ export const UserStrip = memo(
           'flex items-center gap-2 rounded-lg transition-colors',
           compact ? 'p-1' : 'p-2',
           showBorder && 'border border-border/50',
-          'bg-muted/20 hover:bg-muted/40',
+          'bg-muted/25 hover:bg-muted/45',
           className,
         )}
         data-testid={testId}
@@ -201,10 +202,11 @@ export const UserStrip = memo(
           {/* Row 1: Name */}
           <PlayerPopover player={user}>
             <span
-              className="text-sm font-medium cursor-pointer hover:text-primary transition-colors leading-tight"
+              className="text-sm font-medium cursor-pointer hover:text-primary transition-colors leading-tight inline-block min-w-[15ch] sm:min-w-[20ch]"
               title={fullName.length > 12 ? fullName : undefined}
             >
-              {displayedName}
+              <span className="hidden sm:inline">{displayedName}</span>
+              <span className="sm:hidden">{displayedNameMobile}</span>
             </span>
           </PlayerPopover>
           {/* Row 2: Positions - fillEmpty ensures consistent width */}

@@ -158,9 +158,9 @@ export const TournamentDetailPage: React.FC = () => {
   const title = () => {
     return (
       <>
-        <div className="flex flex-row items-center mb-2">
+        <div className="flex flex-col sm:flex-row sm:items-center mb-2 gap-1">
           {tournamentName()}
-          <span className="ml-4 text-base text-base-content/50 font-normal">
+          <span className="sm:ml-4 text-base text-base-content/50 font-normal">
             played on {getDate()}
           </span>
         </div>
@@ -170,7 +170,7 @@ export const TournamentDetailPage: React.FC = () => {
 
   return (
     <div
-      className="container px-1 sm:mx-auto sm:p-4"
+      className="max-w-full overflow-x-hidden px-2 sm:container sm:mx-auto sm:p-4"
       data-testid="tournamentDetailPage"
     >
       {title()}
