@@ -107,6 +107,11 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
             sizeClasses[size],
             className
           )}
+          // Prevent outside-click dismissal: form dialogs should only close via
+          // explicit actions (X, Cancel, submit). This also fixes nested dialog
+          // issues where an inner dialog's overlay triggers the outer's dismiss.
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
           data-testid={dataTestId}
         >
           <DialogHeader>
