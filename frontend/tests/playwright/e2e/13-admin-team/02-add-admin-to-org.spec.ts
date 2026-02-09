@@ -131,9 +131,10 @@ test.describe('Add Admin to Organization (@cicd)', () => {
     await expect(page.locator('[data-testid="edit-organization-modal"]')).toBeVisible({ timeout: 3000 });
 
     // Verify the user now appears in the admin team list
+    // Allow time for the org refetch cycle to complete and update the admin list
     const newAdminRow = page.locator(`[data-testid="team-member-${ADDABLE_USERNAME}"]`);
+    await expect(newAdminRow).toBeVisible({ timeout: 10000 });
     await newAdminRow.scrollIntoViewIfNeeded();
-    await expect(newAdminRow).toBeVisible({ timeout: 5000 });
   });
 
   test('@cicd Already-added user shows correct state', async ({

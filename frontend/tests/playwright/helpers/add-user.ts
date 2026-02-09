@@ -50,6 +50,9 @@ export async function searchUser(page: Page, query: string): Promise<void> {
  * Search for and add a user in the AddUserModal.
  * Assumes the modal is already open.
  *
+ * Note: Uses .first() because AddUserModal renders SiteUserResults twice
+ * (desktop two-column grid + mobile tabs), producing duplicate data-testids.
+ *
  * @param page - Playwright page
  * @param username - Username to search for and add
  */
@@ -58,7 +61,8 @@ export async function searchAndAddUser(page: Page, username: string): Promise<vo
   await searchUser(page, username);
 
   // Wait for and click the add button for the specific user
-  const addBtn = page.locator(`[data-testid="add-user-btn-${username}"]`);
+  // .first() picks the desktop-grid instance (rendered first in DOM)
+  const addBtn = page.locator(`[data-testid="add-user-btn-${username}"]`).first();
   await addBtn.waitFor({ state: 'visible', timeout: 10000 });
   await addBtn.click();
 
@@ -75,7 +79,8 @@ export async function searchAndAddUser(page: Page, username: string): Promise<vo
  * @param username - Username to check
  */
 export async function expectUserAlreadyAdded(page: Page, username: string): Promise<void> {
-  const userRow = page.locator(`[data-testid="site-user-result-${username}"]`);
+  // .first() picks the desktop-grid instance (rendered first in DOM)
+  const userRow = page.locator(`[data-testid="site-user-result-${username}"]`).first();
   await expect(userRow).toBeVisible({ timeout: 5000 });
   await expect(userRow.locator('text=/already added/i')).toBeVisible({ timeout: 3000 });
 }

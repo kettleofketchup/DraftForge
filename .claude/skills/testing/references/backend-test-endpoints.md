@@ -68,10 +68,37 @@ if settings.TEST:
     urlpatterns += [path("api/tests/", include("tests.urls"))]
 ```
 
+## State Reset Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/tests/org/<org_pk>/reset-admin-team/` | POST | Reset org admin team to populate defaults |
+
+State reset endpoints are critical for test isolation. They reset DB state AND invalidate cacheops cache.
+
+### Cacheops Cache Invalidation in Reset Endpoints
+
+**Django cacheops does NOT auto-invalidate when M2M relationships are modified** via `.add()`, `.remove()`, or `.clear()`. After modifying M2M fields in test reset endpoints, you MUST call `invalidate_obj()`:
+
+```python
+from cacheops import invalidate_obj
+
+# After M2M changes:
+org.admins.clear()
+org.staff.clear()
+org.admins.add(admin_user)
+invalidate_obj(org)  # REQUIRED — otherwise GET returns stale cached data
+```
+
+Without this, subsequent API requests (e.g., `GET /organizations/1/`) will return cached data that doesn't reflect the M2M changes, causing test flakes.
+
+**This also applies to production views** — see `backend/app/views/admin_team.py` for the pattern where every M2M mutation (`add_org_admin`, `remove_org_staff`, etc.) calls `invalidate_obj()` after the change.
+
 ## Adding New Test Endpoints
 
 1. Add view function to `backend/tests/test_auth.py`
 2. Apply decorators: `@csrf_exempt`, `@api_view`, `@authentication_classes([])`, `@permission_classes([AllowAny])`
 3. Check `isTestEnvironment(request)` at top
-4. Add URL pattern to `backend/tests/urls.py`
-5. Add corresponding Playwright fixture function in `frontend/tests/playwright/fixtures/`
+4. **If modifying M2M fields**: call `invalidate_obj(model)` after changes (cacheops doesn't auto-invalidate M2M)
+5. Add URL pattern to `backend/tests/urls.py`
+6. Add corresponding Playwright fixture function in `frontend/tests/playwright/fixtures/`

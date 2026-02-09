@@ -1,5 +1,6 @@
 """Admin Team API views for organization and league permission management."""
 
+from cacheops import invalidate_obj
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Q
@@ -191,6 +192,7 @@ def add_org_admin(request, org_id):
         )
 
     org.admins.add(user)
+    invalidate_obj(org)
 
     # Log the action
     OrgLog.objects.create(
@@ -231,6 +233,7 @@ def remove_org_admin(request, org_id, user_id):
         )
 
     org.admins.remove(user)
+    invalidate_obj(org)
 
     # Log the action
     OrgLog.objects.create(
@@ -277,6 +280,7 @@ def add_org_staff(request, org_id):
         )
 
     org.staff.add(user)
+    invalidate_obj(org)
 
     # Log the action
     OrgLog.objects.create(
@@ -316,6 +320,7 @@ def remove_org_staff(request, org_id, user_id):
         )
 
     org.staff.remove(user)
+    invalidate_obj(org)
 
     # Log the action
     OrgLog.objects.create(
@@ -385,6 +390,8 @@ def transfer_org_ownership(request, org_id):
     if old_owner:
         org.admins.add(old_owner)
 
+    invalidate_obj(org)
+
     # Log the action
     OrgLog.objects.create(
         organization=org,
@@ -446,6 +453,7 @@ def add_league_admin(request, league_id):
         )
 
     league.admins.add(user)
+    invalidate_obj(league)
 
     # Log the action
     LeagueLog.objects.create(
@@ -490,6 +498,7 @@ def remove_league_admin(request, league_id, user_id):
         )
 
     league.admins.remove(user)
+    invalidate_obj(league)
 
     # Log the action
     LeagueLog.objects.create(
@@ -536,6 +545,7 @@ def add_league_staff(request, league_id):
         )
 
     league.staff.add(user)
+    invalidate_obj(league)
 
     # Log the action
     LeagueLog.objects.create(
@@ -575,6 +585,7 @@ def remove_league_staff(request, league_id, user_id):
         )
 
     league.staff.remove(user)
+    invalidate_obj(league)
 
     # Log the action
     LeagueLog.objects.create(
