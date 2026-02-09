@@ -16,6 +16,7 @@ import '@xyflow/react/dist/style.css';
 import './bracket-styles.css';
 
 import { useBracketStore } from '~/store/bracketStore';
+import { useBracketQuery } from '~/hooks/useBracket';
 import { useUserStore } from '~/store/userStore';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useElkLayout, type MatchNodeType } from './hooks/useElkLayout';
@@ -131,8 +132,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   // Use individual selectors to prevent unnecessary re-renders
   const matches = useBracketStore((state) => state.matches);
   const isDirty = useBracketStore((state) => state.isDirty);
-  const isLoading = useBracketStore((state) => state.isLoading);
-  // Note: Actions are accessed via getState() in effects to avoid subscriptions
+  const { isLoading, data: bracketData } = useBracketQuery(tournamentId);
 
   const { getLayoutedElements } = useElkLayout();
   const { setViewport, getViewport, fitView } = useReactFlow();
@@ -203,35 +203,6 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
 
   // Pre-compute badge mapping for all matches
   const badgeMapping = useMemo(() => buildBadgeMapping(matches), [matches]);
-
-  // Track current tournament to prevent unnecessary reloads
-  const currentTournamentRef = useRef<number | null>(null);
-
-  // Load bracket on mount - only depends on tournamentId
-  useEffect(() => {
-    // Skip if we've already loaded this tournament
-    if (currentTournamentRef.current === tournamentId) return;
-    currentTournamentRef.current = tournamentId;
-
-    useBracketStore.getState().loadBracket(tournamentId);
-    // Use getState in cleanup to get fresh reference
-    return () => useBracketStore.getState().stopPolling();
-  }, [tournamentId]);
-
-  // Start polling for live updates (when not editing)
-  useEffect(() => {
-    const store = useBracketStore.getState();
-    if (!isDirty) {
-      // Only start polling if not already polling
-      if (!store.pollInterval) {
-        store.startPolling(tournamentId, 5000);
-      }
-    } else {
-      store.stopPolling();
-    }
-    // Use getState in cleanup to get fresh reference
-    return () => useBracketStore.getState().stopPolling();
-  }, [isDirty, tournamentId]);
 
   // Layout matches using ELK when matches change
   useEffect(() => {
@@ -510,7 +481,7 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
       )}
 
       {/* Empty state */}
-      {matches.length === 0 && !isLoading && (
+      {matches.length === 0 && !isLoading && !bracketData?.matches?.length && (
         <div className="flex flex-col items-center justify-center h-96 text-muted-foreground">
           <p className="mb-4">No bracket generated yet.</p>
           {isStaff && teams.length >= 2 && (
