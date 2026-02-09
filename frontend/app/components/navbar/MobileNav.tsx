@@ -163,10 +163,13 @@ export function MobileNav() {
   const currentUser = useUserStore((state) => state.currentUser);
   // Render client-side only to avoid Radix UI hydration mismatch with special characters in IDs
   const [mounted, setMounted] = useState(false);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const closeNav = () => setOpen(false);
 
   // Return placeholder with same dimensions to prevent layout shift
   if (!mounted) {
@@ -176,7 +179,7 @@ export function MobileNav() {
   }
 
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <Button variant="ghost" size="icon" className="md:hidden mr-1" aria-label="Open menu">
           <Menu className="h-5 w-5" />
@@ -199,6 +202,7 @@ export function MobileNav() {
             icon={<HomeIcon />}
             title="Home"
             subtitle="Back to start"
+            onClick={closeNav}
           />
           <MobileNavLink
             to="/about"
@@ -206,6 +210,7 @@ export function MobileNav() {
             title="About"
             subtitle="Who we are"
             iconClassName="text-info"
+            onClick={closeNav}
           />
           <MobileNavLink
             to="/tournaments"
@@ -213,6 +218,7 @@ export function MobileNav() {
             title="Tournaments"
             subtitle="Compete & win"
             iconClassName="text-warning"
+            onClick={closeNav}
           />
           <MobileNavLink
             to="/users"
@@ -220,6 +226,7 @@ export function MobileNav() {
             title="Users"
             subtitle="Find players"
             iconClassName="text-interactive"
+            onClick={closeNav}
           />
           <MobileNavLink
             to="/organizations"
@@ -227,6 +234,7 @@ export function MobileNav() {
             title="Organizations"
             subtitle="Communities"
             iconClassName="text-secondary"
+            onClick={closeNav}
           />
           <MobileNavLink
             to="/leagues"
@@ -234,6 +242,7 @@ export function MobileNav() {
             title="Leagues"
             subtitle="Ranked play"
             iconClassName="text-primary"
+            onClick={closeNav}
           />
           {currentUser?.is_staff && (
             <MobileNavLink
@@ -242,6 +251,7 @@ export function MobileNav() {
               title="Admin"
               subtitle="Manage site"
               iconClassName="text-success"
+              onClick={closeNav}
             />
           )}
 
