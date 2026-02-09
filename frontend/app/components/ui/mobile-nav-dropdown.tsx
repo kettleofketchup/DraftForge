@@ -1,4 +1,3 @@
-import { Menu } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -6,7 +5,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import { brandDepthColors, brandGradient } from '~/components/ui/buttons';
+import { brandDepthColors, brandGradient, brandSecondary } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
 export interface MobileNavOption {
@@ -21,13 +20,15 @@ interface MobileNavDropdownProps {
   value: string;
   onValueChange: (value: string) => void;
   className?: string;
+  /** "primary" (bold gradient) for navbar, "secondary" (subtle) for in-page */
+  variant?: 'primary' | 'secondary';
   'data-testid'?: string;
 }
 
 /**
  * Branded mobile dropdown that replaces tab bars on narrow screens.
- * Primary gradient background with 3D depth, hamburger icon, and
- * secondary highlights for the selected item.
+ * Primary variant: bold gradient with 3D depth for navbar.
+ * Secondary variant: subtle translucent gradient for in-page tabs.
  */
 export function MobileNavDropdown({
   label,
@@ -35,15 +36,19 @@ export function MobileNavDropdown({
   value,
   onValueChange,
   className,
+  variant = 'primary',
   'data-testid': testId,
 }: MobileNavDropdownProps) {
+  const isPrimary = variant === 'primary';
+
   return (
     <div
       data-testid={testId}
       className={cn(
         'rounded-lg',
-        brandGradient,
-        `shadow-lg border-b-4 ${brandDepthColors}`,
+        isPrimary
+          ? [brandGradient, `shadow-lg border-b-4 ${brandDepthColors}`]
+          : brandSecondary,
         className,
       )}
     >
@@ -54,10 +59,9 @@ export function MobileNavDropdown({
         </div>
       )}
 
-      {/* Dropdown trigger with hamburger icon */}
+      {/* Dropdown trigger with chevron indicator */}
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger className="w-full h-10 border-0 rounded-none bg-transparent px-3 text-base font-semibold text-white text-left justify-start focus-visible:ring-0 focus-visible:ring-offset-0 [&>svg:last-child]:text-white/70">
-          <Menu className="h-4 w-4 text-white/70 shrink-0 mr-2" />
+        <SelectTrigger className="w-full h-10 border-0 rounded-none bg-transparent px-3 text-base font-semibold text-white text-left justify-start focus-visible:ring-0 focus-visible:ring-offset-0 [&>svg:last-child]:text-white [&>svg:last-child]:h-5 [&>svg:last-child]:w-5">
           <SelectValue />
         </SelectTrigger>
         <SelectContent className="border-primary/30">

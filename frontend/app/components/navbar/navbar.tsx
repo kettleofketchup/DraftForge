@@ -605,9 +605,12 @@ export const ResponsiveAppBar: React.FC = memo(() => {
       >
         <div className="navbar-start flex-1">
           <MobileNav />
-          <PageNavBar />
           <SiteLogo />
           <NavLinks className="hidden md:flex" />
+        </div>
+        {/* Centered page nav dropdown on mobile */}
+        <div className="absolute left-1/2 -translate-x-1/2 md:hidden z-10">
+          <PageNavBar />
         </div>
         <div className="navbar-end">
           <ExternalLinks className="hidden md:flex" />

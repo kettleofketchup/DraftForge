@@ -1,4 +1,5 @@
 import { ChevronDown, Filter, X } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useLeagues } from '~/components/league';
@@ -17,7 +18,7 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 
-export function TournamentFilterBar() {
+export function TournamentFilterBar({ actions }: { actions?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -58,36 +59,38 @@ export function TournamentFilterBar() {
   // Show placeholder during SSR to avoid hydration mismatch with Radix IDs
   if (!mounted) {
     return (
-      <div className="mb-4">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" disabled>
-            <Filter className="w-4 h-4 mr-2" />
-            Filter
-            <ChevronDown className="w-4 h-4 ml-2" />
-          </Button>
-        </div>
+      <div className="flex items-center justify-between gap-2 w-full mb-4">
+        <Button variant="outline" size="sm" disabled>
+          <Filter className="w-4 h-4 mr-2" />
+          Filter
+          <ChevronDown className="w-4 h-4 ml-2" />
+        </Button>
+        {actions}
       </div>
     );
   }
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="mb-4">
-      <div className="flex items-center gap-2">
-        <CollapsibleTrigger asChild>
-          <Button variant="outline" size="sm">
-            <Filter className="w-4 h-4 mr-2" />
-            Filter
-            <ChevronDown
-              className={`w-4 h-4 ml-2 transition-transform ${open ? 'rotate-180' : ''}`}
-            />
-          </Button>
-        </CollapsibleTrigger>
-        {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
-            <X className="w-4 h-4 mr-1" />
-            Clear filters
-          </Button>
-        )}
+    <Collapsible open={open} onOpenChange={setOpen} className="w-full mb-4">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <CollapsibleTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Filter className="w-4 h-4 mr-2" />
+              Filter
+              <ChevronDown
+                className={`w-4 h-4 ml-2 transition-transform ${open ? 'rotate-180' : ''}`}
+              />
+            </Button>
+          </CollapsibleTrigger>
+          {hasFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <X className="w-4 h-4 mr-1" />
+              Clear filters
+            </Button>
+          )}
+        </div>
+        {actions}
       </div>
 
       <CollapsibleContent className="mt-4">

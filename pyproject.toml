@@ -49,6 +49,7 @@ dependencies = [
     "opentelemetry-instrumentation-requests (>=0.41b0,<0.42.0)",
     "opentelemetry-instrumentation-system-metrics (>=0.41b0,<0.42.0)",
     "opentelemetry-instrumentation-celery (>=0.41b0,<0.42.0)",
+    "whitenoise (>=6.8.0,<7.0.0)",
 ]
 
 

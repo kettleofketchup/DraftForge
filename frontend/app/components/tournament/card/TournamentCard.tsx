@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import type { TournamentType } from '~/components/tournament/types';
 import { STATE_CHOICES } from '../constants';
 
-import { Building2, Calendar, Clock, Crown, Swords, Trophy, Users } from 'lucide-react';
+import { Building2, Calendar, Clock, Crown, Eye, Swords, Trophy, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router';
 import { useUserStore } from '~/store/userStore';
-import { EditIconButton, ViewIconButton } from '../../ui/buttons';
+import { EditIconButton, PrimaryButton } from '../../ui/buttons';
 import {
   CardAction,
   CardDescription,
@@ -219,12 +219,9 @@ export const TournamentCard: React.FC<Props> = React.memo(({
             onClick={() => setEditModalOpen(true)}
             tooltip="Edit Tournament"
             data-testid="tournament-edit-button"
+            className="bg-gradient-to-r from-violet-500/30 to-blue-500/20 ring-1 ring-violet-300/60 border-0 shadow-none"
           />
         )}
-        <ViewIconButton
-          onClick={() => navigate(`/tournament/${tournament.pk}`)}
-          tooltip="View Tournament"
-        />
       </>
     );
   };
@@ -258,8 +255,16 @@ export const TournamentCard: React.FC<Props> = React.memo(({
             {viewMode()}
           </div>
 
-          {/* Footer with delete button */}
-          <div className="flex flex-row mt-2 justify-end">
+          {/* Footer */}
+          <div className="flex flex-row mt-2 items-center justify-between">
+            <PrimaryButton
+              size="sm"
+              onClick={() => navigate(`/tournament/${tournament.pk}`)}
+              data-testid={`tournament-view-${tournament.pk}`}
+            >
+              <Eye className="h-4 w-4" />
+              View Tournament
+            </PrimaryButton>
             <TournamentRemoveButton tournament={tournament} />
           </div>
         </div>
