@@ -13,7 +13,7 @@ export function PageNavBar() {
       options={options}
       value={value}
       onValueChange={onValueChange}
-      className="md:hidden flex-1 mx-2 my-1 max-w-[200px]"
+      className="md:hidden mx-2 my-1"
     />
   );
 }

@@ -124,7 +124,7 @@ export default function OrganizationsPage() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-3 min-w-0">
             <Building2 className="h-7 w-7 sm:h-8 sm:w-8 text-primary shrink-0" />
-            <h1 className="text-xl sm:text-2xl font-bold truncate">Organizations</h1>
+            <h1 className="text-xl! sm:text-2xl! font-bold truncate">Organizations</h1>
           </div>
           {currentUser?.is_superuser && (
             <PrimaryButton onClick={() => setCreateModalOpen(true)} className="w-full sm:w-auto">

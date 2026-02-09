@@ -1,3 +1,4 @@
 *.db.*
 .redis_data/
 .env
+staticfiles/

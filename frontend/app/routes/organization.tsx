@@ -212,6 +212,7 @@ export default function OrganizationDetailPage() {
         </div>
 
         {/* Tabs Section */}
+        <div className="rounded-lg border border-border bg-base-200/50 p-4 md:p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="hidden md:flex mb-4">
             <TabsTrigger value="leagues" data-testid="org-tab-leagues">
@@ -295,6 +296,7 @@ export default function OrganizationDetailPage() {
             </TabsContent>
           )}
         </Tabs>
+        </div>
 
         {pk && (
           <CreateLeagueModal

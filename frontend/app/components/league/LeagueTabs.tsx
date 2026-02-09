@@ -32,7 +32,7 @@ export const LeagueTabs: React.FC<Props> = ({
 
   return (
     <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">
-      <TabsList className="grid w-full grid-cols-4">
+      <TabsList className="hidden md:grid w-full grid-cols-4">
         <TabsTrigger value="info" data-testid="league-tab-info">
           Info
         </TabsTrigger>

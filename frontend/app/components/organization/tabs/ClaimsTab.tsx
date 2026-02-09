@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, Clock, X, AlertCircle } from 'lucide-react';
 import {
   getClaimRequests,
@@ -12,6 +12,7 @@ import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Badge } from '~/components/ui/badge';
+import { MobileNavDropdown } from '~/components/ui/mobile-nav-dropdown';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -99,6 +100,12 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
 
   const pendingCount = claims.filter((c) => c.status === 'pending').length;
 
+  const claimStatusOptions = useMemo(() => [
+    { value: 'pending', label: 'Pending' },
+    { value: 'approved', label: 'Approved' },
+    { value: 'rejected', label: 'Rejected' },
+  ], []);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -107,7 +114,17 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
 
       {/* Status filter tabs */}
       <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as ClaimStatus)}>
-        <TabsList>
+        {/* Mobile dropdown */}
+        <MobileNavDropdown
+          options={claimStatusOptions}
+          value={statusFilter}
+          onValueChange={(v) => setStatusFilter(v as ClaimStatus)}
+          variant="secondary"
+          className="md:hidden mb-4"
+        />
+
+        {/* Desktop tabs */}
+        <TabsList className="hidden md:flex">
           <TabsTrigger value="pending" className="gap-2" data-testid="claims-tab-pending">
             <Clock className="w-4 h-4" />
             Pending

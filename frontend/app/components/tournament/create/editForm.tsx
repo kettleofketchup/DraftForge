@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format, parseISO } from 'date-fns';
-import { CalendarIcon, Clock, Globe } from 'lucide-react';
+import { CalendarIcon, Globe } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -256,7 +256,7 @@ export const TournamentEditForm: React.FC<Props> = ({
             render={({ field }) => (
               <FormItem className="flex flex-col">
                 <FormLabel>Tournament Date & Time</FormLabel>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {/* Date Picker */}
                   <Popover open={calendarOpen} onOpenChange={setCalendarOpen} modal={true}>
                     <PopoverTrigger asChild>
@@ -264,7 +264,7 @@ export const TournamentEditForm: React.FC<Props> = ({
                         <Button
                           variant="outline"
                           className={cn(
-                            'flex-1 pl-3 text-left font-normal',
+                            'pl-3 text-left font-normal',
                             !selectedDate && 'text-muted-foreground'
                           )}
                           data-testid="tournament-date-picker"
@@ -294,16 +294,13 @@ export const TournamentEditForm: React.FC<Props> = ({
                   </Popover>
 
                   {/* Time Picker */}
-                  <div className="relative">
-                    <Input
-                      type="time"
-                      value={selectedTime}
-                      onChange={(e) => setSelectedTime(e.target.value)}
-                      className="w-32"
-                      data-testid="tournament-time-picker"
-                    />
-                    <Clock className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50 pointer-events-none" />
-                  </div>
+                  <Input
+                    type="time"
+                    value={selectedTime}
+                    onChange={(e) => setSelectedTime(e.target.value)}
+                    className="w-fit"
+                    data-testid="tournament-time-picker"
+                  />
                 </div>
                 <FormMessage />
               </FormItem>
