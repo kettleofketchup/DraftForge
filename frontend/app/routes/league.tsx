@@ -32,7 +32,7 @@ export function meta({ data }: Route.MetaArgs) {
     description: 'League standings and tournament schedule',
   });
 }
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Trophy, Building2, Loader2, Pencil } from 'lucide-react';
 
 import { Badge } from '~/components/ui/badge';
@@ -42,6 +42,7 @@ import { useUserStore } from '~/store/userStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useIsLeagueAdmin } from '~/hooks/usePermissions';
+import { usePageNav } from '~/hooks/usePageNav';
 
 export default function LeaguePage() {
   const { leagueId, tab } = useParams<{ leagueId: string; tab?: string }>();
@@ -82,11 +83,11 @@ export default function LeaguePage() {
     };
   }, [league]);
 
-  const handleTabChange = (newTab: string) => {
+  const handleTabChange = useCallback((newTab: string) => {
     setActiveTab(newTab);
     // Don't use replace: true - we want history entries for browser back/forward
     navigate(`/leagues/${leagueId}/${newTab}`);
-  };
+  }, [leagueId, navigate]);
 
   // Filter tournaments for this league
   // league can be a number (ID) or object (from list endpoint with pk, name, organization_name)
@@ -97,6 +98,22 @@ export default function LeaguePage() {
 
   // Permission check for edit - includes org admins via useIsLeagueAdmin
   const canEdit = useIsLeagueAdmin(league);
+
+  // Page nav options for mobile navbar dropdown
+  const leagueUsers = useLeagueStore((s) => s.leagueUsers);
+  const leagueUsersLoading = useLeagueStore((s) => s.leagueUsersLoading);
+  const leagueUsersLeagueId = useLeagueStore((s) => s.leagueUsersLeagueId);
+  const userCountDisplay = leagueUsersLoading || leagueUsersLeagueId !== pk
+    ? '...' : leagueUsers.length;
+
+  const pageNavOptions = useMemo(() => [
+    { value: 'info', label: 'Info' },
+    { value: 'tournaments', label: `${leagueTournaments.length} Tourneys` },
+    { value: 'users', label: `${userCountDisplay} Users` },
+    { value: 'matches', label: 'Matches' },
+  ], [leagueTournaments.length, userCountDisplay]);
+
+  usePageNav(league ? pageNavOptions : null, activeTab, handleTabChange);
 
   if (isLoading) {
     return (
@@ -115,15 +132,16 @@ export default function LeaguePage() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto py-6 px-4 space-y-6">
+      <div className="flex flex-col gap-6 rounded-lg border border-border bg-base-200/50 p-4 md:p-6">
         {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="space-y-2">
+        <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3">
+          <div className="space-y-2 min-w-0">
             <div className="flex items-center gap-3">
-              <Trophy className="h-8 w-8 text-primary" />
-              <h1 className="text-3xl font-bold">{league.name}</h1>
+              <Trophy className="h-7 w-7 md:h-8 md:w-8 text-primary shrink-0" />
+              <h1 className="text-xl! md:text-3xl! font-bold truncate">{league.name}</h1>
             </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
               {league.organization_name && (
                 <Badge variant="outline" className="flex items-center gap-1">
                   <Building2 className="h-3 w-3" />
@@ -143,6 +161,7 @@ export default function LeaguePage() {
               size="sm"
               onClick={() => setEditModalOpen(true)}
               data-testid="edit-league-button"
+              className="shrink-0 w-full sm:w-auto"
             >
               <Pencil className="h-4 w-4 mr-2" />
               Edit League
@@ -157,16 +176,17 @@ export default function LeaguePage() {
           activeTab={activeTab}
           onTabChange={handleTabChange}
         />
+      </div>
 
-        {/* Edit Modal */}
-        {canEdit && league && (
-          <EditLeagueModal
-            open={editModalOpen}
-            onOpenChange={setEditModalOpen}
-            league={league}
-            onSuccess={refetch}
-          />
-        )}
+      {/* Edit Modal */}
+      {canEdit && league && (
+        <EditLeagueModal
+          open={editModalOpen}
+          onOpenChange={setEditModalOpen}
+          league={league}
+          onSuccess={refetch}
+        />
+      )}
     </div>
   );
 }

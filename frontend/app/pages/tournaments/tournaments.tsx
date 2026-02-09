@@ -178,12 +178,7 @@ export default function Tournament() {
 
   return (
     <div className="flex flex-col items-start p-4">
-      {/* Header with Create button - NOT affected by transitions */}
-      <div className="flex w-full justify-end mb-4">
-        <TournamentCreateModal />
-      </div>
-
-      <TournamentFilterBar />
+      <TournamentFilterBar actions={<TournamentCreateModal />} />
 
       {/* Tournament grid - affected by transitions */}
       {renderTournamentGrid()}

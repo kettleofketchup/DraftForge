@@ -38,6 +38,7 @@ COPY --chown=appuser:appuser ./scripts /app/scripts
 COPY --chown=appuser:appuser ./backend /app/backend
 
 WORKDIR /app/backend
+RUN python manage.py collectstatic --noinput
 EXPOSE 8000
 USER appuser
 ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "--ping-interval", "10", "--ping-timeout", "10", "backend.asgi:application"]
@@ -53,6 +54,7 @@ COPY --chown=appuser:appuser ./scripts /app/scripts
 COPY --chown=appuser:appuser ./backend /app/backend
 
 WORKDIR /app/backend
+RUN python manage.py collectstatic --noinput
 EXPOSE 8000
 USER appuser
 ENTRYPOINT ["daphne", "-b", "0.0.0.0", "-p", "8000", "--ping-interval", "10", "--ping-timeout", "10", "backend.asgi:application"]
