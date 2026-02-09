@@ -138,7 +138,6 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="pl-9"
-          autoFocus
           data-testid="add-user-search"
         />
         {/* Loading bar */}

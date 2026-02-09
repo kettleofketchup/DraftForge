@@ -79,3 +79,12 @@ export {
   openLeagueEditModal,
   getFirstLeague,
 } from '../helpers/league';
+
+// AddUser modal helpers
+export {
+  waitForAddUserModal,
+  closeAddUserModal,
+  searchUser,
+  searchAndAddUser,
+  expectUserAlreadyAdded,
+} from '../helpers/add-user';
