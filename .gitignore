@@ -1,4 +1,6 @@
 .claude/settings.local.json
+test-results/
+.last-run.json
 .venv
 .env
 tmux*.log
