@@ -17,6 +17,7 @@ from .test_auth import (
     login_staff,
     login_user,
     login_user_claimer,
+    reset_org_admin_team,
 )
 from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
 from .test_herodraft import (
@@ -91,6 +92,11 @@ urlpatterns = [
         "user/<int:user_pk>/org-membership/",
         get_user_org_membership,
         name="test-user-org-membership",
+    ),
+    path(
+        "org/<int:org_pk>/reset-admin-team/",
+        reset_org_admin_team,
+        name="test-reset-org-admin-team",
     ),
     path(
         "create-claimable-user/",

@@ -239,17 +239,26 @@ export default function HomePage() {
               docsPath="/features/draft/"
             />
             <FeatureCard
+              icon={FileSpreadsheet}
+              title="CSV Import"
+              description="Bulk-add users to organizations and tournaments via CSV upload with conflict detection and team assignment."
+              delay={0.4}
+              badgeText="In Testing"
+              docsPath="/features/planned/csv-import/"
+            />
+            <FeatureCard
               icon={Users}
               title="Team Management"
               description="Create and manage rosters, track player stats, and coordinate with Discord integration."
-              delay={0.4}
+              delay={0.5}
+              comingSoon
               docsPath="/features/planned/team-management/"
             />
             <FeatureCard
               icon={Award}
               title="League System"
               description="Season-based competitive leagues with ELO ratings, standings, and match history."
-              delay={0.5}
+              delay={0.6}
               comingSoon
               docsPath="/features/planned/league-rating/"
             />
@@ -257,17 +266,9 @@ export default function HomePage() {
               icon={Shield}
               title="Guild Discord Integration"
               description="Seamless Discord server integration for roster syncing and tournament announcements."
-              delay={0.6}
+              delay={0.7}
               comingSoon
               docsPath="/features/planned/discord-integration/"
-            />
-            <FeatureCard
-              icon={FileSpreadsheet}
-              title="CSV Import"
-              description="Bulk-add users to organizations and tournaments via CSV upload with conflict detection and team assignment."
-              delay={0.7}
-              badgeText="In Testing"
-              docsPath="/features/planned/csv-import/"
             />
             <FeatureCard
               icon={Gavel}
