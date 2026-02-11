@@ -256,8 +256,8 @@ def fetch_discord_avatars_for_users(users):
                 data = resp.json()
                 avatar_hash = data.get("avatar")
                 if avatar_hash:
-                    # Store the CDN URL
-                    user.avatar = f"https://cdn.discordapp.com/avatars/{user.discordId}/{avatar_hash}.png"
+                    # Store just the hash — avatarUrl property constructs the full URL
+                    user.avatar = avatar_hash
                     user.save(update_fields=["avatar"])
                     print(f"  Updated avatar for {user.username}")
         except Exception as e:

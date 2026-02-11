@@ -416,18 +416,21 @@ class TournamentView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Check that user can create tournament in the specified league."""
-        league_id = self.request.data.get("league")
-        if league_id:
-            try:
-                league = League.objects.get(pk=league_id)
-                if not has_league_admin_access(self.request.user, league):
-                    from rest_framework.exceptions import PermissionDenied
+        from rest_framework.exceptions import PermissionDenied, ValidationError
 
-                    raise PermissionDenied(
-                        "You do not have permission to create tournaments in this league."
-                    )
-            except League.DoesNotExist:
-                pass
+        league_id = self.request.data.get("league")
+        if not league_id:
+            raise ValidationError(
+                {"league": "A league is required when creating a tournament."}
+            )
+        try:
+            league = League.objects.get(pk=league_id)
+            if not has_league_admin_access(self.request.user, league):
+                raise PermissionDenied(
+                    "You do not have permission to create tournaments in this league."
+                )
+        except League.DoesNotExist:
+            raise ValidationError({"league": "League not found."})
         serializer.save()
 
 
@@ -970,13 +973,20 @@ class OrganizationView(viewsets.ModelViewSet):
         )
 
     def get_permissions(self):
-        if self.action in ["create", "destroy"]:
+        if self.action == "destroy":
             self.permission_classes = [IsAdminUser]
+        elif self.action == "create":
+            self.permission_classes = [IsAuthenticated]
         elif self.action in ["update", "partial_update"]:
             self.permission_classes = [IsOrgAdmin]
         else:
             self.permission_classes = [AllowAny]
         return super().get_permissions()
+
+    def perform_create(self, serializer):
+        """Set creator as owner and admin of the new organization."""
+        org = serializer.save(owner=self.request.user)
+        org.admins.add(self.request.user)
 
     def list(self, request, *args, **kwargs):
         cache_key = f"organization_list:{request.get_full_path()}"
