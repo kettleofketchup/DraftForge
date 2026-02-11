@@ -44,30 +44,45 @@ DraftForge is a full-stack application for managing:
 - [Installation Guide](getting-started/installation.md)
 - [Quick Start](getting-started/quick-start.md)
 - [Docker Architecture](architecture/docker.md)
-- [Invoke Tasks](development/invoke-tasks.md)
+- [Just Commands](development/just-commands.md)
 
 ## Features
 
 - [Draft System](features/draft.md) - Snake, Normal, and Shuffle draft modes
 - [Hero Draft](features/herodraft.md) - Captains Mode hero banning and picking
+- [CSV Import](features/csv-import.md) - Bulk-add users via CSV with team assignment and conflict detection
 
 ## Demo Recordings
 
-Generate demo videos and GIFs of key features:
+| Captain 1 - HeroDraft | Captain 2 - HeroDraft |
+|-----------------------|-----------------------|
+| ![Captain 1](assets/gifs/captain1_herodraft.gif) | ![Captain 2](assets/gifs/captain2_herodraft.gif) |
+| [Full Video](assets/videos/captain1_herodraft.webm) | [Full Video](assets/videos/captain2_herodraft.webm) |
+
+| Shuffle Draft | Snake Draft |
+|---------------|-------------|
+| ![Shuffle Draft](assets/gifs/shuffle_draft.gif) | ![Snake Draft](assets/gifs/snake_draft.gif) |
+| [Full Video](assets/videos/shuffle_draft.webm) | [Full Video](assets/videos/snake_draft.webm) |
+
+| CSV Import |
+|------------|
+| ![CSV Import](assets/gifs/csv_import.gif) |
+| [Full Video](assets/videos/csv_import.webm) |
+
+### Generate Demos Locally
 
 ```bash
-source .venv/bin/activate
-
 # Record all demos and generate GIFs
-inv demo.quick
+just demo::quick
 
 # Or record individually
-inv demo.shuffle     # Shuffle draft
-inv demo.snake       # Snake draft
-inv demo.herodraft   # Hero draft with bracket
+just demo::shuffle     # Shuffle draft
+just demo::snake       # Snake draft
+just demo::herodraft   # Hero draft with bracket
+just demo::csv         # CSV import with bracket
 ```
 
-See [Demo Tasks](development/invoke-tasks.md#demo-tasks-inv-demo) for all options.
+See [Just Commands](development/just-commands.md#demo-tasks) for all options.
 
 ## Project Structure
 
@@ -77,6 +92,6 @@ website/
 ├── frontend/         # React + TypeScript + Vite
 ├── docker/           # Docker Compose configurations
 ├── nginx/            # Nginx reverse proxy config
-├── scripts/          # Invoke task scripts
+├── scripts/          # Utility scripts
 └── docs/             # This documentation
 ```

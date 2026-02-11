@@ -1,6 +1,6 @@
 import { generateMeta } from '~/lib/seo';
 import { fetchOrganization } from '~/components/api/api';
-import { Building2, ClipboardList, ExternalLink, Pencil, Plus, Users } from 'lucide-react';
+import { Building2, ClipboardList, ExternalLink, Pencil, Plus, Upload, Users } from 'lucide-react';
 import type { Route } from './+types/organization';
 
 export async function loader({ params }: Route.LoaderArgs) {
@@ -44,6 +44,7 @@ import { PrimaryButton } from '~/components/ui/buttons';
 import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
+import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
@@ -70,6 +71,7 @@ export default function OrganizationDetailPage() {
   const [createLeagueOpen, setCreateLeagueOpen] = useState(false);
   const [editOrgOpen, setEditOrgOpen] = useState(false);
   const [showAddUser, setShowAddUser] = useState(false);
+  const [showCSVImport, setShowCSVImport] = useState(false);
   const [activeTab, setActiveTab] = useUrlTabs('leagues');
 
   // Org users from store
@@ -268,14 +270,24 @@ export default function OrganizationDetailPage() {
                   {orgUsers.length} {orgUsers.length === 1 ? 'member' : 'members'}
                 </span>
                 {canAddMembers && (
-                  <PrimaryButton
-                    size="sm"
-                    onClick={() => setShowAddUser(true)}
-                    data-testid="org-add-member-btn"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Member
-                  </PrimaryButton>
+                  <>
+                    <PrimaryButton
+                      size="sm"
+                      onClick={() => setShowCSVImport(true)}
+                      data-testid="org-csv-import-btn"
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      Import CSV
+                    </PrimaryButton>
+                    <PrimaryButton
+                      size="sm"
+                      onClick={() => setShowAddUser(true)}
+                      data-testid="org-add-member-btn"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Member
+                    </PrimaryButton>
+                  </>
                 )}
               </div>
             </div>
@@ -312,6 +324,19 @@ export default function OrganizationDetailPage() {
             onOpenChange={setEditOrgOpen}
             organization={organization}
             onSuccess={refetch}
+          />
+        )}
+
+        {canAddMembers && pk && (
+          <CSVImportModal
+            open={showCSVImport}
+            onOpenChange={setShowCSVImport}
+            entityContext={{ orgId: pk }}
+            onComplete={() => {
+              const { clearOrgUsers, getOrgUsers } = useOrgStore.getState();
+              clearOrgUsers();
+              getOrgUsers(pk!);
+            }}
           />
         )}
 

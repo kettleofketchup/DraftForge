@@ -171,38 +171,38 @@ reset_match_id_tracker()
 
 ```bash
 # All tests
-inv test.playwright.headless
+just test::pw::headless
 
 # Draft tests only
-inv test.playwright.spec --spec draft
+just test::pw::spec draft
 
 # Bracket tests only
-inv test.playwright.spec --spec bracket
+just test::pw::spec bracket
 
 # Mobile tests only
-inv test.playwright.spec --spec mobile
+just test::pw::spec mobile
 
 # Match stats tests only
-inv test.playwright.spec --spec match
+just test::pw::spec match
 ```
 
 ### Cypress (Legacy)
 
 ```bash
 # All tests
-inv test.headless
+just test::headless
 
 # Draft tests only
-inv test.spec --spec drafts
+just test::spec drafts
 
 # Bracket tests only
-inv test.spec --spec bracket
+just test::spec bracket
 
 # Mobile tests only
-inv test.spec --spec mobile
+just test::spec mobile
 
 # Match stats tests only
-inv test.spec --spec match
+just test::spec match
 
 # Specific test file
 cd frontend && npx cypress run --spec "tests/cypress/e2e/07-draft/01-captain-pick.cy.ts"
@@ -302,10 +302,10 @@ Bracket badges visually link winners bracket matches to their losers bracket des
 ### Running Bracket Tests
 
 ```bash
-# Run all bracket tests
-inv test.spec --spec bracket
+# Run all bracket tests (Playwright)
+just test::pw::spec bracket
 
-# Run specific bracket test file
+# Run all bracket tests (Cypress, legacy)
 cd frontend && npx cypress run --spec "tests/cypress/e2e/09-bracket/**/*.cy.ts"
 
 # Open Cypress interactive mode for brackets

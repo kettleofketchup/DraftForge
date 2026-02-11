@@ -36,6 +36,8 @@ export interface FeatureCardProps {
   icon: React.ElementType;
   title: string;
   description: string;
+  /** Bullet-point feature highlights shown below description */
+  features?: string[];
   delay?: number;
   comingSoon?: boolean;
   /** Custom badge text (defaults to "Coming Soon" when comingSoon is true) */
@@ -55,6 +57,8 @@ export interface FeatureCardProps {
   };
   /** Color class for icon */
   colorClass?: string;
+  /** Aspect ratio class for the preview thumbnail (default: "aspect-video") */
+  previewAspect?: string;
 }
 
 /** Lazy-loading image component using IntersectionObserver + requestIdleCallback */
@@ -75,7 +79,7 @@ const LazyImage = ({
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || deferredSrc === src) return;
 
     let cancelled = false;
     let idleCallbackId: number | undefined;
@@ -112,7 +116,7 @@ const LazyImage = ({
         cancelIdle(idleCallbackId);
       }
     };
-  }, [src]);
+  }, [src, deferredSrc]);
 
   return (
     <div ref={containerRef} className={cn('relative', className)}>
@@ -136,24 +140,27 @@ const LazyImage = ({
 
 /** Helper component to render a grid of media items */
 const MediaGrid = ({ media, title }: { media: ModalMedia[]; title: string }) => (
-  <div className={`flex ${media.length > 1 ? 'flex-row gap-4' : 'flex-col'} overflow-auto`}>
+  <div className={`flex ${media.length > 1 ? 'flex-row gap-4' : 'flex-col'} max-h-[65vh] overflow-hidden`}>
     {media.map((item, index) => (
-      <div key={index} className={`${media.length > 1 ? 'flex-1 min-w-0' : 'w-full'}`}>
+      <div key={index} className={`${media.length > 1 ? 'flex-1 min-w-0' : 'w-full'} flex flex-col`}>
         {item.caption && (
-          <div className="text-center mb-2">
+          <div className="text-center mb-2 shrink-0">
             <span className="text-sm font-medium text-base-content/80 bg-base-200 px-3 py-1 rounded-full">
               {item.caption}
             </span>
           </div>
         )}
-        {item.type === 'video' ? (
-          <VideoPlayer src={item.src} autoPlay loop />
-        ) : (
-          <LazyImage
-            src={item.src}
-            alt={item.caption || `${title} preview ${index + 1}`}
-          />
-        )}
+        <div className="min-h-0 flex-1">
+          {item.type === 'video' ? (
+            <VideoPlayer src={item.src} autoPlay loop className="max-h-[60vh]" />
+          ) : (
+            <LazyImage
+              src={item.src}
+              alt={item.caption || `${title} preview ${index + 1}`}
+              imgClassName="max-h-[60vh] object-contain"
+            />
+          )}
+        </div>
       </div>
     ))}
   </div>
@@ -163,6 +170,7 @@ export const FeatureCard = ({
   icon: Icon,
   title,
   description,
+  features,
   delay = 0,
   comingSoon,
   badgeText,
@@ -172,6 +180,7 @@ export const FeatureCard = ({
   docsPath,
   action,
   colorClass = 'text-primary',
+  previewAspect = 'aspect-video',
 }: FeatureCardProps) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -260,7 +269,7 @@ export const FeatureCard = ({
           {hasPreview && thumbnailSrc && (
             <div className="mt-3">
               <div
-                className="relative overflow-hidden rounded-lg border border-primary/20 cursor-pointer group aspect-video"
+                className={`relative overflow-hidden rounded-lg border border-primary/20 cursor-pointer group ${previewAspect}`}
                 onClick={() => setIsModalOpen(true)}
               >
                 <LazyImage
@@ -314,7 +323,7 @@ export const FeatureCard = ({
       {/* Modal for enlarged media - using shadcn Dialog */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent
-          className="sm:!max-w-[80vw] !max-w-[80vw] max-h-[70vh] overflow-auto bg-base-300 border-primary/30"
+          className="sm:!max-w-[80vw] !max-w-[80vw] max-h-[90vh] overflow-auto bg-base-300 border-primary/30"
           showCloseButton={true}
           closeButtonVariant="default"
         >
@@ -324,6 +333,17 @@ export const FeatureCard = ({
               Preview media for {title}
             </DialogDescription>
           </DialogHeader>
+
+          {features && features.length > 0 && (
+            <ul className="space-y-1 text-sm text-base-content/70 mb-2">
+              {features.map((f, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <span className="text-primary">•</span>
+                  <span>{f}</span>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {/* Tabbed content if we have both quick preview and full video */}
           {hasBothTabs ? (

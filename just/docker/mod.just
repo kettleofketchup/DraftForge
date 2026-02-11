@@ -20,3 +20,16 @@ all-push:
 [group('docker')]
 all-pull:
     {{inv}} docker.all.pull
+
+# Output content hashes for Docker images
+[group('docker')]
+hash service="all":
+    #!/usr/bin/env bash
+    cd {{root}}
+    if [[ "{{service}}" == "all" ]]; then
+        echo "frontend: $(./scripts/hash-docker-image.sh frontend | cut -c1-12)..."
+        echo "backend:  $(./scripts/hash-docker-image.sh backend | cut -c1-12)..."
+        echo "nginx:    $(./scripts/hash-docker-image.sh nginx | cut -c1-12)..."
+    else
+        ./scripts/hash-docker-image.sh {{service}}
+    fi

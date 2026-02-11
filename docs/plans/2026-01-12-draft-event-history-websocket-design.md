@@ -313,7 +313,7 @@ No new Redis instance needed - uses existing caching Redis.
 
 **Test Data:**
 - Add fixture or API endpoint for creating equal-MMR captain scenario
-- Could extend existing `inv db.populate` with specific test case
+- Could extend existing `just db::populate::all` with specific test case
 
 ### Backend Unit Tests
 

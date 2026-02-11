@@ -3,8 +3,7 @@
 ## Test Environment Setup
 
 ```bash
-source .venv/bin/activate
-inv test.setup
+just test::setup
 ```
 
 This command:
@@ -22,48 +21,48 @@ Playwright is the recommended E2E testing framework with parallel execution and 
 
 ```bash
 # Install browsers (first time only)
-inv test.playwright.install
+just test::pw::install
 
 # Run all tests headless
-inv test.playwright.headless
+just test::pw::headless
 
 # Run tests with visible browser
-inv test.playwright.headed
+just test::pw::headed
 
 # Open interactive UI mode
-inv test.playwright.ui
+just test::pw::ui
 ```
 
 ### Run Specific Test Suites
 
 ```bash
-inv test.playwright.navigation    # Navigation tests
-inv test.playwright.tournament    # Tournament tests
-inv test.playwright.draft         # Draft tests
-inv test.playwright.bracket       # Bracket tests
-inv test.playwright.league        # League tests
-inv test.playwright.herodraft     # HeroDraft tests
-inv test.playwright.mobile        # Mobile responsive tests
+just test::pw::spec navigation    # Navigation tests
+just test::pw::spec tournament    # Tournament tests
+just test::pw::spec draft         # Draft tests
+just test::pw::spec bracket       # Bracket tests
+just test::pw::spec league        # League tests
+just test::pw::spec herodraft     # HeroDraft tests
+just test::pw::spec mobile        # Mobile responsive tests
 ```
 
 ### Performance Options
 
 ```bash
 # Run with specific worker count
-inv test.playwright.headless --args="--workers=4"
+just test::pw::headless --workers=4
 
 # Run specific shard (for debugging CI)
-inv test.playwright.headless --args="--shard=1/4"
+just test::pw::headless --shard=1/4
 ```
 
 ### Debugging
 
 ```bash
 # Debug mode with inspector
-inv test.playwright.debug
+just test::pw::debug
 
 # View HTML report
-inv test.playwright.report
+just test::pw::report
 ```
 
 See [Playwright Testing Guide](../testing/playwright.md) for comprehensive documentation.
@@ -73,15 +72,15 @@ See [Playwright Testing Guide](../testing/playwright.md) for comprehensive docum
 ### Interactive Mode
 
 ```bash
-inv test.open
+just test::pw::ui
 ```
 
-Opens Cypress Test Runner for interactive debugging.
+Opens Playwright UI for interactive debugging.
 
 ### Headless Mode
 
 ```bash
-inv test.headless
+just test::pw::headless
 ```
 
 Runs all tests in headless mode (CI/CD).
@@ -89,9 +88,9 @@ Runs all tests in headless mode (CI/CD).
 ### Run Specific Test Specs
 
 ```bash
-inv test.spec --spec drafts      # Run draft tests only
-inv test.spec --spec tournament  # Run tournament tests
-inv test.spec --spec navigation  # Run navigation tests
+just test::pw::spec draft        # Run draft tests only
+just test::pw::spec tournament   # Run tournament tests
+just test::pw::spec navigation   # Run navigation tests
 ```
 
 Available spec shortcuts:
@@ -184,9 +183,7 @@ cy.loginAdmin().then(() => {
 ## Backend Tests
 
 ```bash
-source .venv/bin/activate
-cd backend
-python manage.py test
+just test::run 'python manage.py test app.tests -v 2'
 ```
 
 ## Worktree Testing Verification
@@ -206,36 +203,33 @@ From the worktree root directory:
 ```bash
 cd /home/kettle/git_repos/website/.worktrees/feature-name
 
-# 1. Source the worktree's virtual environment
-source .venv/bin/activate
+# 1. Stop any existing test environment
+just test::down
 
-# 2. Stop any existing test environment
-inv test.down
+# 2. Run full test setup (builds images, installs deps)
+just test::setup
 
-# 3. Run full test setup (builds images, installs deps)
-inv test.setup
+# 3. Run database migrations for test environment
+just db::migrate::test
 
-# 4. Run database migrations for test environment
-inv db.migrate.test
+# 4. Populate test data
+just db::populate::all
 
-# 5. Populate test data
-inv db.populate.all
+# 5. Run backend tests in Docker
+just test::run 'python manage.py test app.tests -v 2'
 
-# 6. Run backend tests in Docker
-inv test.run --cmd 'python manage.py test app.tests -v 2'
+# 6. Start test environment
+just test::up
 
-# 7. Start test environment
-inv test.up
-
-# 8. Run Playwright smoke tests (recommended)
-inv test.playwright.headless
+# 7. Run Playwright smoke tests (recommended)
+just test::pw::headless
 ```
 
 ### Quick Verification (Minimum)
 
 If full Cypress tests aren't required, at minimum:
 
-1. Run `inv test.up` and verify containers start without errors
+1. Run `just test::up` and verify containers start without errors
 2. Navigate to `https://localhost` in browser
 3. Verify login works and pages load without database errors
 4. Check browser console for JavaScript errors
@@ -244,7 +238,7 @@ If full Cypress tests aren't required, at minimum:
 
 | Issue | Solution |
 |-------|----------|
-| Database errors on page load | Run `inv db.migrate.test` and `inv db.populate.all` |
-| Container won't start | Run `inv test.down` then `inv test.setup` |
+| Database errors on page load | Run `just db::migrate::test` and `just db::populate::all` |
+| Container won't start | Run `just test::down` then `just test::setup` |
 | WebSocket connection failed | Check nginx config routes `/api/` correctly (WebSockets use /api/ paths) |
-| Missing dependencies | Run `inv test.setup` to rebuild images |
+| Missing dependencies | Run `just test::setup` to rebuild images |

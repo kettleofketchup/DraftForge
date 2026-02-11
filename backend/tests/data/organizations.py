@@ -28,12 +28,32 @@ TEST_ORG: TestOrganization = TestOrganization(
     timezone="America/New_York",
 )
 
+# CSV Import Test Organization - isolated from other test data
+CSV_ORG: TestOrganization = TestOrganization(
+    pk=3,  # Expected PK after creation
+    name="CSV Import Org",
+    description="Isolated organization for CSV import E2E tests.",
+    rules_template="CSV import test rules.",
+    timezone="America/New_York",
+)
+
+# Demo CSV Organization - for demo video recording (separate from CSV E2E tests)
+DEMO_CSV_ORG: TestOrganization = TestOrganization(
+    pk=4,  # Expected PK after creation
+    name="Demo CSV Org",
+    description="Organization for CSV import demo video recording.",
+    rules_template="Demo CSV rules.",
+    timezone="America/New_York",
+)
+
 # =============================================================================
 # Constants for easy access
 # =============================================================================
 
 DTX_ORG_NAME = DTX_ORG.name
 TEST_ORG_NAME = TEST_ORG.name
+CSV_ORG_NAME = CSV_ORG.name
+DEMO_CSV_ORG_NAME = DEMO_CSV_ORG.name
 
 # =============================================================================
 # All Organizations (for iteration)
@@ -42,4 +62,6 @@ TEST_ORG_NAME = TEST_ORG.name
 ALL_ORGANIZATIONS: list[TestOrganization] = [
     DTX_ORG,
     TEST_ORG,
+    CSV_ORG,
+    DEMO_CSV_ORG,
 ]

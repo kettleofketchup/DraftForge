@@ -902,15 +902,14 @@ git commit -m "feat: render tie resolution overlay in draft modal"
 Run:
 ```bash
 cd /home/kettle/git_repos/website/.worktrees/feature-shuffle-draft
-source .venv/bin/activate
-inv test.up
+just test::up
 ```
 
 **Step 2: Populate test data**
 
 Run:
 ```bash
-inv db.populate.all
+just db::populate::all
 ```
 
 **Step 3: Test shuffle draft flow**
@@ -944,7 +943,7 @@ cd ../backend && python -m black . && python -m isort .
 **Step 2: Ensure all tests pass**
 
 ```bash
-inv test.headless
+just test::pw::headless
 ```
 
 **Step 3: Squash/organize commits if needed**

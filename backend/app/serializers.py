@@ -53,11 +53,11 @@ class TournamentUserSerializer(serializers.ModelSerializer):
             "nickname",
             "avatar",
             "discordId",
+            "discordNickname",
             "positions",
             "steamid",
             "steam_account_id",
             "avatarUrl",
-            "mmr",
             "positions",
         )
 
@@ -92,7 +92,7 @@ class TournamentSerializerBase(serializers.ModelSerializer):
             .select_related("user", "user__positions")
             .prefetch_related(
                 Prefetch(
-                    "league_users",
+                    "league_memberships",
                     queryset=LeagueUser.objects.filter(league_id=league.pk),
                 )
             )
@@ -667,15 +667,9 @@ class TeamSerializer(serializers.ModelSerializer):
         if tournament and tournament.league:
             org = tournament.league.organization
 
-        # If no organization, fall back to legacy user.mmr behavior
+        # If no organization, can't determine MMR
         if not org:
-            total = 0
-            if obj.captain and obj.captain.mmr:
-                total += obj.captain.mmr
-            for member in obj.members.all():
-                if member.mmr and member.pk != getattr(obj.captain, "pk", None):
-                    total += member.mmr
-            return total
+            return 0
 
         # Use OrgUser MMR
         total = 0
@@ -726,7 +720,7 @@ class TournamentSerializer(serializers.ModelSerializer):
     teams = TeamSerializerForTournament(
         many=True, read_only=True
     )  # Return full team objects
-    users = TournamentUserSerializer(many=True, read_only=True)
+    users = serializers.SerializerMethodField()
     draft = DraftSerializerForTournament(many=False, read_only=True)
 
     user_ids = serializers.PrimaryKeyRelatedField(
@@ -760,6 +754,37 @@ class TournamentSerializer(serializers.ModelSerializer):
     def get_league_pk(self, tournament):
         """Return the league's PK for this tournament."""
         return tournament.league.pk if tournament.league else None
+
+    def get_users(self, tournament):
+        """Return users with org-scoped MMR via OrgUserSerializer."""
+        from django.db.models import Prefetch
+
+        from league.models import LeagueUser
+        from org.models import OrgUser
+        from org.serializers import OrgUserSerializer
+
+        league = tournament.league
+        if not league:
+            return TournamentUserSerializer(tournament.users.all(), many=True).data
+
+        org = league.organization
+        if not org:
+            return TournamentUserSerializer(tournament.users.all(), many=True).data
+
+        org_users = (
+            OrgUser.objects.filter(user__in=tournament.users.all(), organization=org)
+            .select_related("user", "user__positions")
+            .prefetch_related(
+                Prefetch(
+                    "league_memberships",
+                    queryset=LeagueUser.objects.filter(league_id=league.pk),
+                )
+            )
+        )
+
+        return OrgUserSerializer(
+            org_users, many=True, context={"league_id": league.pk}
+        ).data
 
     class Meta:
         model = Tournament
@@ -832,7 +857,7 @@ class TournamentSerializer(serializers.ModelSerializer):
                                     OrgUser(
                                         user=user,
                                         organization=org,
-                                        mmr=user.mmr or 0,
+                                        mmr=0,
                                     )
                                 )
                         if new_org_users:
@@ -896,7 +921,6 @@ class UserSerializer(serializers.ModelSerializer):
             "discordId",
             "steamid",
             "steam_account_id",
-            "mmr",
             "avatarUrl",
             "email",
             "username",

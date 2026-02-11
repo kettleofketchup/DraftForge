@@ -1,3 +1,4 @@
+import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -12,6 +13,24 @@ from invoke.tasks import task
 import paths
 
 from .utils import crun, get_version
+
+
+def get_content_hash(service: str) -> str:
+    """Get content hash for a Docker image service.
+
+    Args:
+        service: One of 'frontend', 'backend', 'nginx'
+    """
+    script = paths.PROJECT_PATH / "scripts" / "hash-docker-image.sh"
+    result = subprocess.run(
+        [str(script), service],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=str(paths.PROJECT_PATH),
+    )
+    return result.stdout.strip()
+
 
 ns_docker = Collection("docker")
 ns_docker_frontend = Collection("frontend")
@@ -37,6 +56,8 @@ def docker_build(
     extra_contexts: dict[str, Path] | None = None,
     push: bool = False,
     use_cache: bool = True,
+    content_hash: str | None = None,
+    include_version_tag: bool = True,
 ):
     """Build Docker image using buildx with registry caching.
 
@@ -50,9 +71,17 @@ def docker_build(
         extra_contexts: Additional build contexts
         push: If True, push to registry. If False, load locally.
         use_cache: If True, use registry caching. Set False for local-only builds.
+        content_hash: If provided, also tag with this content hash.
+        include_version_tag: If False, skip the version tag (for dev builds).
     """
-    img_str = f"{image}:{version}"
     cache_ref = f"{image}:buildcache"
+
+    tags = [f"--tag {image}:latest"]
+    if include_version_tag:
+        tags.append(f"--tag {image}:{version}")
+    if content_hash:
+        tags.append(f"--tag {image}:{content_hash}")
+    tag_args = " ".join(tags)
 
     extra_ctx_args = ""
     if extra_contexts:
@@ -76,8 +105,7 @@ def docker_build(
         f"docker buildx build "
         f"--file {str(dockerfile)} "
         f"--target {target} "
-        f"--tag {img_str} "
-        f"--tag {image}:latest "
+        f"{tag_args} "
         f"{cache_args}"
         f"{extra_ctx_args} "
         f"{output_flag} "
@@ -87,11 +115,38 @@ def docker_build(
 
 
 def docker_pull(c, image: str, version: str, dockerfile: Path, context: Path):
-
     cmd = f"docker pull {image}:{version}"
     cmd2 = f"docker pull {image}:latest"
     crun(c, cmd)
     crun(c, cmd2)
+
+
+def docker_pull_by_hash(c, image: str, service: str) -> bool:
+    """Try to pull an image by content hash, falling back to latest.
+
+    On success, tags the pulled image as :latest for docker compose compatibility.
+    Returns True if pull succeeded, False otherwise.
+    """
+    content_hash = get_content_hash(service)
+    short_hash = content_hash[:12]
+
+    # Strategy 1: Try exact hash-tagged image
+    print(f"Pulling {image} by hash ({short_hash}...)...")
+    result = c.run(f"docker pull {image}:{content_hash}", warn=True, hide=True)
+    if result and result.ok:
+        print(f"  ✓ Found exact match for {image} (hash: {short_hash}...)")
+        c.run(f"docker tag {image}:{content_hash} {image}:latest", hide=True)
+        return True
+
+    # Strategy 2: Fall back to latest
+    print(f"  Hash not found, trying {image}:latest...")
+    result = c.run(f"docker pull {image}:latest", warn=True, hide=True)
+    if result and result.ok:
+        print(f"  ✓ Pulled {image}:latest")
+        return True
+
+    print(f"  ✗ No image available for {image}")
+    return False
 
 
 def tag_latest(c, image: str, version: str):
@@ -157,13 +212,23 @@ def get_nginx():
 
 
 @task
-def docker_frontend_build_prod(c, push=False):
+def docker_frontend_build_prod(c, push=False, release=False):
     """Build production frontend image only."""
     version, image, dockerfile, context = get_frontend()
+    content_hash = get_content_hash("frontend")
     # Pass docs directory as additional build context for assets
     extra_contexts = {"docs": paths.PROJECT_PATH / "docs"}
     docker_build(
-        c, image, version, dockerfile, context, "runtime", extra_contexts, push=push
+        c,
+        image,
+        version,
+        dockerfile,
+        context,
+        "runtime",
+        extra_contexts,
+        push=push,
+        content_hash=content_hash,
+        include_version_tag=release,
     )
 
 
@@ -171,7 +236,18 @@ def docker_frontend_build_prod(c, push=False):
 def docker_frontend_build_dev(c, push=False):
     """Build dev frontend image with Cypress/Playwright (slower)."""
     version, image, dockerfile, context = get_frontend_dev()
-    docker_build(c, image, version, dockerfile, context, "runtime-dev", push=push)
+    content_hash = get_content_hash("frontend")
+    docker_build(
+        c,
+        image,
+        version,
+        dockerfile,
+        context,
+        "runtime-dev",
+        push=push,
+        content_hash=content_hash,
+        include_version_tag=False,
+    )
 
 
 @task
@@ -188,42 +264,76 @@ def docker_test_build(c, push=False):
 
 
 @task
-def docker_backend_build(c, push=False):
+def docker_backend_build(c, push=False, release=False):
     """Build both production and dev backend images."""
+    content_hash = get_content_hash("backend")
     version, image, dockerfile, context = get_backend()
-    docker_build(c, image, version, dockerfile, context, push=push)
+    docker_build(
+        c,
+        image,
+        version,
+        dockerfile,
+        context,
+        push=push,
+        content_hash=content_hash,
+        include_version_tag=release,
+    )
     version, image, dockerfile, context = get_backend_dev()
-    docker_build(c, image, version, dockerfile, context, "runtime-dev", push=push)
+    docker_build(
+        c,
+        image,
+        version,
+        dockerfile,
+        context,
+        "runtime-dev",
+        push=push,
+        content_hash=content_hash,
+        include_version_tag=False,
+    )
 
 
 @task
-def docker_nginx_build(c, push=False):
+def docker_nginx_build(c, push=False, release=False):
     """Build nginx image."""
+    content_hash = get_content_hash("nginx")
     version, image, dockerfile, context = get_nginx()
-    docker_build(c, image, version, dockerfile, context, push=push)
+    docker_build(
+        c,
+        image,
+        version,
+        dockerfile,
+        context,
+        push=push,
+        content_hash=content_hash,
+        include_version_tag=release,
+    )
 
 
 @task
 def docker_nginx_pull(c):
-    version, image, dockerfile, context = get_nginx()
-    docker_pull(c, image, version, dockerfile, context)
+    _, image, _, _ = get_nginx()
+    if not docker_pull_by_hash(c, image, "nginx"):
+        raise RuntimeError(f"Failed to pull {image}")
 
 
 @task
 def docker_backend_pull(c):
-    version, image, dockerfile, context = get_backend()
-    docker_pull(c, image, version, dockerfile, context)
-    version, image, dockerfile, context = get_backend_dev()
-    docker_pull(c, image, version, dockerfile, context)
+    _, image, _, _ = get_backend()
+    _, image_dev, _, _ = get_backend_dev()
+    success = docker_pull_by_hash(c, image, "backend")
+    success_dev = docker_pull_by_hash(c, image_dev, "backend")
+    if not (success and success_dev):
+        raise RuntimeError("Failed to pull backend images")
 
 
 @task
 def docker_frontend_pull(c):
-    version, image, dockerfile, context = get_frontend()
-    docker_pull(c, image, version, dockerfile, context)
-    # frontend-dev needed for Cypress tests in CI
-    version, image, dockerfile, context = get_frontend_dev()
-    docker_pull(c, image, version, dockerfile, context)
+    _, image, _, _ = get_frontend()
+    _, image_dev, _, _ = get_frontend_dev()
+    success = docker_pull_by_hash(c, image, "frontend")
+    success_dev = docker_pull_by_hash(c, image_dev, "frontend")
+    if not (success and success_dev):
+        raise RuntimeError("Failed to pull frontend images")
 
 
 @task
@@ -329,11 +439,12 @@ ns_docker_all.add_task(docker_push_all, "push")
 
 @task
 def docker_release_build(c, push=False):
-    """Build production-only images (backend, frontend, nginx). No -dev."""
+    """Build production-only images (backend, frontend, nginx). No -dev.
+    Includes version tags for release tracking."""
     funcs = [
-        lambda: docker_build(c, *get_backend()[:4], push=push),
-        lambda: docker_frontend_build_prod(c, push=push),
-        lambda: docker_nginx_build(c, push=push),
+        lambda: docker_backend_build(c, push=push, release=True),
+        lambda: docker_frontend_build_prod(c, push=push, release=True),
+        lambda: docker_nginx_build(c, push=push, release=True),
     ]
     with alive_bar(total=3, title="Building Release Images") as bar:
         with ThreadPoolExecutor(max_workers=3) as executor:
@@ -353,9 +464,9 @@ def docker_release_push(c):
 def docker_release_pull(c):
     """Pull production-only images (no -dev)."""
     funcs = [
-        lambda: docker_pull(c, *get_backend()),
-        lambda: docker_pull(c, *get_frontend()),
-        lambda: docker_pull(c, *get_nginx()),
+        lambda: docker_pull_by_hash(c, get_backend()[1], "backend"),
+        lambda: docker_pull_by_hash(c, get_frontend()[1], "frontend"),
+        lambda: docker_pull_by_hash(c, get_nginx()[1], "nginx"),
     ]
     with alive_bar(total=3, title="Pulling Release Images") as bar:
         with ThreadPoolExecutor(max_workers=3) as executor:

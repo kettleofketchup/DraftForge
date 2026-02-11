@@ -82,7 +82,9 @@ Automated event management with Discord bot integration for tournament signups a
 
 Bulk-add users to organizations and tournaments via CSV file upload, with client-side preview, conflict detection, and optional team assignment.
 
-[:material-arrow-right: CSV Import](csv-import.md)
+[:material-arrow-right: CSV Import](../csv-import.md)
+
+![CSV Import Demo](../../assets/gifs/csv_import.gif)
 
 **Key Features:**
 
@@ -93,7 +95,7 @@ Bulk-add users to organizations and tournaments via CSV file upload, with client
 - Optional team assignment for tournament imports
 - Three-step modal: Upload → Preview → Results
 
-**Status:** :material-pencil: Design Complete | [GitHub #132](https://github.com/kettleofketchup/DraftForge/issues/132)
+**Status:** :material-check-circle: Complete | [GitHub #132](https://github.com/kettleofketchup/DraftForge/issues/132)
 
 ---
 

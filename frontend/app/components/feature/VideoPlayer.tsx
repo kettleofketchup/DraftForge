@@ -143,7 +143,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
         playsInline
         controls
         preload="metadata"
-        className={cn('w-full h-auto', (isLoading || hasError) && 'opacity-0')}
+        className={cn('w-full h-auto max-h-[inherit] object-contain', (isLoading || hasError) && 'opacity-0')}
       />
     </div>
   );

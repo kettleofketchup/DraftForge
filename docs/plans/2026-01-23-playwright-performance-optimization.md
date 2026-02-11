@@ -41,7 +41,7 @@ jobs:
 ```yaml
     - name: Run Playwright tests
       run: |
-        poetry run inv test.playwright.headless -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        poetry run just test::pw::headless -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 ```
 
 **Step 4: Update artifact upload to include shard number**
@@ -92,7 +92,7 @@ def playwright_headless(ctx, args=""):
 **Step 3: Verify the task works**
 
 ```bash
-inv test.playwright.headless -- --shard=1/4
+just test::pw::headless -- --shard=1/4
 ```
 
 **Step 4: Commit**
@@ -370,10 +370,10 @@ Add to the Testing section:
 **Local parallel execution:**
 ```bash
 # Run with 50% of CPUs (default)
-inv test.playwright.headless
+just test::pw::headless
 
 # Run with specific worker count
-inv test.playwright.headless -- --workers=4
+just test::pw::headless -- --workers=4
 ```
 
 **CI sharding:**
@@ -381,7 +381,7 @@ Tests are automatically sharded across 4 runners in CI for ~4x speedup.
 
 **Run specific shard locally:**
 ```bash
-inv test.playwright.headless -- --shard=1/4
+just test::pw::headless -- --shard=1/4
 ```
 ```
 

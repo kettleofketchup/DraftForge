@@ -326,7 +326,7 @@ def playwright_cicd(c, args=""):
     docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
         c.run(
-            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" --project=chromium --project=herodraft {args}'.strip()
+            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" --project=chromium --project=herodraft --no-deps {args}'.strip()
         )
 
 
@@ -434,13 +434,20 @@ DEMO_VIDEO_NAMES = [
     "captain2_herodraft.webm",
     "shuffle_draft.webm",
     "snake_draft.webm",
+    "csv_import.webm",
 ]
+
+# Per-video GIF start time overrides (seconds). Overrides start_from_middle.
+GIF_START_OVERRIDES = {
+    "csv_import.webm": 22,
+}
 
 # Demo tournament reset keys
 DEMO_RESET_KEYS = {
     "herodraft": "demo_herodraft",
     "shuffle": "demo_shuffle_draft",
     "snake": "demo_snake_draft",
+    "csv": "demo_csv_import",
 }
 
 
@@ -669,6 +676,18 @@ def demo_herodraft(c):
 
 
 @task
+def demo_csv(c):
+    """Record CSV import demo video.
+
+    Resets demo_csv_import data, records CSV import demo.
+    """
+    print("=== CSV Import Demo ===")
+    _reset_demo_data(c, "csv")
+    _run_demo(c, spec="CSV Import")
+    _copy_demo_videos(c)
+
+
+@task
 def demo_all(c):
     """Record all demos sequentially.
 
@@ -779,9 +798,14 @@ def demo_gifs(c, duration=10, fps=12, width=400, start_from_middle=True):
         gif_name = video.stem + ".gif"
         gif_path = docs_gifs / gif_name
 
-        # Calculate start position
+        # Calculate start position (per-video override takes priority)
         start_seconds = 0
-        if start_from_middle:
+        if video.name in GIF_START_OVERRIDES:
+            start_seconds = GIF_START_OVERRIDES[video.name]
+            print(
+                f"Converting: {video.name} -> {gif_name} (from {start_seconds:.1f}s, override)"
+            )
+        elif start_from_middle:
             video_duration = _get_video_duration(c, video)
             if video_duration:
                 # Start from middle, but ensure we have enough content
@@ -977,6 +1001,7 @@ def demo_quick(c, duration=10, fps=12, width=400):
         width: GIF width in pixels (default: 400)
     """
     demo_create(c)
+    demo_trim(c)
     demo_gifs(c, duration=duration, fps=fps, width=width)
 
 
@@ -1006,15 +1031,132 @@ def demo_snapshots(c):
     _copy_demo_snapshots(c)
 
 
+@task
+def demo_git_cleanup(c):
+    """Remove old demo video/GIF blobs from git history.
+
+    Rewrites git history to strip prior versions of docs/assets/videos/*.webm
+    and docs/assets/gifs/*.gif, keeping only the current working tree versions.
+    Requires git-filter-repo (pip install git-filter-repo).
+
+    WARNING: This rewrites history and requires a force push afterward.
+
+    Usage:
+        inv demo.git-cleanup         # Dry run (report only)
+        inv demo.git-cleanup --run   # Actually rewrite history
+    """
+    import shutil
+
+    # Check for git-filter-repo
+    if not shutil.which("git-filter-repo"):
+        print("ERROR: git-filter-repo is not installed.")
+        print("")
+        print("Install:")
+        print("  pip install git-filter-repo")
+        print("  # or: pipx install git-filter-repo")
+        return
+
+    video_dir = paths.PROJECT_PATH / "docs" / "assets" / "videos"
+    gif_dir = paths.PROJECT_PATH / "docs" / "assets" / "gifs"
+
+    # Count blobs in history
+    result = c.run(
+        'git rev-list --all --objects -- "docs/assets/videos/" "docs/assets/gifs/" '
+        "| wc -l",
+        hide=True,
+        warn=True,
+    )
+    blob_count = int(result.stdout.strip()) if result.ok else 0
+
+    if blob_count == 0:
+        print("No demo video/GIF objects found in git history. Nothing to clean.")
+        return
+
+    # Estimate size
+    size_result = c.run(
+        "git rev-list --all --objects -- 'docs/assets/videos/' 'docs/assets/gifs/' "
+        "| git cat-file --batch-check='%(objecttype) %(objectsize)' "
+        "| grep blob | awk '{sum += $2} END {printf \"%.1f\", sum/1024/1024}'",
+        hide=True,
+        warn=True,
+    )
+    size_mb = size_result.stdout.strip() if size_result.ok else "?"
+
+    print(
+        f"Found {blob_count} objects ({size_mb} MB) for demo videos/GIFs in git history."
+    )
+    print("")
+    print("This will:")
+    print("  1. Backup current demo files from the working tree")
+    print("  2. Remove docs/assets/videos/ and docs/assets/gifs/ from all commits")
+    print("  3. Restore the current demo files")
+    print("  4. Create a fresh commit with the current versions")
+    print("")
+    print("After this, you must force-push all branches.")
+    print("")
+
+    confirm = input("Proceed? [y/N] ").strip().lower()
+    if confirm != "y":
+        print("Aborted.")
+        return
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        # Step 1: Backup current files
+        print("\n1. Backing up current demo files...")
+        for src_dir, name in [(video_dir, "videos"), (gif_dir, "gifs")]:
+            if src_dir.exists():
+                dst = tmpdir / name
+                shutil.copytree(src_dir, dst)
+                print(f"   Backed up {name}/")
+
+        # Step 2: Rewrite history
+        print("\n2. Rewriting git history (removing demo videos/GIFs)...")
+        with c.cd(paths.PROJECT_PATH):
+            c.run(
+                "git filter-repo --invert-paths "
+                '--path "docs/assets/videos/" '
+                '--path "docs/assets/gifs/" '
+                "--force",
+            )
+
+        # Step 3: Restore files
+        print("\n3. Restoring current demo files...")
+        for name, dst_dir in [("videos", video_dir), ("gifs", gif_dir)]:
+            backup = tmpdir / name
+            if backup.exists():
+                dst_dir.mkdir(parents=True, exist_ok=True)
+                for f in backup.iterdir():
+                    shutil.copy2(f, dst_dir / f.name)
+                print(f"   Restored {name}/")
+
+        # Step 4: Commit
+        print("\n4. Committing restored files...")
+        with c.cd(paths.PROJECT_PATH):
+            c.run("git add docs/assets/videos/ docs/assets/gifs/", warn=True)
+            c.run(
+                'git commit -m "chore: re-add demo videos/GIFs after history cleanup"',
+                warn=True,
+            )
+
+    print("\nDone! History rewritten.")
+    print("You must now force-push: git push --force-with-lease --all")
+
+
 ns_demo.add_task(demo_create, "create")
 ns_demo.add_task(demo_shuffle, "shuffle")
 ns_demo.add_task(demo_snake, "snake")
 ns_demo.add_task(demo_herodraft, "herodraft")
+ns_demo.add_task(demo_csv, "csv")
 ns_demo.add_task(demo_snapshots, "snapshots")
 ns_demo.add_task(demo_all, "all")
 ns_demo.add_task(demo_gifs, "gifs")
 ns_demo.add_task(demo_trim, "trim")
 ns_demo.add_task(demo_quick, "quick")
 ns_demo.add_task(demo_clean, "clean")
+ns_demo.add_task(demo_git_cleanup, "git-cleanup")
 
 ns_test.add_collection(ns_demo, "demo")

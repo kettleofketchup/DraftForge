@@ -14,15 +14,11 @@ git clone https://github.com/kettleofketchup/draftforge.git
 cd draftforge
 ```
 
-## Python Environment Setup
+## Environment Setup
 
 ```bash
-# Create and activate virtual environment
-python -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies with Poetry
-poetry install
+# First-time setup (installs just, creates venv, installs deps)
+./dev
 ```
 
 ## Frontend Dependencies
@@ -54,31 +50,27 @@ Configure the following in your `.env` files:
 Pull or build the Docker images:
 
 ```bash
-source .venv/bin/activate
-
 # Pull pre-built images
-inv docker.all.pull
+just docker::all-pull
 
 # Or build locally
-inv docker.all.build
+just docker::all-build
 ```
 
 ## Database Setup
 
 ```bash
-source .venv/bin/activate
-inv db.migrate.all     # Run migrations for all environments
+just db::migrate::all     # Run migrations for all environments
 # Or for specific environment:
-# inv db.migrate.dev   # Dev only (default)
-# inv db.migrate.test  # Test only
-# inv db.migrate.prod  # Prod only
+# just db::migrate::dev   # Dev only (default)
+# just db::migrate::test  # Test only
+# just db::migrate::prod  # Prod only
 ```
 
 ## Verify Installation
 
 ```bash
-source .venv/bin/activate
-inv dev.debug
+just dev::debug
 ```
 
 Visit https://localhost to verify the application is running.

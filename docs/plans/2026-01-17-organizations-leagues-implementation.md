@@ -151,7 +151,7 @@ Expected: Migration file created
 
 **Step 4: Apply migration**
 
-Run: `DISABLE_CACHE=true inv db.migrate.all`
+Run: `just db::migrate::all`
 Expected: Applied successfully
 
 **Step 5: Commit**
@@ -215,7 +215,7 @@ Expected: Migration file created
 
 **Step 3: Apply migration**
 
-Run: `DISABLE_CACHE=true inv db.migrate.all`
+Run: `just db::migrate::all`
 Expected: Applied successfully
 
 **Step 4: Commit**
@@ -268,7 +268,7 @@ Expected: Migration file created
 
 **Step 4: Apply migration**
 
-Run: `DISABLE_CACHE=true inv db.migrate.all`
+Run: `just db::migrate::all`
 Expected: Applied successfully
 
 **Step 5: Commit**
@@ -307,7 +307,7 @@ Expected: Migration file created
 
 **Step 3: Apply migration**
 
-Run: `DISABLE_CACHE=true inv db.migrate.all`
+Run: `just db::migrate::all`
 Expected: Applied successfully
 
 **Step 4: Commit**
@@ -401,12 +401,12 @@ Edit the file and replace `XXXX_tournament_league_fk` with the actual migration 
 
 **Step 3: Apply migration with cache disabled**
 
-Run: `DISABLE_CACHE=true inv db.migrate.all`
+Run: `just db::migrate::all`
 Expected: All tournaments with league_id linked to League objects
 
 **Step 4: Verify migration**
 
-Run: `inv dev.run --service backend --cmd "python manage.py shell -c \"from app.models import Tournament, League; print(f'Leagues: {League.objects.count()}, Linked Tournaments: {Tournament.objects.exclude(league__isnull=True).count()}')\""`
+Run: `just dev::run "python manage.py shell -c \"from app.models import Tournament, League; print(f'Leagues: {League.objects.count()}, Linked Tournaments: {Tournament.objects.exclude(league__isnull=True).count()}')\""`
 
 **Step 5: Commit**
 
@@ -1125,7 +1125,7 @@ class OrganizationAPITest(TestCase):
 
 **Step 2: Run test to verify**
 
-Run: `inv test.run --cmd 'python manage.py test app.tests.test_organization -v 2'`
+Run: `just test::run 'python manage.py test app.tests.test_organization -v 2'`
 Expected: All tests pass
 
 **Step 3: Commit**
@@ -1268,7 +1268,7 @@ class LeagueAPITest(TestCase):
 
 **Step 2: Run test to verify**
 
-Run: `inv test.run --cmd 'python manage.py test app.tests.test_league -v 2'`
+Run: `just test::run 'python manage.py test app.tests.test_league -v 2'`
 Expected: All tests pass
 
 **Step 3: Commit**
@@ -3116,7 +3116,7 @@ git commit -m "feat: add Organizations to navigation"
 
 **Step 1: Run backend tests**
 
-Run: `inv test.run --cmd 'python manage.py test app.tests -v 2'`
+Run: `just test::run 'python manage.py test app.tests -v 2'`
 Expected: All tests pass
 
 **Step 2: Run frontend build**
@@ -3126,7 +3126,7 @@ Expected: Build succeeds
 
 **Step 3: Manual testing**
 
-- Start dev environment: `inv dev.debug`
+- Start dev environment: `just dev::debug`
 - Test organization CRUD
 - Test league CRUD
 - Test tournament filtering

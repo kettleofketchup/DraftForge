@@ -2,6 +2,11 @@
 
 The bracket system provides flexible tournament structure options for organizing competitive matches. Multiple formats are supported to accommodate different tournament sizes and styles.
 
+<figure markdown="span">
+  ![Bracket](../assets/site_snapshots/bracket.png){ width="600" }
+  <figcaption>Double elimination bracket with winners and losers brackets</figcaption>
+</figure>
+
 ## Bracket Formats
 
 ### Single Elimination

@@ -78,8 +78,6 @@ class CustomUser(AbstractUser):
     # Steam32 (Account ID) - auto-calculated from steamid, used for match lookups
     steam_account_id = models.IntegerField(null=True, blank=True, db_index=True)
     nickname = models.TextField(null=True, blank=True)
-    mmr = models.IntegerField(null=True, blank=True)
-    league_mmr = models.IntegerField(null=True, blank=True)
 
     # MMR verification tracking
     has_active_dota_mmr = models.BooleanField(default=False)
@@ -830,19 +828,37 @@ class Draft(models.Model):
             if not teams:
                 return {}
 
+            from org.models import OrgUser
+
+            # Get organization for MMR lookups
+            org = None
+            if self.tournament.league:
+                org = self.tournament.league.organization
+
+            # Build user_pk -> OrgUser.mmr mapping
+            mmr_map = {}
+            if org:
+                for ou in OrgUser.objects.filter(
+                    user__in=self.tournament.users.all(), organization=org
+                ):
+                    mmr_map[ou.user_id] = ou.mmr or 0
+
             # Get all available players (excluding captains) sorted by MMR desc
-            available_players = list(
+            all_player_ids = list(
                 self.tournament.users.exclude(
                     teams_as_captain__tournament=self.tournament
-                )
-                .order_by("-mmr")
-                .values_list("id", "mmr")
+                ).values_list("id", flat=True)
+            )
+            available_players = sorted(
+                [(pid, mmr_map.get(pid, 0)) for pid in all_player_ids],
+                key=lambda x: x[1],
+                reverse=True,
             )
 
             # Initialize team rosters with captains
             team_rosters = {}
             for team in teams:
-                captain_mmr = team.captain.mmr or 0
+                captain_mmr = mmr_map.get(team.captain_id, 0)
                 team_rosters[team.id] = [(team.captain.id, captain_mmr)]
 
             # Simulate draft rounds (4 picks per team after captain)
@@ -1217,12 +1233,17 @@ class Draft(models.Model):
         if not teams:
             raise ValueError("No teams in tournament")
 
+        from app.functions.shuffle_draft import get_team_total_mmr
+
+        # Get organization for MMR lookups
+        org = None
+        if self.tournament.league:
+            org = self.tournament.league.organization
+
         # Calculate current total MMR for each team
         team_mmrs = []
         for team in teams:
-            total = team.captain.mmr or 0
-            for member in team.members.exclude(id=team.captain_id):
-                total += member.mmr or 0
+            total = get_team_total_mmr(team, organization=org)
             team_mmrs.append({"team": team, "mmr": total})
 
         # Find lowest MMR

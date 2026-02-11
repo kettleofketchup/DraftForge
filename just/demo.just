@@ -24,6 +24,10 @@ herodraft:
     {{inv}} demo.herodraft
 
 [group('demo')]
+csv:
+    {{inv}} demo.csv
+
+[group('demo')]
 snapshots:
     {{inv}} demo.snapshots
 
@@ -42,3 +46,7 @@ quick *args:
 [group('demo')]
 clean:
     {{inv}} demo.clean
+
+[group('demo')]
+git-cleanup:
+    {{inv}} demo.git-cleanup

@@ -14,19 +14,17 @@ Playwright is the recommended E2E testing framework, offering:
 ## Quick Start
 
 ```bash
-source .venv/bin/activate
-
 # Install Playwright browsers (first time only)
-inv test.playwright.install
+just test::pw::install
 
 # Run all tests headless
-inv test.playwright.headless
+just test::pw::headless
 
 # Run tests with visible browser
-inv test.playwright.headed
+just test::pw::headed
 
 # Open Playwright UI for interactive debugging
-inv test.playwright.ui
+just test::pw::ui
 ```
 
 ## Test Structure
@@ -64,48 +62,48 @@ frontend/tests/playwright/
 
 ```bash
 # Navigation tests
-inv test.playwright.navigation
+just test::pw::spec navigation
 
 # Tournament tests
-inv test.playwright.tournament
+just test::pw::spec tournament
 
 # Draft tests
-inv test.playwright.draft
+just test::pw::spec draft
 
 # Bracket tests
-inv test.playwright.bracket
+just test::pw::spec bracket
 
 # League tests
-inv test.playwright.league
+just test::pw::spec league
 
 # Mobile responsive tests
-inv test.playwright.mobile
+just test::pw::spec mobile
 
 # HeroDraft multi-browser tests
-inv test.playwright.herodraft
+just test::pw::spec herodraft
 ```
 
 ### By Spec Pattern
 
 ```bash
 # Run tests matching grep pattern
-inv test.playwright.spec --spec bracket
+just test::pw::spec bracket
 
 # Run tests matching pattern (not a file path)
-inv test.playwright.spec --spec navigation
+just test::pw::spec navigation
 
 # Run tests matching pattern
-inv test.playwright.spec --spec draft
+just test::pw::spec draft
 ```
 
 ### Debug Mode
 
 ```bash
 # Run with Playwright Inspector
-inv test.playwright.debug
+just test::pw::debug
 
 # Open UI mode for visual debugging
-inv test.playwright.ui
+just test::pw::ui
 ```
 
 ## Performance Optimization
@@ -116,13 +114,13 @@ Tests run in parallel using 50% of CPU cores by default:
 
 ```bash
 # Default (50% of CPUs)
-inv test.playwright.headless
+just test::pw::headless
 
 # Specify worker count
-inv test.playwright.headless --args="--workers=4"
+just test::pw::headless --workers=4
 
 # Single worker for debugging
-inv test.playwright.headless --args="--workers=1"
+just test::pw::headless --workers=1
 ```
 
 ### CI Sharding
@@ -131,10 +129,10 @@ Tests are automatically sharded across 4 parallel CI runners:
 
 ```bash
 # Run specific shard locally (for debugging CI issues)
-inv test.playwright.headless --args="--shard=1/4"
-inv test.playwright.headless --args="--shard=2/4"
-inv test.playwright.headless --args="--shard=3/4"
-inv test.playwright.headless --args="--shard=4/4"
+just test::pw::headless --shard=1/4
+just test::pw::headless --shard=2/4
+just test::pw::headless --shard=3/4
+just test::pw::headless --shard=4/4
 ```
 
 ### Projects
@@ -389,7 +387,7 @@ await page.waitForSelector('[data-testid="loaded"]');
 
 ```bash
 # Open HTML report after test run
-inv test.playwright.report
+just test::pw::report
 ```
 
 ### Trace Viewer
@@ -404,17 +402,17 @@ npx playwright show-trace frontend/test-results/path-to-trace.zip
 
 ```bash
 # Run with Playwright Inspector
-inv test.playwright.debug
+just test::pw::debug
 
 # Run specific test in debug mode
-inv test.playwright.spec --spec navigation --args="--debug"
+just test::pw::spec navigation --debug
 ```
 
 ### UI Mode
 
 ```bash
 # Interactive UI for running and debugging tests
-inv test.playwright.ui
+just test::pw::ui
 ```
 
 ## CI Integration
@@ -428,7 +426,7 @@ strategy:
   matrix:
     shard: [1, 2, 3, 4]
 steps:
-  - run: inv test.playwright.headless --args="--shard=${{ matrix.shard }}/4"
+  - run: just test::pw::headless --shard=${{ matrix.shard }}/4
 ```
 
 ### Artifacts

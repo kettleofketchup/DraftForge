@@ -67,12 +67,12 @@ class Joke(models.Model):
 
 **Step 2: Run makemigrations**
 
-Run: `source .venv/bin/activate && inv test.run --cmd 'python manage.py makemigrations app'`
+Run: `just test::run 'python manage.py makemigrations app'`
 Expected: Migration file created
 
 **Step 3: Run migrate for all environments**
 
-Run: `source .venv/bin/activate && inv db.migrate.all`
+Run: `just db::migrate::all`
 Expected: Migrations applied successfully
 
 **Step 4: Commit**
@@ -291,7 +291,7 @@ class JokeAPITest(TestCase):
 
 **Step 2: Run tests to verify they pass**
 
-Run: `source .venv/bin/activate && inv test.run --cmd 'python manage.py test app.tests.test_joke -v 2'`
+Run: `just test::run 'python manage.py test app.tests.test_joke -v 2'`
 Expected: All tests pass
 
 **Step 3: Commit**
@@ -1114,11 +1114,11 @@ git commit -m "feat: integrate PlayerPopover in DraftTable"
 
 **Step 1: Start test environment**
 
-Run: `source .venv/bin/activate && inv test.up`
+Run: `just test::up`
 
 **Step 2: Run backend tests**
 
-Run: `source .venv/bin/activate && inv test.run --cmd 'python manage.py test app.tests -v 2'`
+Run: `just test::run 'python manage.py test app.tests -v 2'`
 Expected: All tests pass
 
 **Step 3: Test manually in browser**

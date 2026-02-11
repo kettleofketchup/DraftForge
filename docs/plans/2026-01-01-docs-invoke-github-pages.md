@@ -80,7 +80,7 @@ ns.add_collection(ns_docs, "docs")
 
 **Step 3: Verify tasks are available**
 
-Run: `source .venv/bin/activate && inv --list | grep docs`
+Run: `just --list --list-submodules | grep docs`
 Expected:
 ```
   docs.build                Build static documentation site.
@@ -89,7 +89,7 @@ Expected:
 
 **Step 4: Test docs.build command**
 
-Run: `source .venv/bin/activate && inv docs.build`
+Run: `just docs::build`
 Expected: MkDocs builds successfully, creates `site/` directory
 
 **Step 5: Commit**
@@ -199,8 +199,8 @@ Add new section:
 ## Docs Commands (`inv docs.*`)
 
 ```bash
-inv docs.serve    # Start MkDocs dev server with hot reload (port 8000)
-inv docs.build    # Build static documentation site to site/
+just docs::serve    # Start MkDocs dev server with hot reload (port 8000)
+just docs::build    # Build static documentation site to site/
 ```
 ```
 
@@ -225,13 +225,11 @@ Replace the Local Development section (lines 112-124) with:
 ## Local Development
 
 ```bash
-source .venv/bin/activate
-
 # Serve locally with hot reload
-inv docs.serve
+just docs::serve
 
 # Build static site
-inv docs.build
+just docs::build
 ```
 
 Site available at http://127.0.0.1:8000
@@ -264,8 +262,8 @@ git commit -m "docs: update mkdocs-documentation agent with invoke commands"
 Find the "Common Invoke Commands" section and add after the Docker commands:
 ```markdown
 # Docs
-inv docs.serve         # Start MkDocs dev server
-inv docs.build         # Build static docs site
+just docs::serve         # Start MkDocs dev server
+just docs::build         # Build static docs site
 ```
 
 **Step 2: Commit**
@@ -306,12 +304,12 @@ git commit -m "chore: add site/ to gitignore (MkDocs build output)"
 
 **Step 1: Verify all tasks are available**
 
-Run: `source .venv/bin/activate && inv --list`
+Run: `just --list --list-submodules`
 Expected: Shows `docs.build` and `docs.serve` in the list
 
 **Step 2: Test docs.build**
 
-Run: `source .venv/bin/activate && inv docs.build`
+Run: `just docs::build`
 Expected: Builds successfully, creates `site/` directory
 
 **Step 3: Verify site/ is ignored**

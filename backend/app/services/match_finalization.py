@@ -75,9 +75,9 @@ class LeagueMatchService:
                         org_user = OrgUser.objects.get(user=player, organization=org)
                         base_mmr = org_user.mmr or 0
                     except OrgUser.DoesNotExist:
-                        base_mmr = player.mmr or 0  # Fallback to legacy
+                        base_mmr = 0
                 else:
-                    base_mmr = player.mmr or 0  # Fallback to legacy
+                    base_mmr = 0
 
                 existing_ratings[player.pk] = LeagueRating.objects.create(
                     league=league, player=player, base_mmr=base_mmr

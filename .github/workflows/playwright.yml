@@ -95,8 +95,8 @@ jobs:
 
     - name: Pull or Build Docker images
       run: |
-        echo "Attempting to pull images from registry..."
-        if docker compose --project-directory . -f docker/docker-compose.ci.yaml pull 2>&1; then
+        echo "Pulling images (hash-aware: tries exact dependency match first)..."
+        if just docker::all-pull; then
           echo "✓ Images pulled successfully"
         else
           echo "✗ Pull failed, building with buildx + registry cache..."

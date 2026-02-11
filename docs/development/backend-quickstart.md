@@ -4,49 +4,35 @@ Quick reference for Django backend development in the DraftForge project.
 
 ## Prerequisites
 
-Always activate the virtual environment or use invoke commands:
-
-```bash
-source .venv/bin/activate
-
-# Or use invoke directly with PATH
-PATH=".venv/bin:$PATH" inv <command>
-```
+Just commands automatically activate the virtual environment. No manual activation needed.
 
 ## Database Operations
 
 ### Migrations
 
-Run migrations using invoke (recommended):
+Run migrations using just (recommended):
 
 ```bash
 # All environments
-inv db.migrate.all
+just db::migrate::all
 
 # Specific environments
-inv db.migrate.dev     # Development (default)
-inv db.migrate.test    # Test environment
-inv db.migrate.prod    # Production
+just db::migrate::dev     # Development (default)
+just db::migrate::test    # Test environment
+just db::migrate::prod    # Production
 ```
 
 To create new migrations:
 
 ```bash
-cd backend
-DISABLE_CACHE=true python manage.py makemigrations app
+just db::makemigrations app
 ```
 
 ### Test Data Population
 
 ```bash
 # Full test database reset and population
-inv db.populate.all
-
-# Individual population commands
-inv db.populate.users          # Discord users
-inv db.populate.tournaments    # Random tournaments
-inv db.populate.steam-mock     # Mock Steam matches
-inv db.populate.test-tournaments  # Cypress test scenarios
+just db::populate::all
 ```
 
 ## Running the Server
@@ -54,8 +40,8 @@ inv db.populate.test-tournaments  # Cypress test scenarios
 ### Development (Docker)
 
 ```bash
-inv dev.debug   # Interactive mode with logs
-inv dev.up      # Detached mode with sync
+just dev::debug   # Interactive mode with logs
+just dev::up      # Detached mode
 ```
 
 ### Direct (Local)
@@ -73,13 +59,13 @@ Note: Use `DISABLE_CACHE=true` when Redis is unavailable.
 
 ```bash
 # All tests
-inv test.run --cmd 'python manage.py test app.tests -v 2'
+just test::run 'python manage.py test app.tests -v 2'
 
 # Specific module
-inv test.run --cmd 'python manage.py test app.tests.test_shuffle_draft -v 2'
+just test::run 'python manage.py test app.tests.test_shuffle_draft -v 2'
 
 # Specific test class
-inv test.run --cmd 'python manage.py test app.tests.test_shuffle_draft.GetTeamTotalMmrTest -v 2'
+just test::run 'python manage.py test app.tests.test_shuffle_draft.GetTeamTotalMmrTest -v 2'
 ```
 
 ### Backend Tests (Local)
@@ -102,14 +88,13 @@ DISABLE_CACHE=true python manage.py test app.tests -v 2
 
 ```bash
 # Django shell
-inv dev.exec backend 'python manage.py shell'
+just py::shell
 
 # Create superuser
-inv dev.exec backend 'python manage.py createsuperuser'
+just dev::exec backend 'python manage.py createsuperuser'
 
 # Check for issues
-cd backend
-DISABLE_CACHE=true python manage.py check
+just dev::exec backend 'python manage.py check'
 ```
 
 ## Troubleshooting
@@ -117,6 +102,6 @@ DISABLE_CACHE=true python manage.py check
 | Issue | Solution |
 |-------|----------|
 | Redis connection errors | Use `DISABLE_CACHE=true` prefix |
-| Migrations out of sync | Run `inv db.migrate.all` |
-| Module not found | Activate venv: `source .venv/bin/activate` |
-| Tests hang on cleanup | Use Docker: `inv test.run --cmd '...'` |
+| Migrations out of sync | Run `just db::migrate::all` |
+| Module not found | Run `./dev` to bootstrap the environment |
+| Tests hang on cleanup | Use Docker: `just test::run '...'` |
