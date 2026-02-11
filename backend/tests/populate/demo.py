@@ -2,6 +2,8 @@
 Demo tournament population functions for video recording.
 """
 
+import random
+
 from .constants import DTX_STEAM_LEAGUE_ID, TOURNAMENT_USERS
 from .utils import (
     REAL_TOURNAMENT_USERS,
@@ -100,7 +102,7 @@ def populate_demo_herodraft_tournament(force=False):
     org = dtx_league.organization
     if org:
         for user in all_users:
-            org_user = ensure_org_user(user, org)
+            org_user = ensure_org_user(user, org, mmr=random.randint(2000, 8000))
             ensure_league_user(user, org_user, dtx_league)
 
     # Create teams using config from tests/data
@@ -211,7 +213,7 @@ def populate_demo_captaindraft_tournament(force=False):
     org = dtx_league.organization
     if org:
         for user in users:
-            org_user = ensure_org_user(user, org)
+            org_user = ensure_org_user(user, org, mmr=random.randint(2000, 8000))
             ensure_league_user(user, org_user, dtx_league)
 
     # Create draft for this tournament (shuffle mode for demo)
@@ -278,7 +280,7 @@ def populate_demo_snake_draft_tournament(force=False):
     org = dtx_league.organization
     if org:
         for user in users:
-            org_user = ensure_org_user(user, org)
+            org_user = ensure_org_user(user, org, mmr=random.randint(2000, 8000))
             ensure_league_user(user, org_user, dtx_league)
 
     # Create 4 teams with captains (first 4 users)
@@ -362,7 +364,7 @@ def populate_demo_shuffle_draft_tournament(force=False):
     org = dtx_league.organization
     if org:
         for user in users:
-            org_user = ensure_org_user(user, org)
+            org_user = ensure_org_user(user, org, mmr=random.randint(2000, 8000))
             ensure_league_user(user, org_user, dtx_league)
 
     # Create 4 teams with captains (first 4 users)
