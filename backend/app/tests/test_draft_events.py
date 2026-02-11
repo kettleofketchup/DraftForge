@@ -19,9 +19,6 @@ class DraftEventModelTest(TestCase):
             password="testpass",
             positions=self.positions,
         )
-        self.user.mmr = 5000
-        self.user.save()
-
         # Create tournament
         self.tournament = Tournament.objects.create(
             name="Test Tournament",
@@ -161,8 +158,6 @@ class ShuffleDraftEventIntegrationTest(TestCase):
                 password="testpass",
                 positions=PositionsModel.objects.create(),
             )
-            captain.mmr = 5000 + (i * 100)  # 5000, 5100, 5200, 5300
-            captain.save()
             self.captains.append(captain)
 
         # Create tournament
@@ -248,17 +243,12 @@ class TournamentEventIntegrationTest(TestCase):
             positions=PositionsModel.objects.create(),
             is_staff=True,
         )
-        self.captain.mmr = 5000
-        self.captain.save()
-
         # Create player to be picked
         self.player = CustomUser.objects.create_user(
             username="player",
             password="testpass",
             positions=PositionsModel.objects.create(),
         )
-        self.player.mmr = 4500
-        self.player.save()
 
         # Create tournament
         self.tournament = Tournament.objects.create(

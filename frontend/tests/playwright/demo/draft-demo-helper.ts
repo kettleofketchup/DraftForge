@@ -165,6 +165,19 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   await setupPage.reload();
   await waitForHydration(setupPage);
 
+  // Dismiss any dialog that auto-opens after reload
+  const postReloadDialog = setupPage.locator('[role="dialog"]');
+  if (await postReloadDialog.isVisible({ timeout: 2000 }).catch(() => false)) {
+    const dismissBtn = postReloadDialog.locator('button[aria-label="Close"], [data-testid="close-draft-modal"]').first();
+    if (await dismissBtn.isVisible().catch(() => false)) {
+      await dismissBtn.click();
+      await setupPage.waitForTimeout(300);
+    } else {
+      await setupPage.keyboard.press('Escape');
+      await setupPage.waitForTimeout(300);
+    }
+  }
+
   // Navigate to Teams tab (wait for it to be visible after reload)
   const teamsTabAfterReload = setupPage.locator('[data-testid="teamsTab"]');
   await teamsTabAfterReload.waitFor({ state: 'visible', timeout: 15000 });
@@ -293,14 +306,29 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   console.log('Setup: Reset draft for video recording');
 
   // Re-initialize draft with correct style
-  await setupContext.request.post(
-    `${API_URL}/tournaments/init-draft`,
-    {
-      data: { tournament_pk: tournament.pk },
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-      failOnStatusCode: false,
-    }
-  );
+  try {
+    await setupContext.request.post(
+      `${API_URL}/tournaments/init-draft`,
+      {
+        data: { tournament_pk: tournament.pk },
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        failOnStatusCode: false,
+      }
+    );
+  } catch (e) {
+    // Context may be degraded after many API calls - fall back to fetch from page
+    console.log(`Setup: Re-init via context failed (${e}), retrying via page fetch...`);
+    const setupPage2 = await setupContext.newPage();
+    await setupPage2.goto(`${BASE_URL}/tournament/${tournament.pk}`);
+    await setupPage2.evaluate(async ({ apiUrl, tournamentPk, csrf }) => {
+      await fetch(`${apiUrl}/tournaments/init-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+        body: JSON.stringify({ tournament_pk: tournamentPk }),
+      });
+    }, { apiUrl: API_URL, tournamentPk: tournament.pk, csrf: csrfToken });
+    await setupPage2.close();
+  }
 
   // Save storage state for video context
   const storageState = await setupContext.storageState();

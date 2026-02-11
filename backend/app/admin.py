@@ -5,7 +5,7 @@ from .models import CustomUser, HeroDraft, HeroDraftEvent
 
 
 class CustomUserAdmin(admin.ModelAdmin):
-    list_display = ["username", "mmr", "steamid", "is_superuser", "is_staff"]
+    list_display = ["username", "steamid", "is_superuser", "is_staff"]
 
 
 class HeroDraftEventInline(admin.TabularInline):

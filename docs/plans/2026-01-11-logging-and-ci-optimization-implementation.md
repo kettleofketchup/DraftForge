@@ -298,7 +298,7 @@ git commit -m "ci: fix Docker cache key to use file hashes instead of commit SHA
 
 **Step 1: Run populate command and check output**
 
-Run: `cd /home/kettle/git_repos/website && source .venv/bin/activate && inv db.populate.all 2>&1 | head -50`
+Run: `cd /home/kettle/git_repos/website && just db::populate::all 2>&1 | head -50`
 
 Expected:
 - No "DEBUG:root:" spam
@@ -307,7 +307,7 @@ Expected:
 
 **Step 2: Verify LOG_LEVEL override works**
 
-Run: `cd /home/kettle/git_repos/website && source .venv/bin/activate && LOG_LEVEL=DEBUG inv db.populate.all 2>&1 | head -20`
+Run: `cd /home/kettle/git_repos/website && LOG_LEVEL=DEBUG just db::populate::all 2>&1 | head -20`
 
 Expected: DEBUG messages should now appear
 

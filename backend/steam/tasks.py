@@ -69,8 +69,8 @@ def recalculate_user_league_mmr_task(user_id: int):
     try:
         user = CustomUser.objects.get(pk=user_id)
         update_user_league_mmr(user)
-        logger.info(f"Recalculated league MMR for {user.username}: {user.league_mmr}")
-        return {"user_id": user_id, "league_mmr": user.league_mmr}
+        logger.info(f"Recalculated league MMR for {user.username}")
+        return {"user_id": user_id}
     except CustomUser.DoesNotExist:
         logger.error(f"User {user_id} not found")
         return None

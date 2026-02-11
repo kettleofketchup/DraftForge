@@ -728,9 +728,9 @@ def playwright_spec(c, spec=""):
     """Run Playwright tests for a specific spec pattern.
 
     Usage:
-        inv test.playwright.spec --spec navigation     # Runs *navigation*.spec.ts
-        inv test.playwright.spec --spec tournament     # Runs *tournament*.spec.ts
-        inv test.playwright.spec --spec 01             # Runs *01*.spec.ts
+        just test::pw::spec navigation     # Runs *navigation*.spec.ts
+        just test::pw::spec tournament     # Runs *tournament*.spec.ts
+        just test::pw::spec 01             # Runs *01*.spec.ts
     """
     flush_test_redis_for_playwright(c)
     with c.cd(paths.FRONTEND_PATH):
@@ -849,7 +849,7 @@ ns_runner.add_collection(ns_playwright, "playwright")
 
 **Step 2: Verify invoke can list the new tasks**
 
-Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && source .venv/bin/activate && inv --list | grep playwright`
+Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && just --list --list-submodules | grep pw`
 Expected: Shows `test.runner.playwright.*` tasks
 
 **Step 3: Commit**
@@ -1278,34 +1278,30 @@ Update the Testing section to include Playwright commands:
 
 **Backend (via Docker - Recommended)**:
 ```bash
-source .venv/bin/activate
-inv test.run --cmd 'python manage.py test app.tests -v 2'
+just test::run 'python manage.py test app.tests -v 2'
 ```
 
 **Frontend E2E (Playwright - Recommended)**:
 ```bash
-source .venv/bin/activate
-
 # Run all Playwright tests
-inv test.runner.playwright.headless
+just test::pw::headless
 
 # Run with UI mode (interactive)
-inv test.runner.playwright.ui
+just test::pw::ui
 
 # Run specific suite
-inv test.runner.playwright.spec --spec navigation
-inv test.runner.playwright.spec --spec tournament
-inv test.runner.playwright.spec --spec draft
+just test::pw::spec navigation
+just test::pw::spec tournament
+just test::pw::spec draft
 
 # Run herodraft tests
-inv test.runner.playwright.herodraft
+just test::pw::spec herodraft
 ```
 
 **Frontend E2E (Cypress - Legacy)**:
 ```bash
-source .venv/bin/activate
-inv test.open          # Cypress interactive
-inv test.headless      # Cypress headless
+just test::pw::ui          # Playwright interactive
+just test::pw::headless    # Playwright headless
 ```
 ```
 

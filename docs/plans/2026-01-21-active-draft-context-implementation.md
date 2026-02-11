@@ -76,7 +76,7 @@ def current_user(request):
 
 **Step 2: Verify the change**
 
-Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && source .venv/bin/activate && inv test.run --cmd 'python manage.py check'`
+Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && just test::run 'python manage.py check'`
 Expected: System check identified no issues.
 
 **Step 3: Commit**
@@ -117,7 +117,7 @@ Remove from urlpatterns (lines 122-126):
 
 **Step 3: Verify the change**
 
-Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && source .venv/bin/activate && inv test.run --cmd 'python manage.py check'`
+Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && just test::run 'python manage.py check'`
 Expected: System check identified no issues.
 
 **Step 4: Commit**
@@ -575,7 +575,7 @@ cd /home/kettle/git_repos/website/.worktrees/herodraft && git add frontend/app/p
 **Step 1: Run backend tests**
 
 ```bash
-cd /home/kettle/git_repos/website/.worktrees/herodraft && source .venv/bin/activate && inv test.run --cmd 'python manage.py test app.tests -v 2'
+cd /home/kettle/git_repos/website/.worktrees/herodraft && just test::run 'python manage.py test app.tests -v 2'
 ```
 
 **Step 2: Run frontend type check**
@@ -587,12 +587,12 @@ cd /home/kettle/git_repos/website/.worktrees/herodraft/frontend && npm run typec
 **Step 3: Run Cypress tests**
 
 ```bash
-cd /home/kettle/git_repos/website/.worktrees/herodraft && source .venv/bin/activate && inv test.headless
+cd /home/kettle/git_repos/website/.worktrees/herodraft && just test::pw::headless
 ```
 
 **Step 4: Manual verification**
 
-1. Start dev environment: `inv dev.debug`
+1. Start dev environment: `just dev::debug`
 2. Log in as a user who is captain
 3. Navigate to a tournament with an active draft
 4. Verify banner appears below navbar

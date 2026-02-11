@@ -1851,14 +1851,14 @@ Expected: All tests pass
 
 ```bash
 cd /home/kettle/git_repos/website/.worktrees/draft-events
-../.venv/bin/inv test.up
+just test::up
 ```
 
 **Step 3: Run Cypress tests (if environment is ready)**
 
 ```bash
 cd /home/kettle/git_repos/website/.worktrees/draft-events
-../.venv/bin/inv test.headless
+just test::pw::headless
 ```
 
 **Step 4: Final commit with all changes verified**

@@ -131,8 +131,6 @@ def populate_test_auth_users(force=False):
             user.nickname = nickname
             user.is_staff = is_staff
             user.is_superuser = is_superuser
-            if not user.mmr:
-                user.mmr = mmr
             user.save()
             print(f"  Updated: {nickname or username} (pk={pk})")
         else:
@@ -146,7 +144,6 @@ def populate_test_auth_users(force=False):
                 nickname=nickname,
                 is_staff=is_staff,
                 is_superuser=is_superuser,
-                mmr=mmr,
             )
             if is_claimable:
                 user.set_unusable_password()

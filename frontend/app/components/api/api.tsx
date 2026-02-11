@@ -40,6 +40,14 @@ export {
   searchDiscordMembers,
   refreshDiscordMembers,
   type DiscordSearchResult,
+  // CSV import
+  importCSVToOrg,
+  importCSVToTournament,
+  type CSVImportRow,
+  type CSVImportOptions,
+  type CSVImportResponse,
+  type CSVImportResultRow,
+  type MMRTarget,
 } from './orgAPI';
 
 // Re-export league API

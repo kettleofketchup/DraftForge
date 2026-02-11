@@ -34,17 +34,17 @@ Each namespace gets the following commands:
 ### Example Usage
 
 ```bash
-inv dev.up
-inv dev.logs
-inv dev.down
+just dev::up
+just dev::logs
+just dev::down
 
-inv test.up
-inv test.ps
-inv test.down
+just test::up
+just test::ps
+just test::down
 
-inv prod.up
-inv prod.restart
-inv prod.down
+just prod::up
+just prod::restart
+just prod::down
 ```
 
 ## Implementation

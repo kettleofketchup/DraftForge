@@ -14,6 +14,7 @@ from app.models import (
     LeagueRating,
     Organization,
 )
+from org.models import OrgUser
 
 
 class MatchFinalizationServiceTest(TestCase):
@@ -38,15 +39,13 @@ class MatchFinalizationServiceTest(TestCase):
         self.dire = []
         for i in range(5):
             p = CustomUser.objects.create_user(username=f"radiant{i}", password="test")
-            p.mmr = 3000
-            p.save()
             self.radiant.append(p)
+            OrgUser.objects.create(user=p, organization=self.org, mmr=3000)
 
         for i in range(5):
             p = CustomUser.objects.create_user(username=f"dire{i}", password="test")
-            p.mmr = 3000
-            p.save()
             self.dire.append(p)
+            OrgUser.objects.create(user=p, organization=self.org, mmr=3000)
 
     def test_finalize_creates_ratings_if_missing(self):
         """Finalize should create LeagueRating records for new players."""
