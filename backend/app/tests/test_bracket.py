@@ -28,7 +28,6 @@ class SaveBracketTest(TestCase):
             captain = CustomUser.objects.create_user(
                 username=f"captain{i}",
                 password="test123",
-                mmr=5000 - (i * 100),
             )
             team = Team.objects.create(
                 name=f"Team {i+1}",

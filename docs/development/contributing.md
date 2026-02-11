@@ -9,10 +9,7 @@
 
 2. **Setup Environment**
    ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   poetry install
-   cd frontend && npm install && cd ..
+   ./dev  # Installs just, creates venv, installs deps
    ```
 
 3. **Create Branch**
@@ -22,13 +19,13 @@
 
 4. **Start Development**
    ```bash
-   inv dev.debug
+   just dev::debug
    ```
 
 5. **Run Tests**
    ```bash
-   inv test.setup
-   inv test.headless
+   just test::setup
+   just test::pw::headless
    ```
 
 6. **Commit & Push**

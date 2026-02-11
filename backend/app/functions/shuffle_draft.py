@@ -47,12 +47,9 @@ def get_team_total_mmr(team, organization=None) -> int:
         if tournament and tournament.league:
             organization = tournament.league.organization
 
-    # If still no organization, fall back to direct user.mmr (legacy behavior)
+    # If no organization, can't determine MMR
     if organization is None:
-        total = team.captain.mmr or 0 if team.captain else 0
-        for member in team.members.exclude(id=team.captain_id):
-            total += member.mmr or 0
-        return total
+        return 0
 
     # Use OrgUser MMR
     total = get_user_org_mmr(team.captain, organization) if team.captain else 0

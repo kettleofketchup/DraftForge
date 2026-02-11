@@ -23,6 +23,7 @@ DEMO_TOURNAMENTS = {
     "demo_captaindraft": "Demo Captain Draft Tournament",
     "demo_snake_draft": "Demo Snake Draft Tournament",
     "demo_shuffle_draft": "Demo Shuffle Draft Tournament",
+    "demo_csv_import": "Demo CSV Import",
 }
 
 
@@ -58,9 +59,16 @@ def reset_demo_tournament(request, key: str):
             status=status.HTTP_404_NOT_FOUND,
         )
 
+    # CSV import demo may have multiple tournaments (created via UI each run)
+    if key == "demo_csv_import":
+        return _reset_demo_csv_import()
+
     try:
         tournament = Tournament.objects.get(name=tournament_name)
     except Tournament.DoesNotExist:
+        tournament = None
+
+    if tournament is None:
         return Response(
             {
                 "error": f"Tournament '{tournament_name}' not found. Run 'inv db.populate.all' first."
@@ -80,6 +88,52 @@ def reset_demo_tournament(request, key: str):
     return Response(
         {"error": "Reset not implemented for this key"},
         status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+def _reset_demo_csv_import():
+    """Reset CSV Import demo - delete all matching tournaments, users, and related records.
+
+    The demo creates the tournament via UI, so there may be zero or multiple.
+    Deletes ALL tournaments named "Demo CSV Import" and all associated data.
+    """
+    from app.models import CustomUser, Tournament
+    from league.models import LeagueUser
+    from org.models import OrgUser
+
+    tournament_name = DEMO_TOURNAMENTS["demo_csv_import"]
+
+    # Delete ALL tournaments with this name (handles leftover duplicates)
+    tournaments = Tournament.objects.filter(name=tournament_name)
+    deleted_tournaments = tournaments.count()
+    for t in tournaments:
+        t.games.all().delete()
+        t.teams.all().delete()
+        t.users.clear()
+        t.delete()
+
+    # Find stub users with demo Steam IDs (76561198900000001 - 76561198900000040)
+    stub_users = CustomUser.objects.filter(
+        steamid__gte=76561198900000001,
+        steamid__lte=76561198900000040,
+    )
+
+    # Delete related OrgUser and LeagueUser records first
+    deleted_org_users = OrgUser.objects.filter(user__in=stub_users).delete()[0]
+    deleted_league_users = LeagueUser.objects.filter(user__in=stub_users).delete()[0]
+
+    # Delete the users themselves
+    deleted_users = stub_users.delete()[0]
+
+    return Response(
+        {
+            "status": "reset",
+            "tournament": tournament_name,
+            "deleted_tournaments": deleted_tournaments,
+            "deleted_users": deleted_users,
+            "deleted_org_users": deleted_org_users,
+            "deleted_league_users": deleted_league_users,
+        }
     )
 
 

@@ -369,6 +369,7 @@ just test::run 'python manage.py test app.tests -v 2'
 ## Skills Available
 
 - `just` - Just command runner (auto-activates venv, works in worktrees)
+- `testing` - Test infrastructure (populate system, Playwright fixtures, feature-isolated test data)
 - `visual-debugging` - Chrome MCP browser automation for debugging
 
 ## Demo Video Recording

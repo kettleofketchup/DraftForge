@@ -40,7 +40,7 @@ def populate_all(force=False):
 
 **Step 3: Verify the change**
 
-Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && source .venv/bin/activate && inv test.exec --service backend --cmd 'python manage.py check'`
+Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && just test::exec backend 'python manage.py check'`
 Expected: System check identified no issues.
 
 **Step 4: Commit**
@@ -67,7 +67,7 @@ TEST_KEY_TO_NAME["real_tournament"] = "Real Tournament 38"
 
 **Step 2: Verify syntax**
 
-Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && source .venv/bin/activate && inv test.exec --service backend --cmd 'python -c "from tests.helpers.tournament_config import TEST_KEY_TO_NAME; print(TEST_KEY_TO_NAME.get(\"real_tournament\"))"'`
+Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && just test::exec backend 'python -c "from tests.helpers.tournament_config import TEST_KEY_TO_NAME; print(TEST_KEY_TO_NAME.get(\"real_tournament\"))"'`
 Expected: `Real Tournament 38`
 
 **Step 3: Commit**
@@ -163,7 +163,7 @@ path("login-as-discord/", login_as_discord_id, name="test-login-as-discord"),
 
 **Step 3: Verify endpoint works**
 
-Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && source .venv/bin/activate && inv test.exec --service backend --cmd 'python manage.py check'`
+Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && just test::exec backend 'python manage.py check'`
 Expected: System check identified no issues.
 
 **Step 4: Commit**
@@ -319,7 +319,7 @@ path(
 
 **Step 3: Verify endpoints**
 
-Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && source .venv/bin/activate && inv test.exec --service backend --cmd 'python manage.py check'`
+Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && just test::exec backend 'python manage.py check'`
 Expected: System check identified no issues.
 
 **Step 4: Commit**
@@ -394,7 +394,7 @@ def handle_round_timeout(draft: "HeroDraft", round: "HeroDraftRound") -> None:
 
 **Step 3: Verify function is importable**
 
-Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && source .venv/bin/activate && inv test.exec --service backend --cmd 'python -c "from app.functions.herodraft import handle_round_timeout; print(\"OK\")"'`
+Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && just test::exec backend 'python -c "from app.functions.herodraft import handle_round_timeout; print(\"OK\")"'`
 Expected: `OK`
 
 **Step 4: Commit if changes were made**
@@ -1638,14 +1638,13 @@ cd /home/kettle/git_repos/website/.worktrees/herodraft && git add frontend/tests
 
 ```bash
 cd /home/kettle/git_repos/website/.worktrees/herodraft
-source .venv/bin/activate
-inv db.populate.all
+just db::populate::all
 ```
 
 **Step 2: Verify Real Tournament 38 is pk 1**
 
 ```bash
-inv test.exec --service backend --cmd 'python -c "from app.models import Tournament; t = Tournament.objects.get(name=\"Real Tournament 38\"); print(f\"PK: {t.pk}\")"'
+just test::exec backend 'python -c "from app.models import Tournament; t = Tournament.objects.get(name=\"Real Tournament 38\"); print(f\"PK: {t.pk}\")"'
 ```
 Expected: `PK: 1`
 
@@ -1653,14 +1652,13 @@ Expected: `PK: 1`
 
 ```bash
 cd /home/kettle/git_repos/website/.worktrees/herodraft
-source .venv/bin/activate
-inv test.open
-# In Cypress UI, select e2e/10-herodraft/01-full-draft-flow.cy.ts
+just test::pw::ui
+# In Playwright UI, select herodraft tests
 ```
 
 Or headless:
 ```bash
-inv test.headless -- --spec "frontend/tests/cypress/e2e/10-herodraft/**/*"
+just test::pw::spec herodraft
 ```
 
 **Step 4: Fix any failing tests**
@@ -1681,8 +1679,7 @@ cd /home/kettle/git_repos/website/.worktrees/herodraft && git add -A && git comm
 
 ```bash
 cd /home/kettle/git_repos/website/.worktrees/herodraft
-source .venv/bin/activate
-inv test.headless
+just test::pw::headless
 ```
 
 **Step 2: Verify bracket tests still pass**

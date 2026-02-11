@@ -245,6 +245,6 @@ const verifyDraftEvent = (cy: Cypress.cy, draftPk: number, eventType: string) =>
 8. Implement completion test
 
 ### Phase 4: Verification
-1. Run `inv db.populate.all` to verify tournament ordering
+1. Run `just db::populate::all` to verify tournament ordering
 2. Run hero draft tests specifically first
 3. Run full Cypress suite to verify no regressions

@@ -319,7 +319,7 @@ def test_pause_resume_adjusts_round_started_at(self):
 **Step 2: Run tests**
 
 ```bash
-inv test.run --cmd 'python manage.py test app.tests.test_herodraft_consumers -v 2'
+just test::run 'python manage.py test app.tests.test_herodraft_consumers -v 2'
 ```
 
 **Step 3: Commit**

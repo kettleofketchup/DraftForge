@@ -2,6 +2,11 @@
 
 The draft system allows tournament captains to pick players for their teams. Three draft styles are available, each with different pick order mechanics.
 
+| Snake Draft | Shuffle Draft |
+|-------------|---------------|
+| ![Snake Draft](../assets/gifs/snake_draft.gif) | ![Shuffle Draft](../assets/gifs/shuffle_draft.gif) |
+| [:material-play-circle: Full Video](../assets/videos/snake_draft.webm) | [:material-play-circle: Full Video](../assets/videos/shuffle_draft.webm) |
+
 ## Draft Styles
 
 ### Snake Draft

@@ -6,9 +6,9 @@ After editing files in these paths, **run the corresponding demo task**:
 
 | Path Pattern | Run This | Videos Updated |
 |--------------|----------|----------------|
-| `frontend/app/components/herodraft/**` | `inv demo.herodraft` | captain1_herodraft, captain2_herodraft |
-| `frontend/app/components/draft/**` | `inv demo.shuffle` and `inv demo.snake` | shuffle_draft, snake_draft |
-| `frontend/app/components/bracket/**` | `inv demo.herodraft` | (bracket is entry point to hero draft) |
+| `frontend/app/components/herodraft/**` | `just demo::herodraft` | captain1_herodraft, captain2_herodraft |
+| `frontend/app/components/draft/**` | `just demo::shuffle` and `just demo::snake` | shuffle_draft, snake_draft |
+| `frontend/app/components/bracket/**` | `just demo::herodraft` | (bracket is entry point to hero draft) |
 
 ## Action Required
 
@@ -23,20 +23,20 @@ When you complete edits to these components that affect visual appearance:
 
 | Command | Description |
 |---------|-------------|
-| `inv demo.herodraft` | Record hero draft demo (resets demo data first) |
-| `inv demo.shuffle` | Record shuffle draft demo |
-| `inv demo.snake` | Record snake draft demo |
-| `inv demo.all` | Record all demos in parallel |
-| `inv demo.gifs` | Convert videos to GIF previews |
-| `inv demo.trim` | Trim initial white screen from videos |
-| `inv demo.clean` | Clean demo output directories |
+| `just demo::herodraft` | Record hero draft demo (resets demo data first) |
+| `just demo::shuffle` | Record shuffle draft demo |
+| `just demo::snake` | Record snake draft demo |
+| `just demo::all` | Record all demos in parallel |
+| `just demo::gifs` | Convert videos to GIF previews |
+| `just demo::trim` | Trim initial white screen from videos |
+| `just demo::clean` | Clean demo output directories |
 
 ## Prerequisites
 
 Before running demos:
 
-1. Test environment must be running: `inv dev.test`
-2. Test data must be populated: `inv db.populate.all`
+1. Test environment must be running: `just test::up`
+2. Test data must be populated: `just db::populate::all`
 
 ## Test Data
 

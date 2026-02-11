@@ -193,25 +193,90 @@ ghcr.io/kettleofketchup/draftforge/
 └── nginx:latest
 ```
 
+## Content-Hash Tagging
+
+Docker images are tagged with a SHA256 hash of the files that determine their installed dependencies. This detects stale images — if a dependency changes (e.g. a new npm package), the hash changes, and pulls/builds know to update.
+
+### What Gets Hashed
+
+| Service | Files | Script |
+|---------|-------|--------|
+| **frontend** / **frontend-dev** | `frontend/Dockerfile`, `frontend/package-lock.json` | `scripts/hash-docker-image.sh frontend` |
+| **backend** / **backend-dev** | `backend/Dockerfile`, `poetry.lock` | `scripts/hash-docker-image.sh backend` |
+| **nginx** | `nginx/Dockerfile`, `nginx/entrypoint.sh`, `nginx/default.template.conf` | `scripts/hash-docker-image.sh nginx` |
+
+Source code is **not** hashed — it's mounted at runtime, not baked into the image.
+
+### How It Works
+
+```mermaid
+flowchart LR
+    A[Hash local files] --> B{Pull registry:hash}
+    B -->|Found| C[Tag as :latest]
+    B -->|Not found| D{Pull registry:latest}
+    D -->|Found| C
+    D -->|Not found| E[Build from scratch]
+```
+
+1. **Hash** — `sha256sum` of dependency files → content hash
+2. **Pull** — try `image:hash` first (exact match), fall back to `image:latest`
+3. **Build** — tags image with `:hash` and `:latest`
+4. **Push** — pushes `:hash` and `:latest` tags
+
+Docker Compose files reference `:latest` — the pull step handles tagging the correct image as `:latest`.
+
+### Dev vs Release Tagging
+
+| Operation | Tags | Use Case |
+|-----------|------|----------|
+| `just docker::all-build` | `:hash` + `:latest` | Development builds |
+| `just docker::all-push` | `:hash` + `:latest` | Push to registry (CI) |
+| `just docker::release::push` | `:version` + `:hash` + `:latest` | Production releases |
+
+### Commands
+
+```bash
+# Inspect current hashes
+just docker::hash              # All services
+just docker::hash frontend     # Single service (full hash)
+
+# Build with hash tags
+just docker::all-build
+
+# Pull by hash (falls back to latest)
+just docker::all-pull
+
+# Push hash + latest tags
+just docker::all-push
+
+# Release: includes version tags
+just docker::release::push
+```
+
+### CI Integration
+
+Two workflows use hash tagging:
+
+- **`build-docker-images.yml`** — Triggers on push to `main` when Dockerfiles or lock files change. Builds and pushes hash-tagged images.
+- **`playwright.yml`** — Pulls images by hash before running tests. Falls back to building if no image matches.
+
 ## Common Docker Operations
 
 ```bash
-source .venv/bin/activate
-
 # Build all images
-inv docker.all.build
+just docker::all-build
 
 # Push to registry
-inv docker.all.push
+just docker::all-push
 
 # Pull latest images
-inv docker.all.pull
+just docker::all-pull
 
 # Start development
-inv dev.debug
+just dev::debug
 
 # Start production locally
-inv dev.prod
+just dev::local-prod
 ```
 
 ## Networking
@@ -244,5 +309,5 @@ Development uses self-signed certificates in `nginx/data/ssl/`.
 
 Production uses Let's Encrypt via Certbot:
 ```bash
-inv prod.certbot
+just prod::certbot
 ```

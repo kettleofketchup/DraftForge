@@ -87,9 +87,9 @@ def update_user_league_mmr(user, organization=None, league=None) -> None:
             org_user = OrgUser.objects.get(user=user, organization=organization)
             base_mmr = org_user.mmr
         except OrgUser.DoesNotExist:
-            base_mmr = user.mmr  # Fallback
+            base_mmr = None
     else:
-        base_mmr = user.mmr
+        base_mmr = None
 
     if not base_mmr:
         # No base MMR - update LeagueUser if we have league context
@@ -103,9 +103,8 @@ def update_user_league_mmr(user, organization=None, league=None) -> None:
             except LeagueUser.DoesNotExist:
                 pass
         else:
-            # Legacy fallback
-            user.league_mmr = None
-            user.save(update_fields=["league_mmr"])
+            # No league context, nothing to update
+            pass
         return
 
     best_adjustment = user.league_stats.aggregate(Max("mmr_adjustment"))[
@@ -130,14 +129,11 @@ def update_user_league_mmr(user, organization=None, league=None) -> None:
                 f"(base: {base_mmr}, adjustment: {best_adjustment})"
             )
         except LeagueUser.DoesNotExist:
-            # No LeagueUser entry, fall back to legacy
-            user.league_mmr = calculated_league_mmr
-            user.save(update_fields=["league_mmr"])
+            # No LeagueUser entry, nothing to update
+            pass
     else:
-        # Legacy fallback
-        user.league_mmr = calculated_league_mmr
-        user.save(update_fields=["league_mmr"])
+        # No league context, nothing to update
         logger.debug(
-            f"Updated {user.username} league_mmr to {calculated_league_mmr} "
+            f"No league context for {user.username}, skipping league MMR update "
             f"(base: {base_mmr}, adjustment: {best_adjustment})"
         )

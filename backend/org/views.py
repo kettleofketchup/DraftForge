@@ -193,8 +193,6 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         # Copy other fields from target if claimer doesn't have them
         if target_user.nickname and not claimer.nickname:
             claimer.nickname = target_user.nickname
-        if target_user.mmr and (not claimer.mmr or claimer.mmr == 0):
-            claimer.mmr = target_user.mmr
         if target_user.avatar and not claimer.avatar:
             claimer.avatar = target_user.avatar
 

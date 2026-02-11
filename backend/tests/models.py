@@ -45,8 +45,7 @@ class UserModel(BaseModel):
         user, created = CustomUser.objects.get_or_create(discordId=self.discordId)
         if not created:
             return user
-        if not self.mmr:
-            mmr = random.randint(200, 6000)
+        mmr = self.mmr if self.mmr else random.randint(200, 6000)
 
         positions = PositionsModel.objects.create()
         positions.carry = random.randint(0, 5)
@@ -58,8 +57,6 @@ class UserModel(BaseModel):
         with transaction.atomic():
             print("creating user", self.username)
             user.createFromDiscordData(discordData)
-            user.mmr = mmr
-
             positions.save()
             if random.randint(0, 1):
                 user.steamId = str(

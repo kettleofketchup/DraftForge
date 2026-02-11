@@ -570,4 +570,4 @@ After implementation, verify:
 - [ ] All player Steam IDs match the users in the tournament teams
 - [ ] Match data follows realistic stats patterns
 - [ ] `PlayerMatchStats.user` links correctly to `CustomUser` records
-- [ ] Running `inv db.populate.steam` works from command line
+- [ ] Running `just db::populate::all` works from command line

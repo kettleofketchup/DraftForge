@@ -19,6 +19,7 @@ from .test_auth import (
     login_user_claimer,
     reset_org_admin_team,
 )
+from .test_csv import reset_csv_import
 from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
 from .test_herodraft import (
     force_herodraft_timeout,
@@ -127,6 +128,12 @@ urlpatterns = [
         "herodraft-by-key/<str:key>/",
         get_herodraft_by_key,
         name="test-herodraft-by-key",
+    ),
+    # CSV import reset
+    path(
+        "csv-import/reset/",
+        reset_csv_import,
+        name="test-csv-import-reset",
     ),
     # Demo tournament endpoints (for video recording)
     # More specific paths first to avoid <str:key> catching them

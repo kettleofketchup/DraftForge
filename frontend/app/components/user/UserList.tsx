@@ -21,9 +21,13 @@ export const useProgressiveRender = <T,>(
   const [visibleCount, setVisibleCount] = useState(batchSize);
 
   useEffect(() => {
-    // Reset when items change
-    setVisibleCount(batchSize);
-  }, [items, batchSize]);
+    // Only reset progressive loading when the list grows beyond what we've shown.
+    // Shrinking (e.g. removing a user) should NOT reset — just let the remaining
+    // items stay visible so the removed card disappears without a full re-render.
+    if (items.length > visibleCount) {
+      setVisibleCount(batchSize);
+    }
+  }, [items.length, batchSize]);
 
   useEffect(() => {
     if (visibleCount >= items.length) return;

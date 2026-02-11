@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Code2,
   FileSpreadsheet,
+  Gamepad2,
   Gavel,
   GitBranch,
   Shield,
@@ -202,6 +203,13 @@ export default function HomePage() {
               icon={Trophy}
               title="Tournament Brackets"
               description="Single elimination, double elimination, and round-robin formats with automatic bracket generation."
+              features={[
+                'Single and double elimination brackets',
+                'Round-robin group stages',
+                'Automatic seeding and bracket generation',
+                'Match result tracking with Steam API',
+                'Interactive bracket visualization',
+              ]}
               delay={0.1}
               gifSrc={`${ASSETS_BASE}/site_snapshots/bracket.png`}
               docsPath="/features/bracket/"
@@ -210,6 +218,13 @@ export default function HomePage() {
               icon={Swords}
               title="Hero Draft System"
               description="Real-time captain's mode drafting with spectator view, timers, and pick/ban tracking."
+              features={[
+                'Real-time WebSocket pick/ban phases',
+                'Captain and spectator views',
+                'Configurable timers and reserve time',
+                'Pause and resume draft controls',
+                'Integrated with tournament brackets',
+              ]}
               delay={0.2}
               gifSrc={`${ASSETS_BASE}/gifs/captain1_herodraft.gif`}
               quickMedia={[
@@ -226,6 +241,13 @@ export default function HomePage() {
               icon={GitBranch}
               title="Team Draft Composition"
               description="Draft 40+ team members in minutes with Snake, Normal, and Shuffle draft modes balanced by MMR."
+              features={[
+                'Snake, Normal, and Shuffle draft modes',
+                'MMR-balanced team generation',
+                'Real-time WebSocket draft updates',
+                'Captain pick order with trade support',
+                'Position preference tracking',
+              ]}
               delay={0.3}
               gifSrc={`${ASSETS_BASE}/gifs/snake_draft.gif`}
               quickMedia={[
@@ -242,15 +264,40 @@ export default function HomePage() {
               icon={FileSpreadsheet}
               title="CSV Import"
               description="Bulk-add users to organizations and tournaments via CSV upload with conflict detection and team assignment."
+              features={[
+                'Drag-and-drop upload with instant preview',
+                'Resolve users by Steam ID or Discord ID',
+                'Auto-create stub accounts for unknown players',
+                'Conflict detection and per-row error reporting',
+                'Optional team assignment for tournaments',
+              ]}
               delay={0.4}
-              badgeText="In Testing"
-              docsPath="/features/planned/csv-import/"
+              gifSrc={`${ASSETS_BASE}/gifs/csv_import.gif`}
+              modalMedia={[
+                { src: `${ASSETS_BASE}/videos/csv_import.webm`, caption: 'CSV Import Demo', type: 'video' },
+              ]}
+              docsPath="/features/csv-import/"
+            />
+            <FeatureCard
+              icon={Gamepad2}
+              title="Dota 2 Custom Lobbies"
+              description="Automated lobby creation during tournament drafts with league-scoped configuration and captain auto-invites."
+              features={[
+                'Automatic lobby creation during draft',
+                'League-scoped YAML lobby configuration',
+                'Captain auto-invites to Radiant and Dire',
+                'Lobby restart and regenerate controls',
+                'Spectator lobby visibility',
+              ]}
+              delay={0.5}
+              comingSoon
+              docsPath="/features/planned/dota-lobbies/"
             />
             <FeatureCard
               icon={Users}
               title="Team Management"
               description="Create and manage rosters, track player stats, and coordinate with Discord integration."
-              delay={0.5}
+              delay={0.6}
               comingSoon
               docsPath="/features/planned/team-management/"
             />
@@ -258,7 +305,7 @@ export default function HomePage() {
               icon={Award}
               title="League System"
               description="Season-based competitive leagues with ELO ratings, standings, and match history."
-              delay={0.6}
+              delay={0.7}
               comingSoon
               docsPath="/features/planned/league-rating/"
             />
@@ -266,7 +313,7 @@ export default function HomePage() {
               icon={Shield}
               title="Guild Discord Integration"
               description="Seamless Discord server integration for roster syncing and tournament announcements."
-              delay={0.7}
+              delay={0.8}
               comingSoon
               docsPath="/features/planned/discord-integration/"
             />
@@ -274,7 +321,7 @@ export default function HomePage() {
               icon={Gavel}
               title="Auction Draft"
               description="Captain nomination bidding with salary caps, real-time WebSocket auctions, and shuffle draft fallback."
-              delay={0.8}
+              delay={0.9}
               comingSoon
               docsPath="/features/planned/auction-house/"
             />

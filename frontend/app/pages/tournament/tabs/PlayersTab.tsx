@@ -1,5 +1,6 @@
-import { Plus } from 'lucide-react';
+import { Plus, Upload } from 'lucide-react';
 import { memo, useCallback, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { addTournamentMember } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
 import { PrimaryButton } from '~/components/ui/buttons';
@@ -7,6 +8,7 @@ import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { UserType } from '~/components/user/types';
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
+import { CSVImportModal } from '~/components/user/CSVImportModal';
 import { useUserStore } from '~/store/userStore';
 import { useOrgStore } from '~/store/orgStore';
 import { hasErrors } from '../hasErrors';
@@ -18,7 +20,9 @@ export const PlayersTab: React.FC = memo(() => {
   const setQuery = useUserStore((state) => state.setUserQuery);
   const isStaff = useUserStore((state) => state.isStaff);
   const currentOrg = useOrgStore((s) => s.currentOrg);
+  const queryClient = useQueryClient();
   const [showAddUser, setShowAddUser] = useState(false);
+  const [showCSVImport, setShowCSVImport] = useState(false);
 
   const tournamentUsers = tournament?.users ?? [];
 
@@ -35,9 +39,11 @@ export const PlayersTab: React.FC = memo(() => {
           users: [...(current.users ?? []), user],
         });
       }
+      // Invalidate React Query cache so useTournament refetches
+      queryClient.invalidateQueries({ queryKey: ['tournament', tournament.pk] });
       return user;
     },
-    [tournament?.pk, setTournament]
+    [tournament?.pk, setTournament, queryClient]
   );
 
   const addedPkSet = useMemo(
@@ -68,7 +74,15 @@ export const PlayersTab: React.FC = memo(() => {
           />
         </div>
         {canEdit && (
-          <div className="flex md:px-5 shrink-0">
+          <div className="flex md:px-5 gap-2 shrink-0">
+            <PrimaryButton
+              onClick={() => setShowCSVImport(true)}
+              data-testid="tournament-csv-import-btn"
+              className="w-full md:w-auto"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Import CSV
+            </PrimaryButton>
             <PrimaryButton
               onClick={() => setShowAddUser(true)}
               data-testid="tournamentAddPlayerBtn"
@@ -91,6 +105,21 @@ export const PlayersTab: React.FC = memo(() => {
           emptyMessage="No players in this tournament"
         />
       </div>
+
+      {canEdit && tournament?.pk && (
+        <CSVImportModal
+          open={showCSVImport}
+          onOpenChange={setShowCSVImport}
+          entityContext={{
+            orgId: currentOrg?.pk,
+            tournamentId: tournament.pk,
+          }}
+          onComplete={() => {
+            // Invalidate React Query cache so useTournament refetches
+            queryClient.invalidateQueries({ queryKey: ['tournament', tournament.pk] });
+          }}
+        />
+      )}
 
       {canEdit && (
         <AddUserModal

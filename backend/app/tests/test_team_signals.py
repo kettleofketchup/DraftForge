@@ -27,12 +27,11 @@ class TeamMemberRemovalTests(TestCase):
 
         # Create users with different MMRs
         self.users = []
-        for i, mmr in enumerate([5000, 4000, 3000, 2000, 1000]):
+        for i in range(5):
             positions = PositionsModel.objects.create()
             user = CustomUser.objects.create(
                 username=f"user_{i}",
                 discordId=f"discord_{i}",
-                mmr=mmr,
                 positions=positions,
             )
             self.users.append(user)
@@ -145,7 +144,6 @@ class TournamentUserRemovalCascadeTests(TestCase):
             user = CustomUser.objects.create(
                 username=f"user_{i}",
                 discordId=f"discord_{i}",
-                mmr=5000 - (i * 100),
                 positions=positions,
             )
             self.users.append(user)
@@ -221,21 +219,18 @@ class TeamValidationTests(TestCase):
         self.user1 = CustomUser.objects.create(
             username="user1",
             discordId="discord1",
-            mmr=5000,
             positions=self.positions,
         )
         self.positions2 = PositionsModel.objects.create()
         self.user2 = CustomUser.objects.create(
             username="user2",
             discordId="discord2",
-            mmr=4000,
             positions=self.positions2,
         )
         self.positions3 = PositionsModel.objects.create()
         self.non_member = CustomUser.objects.create(
             username="non_member",
             discordId="discord3",
-            mmr=3000,
             positions=self.positions3,
         )
 

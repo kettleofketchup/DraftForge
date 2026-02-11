@@ -99,7 +99,7 @@ The Cypress workflow re-downloads dependencies every run because:
 ## Testing
 
 **Logging changes:**
-- Run `inv db.populate.all` locally
+- Run `just db::populate::all` locally
 - Verify cleaner output without DEBUG spam
 - Verify Redis warning appears only once
 
