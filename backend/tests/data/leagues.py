@@ -31,6 +31,28 @@ TEST_LEAGUE: TestLeague = TestLeague(
     organization_names=["Test Organization"],
 )
 
+# CSV Import Test League - isolated from other test data
+CSV_LEAGUE: TestLeague = TestLeague(
+    pk=3,  # Expected PK after creation
+    name="CSV Import League",
+    steam_league_id=17931,
+    description="Isolated league for CSV import E2E tests.",
+    rules="CSV import test rules.",
+    timezone="America/New_York",
+    organization_names=["CSV Import Org"],
+)
+
+# Demo CSV League - for demo video recording (separate from CSV E2E tests)
+DEMO_CSV_LEAGUE: TestLeague = TestLeague(
+    pk=4,  # Expected PK after creation
+    name="Demo CSV League",
+    steam_league_id=17932,
+    description="League for CSV import demo video recording.",
+    rules="Demo CSV rules.",
+    timezone="America/New_York",
+    organization_names=["Demo CSV Org"],
+)
+
 # =============================================================================
 # Constants for easy access
 # =============================================================================
@@ -41,6 +63,12 @@ DTX_STEAM_LEAGUE_ID = DTX_LEAGUE.steam_league_id
 TEST_LEAGUE_NAME = TEST_LEAGUE.name
 TEST_STEAM_LEAGUE_ID = TEST_LEAGUE.steam_league_id
 
+CSV_LEAGUE_NAME = CSV_LEAGUE.name
+CSV_STEAM_LEAGUE_ID = CSV_LEAGUE.steam_league_id
+
+DEMO_CSV_LEAGUE_NAME = DEMO_CSV_LEAGUE.name
+DEMO_CSV_STEAM_LEAGUE_ID = DEMO_CSV_LEAGUE.steam_league_id
+
 # =============================================================================
 # All Leagues (for iteration)
 # =============================================================================
@@ -48,4 +76,6 @@ TEST_STEAM_LEAGUE_ID = TEST_LEAGUE.steam_league_id
 ALL_LEAGUES: list[TestLeague] = [
     DTX_LEAGUE,
     TEST_LEAGUE,
+    CSV_LEAGUE,
+    DEMO_CSV_LEAGUE,
 ]

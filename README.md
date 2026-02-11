@@ -24,7 +24,7 @@ A tournament management platform for Dota 2 gaming communities.
 | :white_check_mark: | [Hero Draft](https://kettleofketchup.github.io/DraftForge/features/herodraft/) | Real-time Captains Mode hero picking with spectator view, timers, and pick/ban tracking |
 | :white_check_mark: | Match Tracking | Steam API integration for match statistics |
 | :white_check_mark: | [Telemetry](https://kettleofketchup.github.io/DraftForge/dev/telemetry/) | Structured logging with structlog and optional OpenTelemetry tracing |
-| :test_tube: | [CSV Import](https://kettleofketchup.github.io/DraftForge/features/planned/csv-import/) | Bulk-add users via CSV upload with conflict detection and team assignment |
+| :white_check_mark: | [CSV Import](https://kettleofketchup.github.io/DraftForge/features/planned/csv-import/) | Bulk-add users via CSV upload with conflict detection and team assignment |
 | :soon: | [Team Management](https://kettleofketchup.github.io/DraftForge/features/planned/team-management/) | Create and manage rosters, track player stats, and coordinate with Discord |
 | :soon: | [League System](https://kettleofketchup.github.io/DraftForge/features/planned/league-rating/) | Season-based competitive leagues with ELO ratings and standings |
 | :soon: | [Discord Integration](https://kettleofketchup.github.io/DraftForge/features/planned/discord-integration/) | Server syncing for rosters and tournament announcements |
@@ -111,6 +111,11 @@ Automated demo recordings are available for key features:
 | ![Shuffle Draft](docs/assets/gifs/shuffle_draft.gif) | ![Snake Draft](docs/assets/gifs/snake_draft.gif) |
 | [Full Video](docs/assets/videos/shuffle_draft.webm) | [Full Video](docs/assets/videos/snake_draft.webm) |
 
+| CSV Import |
+|------------|
+| ![CSV Import](docs/assets/gifs/csv_import.gif) |
+| [Full Video](docs/assets/videos/csv_import.webm) |
+
 ### Generate Demos Locally
 
 ```bash
@@ -123,6 +128,7 @@ inv demo.quick
 inv demo.shuffle     # Shuffle draft
 inv demo.snake       # Snake draft
 inv demo.herodraft   # Hero draft with bracket
+inv demo.csv         # CSV import with bracket
 ```
 
 Full videos: `docs/assets/videos/` | GIF previews: `docs/assets/gifs/`

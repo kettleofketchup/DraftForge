@@ -200,3 +200,61 @@ export async function refreshDiscordMembers(
   );
   return response.data;
 }
+
+// CSV Import
+export interface CSVImportRow {
+  steam_friend_id?: string;
+  discord_id?: string;
+  discord_username?: string;
+  name?: string;
+  mmr?: number | null;
+  team_name?: string;
+  team_captain?: boolean;
+  positions?: string;
+}
+
+export type MMRTarget = 'organization' | 'league';
+
+export interface CSVImportOptions {
+  update_mmr?: boolean;
+  mmr_target?: MMRTarget;
+}
+
+export interface CSVImportResultRow {
+  row: number;
+  status: 'added' | 'skipped' | 'error' | 'updated';
+  reason?: string;
+  created?: boolean;
+  team?: string;
+  user?: UserType;
+  conflict_users?: UserType[];
+}
+
+export interface CSVImportResponse {
+  summary: { added: number; skipped: number; created: number; errors: number; updated: number };
+  results: CSVImportResultRow[];
+}
+
+export async function importCSVToOrg(
+  orgId: number,
+  rows: CSVImportRow[],
+  options?: CSVImportOptions,
+): Promise<CSVImportResponse> {
+  const response = await axios.post<CSVImportResponse>(
+    `/organizations/${orgId}/import-csv/`,
+    { rows, ...options },
+  );
+  return response.data;
+}
+
+export async function importCSVToTournament(
+  tournamentId: number,
+  rows: CSVImportRow[],
+  options?: CSVImportOptions,
+): Promise<CSVImportResponse> {
+  const response = await axios.post<CSVImportResponse>(
+    `/tournaments/${tournamentId}/import-csv/`,
+    { rows, ...options },
+  );
+  return response.data;
+}

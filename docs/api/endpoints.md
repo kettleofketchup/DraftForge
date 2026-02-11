@@ -430,8 +430,8 @@ Omit `season_team_ids` to import all teams from the tournament's linked season.
 
 Bulk-import users into organizations or tournaments via pre-parsed CSV data.
 
-!!! info "Planned Feature"
-    CSV Import is a planned feature. See [CSV Import](../features/planned/csv-import.md) for the full design.
+!!! info "Feature Documentation"
+    See [CSV Import](../features/csv-import.md) for the full design.
 
 ### Organization CSV Import
 

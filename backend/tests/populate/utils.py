@@ -69,7 +69,6 @@ def create_user(user_data, organization=None):
     with transaction.atomic():
         print("creating user", user_data["user"]["username"])
         user.createFromDiscordData(user_data)
-        user.mmr = mmr  # Keep for backwards compat during migration
         positions = PositionsModel.objects.create()
         positions.carry = random.randint(0, 5)
         positions.mid = random.randint(0, 5)
@@ -97,7 +96,7 @@ def ensure_org_user(user, organization, mmr=None):
     org_user, created = OrgUser.objects.get_or_create(
         user=user,
         organization=organization,
-        defaults={"mmr": mmr if mmr is not None else (user.mmr or 0)},
+        defaults={"mmr": mmr if mmr is not None else 0},
     )
     if not created and mmr is not None and org_user.mmr != mmr:
         org_user.mmr = mmr
@@ -202,15 +201,12 @@ def get_or_create_demo_user(username, user_data, organization=None):
             discordId=user_data["discord_id"],
             username=username,
             steamid=steamid_64,
-            mmr=mmr,
             positions=positions,
         )
     else:
         # Update existing user with latest data
         if steamid_64 and user.steamid != steamid_64:
             user.steamid = steamid_64
-        if user.mmr != mmr:
-            user.mmr = mmr
         # Update positions if provided
         if pos_data and user.positions:
             user.positions.carry = pos_data.get("carry", user.positions.carry)
@@ -260,8 +256,8 @@ def fetch_discord_avatars_for_users(users):
                 data = resp.json()
                 avatar_hash = data.get("avatar")
                 if avatar_hash:
-                    # Store the CDN URL
-                    user.avatar = f"https://cdn.discordapp.com/avatars/{user.discordId}/{avatar_hash}.png"
+                    # Store just the hash — avatarUrl property constructs the full URL
+                    user.avatar = avatar_hash
                     user.save(update_fields=["avatar"])
                     print(f"  Updated avatar for {user.username}")
         except Exception as e:

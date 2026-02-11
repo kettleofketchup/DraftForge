@@ -59,8 +59,25 @@ def handle_team_member_removal(sender, instance, action, pk_set, **kwargs):
         team.save(update_fields=["captain", "deputy_captain"])
         return
 
-    # Fallback: promote highest MMR member
-    highest_mmr_member = team.members.order_by("-mmr").first()
+    # Fallback: promote remaining member (by OrgUser MMR if available, else by pk)
+    remaining = team.members.all()
+    highest_mmr_member = remaining.order_by("pk").first()
+    if (
+        team.tournament
+        and hasattr(team.tournament, "league")
+        and team.tournament.league
+    ):
+        org = team.tournament.league.organization
+        if org:
+            from org.models import OrgUser
+
+            best = (
+                OrgUser.objects.filter(user__in=remaining, organization=org)
+                .order_by("-mmr")
+                .first()
+            )
+            if best:
+                highest_mmr_member = best.user
     team.captain = highest_mmr_member
     team.deputy_captain = None
     team.save(update_fields=["captain", "deputy_captain"])
@@ -131,7 +148,7 @@ def handle_tournament_user_addition(sender, instance, action, pk_set, **kwargs):
         org_user, org_created = OrgUser.objects.get_or_create(
             user=user,
             organization=org,
-            defaults={"mmr": user.mmr or 0},
+            defaults={"mmr": 0},
         )
         if org_created:
             log.info(

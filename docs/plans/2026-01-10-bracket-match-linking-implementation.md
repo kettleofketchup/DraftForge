@@ -1848,25 +1848,24 @@ Expected: All tests pass
 **Step 11.2: Populate test data**
 
 ```bash
-source .venv/bin/activate
-inv db.populate.all
+just db::populate::all
 ```
 
 **Step 11.3: Start test environment**
 
 ```bash
-inv test.up
+just test::up
 ```
 
 **Step 11.4: Run Cypress tests**
 
 ```bash
-inv test.headless
+just test::pw::headless
 ```
 
 Or interactively:
 ```bash
-inv test.open
+just test::pw::ui
 ```
 
 **Step 11.5: Final commit**

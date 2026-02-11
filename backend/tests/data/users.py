@@ -303,6 +303,55 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
 }
 
 # =============================================================================
+# CSV Import Test Users
+# These users exist in the DB but are NOT members of any org/tournament.
+# CSV import tests use their Steam/Discord IDs to add them.
+# =============================================================================
+
+CSV_IMPORT_USERS: list[TestUser] = [
+    TestUser(
+        pk=1040,
+        username="csv_steam_user",
+        nickname="CSV Steam User",
+        discord_id=None,
+        steam_id_64=76561198800000001,
+        mmr=4200,
+    ),
+    TestUser(
+        pk=1041,
+        username="csv_discord_user",
+        nickname="CSV Discord User",
+        discord_id="300000000000000001",
+        steam_id=None,
+        mmr=3800,
+    ),
+    TestUser(
+        pk=1042,
+        username="csv_both_ids",
+        nickname="CSV Both IDs",
+        discord_id="300000000000000002",
+        steam_id_64=76561198800000003,
+        mmr=5100,
+    ),
+    TestUser(
+        pk=1043,
+        username="csv_conflict_user",
+        nickname="CSV Conflict User",
+        discord_id="300000000000000099",
+        steam_id_64=76561198800000004,
+        mmr=4700,
+    ),
+    TestUser(
+        pk=1044,
+        username="csv_team_user",
+        nickname="CSV Team User",
+        discord_id=None,
+        steam_id_64=76561198800000005,
+        mmr=3500,
+    ),
+]
+
+# =============================================================================
 # Auth Test Users (for iteration)
 # =============================================================================
 

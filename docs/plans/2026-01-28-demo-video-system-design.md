@@ -56,7 +56,7 @@ POST /api/tests/demo/demo_captaindraft/reset/
 ### Execution Flow
 
 ```
-inv demo.herodraft
+just demo::herodraft
     ├─► POST /api/tests/demo/demo_herodraft/reset/
     ├─► docker exec frontend npx playwright test \
     │       --config=playwright.demo.config.ts \
@@ -67,7 +67,7 @@ inv demo.herodraft
 ### Parallel Execution
 
 ```
-inv demo.all
+just demo::all
     ├─► Reset demo_herodraft (API call)
     ├─► Reset demo_captaindraft (API call)
     └─► docker exec frontend npx playwright test \

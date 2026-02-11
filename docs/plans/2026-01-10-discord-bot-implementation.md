@@ -102,7 +102,7 @@ class RSVPModelTest(TestCase):
 
 **Step 2: Run test to verify it fails**
 
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py test discordbot.tests -v 2'`
+Run: `just test::exec backend 'python backend/manage.py test discordbot.tests -v 2'`
 Expected: FAIL with "cannot import name 'EventTemplate' from 'discordbot.models'"
 
 **Step 3: Write the models**
@@ -195,12 +195,12 @@ class RSVP(models.Model):
 
 **Step 4: Create and run migrations**
 
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py makemigrations discordbot'`
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py migrate discordbot'`
+Run: `just test::exec backend 'python backend/manage.py makemigrations discordbot'`
+Run: `just test::exec backend 'python backend/manage.py migrate discordbot'`
 
 **Step 5: Run test to verify it passes**
 
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py test discordbot.tests -v 2'`
+Run: `just test::exec backend 'python backend/manage.py test discordbot.tests -v 2'`
 Expected: PASS (3 tests)
 
 **Step 6: Commit**
@@ -260,7 +260,7 @@ class RSVPAdmin(admin.ModelAdmin):
 
 **Step 2: Verify admin loads**
 
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py check'`
+Run: `just test::exec backend 'python backend/manage.py check'`
 Expected: "System check identified no issues"
 
 **Step 3: Commit**
@@ -320,7 +320,7 @@ class EmbedBuildersTest(TestCase):
 
 **Step 2: Run test to verify it fails**
 
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py test discordbot.tests.EmbedBuildersTest -v 2'`
+Run: `just test::exec backend 'python backend/manage.py test discordbot.tests.EmbedBuildersTest -v 2'`
 Expected: FAIL with "cannot import name 'event_announcement_embed'"
 
 **Step 3: Write the embeds module**
@@ -387,7 +387,7 @@ def results_posted_embed(tournament):
 
 **Step 4: Run test to verify it passes**
 
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py test discordbot.tests.EmbedBuildersTest -v 2'`
+Run: `just test::exec backend 'python backend/manage.py test discordbot.tests.EmbedBuildersTest -v 2'`
 Expected: PASS (2 tests)
 
 **Step 5: Commit**
@@ -451,7 +451,7 @@ class UtilsTest(TestCase):
 
 **Step 2: Run test to verify it fails**
 
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py test discordbot.tests.UtilsTest -v 2'`
+Run: `just test::exec backend 'python backend/manage.py test discordbot.tests.UtilsTest -v 2'`
 Expected: FAIL with "cannot import name 'sync_send_embed'"
 
 **Step 3: Write the utils module**
@@ -623,7 +623,7 @@ def sync_add_reactions(channel_id, message_id, emojis=None):
 
 **Step 4: Run test to verify it passes**
 
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py test discordbot.tests.UtilsTest -v 2'`
+Run: `just test::exec backend 'python backend/manage.py test discordbot.tests.UtilsTest -v 2'`
 Expected: PASS (2 tests)
 
 **Step 5: Commit**
@@ -728,7 +728,7 @@ class ScheduledEventTaskTest(TestCase):
 
 **Step 2: Run test to verify it fails**
 
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py test discordbot.tests.ScheduledEventTaskTest -v 2'`
+Run: `just test::exec backend 'python backend/manage.py test discordbot.tests.ScheduledEventTaskTest -v 2'`
 Expected: FAIL with "cannot import name 'check_scheduled_events'"
 
 **Step 3: Write the tasks module**
@@ -814,7 +814,7 @@ def check_scheduled_events():
 
 **Step 5: Run test to verify it passes**
 
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py test discordbot.tests.ScheduledEventTaskTest -v 2'`
+Run: `just test::exec backend 'python backend/manage.py test discordbot.tests.ScheduledEventTaskTest -v 2'`
 Expected: PASS (3 tests)
 
 **Step 6: Commit**
@@ -1017,7 +1017,7 @@ def run_bot():
 
 **Step 2: Verify syntax**
 
-Run: `inv test.exec --service backend --cmd 'python -c "import discordbot.bot"'`
+Run: `just test::exec backend 'python -c "import discordbot.bot"'`
 Expected: No errors
 
 **Step 3: Commit**
@@ -1067,7 +1067,7 @@ class Command(BaseCommand):
 
 **Step 2: Verify command is discoverable**
 
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py help run_discord_bot'`
+Run: `just test::exec backend 'python backend/manage.py help run_discord_bot'`
 Expected: Shows help for run_discord_bot command
 
 **Step 3: Commit**
@@ -1151,12 +1151,12 @@ git commit -m "feat(discordbot): add Docker service for Discord bot"
 
 **Step 1: Run complete test suite**
 
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py test discordbot.tests -v 2'`
+Run: `just test::exec backend 'python backend/manage.py test discordbot.tests -v 2'`
 Expected: All tests pass (10+ tests)
 
 **Step 2: Run existing app tests to ensure no regressions**
 
-Run: `inv test.exec --service backend --cmd 'python backend/manage.py test app.tests -v 2'`
+Run: `just test::exec backend 'python backend/manage.py test app.tests -v 2'`
 Expected: All existing tests still pass
 
 ---
@@ -1176,8 +1176,8 @@ After completing all tasks, you will have:
 
 **To start the bot locally:**
 ```bash
-inv dev.up
-inv dev.exec --service discord_bot --cmd 'python backend/manage.py run_discord_bot'
+just dev::up
+just dev::exec discord_bot 'python backend/manage.py run_discord_bot'
 ```
 
 **To use admin utilities in Django code:**

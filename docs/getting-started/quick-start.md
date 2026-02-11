@@ -1,18 +1,14 @@
 # Quick Start
 
-!!! warning "Always Source the Virtual Environment"
-    Before running any Python or Invoke commands:
-    ```bash
-    source .venv/bin/activate
-    ```
+!!! info "No Manual Venv Activation Needed"
+    Just commands automatically activate the correct virtual environment.
 
 ## Development Mode
 
 Start the full development stack with hot reloading:
 
 ```bash
-source .venv/bin/activate
-inv dev.debug
+just dev::debug
 ```
 
 This starts:
@@ -29,53 +25,49 @@ Access the application at **https://localhost**
 ### Start Development
 
 ```bash
-inv dev.debug      # Standard development
-inv dev.live       # Development with tmux
+just dev::debug      # Standard development
+just dev::live       # Development with tmux
 ```
 
 ### Database Operations
 
 ```bash
-inv db.migrate           # Run migrations (dev, default)
-inv db.migrate.all       # Run migrations for all environments
-inv db.migrate.test      # Run migrations for test environment
-inv db.populate.all      # Populate test data
-inv db.populate.users    # Populate users only
+just db::run-migrate       # Run migrations (dev, default)
+just db::migrate::all      # Run migrations for all environments
+just db::migrate::test     # Run migrations for test environment
+just db::populate::all     # Populate test data
 ```
 
 ### Docker Operations
 
 ```bash
-inv docker.all.build     # Build all images
-inv docker.all.push      # Push to registry
-inv docker.all.pull      # Pull latest images
+just docker::all-build     # Build all images
+just docker::all-push      # Push to registry
+just docker::all-pull      # Pull latest images
 ```
 
 ### Testing
 
 ```bash
-inv test.setup      # Full test environment setup
-inv test.open       # Cypress interactive mode
-inv test.headless   # Cypress headless mode
+just test::setup           # Full test environment setup
+just test::pw::ui          # Playwright interactive UI mode
+just test::pw::headless    # Playwright headless mode
 ```
 
 ### Updates
 
 ```bash
-inv update.all      # Update everything
-inv update.git      # Git pull only
-inv update.npm      # npm install only
-inv update.python   # Poetry install only
+just update::all      # Update everything
 ```
 
-## Available Invoke Tasks
+## Available Just Commands
 
-Run `inv --list` to see all available tasks organized by namespace:
+Run `just --list --list-submodules` to see all available commands organized by namespace:
 
-- `dev.*` - Development commands
-- `docker.*` - Docker operations
-- `db.*` - Database operations
-- `test.*` - Testing commands
-- `update.*` - Dependency updates
-- `version.*` - Version management
-- `prod.*` - Production commands
+- `dev::*` - Development commands
+- `docker::*` - Docker operations
+- `db::*` - Database operations
+- `test::*` - Testing commands
+- `update::*` - Dependency updates
+- `version::*` - Version management
+- `prod::*` - Production commands

@@ -1,4 +1,4 @@
-import { Award, GitBranch, Shield, Swords, Trophy, Users } from 'lucide-react';
+import { Award, FileSpreadsheet, Gamepad2, GitBranch, Shield, Swords, Trophy, Users } from 'lucide-react';
 import { getLogger } from '~/lib/logger';
 import { FeatureCard } from '~/components/feature/FeatureCard';
 
@@ -36,10 +36,25 @@ export function FeaturesSection() {
           action={{ label: 'Browse Tournaments', href: '/tournaments' }}
         />
         <FeatureCard
+          icon={FileSpreadsheet}
+          title="CSV Import"
+          description="Bulk-add users via CSV upload with client-side preview, conflict detection, and optional team assignment."
+          delay={0.4}
+          docsPath="/features/csv-import/"
+        />
+        <FeatureCard
+          icon={Gamepad2}
+          title="Dota 2 Custom Lobbies"
+          description="Automated lobby creation during tournament drafts with league-scoped settings and captain auto-invites."
+          delay={0.5}
+          docsPath="/features/planned/dota-lobbies/"
+          comingSoon
+        />
+        <FeatureCard
           icon={Users}
           title="Team Management"
           description="Create and manage rosters, track player stats, and coordinate with Discord integration."
-          delay={0.4}
+          delay={0.6}
           docsPath="/features/planned/team-management/"
           action={{ label: 'View Users', href: '/users' }}
         />
@@ -47,7 +62,7 @@ export function FeaturesSection() {
           icon={Award}
           title="League System"
           description="Season-based competitive leagues with ELO ratings, standings, and match history."
-          delay={0.5}
+          delay={0.7}
           docsPath="/features/planned/league-rating/"
           action={{ label: 'View Leagues', href: '/leagues' }}
           comingSoon
@@ -56,7 +71,7 @@ export function FeaturesSection() {
           icon={Shield}
           title="Discord Integration"
           description="Seamless Discord server integration for roster syncing and tournament announcements."
-          delay={0.6}
+          delay={0.8}
           docsPath="/features/planned/discord-integration/"
           comingSoon
         />

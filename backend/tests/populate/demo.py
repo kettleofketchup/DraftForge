@@ -2,6 +2,8 @@
 Demo tournament population functions for video recording.
 """
 
+import random
+
 from .constants import DTX_STEAM_LEAGUE_ID, TOURNAMENT_USERS
 from .utils import (
     REAL_TOURNAMENT_USERS,
@@ -100,7 +102,7 @@ def populate_demo_herodraft_tournament(force=False):
     org = dtx_league.organization
     if org:
         for user in all_users:
-            org_user = ensure_org_user(user, org)
+            org_user = ensure_org_user(user, org, mmr=random.randint(2000, 8000))
             ensure_league_user(user, org_user, dtx_league)
 
     # Create teams using config from tests/data
@@ -133,9 +135,12 @@ def populate_demo_herodraft_tournament(force=False):
     )
 
     # Create HeroDraft for this game
+    # State is "completed" so it doesn't trigger the active_drafts banner
+    # for captains in E2E tests. Demo reset sets it back to
+    # "waiting_for_captains" before recording.
     herodraft = HeroDraft.objects.create(
         game=game,
-        state="waiting_for_captains",
+        state="completed",
     )
 
     # Create draft teams
@@ -208,7 +213,7 @@ def populate_demo_captaindraft_tournament(force=False):
     org = dtx_league.organization
     if org:
         for user in users:
-            org_user = ensure_org_user(user, org)
+            org_user = ensure_org_user(user, org, mmr=random.randint(2000, 8000))
             ensure_league_user(user, org_user, dtx_league)
 
     # Create draft for this tournament (shuffle mode for demo)
@@ -275,7 +280,7 @@ def populate_demo_snake_draft_tournament(force=False):
     org = dtx_league.organization
     if org:
         for user in users:
-            org_user = ensure_org_user(user, org)
+            org_user = ensure_org_user(user, org, mmr=random.randint(2000, 8000))
             ensure_league_user(user, org_user, dtx_league)
 
     # Create 4 teams with captains (first 4 users)
@@ -359,7 +364,7 @@ def populate_demo_shuffle_draft_tournament(force=False):
     org = dtx_league.organization
     if org:
         for user in users:
-            org_user = ensure_org_user(user, org)
+            org_user = ensure_org_user(user, org, mmr=random.randint(2000, 8000))
             ensure_league_user(user, org_user, dtx_league)
 
     # Create 4 teams with captains (first 4 users)
@@ -391,9 +396,60 @@ def populate_demo_shuffle_draft_tournament(force=False):
     return tournament
 
 
+def populate_demo_csv_org(force=False):
+    """Create Demo CSV Organization and League for demo video recording.
+
+    Separate from CSV Import Org (used by E2E tests) to avoid clobbering test data.
+    Admin user is added as org admin so the demo can create tournaments.
+    """
+    from app.models import CustomUser, League, Organization
+    from tests.data.leagues import DEMO_CSV_LEAGUE
+    from tests.data.organizations import DEMO_CSV_ORG
+    from tests.data.users import ADMIN_USER
+
+    demo_org, created = Organization.objects.update_or_create(
+        name=DEMO_CSV_ORG.name,
+        defaults={
+            "description": DEMO_CSV_ORG.description,
+            "logo": "",
+            "rules_template": DEMO_CSV_ORG.rules_template,
+            "timezone": DEMO_CSV_ORG.timezone,
+        },
+    )
+    print(f"  {'Created' if created else 'Updated'} organization: {DEMO_CSV_ORG.name}")
+
+    demo_league, created = League.objects.update_or_create(
+        steam_league_id=DEMO_CSV_LEAGUE.steam_league_id,
+        defaults={
+            "name": DEMO_CSV_LEAGUE.name,
+            "description": DEMO_CSV_LEAGUE.description,
+            "rules": DEMO_CSV_LEAGUE.rules,
+            "prize_pool": "",
+            "timezone": DEMO_CSV_LEAGUE.timezone,
+        },
+    )
+    if demo_league.organization != demo_org:
+        demo_league.organization = demo_org
+        demo_league.save()
+    print(f"  {'Created' if created else 'Updated'} league: {DEMO_CSV_LEAGUE.name}")
+
+    if demo_org.default_league != demo_league:
+        demo_org.default_league = demo_league
+        demo_org.save()
+
+    admin_user = CustomUser.objects.filter(pk=ADMIN_USER.pk).first()
+    if admin_user and admin_user not in demo_org.admins.all():
+        demo_org.admins.add(admin_user)
+        print(f"  Added {admin_user.username} as admin of {DEMO_CSV_ORG.name}")
+
+    print(f"  Demo CSV ready: org={demo_org.pk}, league={demo_league.pk}")
+    return demo_org, demo_league
+
+
 def populate_demo_tournaments(force=False):
     """Create all demo tournaments for video recording."""
     populate_demo_herodraft_tournament(force)
     populate_demo_captaindraft_tournament(force)
     populate_demo_snake_draft_tournament(force)
     populate_demo_shuffle_draft_tournament(force)
+    populate_demo_csv_org(force)

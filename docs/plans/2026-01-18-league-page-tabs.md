@@ -1247,7 +1247,7 @@ cd frontend && npx tsc --noEmit
 **Step 2: Start dev environment**
 
 ```bash
-inv dev.test
+just test::up
 ```
 
 **Step 3: Manual test checklist**

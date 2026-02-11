@@ -370,7 +370,7 @@ Verify it creates all 4 tables: `app_herodraft`, `app_draftteam`, `app_herodraft
 
 **Step 3: Apply migration**
 
-Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && source .venv/bin/activate && inv db.migrate.all`
+Run: `cd /home/kettle/git_repos/website/.worktrees/herodraft && just db::migrate::all`
 
 **Step 4: Commit**
 

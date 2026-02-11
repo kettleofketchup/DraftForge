@@ -2,6 +2,11 @@
 
 The Hero Draft system implements Dota 2's Captain's Mode for tournament matches, allowing team captains to ban and pick heroes in real-time via WebSocket.
 
+| Captain 1 Perspective | Captain 2 Perspective |
+|-----------------------|-----------------------|
+| ![Captain 1](../assets/gifs/captain1_herodraft.gif) | ![Captain 2](../assets/gifs/captain2_herodraft.gif) |
+| [:material-play-circle: Full Video](../assets/videos/captain1_herodraft.webm) | [:material-play-circle: Full Video](../assets/videos/captain2_herodraft.webm) |
+
 ## Overview
 
 Hero Draft runs through several phases:
@@ -406,7 +411,7 @@ All components have `data-testid` attributes for Playwright testing:
 ### Backend Tests
 
 ```bash
-inv test.run --cmd 'python manage.py test app.tests.test_herodraft_consumers -v 2'
+just test::run 'python manage.py test app.tests.test_herodraft_consumers -v 2'
 ```
 
 Key test: `test_pause_resume_timing_adjustment` - verifies that pause duration + countdown is correctly added to `started_at`.
@@ -414,7 +419,7 @@ Key test: `test_pause_resume_timing_adjustment` - verifies that pause duration +
 ### Frontend E2E Tests (Playwright)
 
 ```bash
-inv test.playwright.spec --file tests/playwright/e2e/herodraft/websocket-reconnect-fuzz.spec.ts
+just test::pw::spec websocket-reconnect-fuzz
 ```
 
 Fuzz tests verify:

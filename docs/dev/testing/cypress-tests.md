@@ -112,15 +112,14 @@ frontend/tests/cypress/
 Ensure the test environment is running:
 
 ```bash
-source .venv/bin/activate
-inv test.setup     # Full setup (builds, migrates, populates, starts)
+just test::setup     # Full setup (builds, migrates, populates, starts)
 ```
 
 Or if the environment is already set up:
 
 ```bash
-inv dev.test       # Start test environment
-inv db.populate.all  # Populate test data
+just test::up       # Start test environment
+just db::populate::all  # Populate test data
 ```
 
 ### Interactive Mode (Recommended for Development)
@@ -128,7 +127,7 @@ inv db.populate.all  # Populate test data
 Opens the Cypress Test Runner GUI:
 
 ```bash
-inv test.open
+just test::pw::ui
 ```
 
 ### Headless Mode (CI/CD)
@@ -136,32 +135,32 @@ inv test.open
 Runs all tests in headless mode:
 
 ```bash
-inv test.headless
+just test::pw::headless
 ```
 
 ### Run Specific Test Categories
 
 ```bash
 # By category
-inv test.cypress.draft       # Draft tests (07-draft, 08-shuffle-draft)
-inv test.cypress.tournament  # Tournament tests (03, 04)
-inv test.cypress.bracket     # Bracket tests (09)
-inv test.cypress.league      # League tests (10)
-inv test.cypress.navigation  # Navigation tests (00, 01)
-inv test.cypress.mobile      # Mobile tests (06)
-inv test.cypress.all         # All Cypress tests
+just test::pw::spec draft         # Draft tests (07-draft, 08-shuffle-draft)
+just test::pw::spec tournament   # Tournament tests (03, 04)
+just test::pw::spec bracket      # Bracket tests (09)
+just test::pw::spec league       # League tests (10)
+just test::pw::spec navigation   # Navigation tests (00, 01)
+just test::pw::spec mobile       # Mobile tests (06)
+just test::pw::headless          # All tests
 
 # By spec pattern
-inv test.spec --spec drafts      # 07-draft/**/*.cy.ts
-inv test.spec --spec tournament  # 04-tournament/**/*.cy.ts
-inv test.spec --spec 01          # 01-*.cy.ts
+just test::pw::spec draft        # Draft tests
+just test::pw::spec tournament   # Tournament tests
+just test::pw::spec 01           # Tests matching "01"
 ```
 
 ### Parallel Execution
 
 ```bash
-inv test.parallel            # Run with 3 threads (default)
-inv test.parallel --threads 4  # Custom thread count
+just test::pw::headless              # Run with default workers (50% of CPUs)
+just test::pw::headless --workers=4  # Custom worker count
 ```
 
 ## Writing New Tests
@@ -333,14 +332,14 @@ Tests depend on pre-populated test data. Key test configurations:
 Populate test data with:
 
 ```bash
-inv db.populate.all
+just db::populate::all
 ```
 
 ## Debugging Tips
 
 ### Visual Debugging
 
-1. Run in interactive mode: `inv test.open`
+1. Run in interactive mode: `just test::pw::ui`
 2. Use time-travel debugging in Cypress UI
 3. Add `cy.pause()` to stop execution at a point
 
@@ -381,15 +380,11 @@ beforeEach(() => {
 
 ## CI/CD Integration
 
-Tests run automatically via invoke tasks:
+Tests run automatically via just commands:
 
 ```bash
 # Full CI/CD test suite
-inv test.cicd.all      # Backend + Cypress
-
-# Individual suites
-inv test.cicd.cypress  # Cypress only (with setup)
-inv test.cicd.backend  # Backend only
+just test::pw::cicd    # Full CI/CD test suite
 ```
 
 The CI pipeline:

@@ -65,6 +65,9 @@ markdown_extensions:
       alternate_style: true
   - admonition
   - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - attr_list
   - md_in_html
   - tables
@@ -79,13 +82,13 @@ nav:
   - Features:
       - Draft System: features/draft.md
       - Hero Draft: features/herodraft.md
+      - CSV Import: features/csv-import.md
       - Planned:
           - Overview: features/planned/index.md
           - Team Management & Seasons: features/planned/team-management.md
           - League Rating: features/planned/league-rating.md
           - Dota 2 Lobbies: features/planned/dota-lobbies.md
           - Discord Integration: features/planned/discord-integration.md
-          - CSV Import: features/planned/csv-import.md
           - Auction House: features/planned/auction-house.md
   - Architecture:
       - Overview: architecture/overview.md
@@ -93,7 +96,7 @@ nav:
       - Backend: architecture/backend.md
       - Frontend: architecture/frontend.md
   - Development:
-      - Invoke Tasks: development/invoke-tasks.md
+      - Just Commands: development/just-commands.md
       - Testing: development/testing.md
       - Contributing: development/contributing.md
       - Telemetry:

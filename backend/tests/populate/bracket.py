@@ -93,7 +93,6 @@ def populate_bracket_linking_scenario(force=False):
             defaults={
                 "username": username,
                 "steamid": steam_id,
-                "mmr": 3000 + (i * 100),
             },
         )
         if created:
@@ -126,8 +125,8 @@ def populate_bracket_linking_scenario(force=False):
     # Create OrgUser and LeagueUser records for tournament users
     org = dtx_league.organization
     if org:
-        for user in team_users:
-            org_user = _ensure_org_user(user, org)
+        for i, user in enumerate(team_users):
+            org_user = _ensure_org_user(user, org, mmr=3000 + (i * 100))
             _ensure_league_user(user, org_user, dtx_league)
 
     # Create 4 teams with 5 players each
