@@ -1,8 +1,8 @@
-import { redirect } from 'react-router-dom';
+import { redirect } from 'react-router';
 
-export function loader() {
+export function clientLoader() {
   return redirect('/');
 }
 export default function redirecter() {
-  return null; // This component will never render, as the loader handles the redirect
+  return null;
 }

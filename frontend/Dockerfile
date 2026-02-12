@@ -94,8 +94,7 @@ ENV NODE_ENV="dev"
 ENV RELEASE=false
 ENV TEST=false
 EXPOSE 3000
-COPY --from=builder --chown=node:node /app/build /app/build
-COPY --from=builder --chown=node:node /app/instrument.server.mjs /app/instrument.server.mjs
+COPY --from=builder --chown=node:node /app/build/client /app/build/client
 
 USER node
 CMD ["npm", "run", "start"]

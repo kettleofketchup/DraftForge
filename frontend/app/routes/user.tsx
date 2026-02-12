@@ -3,7 +3,7 @@ import { generateMeta } from '~/lib/seo';
 import { fetchUser } from '~/components/api/api';
 import type { Route } from './+types/user';
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const pk = params.pk ? parseInt(params.pk, 10) : null;
   if (!pk) return { user: null };
 
