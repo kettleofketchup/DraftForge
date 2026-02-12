@@ -1,13 +1,9 @@
 from pathlib import Path
 
-import semver
-from invoke import UnexpectedExit
 from invoke.collection import Collection
 from invoke.tasks import task
 
 import paths
-from backend.tasks import ns_db
-from scripts.docker import docker_pull_all, ns_docker
 from scripts.sync_version import (
     get_version_from_env,
     get_version_from_pyproject,
@@ -15,7 +11,7 @@ from scripts.sync_version import (
     update_pyproject_version,
 )
 from scripts.update import ns_update
-from scripts.utils import crun, get_version
+from scripts.utils import crun
 
 config = None
 version = None
@@ -101,6 +97,11 @@ def set_version(c, version, commit=True, tag_version=True):
         else:
             print(f"Warning: Failed to create tag {version} (may already exist).")
 
+    if commit:
+        print("Pushing commit and tags...")
+        crun(c, "git push")
+        crun(c, "git push --tags")
+
 
 @task
 def build_with_version(c, version=None, env_file=None):
@@ -148,24 +149,7 @@ def build_with_version(c, version=None, env_file=None):
     print(f"Build complete with version {target_version}")
 
 
-@task
-def tag(c):
-    version = get_version()
-    v_semver = semver.VersionInfo.parse(version)
-
-    print(f"Tagging version: {version}")
-
-    crun(c, f"git tag {version}")
-    crun(c, "git push --tags")
-
-    v_semver = v_semver.bump_patch()
-    print("new version is string:", str(v_semver))
-    set_version(c, str(v_semver))
-
-
 ns_version.add_task(sync_version_from_env, "from-env")
 ns_version.add_task(sync_version_from_pyproject, "from-pyproject")
 ns_version.add_task(set_version, "set")
 ns_version.add_task(build_with_version, "build")
-
-ns_version.add_task(tag, "tag")
