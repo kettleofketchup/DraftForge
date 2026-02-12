@@ -69,6 +69,7 @@ from .serializers import (
     TournamentsSerializer,
     TournamentUserSerializer,
     UserSerializer,
+    _build_users_dict,
     _serialize_users_with_mmr,
 )
 
@@ -412,28 +413,8 @@ class TournamentView(viewsets.ModelViewSet):
             serializer = self.get_serializer(instance)
             data = serializer.data
 
-            # Phase 1: Add _users dict alongside existing nested objects
-            seen_pks = set()
-            for user in instance.users.all():
-                seen_pks.add(user.pk)
-            for team in instance.teams.all():
-                for m in team.members.all():
-                    seen_pks.add(m.pk)
-                if team.captain_id:
-                    seen_pks.add(team.captain_id)
-                if team.deputy_captain_id:
-                    seen_pks.add(team.deputy_captain_id)
-                for m in team.dropin_members.all():
-                    seen_pks.add(m.pk)
-                for m in team.left_members.all():
-                    seen_pks.add(m.pk)
-
-            user_qs = CustomUser.objects.filter(pk__in=seen_pks).select_related(
-                "positions"
-            )
-            data["_users"] = {
-                u["pk"]: u for u in _serialize_users_with_mmr(user_qs, instance)
-            }
+            # Deduplicated user dict for frontend entity cache
+            data["_users"] = _build_users_dict(instance)
 
             return data
 

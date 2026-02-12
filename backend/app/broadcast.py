@@ -12,7 +12,7 @@ from app.serializers import (
     DraftSerializerSlim,
     DraftTeamSerializerFull,
     HeroDraftSerializer,
-    _serialize_users_with_mmr,
+    _build_users_dict,
 )
 
 log = logging.getLogger(__name__)
