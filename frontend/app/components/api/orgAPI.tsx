@@ -95,7 +95,7 @@ export async function updateOrgUser(
   data: Partial<UserType>,
 ): Promise<UserType> {
   const response = await axios.patch<UserType>(
-    `/org/${organizationId}/users/${orgUserId}/`,
+    `/organizations/${organizationId}/users/${orgUserId}/`,
     data
   );
   return response.data;

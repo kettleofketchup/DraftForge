@@ -703,6 +703,43 @@ def add_org_member(request, org_id):
     return Response({"status": "added", "user": TournamentUserSerializer(user).data})
 
 
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def update_org_user(request, org_id, org_user_id):
+    """Update an OrgUser's fields (e.g. MMR)."""
+    org = get_object_or_404(Organization, pk=org_id)
+
+    if not has_org_staff_access(request.user, org):
+        return Response(
+            {"error": "You do not have permission"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    org_user = get_object_or_404(
+        OrgUser.objects.select_related("user"), pk=org_user_id, organization=org
+    )
+
+    ALLOWED_FIELDS = {"mmr"}
+    updated = []
+    for field in ALLOWED_FIELDS:
+        if field in request.data:
+            setattr(org_user, field, request.data[field])
+            updated.append(field)
+
+    if not updated:
+        return Response(
+            {"error": "No valid fields to update"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    org_user.save(update_fields=updated)
+    invalidate_obj(org_user)
+
+    from org.serializers import OrgUserSerializer
+
+    return Response(OrgUserSerializer(org_user).data)
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def add_league_member(request, league_id):

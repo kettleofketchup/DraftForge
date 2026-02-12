@@ -64,6 +64,7 @@ from app.views.admin_team import (
     remove_org_staff,
     search_users,
     transfer_org_ownership,
+    update_org_user,
 )
 from app.views.csv_import import import_csv_org, import_csv_tournament
 from app.views_joke import buy_tango, get_tangoes
@@ -263,6 +264,12 @@ urlpatterns = [
         "api/tournaments/<int:tournament_id>/import-csv/",
         import_csv_tournament,
         name="import_csv_tournament",
+    ),
+    # Org user update
+    path(
+        "api/organizations/<int:org_id>/users/<int:org_user_id>/",
+        update_org_user,
+        name="update_org_user",
     ),
     # Member management
     path(
