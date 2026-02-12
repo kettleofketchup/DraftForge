@@ -117,6 +117,36 @@ def _serialize_user_with_mmr(user, tournament):
     return results[0] if results else TournamentUserSerializer(user).data
 
 
+def _collect_tournament_user_pks(tournament):
+    """Collect all unique user PKs from a tournament and its teams.
+
+    Includes: users, team members, captains, deputy captains,
+    dropin members, and left members.
+    """
+    seen_pks = set()
+    for user in tournament.users.all():
+        seen_pks.add(user.pk)
+    for team in tournament.teams.all():
+        for m in team.members.all():
+            seen_pks.add(m.pk)
+        if team.captain_id:
+            seen_pks.add(team.captain_id)
+        if team.deputy_captain_id:
+            seen_pks.add(team.deputy_captain_id)
+        for m in team.dropin_members.all():
+            seen_pks.add(m.pk)
+        for m in team.left_members.all():
+            seen_pks.add(m.pk)
+    return seen_pks
+
+
+def _build_users_dict(tournament):
+    """Build a deduplicated {pk: serialized_user} dict for a tournament."""
+    seen_pks = _collect_tournament_user_pks(tournament)
+    user_qs = CustomUser.objects.filter(pk__in=seen_pks).select_related("positions")
+    return {u["pk"]: u for u in _serialize_users_with_mmr(user_qs, tournament)}
+
+
 class TournamentSerializerBase(serializers.ModelSerializer):
     users = serializers.SerializerMethodField()
     captains = TournamentUserSerializer(many=True, read_only=True)
