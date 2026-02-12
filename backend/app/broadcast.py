@@ -9,9 +9,10 @@ from channels.layers import get_channel_layer
 
 from app.serializers import (
     DraftEventSerializer,
-    DraftSerializerForTournament,
+    DraftSerializerSlim,
     DraftTeamSerializerFull,
     HeroDraftSerializer,
+    _serialize_users_with_mmr,
 )
 
 log = logging.getLogger(__name__)

@@ -7,9 +7,12 @@
 
 import { create } from 'zustand';
 import { toast } from 'sonner';
+import type { UserType } from '~/components/user/types';
 import { getLogger } from '~/lib/logger';
 import { getWebSocketManager } from '~/lib/websocket';
 import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
+import { useOrgStore } from '~/store/orgStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import type { DraftEvent, PlayerPickedPayload, WebSocketDraftState, WebSocketMessage } from '~/types/draftEvent';
 import { PlayerPickedToast } from '~/components/teamdraft/DraftToasts';
 
@@ -87,6 +90,15 @@ interface DraftWebSocketState {
   reset: () => void;
 }
 
+/** Ingest _users dict from WS draft state into entity cache. */
+function ingestDraftStateUsers(draftState: WebSocketDraftState): void {
+  if (draftState._users) {
+    const users = Object.values(draftState._users) as UserType[];
+    const orgId = useOrgStore.getState().currentOrg?.pk;
+    useUserCacheStore.getState().upsert(users, { orgId });
+  }
+}
+
 const initialState = {
   status: 'disconnected' as ConnectionStatus,
   error: null,
@@ -160,6 +172,7 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
         // Also update draft state if included in initial_events
         if (message.draft_state) {
           log.debug('Updating draft state from initial_events');
+          ingestDraftStateUsers(message.draft_state);
           set({ draftState: message.draft_state });
         }
       } else if (message.type === 'draft_event' && message.event) {
@@ -181,6 +194,7 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
         // Update draft state if included
         if (message.draft_state) {
           log.debug('Updating draft state from WebSocket');
+          ingestDraftStateUsers(message.draft_state);
           set({ draftState: message.draft_state });
         }
       }

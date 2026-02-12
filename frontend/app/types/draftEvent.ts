@@ -83,21 +83,30 @@ export interface PickUndonePayload {
 
 /**
  * Draft state included in WebSocket messages to avoid additional API calls.
- * This matches the DraftSerializerForTournament from the backend.
+ * This matches the DraftSerializerSlim from the backend (pk-only user references).
  */
 export interface WebSocketDraftState {
   pk: number;
   draft_rounds: Array<{
     pk: number;
+    captain: number | null;
+    choice: number | null;
     [key: string]: unknown;
   }>;
-  users_remaining: Array<{
-    pk: number;
-    username: string;
-    [key: string]: unknown;
-  }>;
+  users_remaining: number[];
   latest_round: number | null;
   draft_style: string;
+  _users?: Record<number, Record<string, unknown>>;
+  tournament?: {
+    pk: number;
+    teams: Array<{
+      pk: number;
+      members: number[];
+      captain: number | null;
+      deputy_captain: number | null;
+      [key: string]: unknown;
+    }>;
+  };
 }
 
 export interface WebSocketMessage {
