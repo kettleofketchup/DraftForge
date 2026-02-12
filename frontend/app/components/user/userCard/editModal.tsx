@@ -101,7 +101,7 @@ export const UserEditModalDialog: React.FC<DialogProps> = memo(
 export const UserEditModalButton: React.FC = memo(() => {
   return (
     <DialogTrigger asChild>
-      <EditIconButton tooltip="Edit User" />
+      <EditIconButton tooltip="Edit User" data-testid="edit-user-btn" />
     </DialogTrigger>
   );
 });
@@ -110,6 +110,7 @@ export const UserEditModal: React.FC<Props> = memo(({ user }) => {
 
   // Initialize form with user data to prevent null updates
   const [form, setForm] = useState<UserType>(() => ({
+    orgUserPk: user.orgUserPk, // OrgUser pk (for org-scoped PATCH)
     pk: user.pk,
     username: user.username,
     nickname: user.nickname,
@@ -127,6 +128,7 @@ export const UserEditModal: React.FC<Props> = memo(({ user }) => {
   // Update form when user prop changes
   useEffect(() => {
     setForm({
+      orgUserPk: user.orgUserPk, // OrgUser pk (for org-scoped PATCH)
       pk: user.pk,
       username: user.username,
       nickname: user.nickname,

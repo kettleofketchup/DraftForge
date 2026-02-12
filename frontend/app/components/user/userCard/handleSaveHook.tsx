@@ -82,10 +82,10 @@ export const handleSave = async (
       },
     });
   } else {
-    // If we have org context AND form.id (OrgUser pk), use org-scoped update
+    // If we have org context AND orgUserPk, use org-scoped update
     const updatePromise =
-      organizationId && form.id
-        ? updateOrgUser(organizationId, form.id, form as UserType)
+      organizationId && form.orgUserPk
+        ? updateOrgUser(organizationId, form.orgUserPk, form as UserType)
         : newUser.dbUpdate(form as UserType);
 
     toast.promise(updatePromise, {

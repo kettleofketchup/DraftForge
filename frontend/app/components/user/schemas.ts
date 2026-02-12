@@ -42,7 +42,7 @@ export const UserSchema = z.object({
   steamid: z.number().min(0).nullable().optional(),
   steam_account_id: z.number().min(0).nullable().optional(), // 32-bit account ID
   avatar: z.string().url().nullable().optional(),
-  id: z.number().min(0).optional(), // OrgUser pk (for PATCH operations)
+  orgUserPk: z.number().min(0).optional(), // OrgUser pk (for org-scoped PATCH)
   pk: z.number().min(0).optional(), // User pk (for display)
   discordNickname: z.string().min(2).max(100).nullable().optional(),
   discordId: z.string().min(2).max(100).nullable().optional(),
