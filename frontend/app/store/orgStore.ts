@@ -10,6 +10,7 @@ import { fetchOrganization, getOrganizationUsers } from '~/components/api/api';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
+import { useUserCacheStore } from '~/store/userCacheStore';
 
 const log = getLogger('orgStore');
 
@@ -20,6 +21,7 @@ interface OrgState {
 
   /** Organization users (members via OrgUser) */
   orgUsers: UserType[];
+  orgUserPks: number[];
   orgUsersLoading: boolean;
   orgUsersError: string | null;
   orgUsersOrgId: number | null;
@@ -39,6 +41,7 @@ export const useOrgStore = create<OrgState>((set, get) => ({
   currentOrg: null,
   currentOrgLoading: false,
   orgUsers: [],
+  orgUserPks: [],
   orgUsersLoading: false,
   orgUsersError: null,
   orgUsersOrgId: null,
@@ -69,6 +72,7 @@ export const useOrgStore = create<OrgState>((set, get) => ({
       currentOrg: null,
       currentOrgLoading: false,
       orgUsers: [],
+      orgUserPks: [],
       orgUsersLoading: false,
       orgUsersOrgId: null,
       orgUsersError: null,
@@ -83,11 +87,17 @@ export const useOrgStore = create<OrgState>((set, get) => ({
       return;
     }
 
-    set({ orgUsersLoading: true, orgUsersError: null, orgUsersOrgId: orgId });
+    set({ orgUsersLoading: true, orgUsersError: null, orgUsersOrgId: orgId, orgUserPks: [] });
 
     try {
       const users = await getOrganizationUsers(orgId);
-      set({ orgUsers: users, orgUsersLoading: false });
+      // Dual-write: populate cache AND keep old array
+      useUserCacheStore.getState().upsert(users, { orgId });
+      set({
+        orgUsers: users,
+        orgUserPks: users.filter((u) => u.pk != null).map((u) => u.pk!),
+        orgUsersLoading: false,
+      });
       log.debug('OrgUsers fetched successfully:', users.length, 'users');
     } catch (error) {
       log.error('Error fetching org users:', error);
@@ -96,12 +106,13 @@ export const useOrgStore = create<OrgState>((set, get) => ({
           error instanceof Error ? error.message : 'Failed to fetch org users',
         orgUsersLoading: false,
         orgUsers: [],
+        orgUserPks: [],
       });
     }
   },
 
   clearOrgUsers: () =>
-    set({ orgUsers: [], orgUsersOrgId: null, orgUsersError: null }),
+    set({ orgUsers: [], orgUserPks: [], orgUsersOrgId: null, orgUsersError: null }),
 }));
 
 // Selectors
