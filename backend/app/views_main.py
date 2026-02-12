@@ -67,6 +67,7 @@ from .serializers import (
     TournamentListSerializer,
     TournamentSerializer,
     TournamentsSerializer,
+    TournamentUserSerializer,
     UserSerializer,
 )
 
@@ -1203,6 +1204,23 @@ class DraftCreateView(generics.CreateAPIView):
 class DraftRoundCreateView(generics.CreateAPIView):
     serializer_class = DraftRoundSerializer
     permission_classes = [IsStaff]
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def bulk_users(request):
+    """Fetch multiple users by pk for entity cache hydration.
+    Returns core fields only — scoped data (MMR) comes from context-specific fetches.
+    """
+    pks = request.data.get("pks", [])
+    if not isinstance(pks, list) or not all(isinstance(pk, int) for pk in pks):
+        return Response({"error": "Provide a list of integer pks"}, status=400)
+    if len(pks) == 0 or len(pks) > 200:
+        return Response({"error": "Provide 1-200 pks"}, status=400)
+
+    users = CustomUser.objects.filter(pk__in=pks).select_related("positions")
+    serializer = TournamentUserSerializer(users, many=True)
+    return Response(serializer.data)
 
 
 @api_view(["GET"])
