@@ -736,6 +736,10 @@ def update_org_user(request, org_id, org_user_id):
     invalidate_obj(org_user)
     invalidate_obj(org)
 
+    # Invalidate cached tournament responses that include this user's MMR
+    for tournament in org_user.user.tournament_set.all():
+        invalidate_obj(tournament)
+
     from org.serializers import OrgUserSerializer
 
     return Response(OrgUserSerializer(org_user).data)
