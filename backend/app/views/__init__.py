@@ -17,6 +17,7 @@ from app.views_main import (  # ViewSets; Create views; Functions
     UserCreateView,
     UserView,
     ajax_auth,
+    bulk_users,
     current_user,
     done,
     home,
@@ -52,6 +53,7 @@ __all__ = [
     "DraftCreateView",
     "DraftRoundCreateView",
     # Functions
+    "bulk_users",
     "logout",
     "home",
     "home_stats",
