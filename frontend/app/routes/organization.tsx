@@ -4,7 +4,7 @@ import { queryClient } from '~/root';
 import { Building2, ClipboardList, ExternalLink, Pencil, Plus, Upload, Users } from 'lucide-react';
 import type { Route } from './+types/organization';
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const pk = params.organizationId ? parseInt(params.organizationId, 10) : null;
   if (!pk) return { organization: null };
 

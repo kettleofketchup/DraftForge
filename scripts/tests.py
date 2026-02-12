@@ -160,29 +160,39 @@ def playwright_debug(c):
 
 
 @task
-def playwright_spec(c, spec="", file="", args=""):
+def playwright_spec(c, spec="", file="", grep="", args=""):
     """Run Playwright tests for a specific spec pattern or file.
 
     Usage:
-        inv test.playwright.spec --spec herodraft  # Runs tests matching "herodraft"
+        inv test.playwright.spec --spec two-captains  # Matches file paths containing "two-captains"
         inv test.playwright.spec --file tests/playwright/e2e/herodraft-captain-connection.spec.ts
+        inv test.playwright.spec --grep "should complete"  # Grep test titles
         inv test.playwright.spec --spec herodraft --args "--shard=1/4"
 
     Args:
-        spec: Grep pattern to filter tests
-        file: Specific test file path to run
+        spec: File path pattern to match (passed as positional arg to Playwright)
+        file: Specific test file path to run (alias for spec)
+        grep: Grep pattern to filter by test title (--grep flag)
         args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
     """
     flush_test_redis(c)
     docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
-        if file:
+        pattern = file or spec
+        # --no-deps: skip project dependencies (e.g. herodraft depends on chromium,
+        # but when running a specific spec we don't want to run all chromium tests first)
+        no_deps = "--no-deps" if pattern or grep else ""
+        if pattern and grep:
             c.run(
-                f"DOCKER_HOST={docker_host} npx playwright test {file} {args}".strip()
+                f'DOCKER_HOST={docker_host} npx playwright test {pattern} --grep "{grep}" {no_deps} {args}'.strip()
             )
-        elif spec:
+        elif pattern:
             c.run(
-                f'DOCKER_HOST={docker_host} npx playwright test --grep "{spec}" {args}'.strip()
+                f"DOCKER_HOST={docker_host} npx playwright test {pattern} {no_deps} {args}".strip()
+            )
+        elif grep:
+            c.run(
+                f'DOCKER_HOST={docker_host} npx playwright test --grep "{grep}" {no_deps} {args}'.strip()
             )
         else:
             c.run(f"DOCKER_HOST={docker_host} npx playwright test {args}".strip())

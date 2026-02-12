@@ -37,21 +37,5 @@ export default function handleRequest(
   });
 }
 
-const SENTRY_PKG = '@sentry/react-router';
-
-export function handleError(error: unknown, { request }: { request: Request }) {
-  // Client disconnected before response finished (React Router aborts the controller)
-  if (error instanceof DOMException && error.name === 'AbortError') return;
-
-  // Ignore errors from requests to raw IPs (bot scanners)
-  const host = new URL(request.url).hostname;
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return;
-
-  // In production, Sentry is loaded via instrument.server.mjs (--import flag).
-  // captureException is a no-op when the SDK isn't initialized.
-  import(/* @vite-ignore */ SENTRY_PKG)
-    .then((Sentry) => Sentry.captureException(error))
-    .catch(() => {});
-
-  console.error('Server error:', request.url, error);
-}
+// SPA mode: this file only runs at build time to generate the static HTML shell.
+// No server-side rendering or error handling occurs at runtime.

@@ -114,8 +114,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   };
 
   const goToDotabuff = () => {
-    if (!displayPlayer.steam_account_id) return '#';
-    return `https://www.dotabuff.com/players/${encodeURIComponent(String(displayPlayer.steam_account_id))}`;
+    if (!displayPlayer.steamid) return '#';
+    return `https://www.dotabuff.com/players/${encodeURIComponent(String(displayPlayer.steamid))}`;
   };
 
   return (
@@ -218,7 +218,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
         {/* Action buttons */}
         <div className="pt-2 flex gap-2">
           {/* Dotabuff link */}
-          {displayPlayer.steam_account_id && (
+          {displayPlayer.steamid && (
             <a
               className="flex items-center justify-center btn btn-sm btn-outline flex-1 gap-1"
               href={goToDotabuff()}

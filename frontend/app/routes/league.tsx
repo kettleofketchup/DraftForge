@@ -3,7 +3,7 @@ import { fetchLeague } from '~/components/api/api';
 import { useParams, useNavigate } from 'react-router';
 import type { Route } from './+types/league';
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const pk = params.leagueId ? parseInt(params.leagueId, 10) : null;
   if (!pk) return { league: null };
 

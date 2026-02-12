@@ -77,7 +77,7 @@ export const queryClient = new QueryClient({
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark" data-theme="dark">
-      <head suppressHydrationWarning={true}>
+      <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
@@ -106,6 +106,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <DevScripts />
       </body>
     </html>
+  );
+}
+
+export function HydrateFallback() {
+  return (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+    </div>
   );
 }
 

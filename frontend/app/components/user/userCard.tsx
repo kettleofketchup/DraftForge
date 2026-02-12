@@ -76,9 +76,9 @@ export const UserCard: React.FC<Props> = memo(
 
     const userDotabuff = () => {
       const goToDotabuff = () => {
-        return `https://www.dotabuff.com/players/${user.steam_account_id}`;
+        return `https://www.dotabuff.com/players/${user.steamid}`;
       };
-      if (!user.steam_account_id) return null;
+      if (!user.steamid) return null;
       return (
         <a
           className="btn btn-sm btn-outline gap-1"
