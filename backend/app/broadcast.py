@@ -42,9 +42,18 @@ def broadcast_event(event, include_draft_state=True):
     draft_state = None
     if include_draft_state:
         try:
-            # Refresh the draft from DB to get the latest state
-            event.draft.refresh_from_db()
-            draft_state = DraftSerializerForTournament(event.draft).data
+            from app.models import Draft
+
+            # Re-fetch with prefetches to avoid N+1 queries and ensure
+            # captain/choice relations are fully loaded for serialization
+            draft = Draft.objects.prefetch_related(
+                "draft_rounds__captain",
+                "draft_rounds__choice",
+                "tournament__teams__captain",
+                "tournament__teams__members",
+                "tournament__users",
+            ).get(pk=event.draft_id)
+            draft_state = DraftSerializerForTournament(draft).data
         except Exception as e:
             log.warning(f"Failed to serialize draft state: {e}")
 
