@@ -10,6 +10,7 @@ import { fetchLeague, getLeagueUsers } from '~/components/api/api';
 import type { LeagueType } from '~/components/league/schemas';
 import type { UserType } from '~/components/user/types';
 import { getLogger } from '~/lib/logger';
+import { useUserCacheStore } from '~/store/userCacheStore';
 
 const log = getLogger('leagueStore');
 
@@ -20,6 +21,7 @@ interface LeagueState {
 
   /** League users (members via LeagueUser) */
   leagueUsers: UserType[];
+  leagueUserPks: number[];
   leagueUsersLoading: boolean;
   leagueUsersError: string | null;
   leagueUsersLeagueId: number | null;
@@ -39,6 +41,7 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
   currentLeague: null,
   currentLeagueLoading: false,
   leagueUsers: [],
+  leagueUserPks: [],
   leagueUsersLoading: false,
   leagueUsersError: null,
   leagueUsersLeagueId: null,
@@ -69,6 +72,7 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
       currentLeague: null,
       currentLeagueLoading: false,
       leagueUsers: [],
+      leagueUserPks: [],
       leagueUsersLoading: false,
       leagueUsersLeagueId: null,
       leagueUsersError: null,
@@ -83,11 +87,17 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
       return;
     }
 
-    set({ leagueUsersLoading: true, leagueUsersError: null, leagueUsersLeagueId: leagueId });
+    set({ leagueUsersLoading: true, leagueUsersError: null, leagueUsersLeagueId: leagueId, leagueUserPks: [] });
 
     try {
       const users = await getLeagueUsers(leagueId);
-      set({ leagueUsers: users, leagueUsersLoading: false });
+      // Dual-write: populate cache AND keep old array
+      useUserCacheStore.getState().upsert(users, { leagueId });
+      set({
+        leagueUsers: users,
+        leagueUserPks: users.filter((u) => u.pk != null).map((u) => u.pk!),
+        leagueUsersLoading: false,
+      });
       log.debug('LeagueUsers fetched successfully:', users.length, 'users');
     } catch (error) {
       log.error('Error fetching league users:', error);
@@ -96,12 +106,13 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
           error instanceof Error ? error.message : 'Failed to fetch league users',
         leagueUsersLoading: false,
         leagueUsers: [],
+        leagueUserPks: [],
       });
     }
   },
 
   clearLeagueUsers: () =>
-    set({ leagueUsers: [], leagueUsersLeagueId: null, leagueUsersError: null }),
+    set({ leagueUsers: [], leagueUserPks: [], leagueUsersLeagueId: null, leagueUsersError: null }),
 }));
 
 // Selectors
