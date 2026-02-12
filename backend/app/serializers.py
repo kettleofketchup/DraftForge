@@ -27,6 +27,22 @@ from .models import (
 )
 
 
+class UserPkField(serializers.RelatedField):
+    """Serialize a user relationship as just their pk integer.
+    Handles nullable FKs (e.g., deputy_captain) via allow_null.
+    """
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("read_only", True)
+        kwargs.setdefault("allow_null", True)
+        super().__init__(**kwargs)
+
+    def to_representation(self, value):
+        if value is None:
+            return None
+        return value.pk
+
+
 class PositionsSerializer(serializers.ModelSerializer):
     pk = serializers.IntegerField(required=False)
     carry = serializers.IntegerField()
