@@ -39,9 +39,6 @@ export const GameCard: React.FC<Props> = ({
   >({});
   const tournament = useUserStore((state) => state.tournament);
 
-  const allUsersFromStore = useUserStore((state) => state.users); // Assuming 'users' holds all users
-  const fetchAllUsers = useUserStore((state) => state.getUsers); // Assuming 'getUsers' fetches all users
-
   const currentUser = useUserStore((state) => state.currentUser);
   const [saveCallback, setSaveCallBack] = useState(saveFunc || 'save');
 
