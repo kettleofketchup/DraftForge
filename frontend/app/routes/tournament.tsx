@@ -4,7 +4,7 @@ import { fetchTournament } from '~/components/api/api';
 import { queryClient } from '~/root';
 import type { Route } from './+types/tournament';
 
-export async function loader({ params }: Route.LoaderArgs) {
+export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const pk = params.pk ? parseInt(params.pk, 10) : null;
   if (!pk) return { tournament: null };
 
