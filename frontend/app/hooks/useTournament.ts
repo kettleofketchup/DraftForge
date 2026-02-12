@@ -7,7 +7,6 @@ export function useTournament(pk: number | null) {
     queryKey: ['tournament', pk],
     queryFn: () => fetchTournament(pk!),
     enabled: !!pk,
-    staleTime: 0, // Override global 5min default so invalidateQueries() triggers immediate refetch
     refetchInterval: 10_000,
   });
 }
