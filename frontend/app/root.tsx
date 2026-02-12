@@ -64,7 +64,8 @@ export function DevScripts() {
 }
 
 // Create a client outside component to avoid recreation on renders
-const queryClient = new QueryClient({
+// Exported so route loaders can seed the cache, avoiding double-fetches
+export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5, // 5 minutes

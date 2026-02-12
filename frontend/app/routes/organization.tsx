@@ -1,5 +1,6 @@
 import { generateMeta } from '~/lib/seo';
 import { fetchOrganization } from '~/components/api/api';
+import { queryClient } from '~/root';
 import { Building2, ClipboardList, ExternalLink, Pencil, Plus, Upload, Users } from 'lucide-react';
 import type { Route } from './+types/organization';
 
@@ -9,6 +10,8 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   try {
     const organization = await fetchOrganization(pk);
+    // Seed TanStack Query cache so useOrganization() doesn't re-fetch
+    queryClient.setQueryData(['organization', pk], organization);
     return { organization };
   } catch {
     return { organization: null };
