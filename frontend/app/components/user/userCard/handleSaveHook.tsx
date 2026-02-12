@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { updateOrgUser } from '~/components/api/api';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
+import { useOrgStore } from '~/store/orgStore';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('handleSaveHook');
 
@@ -88,12 +89,20 @@ export const handleSave = async (
         ? updateOrgUser(organizationId, form.orgUserPk, form as UserType)
         : newUser.dbUpdate(form as UserType);
 
+    const isOrgUpdate = !!(organizationId && form.orgUserPk);
     toast.promise(updatePromise, {
       loading: `Updating User ${user.username}.`,
       success: (data) => {
         setIsSaving(true);
         setStatusMsg('User updated successfully!');
         setUser(data);
+        // Update orgStore.orgUsers so the org page reflects the change
+        if (isOrgUpdate) {
+          const { orgUsers, setOrgUsers } = useOrgStore.getState();
+          setOrgUsers(
+            orgUsers.map((u) => (u.orgUserPk === data.orgUserPk ? { ...u, ...data } : u)),
+          );
+        }
         resetForm();
         return `${user.username} has been updated`;
       },
