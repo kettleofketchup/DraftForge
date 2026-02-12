@@ -8,11 +8,13 @@ import { TeamPositionCoverageRow } from '../TeamPositionCoverage';
 const selectTeams = (state: ReturnType<typeof useUserStore.getState>) => state.tournament?.teams;
 const selectCurDraftRoundCaptainPk = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.captain?.pk;
 const selectCurDraftRoundCaptain = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.captain;
+const selectOrganizationPk = (state: ReturnType<typeof useUserStore.getState>) => state.tournament?.organization_pk;
 
 export const CurrentTeamSection = memo(() => {
   const teams = useUserStore(selectTeams);
   const curDraftRoundCaptainPk = useUserStore(selectCurDraftRoundCaptainPk);
   const curDraftRoundCaptain = useUserStore(selectCurDraftRoundCaptain);
+  const organizationPk = useUserStore(selectOrganizationPk);
 
   // Get current team
   const currentTeam = useMemo(() => {
@@ -31,7 +33,7 @@ export const CurrentTeamSection = memo(() => {
         <h3 className="text-xs md:text-sm font-medium text-muted-foreground mb-1 text-center lg:text-left">
           {teamName}
         </h3>
-        <TeamTable team={currentTeam} compact useStrips />
+        <TeamTable team={currentTeam} compact useStrips organizationId={organizationPk ?? undefined} />
       </div>
     </div>
   );

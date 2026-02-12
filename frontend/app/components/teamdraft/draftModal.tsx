@@ -433,7 +433,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     // Show completed team draft view when draft is complete and not viewing full draft
     if (isDraftCompleted && !showFullDraft) {
       return (
-        <CompletedTeamDraftView teams={tournament?.teams || []} />
+        <CompletedTeamDraftView teams={tournament?.teams || []} organizationId={tournament?.organization_pk ?? undefined} />
       );
     }
 
