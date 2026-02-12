@@ -176,6 +176,16 @@ class TeamSerializerForTournament(serializers.ModelSerializer):
         )
 
 
+class TeamSerializerSlim(TeamSerializerForTournament):
+    """Slim variant — inherits everything, overrides user fields to pk-only."""
+
+    members = UserPkField(many=True)
+    captain = UserPkField()
+    deputy_captain = UserPkField()
+    dropin_members = UserPkField(many=True)
+    left_members = UserPkField(many=True)
+
+
 # For tournaments page
 class TournamentsSerializer(serializers.ModelSerializer):
     captains = TournamentUserSerializer(many=True, read_only=True)
@@ -467,6 +477,14 @@ class DraftRoundForDraftSerializer(serializers.ModelSerializer):
         )
 
 
+class DraftRoundSerializerSlim(DraftRoundForDraftSerializer):
+    """Slim variant — user fields as pks."""
+
+    captain = UserPkField()
+    choice = UserPkField()
+    team = TeamSerializerSlim(many=False, read_only=True)
+
+
 class TournamentSerializerForWebSocket(serializers.ModelSerializer):
     """
     Minimal tournament serializer for WebSocket broadcasts.
@@ -511,6 +529,16 @@ class DraftSerializerForTournament(serializers.ModelSerializer):
             "draft_style",
             "tournament",
         )
+
+
+class DraftSerializerSlim(DraftSerializerForTournament):
+    """Slim variant — user fields as pks, uses slim nested serializers."""
+
+    draft_rounds = DraftRoundSerializerSlim(many=True, read_only=True)
+    users_remaining = serializers.SerializerMethodField()
+
+    def get_users_remaining(self, draft):
+        return [u.pk for u in draft.users_remaining]
 
 
 class TournamentSerializerDraft(serializers.ModelSerializer):
