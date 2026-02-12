@@ -8,10 +8,6 @@ set ver:
     {{inv}} version.set {{ver}}
 
 [group('version')]
-tag:
-    {{inv}} version.tag
-
-[group('version')]
 build:
     {{inv}} version.build
 
