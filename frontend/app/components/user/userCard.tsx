@@ -14,6 +14,7 @@ import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
+import { isUserEntry } from '~/store/userCacheTypes';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
 import { useUserStore } from '~/store/userStore';
 import { RolePositions } from './positions';
@@ -41,6 +42,10 @@ export const UserCard: React.FC<Props> = memo(
     const getUsers = useUserStore((state) => state.getUsers);
     const { openPlayerModal } = useSharedPopover();
 
+    const mmr = isUserEntry(user)
+      ? (organizationId ? user.orgData[organizationId]?.mmr : undefined)
+      : user.mmr;
+
     const handleViewProfile = () => {
       openPlayerModal(user, { leagueId, organizationId });
     };
@@ -53,7 +58,7 @@ export const UserCard: React.FC<Props> = memo(
     }, [user.pk, getUsers]);
 
     const hasError = () => {
-      if (!user.mmr) {
+      if (!mmr) {
         return true;
       }
 
@@ -144,7 +149,7 @@ export const UserCard: React.FC<Props> = memo(
     const errorInfo = () => {
       return (
         <div className="flex flex-col items-end">
-          {!user.mmr && (
+          {!mmr && (
             <span className="font-semibold text-red-500">MMR: Not added</span>
           )}
           {!user.positions && (
@@ -222,7 +227,7 @@ export const UserCard: React.FC<Props> = memo(
                 <Item size="sm" variant="muted" className="!p-1">
                   <ItemContent className="!gap-0 items-center">
                     <ItemTitle className="!text-xs text-muted-foreground">Base MMR</ItemTitle>
-                    <span className="text-sm font-semibold">{user.mmr ?? '?'}</span>
+                    <span className="text-sm font-semibold">{mmr ?? '?'}</span>
                   </ItemContent>
                 </Item>
                 <Item size="sm" variant="muted" className="!p-1">
@@ -264,7 +269,7 @@ export const UserCard: React.FC<Props> = memo(
           </div>
 
           {/* Error info row */}
-          {(!user.mmr || !user.positions) && (
+          {(!mmr || !user.positions) && (
             <div className="flex justify-end">
               {errorInfo()}
             </div>
