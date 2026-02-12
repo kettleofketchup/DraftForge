@@ -69,6 +69,7 @@ from .serializers import (
     TournamentsSerializer,
     TournamentUserSerializer,
     UserSerializer,
+    _serialize_users_with_mmr,
 )
 
 log = logging.getLogger(__name__)
@@ -353,7 +354,22 @@ class TournamentView(viewsets.ModelViewSet):
             queryset = queryset.filter(league__organization__pk=org_id)
         if league_id:
             queryset = queryset.filter(league_id=league_id)
-        return queryset
+        return queryset.prefetch_related(
+            "users",
+            "users__positions",
+            "captains",
+            "captains__positions",
+            "teams__members",
+            "teams__members__positions",
+            "teams__captain",
+            "teams__captain__positions",
+            "teams__deputy_captain",
+            "teams__deputy_captain__positions",
+            "teams__dropin_members",
+            "teams__dropin_members__positions",
+            "teams__left_members",
+            "teams__left_members__positions",
+        )
 
     def list(self, request, *args, **kwargs):
         cache_key = f"tournament_list:{request.get_full_path()}"
@@ -378,7 +394,7 @@ class TournamentView(viewsets.ModelViewSet):
 
     def retrieve(self, request, *args, **kwargs):
         pk = kwargs["pk"]
-        cache_key = f"tournament_detail:{pk}"
+        cache_key = f"tournament_detail_v2:{pk}"
 
         @cached_as(
             Tournament.objects.filter(pk=pk),
@@ -393,9 +409,33 @@ class TournamentView(viewsets.ModelViewSet):
         def get_data():
             log.debug("get_tournament: fetching data")
             instance = self.get_object()
-
             serializer = self.get_serializer(instance)
-            return serializer.data
+            data = serializer.data
+
+            # Phase 1: Add _users dict alongside existing nested objects
+            seen_pks = set()
+            for user in instance.users.all():
+                seen_pks.add(user.pk)
+            for team in instance.teams.all():
+                for m in team.members.all():
+                    seen_pks.add(m.pk)
+                if team.captain_id:
+                    seen_pks.add(team.captain_id)
+                if team.deputy_captain_id:
+                    seen_pks.add(team.deputy_captain_id)
+                for m in team.dropin_members.all():
+                    seen_pks.add(m.pk)
+                for m in team.left_members.all():
+                    seen_pks.add(m.pk)
+
+            user_qs = CustomUser.objects.filter(pk__in=seen_pks).select_related(
+                "positions"
+            )
+            data["_users"] = {
+                u["pk"]: u for u in _serialize_users_with_mmr(user_qs, instance)
+            }
+
+            return data
 
         data = get_data()
         return Response(data)
