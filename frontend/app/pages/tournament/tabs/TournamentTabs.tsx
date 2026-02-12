@@ -14,7 +14,6 @@ import { usePageNav } from '~/hooks/usePageNav';
 export default function TournamentTabs() {
   const { pk } = useParams<{ pk: string }>();
   const navigate = useNavigate();
-  const users = useUserStore((state) => state.users);
   const activeTab = useTournamentStore((state) => state.activeTab);
 
   const handleTabChange = useCallback((tab: string) => {
