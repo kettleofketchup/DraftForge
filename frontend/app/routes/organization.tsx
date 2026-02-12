@@ -49,7 +49,9 @@ import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
+import { useOrgUsers } from '~/hooks/useOrgUsers';
 import { useOrgStore } from '~/store/orgStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 import { usePageNav } from '~/hooks/usePageNav';
 
@@ -77,8 +79,9 @@ export default function OrganizationDetailPage() {
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [activeTab, setActiveTab] = useUrlTabs('leagues');
 
-  // Org users from store
-  const { orgUsers, orgUsersLoading, orgUsersOrgId, getOrgUsers } = useOrgStore();
+  // Org users from store (pk array) + cache resolution
+  const { orgUserPks, orgUsersLoading, orgUsersOrgId, getOrgUsers } = useOrgStore();
+  const orgUsers = useOrgUsers(pk ?? 0);
   const currentOrg = useOrgStore((s) => s.currentOrg);
 
   // Fetch org users when switching to users tab
@@ -103,16 +106,20 @@ export default function OrganizationDetailPage() {
     async (payload: AddMemberPayload) => {
       if (!pk) throw new Error('No organization');
       const user = await addOrgMember(pk, payload);
-      const { orgUsers, setOrgUsers } = useOrgStore.getState();
-      setOrgUsers([...orgUsers, user]);
+      // Optimistic update: upsert into cache + append pk
+      useUserCacheStore.getState().upsert(user, { orgId: pk });
+      const { orgUserPks } = useOrgStore.getState();
+      if (user.pk != null) {
+        useOrgStore.setState({ orgUserPks: [...orgUserPks, user.pk] });
+      }
       return user;
     },
     [pk]
   );
 
   const addedPkSet = useMemo(
-    () => new Set(orgUsers.map((u) => u.pk)),
-    [orgUsers]
+    () => new Set(orgUserPks),
+    [orgUserPks]
   );
   const isUserAdded = useCallback(
     (user: UserType) => user.pk != null && addedPkSet.has(user.pk),
@@ -122,7 +129,7 @@ export default function OrganizationDetailPage() {
   const hasDiscordServer = Boolean(organization?.discord_server_id);
 
   // Page nav options for mobile navbar dropdown
-  const userCountDisplay = orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUsers.length;
+  const userCountDisplay = orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUserPks.length;
   const pageNavOptions = useMemo(() => {
     const opts = [
       { value: 'leagues', label: `Leagues (${leagues.length})` },
@@ -225,7 +232,7 @@ export default function OrganizationDetailPage() {
             </TabsTrigger>
             <TabsTrigger value="users" data-testid="org-tab-users">
               <Users className="w-4 h-4 mr-2" />
-              Users ({orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUsers.length})
+              Users ({orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUserPks.length})
             </TabsTrigger>
             {isOrgAdmin && (
               <TabsTrigger value="claims" data-testid="org-tab-claims">

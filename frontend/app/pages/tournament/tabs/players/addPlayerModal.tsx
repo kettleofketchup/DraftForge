@@ -5,6 +5,7 @@ import type { UserType } from '~/components/user/types';
 import { PlusIconButton } from '~/components/ui/buttons';
 import { FormDialog } from '~/components/ui/dialogs';
 import UserCreateModal from '~/components/user/userCard/createModal';
+import { useOrgUsers } from '~/hooks/useOrgUsers';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 import { AddPlayerDropdown } from './addPlayerDropdown';
@@ -40,8 +41,8 @@ export const AddPlayerModal: React.FC<Props> = ({
   const globalUsers = useUserStore((state) => state.users);
   const getUsers = useUserStore((state) => state.getUsers);
 
-  // Org-specific users (preferred when orgId is provided)
-  const orgUsers = useOrgStore((state) => state.orgUsers);
+  // Org-specific users resolved from cache
+  const orgUsers = useOrgUsers(orgId ?? 0);
   const getOrgUsers = useOrgStore((state) => state.getOrgUsers);
   const orgUsersLoading = useOrgStore((state) => state.orgUsersLoading);
 
