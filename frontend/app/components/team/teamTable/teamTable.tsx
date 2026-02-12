@@ -21,6 +21,8 @@ interface TeamTableProps {
   compact?: boolean;
   /** Use UserStrip layout instead of table rows */
   useStrips?: boolean;
+  /** Optional organization ID for scoped MMR display */
+  organizationId?: number;
 }
 
 // Custom comparison function for memo that properly detects team member changes
@@ -28,9 +30,10 @@ const teamTablePropsAreEqual = (
   prevProps: TeamTableProps,
   nextProps: TeamTableProps
 ): boolean => {
-  // If compact or useStrips changed, re-render
+  // If compact, useStrips, or organizationId changed, re-render
   if (prevProps.compact !== nextProps.compact) return false;
   if (prevProps.useStrips !== nextProps.useStrips) return false;
+  if (prevProps.organizationId !== nextProps.organizationId) return false;
 
   // If team reference is the same, no need to re-render
   if (prevProps.team === nextProps.team) return true;
@@ -54,7 +57,7 @@ const teamTablePropsAreEqual = (
   return true;
 };
 
-export const TeamTable: React.FC<TeamTableProps> = memo(({ team, compact = false, useStrips = false }) => {
+export const TeamTable: React.FC<TeamTableProps> = memo(({ team, compact = false, useStrips = false, organizationId }) => {
   // Memoize sorted members to avoid mutation and recalculation
   const members = useMemo(() => {
     if (!team?.members || team.members.length === 0) return [];
@@ -92,6 +95,7 @@ export const TeamTable: React.FC<TeamTableProps> = memo(({ team, compact = false
           <UserStrip
             key={`TeamStrip-${user.pk}`}
             user={user}
+            organizationId={organizationId}
             data-testid={`team-member-${user.pk}`}
           />
         ))}
