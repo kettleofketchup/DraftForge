@@ -95,6 +95,7 @@ export const UserEditForm: React.FC<Props> = ({ user, form, setForm }) => {
       <div className="w-full">
         <Label className="font-semibold">{label}</Label>
         <Input
+          data-testid={`edit-user-${key}`}
           type={type}
           placeholder={String(user[key] ?? '')}
           value={String(form[key as keyof UserType] ?? '')}

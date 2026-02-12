@@ -14,7 +14,9 @@ class OrgUserSerializer(serializers.ModelSerializer):
         league_id: Optional league ID to include league_mmr from LeagueUser
     """
 
-    id = serializers.IntegerField(read_only=True)  # OrgUser's pk (for PATCH)
+    orgUserPk = serializers.IntegerField(
+        source="id", read_only=True
+    )  # OrgUser's pk (for PATCH)
     pk = serializers.IntegerField(source="user.pk", read_only=True)  # User's pk
     username = serializers.CharField(source="user.username", read_only=True)
     nickname = serializers.CharField(source="user.nickname", read_only=True)
@@ -64,7 +66,7 @@ class OrgUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrgUser
         fields = (
-            "id",
+            "orgUserPk",
             "pk",
             "username",
             "nickname",

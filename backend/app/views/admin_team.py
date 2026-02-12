@@ -734,6 +734,7 @@ def update_org_user(request, org_id, org_user_id):
 
     org_user.save(update_fields=updated)
     invalidate_obj(org_user)
+    invalidate_obj(org)
 
     from org.serializers import OrgUserSerializer
 
