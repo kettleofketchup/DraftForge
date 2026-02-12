@@ -12,7 +12,6 @@ export function useOrganization(pk: number | undefined) {
     queryKey: organizationQueryKey(pk!),
     queryFn: () => fetchOrganization(pk!),
     enabled: !!pk,
-    staleTime: 0, // Override global 5min default so invalidateQueries() triggers immediate refetch
   });
 
   // Keep Zustand orgStore in sync so other consumers (AdminTeamSection, etc.) see live data

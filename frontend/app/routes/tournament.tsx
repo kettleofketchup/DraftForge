@@ -1,6 +1,7 @@
 import TournamentDetailPage from '~/pages/tournament/TournamentDetailPage';
 import { generateMeta } from '~/lib/seo';
 import { fetchTournament } from '~/components/api/api';
+import { queryClient } from '~/root';
 import type { Route } from './+types/tournament';
 
 export async function loader({ params }: Route.LoaderArgs) {
@@ -9,6 +10,8 @@ export async function loader({ params }: Route.LoaderArgs) {
 
   try {
     const tournament = await fetchTournament(pk);
+    // Seed TanStack Query cache so useTournament() doesn't re-fetch
+    queryClient.setQueryData(['tournament', pk], tournament);
     return { tournament };
   } catch {
     return { tournament: null };
