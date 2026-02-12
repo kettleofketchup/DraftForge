@@ -49,3 +49,17 @@ export const UserSchema = z.object({
   guildNickname: z.string().min(2).max(100).nullable().optional(),
   active_drafts: z.array(ActiveDraftSchema).optional(),
 });
+
+/**
+ * Core user fields for the entity cache.
+ * Omits context-scoped fields (id=OrgUser pk, mmr=org MMR, league_mmr)
+ * which go into orgData/leagueData on UserEntry.
+ * pk is overridden from optional to required.
+ */
+export const CoreUserSchema = UserSchema.omit({
+  id: true,
+  mmr: true,
+  league_mmr: true,
+}).extend({ pk: z.number() });
+
+export type CoreUserType = z.infer<typeof CoreUserSchema>;
