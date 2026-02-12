@@ -7,7 +7,9 @@ import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import type { UserType } from '~/components/user/types';
 import { useIsLeagueAdmin } from '~/hooks/usePermissions';
+import { useLeagueUsers } from '~/hooks/useLeagueUsers';
 import { useLeagueStore } from '~/store/leagueStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { useOrgStore } from '~/store/orgStore';
 
 interface Props {
@@ -15,7 +17,8 @@ interface Props {
 }
 
 export const UsersTab: React.FC<Props> = ({ leaguePk }) => {
-  const { leagueUsers, leagueUsersLoading, getLeagueUsers } = useLeagueStore();
+  const { leagueUserPks, leagueUsersLoading, getLeagueUsers } = useLeagueStore();
+  const leagueUsers = useLeagueUsers(leaguePk);
   const currentLeague = useLeagueStore((s) => s.currentLeague);
   const currentOrg = useOrgStore((s) => s.currentOrg);
   const [showAddUser, setShowAddUser] = useState(false);
@@ -33,16 +36,20 @@ export const UsersTab: React.FC<Props> = ({ leaguePk }) => {
     async (payload: AddMemberPayload) => {
       if (!leaguePk) throw new Error('No league');
       const user = await addLeagueMember(leaguePk, payload);
-      const { leagueUsers, setLeagueUsers } = useLeagueStore.getState();
-      setLeagueUsers([...leagueUsers, user]);
+      // Optimistic update: upsert into cache + append pk
+      useUserCacheStore.getState().upsert(user, { leagueId: leaguePk });
+      const { leagueUserPks } = useLeagueStore.getState();
+      if (user.pk != null) {
+        useLeagueStore.setState({ leagueUserPks: [...leagueUserPks, user.pk] });
+      }
       return user;
     },
     [leaguePk]
   );
 
   const addedPkSet = useMemo(
-    () => new Set(leagueUsers.map((u) => u.pk)),
-    [leagueUsers]
+    () => new Set(leagueUserPks),
+    [leagueUserPks]
   );
   const isUserAdded = useCallback(
     (user: UserType) => user.pk != null && addedPkSet.has(user.pk),
