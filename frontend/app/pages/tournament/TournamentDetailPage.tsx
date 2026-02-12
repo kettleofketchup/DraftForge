@@ -1,8 +1,10 @@
 import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import type { UserType } from '~/components/user/types';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 import { useTournamentStore } from '~/store/tournamentStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 import { useTournament } from '~/hooks/useTournament';
 import { useTournamentSocket } from '~/hooks/useTournamentSocket';
@@ -30,6 +32,15 @@ export const TournamentDetailPage: React.FC = () => {
   // directly and write to userStore will be overwritten on next refetch (~10s).
   useEffect(() => {
     if (tournament) {
+      // Ingest _users dict into entity cache for deduplication
+      const _users = (tournament as Record<string, unknown>)._users as
+        | Record<number, UserType>
+        | undefined;
+      if (_users) {
+        const users = Object.values(_users);
+        const orgId = useOrgStore.getState().currentOrg?.pk;
+        useUserCacheStore.getState().upsert(users, { orgId });
+      }
       useUserStore.getState().setTournament(tournament);
     }
     return () => {
