@@ -39,6 +39,53 @@ from cacheops import invalidate_all
 invalidate_all()
 ```
 
+## Transaction-Safe Invalidation (Preferred)
+
+When writes happen inside `transaction.atomic()`, signal handlers, or `@transaction.atomic` decorators,
+cacheops `invalidate_obj()` may fire before data is committed — causing stale cache reads.
+
+Use the `invalidate_after_commit` utility from `app/cache_utils.py`:
+
+```python
+from app.cache_utils import invalidate_after_commit
+
+# Inside a transaction — invalidation deferred until commit
+with transaction.atomic():
+    user.nickname = "New"
+    user.save()
+    org_user.mmr = 5000
+    org_user.save()
+    invalidate_after_commit(
+        *user.tournaments.all(),
+        org_user,
+        org_user.organization,
+    )
+
+# Inside a signal handler — signals run INSIDE the triggering transaction
+@receiver(post_save, sender=Match)
+def match_post_save(sender, instance, **kwargs):
+    for game in instance.games.all():
+        invalidate_after_commit(game, game.tournament)
+
+# With @transaction.atomic decorator
+@transaction.atomic
+def save_bracket(request, tournament_id):
+    # ... create/update games ...
+    invalidate_after_commit(tournament, *saved_games)
+```
+
+### Rule of Thumb
+
+If you ever have:
+- `transaction.atomic()` blocks
+- `on_commit` hooks
+- Bulk `.update()` / `.bulk_create()`
+- Writes in signal handlers
+
+...use `invalidate_after_commit()` instead of direct `invalidate_obj()`.
+
+Direct `invalidate_obj()` is only safe OUTSIDE any transaction context (e.g., after M2M `.add()`/`.remove()` which auto-commit).
+
 ## Override save() Pattern
 
 For models with related data that must stay consistent:
@@ -65,20 +112,21 @@ class DraftRound(models.Model):
 
 ## Signal-Based Invalidation (Alternative)
 
+**WARNING**: Signal handlers run INSIDE the triggering transaction. Always use `invalidate_after_commit`:
+
 ```python
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from cacheops import invalidate_model, invalidate_obj
+from app.cache_utils import invalidate_after_commit
 
 @receiver(post_save, sender=DraftRound)
 def invalidate_draft_cache(sender, instance, **kwargs):
-    invalidate_obj(instance.draft)
-    invalidate_model(Team)
+    invalidate_after_commit(instance.draft)
 
 @receiver(post_delete, sender=Team)
 def invalidate_team_cache(sender, instance, **kwargs):
     if instance.tournament:
-        invalidate_obj(instance.tournament)
+        invalidate_after_commit(instance.tournament)
 ```
 
 ## Function-Level Invalidation
