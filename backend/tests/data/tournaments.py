@@ -91,6 +91,7 @@ TEST_LEAGUE_TOURNAMENT_CONFIG = DynamicTournamentConfig(
     team_count=4,
     tournament_type="double_elimination",
     league_name="Test League",
+    organization_pk=2,  # Test Organization
 )
 
 # Bracket test configs (for steam match population)
@@ -156,6 +157,7 @@ CSV_IMPORT_TOURNAMENT: TestTournament = TestTournament(
     state="in_progress",
     steam_league_id=CSV_STEAM_LEAGUE_ID,
     league_name="CSV Import League",
+    organization_pk=3,  # CSV Import Org
     teams=[],  # Empty - CSV import adds users
 )
 
@@ -171,5 +173,6 @@ USER_EDIT_TOURNAMENT: TestTournament = TestTournament(
     state="in_progress",
     steam_league_id=USER_EDIT_STEAM_LEAGUE_ID,
     league_name="User Edit League",
+    organization_pk=5,  # User Edit Org
     teams=[],  # No teams needed - just users
 )
