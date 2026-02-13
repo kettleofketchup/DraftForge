@@ -56,7 +56,7 @@ export const UserSchema = z.object({
  * pk is overridden from optional to required.
  */
 export const CoreUserSchema = UserSchema.omit({
-  id: true,
+  orgUserPk: true,
   mmr: true,
   league_mmr: true,
 }).extend({ pk: z.number() });
