@@ -109,13 +109,18 @@ await visitAndWait(page, '/organizations/3/');  // Fragile!
 | Org | 1 | DTX (main) |
 | Org | 2 | Test (basic E2E) |
 | Org | 3 | CSV Import |
+| Org | 4 | Demo CSV |
+| Org | 5 | User Edit |
 | League | 1 (steam=17929) | DTX |
 | League | 2 (steam=17930) | Test |
 | League | 3 (steam=17931) | CSV Import |
+| League | 4 (steam=17932) | Demo CSV |
+| League | 5 (steam=17933) | User Edit |
 | Users | 1001-1003 | Site-level (admin/staff/regular) |
 | Users | 1010-1011 | Claim profile |
 | Users | 1020-1021 | Org roles |
 | Users | 1030-1031 | League roles |
 | Users | 1040-1044 | CSV Import |
+| Users | 1050-1052 | User Edit |
 
 When adding new features, pick the next available PK range.

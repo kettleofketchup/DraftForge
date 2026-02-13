@@ -42,16 +42,35 @@ def list(self, request, *args, **kwargs):
 
 ### Cache Invalidation Pattern
 
-```python
-from cacheops import invalidate_obj, invalidate_model
+**Preferred: `invalidate_after_commit`** — use inside transactions, signal handlers, or anywhere writes may be deferred:
 
-def save(self, *args, **kwargs):
-    super().save(*args, **kwargs)
-    # Invalidate specific instance
-    invalidate_obj(self.related_obj)
-    # Invalidate entire model cache
-    invalidate_model(RelatedModel)
+```python
+from app.cache_utils import invalidate_after_commit
+
+with transaction.atomic():
+    user.nickname = "New"
+    user.save()
+    invalidate_after_commit(tournament, org_user, org_user.organization)
 ```
+
+**Direct `invalidate_obj`** — safe only OUTSIDE transactions (e.g., after M2M `.add()`/`.remove()`):
+
+```python
+from cacheops import invalidate_obj
+
+org.admins.add(user)       # M2M auto-commits
+invalidate_obj(org)        # Safe — data already committed
+```
+
+**When to use which:**
+
+| Context | Use |
+|---------|-----|
+| Inside `transaction.atomic()` | `invalidate_after_commit()` |
+| Inside `@transaction.atomic` decorator | `invalidate_after_commit()` |
+| Inside signal handlers (`post_save`, etc.) | `invalidate_after_commit()` |
+| After `.save()` / M2M ops outside transactions | Direct `invalidate_obj()` is safe |
+| After `.update()` / `.bulk_create()` | `invalidate_after_commit()` (defensive) |
 
 ## DTX Model Cache Dependencies
 
@@ -68,9 +87,10 @@ When modifying data, invalidate these related caches:
 ## Key Principles
 
 1. **Invalidate on Write**: Always invalidate related caches after mutations
-2. **Monitor Dependencies**: Use `@cached_as(Model1, Model2, ...)` to auto-invalidate
-3. **Use Specific Keys**: Include request path or pk in cache keys
-4. **Keep Fresh for Detail**: Use `keep_fresh=True` for single-object retrieval
+2. **Use `invalidate_after_commit`**: Default to deferred invalidation in transactions — see `app/cache_utils.py`
+3. **Monitor Dependencies**: Use `@cached_as(Model1, Model2, ...)` to auto-invalidate
+4. **Use Specific Keys**: Include request path or pk in cache keys
+5. **Keep Fresh for Detail**: Use `keep_fresh=True` for single-object retrieval
 
 ## Detailed References
 
