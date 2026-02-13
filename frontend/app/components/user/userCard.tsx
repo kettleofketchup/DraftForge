@@ -42,8 +42,9 @@ export const UserCard: React.FC<Props> = memo(
     const getUsers = useUserStore((state) => state.getUsers);
     const { openPlayerModal } = useSharedPopover();
 
+    const orgEntry = isUserEntry(user) && organizationId ? user.orgData[organizationId] : undefined;
     const mmr = isUserEntry(user)
-      ? (organizationId ? user.orgData[organizationId]?.mmr : undefined)
+      ? (organizationId ? orgEntry?.mmr : undefined)
       : user.mmr;
 
     const handleViewProfile = () => {
@@ -81,9 +82,9 @@ export const UserCard: React.FC<Props> = memo(
 
     const userDotabuff = () => {
       const goToDotabuff = () => {
-        return `https://www.dotabuff.com/players/${user.steamid}`;
+        return `https://www.dotabuff.com/players/${user.steam_account_id}`;
       };
-      if (!user.steamid) return null;
+      if (!user.steam_account_id) return null;
       return (
         <a
           className="btn btn-sm btn-outline gap-1"
@@ -103,17 +104,17 @@ export const UserCard: React.FC<Props> = memo(
     };
 
     // Show "Claim Profile" button when:
-    // - Target user HAS Steam ID (manually added profile with steam identifier)
+    // - Target user HAS Friend ID (manually added profile with steam identifier)
     // - Target user has NO Discord ID (manually added, can't log in)
     // - Current user HAS Discord ID (logged in, can claim)
-    // - Current user either has NO Steam ID or has the SAME Steam ID as target
+    // - Current user either has NO Friend ID or has the SAME Friend ID as target
     // - Current user is not this user
-    // Note: steamid is unique in the database. Claiming merges the profile.
+    // Note: steam_account_id is unique in the database. Claiming merges the profile.
     const canClaimProfile =
-      user.steamid &&
+      user.steam_account_id &&
       !user.discordId &&
       currentUser?.discordId &&
-      (!currentUser?.steamid || currentUser.steamid === user.steamid) &&
+      (!currentUser?.steam_account_id || currentUser.steam_account_id === user.steam_account_id) &&
       currentUser?.pk !== user.pk;
 
     const claimProfileButton = () => {
@@ -198,7 +199,11 @@ export const UserCard: React.FC<Props> = memo(
             <CardAction className="flex items-center gap-1">
               <LoginAsUserButton user={user} />
               {(currentUser.is_staff || currentUser.is_superuser) && (
-                <UserEditModal user={new User(user)} />
+                <UserEditModal user={new User(
+                  isUserEntry(user) && orgEntry
+                    ? { ...user, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
+                    : user
+                )} />
               )}
               <ViewIconButton
                 onClick={handleViewProfile}
@@ -258,11 +263,11 @@ export const UserCard: React.FC<Props> = memo(
                 </ItemContent>
               </Item>
             )}
-            {user.steamid && (
+            {user.steam_account_id && (
               <Item size="sm" variant="muted" className="!p-1">
                 <ItemContent className="!gap-0">
-                  <ItemTitle className="!text-xs text-muted-foreground">Steam ID</ItemTitle>
-                  <span className="text-sm">{String(user.steamid).length > 8 ? `${String(user.steamid).slice(0, 8)}...` : user.steamid}</span>
+                  <ItemTitle className="!text-xs text-muted-foreground">Friend ID</ItemTitle>
+                  <span className="text-sm">{String(user.steam_account_id).length > 8 ? `${String(user.steam_account_id).slice(0, 8)}...` : user.steam_account_id}</span>
                 </ItemContent>
               </Item>
             )}

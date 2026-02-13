@@ -87,11 +87,15 @@ const UserCardWrapper = memo(
     animationIndex,
     compact,
     deleteButtonType,
+    organizationId,
+    leagueId,
   }: {
     userData: UserType;
     animationIndex: number;
     compact?: boolean;
     deleteButtonType?: 'normal' | 'tournament';
+    organizationId?: number;
+    leagueId?: number;
   }) => {
     return (
       <UserCard
@@ -101,6 +105,8 @@ const UserCardWrapper = memo(
         deleteButtonType={deleteButtonType ?? 'normal'}
         animationIndex={animationIndex}
         compact={compact}
+        organizationId={organizationId}
+        leagueId={leagueId}
       />
     );
   }
@@ -151,6 +157,10 @@ interface UserListProps {
   compact?: boolean;
   /** Delete button type for cards */
   deleteButtonType?: 'normal' | 'tournament';
+  /** Organization ID for scoped MMR display */
+  organizationId?: number;
+  /** League ID for scoped MMR display */
+  leagueId?: number;
 }
 
 /**
@@ -169,6 +179,8 @@ export function UserList({
   gridCols = 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
   compact,
   deleteButtonType,
+  organizationId,
+  leagueId,
 }: UserListProps) {
   // Internal search state (used when showSearch is true)
   const [internalQuery, setInternalQuery] = useState('');
@@ -271,6 +283,8 @@ export function UserList({
             animationIndex={index}
             compact={compact}
             deleteButtonType={deleteButtonType}
+            organizationId={organizationId}
+            leagueId={leagueId}
           />
         ))}
       </div>

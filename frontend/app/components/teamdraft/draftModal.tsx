@@ -426,8 +426,10 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     }
   }, [open]);
 
-  // Check if the draft is completed (no users remaining to draft)
-  const isDraftCompleted = draft?.users_remaining?.length === 0;
+  // Draft is complete when all rounds have a choice picked
+  const isDraftCompleted =
+    (draft?.draft_rounds?.length ?? 0) > 0 &&
+    draft?.draft_rounds?.every((r) => r.choice != null) === true;
 
   const mainView = () => {
     // Show completed team draft view when draft is complete and not viewing full draft

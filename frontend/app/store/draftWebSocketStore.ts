@@ -306,7 +306,13 @@ export const draftWsSelectors = {
   usersRemainingCount: (s: DraftWebSocketState) =>
     s.draftState?.users_remaining?.length ?? 0,
 
-  /** True when draft is completed (no users remaining) */
-  isDraftCompleted: (s: DraftWebSocketState) =>
-    s.draftState !== null && (s.draftState.users_remaining?.length ?? -1) === 0,
+  /** True when draft is completed (all rounds have a choice) */
+  isDraftCompleted: (s: DraftWebSocketState) => {
+    const rounds = s.draftState?.draft_rounds;
+    return (
+      s.draftState !== null &&
+      (rounds?.length ?? 0) > 0 &&
+      rounds?.every((r) => r.choice != null) === true
+    );
+  },
 };

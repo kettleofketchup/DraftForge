@@ -18,6 +18,7 @@ import type { DraftRoundType, DraftType } from '~/components/teamdraft/types';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { User } from '~/components/user/user';
 import type { GameType, GuildMember, GuildMembers, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
@@ -325,7 +326,7 @@ export const useUserStore = create<UserState>()(
 
         try {
           const response = await fetchTournament(id);
-          set({ tournament: response });
+          set({ tournament: hydrateTournament(response as TournamentType & { _users?: Record<number, unknown> }) as TournamentType });
         } catch (err) {
           log.error('Failed to fetch tournament:', err);
         }

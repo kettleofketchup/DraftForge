@@ -41,14 +41,14 @@ log = logging.getLogger(__name__)
 class ProfileUserSerializer(serializers.ModelSerializer):
     positions = PositionsSerializer(many=False, read_only=True)
     nickname = serializers.CharField(required=False, allow_blank=True, max_length=100)
-    steamid = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    steam_account_id = serializers.IntegerField(required=False, allow_null=True)
 
     class Meta:
         model = CustomUser
         fields = (
             "nickname",
             "positions",
-            "steamid",
+            "steam_account_id",
         )
 
 
@@ -56,7 +56,7 @@ class ProfileUpdateSerializer(serializers.Serializer):
 
     positions = PositionsSerializer(many=False, required=False)
     nickname = serializers.CharField(required=False, allow_blank=True, max_length=100)
-    steamid = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    steam_account_id = serializers.IntegerField(required=False, allow_null=True)
 
 
 @api_view(["post"])
@@ -70,7 +70,7 @@ def profile_update(request):
     log.debug(request.data)
     if serializer.is_valid():
         positions = serializer.validated_data.get("positions", None)
-        steamid = serializer.validated_data.get("steamid", None)
+        steam_account_id = serializer.validated_data.get("steam_account_id", None)
         nickname = serializer.validated_data.get("nickname", None)
 
     else:
@@ -88,21 +88,21 @@ def profile_update(request):
         for field, value in positions.items():
             setattr(posObj, field, value)
         user.positions = posObj
-    if steamid is not None:
-        # Normalize Steam ID to 64-bit format
-        # Steam uses two formats:
-        # - 64-bit (Friend ID): e.g., 76561198012345678
-        # - 32-bit (Account ID): e.g., 52079950
-        # Convert 32-bit to 64-bit if needed
-        try:
-            steamid_int = int(steamid)
-            STEAM_ID_64_BASE = 76561197960265728
-            if steamid_int < STEAM_ID_64_BASE:
-                # This is a 32-bit account ID, convert to 64-bit
-                steamid_int = steamid_int + STEAM_ID_64_BASE
-            user.steamid = steamid_int
-        except (ValueError, TypeError):
-            return Response({"error": "Invalid Steam ID format"}, status=400)
+    if steam_account_id is not None:
+        # steam_account_id is the 32-bit Friend ID (from Dotabuff URL)
+        # save() auto-computes the 64-bit steamid
+        if steam_account_id != user.steam_account_id:
+            conflict = (
+                CustomUser.objects.filter(steam_account_id=steam_account_id)
+                .exclude(pk=user.pk)
+                .first()
+            )
+            if conflict:
+                return Response(
+                    {"error": "This Friend ID is already linked to another account"},
+                    status=409,
+                )
+            user.steam_account_id = steam_account_id
     if nickname is not None:
         user.nickname = nickname
     log.debug(f"{positions}, {steamid}, {nickname}")

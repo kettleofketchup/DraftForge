@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import type { UserType } from '~/components/user/types';
 import { useLeagueStore } from '~/store/leagueStore';
@@ -8,6 +8,7 @@ import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 import { useTournament } from '~/hooks/useTournament';
 import { useTournamentSocket } from '~/hooks/useTournamentSocket';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import type { TournamentType } from '~/components/tournament/types';
 import TournamentTabs from './tabs/TournamentTabs';
 
@@ -27,27 +28,33 @@ export const TournamentDetailPage: React.FC = () => {
   // WebSocket for real-time cache invalidation
   useTournamentSocket(pkNum && !Number.isNaN(pkNum) ? pkNum : null);
 
-  // Compatibility shim: sync query data to userStore for ~35 existing consumers
-  // NOTE: This is one-way (query -> userStore). Files that call fetchTournament()
-  // directly and write to userStore will be overwritten on next refetch (~10s).
+  // Hydrate slim tournament response: resolve PK-only user references
+  // back to full objects using the _users dict, so downstream consumers
+  // continue to receive UserType objects.
+  const hydratedTournament = useMemo(() => {
+    if (!tournament) return null;
+    return hydrateTournament(tournament as TournamentType & { _users?: Record<number, UserType> });
+  }, [tournament]);
+
+  // Sync hydrated data to userStore for ~35 existing consumers
   useEffect(() => {
-    if (tournament) {
-      // Ingest _users dict into entity cache for deduplication
-      const _users = (tournament as Record<string, unknown>)._users as
+    if (hydratedTournament) {
+      // Ingest _users dict into entity cache for cross-page deduplication
+      const _users = (tournament as Record<string, unknown>)?._users as
         | Record<number, UserType>
         | undefined;
       if (_users) {
         const users = Object.values(_users);
-        const orgId = useOrgStore.getState().currentOrg?.pk;
-        useUserCacheStore.getState().upsert(users, { orgId });
+        const orgId = hydratedTournament.organization_pk ?? useOrgStore.getState().currentOrg?.pk;
+        const leagueId = hydratedTournament.league_pk ?? undefined;
+        useUserCacheStore.getState().upsert(users, { orgId, leagueId });
       }
-      useUserStore.getState().setTournament(tournament);
+      useUserStore.getState().setTournament(hydratedTournament);
     }
     return () => {
-      // Clear stale tournament when navigating away so children don't see old data
       useUserStore.getState().setTournament(null as unknown as TournamentType);
     };
-  }, [tournament]);
+  }, [hydratedTournament]);
 
   // UI state from tournamentStore
   const setLive = useTournamentStore((state) => state.setLive);

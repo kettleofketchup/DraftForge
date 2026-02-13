@@ -46,6 +46,14 @@ class TestUser(BaseModel):
             return 76561197960265728 + self.steam_id
         return None
 
+    def get_steam_account_id(self) -> int | None:
+        """Get 32-bit Friend ID (Dotabuff), converting from 64-bit if needed."""
+        if self.steam_id:
+            return self.steam_id
+        if self.steam_id_64:
+            return self.steam_id_64 - 76561197960265728
+        return None
+
 
 # =============================================================================
 # Organization Models

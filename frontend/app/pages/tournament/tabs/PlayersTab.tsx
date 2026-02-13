@@ -3,12 +3,14 @@ import { memo, useCallback, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { addTournamentMember } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
+import type { TournamentType } from '~/components/tournament/types';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { UserType } from '~/components/user/types';
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { useUserStore } from '~/store/userStore';
 import { useOrgStore } from '~/store/orgStore';
 import { hasErrors } from '../hasErrors';
@@ -30,18 +32,11 @@ export const PlayersTab: React.FC = memo(() => {
   const handleAddMember = useCallback(
     async (payload: AddMemberPayload) => {
       if (!tournament?.pk) throw new Error('No tournament');
-      const user = await addTournamentMember(tournament.pk, payload);
-      // Optimistic update — append user to tournament's users array
-      const current = useUserStore.getState().tournament;
-      if (current) {
-        setTournament({
-          ...current,
-          users: [...(current.users ?? []), user],
-        });
-      }
+      const rawTournament = await addTournamentMember(tournament.pk, payload);
+      const hydrated = hydrateTournament(rawTournament as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
+      setTournament(hydrated);
       // Invalidate React Query cache so useTournament refetches
       queryClient.invalidateQueries({ queryKey: ['tournament', tournament.pk] });
-      return user;
     },
     [tournament?.pk, setTournament, queryClient]
   );

@@ -1,5 +1,6 @@
 import { fetchDraft } from '~/components/api/api';
 import type { DraftType } from '~/index';
+import { hydrateDraft } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('RefreshDraftHook');
 
@@ -20,7 +21,8 @@ export const refreshDraftHook = async ({ draft, setDraft }: hookParams) => {
   }
   log.debug('refreshing draft', draft.pk);
   try {
-    const data: DraftType = await fetchDraft(draft.pk);
+    const rawData = await fetchDraft(draft.pk);
+    const data = hydrateDraft(rawData as DraftType & { _users?: Record<number, unknown> });
     setDraft(data);
     log.debug('Updated Draft information');
   } catch (error) {
