@@ -579,7 +579,7 @@ class DraftSerializerForTournament(serializers.ModelSerializer):
 
 
 class DraftSerializerSlim(DraftSerializerForTournament):
-    """Slim variant — user fields as pks, uses slim nested serializers."""
+    """Slim variant — user fields as PKs, uses slim nested serializers."""
 
     draft_rounds = DraftRoundSerializerSlim(many=True, read_only=True)
     users_remaining = serializers.SerializerMethodField()
