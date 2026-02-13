@@ -308,6 +308,7 @@ export default function OrganizationDetailPage() {
               showSearch={orgUsers.length > 5}
               searchPlaceholder="Search members..."
               emptyMessage="No members in this organization"
+              organizationId={pk}
             />
           </TabsContent>
 

@@ -1,21 +1,32 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { UserClassType, UserType } from '~/components/user';
 import { brandErrorBg, brandErrorCard } from '~/components/ui/buttons';
 import UserEditModal from '~/components/user/userCard/editModal';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
+import type { UserEntry } from '~/store/userCacheTypes';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 const log = getLogger('hasErrors');
 
 interface UserIssue {
-  user: UserType;
+  user: UserClassType;
   issues: string[];
 }
 
-function hasNoPositions(user: UserType): boolean {
+/** Convert a UserEntry to a UserType-like object with org-scoped fields flattened. */
+function toUserType(entry: UserEntry, orgId?: number): UserClassType {
+  const orgData = orgId ? entry.orgData[orgId] : undefined;
+  return {
+    ...entry,
+    orgUserPk: orgData?.id,
+    mmr: orgData?.mmr,
+  } as unknown as UserClassType;
+}
+
+function hasNoPositions(user: UserEntry): boolean {
   const positions = user.positions;
   if (!positions) return true;
-  // Check if all position values are 0 or undefined
   const totalPreference =
     (positions.carry || 0) +
     (positions.mid || 0) +
@@ -27,34 +38,45 @@ function hasNoPositions(user: UserType): boolean {
 
 export const hasErrors = () => {
   const tournament = useUserStore((state) => state.tournament);
+  const entities = useUserCacheStore((state) => state.entities);
 
-  // Compute users with issues
+  const orgId = tournament?.organization_pk ?? undefined;
+
+  // Resolve users from entity cache — the single source of truth
   const usersWithIssues = useMemo(() => {
     if (!tournament?.users) return [];
 
     const issues: UserIssue[] = [];
 
-    for (const user of tournament.users) {
+    for (const userRef of tournament.users) {
+      const pk = typeof userRef === 'number' ? userRef : (userRef as UserType)?.pk;
+      if (!pk) continue;
+
+      const cached = entities[pk];
+      if (!cached) continue;
+
       const userIssues: string[] = [];
 
-      if (!user.mmr) {
+      // Check org-scoped MMR from the entity cache
+      const mmr = orgId ? cached.orgData[orgId]?.mmr : undefined;
+      if (!mmr) {
         userIssues.push('No MMR');
       }
-      if (!user.steamid) {
-        userIssues.push('No Steam ID');
+      if (!cached.steam_account_id) {
+        userIssues.push('No Friend ID');
       }
-      if (hasNoPositions(user)) {
+      if (hasNoPositions(cached)) {
         userIssues.push('No positions');
       }
 
       if (userIssues.length > 0) {
-        issues.push({ user, issues: userIssues });
+        issues.push({ user: toUserType(cached, orgId), issues: userIssues });
       }
     }
 
     log.debug('Users with issues:', issues.length, issues);
     return issues;
-  }, [tournament?.users]);
+  }, [tournament?.users, entities, orgId]);
 
   return (
     <>
@@ -80,7 +102,7 @@ export const hasErrors = () => {
                   </div>
                   <div className="flex justify-center mt-3">
                     <UserEditModal
-                      user={user as UserClassType}
+                      user={user}
                       key={`UserEditModal-${user.pk}`}
                     />
                   </div>

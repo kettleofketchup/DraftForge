@@ -88,3 +88,14 @@ export {
   searchAndAddUser,
   expectUserAlreadyAdded,
 } from '../helpers/add-user';
+
+// EditUser modal helpers
+export {
+  type EditUserField,
+  openEditModal,
+  readEditField,
+  fillEditField,
+  saveEditModal,
+  editUserField,
+  restoreUserField,
+} from '../helpers/edit-user';

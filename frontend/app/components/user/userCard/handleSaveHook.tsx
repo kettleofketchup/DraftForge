@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { updateOrgUser } from '~/components/api/api';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
-import { useOrgStore } from '~/store/orgStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('handleSaveHook');
 
@@ -37,6 +37,7 @@ type HandleSaveParams = {
   setUser: (user: UserType) => void;
   setDiscordUser?: React.Dispatch<React.SetStateAction<User>>;
   organizationId?: number | null; // Org context for org-scoped updates
+  onSuccess?: () => void; // Called after successful save (e.g. close dialog)
 };
 
 export const handleSave = async (
@@ -51,6 +52,7 @@ export const handleSave = async (
     setUser,
     setDiscordUser,
     organizationId,
+    onSuccess,
   }: HandleSaveParams,
 ) => {
   setErrorMessage({}); // Clear old errors
@@ -69,46 +71,49 @@ export const handleSave = async (
     toast.promise(newUser.dbCreate(), {
       loading: `Creating User ${user.username}.`,
       success: (data: UserType) => {
-        setIsSaving(true);
         setStatusMsg('User created successfully!');
         setUser(data);
         resetForm();
+        onSuccess?.();
         return `${user.username} has been Created`;
       },
       error: (err) => {
         const val = err.response.data;
         setErrorMessage(val);
+        setIsSaving(false);
         log.error('Failed to create user', err);
         return <>{createErrorMessage(val)}</>;
       },
     });
   } else {
-    // If we have org context AND orgUserPk, use org-scoped update
-    const updatePromise =
-      organizationId && form.orgUserPk
-        ? updateOrgUser(organizationId, form.orgUserPk, form as UserType)
-        : newUser.dbUpdate(form as UserType);
-
-    const isOrgUpdate = !!(organizationId && form.orgUserPk);
+    // If we have org context AND orgUserPk, use org-scoped update.
+    // Use user.orgUserPk (from prop) not form.orgUserPk — form state can lose it during edits.
+    const orgUserPk = form.orgUserPk || user.orgUserPk;
+    const isOrgUpdate = !!(organizationId && orgUserPk);
+    const updatePromise = isOrgUpdate
+      ? updateOrgUser(organizationId!, orgUserPk!, form as UserType)
+      : newUser.dbUpdate(form as UserType);
     toast.promise(updatePromise, {
       loading: `Updating User ${user.username}.`,
       success: (data) => {
-        setIsSaving(true);
         setStatusMsg('User updated successfully!');
         setUser(data);
-        // Update orgStore.orgUsers so the org page reflects the change
-        if (isOrgUpdate) {
-          const { orgUsers, setOrgUsers } = useOrgStore.getState();
-          setOrgUsers(
-            orgUsers.map((u) => (u.orgUserPk === data.orgUserPk ? { ...u, ...data } : u)),
+        // Update entity cache so all contexts (org, league, tournament) reflect the change
+        if (data.pk) {
+          useUserCacheStore.getState().upsert(
+            [data],
+            isOrgUpdate && organizationId ? { orgId: organizationId } : undefined,
           );
         }
         resetForm();
+        onSuccess?.();
         return `${user.username} has been updated`;
       },
       error: (err) => {
         log.error(`Failed to update user ${user.username}`, err);
-        setErrorMessage(err.response.data);
+        const errData = err?.response?.data;
+        if (errData) setErrorMessage(errData);
+        setIsSaving(false);
         return `Failed to update user ${user.username}.`;
       },
     });

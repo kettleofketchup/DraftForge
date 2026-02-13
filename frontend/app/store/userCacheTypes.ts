@@ -20,7 +20,6 @@ export interface UserEntry {
   avatar?: string | null;
   avatarUrl?: string;
   positions?: PositionsType;
-  steamid?: number | null;
   steam_account_id?: number | null;
   discordId?: string | null;
   discordNickname?: string | null;

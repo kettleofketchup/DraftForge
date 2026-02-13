@@ -10,6 +10,7 @@ import {
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
 import type { UserType } from '~/components/user/types';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -91,7 +92,8 @@ export const CreateTeamsButton: React.FC<CreateTeamsButtonProps> = ({
       }
     }
     if (tournament.pk) {
-      tournament = await fetchTournament(tournament.pk);
+      const rawData = await fetchTournament(tournament.pk);
+      tournament = hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
       setTournament(tournament);
     }
     setDialogOpen(false);

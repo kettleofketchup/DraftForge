@@ -43,8 +43,8 @@ export const button3DDisabled =
   'disabled:shadow-none disabled:border-b-0 disabled:translate-y-0 disabled:bg-gray-400 disabled:text-gray-600 disabled:cursor-not-allowed disabled:opacity-70';
 
 // Icon styling to ensure icons inherit text color
-const iconWhite = '[&_svg]:text-white [&_svg]:fill-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]';
-const iconMuted = 'disabled:[&_svg]:text-gray-600 disabled:[&_svg]:fill-gray-600 disabled:[&_svg]:drop-shadow-none';
+const iconWhite = '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]';
+const iconMuted = 'disabled:[&_svg]:text-gray-600 disabled:[&_svg]:drop-shadow-none';
 
 // Brand secondary opaque - for use on colored backgrounds (dialogs) where translucency bleeds
 export const brandSecondaryOpaque = 'bg-violet-950 border border-violet-400/30 text-violet-100 hover:bg-violet-900';

@@ -210,7 +210,7 @@ export const UserStrip = memo(
         {/* Column 3: MMR (stacked vertically - Base on top, League below) */}
         <div className="flex flex-col justify-center gap-0.5 shrink-0">
           {baseMmrBadge}
-          {leagueMmrBadge}
+          {leagueMmrValue ? leagueMmrBadge : null}
         </div>
 
         {/* Column 4: Context Slot (flex-1 to push action to end) */}

@@ -42,11 +42,11 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   const [isLoadingUser, setIsLoadingUser] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
 
-  // Can claim if: target HAS steamid (manually added profile with steam identifier),
+  // Can claim if: target HAS steam_account_id (manually added profile with steam identifier),
   // target has NO discordId (can't log in), and current user HAS discordId (can log in).
-  // Note: steamid is unique in the database. Claiming merges the profile.
+  // Note: steam_account_id is unique in the database. Claiming merges the profile.
   const canClaimProfile =
-    player.steamid &&
+    player.steam_account_id &&
     !player.discordId &&
     currentUser?.discordId &&
     currentUser?.pk !== player.pk;
@@ -114,8 +114,8 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   };
 
   const goToDotabuff = () => {
-    if (!displayPlayer.steamid) return '#';
-    return `https://www.dotabuff.com/players/${encodeURIComponent(String(displayPlayer.steamid))}`;
+    if (!displayPlayer.steam_account_id) return '#';
+    return `https://www.dotabuff.com/players/${encodeURIComponent(String(displayPlayer.steam_account_id))}`;
   };
 
   return (
@@ -181,9 +181,9 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
           <div className="pt-1 pl-1">
             <RolePositions user={displayPlayer} />
           </div>
-          {displayPlayer.steamid && (
+          {displayPlayer.steam_account_id && (
             <div>
-              <span className="font-semibold">Steam ID:</span> {displayPlayer.steamid}
+              <span className="font-semibold">Friend ID:</span> {displayPlayer.steam_account_id}
             </div>
           )}
         </div>
@@ -218,7 +218,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
         {/* Action buttons */}
         <div className="pt-2 flex gap-2">
           {/* Dotabuff link */}
-          {displayPlayer.steamid && (
+          {displayPlayer.steam_account_id && (
             <a
               className="flex items-center justify-center btn btn-sm btn-outline flex-1 gap-1"
               href={goToDotabuff()}

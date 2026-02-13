@@ -358,8 +358,6 @@ class TournamentView(viewsets.ModelViewSet):
         return queryset.prefetch_related(
             "users",
             "users__positions",
-            "captains",
-            "captains__positions",
             "teams__members",
             "teams__members__positions",
             "teams__captain",
@@ -580,7 +578,12 @@ class DraftView(viewsets.ModelViewSet):
         def get_data():
             instance = self.get_object()
             serializer = self.get_serializer(instance)
-            return serializer.data
+            data = serializer.data
+
+            # Deduplicated user dict for frontend entity cache
+            data["_users"] = _build_users_dict(instance.tournament)
+
+            return data
 
         data = get_data()
         return Response(data)

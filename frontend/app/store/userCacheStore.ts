@@ -63,7 +63,7 @@ export const userAdapter = createEntityAdapter<UserEntry>({
   schema: CoreUserSchema,
   indexes: [
     { name: 'byDiscordId', key: 'discordId' },
-    { name: 'bySteamId', key: 'steamid' },
+    { name: 'bySteamAccountId', key: 'steam_account_id' },
   ],
 });
 
@@ -83,22 +83,22 @@ function toUserEntry(
   let orgData = existing?.orgData ?? {};
   let leagueData = existing?.leagueData ?? {};
 
-  if (context?.orgId && raw.mmr != null && raw.id != null) {
+  if (context?.orgId && raw.mmr != null && raw.orgUserPk != null) {
     orgData = {
       ...orgData,
       [context.orgId]: {
-        id: raw.id,
+        id: raw.orgUserPk,
         mmr: raw.mmr,
         _fetchedAt: now,
       },
     };
   }
 
-  if (context?.leagueId && raw.league_mmr != null && raw.id != null) {
+  if (context?.leagueId && raw.league_mmr != null && raw.orgUserPk != null) {
     leagueData = {
       ...leagueData,
       [context.leagueId]: {
-        id: raw.id,
+        id: raw.orgUserPk,
         mmr: raw.league_mmr,
         _fetchedAt: now,
       },
@@ -128,7 +128,7 @@ interface UserCacheState extends EntityState<UserEntry> {
   // Read operations
   getById(pk: number): UserEntry | undefined;
   getByDiscordId(discordId: string): UserEntry | undefined;
-  getBySteamId(steamid: number): UserEntry | undefined;
+  getBySteamAccountId(steam_account_id: number): UserEntry | undefined;
 
   // Staleness
   isStale(pk: number, context?: UpsertContext): boolean;
@@ -218,11 +218,11 @@ export const useUserCacheStore = create<UserCacheState>()(
         );
       },
 
-      getBySteamId(steamid) {
+      getBySteamAccountId(steam_account_id) {
         return userAdapter.selectByIndex(
           get(),
-          'bySteamId',
-          steamid,
+          'bySteamAccountId',
+          steam_account_id,
         );
       },
 

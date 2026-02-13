@@ -167,33 +167,22 @@ def invalidate_game_cache_on_match_save(sender, instance, **kwargs):
     This ensures bracket data stays fresh when match details change.
     """
     try:
-        from cacheops import invalidate_model, invalidate_obj
-
-        # Import Game here to avoid circular imports
-        from app.models import Game
+        from app.cache_utils import invalidate_after_commit
+        from app.models import Game, Tournament
 
         # Find any Game objects linked to this match via gameid
-        linked_games = Game.objects.filter(gameid=instance.match_id)
-        for game in linked_games:
-            invalidate_obj(game)
-            logger.debug(
-                f"Invalidated cache for Game {game.pk} linked to Match {instance.match_id}"
+        linked_games = list(Game.objects.filter(gameid=instance.match_id))
+        if linked_games:
+            tournaments = list(
+                Tournament.objects.filter(
+                    pk__in={g.tournament_id for g in linked_games if g.tournament_id}
+                )
             )
-
-        # Also invalidate the tournament cache if games were found
-        if linked_games.exists():
-            from app.models import Tournament
-
-            tournament_ids = linked_games.values_list(
-                "tournament_id", flat=True
-            ).distinct()
-            for tournament_id in tournament_ids:
-                try:
-                    tournament = Tournament.objects.get(pk=tournament_id)
-                    invalidate_obj(tournament)
-                    logger.debug(f"Invalidated cache for Tournament {tournament_id}")
-                except Tournament.DoesNotExist:
-                    pass
+            invalidate_after_commit(*linked_games, *tournaments)
+            logger.debug(
+                f"Scheduled cache invalidation for {len(linked_games)} games, "
+                f"{len(tournaments)} tournaments linked to Match {instance.match_id}"
+            )
     except ImportError:
         # cacheops not installed or not configured
         pass

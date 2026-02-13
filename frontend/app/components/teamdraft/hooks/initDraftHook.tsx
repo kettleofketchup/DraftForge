@@ -2,6 +2,7 @@ import { toast } from 'sonner';
 import { initDraftRounds } from '~/components/api/api';
 import type { InitDraftRoundsAPI } from '~/components/api/types';
 import type { DraftRoundType, DraftType, TournamentType } from '~/index';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('InitDraft');
 
@@ -41,8 +42,9 @@ export const initDraftHook = async ({
   const promise = initDraftRounds(data);
   toast.promise(promise, {
     loading: `Initializing draft rounds...`,
-    success: (data) => {
-      log.debug('DraftRebuild sucess, data:', data);
+    success: (rawData) => {
+      log.debug('DraftRebuild sucess, data:', rawData);
+      const data = hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
       setTournament(data);
       if (!data.draft) {
         log.error('No draft in response');

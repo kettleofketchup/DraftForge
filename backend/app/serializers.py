@@ -7,6 +7,8 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from rest_framework import serializers
 
+from app.cache_utils import invalidate_after_commit
+
 log = getLogger(__name__)
 from .models import (
     CustomUser,
@@ -71,7 +73,6 @@ class TournamentUserSerializer(serializers.ModelSerializer):
             "discordId",
             "discordNickname",
             "positions",
-            "steamid",
             "steam_account_id",
             "avatarUrl",
             "positions",
@@ -91,6 +92,19 @@ def _serialize_users_with_mmr(users_qs, tournament):
 
     if not org:
         return TournamentUserSerializer(users_qs, many=True).data
+
+    # Auto-create OrgUser records for tournament users missing from the org
+    existing_user_pks = set(
+        OrgUser.objects.filter(user__in=users_qs, organization=org).values_list(
+            "user_id", flat=True
+        )
+    )
+    missing_users = users_qs.exclude(pk__in=existing_user_pks)
+    if missing_users.exists():
+        OrgUser.objects.bulk_create(
+            [OrgUser(user=u, organization=org) for u in missing_users],
+            ignore_conflicts=True,
+        )
 
     org_users = (
         OrgUser.objects.filter(user__in=users_qs, organization=org)
@@ -149,12 +163,12 @@ def _build_users_dict(tournament):
 
 class TournamentSerializerBase(serializers.ModelSerializer):
     users = serializers.SerializerMethodField()
-    captains = TournamentUserSerializer(many=True, read_only=True)
+    captains = UserPkField(many=True)
     tournament_type = serializers.CharField(read_only=False)
 
     def get_users(self, tournament):
-        """Return users with org-scoped MMR via OrgUserSerializer."""
-        return _serialize_users_with_mmr(tournament.users.all(), tournament)
+        """Return user PKs only — full data provided via _users dict."""
+        return [u.pk for u in tournament.users.all()]
 
     class Meta:
         model = Tournament
@@ -518,10 +532,11 @@ class DraftRoundSerializerSlim(DraftRoundForDraftSerializer):
 class TournamentSerializerForWebSocket(serializers.ModelSerializer):
     """
     Minimal tournament serializer for WebSocket broadcasts.
-    Includes teams with members for real-time state updates.
+    Includes teams with PK-only members for real-time state updates.
+    Full user data provided via _users dict.
     """
 
-    teams = TeamSerializerForTournament(many=True, read_only=True)
+    teams = TeamSerializerSlim(many=True, read_only=True)
 
     class Meta:
         model = Tournament
@@ -535,9 +550,10 @@ class DraftSerializerForTournament(serializers.ModelSerializer):
     """
     Serializer for draft data used in WebSocket broadcasts.
     Includes tournament.teams for real-time team updates.
+    Full user data provided via _users dict.
     """
 
-    draft_rounds = DraftRoundForDraftSerializer(
+    draft_rounds = DraftRoundSerializerSlim(
         many=True,
         read_only=True,
     )
@@ -547,7 +563,8 @@ class DraftSerializerForTournament(serializers.ModelSerializer):
     tournament = TournamentSerializerForWebSocket(read_only=True)
 
     def get_users_remaining(self, draft):
-        return _serialize_users_with_mmr(draft.users_remaining, draft.tournament)
+        """Return user PKs only — full data provided via _users dict."""
+        return [u.pk for u in draft.users_remaining]
 
     class Meta:
         model = Draft
@@ -572,19 +589,15 @@ class DraftSerializerSlim(DraftSerializerForTournament):
 
 
 class TournamentSerializerDraft(serializers.ModelSerializer):
-    teams = TeamSerializerForTournament(
-        many=True, read_only=True
-    )  # Return full team objects
+    teams = TeamSerializerSlim(many=True, read_only=True)
     users = serializers.SerializerMethodField()
 
     tournament_type = serializers.CharField(read_only=False)
-    captains = serializers.SerializerMethodField()
+    captains = UserPkField(many=True)
 
     def get_users(self, tournament):
-        return _serialize_users_with_mmr(tournament.users.all(), tournament)
-
-    def get_captains(self, tournament):
-        return _serialize_users_with_mmr(tournament.captains.all(), tournament)
+        """Return user PKs only — full data provided via _users dict."""
+        return [u.pk for u in tournament.users.all()]
 
     class Meta:
         model = Tournament
@@ -593,7 +606,7 @@ class TournamentSerializerDraft(serializers.ModelSerializer):
             "name",
             "date_played",
             "users",
-            "teams",  # Include full team objects
+            "teams",
             "captains",
             "tournament_type",
         )
@@ -607,13 +620,14 @@ class DraftSerializer(serializers.ModelSerializer):
     )
     users_remaining = serializers.SerializerMethodField()
 
-    draft_rounds = DraftRoundForDraftSerializer(
+    draft_rounds = DraftRoundSerializerSlim(
         many=True,
         read_only=True,
     )
 
     def get_users_remaining(self, draft):
-        return _serialize_users_with_mmr(draft.users_remaining, draft.tournament)
+        """Return user PKs only — full data provided via _users dict."""
+        return [u.pk for u in draft.users_remaining]
 
     class Meta:
         model = Draft
@@ -641,10 +655,11 @@ class DraftSerializerMMRs(serializers.ModelSerializer):
 
 
 class GameSerializerForTournament(serializers.ModelSerializer):
+    """Used inside TournamentSerializer which provides _users dict."""
 
-    dire_team = TeamSerializerForTournament(many=False, read_only=True)
-    radiant_team = TeamSerializerForTournament(many=False, read_only=True)
-    winning_team = TeamSerializerForTournament(many=False, read_only=True)
+    dire_team = TeamSerializerSlim(many=False, read_only=True)
+    radiant_team = TeamSerializerSlim(many=False, read_only=True)
+    winning_team = TeamSerializerSlim(many=False, read_only=True)
     herodraft_id = serializers.SerializerMethodField()
 
     def get_herodraft_id(self, obj):
@@ -858,11 +873,9 @@ class TeamSerializer(serializers.ModelSerializer):
 
 
 class TournamentSerializer(serializers.ModelSerializer):
-    teams = TeamSerializerForTournament(
-        many=True, read_only=True
-    )  # Return full team objects
+    teams = TeamSerializerSlim(many=True, read_only=True)
     users = serializers.SerializerMethodField()
-    draft = DraftSerializerForTournament(many=False, read_only=True)
+    draft = DraftSerializerSlim(many=False, read_only=True)
 
     user_ids = serializers.PrimaryKeyRelatedField(
         source="users",
@@ -872,7 +885,7 @@ class TournamentSerializer(serializers.ModelSerializer):
         required=False,
     )
     tournament_type = serializers.CharField(read_only=False)
-    captains = TournamentUserSerializer(many=True, read_only=True)
+    captains = UserPkField(many=True)
     games = GameSerializerForTournament(many=True, read_only=True)
     league = LeaguesSerializer(read_only=True)
     league_id_write = serializers.PrimaryKeyRelatedField(
@@ -897,35 +910,8 @@ class TournamentSerializer(serializers.ModelSerializer):
         return tournament.league.pk if tournament.league else None
 
     def get_users(self, tournament):
-        """Return users with org-scoped MMR via OrgUserSerializer."""
-        from django.db.models import Prefetch
-
-        from league.models import LeagueUser
-        from org.models import OrgUser
-        from org.serializers import OrgUserSerializer
-
-        league = tournament.league
-        if not league:
-            return TournamentUserSerializer(tournament.users.all(), many=True).data
-
-        org = league.organization
-        if not org:
-            return TournamentUserSerializer(tournament.users.all(), many=True).data
-
-        org_users = (
-            OrgUser.objects.filter(user__in=tournament.users.all(), organization=org)
-            .select_related("user", "user__positions")
-            .prefetch_related(
-                Prefetch(
-                    "league_memberships",
-                    queryset=LeagueUser.objects.filter(league_id=league.pk),
-                )
-            )
-        )
-
-        return OrgUserSerializer(
-            org_users, many=True, context={"league_id": league.pk}
-        ).data
+        """Return user PKs only — full data provided via _users dict."""
+        return [u.pk for u in tournament.users.all()]
 
     class Meta:
         model = Tournament
@@ -936,11 +922,11 @@ class TournamentSerializer(serializers.ModelSerializer):
             "date_played",
             "timezone",
             "users",
-            "teams",  # Include full team objects
+            "teams",
             "winning_team",
             "state",
             "games",
-            "user_ids",  # Allow setting user IDs for the tournament
+            "user_ids",
             "captains",
             "tournament_type",
             "league",
@@ -1046,8 +1032,7 @@ class UserSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    # Auto-computed 32-bit Steam Account ID from 64-bit Friend ID
-    steam_account_id = serializers.IntegerField(read_only=True)
+    steam_account_id = serializers.IntegerField(required=False, allow_null=True)
 
     class Meta:
         model = CustomUser
@@ -1060,7 +1045,6 @@ class UserSerializer(serializers.ModelSerializer):
             "is_superuser",
             "avatar",
             "discordId",
-            "steamid",
             "steam_account_id",
             "avatarUrl",
             "email",
@@ -1088,7 +1072,26 @@ class UserSerializer(serializers.ModelSerializer):
 
             instance.save()
             log.debug("Updated User")
-            return instance
+
+            # Invalidate all cached views that include this user.
+            # Deferred until after commit so cacheops sees committed state.
+            invalidate_after_commit(
+                *instance.tournaments.all(),
+                *instance.org_memberships.select_related("organization").all(),
+                *(
+                    mu.organization
+                    for mu in instance.org_memberships.select_related(
+                        "organization"
+                    ).all()
+                ),
+                *instance.league_memberships.select_related("league").all(),
+                *(
+                    mu.league
+                    for mu in instance.league_memberships.select_related("league").all()
+                ),
+            )
+
+        return instance
 
     def create(self, validated_data):
         fields = self.Meta.fields

@@ -40,6 +40,7 @@ from tests.populate.demo import populate_demo_tournaments
 from tests.populate.organizations import populate_organizations_and_leagues
 from tests.populate.steam import populate_steam_matches
 from tests.populate.tournaments import populate_real_tournament_38, populate_tournaments
+from tests.populate.user_edit import populate_user_edit_data
 from tests.populate.users import populate_test_auth_users, populate_users
 
 # Re-export utilities that may be used directly
@@ -83,6 +84,7 @@ def populate_all(force=False):
     populate_bracket_linking_scenario(force)
     populate_bracket_unset_winner_tournament(force)
     populate_csv_import_data(force)
+    populate_user_edit_data(force)
     populate_demo_tournaments(force)
 
 
@@ -99,6 +101,7 @@ __all__ = [
     "populate_bracket_linking_scenario",
     "populate_bracket_unset_winner_tournament",
     "populate_csv_import_data",
+    "populate_user_edit_data",
     "populate_demo_tournaments",
     # Utilities
     "create_user",

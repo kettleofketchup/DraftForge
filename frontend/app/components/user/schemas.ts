@@ -39,8 +39,7 @@ export const UserSchema = z.object({
   nickname: z.string().min(2).max(100).nullable().optional(),
   mmr: z.number().min(0).nullable().optional(),
   league_mmr: z.number().min(0).nullable().optional(), // MMR snapshot from LeagueUser
-  steamid: z.number().min(0).nullable().optional(),
-  steam_account_id: z.number().min(0).nullable().optional(), // 32-bit account ID
+  steam_account_id: z.number().min(0).nullable().optional(), // 32-bit Friend ID (Dotabuff)
   avatar: z.string().url().nullable().optional(),
   orgUserPk: z.number().min(0).optional(), // OrgUser pk (for org-scoped PATCH)
   pk: z.number().min(0).optional(), // User pk (for display)

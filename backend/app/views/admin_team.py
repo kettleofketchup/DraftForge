@@ -10,6 +10,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from app.cache_utils import invalidate_after_commit
 from app.models import (
     CustomUser,
     League,
@@ -608,7 +609,7 @@ def _resolve_user(data, org=None):
     Resolve a user from user_id or discord_id. Returns User or error Response.
 
     When discord_id is provided, the backend looks up the Discord member data
-    from its own Redis cache (trust boundary -- never trust client-supplied data).
+    from its own Red22is cache (trust boundary -- never trust client-supplied data).
     """
     user_id = data.get("user_id")
     discord_id = data.get("discord_id")
@@ -706,7 +707,12 @@ def add_org_member(request, org_id):
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def update_org_user(request, org_id, org_user_id):
-    """Update an OrgUser's fields (e.g. MMR)."""
+    """Update an OrgUser and/or its underlying CustomUser.
+
+    OrgUser fields (e.g. mmr) are updated directly.
+    Base user fields (nickname, steam_account_id, etc.) are forwarded
+    to the CustomUser model so edits from the org page work end-to-end.
+    """
     org = get_object_or_404(Organization, pk=org_id)
 
     if not has_org_staff_access(request.user, org):
@@ -716,29 +722,69 @@ def update_org_user(request, org_id, org_user_id):
         )
 
     org_user = get_object_or_404(
-        OrgUser.objects.select_related("user"), pk=org_user_id, organization=org
+        OrgUser.objects.select_related("user", "user__positions"),
+        pk=org_user_id,
+        organization=org,
     )
 
-    ALLOWED_FIELDS = {"mmr"}
-    updated = []
-    for field in ALLOWED_FIELDS:
+    # --- OrgUser-level fields ---
+    ORG_USER_FIELDS = {"mmr"}
+    org_updated = []
+    for field in ORG_USER_FIELDS:
         if field in request.data:
             setattr(org_user, field, request.data[field])
-            updated.append(field)
+            org_updated.append(field)
 
-    if not updated:
+    # --- Base CustomUser fields ---
+    USER_FIELDS = {"nickname", "steam_account_id", "guildNickname"}
+    user = org_user.user
+    user_updated = False
+    for field in USER_FIELDS:
+        if field in request.data:
+            new_val = request.data[field]
+            # Coerce empty strings to None for nullable fields
+            if new_val == "" or new_val == "null":
+                new_val = None
+            if getattr(user, field) != new_val:
+                setattr(user, field, new_val)
+                user_updated = True
+
+    # --- Positions (nested FK) ---
+    positions_data = request.data.get("positions")
+    if positions_data and isinstance(positions_data, dict):
+        positions_instance = user.positions
+        for key in ("carry", "mid", "offlane", "soft_support", "hard_support"):
+            if key in positions_data:
+                val = int(positions_data[key])
+                if getattr(positions_instance, key) != val:
+                    setattr(positions_instance, key, val)
+                    user_updated = True
+        if user_updated:
+            positions_instance.save()
+
+    if not org_updated and not user_updated:
         return Response(
             {"error": "No valid fields to update"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    org_user.save(update_fields=updated)
-    invalidate_obj(org_user)
-    invalidate_obj(org)
+    with transaction.atomic():
+        if org_updated:
+            org_user.save(update_fields=org_updated)
+        if user_updated:
+            user.save()  # Full save triggers steamid sync
 
-    # Invalidate cached tournament responses that include this user's MMR
-    for tournament in org_user.user.tournament_set.all():
-        invalidate_obj(tournament)
+        # Invalidate all cached views affected by this change
+        league_users = LeagueUser.objects.filter(org_user=org_user).select_related(
+            "league"
+        )
+        invalidate_after_commit(
+            org_user,
+            org,
+            *user.tournaments.all(),
+            *league_users,
+            *(lu.league for lu in league_users),
+        )
 
     from org.serializers import OrgUserSerializer
 
@@ -814,4 +860,16 @@ def add_tournament_member(request, tournament_id):
         )
 
     tournament.users.add(user)
-    return Response({"status": "added", "user": TournamentUserSerializer(user).data})
+
+    # Invalidate immediately so _serialize_tournament gets fresh data,
+    # AND after commit so subsequent GET requests see the new state.
+    invalidate_obj(tournament)
+    invalidate_after_commit(tournament)
+
+    # Refresh to include the newly added user in serialization
+    tournament.refresh_from_db()
+    from app.functions.tournament import _serialize_tournament
+
+    return Response(
+        {"status": "added", "tournament": _serialize_tournament(tournament)}
+    )
