@@ -105,7 +105,7 @@ def profile_update(request):
             user.steam_account_id = steam_account_id
     if nickname is not None:
         user.nickname = nickname
-    log.debug(f"{positions}, {steamid}, {nickname}")
+    log.debug(f"{positions}, {steam_account_id}, {nickname}")
     with transaction.atomic():
         posObj.save()
         user.save()
