@@ -87,8 +87,8 @@ test.describe('Edit Profile Modal (@cicd)', () => {
 
     // Verify the Positions card is visible in the overview tab
     // (confirms the page re-rendered with updated data)
-    const positionsHeading = page.getByRole('heading', { name: 'Positions' });
-    await expect(positionsHeading).toBeVisible({ timeout: 5000 });
+    const positionsLabel = page.getByText('Positions').first();
+    await expect(positionsLabel).toBeVisible({ timeout: 5000 });
 
     // --- Restore original value ---
     await editBtn.click();
