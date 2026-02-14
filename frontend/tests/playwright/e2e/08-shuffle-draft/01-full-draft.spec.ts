@@ -248,7 +248,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
       `Tournament: ${tournamentData.name} (pk=${tournamentData.pk})`
     );
     console.log(
-      `Captains: ${tournamentData.captains.map((c) => c.username).join(', ')}`
+      `Captains: ${tournamentData.captains.join(', ')}`
     );
 
     await context.close();
@@ -314,8 +314,10 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
     }
 
     // Login as the second captain using loginAsUser
-    const response = await loginAsUser(secondCaptain.pk);
-    console.log(`Logged in as: ${response.user?.username || secondCaptain.username}`);
+    // captain is now a PK (number) from the slim serializer
+    const captainPk = typeof secondCaptain === 'number' ? secondCaptain : secondCaptain.pk;
+    const response = await loginAsUser(captainPk);
+    console.log(`Logged in as: ${response.user?.username}`);
 
     // Visit the tournament page
     await visitAndWaitForHydration(page, `/tournament/${tournamentData.pk}`);

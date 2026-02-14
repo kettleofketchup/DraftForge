@@ -20,16 +20,33 @@ test.describe('Edit Org User MMR (@cicd)', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
 
-    const league = await getFirstLeague(context);
-    if (!league) throw new Error('No leagues found. Run just db::populate::all');
+    // Find an org that has users by checking the org users endpoint
+    const leaguesResp = await context.request.get(`${API_URL}/leagues/`);
+    const leagues = await leaguesResp.json();
+    if (!Array.isArray(leagues) || leagues.length === 0) {
+      throw new Error('No leagues found. Run just db::populate::all');
+    }
 
-    const leagueResp = await context.request.get(`${API_URL}/leagues/${league.pk}/`);
-    const leagueData = await leagueResp.json();
-    orgPk =
-      typeof leagueData.organization === 'object'
-        ? leagueData.organization.pk
-        : leagueData.organization;
+    for (const league of leagues) {
+      const leagueOrgPk =
+        typeof league.organization === 'object'
+          ? league.organization.pk
+          : league.organization;
+      const usersResp = await context.request.get(
+        `${API_URL}/organizations/${leagueOrgPk}/users/`,
+        { failOnStatusCode: false }
+      );
+      if (usersResp.ok()) {
+        const usersData = await usersResp.json();
+        const users = Array.isArray(usersData) ? usersData : usersData.results ?? [];
+        if (users.length > 0) {
+          orgPk = leagueOrgPk;
+          break;
+        }
+      }
+    }
 
+    if (!orgPk) throw new Error('No org with users found');
     await context.close();
   });
 
