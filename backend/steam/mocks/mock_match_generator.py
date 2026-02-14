@@ -243,8 +243,8 @@ def generate_player_stats(
         # Apply multiplier with some variance
         return int(base * multiplier * random.uniform(0.9, 1.1))
 
-    # Convert 64-bit Steam ID to 32-bit account_id
-    account_id = user.steamid - 76561197960265728
+    # Use 32-bit account_id directly (steam_account_id is canonical)
+    account_id = user.steam_account_id or 0
 
     # Team number: 0 for Radiant, 1 for Dire
     team_number = 0 if player_slot < 128 else 1
