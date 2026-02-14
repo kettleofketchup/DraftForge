@@ -68,10 +68,10 @@ export async function deleteTournament(pk: number): Promise<void> {
 export async function addTournamentMember(
   tournamentId: number,
   payload: AddMemberPayload,
-): Promise<UserType> {
-  const response = await axios.post<AddUserResponse>(
+): Promise<TournamentType> {
+  const response = await axios.post<{ status: string; tournament: TournamentType }>(
     `/tournaments/${tournamentId}/members/`,
     payload,
   );
-  return response.data.user;
+  return response.data.tournament;
 }

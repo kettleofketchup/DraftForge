@@ -39,8 +39,7 @@ export const UserSchema = z.object({
   nickname: z.string().min(2).max(100).nullable().optional(),
   mmr: z.number().min(0).nullable().optional(),
   league_mmr: z.number().min(0).nullable().optional(), // MMR snapshot from LeagueUser
-  steamid: z.number().min(0).nullable().optional(),
-  steam_account_id: z.number().min(0).nullable().optional(), // 32-bit account ID
+  steam_account_id: z.number().min(0).nullable().optional(), // 32-bit Friend ID (Dotabuff)
   avatar: z.string().url().nullable().optional(),
   orgUserPk: z.number().min(0).optional(), // OrgUser pk (for org-scoped PATCH)
   pk: z.number().min(0).optional(), // User pk (for display)
@@ -49,3 +48,17 @@ export const UserSchema = z.object({
   guildNickname: z.string().min(2).max(100).nullable().optional(),
   active_drafts: z.array(ActiveDraftSchema).optional(),
 });
+
+/**
+ * Core user fields for the entity cache.
+ * Omits context-scoped fields (id=OrgUser pk, mmr=org MMR, league_mmr)
+ * which go into orgData/leagueData on UserEntry.
+ * pk is overridden from optional to required.
+ */
+export const CoreUserSchema = UserSchema.omit({
+  orgUserPk: true,
+  mmr: true,
+  league_mmr: true,
+}).extend({ pk: z.number() });
+
+export type CoreUserType = z.infer<typeof CoreUserSchema>;

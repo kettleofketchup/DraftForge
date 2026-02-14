@@ -240,7 +240,7 @@ export const UserEditForm: React.FC<Props> = ({ user, form, setForm }) => {
           {inputView('mmr', 'MMR: ', 'number')}
           {/* Position selection using checkboxes for PositionEnum */}
           {positionSelection()}
-          {inputView('steamid', 'Steam ID: ', 'number')}
+          {inputView('steam_account_id', 'Friend ID: ', 'number')}
           {/* {inputView('discordId', 'Discord ID: ', 'number')} */}
           {inputView('guildNickname', 'Discord Guild Nickname: ')}
         </div>

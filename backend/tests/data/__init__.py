@@ -25,6 +25,9 @@ from tests.data.leagues import (
     TEST_LEAGUE,
     TEST_LEAGUE_NAME,
     TEST_STEAM_LEAGUE_ID,
+    USER_EDIT_LEAGUE,
+    USER_EDIT_LEAGUE_NAME,
+    USER_EDIT_STEAM_LEAGUE_ID,
 )
 
 # Models
@@ -48,6 +51,8 @@ from tests.data.organizations import (
     DTX_ORG_NAME,
     TEST_ORG,
     TEST_ORG_NAME,
+    USER_EDIT_ORG,
+    USER_EDIT_ORG_NAME,
 )
 
 # Teams
@@ -70,6 +75,7 @@ from tests.data.tournaments import (
     CSV_IMPORT_TOURNAMENT,
     DEMO_HERODRAFT_TOURNAMENT,
     REAL_TOURNAMENT_38,
+    USER_EDIT_TOURNAMENT,
 )
 
 # Users
@@ -86,6 +92,7 @@ from tests.data.users import (
     STAFF_USER,
     TOURNAMENT_USERS,
     USER_CLAIMER,
+    USER_EDIT_USERS,
 )
 
 __all__ = [
@@ -105,6 +112,8 @@ __all__ = [
     "CSV_ORG_NAME",
     "DEMO_CSV_ORG",
     "DEMO_CSV_ORG_NAME",
+    "USER_EDIT_ORG",
+    "USER_EDIT_ORG_NAME",
     "ALL_ORGANIZATIONS",
     # Leagues
     "DTX_LEAGUE",
@@ -119,6 +128,9 @@ __all__ = [
     "TEST_STEAM_LEAGUE_ID",
     "CSV_STEAM_LEAGUE_ID",
     "DEMO_CSV_STEAM_LEAGUE_ID",
+    "USER_EDIT_LEAGUE",
+    "USER_EDIT_LEAGUE_NAME",
+    "USER_EDIT_STEAM_LEAGUE_ID",
     "ALL_LEAGUES",
     # Users
     "ADMIN_USER",
@@ -133,6 +145,7 @@ __all__ = [
     "TOURNAMENT_USERS",
     "AUTH_TEST_USERS",
     "ALL_TEST_USERS",
+    "USER_EDIT_USERS",
     # Teams
     "GGLIVE_TEAM",
     "BENEVOLENTGREMLIN_TEAM",
@@ -149,4 +162,5 @@ __all__ = [
     "DEMO_HERODRAFT_TOURNAMENT",
     "BRACKET_UNSET_WINNER_TOURNAMENT",
     "CSV_IMPORT_TOURNAMENT",
+    "USER_EDIT_TOURNAMENT",
 ]

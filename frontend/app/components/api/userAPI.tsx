@@ -36,6 +36,15 @@ export async function fetchUser(pk: number): Promise<UserType> {
   return response.data as UserType;
 }
 
+export async function fetchUsersBulk(
+  pks: number[],
+): Promise<UserType[]> {
+  const response = await axios.post<UserType[]>(`/users/bulk/`, {
+    pks,
+  });
+  return response.data;
+}
+
 export async function createUser(data: Partial<UserType>): Promise<UserType> {
   const response = await axios.post(`/user/register`, data);
   return response.data as UserType;

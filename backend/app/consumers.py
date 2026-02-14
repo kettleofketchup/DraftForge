@@ -85,7 +85,7 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
     @database_sync_to_async
     def get_draft_state(self, draft_id):
         from app.models import Draft
-        from app.serializers import DraftSerializerForTournament
+        from app.serializers import DraftSerializerSlim, _build_users_dict
 
         try:
             # Note: users_remaining is a property, not a relation, so it can't be prefetched
@@ -96,7 +96,11 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 "tournament__teams__members",
                 "tournament__users",  # Prefetch users for users_remaining calculation
             ).get(pk=draft_id)
-            return DraftSerializerForTournament(draft).data
+            data = DraftSerializerSlim(draft).data
+
+            # Add _users dict for frontend cache hydration
+            data["_users"] = _build_users_dict(draft.tournament)
+            return data
         except Draft.DoesNotExist:
             return None
 

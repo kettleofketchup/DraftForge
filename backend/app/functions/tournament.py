@@ -32,10 +32,18 @@ from app.serializers import (
     TeamSerializer,
     TournamentSerializer,
     UserSerializer,
+    _build_users_dict,
 )
 from backend import settings
 
 log = logging.getLogger(__name__)
+
+
+def _serialize_tournament(tournament):
+    """Serialize a tournament with the _users dict for frontend hydration."""
+    data = TournamentSerializer(tournament).data
+    data["_users"] = _build_users_dict(tournament)
+    return data
 
 
 class PickPlayerForRound(serializers.Serializer):
@@ -153,7 +161,7 @@ def pick_player_for_round(request):
     except Tournament.DoesNotExist:
         return Response({"error": "Tournament not found"}, status=404)
     # Build response data
-    response_data = TournamentSerializer(tournament).data
+    response_data = _serialize_tournament(tournament)
     if tie_data:
         response_data["tie_resolution"] = tie_data
 
@@ -215,8 +223,7 @@ def create_team_from_captain(request):
                 "User is already a captain in this tournament with a draft order"
             )
             return Response(
-                TournamentSerializer(tournament).data,
-                TournamentSerializer(tournament).data,
+                _serialize_tournament(tournament),
                 status=201,
             )
 
@@ -242,7 +249,7 @@ def create_team_from_captain(request):
     invalidate_obj(tournament)
     invalidate_obj(team)
 
-    return Response(TournamentSerializer(tournament).data, status=201)
+    return Response(_serialize_tournament(tournament), status=201)
 
 
 class CreateDraftRounds(serializers.Serializer):
@@ -294,7 +301,7 @@ def generate_draft_rounds(request):
     invalidate_obj(draft)
     invalidate_obj(tournament)
 
-    return Response(TournamentSerializer(tournament).data, status=201)
+    return Response(_serialize_tournament(tournament), status=201)
 
 
 @api_view(["POST"])
@@ -348,7 +355,7 @@ def rebuild_team(request):
     draft.save()
     tournament.draft = draft
     tournament = Tournament.objects.get(pk=tournament_pk)
-    data = TournamentSerializer(tournament).data
+    data = _serialize_tournament(tournament)
     log.debug(data)
 
     # Invalidate specific objects after rebuilding teams
@@ -497,4 +504,4 @@ def undo_last_pick(request):
     invalidate_obj(tournament)
     invalidate_obj(draft)
 
-    return Response(TournamentSerializer(tournament).data, status=200)
+    return Response(_serialize_tournament(tournament), status=200)

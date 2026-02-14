@@ -50,8 +50,10 @@ export const useAutoRefreshDraft = ({
   const choiceIsNull = curDraftRound?.choice === null;
   const hasDraft = !!draft;
   const hasCurDraftRound = !!curDraftRound;
-  const usersRemainingCount = draft?.users_remaining?.length ?? -1;
-  const isDraftCompleted = usersRemainingCount === 0;
+  const draftRounds = draft?.draft_rounds;
+  const isDraftCompleted =
+    (draftRounds?.length ?? 0) > 0 &&
+    draftRounds?.every((r) => r.choice != null) === true;
 
   useEffect(() => {
     // Clear any existing interval first

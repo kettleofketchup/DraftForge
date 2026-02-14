@@ -18,9 +18,11 @@ import type { DraftRoundType, DraftType } from '~/components/teamdraft/types';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { TeamType, TournamentType } from '~/components/tournament/types';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { User } from '~/components/user/user';
 import type { GameType, GuildMember, GuildMembers, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
+import { useUserCacheStore } from '~/store/userCacheStore';
 
 const log = getLogger('userStore');
 
@@ -37,15 +39,16 @@ interface UserState {
   discordUsers: GuildMembers;
   getDiscordUsers: () => Promise<void>;
   setDiscordUsers: (users: GuildMembers) => void;
-  users: UserType[];
-  setUsers: (users: UserType[]) => void;
+  /** Global user pk array (resolved via useResolvedUsers hook) */
+  globalUserPks: number[];
+  /** Upsert a user into the cache (replaces old array-based setUser) */
   setUser: (user: UserType) => void;
+  /** Add a user to cache + global pk array */
   addUser: (user: UserType) => void;
+  /** Remove a user from cache + global pk array */
   delUser: (user: UserType) => void;
   getUsers: () => Promise<void>;
   createUser: (user: UserType) => Promise<void>;
-
-  clearUsers: () => void;
   game: GameType;
   games: GameType[];
   team: TeamType;
@@ -196,54 +199,42 @@ export const useUserStore = create<UserState>()(
         set({ currentUser: user });
       },
 
-      setUser: (user: UserType) => {
-        log.debug('User set:', user);
-        if (!user) {
-          log.error('Attempted to set user to null or undefined');
-          return;
-        }
-        if (user.pk === undefined) {
-          log.error('User pk is undefined:', user);
-          return;
-        }
-        const users = get().users;
-        const userIndex = users.findIndex((u) => u?.pk === user.pk);
-        if (userIndex !== -1) {
-          const updatedUsers = [...users];
-          updatedUsers[userIndex] = user;
-          set({ users: updatedUsers });
-          log.debug('userUserStore updated User', user);
-        } else {
-          get().addUser(user);
-        }
-        const tournaments = get().tournamentsByUser(user);
-        if (tournaments.length == 0) {
-          return;
-        }
-        log.debug('User tournaments', tournaments);
-        for (const tournament of tournaments) {
-          var change = false;
-          log.debug('User tournament: ', tournament.pk, user);
+      clearUser: () => {
+        set({ currentUser: {} as UserType });
+        useUserCacheStore.getState().reset();
+      },
+      isStaff: () => !!get().currentUser?.is_staff,
+      globalUserPks: [] as number[],
 
+      setUser: (user: UserType) => {
+        if (!user || user.pk == null) return;
+        useUserCacheStore.getState().upsert(user);
+        // Also update tournament user references
+        const tournaments = get().tournamentsByUser(user);
+        for (const tournament of tournaments) {
+          let change = false;
           tournament.users = tournament.users?.map((u) => {
-            if (u?.pk === user.pk) {
-              log.debug('Updating user in tournament:', tournament.pk, user);
-              change = true;
-              return user;
-            }
+            if (u?.pk === user.pk) { change = true; return user; }
             return u;
           }) ?? null;
-          log.debug('Updating tournament with user:', tournament.users, user);
-          if (change) {
-            log.debug('Setting tournament with updated user:', tournament);
-            get().setTournament(tournament);
-          }
+          if (change) get().setTournament(tournament);
         }
       },
-      clearUser: () => set({ currentUser: {} as UserType }),
-      isStaff: () => !!get().currentUser?.is_staff,
-      users: [] as UserType[],
-      addUser: (user) => set({ users: [...get().users, user] }),
+
+      addUser: (user: UserType) => {
+        if (!user || user.pk == null) return;
+        useUserCacheStore.getState().upsert(user);
+        const pks = get().globalUserPks;
+        if (!pks.includes(user.pk!)) {
+          set({ globalUserPks: [...pks, user.pk!] });
+        }
+      },
+
+      delUser: (user: UserType) => {
+        if (!user || user.pk == null) return;
+        useUserCacheStore.getState().remove(user.pk!);
+        set({ globalUserPks: get().globalUserPks.filter((pk) => pk !== user.pk) });
+      },
 
       addTournament: (tourn: TournamentType) =>
         set({ tournaments: [...get().tournaments, tourn] }),
@@ -252,17 +243,14 @@ export const useUserStore = create<UserState>()(
           tournaments: get().tournaments.filter((t) => t?.pk !== tourn.pk),
         }),
 
-      delUser: (user) =>
-        set({ users: get().users.filter((u) => u?.pk !== user.pk) }),
-
-      setUsers: (users) => set({ users }),
-      clearUsers: () => set({ users: [] as UserType[] }),
-
       getUsers: async () => {
         try {
           const response = await fetchUsers();
-          set({ users: response });
-          log.debug('User fetched successfully:', response);
+          useUserCacheStore.getState().upsert(response);
+          set({
+            globalUserPks: response.filter((u) => u.pk != null).map((u) => u.pk!),
+          });
+          log.debug('Users fetched successfully:', response.length);
         } catch (error) {
           log.error('Error fetching users:', error);
         }
@@ -338,7 +326,7 @@ export const useUserStore = create<UserState>()(
 
         try {
           const response = await fetchTournament(id);
-          set({ tournament: response });
+          set({ tournament: hydrateTournament(response as TournamentType & { _users?: Record<number, unknown> }) as TournamentType });
         } catch (err) {
           log.error('Failed to fetch tournament:', err);
         }
@@ -445,8 +433,7 @@ export const useUserStore = create<UserState>()(
       name: 'dtx-storage', // key in localStorage
       partialize: (state) => ({
         currentUser: state.currentUser,
-        users: state.users,
-      }), // optionally limit what's stored
+      }),
       onRehydrateStorage: () => (state) => {
         log.debug('Rehydrating user store...');
         log.debug('Current user:', state?.currentUser);

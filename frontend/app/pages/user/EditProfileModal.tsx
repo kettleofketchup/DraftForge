@@ -33,8 +33,7 @@ const log = getLogger('EditProfileModal');
 
 const EditProfileSchema = z.object({
   nickname: z.string().min(2).max(100).nullable().optional(),
-  mmr: z.number().min(0).max(20000).nullable().optional(),
-  steamid: z.number().min(0).nullable().optional(),
+  steam_account_id: z.number().min(0).nullable().optional(),
   positions: z.object({
     carry: z.number().min(0),
     mid: z.number().min(0),
@@ -66,8 +65,7 @@ export function EditProfileModal({
     resolver: zodResolver(EditProfileSchema),
     defaultValues: {
       nickname: user.nickname ?? '',
-      mmr: user.mmr ?? null,
-      steamid: user.steamid ?? null,
+      steam_account_id: user.steam_account_id ?? null,
       positions: {
         carry: user.positions?.carry ?? 0,
         mid: user.positions?.mid ?? 0,
@@ -83,8 +81,7 @@ export function EditProfileModal({
     if (open) {
       form.reset({
         nickname: user.nickname ?? '',
-        mmr: user.mmr ?? null,
-        steamid: user.steamid ?? null,
+        steam_account_id: user.steam_account_id ?? null,
         positions: {
           carry: user.positions?.carry ?? 0,
           mid: user.positions?.mid ?? 0,
@@ -98,7 +95,14 @@ export function EditProfileModal({
 
   const onSubmit = async (data: EditProfileFormData) => {
     try {
-      const updatedUser = await UpdateProfile(data);
+      // Only send fields that the user actually changed
+      const { dirtyFields } = form.formState;
+      const payload: Partial<EditProfileFormData> = {};
+      if (dirtyFields.nickname) payload.nickname = data.nickname;
+      if (dirtyFields.steam_account_id) payload.steam_account_id = data.steam_account_id;
+      if (dirtyFields.positions) payload.positions = data.positions;
+
+      const updatedUser = await UpdateProfile(payload);
       setUser(updatedUser);
       setCurrentUser(updatedUser);
       toast.success('Profile updated successfully');
@@ -144,59 +148,30 @@ export function EditProfileModal({
               )}
             />
 
-            {/* MMR */}
+            {/* Friend ID (32-bit Steam Account ID) */}
             <FormField
               control={form.control}
-              name="mmr"
+              name="steam_account_id"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Base MMR</FormLabel>
+                  <FormLabel>Friend ID</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
-                      placeholder="Enter your MMR"
+                      placeholder="Enter your Friend ID (from Dotabuff)"
                       {...field}
                       value={field.value ?? ''}
                       onChange={(e) => {
                         const val = e.target.value;
                         field.onChange(val ? parseInt(val, 10) : null);
                       }}
-                      disabled
-                      className="bg-muted text-muted-foreground"
-                    />
-                  </FormControl>
-                  <FormDescription className="text-amber-600">
-                    ⚠️ Only provide your last ranked MMR. Contact an admin to update.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Steam ID */}
-            <FormField
-              control={form.control}
-              name="steamid"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Steam ID</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      placeholder="Enter your Steam ID"
-                      {...field}
-                      value={field.value ?? ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        field.onChange(val ? parseInt(val, 10) : null);
-                      }}
-                      disabled={!!user.steamid}
+                      disabled={!!user.steam_account_id}
                     />
                   </FormControl>
                   <FormDescription>
-                    {user.steamid
-                      ? 'Steam ID cannot be changed once set'
-                      : 'Your Steam account ID (found on Dotabuff)'}
+                    {user.steam_account_id
+                      ? 'Friend ID cannot be changed once set'
+                      : 'Your Friend ID (found on Dotabuff URL)'}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

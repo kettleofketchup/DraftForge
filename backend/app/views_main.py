@@ -67,7 +67,10 @@ from .serializers import (
     TournamentListSerializer,
     TournamentSerializer,
     TournamentsSerializer,
+    TournamentUserSerializer,
     UserSerializer,
+    _build_users_dict,
+    _serialize_users_with_mmr,
 )
 
 log = logging.getLogger(__name__)
@@ -352,7 +355,20 @@ class TournamentView(viewsets.ModelViewSet):
             queryset = queryset.filter(league__organization__pk=org_id)
         if league_id:
             queryset = queryset.filter(league_id=league_id)
-        return queryset
+        return queryset.prefetch_related(
+            "users",
+            "users__positions",
+            "teams__members",
+            "teams__members__positions",
+            "teams__captain",
+            "teams__captain__positions",
+            "teams__deputy_captain",
+            "teams__deputy_captain__positions",
+            "teams__dropin_members",
+            "teams__dropin_members__positions",
+            "teams__left_members",
+            "teams__left_members__positions",
+        )
 
     def list(self, request, *args, **kwargs):
         cache_key = f"tournament_list:{request.get_full_path()}"
@@ -377,7 +393,7 @@ class TournamentView(viewsets.ModelViewSet):
 
     def retrieve(self, request, *args, **kwargs):
         pk = kwargs["pk"]
-        cache_key = f"tournament_detail:{pk}"
+        cache_key = f"tournament_detail_v2:{pk}"
 
         @cached_as(
             Tournament.objects.filter(pk=pk),
@@ -392,9 +408,13 @@ class TournamentView(viewsets.ModelViewSet):
         def get_data():
             log.debug("get_tournament: fetching data")
             instance = self.get_object()
-
             serializer = self.get_serializer(instance)
-            return serializer.data
+            data = serializer.data
+
+            # Deduplicated user dict for frontend entity cache
+            data["_users"] = _build_users_dict(instance)
+
+            return data
 
         data = get_data()
         return Response(data)
@@ -558,7 +578,12 @@ class DraftView(viewsets.ModelViewSet):
         def get_data():
             instance = self.get_object()
             serializer = self.get_serializer(instance)
-            return serializer.data
+            data = serializer.data
+
+            # Deduplicated user dict for frontend entity cache
+            data["_users"] = _build_users_dict(instance.tournament)
+
+            return data
 
         data = get_data()
         return Response(data)
@@ -1203,6 +1228,23 @@ class DraftCreateView(generics.CreateAPIView):
 class DraftRoundCreateView(generics.CreateAPIView):
     serializer_class = DraftRoundSerializer
     permission_classes = [IsStaff]
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def bulk_users(request):
+    """Fetch multiple users by pk for entity cache hydration.
+    Returns core fields only — scoped data (MMR) comes from context-specific fetches.
+    """
+    pks = request.data.get("pks", [])
+    if not isinstance(pks, list) or not all(isinstance(pk, int) for pk in pks):
+        return Response({"error": "Provide a list of integer pks"}, status=400)
+    if len(pks) == 0 or len(pks) > 200:
+        return Response({"error": "Provide 1-200 pks"}, status=400)
+
+    users = CustomUser.objects.filter(pk__in=pks).select_related("positions")
+    serializer = TournamentUserSerializer(users, many=True)
+    return Response(serializer.data)
 
 
 @api_view(["GET"])

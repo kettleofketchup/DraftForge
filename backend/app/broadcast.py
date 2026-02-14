@@ -9,9 +9,10 @@ from channels.layers import get_channel_layer
 
 from app.serializers import (
     DraftEventSerializer,
-    DraftSerializerForTournament,
+    DraftSerializerSlim,
     DraftTeamSerializerFull,
     HeroDraftSerializer,
+    _build_users_dict,
 )
 
 log = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ def broadcast_event(event, include_draft_state=True):
                 "tournament__teams__members",
                 "tournament__users",
             ).get(pk=event.draft_id)
-            draft_state = DraftSerializerForTournament(draft).data
+            draft_state = DraftSerializerSlim(draft).data
         except Exception as e:
             log.warning(f"Failed to serialize draft state: {e}")
 

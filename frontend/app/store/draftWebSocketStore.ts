@@ -7,9 +7,12 @@
 
 import { create } from 'zustand';
 import { toast } from 'sonner';
+import type { UserType } from '~/components/user/types';
 import { getLogger } from '~/lib/logger';
 import { getWebSocketManager } from '~/lib/websocket';
 import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
+import { useOrgStore } from '~/store/orgStore';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import type { DraftEvent, PlayerPickedPayload, WebSocketDraftState, WebSocketMessage } from '~/types/draftEvent';
 import { PlayerPickedToast } from '~/components/teamdraft/DraftToasts';
 
@@ -87,6 +90,68 @@ interface DraftWebSocketState {
   reset: () => void;
 }
 
+/** Ingest _users dict from WS draft state into entity cache. */
+function ingestDraftStateUsers(draftState: WebSocketDraftState): void {
+  if (draftState._users) {
+    const users = Object.values(draftState._users) as UserType[];
+    const orgId = useOrgStore.getState().currentOrg?.pk;
+    useUserCacheStore.getState().upsert(users, { orgId });
+  }
+}
+
+/**
+ * Hydrate slim WS draft state (pk-only user references) back to full user
+ * objects using the _users dict. This ensures downstream consumers that
+ * access .mmr, .username, .pk on users_remaining, draft_rounds.captain/choice,
+ * and tournament.teams.members continue to work correctly.
+ */
+function hydrateSlimDraftState(slim: WebSocketDraftState): WebSocketDraftState {
+  const usersMap = slim._users;
+  if (!usersMap) return slim;
+
+  const resolve = (ref: unknown): unknown => {
+    if (typeof ref === 'number') return usersMap[ref] ?? { pk: ref };
+    return ref;
+  };
+
+  const resolveArray = (refs: unknown): unknown[] => {
+    if (!Array.isArray(refs)) return [];
+    return refs.map((r) => (typeof r === 'number' ? (usersMap[r] ?? { pk: r }) : r));
+  };
+
+  return {
+    ...slim,
+    users_remaining: resolveArray(slim.users_remaining) as WebSocketDraftState['users_remaining'],
+    draft_rounds: (slim.draft_rounds ?? []).map((round) => ({
+      ...round,
+      captain: resolve(round.captain),
+      choice: resolve(round.choice),
+      // Hydrate nested team if present
+      ...(round.team && typeof round.team === 'object'
+        ? {
+            team: {
+              ...(round.team as Record<string, unknown>),
+              members: resolveArray((round.team as Record<string, unknown>).members),
+              captain: resolve((round.team as Record<string, unknown>).captain),
+              deputy_captain: resolve((round.team as Record<string, unknown>).deputy_captain),
+            },
+          }
+        : {}),
+    })),
+    tournament: slim.tournament
+      ? {
+          ...slim.tournament,
+          teams: (slim.tournament.teams ?? []).map((team) => ({
+            ...team,
+            members: resolveArray((team as Record<string, unknown>).members),
+            captain: resolve((team as Record<string, unknown>).captain),
+            deputy_captain: resolve((team as Record<string, unknown>).deputy_captain),
+          })),
+        }
+      : undefined,
+  };
+}
+
 const initialState = {
   status: 'disconnected' as ConnectionStatus,
   error: null,
@@ -160,7 +225,8 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
         // Also update draft state if included in initial_events
         if (message.draft_state) {
           log.debug('Updating draft state from initial_events');
-          set({ draftState: message.draft_state });
+          ingestDraftStateUsers(message.draft_state);
+          set({ draftState: hydrateSlimDraftState(message.draft_state) });
         }
       } else if (message.type === 'draft_event' && message.event) {
         const newEvent = message.event;
@@ -181,7 +247,8 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
         // Update draft state if included
         if (message.draft_state) {
           log.debug('Updating draft state from WebSocket');
-          set({ draftState: message.draft_state });
+          ingestDraftStateUsers(message.draft_state);
+          set({ draftState: hydrateSlimDraftState(message.draft_state) });
         }
       }
     });
@@ -239,7 +306,13 @@ export const draftWsSelectors = {
   usersRemainingCount: (s: DraftWebSocketState) =>
     s.draftState?.users_remaining?.length ?? 0,
 
-  /** True when draft is completed (no users remaining) */
-  isDraftCompleted: (s: DraftWebSocketState) =>
-    s.draftState !== null && (s.draftState.users_remaining?.length ?? -1) === 0,
+  /** True when draft is completed (all rounds have a choice) */
+  isDraftCompleted: (s: DraftWebSocketState) => {
+    const rounds = s.draftState?.draft_rounds;
+    return (
+      s.draftState !== null &&
+      (rounds?.length ?? 0) > 0 &&
+      rounds?.every((r) => r.choice != null) === true
+    );
+  },
 };

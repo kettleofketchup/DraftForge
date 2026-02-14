@@ -111,7 +111,8 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
     expect(org).not.toBeNull();
 
     // Find a user not in this tournament
-    const tournamentUserPks = tournament!.users.map((u) => u.pk);
+    // users is now an array of PKs (not full objects)
+    const tournamentUserPks = tournament!.users as number[];
     const userToAdd = await findUserNotInTournament(context, tournamentUserPks);
     expect(userToAdd).not.toBeNull();
 
@@ -220,22 +221,22 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
     // Login as admin
     await loginAdmin();
 
-    // Get a tournament with users
+    // Get a tournament with users (users is now an array of PKs)
     const tournament = await getTournament(context, 1);
     expect(tournament).not.toBeNull();
     expect(tournament!.users.length).toBeGreaterThan(0);
 
-    // Get the first user's data from the tournament response
-    const tournamentUser = tournament!.users[0] as {
-      pk: number;
-      username: string;
-      mmr?: number;
-    };
+    // users is now PK-only; full data is in _users sidecar dict
+    const firstUserPk = tournament!.users[0] as unknown as number;
+    const usersDict = (tournament as Record<string, unknown>)._users as
+      Record<string, { pk: number; username: string; mmr?: number }> | undefined;
 
-    // The mmr in the tournament response should come from OrgUser
-    // (This is handled by OrgUserSerializer in the backend)
-    if (tournament!.league) {
-      const membership = await getUserOrgMembership(context, tournamentUser.pk);
+    // The mmr in the _users dict should come from OrgUser
+    if (tournament!.league && usersDict) {
+      const tournamentUser = usersDict[String(firstUserPk)];
+      expect(tournamentUser).toBeDefined();
+
+      const membership = await getUserOrgMembership(context, firstUserPk);
       expect(membership).not.toBeNull();
 
       const orgUser = membership!.org_users.find(
@@ -243,7 +244,7 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
       );
 
       // If user has an OrgUser record, verify mmr matches
-      if (orgUser && tournamentUser.mmr !== undefined) {
+      if (orgUser && tournamentUser?.mmr !== undefined) {
         expect(tournamentUser.mmr).toBe(orgUser.mmr);
       }
     }

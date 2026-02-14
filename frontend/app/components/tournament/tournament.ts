@@ -16,6 +16,7 @@ import {
   updateTournament,
 } from '~/components/api/api';
 
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('tournamentClass');
 export class Tournament implements TournamentClassType {
@@ -46,7 +47,8 @@ export class Tournament implements TournamentClassType {
       throw new Error('User primary key (pk) is not set.');
     }
     try {
-      const data = await fetchTournament(this.pk);
+      const rawData = await fetchTournament(this.pk);
+      const data = hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> });
       Object.assign(this, data);
     } catch (error) {
       log.error('Error fetching user data:', error);

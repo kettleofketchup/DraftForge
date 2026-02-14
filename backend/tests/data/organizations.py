@@ -46,6 +46,15 @@ DEMO_CSV_ORG: TestOrganization = TestOrganization(
     timezone="America/New_York",
 )
 
+# User Edit Test Organization - isolated from other test data
+USER_EDIT_ORG: TestOrganization = TestOrganization(
+    pk=5,  # Expected PK after creation
+    name="User Edit Org",
+    description="Isolated organization for user edit E2E tests.",
+    rules_template="User edit test rules.",
+    timezone="America/New_York",
+)
+
 # =============================================================================
 # Constants for easy access
 # =============================================================================
@@ -54,6 +63,7 @@ DTX_ORG_NAME = DTX_ORG.name
 TEST_ORG_NAME = TEST_ORG.name
 CSV_ORG_NAME = CSV_ORG.name
 DEMO_CSV_ORG_NAME = DEMO_CSV_ORG.name
+USER_EDIT_ORG_NAME = USER_EDIT_ORG.name
 
 # =============================================================================
 # All Organizations (for iteration)
@@ -64,4 +74,5 @@ ALL_ORGANIZATIONS: list[TestOrganization] = [
     TEST_ORG,
     CSV_ORG,
     DEMO_CSV_ORG,
+    USER_EDIT_ORG,
 ]

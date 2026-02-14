@@ -9,11 +9,12 @@ import {
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { cn } from '~/lib/utils';
+import { isUserEntry, type UserEntry } from '~/store/userCacheTypes';
 import { RolePositions } from './positions';
 import type { UserType } from './types';
 
 interface UserStripProps {
-  user: UserType;
+  user: UserType | UserEntry;
 
   /** Optional slot for contextual data (e.g., projected MMR, pick order) */
   contextSlot?: React.ReactNode;
@@ -47,19 +48,8 @@ const userStripPropsAreEqual = (
   prev: UserStripProps,
   next: UserStripProps,
 ): boolean => {
-  // User identity/display changes
-  if (prev.user?.pk !== next.user?.pk) return false;
-  if (prev.user?.username !== next.user?.username) return false;
-  if (prev.user?.nickname !== next.user?.nickname) return false;
-  if (prev.user?.mmr !== next.user?.mmr) return false;
-  if ((prev.user as any)?.league_mmr !== (next.user as any)?.league_mmr)
-    return false;
-  if (prev.user?.avatar !== next.user?.avatar) return false;
-
-  // Positions object - check if both exist or both don't
-  const prevHasPos = !!prev.user?.positions;
-  const nextHasPos = !!next.user?.positions;
-  if (prevHasPos !== nextHasPos) return false;
+  // Entity adapter guarantees new reference = changed data
+  if (prev.user !== next.user) return false;
 
   // Slots - referential equality (parent should memoize if needed)
   if (prev.contextSlot !== next.contextSlot) return false;
@@ -93,9 +83,6 @@ export const UserStrip = memo(
     className,
     'data-testid': testId,
   }: UserStripProps) => {
-    // Type assertion for league_mmr which may not be in base UserType
-    const userWithLeague = user as UserType & { league_mmr?: number };
-
     // Memoize display names to avoid recalculating
     const { fullName, displayedName, displayedNameMobile } = useMemo(
       () => ({
@@ -107,13 +94,20 @@ export const UserStrip = memo(
     );
 
     // Memoize MMR values to prevent badge re-renders
+    const orgMmr = isUserEntry(user)
+      ? (organizationId ? user.orgData[organizationId]?.mmr : undefined)
+      : user.mmr;
     const baseMmr = useMemo(
-      () => (user.mmr ?? 0).toLocaleString().padStart(6, '\u2007'),
-      [user.mmr],
+      () => (orgMmr ?? 0).toLocaleString().padStart(6, '\u2007'),
+      [orgMmr],
     );
+
+    const leagueMmrValue = isUserEntry(user)
+      ? (leagueId ? user.leagueData[leagueId]?.mmr : undefined)
+      : (user as UserType & { league_mmr?: number }).league_mmr;
     const leagueMmr = useMemo(
-      () => (userWithLeague.league_mmr ?? 0).toLocaleString().padStart(6, '\u2007'),
-      [userWithLeague.league_mmr],
+      () => (leagueMmrValue ?? 0).toLocaleString().padStart(6, '\u2007'),
+      [leagueMmrValue],
     );
 
     // Memoize the entire MMR badge sections to prevent Tooltip/Radix re-renders
@@ -216,7 +210,7 @@ export const UserStrip = memo(
         {/* Column 3: MMR (stacked vertically - Base on top, League below) */}
         <div className="flex flex-col justify-center gap-0.5 shrink-0">
           {baseMmrBadge}
-          {leagueMmrBadge}
+          {leagueMmrValue ? leagueMmrBadge : null}
         </div>
 
         {/* Column 4: Context Slot (flex-1 to push action to end) */}

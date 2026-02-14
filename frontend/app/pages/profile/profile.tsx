@@ -56,7 +56,7 @@ export const ProfilePage: React.FC = () => {
       'positions.hard_support',
       currentUser?.positions?.hard_support || 0,
     );
-    form.setValue('steamid', currentUser?.steamid || null);
+    form.setValue('steam_account_id', currentUser?.steam_account_id || null);
     log.debug('Form initialized with values:', form.getValues());
     log.debug(currentUser);
   };
@@ -106,22 +106,22 @@ export const ProfilePage: React.FC = () => {
 
                 <FormField
                   control={form.control}
-                  name="steamid"
+                  name="steam_account_id"
                   rules={{
                     validate: (value) => {
-                      if (currentUser?.steamid && !value) {
-                        return 'Steam ID cannot be cleared once set';
+                      if (currentUser?.steam_account_id && !value) {
+                        return 'Friend ID cannot be cleared once set';
                       }
                       return true;
                     },
                   }}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Steam ID</FormLabel>
+                      <FormLabel>Friend ID</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
-                          placeholder="Enter your Steam ID"
+                          placeholder="Enter your Friend ID"
                           {...field}
                           value={field.value ?? ''}
                           onChange={(e) => {
@@ -130,9 +130,9 @@ export const ProfilePage: React.FC = () => {
                           }}
                         />
                       </FormControl>
-                      {currentUser?.steamid && (
+                      {currentUser?.steam_account_id && (
                         <FormDescription>
-                          Steam ID cannot be removed once set
+                          Friend ID cannot be removed once set
                         </FormDescription>
                       )}
                       <FormMessage />

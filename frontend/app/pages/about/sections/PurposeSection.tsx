@@ -7,13 +7,15 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('PurposeSection');
 export function PurposeSection() {
   log.debug('Rendering PurposeSection component');
-  const users = useUserStore((state) => state.users);
+  const globalUserPks = useUserStore((state) => state.globalUserPks);
+  const users = useResolvedUsers(globalUserPks);
   const getDiscordUsers = useUserStore((state) => state.getDiscordUsers);
   const discordUsers = useUserStore((state) => state.discordUsers);
   const getUsers = useUserStore((state) => state.getUsers);

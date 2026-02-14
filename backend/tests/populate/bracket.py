@@ -86,13 +86,13 @@ def populate_bracket_linking_scenario(force=False):
     for i in range(20):
         discord_id = str(200000000000000000 + i)
         username = f"link_test_player_{i}"
-        steam_id = 76561197960300000 + i  # Unique steam IDs for linking
+        steam_account_id = 34272 + i  # Unique 32-bit Friend IDs for linking
 
         user, created = CustomUser.objects.get_or_create(
             discordId=discord_id,
             defaults={
                 "username": username,
-                "steamid": steam_id,
+                "steam_account_id": steam_account_id,
             },
         )
         if created:
@@ -102,9 +102,13 @@ def populate_bracket_linking_scenario(force=False):
             )
             user.positions = positions
             user.save()
-        elif user.steamid != steam_id:
-            # Ensure steam ID is set correctly
-            user.steamid = steam_id
+        elif user.steam_account_id != steam_account_id:
+            # Ensure Friend ID is set correctly
+            user.steam_account_id = steam_account_id
+            user.save()
+
+        # Ensure steamid is computed (may be NULL if user existed before save() override)
+        if user.steamid is None and user.steam_account_id is not None:
             user.save()
 
         team_users.append(user)
@@ -284,9 +288,14 @@ def populate_bracket_linking_scenario(force=False):
         dire_players = config["dire_players"]
 
         for slot_idx, player in enumerate(radiant_players):
+            steam_id_64 = player.steamid or (
+                player.steam_account_id + CustomUser.STEAM_ID_64_BASE
+                if player.steam_account_id
+                else None
+            )
             PlayerMatchStats.objects.update_or_create(
                 match=match,
-                steam_id=player.steamid,
+                steam_id=steam_id_64,
                 defaults={
                     "user": player,
                     "player_slot": slot_idx,
@@ -305,9 +314,14 @@ def populate_bracket_linking_scenario(force=False):
             )
 
         for slot_idx, player in enumerate(dire_players):
+            steam_id_64 = player.steamid or (
+                player.steam_account_id + CustomUser.STEAM_ID_64_BASE
+                if player.steam_account_id
+                else None
+            )
             PlayerMatchStats.objects.update_or_create(
                 match=match,
-                steam_id=player.steamid,
+                steam_id=steam_id_64,
                 defaults={
                     "user": player,
                     "player_slot": 128 + slot_idx,  # Dire slots start at 128
