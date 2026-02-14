@@ -53,7 +53,9 @@ def create_dynamic_tournament(config: DynamicTournamentConfig, force: bool = Fal
 
     # Get users with Steam IDs for team membership
     users_with_steam = list(
-        CustomUser.objects.filter(steamid__isnull=False).exclude(steamid=0)
+        CustomUser.objects.filter(steam_account_id__isnull=False).exclude(
+            steam_account_id=0
+        )
     )
     all_users = list(CustomUser.objects.all())
 

@@ -163,7 +163,7 @@ def _build_users_dict(tournament):
 
 class TournamentSerializerBase(serializers.ModelSerializer):
     users = serializers.SerializerMethodField()
-    captains = UserPkField(many=True)
+    captains = UserPkField(many=True, read_only=True)
     tournament_type = serializers.CharField(read_only=False)
 
     def get_users(self, tournament):
@@ -223,11 +223,11 @@ class TeamSerializerForTournament(serializers.ModelSerializer):
 class TeamSerializerSlim(TeamSerializerForTournament):
     """Slim variant — inherits everything, overrides user fields to pk-only."""
 
-    members = UserPkField(many=True)
+    members = UserPkField(many=True, read_only=True)
     captain = UserPkField()
     deputy_captain = UserPkField()
-    dropin_members = UserPkField(many=True)
-    left_members = UserPkField(many=True)
+    dropin_members = UserPkField(many=True, read_only=True)
+    left_members = UserPkField(many=True, read_only=True)
 
 
 # For tournaments page
@@ -593,7 +593,7 @@ class TournamentSerializerDraft(serializers.ModelSerializer):
     users = serializers.SerializerMethodField()
 
     tournament_type = serializers.CharField(read_only=False)
-    captains = UserPkField(many=True)
+    captains = UserPkField(many=True, read_only=True)
 
     def get_users(self, tournament):
         """Return user PKs only — full data provided via _users dict."""
@@ -885,7 +885,7 @@ class TournamentSerializer(serializers.ModelSerializer):
         required=False,
     )
     tournament_type = serializers.CharField(read_only=False)
-    captains = UserPkField(many=True)
+    captains = UserPkField(many=True, read_only=True)
     games = GameSerializerForTournament(many=True, read_only=True)
     league = LeaguesSerializer(read_only=True)
     league_id_write = serializers.PrimaryKeyRelatedField(
