@@ -24,6 +24,11 @@ export const DisplayName = (
     return '?';
   }
 
+  // Guard against raw PKs (numbers) from unhydrated data
+  if (typeof user !== 'object') {
+    return '?';
+  }
+
   let name: string;
 
   if ('user' in user) {
