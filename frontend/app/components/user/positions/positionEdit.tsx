@@ -7,7 +7,7 @@ export const PositionChoiceEnum: Record<number, string> = {
   1: '1: Favorite',
   2: '2: Can play',
   3: '3: If the team needs',
-  4: '4: I would rather not but I guess',
+  4: '4: I would rather not',
   5: '5: Least Favorite',
 };
 
