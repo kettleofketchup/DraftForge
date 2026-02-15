@@ -18,6 +18,14 @@ import {
   DialogTrigger,
 } from '~/components/ui/dialog';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
+import { Label } from '~/components/ui/label';
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -45,6 +53,7 @@ import { useDraftLive } from './hooks/useDraftLive';
 import { useDraftWebSocketStore, draftWsSelectors } from '~/store/draftWebSocketStore';
 import { LiveAutoButtons, DraftRoundIndicator } from './liveView';
 import { CompletedTeamDraftView } from './CompletedTeamDraftView';
+import { initDraftHook } from './hooks/initDraftHook';
 import type { DraftRoundType, DraftType } from './types';
 import type { TournamentType } from '~/components/tournament/types';
 const log = getLogger('DraftModal');
@@ -71,11 +80,33 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const [draftStyleOpen, setDraftStyleOpen] = useState(false);
   const [footerDrawerOpen, setFooterDrawerOpen] = useState(false);
   const [showFullDraft, setShowFullDraft] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState<'snake' | 'normal' | 'shuffle'>('snake');
+  const [isStarting, setIsStarting] = useState(false);
   const isStaff = useUserStore((state) => state.isStaff);
   const currentUser = useUserStore((state) => state.currentUser);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { pk } = useParams<{ pk: string }>();
+
+  const handleStartDraft = async () => {
+    if (!tournament?.pk) return;
+    setIsStarting(true);
+    try {
+      await initDraftHook({
+        tournament,
+        setTournament,
+        setDraft,
+        curDraftRound,
+        setCurDraftRound,
+        setDraftIndex,
+        draftStyle: selectedStyle,
+      });
+    } catch {
+      // Error already displayed by toast.promise in initDraftHook
+    } finally {
+      setIsStarting(false);
+    }
+  };
 
   // Sync URL with modal open/close state
   // Note: Don't call setLive here - TournamentDetailPage handles live state based on URL
@@ -432,6 +463,85 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     draft?.draft_rounds?.every((r) => r.choice != null) === true;
 
   const mainView = () => {
+    // Show start draft UI when no draft exists
+    if (!draft || !draft.pk) {
+      if (!isStaff()) {
+        return (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center space-y-2">
+              <h2 className="text-xl font-bold">Draft Not Started</h2>
+              <p className="text-muted-foreground">
+                Waiting for tournament staff to start the team draft.
+              </p>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-6 max-w-md">
+            <div>
+              <h2 className="text-xl font-bold">Start Team Draft</h2>
+              <p className="text-muted-foreground mt-1">
+                Select a draft style and start the team draft.
+              </p>
+            </div>
+
+            <div className="space-y-2 text-left">
+              <Label className="text-sm font-medium">Draft Style</Label>
+              <Select
+                value={selectedStyle}
+                onValueChange={(v) =>
+                  setSelectedStyle(v as 'snake' | 'normal' | 'shuffle')
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select draft style" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="snake">
+                    <div className="flex flex-col">
+                      <span className="font-medium">Snake Draft</span>
+                      <span className="text-xs text-muted-foreground">
+                        1st, 2nd, 3rd, 4th, 4th, 3rd, 2nd, 1st...
+                      </span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="normal">
+                    <div className="flex flex-col">
+                      <span className="font-medium">Normal Draft</span>
+                      <span className="text-xs text-muted-foreground">
+                        1st, 2nd, 3rd, 4th, 1st, 2nd, 3rd, 4th...
+                      </span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="shuffle">
+                    <div className="flex flex-col">
+                      <span className="font-medium">Shuffle Draft</span>
+                      <span className="text-xs text-muted-foreground">
+                        Lowest MMR team picks first, recalculated each round
+                      </span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <PrimaryButton
+              onClick={handleStartDraft}
+              className="w-full"
+              disabled={isStarting}
+              data-testid="start-draft-button"
+            >
+              <ClipboardPen className="h-4 w-4 mr-2" />
+              Start Draft
+            </PrimaryButton>
+          </div>
+        </div>
+      );
+    }
+
     // Show completed team draft view when draft is complete and not viewing full draft
     if (isDraftCompleted && !showFullDraft) {
       return (
@@ -541,7 +651,8 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
             {mainView()}
           </div>
 
-          {/* Footer - fixed at bottom */}
+          {/* Footer - fixed at bottom, hidden when no draft */}
+          {draft?.pk && (
           <div className="shrink-0 border-t border-gray-800 bg-gray-900/95 backdrop-blur">
             {/* Mobile Footer Drawer */}
             <div className="md:hidden">
@@ -671,6 +782,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
               </div>
             </div>
           </div>
+          )}
         </div>
 
         {/* Externally controlled Draft Style Modal */}
