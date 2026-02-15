@@ -63,7 +63,7 @@ export function UserProfilePage() {
   }
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
+    <div className="container mx-auto px-2 py-4 sm:px-4 max-w-4xl overflow-x-hidden">
       {/* Profile Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -72,7 +72,7 @@ export function UserProfilePage() {
       >
         <Card className="mb-6">
           <CardContent className="pt-6">
-            <div className="flex flex-col sm:flex-row gap-6 items-center sm:items-start">
+            <div className="flex flex-col sm:flex-row gap-6 items-center sm:items-start min-w-0">
               {/* Avatar */}
               <div className="relative">
                 <UserAvatar
@@ -94,9 +94,9 @@ export function UserProfilePage() {
               </div>
 
               {/* User Info */}
-              <div className="flex-1 text-center sm:text-left">
+              <div className="flex-1 text-center sm:text-left min-w-0">
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
-                  <h1 className="text-2xl sm:text-3xl font-bold">
+                  <h1 className="text-xl sm:text-3xl font-bold break-words min-w-0">
                     {user.nickname || user.username}
                   </h1>
                   {isOwnProfile && (
@@ -139,20 +139,20 @@ export function UserProfilePage() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <ScrollArea className="w-full pb-2">
-          <TabsList className="inline-flex w-full min-w-max gap-1 p-1">
-            <TabsTrigger value="overview" className="flex-1 min-w-[100px] min-h-11 gap-2">
+          <TabsList className="inline-flex w-full gap-1 p-1">
+            <TabsTrigger value="overview" className="flex-1 min-h-11 gap-2">
               <Users className="h-4 w-4" />
               <span className="hidden sm:inline">Overview</span>
             </TabsTrigger>
-            <TabsTrigger value="tournaments" className="flex-1 min-w-[100px] min-h-11 gap-2">
+            <TabsTrigger value="tournaments" className="flex-1 min-h-11 gap-2">
               <Trophy className="h-4 w-4" />
               <span className="hidden sm:inline">Tournaments</span>
             </TabsTrigger>
-            <TabsTrigger value="leagues" className="flex-1 min-w-[100px] min-h-11 gap-2">
+            <TabsTrigger value="leagues" className="flex-1 min-h-11 gap-2">
               <Award className="h-4 w-4" />
               <span className="hidden sm:inline">Leagues</span>
             </TabsTrigger>
-            <TabsTrigger value="games" className="flex-1 min-w-[100px] min-h-11 gap-2">
+            <TabsTrigger value="games" className="flex-1 min-h-11 gap-2">
               <Gamepad2 className="h-4 w-4" />
               <span className="hidden sm:inline">Games</span>
             </TabsTrigger>
@@ -208,24 +208,24 @@ function OverviewTab({ user }: { user: UserType }) {
         <CardHeader>
           <CardTitle className="text-lg">Profile Details</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Username</span>
-            <span className="font-medium">{user.username}</span>
+        <CardContent className="space-y-3 min-w-0">
+          <div className="flex justify-between gap-2">
+            <span className="text-muted-foreground shrink-0">Username</span>
+            <span className="font-medium truncate">{user.username}</span>
           </div>
           {user.nickname && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Nickname</span>
-              <span className="font-medium">{user.nickname}</span>
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground shrink-0">Nickname</span>
+              <span className="font-medium truncate">{user.nickname}</span>
             </div>
           )}
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Base MMR</span>
+          <div className="flex justify-between gap-2">
+            <span className="text-muted-foreground shrink-0">Base MMR</span>
             <span className="font-medium">{user.mmr ?? 'Not set'}</span>
           </div>
           {user.steam_account_id && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Friend ID</span>
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground shrink-0">Friend ID</span>
               <span className="font-medium font-mono text-sm">{user.steam_account_id}</span>
             </div>
           )}
@@ -279,7 +279,7 @@ function GamesTab({ user }: { user: UserType }) {
 
 function ProfileSkeleton() {
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
+    <div className="container mx-auto px-2 py-4 sm:px-4 max-w-4xl overflow-x-hidden">
       <Card className="mb-6">
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row gap-6 items-center sm:items-start">
