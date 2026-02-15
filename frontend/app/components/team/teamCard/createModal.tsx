@@ -7,6 +7,7 @@ import { FormDialog } from '~/components/ui/dialogs';
 import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
 import { User } from '~/components/user/user';
 import { UserEditForm } from '~/components/user/userCard/editForm';
+import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useUserStore } from '~/store/userStore';
 
 import {
@@ -28,7 +29,8 @@ interface Props {}
 
 export const TeamCreateModal: React.FC<Props> = (props) => {
   const currentUser: UserType = useUserStore((state) => state.currentUser);
-  const users: UserType[] = useUserStore((state) => state.users);
+  const globalUserPks = useUserStore((state) => state.globalUserPks);
+  const users = useResolvedUsers(globalUserPks);
 
   const [open, setOpen] = useState(false);
   const [selectedDiscordUser, setSelectedDiscordUser] = useState<User>(

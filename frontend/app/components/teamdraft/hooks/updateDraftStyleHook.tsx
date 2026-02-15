@@ -34,7 +34,8 @@ export const updateDraftStyleHook = async ({
     loading: `Setting draft style to ${draftStyle}...`,
     success: (data) => {
       log.debug('Set draft style sucess, data:', data);
-      setDraft(data);
+      // Only merge the changed field — PATCH response lacks _users dict
+      setDraft({ ...draft, draft_style: data.draft_style });
       return `Draft style set to ${draftStyle}`;
     },
     error: (err) => {

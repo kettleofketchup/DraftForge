@@ -29,10 +29,10 @@ import {
 } from '~/components/ui/dialog';
 import { User } from '~/components/user/user';
 
-import { useShallow } from 'zustand/react/shallow';
 import { DIALOG_CSS_SMALL } from '~/components/reusable/modal';
 import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
 import { UserEditForm } from '~/components/user/userCard/editForm';
+import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { getLogger } from '~/lib/logger';
 import { handleSave } from './handleSaveHook';
 const log = getLogger('createModal');
@@ -44,7 +44,8 @@ interface Props {
 
 export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
   const currentUser: UserType = useUserStore((state) => state.currentUser);
-  const users: UserType[] = useUserStore(useShallow((state) => state.users));
+  const globalUserPks = useUserStore((state) => state.globalUserPks);
+  const users = useResolvedUsers(globalUserPks);
 
   const [selectedDiscordUser, setSelectedDiscordUser] = useState<User>(
     new User({} as UserClassType),

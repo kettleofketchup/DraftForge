@@ -160,8 +160,8 @@ export function CSVImportModal({
       // Build a single-row import using only the selected user's identifier
       const originalRaw = sentRowMapRef.current.get(rowNumber);
       const row: CSVImportRow = {};
-      if (selectedUser.steamid) {
-        row.steam_friend_id = String(selectedUser.steamid);
+      if (selectedUser.steam_account_id) {
+        row.steam_friend_id = String(selectedUser.steam_account_id);
       } else if (selectedUser.discordId) {
         row.discord_id = selectedUser.discordId;
       }

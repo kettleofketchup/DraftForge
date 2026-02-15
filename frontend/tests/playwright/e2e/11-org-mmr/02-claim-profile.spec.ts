@@ -7,12 +7,12 @@
  * (e.g., by an org admin adding a user with just their Steam ID).
  *
  * Test users:
- * - claimable_profile: HAS Steam ID, NO Discord ID, NO username (manually added by org)
- * - user_claimer: HAS Discord ID, NO Steam ID (can log in, can claim profiles)
+ * - claimable_profile: HAS Friend ID, NO Discord ID, NO username (manually added by org)
+ * - user_claimer: HAS Discord ID, NO Friend ID (can log in, can claim profiles)
  *
  * Claim button logic:
- * - Shows when: target HAS steamid AND NO discordId, current user HAS discordId
- * - Note: steamid is unique in the database. Claiming merges the profiles.
+ * - Shows when: target HAS steam_account_id AND NO discordId, current user HAS discordId
+ * - Note: steam_account_id is unique in the database. Claiming merges the profiles.
  */
 
 import { expect, test } from '../../fixtures';
@@ -21,7 +21,7 @@ import { API_URL } from '../../fixtures/constants';
 interface CurrentUser {
   pk: number;
   username: string;
-  steamid: number | null;
+  steam_account_id: number | null;
 }
 
 // API helper to get current logged-in user
@@ -37,10 +37,10 @@ async function getCurrentUser(
 async function getUserByUsername(
   context: { request: { get: (url: string) => Promise<{ ok: () => boolean; json: () => Promise<unknown> }> } },
   username: string
-): Promise<{ pk: number; username: string; steamid: number | null; discordId: string | null } | null> {
+): Promise<{ pk: number; username: string; steam_account_id: number | null; discordId: string | null } | null> {
   const response = await context.request.get(`${API_URL}/users/`);
   if (!response.ok()) return null;
-  const users = (await response.json()) as Array<{ pk: number; username: string; steamid: number | null; discordId: string | null }>;
+  const users = (await response.json()) as Array<{ pk: number; username: string; steam_account_id: number | null; discordId: string | null }>;
   return users.find(u => u.username === username) || null;
 }
 
@@ -56,17 +56,17 @@ test.describe('Claim Profile Feature', () => {
     // Verify we're logged in with Discord ID (can claim profiles)
     const currentUser = await getCurrentUser(context);
     expect(currentUser).not.toBeNull();
-    console.log(`Logged in as ${currentUser!.username} (pk=${currentUser!.pk}, steamid=${currentUser!.steamid})`);
+    console.log(`Logged in as ${currentUser!.username} (pk=${currentUser!.pk}, steam_account_id=${currentUser!.steam_account_id})`);
 
-    // Get the claimable_profile user (look by steamid since username is null)
+    // Get the claimable_profile user (look by steam_account_id since username is null)
     const response = await context.request.get(`${API_URL}/users/`);
-    const users = (await response.json()) as Array<{ pk: number; username: string | null; steamid: number | null; discordId: string | null; nickname: string | null }>;
-    const claimable = users.find(u => u.nickname === 'Claimable Profile' || u.steamid === 76561198099999999);
+    const users = (await response.json()) as Array<{ pk: number; username: string | null; steam_account_id: number | null; discordId: string | null; nickname: string | null }>;
+    const claimable = users.find(u => u.nickname === 'Claimable Profile' || u.steam_account_id === 76561198099999999);
 
     expect(claimable).not.toBeNull();
-    expect(claimable!.steamid).not.toBeNull(); // HAS Steam ID - this is the identifier
+    expect(claimable!.steam_account_id).not.toBeNull(); // HAS Friend ID - this is the identifier
     expect(claimable!.discordId).toBeNull(); // No Discord ID (can't log in, manually added)
-    console.log(`Found claimable user: nickname=${claimable!.nickname} (pk=${claimable!.pk}, steamid=${claimable!.steamid})`);
+    console.log(`Found claimable user: nickname=${claimable!.nickname} (pk=${claimable!.pk}, steam_account_id=${claimable!.steam_account_id})`);
 
     // Navigate to users page - reload to force fresh currentUser fetch
     await page.goto('/users');
@@ -85,7 +85,7 @@ test.describe('Claim Profile Feature', () => {
       await page.waitForTimeout(500); // Wait for search to filter
     }
 
-    // Claim button should be visible (user has steamid but no discordId)
+    // Claim button should be visible (user has steam_account_id but no discordId)
     const claimBtnOnCard = page.locator(`[data-testid="claim-profile-btn-${claimable!.pk}"]`);
     await expect(claimBtnOnCard).toBeVisible({ timeout: 10000 });
 
@@ -107,7 +107,7 @@ test.describe('Claim Profile Feature', () => {
 
     // Get any user WITH Discord ID (claim button should NOT show - they can log in)
     const response = await context.request.get(`${API_URL}/users/`);
-    const users = (await response.json()) as Array<{ pk: number; username: string; steamid: number | null; discordId: string | null }>;
+    const users = (await response.json()) as Array<{ pk: number; username: string; steam_account_id: number | null; discordId: string | null }>;
     const userWithDiscord = users.find(u =>
       u.discordId !== null &&
       u.pk !== currentUser!.pk
@@ -162,7 +162,7 @@ test.describe('Claim Profile Feature', () => {
     // Wait for users to load
     await page.waitForSelector('[data-testid^="usercard-"]', { timeout: 15000 });
 
-    // Search for Claimable Profile (has steamid, no discordId)
+    // Search for Claimable Profile (has steam_account_id, no discordId)
     const searchInput = page.locator('[data-testid="userSearchInput"], input[placeholder*="Search"]').first();
     if (await searchInput.isVisible({ timeout: 3000 }).catch(() => false)) {
       await searchInput.fill('Claimable');
@@ -198,8 +198,8 @@ test.describe('Claim Profile Feature', () => {
 
     // Get the claimable_profile user
     const response = await context.request.get(`${API_URL}/users/`);
-    const users = (await response.json()) as Array<{ pk: number; username: string | null; steamid: number | null; discordId: string | null; nickname: string | null }>;
-    const claimable = users.find(u => u.nickname === 'Claimable Profile' || u.steamid === 76561198099999999);
+    const users = (await response.json()) as Array<{ pk: number; username: string | null; steam_account_id: number | null; discordId: string | null; nickname: string | null }>;
+    const claimable = users.find(u => u.nickname === 'Claimable Profile' || u.steam_account_id === 76561198099999999);
 
     if (!claimable) {
       console.log('Claimable profile not found - skipping test');

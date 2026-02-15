@@ -5,6 +5,7 @@ import type { UserType } from '~/components/user/types';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import type { DraftRoundType, DraftType, TournamentType } from '~/index';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 import type { TieResolution } from '../types';
 const log = getLogger('PickPlayerHook');
@@ -83,7 +84,8 @@ export const choosePlayerHook = async ({
         message={`Choosing ${DisplayName(player)} for ${curDraftRound.captain ? DisplayName(curDraftRound.captain) : 'captain'}`}
       />
     ),
-    success: (data) => {
+    success: (rawData) => {
+      const data = hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
       setTournament(data);
       if (!data.draft) {
         log.error('No draft in response');

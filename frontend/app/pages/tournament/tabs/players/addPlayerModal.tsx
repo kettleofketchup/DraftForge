@@ -5,6 +5,8 @@ import type { UserType } from '~/components/user/types';
 import { PlusIconButton } from '~/components/ui/buttons';
 import { FormDialog } from '~/components/ui/dialogs';
 import UserCreateModal from '~/components/user/userCard/createModal';
+import { useOrgUsers } from '~/hooks/useOrgUsers';
+import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 import { AddPlayerDropdown } from './addPlayerDropdown';
@@ -36,12 +38,13 @@ export const AddPlayerModal: React.FC<Props> = ({
   const currentUser = useUserStore((state) => state.currentUser);
   const isStaff = useUserStore((state) => state.isStaff);
 
-  // Global users fallback
-  const globalUsers = useUserStore((state) => state.users);
+  // Global users fallback (resolved from cache)
+  const globalUserPks = useUserStore((state) => state.globalUserPks);
+  const globalUsers = useResolvedUsers(globalUserPks);
   const getUsers = useUserStore((state) => state.getUsers);
 
-  // Org-specific users (preferred when orgId is provided)
-  const orgUsers = useOrgStore((state) => state.orgUsers);
+  // Org-specific users resolved from cache
+  const orgUsers = useOrgUsers(orgId ?? 0);
   const getOrgUsers = useOrgStore((state) => state.getOrgUsers);
   const orgUsersLoading = useOrgStore((state) => state.orgUsersLoading);
 
@@ -54,12 +57,12 @@ export const AddPlayerModal: React.FC<Props> = ({
       if (orgId) {
         // Load org-specific users
         getOrgUsers(orgId);
-      } else if (globalUsers.length === 0) {
+      } else if (globalUserPks.length === 0) {
         // Fallback to global users
         getUsers();
       }
     }
-  }, [open, orgId, globalUsers.length, getOrgUsers, getUsers]);
+  }, [open, orgId, globalUserPks.length, getOrgUsers, getUsers]);
 
   if (!isStaff()) {
     return (

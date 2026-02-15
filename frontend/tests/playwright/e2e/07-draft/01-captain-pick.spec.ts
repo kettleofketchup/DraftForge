@@ -43,7 +43,9 @@ test.describe('Captain Draft Pick', () => {
     const firstTeam = sortedTeams[0];
 
     if (firstTeam && firstTeam.captain) {
-      captainPk = firstTeam.captain.pk;
+      captainPk = typeof firstTeam.captain === 'number'
+        ? firstTeam.captain
+        : firstTeam.captain.pk;
     } else {
       throw new Error('Could not find captain for first team');
     }

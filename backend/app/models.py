@@ -73,10 +73,10 @@ class CustomUser(AbstractUser):
     # Override username to allow blank (users can be created from Steam only)
     username = models.CharField(max_length=150, unique=True, blank=True, null=True)
 
-    # Steam64 (Friend ID) - the full 64-bit Steam ID
-    steamid = models.BigIntegerField(null=True, unique=True, blank=True)
-    # Steam32 (Account ID) - auto-calculated from steamid, used for match lookups
-    steam_account_id = models.IntegerField(null=True, blank=True, db_index=True)
+    # 32-bit Friend ID (Dotabuff URL) - set by user, primary identifier
+    steam_account_id = models.IntegerField(null=True, unique=True, blank=True)
+    # 64-bit Steam ID - auto-calculated from steam_account_id
+    steamid = models.BigIntegerField(null=True, blank=True, db_index=True)
     nickname = models.TextField(null=True, blank=True)
 
     # MMR verification tracking
@@ -115,14 +115,21 @@ class CustomUser(AbstractUser):
     )
 
     # Steam ID conversion constant
-    # Steam64 (Friend ID) = 76561197960265728 + Steam32 (Account ID)
+    # steamid (64-bit) = steam_account_id (32-bit) + STEAM_ID_64_BASE
     STEAM_ID_64_BASE = 76561197960265728
 
     def save(self, *args, **kwargs):
-        """Auto-calculate steam_account_id when steamid is set."""
-        if self.steamid is not None:
+        """Keep steam_account_id (32-bit) and steamid (64-bit) in sync.
+
+        Primary direction: steam_account_id → steamid.
+        Backward compat: if only steamid is set, derive steam_account_id from it.
+        """
+        if self.steam_account_id is not None:
+            self.steamid = self.steam_account_id + self.STEAM_ID_64_BASE
+        elif self.steamid is not None:
             self.steam_account_id = self.steamid - self.STEAM_ID_64_BASE
         else:
+            self.steamid = None
             self.steam_account_id = None
         super().save(*args, **kwargs)
 

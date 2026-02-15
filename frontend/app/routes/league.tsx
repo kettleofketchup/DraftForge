@@ -100,11 +100,11 @@ export default function LeaguePage() {
   const canEdit = useIsLeagueAdmin(league);
 
   // Page nav options for mobile navbar dropdown
-  const leagueUsers = useLeagueStore((s) => s.leagueUsers);
+  const leagueUserPks = useLeagueStore((s) => s.leagueUserPks);
   const leagueUsersLoading = useLeagueStore((s) => s.leagueUsersLoading);
   const leagueUsersLeagueId = useLeagueStore((s) => s.leagueUsersLeagueId);
   const userCountDisplay = leagueUsersLoading || leagueUsersLeagueId !== pk
-    ? '...' : leagueUsers.length;
+    ? '...' : leagueUserPks.length;
 
   const pageNavOptions = useMemo(() => [
     { value: 'info', label: 'Info' },

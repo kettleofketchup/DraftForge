@@ -111,9 +111,9 @@ def populate_test_auth_users(force=False):
         pk = user_data.pk
         username = user_data.username
         discord_id = user_data.discord_id
-        steam_id = (
-            user_data.get_steam_id_64()
-        )  # Use method to handle both steam_id and steam_id_64
+        steam_account_id = (
+            user_data.get_steam_account_id()
+        )  # 32-bit Friend ID (Dotabuff)
         nickname = user_data.nickname or username
         is_staff = user_data.is_staff
         is_superuser = user_data.is_superuser
@@ -127,7 +127,7 @@ def populate_test_auth_users(force=False):
             user.username = username
             user.discordId = discord_id
             user.discordUsername = username
-            user.steamid = steam_id
+            user.steam_account_id = steam_account_id
             user.nickname = nickname
             user.is_staff = is_staff
             user.is_superuser = is_superuser
@@ -140,7 +140,7 @@ def populate_test_auth_users(force=False):
                 username=username,
                 discordId=discord_id,
                 discordUsername=username,
-                steamid=steam_id,
+                steam_account_id=steam_account_id,
                 nickname=nickname,
                 is_staff=is_staff,
                 is_superuser=is_superuser,

@@ -8,6 +8,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
+from app.cache_utils import invalidate_after_commit
 from app.models import Game, Team, Tournament
 from app.permissions_org import IsTournamentStaff
 from app.serializers import (
@@ -147,10 +148,8 @@ def save_bracket(request, tournament_id):
     )
     result_serializer = BracketGameSerializer(saved_games, many=True)
 
-    # Invalidate caches after saving bracket - invalidate each saved game
-    for game in saved_games:
-        invalidate_obj(game)
-    invalidate_obj(tournament)
+    # Invalidate caches after saving bracket
+    invalidate_after_commit(*saved_games, tournament)
 
     return Response({"tournamentId": tournament_id, "matches": result_serializer.data})
 
@@ -290,12 +289,12 @@ def advance_winner(request, game_id):
         winning_team.save()
 
     # Invalidate caches after advancing winner
-    invalidate_obj(game)
-    invalidate_obj(winning_team)
+    objs_to_invalidate = [game, winning_team]
     if losing_team:
-        invalidate_obj(losing_team)
+        objs_to_invalidate.append(losing_team)
     if game.tournament:
-        invalidate_obj(game.tournament)
+        objs_to_invalidate.append(game.tournament)
+    invalidate_after_commit(*objs_to_invalidate)
 
     return Response(BracketGameSerializer(game).data)
 

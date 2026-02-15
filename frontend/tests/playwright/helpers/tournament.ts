@@ -11,16 +11,14 @@ export interface TournamentData {
   teams: Array<{
     pk: number;
     name: string;
-    captain: {
-      pk: number;
-      username: string;
-    };
+    captain: number;
+    members: number[];
     draft_order: number;
   }>;
-  captains: Array<{
-    pk: number;
-    username: string;
-  }>;
+  captains: number[];
+  users: number[];
+  league: number | null;
+  _users?: Record<string, { pk: number; username: string; mmr?: number }>;
 }
 
 /**

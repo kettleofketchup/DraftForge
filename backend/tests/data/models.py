@@ -46,6 +46,14 @@ class TestUser(BaseModel):
             return 76561197960265728 + self.steam_id
         return None
 
+    def get_steam_account_id(self) -> int | None:
+        """Get 32-bit Friend ID (Dotabuff), converting from 64-bit if needed."""
+        if self.steam_id:
+            return self.steam_id
+        if self.steam_id_64:
+            return self.steam_id_64 - 76561197960265728
+        return None
+
 
 # =============================================================================
 # Organization Models
@@ -108,6 +116,7 @@ class TestTournament(BaseModel):
     state: str = "past"
     steam_league_id: int | None = None
     league_name: str | None = None  # Reference to TestLeague by name
+    organization_pk: int = 1  # Organization PK (default: DTX org)
     date_played: str | None = None  # ISO format date string
     teams: list[TestTeam] = []  # Teams in this tournament
     user_usernames: list[str] = []  # All users in tournament (if not using teams)
@@ -129,6 +138,7 @@ class DynamicTournamentConfig(BaseModel):
     team_count: int  # Number of teams to create
     tournament_type: str = "double_elimination"
     league_name: str = "DTX League"  # Reference to league by name
+    organization_pk: int = 1  # Organization PK (default: DTX org)
     # Steam match population settings
     completed_game_count: int | None = None  # Number of bracket games to mark completed
     match_id_base: int | None = None  # Base match ID for mock Steam matches

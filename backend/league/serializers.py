@@ -17,7 +17,6 @@ class LeagueUserSerializer(serializers.ModelSerializer):
     avatar = serializers.CharField(source="user.avatar", read_only=True)
     discordId = serializers.CharField(source="user.discordId", read_only=True)
     positions = PositionsSerializer(source="user.positions", read_only=True)
-    steamid = serializers.IntegerField(source="user.steamid", read_only=True)
     steam_account_id = serializers.IntegerField(
         source="user.steam_account_id", read_only=True
     )
@@ -34,7 +33,6 @@ class LeagueUserSerializer(serializers.ModelSerializer):
             "avatar",
             "discordId",
             "positions",
-            "steamid",
             "steam_account_id",
             "avatarUrl",
             "mmr",
