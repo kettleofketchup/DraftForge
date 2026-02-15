@@ -13,6 +13,7 @@ type hookParams = {
   curDraftRound: DraftRoundType;
   setCurDraftRound: (draftRound: DraftRoundType) => void;
   setDraftIndex: (index: number) => void;
+  draftStyle?: 'snake' | 'normal' | 'shuffle';
 };
 
 export const initDraftHook = async ({
@@ -22,6 +23,7 @@ export const initDraftHook = async ({
   curDraftRound,
   setCurDraftRound,
   setDraftIndex,
+  draftStyle,
 }: hookParams) => {
   log.debug('Initialization draft', { tournament });
 
@@ -37,6 +39,7 @@ export const initDraftHook = async ({
 
   const data: InitDraftRoundsAPI = {
     tournament_pk: tournament.pk,
+    ...(draftStyle && { draft_style: draftStyle }),
   };
 
   const promise = initDraftRounds(data);
