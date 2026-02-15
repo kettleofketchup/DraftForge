@@ -30,13 +30,22 @@ export const PlayersTab: React.FC = memo(() => {
 
   // AddUserModal callbacks
   const handleAddMember = useCallback(
-    async (payload: AddMemberPayload) => {
+    async (payload: AddMemberPayload): Promise<UserType> => {
       if (!tournament?.pk) throw new Error('No tournament');
+      const oldPks = new Set(
+        (useUserStore.getState().tournament?.users ?? []).map((u) => u.pk),
+      );
       const rawTournament = await addTournamentMember(tournament.pk, payload);
       const hydrated = hydrateTournament(rawTournament as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
       setTournament(hydrated);
       // Invalidate React Query cache so useTournament refetches
       queryClient.invalidateQueries({ queryKey: ['tournament', tournament.pk] });
+      // Return the newly added user to satisfy AddUserModal's onAdd contract
+      const addedUser = (hydrated.users ?? []).find(
+        (u) => u.pk != null && !oldPks.has(u.pk),
+      );
+      if (!addedUser) throw new Error('Added user not found in response');
+      return addedUser;
     },
     [tournament?.pk, setTournament, queryClient]
   );

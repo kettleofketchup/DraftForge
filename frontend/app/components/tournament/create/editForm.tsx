@@ -285,8 +285,8 @@ export const TournamentEditForm: React.FC<Props> = ({
                         onSelect={(date) => {
                           if (date) {
                             setSelectedDate(format(date, 'yyyy-MM-dd'));
-                            setCalendarOpen(false);
                           }
+                          setCalendarOpen(false);
                         }}
                         data-testid="tournament-calendar"
                       />
