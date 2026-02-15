@@ -49,6 +49,9 @@ plugins:
   - tags
   - panzoom
 
+exclude_docs: |
+  plans/
+
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
@@ -82,6 +85,7 @@ nav:
   - Features:
       - Draft System: features/draft.md
       - Hero Draft: features/herodraft.md
+      - Bracket: features/bracket.md
       - CSV Import: features/csv-import.md
       - Planned:
           - Overview: features/planned/index.md
@@ -90,15 +94,21 @@ nav:
           - Dota 2 Lobbies: features/planned/dota-lobbies.md
           - Discord Integration: features/planned/discord-integration.md
           - Auction House: features/planned/auction-house.md
+          - CSV Import: features/planned/csv-import.md
   - Architecture:
       - Overview: architecture/overview.md
       - Docker Setup: architecture/docker.md
       - Backend: architecture/backend.md
       - Frontend: architecture/frontend.md
+      - User Entity Cache: architecture/user-entity-cache.md
   - Development:
+      - Backend Quickstart: development/backend-quickstart.md
       - Just Commands: development/just-commands.md
+      - Invoke Tasks (Legacy): development/invoke-tasks.md
       - Testing: development/testing.md
       - Contributing: development/contributing.md
+      - Theming Guide: THEMING-GUIDE.md
+      - Demo Videos: ai/demo/index.md
       - Telemetry:
         - Overview: dev/telemetry/index.md
         - Architecture: dev/telemetry/architecture.md
@@ -107,6 +117,11 @@ nav:
         - Context Guide: dev/telemetry/context.md
         - Local Observability: dev/telemetry/local-observability.md
         - Reference: dev/telemetry/reference.md
+      - Testing Reference:
+        - Cypress Tests (Legacy): dev/testing/cypress-tests.md
+        - Playwright: testing/playwright.md
+        - Test Tournaments: testing/test-tournaments.md
+        - Auth Fixtures: testing/auth/fixtures.md
   - API Reference:
       - Endpoints: api/endpoints.md
   - Links:
