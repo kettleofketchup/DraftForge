@@ -18,6 +18,7 @@ export interface CreateTeamFromCaptainAPI {
 
 export interface InitDraftRoundsAPI {
   tournament_pk: number;
+  draft_style?: 'snake' | 'normal' | 'shuffle';
 }
 
 export interface RebuildDraftRoundsAPI {
