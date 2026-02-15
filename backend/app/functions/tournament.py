@@ -254,6 +254,11 @@ def create_team_from_captain(request):
 
 class CreateDraftRounds(serializers.Serializer):
     tournament_pk = serializers.IntegerField(required=True)
+    draft_style = serializers.ChoiceField(
+        choices=["snake", "normal", "shuffle"],
+        required=False,
+        default=None,
+    )
 
 
 @api_view(["POST"])
@@ -288,6 +293,12 @@ def generate_draft_rounds(request):
         draft = Draft.objects.create(tournament=tournament)
 
     logging.debug(f"Initialization draft for tournament {tournament.name}")
+
+    # Set draft style if provided
+    draft_style = serializer.validated_data.get("draft_style")
+    if draft_style:
+        draft.draft_style = draft_style
+
     # IMPORTANT: rebuild_teams MUST be called BEFORE build_rounds
     # so that team MMR calculations use only captains, not old picks
     # Use clear_only=True to avoid re-adding old draft choices before restart

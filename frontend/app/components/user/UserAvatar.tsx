@@ -92,6 +92,11 @@ export const AvatarUrl = (
     return `${genUrl}&name=?&length=1`;
   }
 
+  // Guard against raw PKs (numbers) from unhydrated data
+  if (typeof user !== 'object') {
+    return `${genUrl}&name=?&length=1`;
+  }
+
   if ('user' in user) {
     // user is GuildMember
     return user.user.avatar
@@ -134,6 +139,7 @@ export const AvatarUrl = (
  */
 function getDisplayName(user: UserLike | undefined): string {
   if (!user) return '?';
+  if (typeof user !== 'object') return '?';
 
   if ('user' in user) {
     // GuildMember
@@ -182,6 +188,9 @@ function arePropsEqual(
   if (prevUser === nextUser) return true;
   if (!prevUser || !nextUser) return prevUser === nextUser;
 
+  // Guard against raw PKs
+  if (typeof prevUser !== 'object' || typeof nextUser !== 'object') return false;
+
   // For GuildMember
   if ('user' in prevUser && 'user' in nextUser) {
     return (
@@ -222,7 +231,7 @@ export const UserAvatar = memo(function UserAvatar({
   'data-testid': testId,
 }: UserAvatarProps) {
   // Extract stable keys for memoization
-  const isGuildMember = user && 'user' in user;
+  const isGuildMember = user && typeof user === 'object' && 'user' in user;
   const guildUserId = isGuildMember ? user.user.id : undefined;
   const guildUserAvatar = isGuildMember ? user.user.avatar : undefined;
   const guildNick = isGuildMember ? user.nick : undefined;
