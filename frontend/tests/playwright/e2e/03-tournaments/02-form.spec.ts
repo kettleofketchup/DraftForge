@@ -73,13 +73,13 @@ test.describe('Tournaments - create (e2e)', () => {
     const calendar = page.locator('[data-slot="calendar"]');
     await calendar.waitFor({ state: 'visible', timeout: 5000 });
 
-    // Select day 15 of the current month using data-testid
-    const dayButton = calendar.locator('[data-testid="calendar-day-15"]').first();
-    // Use evaluate to bypass any popover positioning/z-index issues
-    await dayButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+    // Select day 20 (avoids collision with today if today is the 15th —
+    // clicking an already-selected day deselects and skips popover close)
+    const dayButton = calendar.locator('[data-testid="calendar-day-20"]').first();
+    await dayButton.click();
 
     // Wait for popover to close
-    await calendar.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
+    await calendar.waitFor({ state: 'hidden', timeout: 5000 });
 
     // Submit the form
     await page.locator('[data-testid="tournament-submit-button"]').click();
@@ -167,14 +167,14 @@ test.describe('Tournaments - create (e2e)', () => {
     await typeOption.waitFor({ state: 'visible', timeout: 10000 });
     await typeOption.click();
 
-    // Select date
+    // Select date (day 20 to avoid collision with today's date)
     const datePicker = page.locator('[data-testid="tournament-date-picker"]');
     await datePicker.click();
     const calendar = page.locator('[data-slot="calendar"]');
     await calendar.waitFor({ state: 'visible', timeout: 5000 });
-    const dayButton = calendar.locator('[data-testid="calendar-day-15"]').first();
-    await dayButton.evaluate((btn) => (btn as HTMLButtonElement).click());
-    await calendar.waitFor({ state: 'hidden', timeout: 2000 }).catch(() => {});
+    const dayButton = calendar.locator('[data-testid="calendar-day-20"]').first();
+    await dayButton.click();
+    await calendar.waitFor({ state: 'hidden', timeout: 5000 });
 
     // Submit to create
     await page.locator('[data-testid="tournament-submit-button"]').click();
