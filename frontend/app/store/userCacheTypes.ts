@@ -49,5 +49,5 @@ export interface UpsertContext {
 export function isUserEntry(
   user: UserType | UserEntry,
 ): user is UserEntry {
-  return 'orgData' in user;
+  return typeof user === 'object' && user !== null && 'orgData' in user;
 }
