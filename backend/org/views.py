@@ -187,8 +187,8 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         - All foreign key references
         - Then deletes target_user
         """
-        # Copy Steam ID from target to claimer
-        claimer.steamid = target_user.steamid
+        # Copy Friend ID from target to claimer
+        claimer.steam_account_id = target_user.steam_account_id
 
         # Copy other fields from target if claimer doesn't have them
         if target_user.nickname and not claimer.nickname:
@@ -308,9 +308,10 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
         LeagueLog.objects.filter(actor=target_user).update(actor=claimer)
         LeagueLog.objects.filter(target_user=target_user).update(target_user=claimer)
 
-        # Clear steamid from target before saving claimer (to avoid UNIQUE constraint)
+        # Clear steam_account_id from target before saving claimer (to avoid UNIQUE constraint)
+        target_user.steam_account_id = None
         target_user.steamid = None
-        target_user.save(update_fields=["steamid"])
+        target_user.save(update_fields=["steam_account_id", "steamid"])
 
         # Save claimer and delete target
         claimer.save()

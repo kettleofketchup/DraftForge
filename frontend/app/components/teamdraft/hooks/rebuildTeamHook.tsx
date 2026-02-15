@@ -2,6 +2,7 @@ import { toast } from 'sonner';
 import { DraftRebuild } from '~/components/api/api';
 import type { RebuildDraftRoundsAPI } from '~/components/api/types';
 import type { TournamentType } from '~/index';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('Rebuild Teams Hook');
 
@@ -32,7 +33,8 @@ export const rebuildTeamsHook = async ({
 
   toast.promise(DraftRebuild(data), {
     loading: `Rebuilding teams...`,
-    success: (data) => {
+    success: (rawData) => {
+      const data = hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
       setTournament(data);
       return `Tournament Draft has been rebuilt!`;
     },

@@ -76,8 +76,8 @@ def create_user(user_data, organization=None):
         positions.soft_support = random.randint(0, 5)
         positions.hard_support = random.randint(0, 5)
         positions.save()
-        # All mock users get a Steam ID for testing
-        user.steamid = random.randint(76561197960265728, 76561197960265728 + 1000000)
+        # All mock users get a Friend ID for testing
+        user.steam_account_id = random.randint(1, 1000000)
 
         user.positions = positions
         user.save()
@@ -179,8 +179,7 @@ def get_or_create_demo_user(username, user_data, organization=None):
     """Get or create a user for demo tournaments with real position data."""
     from app.models import Organization
 
-    steam_id = user_data.get("steam_id")
-    steamid_64 = 76561197960265728 + steam_id if steam_id else None
+    steam_account_id = user_data.get("steam_id")  # 32-bit Friend ID
     pos_data = user_data.get("positions", {})
     mmr = user_data.get("mmr", 3000)
 
@@ -200,13 +199,13 @@ def get_or_create_demo_user(username, user_data, organization=None):
         user = CustomUser.objects.create(
             discordId=user_data["discord_id"],
             username=username,
-            steamid=steamid_64,
+            steam_account_id=steam_account_id,
             positions=positions,
         )
     else:
         # Update existing user with latest data
-        if steamid_64 and user.steamid != steamid_64:
-            user.steamid = steamid_64
+        if steam_account_id and user.steam_account_id != steam_account_id:
+            user.steam_account_id = steam_account_id
         # Update positions if provided
         if pos_data and user.positions:
             user.positions.carry = pos_data.get("carry", user.positions.carry)

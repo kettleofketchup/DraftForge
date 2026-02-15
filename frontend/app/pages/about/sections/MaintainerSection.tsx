@@ -2,6 +2,7 @@ import { Beer, Binary, Code, Gamepad2, HeartPlus } from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 
@@ -17,7 +18,8 @@ import { motion } from 'framer-motion';
 import { useEffect } from 'react';
 export function MaintainerSection() {
   log.debug('Rendering MaintainerSection component');
-  const users = useUserStore((state) => state.users);
+  const globalUserPks = useUserStore((state) => state.globalUserPks);
+  const users = useResolvedUsers(globalUserPks);
   const getUsers = useUserStore((state) => state.getUsers);
   const getKettle = () =>
     users.find((user) => user.username === 'kettleofketchup');

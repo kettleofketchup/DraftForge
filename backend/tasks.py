@@ -270,6 +270,21 @@ def db_populate_csv_import(
 
 
 @task
+def db_populate_user_edit(
+    c,
+    path: Path = paths.TEST_ENV_FILE,
+    force: bool = False,
+):
+    """Populate user edit test data (org, league, tournament, test users)."""
+    load_dotenv(path)
+
+    with c.cd(paths.BACKEND_PATH.absolute()):
+        force_arg = "True" if force else "False"
+        cmd = f'DISABLE_CACHE=true python manage.py shell -c "from tests.populate import populate_user_edit_data; populate_user_edit_data(force={force_arg})"'
+        c.run(cmd, pty=True)
+
+
+@task
 def populate_all(c):
     paths.TEST_DB_PATH.unlink(missing_ok=True)
     paths.TEST_DB_PATH.touch()
@@ -286,6 +301,7 @@ def populate_all(c):
         c, paths.TEST_ENV_FILE
     )  # Uses TOURNAMENT_USERS - must run after real_tournament
     db_populate_csv_import(c, paths.TEST_ENV_FILE)
+    db_populate_user_edit(c, paths.TEST_ENV_FILE)
     db_populate_demo_tournaments(c, paths.TEST_ENV_FILE)
 
 
@@ -301,6 +317,7 @@ ns_db_populate.add_task(db_populate_bracket_linking, "bracket-linking")
 ns_db_populate.add_task(db_populate_bracket_unset_winner, "bracket-unset-winner")
 ns_db_populate.add_task(db_populate_real_tournament, "real-tournament")
 ns_db_populate.add_task(db_populate_csv_import, "csv-import")
+ns_db_populate.add_task(db_populate_user_edit, "user-edit")
 ns_db_populate.add_task(db_populate_demo_tournaments, "demo-tournaments")
 ns_db_populate.add_task(populate_all, "all")
 

@@ -67,6 +67,7 @@ export const TeamsTab: React.FC = memo(() => {
             team={team}
             rank={index + 1}
             key={`TeamCard-${team.pk}`}
+            organizationId={tournament?.organization_pk ?? undefined}
           />
         ))}
       </div>

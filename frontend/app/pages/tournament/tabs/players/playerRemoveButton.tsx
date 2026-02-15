@@ -41,11 +41,14 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
         .filter((pk): pk is number => pk !== undefined);
 
       // Optimistic update — remove user from React Query cache immediately
+      // Cache may hold PK-only users (numbers) from slim serializer
       queryClient.setQueryData<TournamentType>(
         ['tournament', tournament.pk],
         (old) =>
           old
-            ? { ...old, users: old.users?.filter((u) => u.username !== user.username) ?? null }
+            ? { ...old, users: old.users?.filter((u) =>
+                typeof u === 'number' ? u !== user.pk : u.username !== user.username
+              ) ?? null }
             : old,
       );
 

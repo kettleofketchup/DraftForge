@@ -1,14 +1,12 @@
-import React, { memo, useEffect, useState } from 'react';
+import React, { memo, useCallback, useEffect, useState } from 'react';
 import type { UserClassType, UserType } from '~/components/user/types';
 
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 
-import { Button } from '~/components/ui/button';
 import { CancelButton, EditIconButton, SubmitButton } from '~/components/ui/buttons';
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -24,25 +22,60 @@ import { handleSave } from './handleSaveHook';
 interface Props {
   user: UserClassType;
 }
-interface DialogProps {
-  user: UserClassType;
-  form: UserType;
-  setForm: React.Dispatch<React.SetStateAction<UserType>>;
-}
-export const UserEditModalDialog: React.FC<DialogProps> = memo(
-  ({ user, form, setForm }) => {
-    const [errorMessage, setErrorMessage] = useState<
-      Partial<Record<keyof UserType, string>>
-    >({});
-    const [isSaving, setIsSaving] = useState(false);
-    const [statusMsg, setStatusMsg] = useState<string | null>(null);
-    const setUser = useUserStore((state) => state.setUser);
-    const currentOrg = useOrgStore((s) => s.currentOrg);
 
-    const onSubmit = (e: React.FormEvent) => {
+export const UserEditModal: React.FC<Props> = memo(({ user }) => {
+  const currentUser: UserType = useUserStore((state) => state.currentUser);
+  const setUser = useUserStore((state) => state.setUser);
+  const currentOrg = useOrgStore((s) => s.currentOrg);
+
+  const [open, setOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<
+    Partial<Record<keyof UserType, string>>
+  >({});
+  const [statusMsg, setStatusMsg] = useState<string | null>(null);
+
+  // Initialize form with user data to prevent null updates
+  const [form, setForm] = useState<UserType>(() => ({
+    orgUserPk: user.orgUserPk,
+    pk: user.pk,
+    username: user.username,
+    nickname: user.nickname,
+    avatar: user.avatar,
+    avatarUrl: user.avatarUrl,
+    discordId: user.discordId,
+    mmr: user.mmr,
+    steam_account_id: user.steam_account_id,
+    positions: user.positions,
+    is_staff: user.is_staff,
+    is_superuser: user.is_superuser,
+    guildNickname: user.guildNickname,
+  } as UserType));
+
+  // Update form when user prop changes
+  useEffect(() => {
+    setForm({
+      orgUserPk: user.orgUserPk,
+      pk: user.pk,
+      username: user.username,
+      nickname: user.nickname,
+      avatar: user.avatar,
+      avatarUrl: user.avatarUrl,
+      discordId: user.discordId,
+      mmr: user.mmr,
+      steam_account_id: user.steam_account_id,
+      positions: user.positions,
+      is_staff: user.is_staff,
+      is_superuser: user.is_superuser,
+      guildNickname: user.guildNickname,
+    } as UserType);
+  }, [user]);
+
+  const onSubmit = useCallback(
+    (e: React.MouseEvent | React.FormEvent) => {
       e.preventDefault();
       handleSave(e, {
-        user: {} as UserClassType,
+        user,
         form,
         setForm,
         setErrorMessage,
@@ -50,10 +83,21 @@ export const UserEditModalDialog: React.FC<DialogProps> = memo(
         setStatusMsg,
         setUser,
         organizationId: currentOrg?.pk ?? null,
+        onSuccess: () => setOpen(false),
       });
-      setForm({} as UserType); // Reset form after
-    };
-    return (
+    },
+    [user, form, setUser, currentOrg?.pk],
+  );
+
+  if (!currentUser || (!currentUser.is_staff && !currentUser.is_superuser)) {
+    return <></>;
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <EditIconButton tooltip="Edit User" data-testid="edit-user-btn" />
+      </DialogTrigger>
       <DialogContent className={`${DIALOG_CSS_SMALL}`}>
         <DialogHeader>
           <DialogTitle>Edit User:</DialogTitle>
@@ -67,93 +111,17 @@ export const UserEditModalDialog: React.FC<DialogProps> = memo(
         </form>
         <DialogFooter>
           <div className="flex flex-row justify-center align-center items-center w-full gap-4">
-            <DialogClose asChild>
-              <SubmitButton
-                loading={isSaving}
-                loadingText="Saving..."
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleSave(e, {
-                    user: user,
-                    form,
-                    setForm,
-                    setErrorMessage,
-                    setIsSaving,
-                    setStatusMsg,
-                    setUser,
-                    organizationId: currentOrg?.pk ?? null,
-                  });
-                }}
-              >
-                {user && user.pk ? 'Save Changes' : 'Create User'}
-              </SubmitButton>
-            </DialogClose>
-            <DialogClose asChild>
-              <CancelButton />
-            </DialogClose>
+            <SubmitButton
+              loading={isSaving}
+              loadingText="Saving..."
+              onClick={onSubmit}
+            >
+              {user && user.pk ? 'Save Changes' : 'Create User'}
+            </SubmitButton>
+            <CancelButton onClick={() => setOpen(false)} />
           </div>
         </DialogFooter>
       </DialogContent>
-    );
-  },
-);
-
-export const UserEditModalButton: React.FC = memo(() => {
-  return (
-    <DialogTrigger asChild>
-      <EditIconButton tooltip="Edit User" data-testid="edit-user-btn" />
-    </DialogTrigger>
-  );
-});
-export const UserEditModal: React.FC<Props> = memo(({ user }) => {
-  const currentUser: UserType = useUserStore((state) => state.currentUser);
-
-  // Initialize form with user data to prevent null updates
-  const [form, setForm] = useState<UserType>(() => ({
-    orgUserPk: user.orgUserPk, // OrgUser pk (for org-scoped PATCH)
-    pk: user.pk,
-    username: user.username,
-    nickname: user.nickname,
-    avatar: user.avatar,
-    avatarUrl: user.avatarUrl,
-    discordId: user.discordId,
-    mmr: user.mmr,
-    steamid: user.steamid,
-    positions: user.positions,
-    is_staff: user.is_staff,
-    is_superuser: user.is_superuser,
-    guildNickname: user.guildNickname,
-  } as UserType));
-
-  // Update form when user prop changes
-  useEffect(() => {
-    setForm({
-      orgUserPk: user.orgUserPk, // OrgUser pk (for org-scoped PATCH)
-      pk: user.pk,
-      username: user.username,
-      nickname: user.nickname,
-      avatar: user.avatar,
-      avatarUrl: user.avatarUrl,
-      discordId: user.discordId,
-      mmr: user.mmr,
-      steamid: user.steamid,
-      positions: user.positions,
-      is_staff: user.is_staff,
-      is_superuser: user.is_superuser,
-      guildNickname: user.guildNickname,
-    } as UserType);
-  }, [user]);
-
-  if (!currentUser || (!currentUser.is_staff && !currentUser.is_superuser)) {
-    return <></>;
-  }
-
-  return (
-    <Dialog key={`user-edit-modal-${user.pk}`}>
-      <form>
-        <UserEditModalButton />
-        <UserEditModalDialog user={user} form={form} setForm={setForm} />
-      </form>
     </Dialog>
   );
 });

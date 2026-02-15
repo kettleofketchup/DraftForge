@@ -40,6 +40,7 @@ export {
   logout,
   fetchUsers,
   fetchUser,
+  fetchUsersBulk,
   createUser,
   updateUser,
   deleteUser,

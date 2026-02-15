@@ -53,6 +53,17 @@ DEMO_CSV_LEAGUE: TestLeague = TestLeague(
     organization_names=["Demo CSV Org"],
 )
 
+# User Edit Test League - isolated from other test data
+USER_EDIT_LEAGUE: TestLeague = TestLeague(
+    pk=5,  # Expected PK after creation
+    name="User Edit League",
+    steam_league_id=17933,
+    description="Isolated league for user edit E2E tests.",
+    rules="User edit test rules.",
+    timezone="America/New_York",
+    organization_names=["User Edit Org"],
+)
+
 # =============================================================================
 # Constants for easy access
 # =============================================================================
@@ -69,6 +80,9 @@ CSV_STEAM_LEAGUE_ID = CSV_LEAGUE.steam_league_id
 DEMO_CSV_LEAGUE_NAME = DEMO_CSV_LEAGUE.name
 DEMO_CSV_STEAM_LEAGUE_ID = DEMO_CSV_LEAGUE.steam_league_id
 
+USER_EDIT_LEAGUE_NAME = USER_EDIT_LEAGUE.name
+USER_EDIT_STEAM_LEAGUE_ID = USER_EDIT_LEAGUE.steam_league_id
+
 # =============================================================================
 # All Leagues (for iteration)
 # =============================================================================
@@ -78,4 +92,5 @@ ALL_LEAGUES: list[TestLeague] = [
     TEST_LEAGUE,
     CSV_LEAGUE,
     DEMO_CSV_LEAGUE,
+    USER_EDIT_LEAGUE,
 ]

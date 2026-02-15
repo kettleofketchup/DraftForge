@@ -352,6 +352,39 @@ CSV_IMPORT_USERS: list[TestUser] = [
 ]
 
 # =============================================================================
+# User Edit Test Users
+# These users are members of the User Edit Org/League/Tournament.
+# User edit E2E tests modify their fields (MMR, nickname, etc.)
+# =============================================================================
+
+USER_EDIT_USERS: list[TestUser] = [
+    TestUser(
+        pk=2050,
+        username="edit_user_alpha",
+        nickname="Edit Alpha",
+        discord_id="400000000000000001",
+        steam_id_64=76561198900000001,
+        mmr=3000,
+    ),
+    TestUser(
+        pk=2051,
+        username="edit_user_bravo",
+        nickname="Edit Bravo",
+        discord_id="400000000000000002",
+        steam_id_64=76561198900000002,
+        mmr=4500,
+    ),
+    TestUser(
+        pk=2052,
+        username="edit_user_charlie",
+        nickname="Edit Charlie",
+        discord_id="400000000000000003",
+        steam_id_64=76561198900000003,
+        mmr=5200,
+    ),
+]
+
+# =============================================================================
 # Auth Test Users (for iteration)
 # =============================================================================
 

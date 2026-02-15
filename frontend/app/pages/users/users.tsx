@@ -5,6 +5,7 @@ import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
 import { UserCreateModal } from '~/components/user/userCard/createModal';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
+import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useUserStore } from '~/store/userStore';
 
 /** Hook for progressive/batched rendering of items */
@@ -111,38 +112,13 @@ const EmptyUsers = () => (
   </div>
 );
 
-// Try to get cached users from sessionStorage (client-side only)
-const getCachedUsers = (): UserType[] => {
-  try {
-    const stored = sessionStorage.getItem('dtx-storage');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return parsed?.state?.users || [];
-    }
-  } catch {
-    // Ignore parse errors
-  }
-  return [];
-};
-
 export function UsersPage() {
   const currentUser = useUserStore((state) => state.currentUser);
   const getCurrentUser = useUserStore((state) => state.getCurrentUser);
   const getUsers = useUserStore((state) => state.getUsers);
-  const storeUsers = useUserStore((state) => state.users);
+  const globalUserPks = useUserStore((state) => state.globalUserPks);
+  const users = useResolvedUsers(globalUserPks);
   const hasHydrated = useUserStore((state) => state.hasHydrated);
-
-  // Read cached users after mount to avoid hydration mismatch
-  const [mounted, setMounted] = useState(false);
-  const [cachedUsers, setCachedUsers] = useState<UserType[]>([]);
-
-  useEffect(() => {
-    setMounted(true);
-    setCachedUsers(getCachedUsers());
-  }, []);
-
-  // Use cached users after mount, then switch to store users after hydration
-  const users = hasHydrated ? storeUsers : (mounted && cachedUsers.length > 0 ? cachedUsers : storeUsers);
 
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, 300);
@@ -174,17 +150,16 @@ export function UsersPage() {
     100  // delay between batches in ms
   );
 
-  // Fetch users after hydration - show cached data immediately, refresh in background
+  // Fetch users after hydration
   useEffect(() => {
-    if (!hasHydrated) return; // Wait for Zustand to hydrate from sessionStorage
+    if (!hasHydrated) return;
 
-    // If we already have users from cache, just refresh in background
-    if (users.length > 0) {
+    if (globalUserPks.length > 0) {
       getUsers(); // Background refresh
       return;
     }
 
-    // No cached users - fetch and wait
+    // No users yet - fetch and wait
     const fetchUsers = async () => {
       setIsRefreshing(true);
       setError(null);

@@ -21,14 +21,14 @@ export const LeagueTabs: React.FC<Props> = ({
   activeTab,
   onTabChange,
 }) => {
-  const leagueUsers = useLeagueStore((state) => state.leagueUsers);
+  const leagueUserPks = useLeagueStore((state) => state.leagueUserPks);
   const leagueUsersLoading = useLeagueStore((state) => state.leagueUsersLoading);
   const leagueUsersLeagueId = useLeagueStore((state) => state.leagueUsersLeagueId);
 
   // Show "..." if loading or if we haven't fetched for this league yet
   const userCountDisplay = leagueUsersLoading || leagueUsersLeagueId !== league.pk
     ? '...'
-    : leagueUsers.length;
+    : leagueUserPks.length;
 
   return (
     <Tabs value={activeTab} onValueChange={onTabChange} className="w-full">

@@ -1,5 +1,6 @@
 import { fetchTournament } from '~/components/api/api';
 import type { DraftRoundType, DraftType, TournamentType } from '~/index';
+import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('RefreshTournament');
 
@@ -33,7 +34,8 @@ export const refreshTournamentHook = async ({
   try {
     log.debug('tournament has been refreshed');
 
-    const data = await fetchTournament(tournament.pk);
+    const rawData = await fetchTournament(tournament.pk);
+    const data = hydrateTournament(rawData as TournamentType & { _users?: Record<number, unknown> }) as TournamentType;
     setTournament(data);
     if (setDraft && data.draft) setDraft(data.draft);
     if (setCurDraftRound)

@@ -83,7 +83,10 @@ export interface PickUndonePayload {
 
 /**
  * Draft state included in WebSocket messages to avoid additional API calls.
- * This matches the DraftSerializerForTournament from the backend.
+ *
+ * The backend sends DraftSerializerSlim (pk-only user references) plus a
+ * `_users` dict. The draftWebSocketStore hydrates pk references back to full
+ * user objects before storing, so consumers see the same shape as the REST API.
  */
 export interface WebSocketDraftState {
   pk: number;
@@ -98,6 +101,15 @@ export interface WebSocketDraftState {
   }>;
   latest_round: number | null;
   draft_style: string;
+  /** Deduplicated user map from slim serializer (consumed during hydration). */
+  _users?: Record<number, Record<string, unknown>>;
+  tournament?: {
+    pk: number;
+    teams: Array<{
+      pk: number;
+      [key: string]: unknown;
+    }>;
+  };
 }
 
 export interface WebSocketMessage {

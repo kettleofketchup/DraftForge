@@ -53,7 +53,9 @@ def create_dynamic_tournament(config: DynamicTournamentConfig, force: bool = Fal
 
     # Get users with Steam IDs for team membership
     users_with_steam = list(
-        CustomUser.objects.filter(steamid__isnull=False).exclude(steamid=0)
+        CustomUser.objects.filter(steam_account_id__isnull=False).exclude(
+            steam_account_id=0
+        )
     )
     all_users = list(CustomUser.objects.all())
 
@@ -281,15 +283,15 @@ def populate_real_tournament_38(force=False):
         discord_id = test_user.discord_id
         pos_data = test_user.positions
 
-        # Convert Steam ID 32-bit to 64-bit if provided
-        steamid_64 = test_user.get_steam_id_64()
+        # Get 32-bit Friend ID (Dotabuff)
+        steam_account_id = test_user.get_steam_account_id()
 
         # First, try to find existing user by discord_id
         user = CustomUser.objects.filter(discordId=discord_id).first()
 
-        if not user and steamid_64:
-            # Try to find by steamid (in case discord changed but steam is same)
-            user = CustomUser.objects.filter(steamid=steamid_64).first()
+        if not user and steam_account_id:
+            # Try to find by steam_account_id (in case discord changed but steam is same)
+            user = CustomUser.objects.filter(steam_account_id=steam_account_id).first()
             if user:
                 # Update discord_id to match production
                 user.discordId = discord_id
@@ -302,8 +304,8 @@ def populate_real_tournament_38(force=False):
             if user:
                 # Update to match production data
                 user.discordId = discord_id
-                if steamid_64:
-                    user.steamid = steamid_64
+                if steam_account_id:
+                    user.steam_account_id = steam_account_id
                 user.save()
                 print(f"    Updated user from username match: {username}")
 
@@ -319,7 +321,7 @@ def populate_real_tournament_38(force=False):
             user = CustomUser.objects.create(
                 discordId=discord_id,
                 username=username,
-                steamid=steamid_64,
+                steam_account_id=steam_account_id,
                 positions=positions,
             )
             print(
@@ -327,8 +329,8 @@ def populate_real_tournament_38(force=False):
             )
         else:
             # Update existing user data
-            if user.steamid != steamid_64 and steamid_64:
-                user.steamid = steamid_64
+            if user.steam_account_id != steam_account_id and steam_account_id:
+                user.steam_account_id = steam_account_id
             if user.username != username:
                 user.username = username
             # Update positions if we have real data

@@ -118,9 +118,9 @@ export function UserProfilePage() {
                     <p className="text-2xl font-bold text-primary">{user.mmr ?? '—'}</p>
                     <p className="text-xs text-muted-foreground">Base MMR</p>
                   </div>
-                  {user.steamid && (
+                  {user.steam_account_id && (
                     <a
-                      href={`https://www.dotabuff.com/players/${user.steamid}`}
+                      href={`https://www.dotabuff.com/players/${user.steam_account_id}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors"
@@ -223,10 +223,10 @@ function OverviewTab({ user }: { user: UserType }) {
             <span className="text-muted-foreground">Base MMR</span>
             <span className="font-medium">{user.mmr ?? 'Not set'}</span>
           </div>
-          {user.steamid && (
+          {user.steam_account_id && (
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Steam ID</span>
-              <span className="font-medium font-mono text-sm">{user.steamid}</span>
+              <span className="text-muted-foreground">Friend ID</span>
+              <span className="font-medium font-mono text-sm">{user.steam_account_id}</span>
             </div>
           )}
         </CardContent>

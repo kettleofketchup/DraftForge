@@ -18,7 +18,7 @@ export class User implements UserClassType {
   nickname?: string | null;
   mmr?: number;
   position?: string;
-  steamid?: number;
+  steam_account_id?: number;
   avatar?: string;
   positions?: PositionsType;
   pk: number;

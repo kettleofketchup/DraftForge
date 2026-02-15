@@ -8,8 +8,8 @@
 import { create } from 'zustand';
 import { fetchLeague, getLeagueUsers } from '~/components/api/api';
 import type { LeagueType } from '~/components/league/schemas';
-import type { UserType } from '~/components/user/types';
 import { getLogger } from '~/lib/logger';
+import { useUserCacheStore } from '~/store/userCacheStore';
 
 const log = getLogger('leagueStore');
 
@@ -18,8 +18,8 @@ interface LeagueState {
   currentLeague: LeagueType | null;
   currentLeagueLoading: boolean;
 
-  /** League users (members via LeagueUser) */
-  leagueUsers: UserType[];
+  /** League user pks (resolved via useLeagueUsers hook) */
+  leagueUserPks: number[];
   leagueUsersLoading: boolean;
   leagueUsersError: string | null;
   leagueUsersLeagueId: number | null;
@@ -30,7 +30,6 @@ interface LeagueState {
   reset: () => void;
 
   /** League Users Actions */
-  setLeagueUsers: (users: UserType[]) => void;
   getLeagueUsers: (leagueId: number) => Promise<void>;
   clearLeagueUsers: () => void;
 }
@@ -38,7 +37,7 @@ interface LeagueState {
 export const useLeagueStore = create<LeagueState>((set, get) => ({
   currentLeague: null,
   currentLeagueLoading: false,
-  leagueUsers: [],
+  leagueUserPks: [],
   leagueUsersLoading: false,
   leagueUsersError: null,
   leagueUsersLeagueId: null,
@@ -68,26 +67,28 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
     set({
       currentLeague: null,
       currentLeagueLoading: false,
-      leagueUsers: [],
+      leagueUserPks: [],
       leagueUsersLoading: false,
       leagueUsersLeagueId: null,
       leagueUsersError: null,
     }),
 
-  setLeagueUsers: (users) => set({ leagueUsers: users }),
-
   getLeagueUsers: async (leagueId: number) => {
     // Skip if already loaded for this league
-    if (get().leagueUsersLeagueId === leagueId && get().leagueUsers.length > 0) {
+    if (get().leagueUsersLeagueId === leagueId && get().leagueUserPks.length > 0) {
       log.debug('LeagueUsers already loaded for league:', leagueId);
       return;
     }
 
-    set({ leagueUsersLoading: true, leagueUsersError: null, leagueUsersLeagueId: leagueId });
+    set({ leagueUsersLoading: true, leagueUsersError: null, leagueUsersLeagueId: leagueId, leagueUserPks: [] });
 
     try {
       const users = await getLeagueUsers(leagueId);
-      set({ leagueUsers: users, leagueUsersLoading: false });
+      useUserCacheStore.getState().upsert(users, { leagueId });
+      set({
+        leagueUserPks: users.filter((u) => u.pk != null).map((u) => u.pk!),
+        leagueUsersLoading: false,
+      });
       log.debug('LeagueUsers fetched successfully:', users.length, 'users');
     } catch (error) {
       log.error('Error fetching league users:', error);
@@ -95,13 +96,13 @@ export const useLeagueStore = create<LeagueState>((set, get) => ({
         leagueUsersError:
           error instanceof Error ? error.message : 'Failed to fetch league users',
         leagueUsersLoading: false,
-        leagueUsers: [],
+        leagueUserPks: [],
       });
     }
   },
 
   clearLeagueUsers: () =>
-    set({ leagueUsers: [], leagueUsersLeagueId: null, leagueUsersError: null }),
+    set({ leagueUserPks: [], leagueUsersLeagueId: null, leagueUsersError: null }),
 }));
 
 // Selectors
@@ -117,9 +118,6 @@ export const leagueSelectors = {
 
   /** Check if league is loading */
   isLoading: (s: LeagueState) => s.currentLeagueLoading,
-
-  /** Get league users */
-  leagueUsers: (s: LeagueState) => s.leagueUsers,
 
   /** Check if league users are loading */
   isLoadingLeagueUsers: (s: LeagueState) => s.leagueUsersLoading,
