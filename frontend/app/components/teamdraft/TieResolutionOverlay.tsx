@@ -24,7 +24,7 @@ export const TieResolutionOverlay: React.FC<TieResolutionOverlayProps> = ({
 
   return (
     <Dialog open={true} onOpenChange={onDismiss}>
-      <DialogContent className={`${DIALOG_CSS} max-w-md`}>
+      <DialogContent className={`${DIALOG_CSS} max-w-md`} data-testid="tie-resolution-overlay">
         <DialogHeader>
           <DialogTitle className="text-center text-xl">
             Tie Breaker!
@@ -89,14 +89,14 @@ export const TieResolutionOverlay: React.FC<TieResolutionOverlayProps> = ({
         </div>
 
         {/* Winner announcement */}
-        <div className="text-center mt-4 p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
+        <div className="text-center mt-4 p-3 bg-green-50 dark:bg-green-950/20 rounded-lg" data-testid="tie-resolution-winner">
           <span className="text-green-700 dark:text-green-300 font-medium">
             {winner?.name} picks next!
           </span>
         </div>
 
         <DialogFooter>
-          <Button onClick={onDismiss} className="w-full">
+          <Button onClick={onDismiss} className="w-full" data-testid="tie-resolution-continue">
             Continue
           </Button>
         </DialogFooter>
