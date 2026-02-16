@@ -23,7 +23,6 @@ const SIGNIFICANT_EVENTS: DraftEvent['event_type'][] = [
   'draft_started',
   'draft_completed',
   'player_picked',
-  'tie_roll',
 ];
 
 function getEventMessage(event: DraftEvent): string {
