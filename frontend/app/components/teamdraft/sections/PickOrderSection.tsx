@@ -17,6 +17,7 @@ const selectTeams = (state: ReturnType<typeof useUserStore.getState>) => state.t
 const selectDraftStyle = (state: ReturnType<typeof useUserStore.getState>) => state.draft?.draft_style;
 const selectDraftRounds = (state: ReturnType<typeof useUserStore.getState>) => state.draft?.draft_rounds;
 const selectCurDraftRoundPk = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.pk;
+const selectCurDraftRoundCaptainPk = (state: ReturnType<typeof useUserStore.getState>) => state.curDraftRound?.captain?.pk;
 
 interface PickOrderCaptain {
   team: TeamType;
@@ -58,6 +59,7 @@ export const PickOrderSection = memo(() => {
   const draftStyle = useUserStore(selectDraftStyle);
   const draftRounds = useUserStore(selectDraftRounds);
   const curDraftRoundPk = useUserStore(selectCurDraftRoundPk);
+  const curDraftRoundCaptainPk = useUserStore(selectCurDraftRoundCaptainPk);
 
   // Build a map of team pk to team for quick lookup
   const teamMap = useMemo(() => {
@@ -101,7 +103,7 @@ export const PickOrderSection = memo(() => {
     return upcoming.slice(0, maxPicks);
   }, [draftStyle, draftRounds, curDraftRoundPk, teamMap, teams?.length]);
 
-  // Compute pick order captains for shuffle draft (original logic)
+  // Compute pick order captains for shuffle draft
   const pickOrderCaptains = useMemo((): PickOrderCaptain[] => {
     if (draftStyle !== 'shuffle') return [];
 
@@ -119,18 +121,34 @@ export const PickOrderSection = memo(() => {
         return a.totalMmr - b.totalMmr;
       });
 
+    // Set isCurrent from server state (not MMR position)
+    allTeams.forEach((t) => {
+      if (!t.isMaxed) {
+        t.isCurrent = t.team.captain?.pk === curDraftRoundCaptainPk;
+      }
+    });
+
+    // Re-sort: current captain first among same-MMR teams
+    allTeams.sort((a, b) => {
+      if (a.isMaxed !== b.isMaxed) return a.isMaxed ? 1 : -1;
+      if (a.totalMmr !== b.totalMmr) return a.totalMmr - b.totalMmr;
+      if (a.isCurrent) return -1;
+      if (b.isCurrent) return 1;
+      return 0;
+    });
+
+    // Number pick order after final sort
     let activeIdx = 0;
     allTeams.forEach((t) => {
       if (!t.isMaxed) {
         t.pickOrder = ++activeIdx;
-        t.isCurrent = activeIdx === 1;
       } else {
         t.pickOrder = 0;
       }
     });
 
     return allTeams;
-  }, [draftStyle, teams]);
+  }, [draftStyle, teams, curDraftRoundCaptainPk]);
 
   // For snake/normal draft, show upcoming picks
   if (draftStyle !== 'shuffle' && upcomingPicks.length > 0) {
