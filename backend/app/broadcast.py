@@ -55,6 +55,7 @@ def broadcast_event(event, include_draft_state=True):
                 "tournament__users",
             ).get(pk=event.draft_id)
             draft_state = DraftSerializerSlim(draft).data
+            draft_state["_users"] = _build_users_dict(draft.tournament)
         except Exception as e:
             log.warning(f"Failed to serialize draft state: {e}")
 
