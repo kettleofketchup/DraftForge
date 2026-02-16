@@ -446,6 +446,7 @@ TEST_KEY_TO_NAME["demo_herodraft"] = "Demo HeroDraft Tournament"
 TEST_KEY_TO_NAME["demo_captaindraft"] = "Demo Captain Draft Tournament"
 TEST_KEY_TO_NAME["demo_snake_draft"] = "Demo Snake Draft Tournament"
 TEST_KEY_TO_NAME["demo_shuffle_draft"] = "Demo Shuffle Draft Tournament"
+TEST_KEY_TO_NAME["shuffle_tie_resolution"] = "Shuffle Tie Resolution Test"
 
 
 def get_tournament_config(key: str) -> TestTournamentConfig:

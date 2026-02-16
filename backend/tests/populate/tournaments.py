@@ -541,3 +541,102 @@ def populate_real_tournament_38(force=False):
     flush_redis_cache()
 
     return tournament
+
+
+def populate_shuffle_tie_tournament(force=False):
+    """
+    Create a shuffle draft tournament with controlled MMR values for tie testing.
+
+    MMR layout (captain-only teams, no pre-assigned members):
+    - Captain 1: 2000 MMR (lowest -> picks first, no tie)
+    - Captains 2-4: 3000 MMR each
+    - 16 available players: 2000 MMR each
+
+    After first pick (player with 2000 MMR joins Team 1):
+    - Team 1: 4000, Teams 2/3/4: 3000 -> 3-way tie -> tie_roll event
+
+    Args:
+        force: If True, recreate even if exists
+    """
+    from app.models import CustomUser, Draft, League, Team, Tournament
+
+    tournament_name = "Shuffle Tie Resolution Test"
+
+    existing = Tournament.objects.filter(name=tournament_name).first()
+    if existing and not force:
+        print(
+            f"Tournament '{tournament_name}' already exists (pk={existing.pk}), skipping..."
+        )
+        return existing
+    if existing:
+        existing.delete()
+
+    # Get DTX league (required for MMR lookups via OrgUser)
+    dtx_league = League.objects.filter(steam_league_id=DTX_STEAM_LEAGUE_ID).first()
+    if not dtx_league:
+        print("DTX League not found. Run populate_organizations_and_leagues first.")
+        return None
+
+    org = dtx_league.organization
+    if not org:
+        print("DTX League has no organization.")
+        return None
+
+    # Get 20 users (4 captains + 16 available for draft)
+    users = list(CustomUser.objects.all()[:20])
+    if len(users) < 20:
+        print(f"Not enough users ({len(users)}). Need 20.")
+        return None
+
+    captains = users[:4]
+    available_players = users[4:20]
+
+    # Create tournament linked to league
+    tournament = Tournament.objects.create(
+        name=tournament_name,
+        date_played=date.today(),
+        state="in_progress",
+        tournament_type="double_elimination",
+        league=dtx_league,
+        steam_league_id=DTX_STEAM_LEAGUE_ID,
+    )
+
+    # Add all 20 users to tournament
+    tournament.users.set(users)
+
+    # Create 4 teams with CAPTAIN ONLY (no extra members)
+    team_names = ["Tie Team Alpha", "Tie Team Beta", "Tie Team Gamma", "Tie Team Delta"]
+    for i, (captain, name) in enumerate(zip(captains, team_names)):
+        team = Team.objects.create(
+            tournament=tournament,
+            name=name,
+            captain=captain,
+            draft_order=i + 1,
+        )
+        team.members.set([captain])  # Captain only -- room for 4 draft picks
+
+    # Set OrgUser MMR values
+    captain_mmrs = [2000, 3000, 3000, 3000]
+    for captain, mmr in zip(captains, captain_mmrs):
+        org_user = ensure_org_user(captain, org, mmr=mmr)
+        ensure_league_user(captain, org_user, dtx_league)
+
+    for player in available_players:
+        org_user = ensure_org_user(player, org, mmr=2000)
+        ensure_league_user(player, org_user, dtx_league)
+
+    # Create shuffle draft (build_shuffle_rounds assigns first captain)
+    draft = Draft.objects.create(
+        tournament=tournament,
+        draft_style="shuffle",
+    )
+    draft.build_rounds()
+
+    print(
+        f"Created '{tournament_name}' (pk={tournament.pk}) -- "
+        f"4 captain-only teams, MMR: [2000, 3000, 3000, 3000], "
+        f"16 available players at 2000 MMR each"
+    )
+
+    flush_redis_cache()
+    return tournament
