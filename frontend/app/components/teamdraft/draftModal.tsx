@@ -54,8 +54,11 @@ import { useDraftWebSocketStore, draftWsSelectors } from '~/store/draftWebSocket
 import { LiveAutoButtons, DraftRoundIndicator } from './liveView';
 import { CompletedTeamDraftView } from './CompletedTeamDraftView';
 import { initDraftHook } from './hooks/initDraftHook';
+import { TieResolutionOverlay } from './TieResolutionOverlay';
 import type { DraftRoundType, DraftType } from './types';
+import type { TieResolution } from './types';
 import type { TournamentType } from '~/components/tournament/types';
+import type { TieRollPayload } from '~/types/draftEvent';
 const log = getLogger('DraftModal');
 type DraftModalParams = {};
 export const DraftModal: React.FC<DraftModalParams> = ({}) => {
@@ -82,6 +85,8 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const [showFullDraft, setShowFullDraft] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState<'snake' | 'normal' | 'shuffle'>('snake');
   const [isStarting, setIsStarting] = useState(false);
+  const [tieResolution, setTieResolution] = useState<TieResolution | null>(null);
+  const [showTieOverlay, setShowTieOverlay] = useState(false);
   const isStaff = useUserStore((state) => state.isStaff);
   const currentUser = useUserStore((state) => state.currentUser);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -303,6 +308,21 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
       handleDraftStateUpdate(wsDraftState);
     }
   }, [wsDraftState, handleDraftStateUpdate]);
+
+  // Show TieResolutionOverlay when a tie_roll event arrives via WebSocket
+  const latestEvent = draftEvents[0]; // Events are newest-first
+  useEffect(() => {
+    if (latestEvent?.event_type === 'tie_roll' && hasNewEvent) {
+      const payload = latestEvent.payload as TieRollPayload;
+      setTieResolution({
+        tied_teams: payload.tied_teams,
+        roll_rounds: payload.roll_rounds,
+        winner_id: payload.winner_id,
+      });
+      setShowTieOverlay(true);
+      clearNewEventFlag();
+    }
+  }, [latestEvent, hasNewEvent, clearNewEventFlag]);
 
   // Auto-advance to latest round when latest_round changes and autoAdvance is enabled
   // Uses primitive value (draft?.latest_round) to avoid infinite loops from object reference changes
@@ -784,6 +804,17 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
           </div>
           )}
         </div>
+
+        {/* Tie Resolution Overlay - shown to all users on WebSocket tie_roll event */}
+        {showTieOverlay && tieResolution && (
+          <TieResolutionOverlay
+            tieResolution={tieResolution}
+            onDismiss={() => {
+              setShowTieOverlay(false);
+              setTieResolution(null);
+            }}
+          />
+        )}
 
         {/* Externally controlled Draft Style Modal */}
         <DraftStyleModal
