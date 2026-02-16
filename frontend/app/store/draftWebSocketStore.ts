@@ -13,7 +13,7 @@ import { getWebSocketManager } from '~/lib/websocket';
 import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
-import type { DraftEvent, PlayerPickedPayload, WebSocketDraftState, WebSocketMessage } from '~/types/draftEvent';
+import type { DraftEvent, PlayerPickedPayload, TieRollPayload, WebSocketDraftState, WebSocketMessage } from '~/types/draftEvent';
 import { PlayerPickedToast } from '~/components/teamdraft/DraftToasts';
 
 const log = getLogger('draftWebSocketStore');
@@ -36,7 +36,7 @@ function getEventMessage(event: DraftEvent): string {
       return `${payload.captain_name} picked ${payload.picked_name} (Pick ${payload.pick_number})`;
     }
     case 'tie_roll': {
-      const payload = event.payload as { winner_name: string; roll_rounds: { captain_id: number; roll: number }[][] };
+      const payload = event.payload as TieRollPayload;
       const lastRound = payload.roll_rounds[payload.roll_rounds.length - 1];
       const rolls = lastRound.map((r) => r.roll).join(' vs ');
       return `Tie resolved! ${payload.winner_name} wins (${rolls})`;
