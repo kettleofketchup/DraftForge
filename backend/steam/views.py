@@ -98,10 +98,11 @@ class LeagueStatsView(APIView):
     """
 
     def get(self, request, user_id):
+        league_id = request.query_params.get("league_id", LEAGUE_ID)
         try:
             stats = LeaguePlayerStats.objects.select_related("user").get(
                 user_id=user_id,
-                league_id=LEAGUE_ID,
+                league_id=league_id,
             )
             serializer = LeaguePlayerStatsSerializer(stats)
             return Response(serializer.data)

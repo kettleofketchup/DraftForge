@@ -51,10 +51,9 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
     currentUser?.discordId &&
     currentUser?.pk !== player.pk;
 
-  // Fetch league stats if leagueId is provided
-  // TODO: Update useUserLeagueStats to accept leagueId parameter when backend supports it
   const { data: leagueStats, isLoading: isLoadingStats } = useUserLeagueStats(
-    leagueId && player.pk ? player.pk : null
+    leagueId && player.pk ? player.pk : null,
+    leagueId
   );
 
   // Fetch full user data when modal opens

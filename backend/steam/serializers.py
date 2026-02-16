@@ -192,6 +192,42 @@ class LinkMatchRequestSerializer(serializers.Serializer):
 # =============================================================================
 
 
+def _get_league_for_stats(obj):
+    """Look up the League object from a LeaguePlayerStats' league_id (Steam league ID)."""
+    from app.models import League
+
+    try:
+        return League.objects.get(steam_league_id=obj.league_id)
+    except League.DoesNotExist:
+        return None
+
+
+def _get_base_mmr(obj):
+    from org.models import OrgUser
+
+    league = _get_league_for_stats(obj)
+    if not league or not league.organization:
+        return 0
+    try:
+        org_user = OrgUser.objects.get(user=obj.user, organization=league.organization)
+        return org_user.mmr or 0
+    except OrgUser.DoesNotExist:
+        return 0
+
+
+def _get_league_mmr(obj):
+    from league.models import LeagueUser
+
+    league = _get_league_for_stats(obj)
+    if not league:
+        return 0
+    try:
+        league_user = LeagueUser.objects.get(user=obj.user, league=league)
+        return league_user.mmr or 0
+    except LeagueUser.DoesNotExist:
+        return 0
+
+
 class LeaguePlayerStatsSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
     avatar = serializers.CharField(source="user.avatar", read_only=True)
@@ -222,24 +258,10 @@ class LeaguePlayerStatsSerializer(serializers.ModelSerializer):
         ]
 
     def get_base_mmr(self, obj):
-        from org.models import OrgUser
-
-        try:
-            org_user = OrgUser.objects.get(
-                user=obj.user, organization=obj.league.organization
-            )
-            return org_user.mmr or 0
-        except OrgUser.DoesNotExist:
-            return 0
+        return _get_base_mmr(obj)
 
     def get_league_mmr(self, obj):
-        from league.models import LeagueUser
-
-        try:
-            league_user = LeagueUser.objects.get(user=obj.user, league=obj.league)
-            return league_user.mmr or 0
-        except LeagueUser.DoesNotExist:
-            return 0
+        return _get_league_mmr(obj)
 
 
 class LeaderboardSerializer(serializers.ModelSerializer):
@@ -270,24 +292,10 @@ class LeaderboardSerializer(serializers.ModelSerializer):
         ]
 
     def get_base_mmr(self, obj):
-        from org.models import OrgUser
-
-        try:
-            org_user = OrgUser.objects.get(
-                user=obj.user, organization=obj.league.organization
-            )
-            return org_user.mmr or 0
-        except OrgUser.DoesNotExist:
-            return 0
+        return _get_base_mmr(obj)
 
     def get_league_mmr(self, obj):
-        from league.models import LeagueUser
-
-        try:
-            league_user = LeagueUser.objects.get(user=obj.user, league=obj.league)
-            return league_user.mmr or 0
-        except LeagueUser.DoesNotExist:
-            return 0
+        return _get_league_mmr(obj)
 
     def get_avg_kda(self, obj):
         if obj.avg_deaths == 0:

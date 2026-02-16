@@ -173,7 +173,7 @@ export function LinkSteamMatchModal({
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
         <DialogContent
-          className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
+          className="max-w-2xl xl:max-w-5xl max-h-[80vh] overflow-hidden flex flex-col"
           data-testid="link-steam-match-modal"
         >
           <DialogHeader>
@@ -285,7 +285,7 @@ export function LinkSteamMatchModal({
                           >
                             <span className="font-medium">{tierLabel}</span>
                           </div>
-                          <div className="space-y-2 p-2 border border-t-0 rounded-b-lg">
+                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-2 p-2 border border-t-0 rounded-b-lg">
                             {sortedTierSuggestions.map((suggestion) => (
                               <SteamMatchCard
                                 key={suggestion.match_id}

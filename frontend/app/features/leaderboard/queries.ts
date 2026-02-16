@@ -31,8 +31,9 @@ async function fetchLeaderboard(
   return response.json();
 }
 
-async function fetchUserLeagueStats(userId: number): Promise<LeagueStats> {
-  const response = await fetch(`${API_BASE}/league-stats/${userId}/`);
+async function fetchUserLeagueStats(userId: number, leagueId?: number): Promise<LeagueStats> {
+  const params = leagueId ? `?league_id=${leagueId}` : "";
+  const response = await fetch(`${API_BASE}/league-stats/${userId}/${params}`);
   if (!response.ok) {
     throw new Error("Failed to fetch league stats");
   }
@@ -56,10 +57,10 @@ export function useLeaderboard(params: LeaderboardParams = {}) {
   });
 }
 
-export function useUserLeagueStats(userId: number | null) {
+export function useUserLeagueStats(userId: number | null, leagueId?: number) {
   return useQuery({
-    queryKey: ["league-stats", userId],
-    queryFn: () => fetchUserLeagueStats(userId!),
+    queryKey: ["league-stats", userId, leagueId],
+    queryFn: () => fetchUserLeagueStats(userId!, leagueId),
     enabled: userId !== null,
   });
 }
