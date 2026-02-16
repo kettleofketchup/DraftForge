@@ -1,6 +1,6 @@
 import { InfoDialog } from "~/components/ui/dialogs";
 import { UserAvatar } from "~/components/user/UserAvatar";
-import type { DraftEvent, PlayerPickedPayload, CaptainAssignedPayload } from "~/types/draftEvent";
+import type { DraftEvent, PlayerPickedPayload, CaptainAssignedPayload, TieRollPayload } from "~/types/draftEvent";
 import { formatDistanceToNow } from "date-fns";
 
 interface DraftEventModalProps {
@@ -59,14 +59,10 @@ function getEventDescription(event: DraftEvent): string {
       return `${payload.captain_name} picked ${payload.picked_name} (Pick ${payload.pick_number})`;
     }
     case "tie_roll": {
-      const payload = event.payload as {
-        tied_captains: { name: string }[];
-        roll_rounds: { captain_id: number; roll: number }[][];
-        winner_name: string;
-      };
-      const names = payload.tied_captains.map((c) => c.name).join(" vs ");
-      const lastRound = payload.roll_rounds[payload.roll_rounds.length - 1];
-      const rolls = lastRound.map((r) => `${r.roll}`).join(" vs ");
+      const payload = event.payload as TieRollPayload;
+      const names = payload.tied_teams?.map((t) => t.name).join(" vs ") ?? "teams";
+      const lastRound = payload.roll_rounds?.[payload.roll_rounds.length - 1];
+      const rolls = lastRound?.map((r) => `${r.roll}`).join(" vs ") ?? "";
       return `Tie! ${names} rolled ${rolls} → ${payload.winner_name} wins`;
     }
     case "captain_assigned": {

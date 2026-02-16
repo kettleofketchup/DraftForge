@@ -60,13 +60,14 @@ export interface PlayerPickedPayload {
 }
 
 export interface TieRollPayload {
-  tied_captains: {
+  pick_number: number;
+  tied_teams: {
     id: number;
     name: string;
     mmr: number;
   }[];
   roll_rounds: {
-    captain_id: number;
+    team_id: number;
     roll: number;
   }[][];
   winner_id: number;
