@@ -7,6 +7,7 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import type { DraftRoundType, DraftType, TournamentType } from '~/index';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { getLogger } from '~/lib/logger';
+import { useDraftWebSocketStore } from '~/store/draftWebSocketStore';
 import type { TieResolution } from '../types';
 const log = getLogger('PickPlayerHook');
 
@@ -32,7 +33,6 @@ type hookParams = {
   setDraft: (draft: DraftType) => void;
   setCurDraftRound: (draftRound: DraftRoundType) => void;
   setDraftIndex: (index: number) => void;
-  onTieResolution?: (tieResolution: TieResolution) => void;
   autoRefreshDraft?: () => Promise<void>;
 };
 
@@ -44,7 +44,6 @@ export const choosePlayerHook = async ({
   setDraft,
   setCurDraftRound,
   setDraftIndex,
-  onTieResolution,
   autoRefreshDraft,
 }: hookParams) => {
   if (!tournament || !tournament.pk) {
@@ -123,17 +122,16 @@ export const choosePlayerHook = async ({
         log.debug('No more rounds to advance to');
       }
 
-      // Show tie overlay for shuffle draft
-      // Cast data to include tie_resolution from backend
+      // Show tie overlay for shuffle draft via WebSocket store
+      // (persists through component remounts unlike local state)
       const responseData = data as TournamentType & {
         tie_resolution?: TieResolution;
       };
       if (
         responseData.draft?.draft_style === 'shuffle' &&
-        responseData.tie_resolution &&
-        onTieResolution
+        responseData.tie_resolution
       ) {
-        onTieResolution(responseData.tie_resolution);
+        useDraftWebSocketStore.getState().setPendingTieResolution(responseData.tie_resolution);
       }
 
       // Trigger auto-refresh after successful pick

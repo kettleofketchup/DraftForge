@@ -54,7 +54,9 @@ import { useDraftWebSocketStore, draftWsSelectors } from '~/store/draftWebSocket
 import { LiveAutoButtons, DraftRoundIndicator } from './liveView';
 import { CompletedTeamDraftView } from './CompletedTeamDraftView';
 import { initDraftHook } from './hooks/initDraftHook';
+import { TieResolutionOverlay } from './TieResolutionOverlay';
 import type { DraftRoundType, DraftType } from './types';
+import type { TieResolution } from './types';
 import type { TournamentType } from '~/components/tournament/types';
 const log = getLogger('DraftModal');
 type DraftModalParams = {};
@@ -82,6 +84,8 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const [showFullDraft, setShowFullDraft] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState<'snake' | 'normal' | 'shuffle'>('snake');
   const [isStarting, setIsStarting] = useState(false);
+  const [tieResolution, setTieResolution] = useState<TieResolution | null>(null);
+  const [showTieOverlay, setShowTieOverlay] = useState(false);
   const isStaff = useUserStore((state) => state.isStaff);
   const currentUser = useUserStore((state) => state.currentUser);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -281,6 +285,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const wsDraftState = useDraftWebSocketStore((s) => s.draftState);
   const hasNewEvent = useDraftWebSocketStore((s) => s.hasNewEvent);
   const clearNewEventFlag = useDraftWebSocketStore((s) => s.clearNewEventFlag);
+  const pendingTieResolution = useDraftWebSocketStore((s) => s.pendingTieResolution);
   const wsConnect = useDraftWebSocketStore((s) => s.connect);
   const wsDisconnect = useDraftWebSocketStore((s) => s.disconnect);
 
@@ -303,6 +308,17 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
       handleDraftStateUpdate(wsDraftState);
     }
   }, [wsDraftState, handleDraftStateUpdate]);
+
+  // Show TieResolutionOverlay when pendingTieResolution is set in the WS store.
+  // Set from two paths: HTTP response (choosePlayerHook) and live WS draft_event.
+  // NOT set from initial_events, so historical tie_rolls don't re-trigger on remount.
+  useEffect(() => {
+    if (pendingTieResolution) {
+      setTieResolution(pendingTieResolution);
+      setShowTieOverlay(true);
+      useDraftWebSocketStore.getState().clearPendingTieResolution();
+    }
+  }, [pendingTieResolution]);
 
   // Auto-advance to latest round when latest_round changes and autoAdvance is enabled
   // Uses primitive value (draft?.latest_round) to avoid infinite loops from object reference changes
@@ -784,6 +800,17 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
           </div>
           )}
         </div>
+
+        {/* Tie Resolution Overlay - shown to all users on WebSocket tie_roll event */}
+        {showTieOverlay && tieResolution && (
+          <TieResolutionOverlay
+            tieResolution={tieResolution}
+            onDismiss={() => {
+              setShowTieOverlay(false);
+              setTieResolution(null);
+            }}
+          />
+        )}
 
         {/* Externally controlled Draft Style Modal */}
         <DraftStyleModal
