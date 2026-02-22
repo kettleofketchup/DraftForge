@@ -12,6 +12,7 @@ Tournament Types:
 from tests.data.leagues import (
     CSV_STEAM_LEAGUE_ID,
     DTX_STEAM_LEAGUE_ID,
+    SHUFFLE_TIE_STEAM_LEAGUE_ID,
     USER_EDIT_STEAM_LEAGUE_ID,
 )
 from tests.data.models import DynamicTournamentConfig, TestTournament
@@ -175,4 +176,20 @@ USER_EDIT_TOURNAMENT: TestTournament = TestTournament(
     league_name="User Edit League",
     organization_pk=5,  # User Edit Org
     teams=[],  # No teams needed - just users
+)
+
+# =============================================================================
+# Shuffle Tie Resolution Tournament
+# Isolated tournament for shuffle draft tie resolution E2E tests.
+# 4 captain-only teams with controlled MMR to trigger 3-way tie after first pick.
+# =============================================================================
+
+SHUFFLE_TIE_TOURNAMENT: TestTournament = TestTournament(
+    name="Shuffle Tie Resolution Test",
+    tournament_type="double_elimination",
+    state="in_progress",
+    steam_league_id=SHUFFLE_TIE_STEAM_LEAGUE_ID,
+    league_name="Shuffle Tie League",
+    organization_pk=6,  # Shuffle Tie Org
+    teams=[],  # Teams created by populate function with captain-only setup
 )

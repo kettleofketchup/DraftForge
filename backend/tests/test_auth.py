@@ -703,6 +703,47 @@ def get_tournament_by_key(request, key: str):
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
+def reset_tournament_by_key(request, key: str):
+    """
+    TEST ONLY: Reset a tournament to its initial state by re-running its populate function.
+
+    Path params:
+        key: str - Test tournament config key (e.g., 'shuffle_tie_resolution')
+
+    Returns:
+        200: Tournament data after reset
+        404: Not in test mode or unknown key
+    """
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from app.models import Tournament
+    from app.serializers import TournamentSerializer
+
+    # Map of keys to their reset/populate functions
+    RESET_FUNCTIONS = {
+        "shuffle_tie_resolution": lambda: __import__(
+            "tests.populate.shuffle_tie", fromlist=["populate_shuffle_tie_data"]
+        ).populate_shuffle_tie_data(force=True),
+    }
+
+    reset_fn = RESET_FUNCTIONS.get(key)
+    if not reset_fn:
+        return Response(
+            {"error": f"No reset function for key: {key}"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    tournament = reset_fn()
+    # Re-fetch from DB to ensure proper datetime conversion
+    tournament = Tournament.objects.get(pk=tournament.pk)
+    return Response(TournamentSerializer(tournament).data)
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def create_claimable_user(request):
     """
     TEST ONLY: Create a user without Discord or Steam ID that can be claimed.

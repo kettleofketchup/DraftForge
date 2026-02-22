@@ -55,6 +55,15 @@ USER_EDIT_ORG: TestOrganization = TestOrganization(
     timezone="America/New_York",
 )
 
+# Shuffle Tie Test Organization - isolated from other test data
+SHUFFLE_TIE_ORG: TestOrganization = TestOrganization(
+    pk=6,  # Expected PK after creation
+    name="Shuffle Tie Org",
+    description="Isolated organization for shuffle draft tie resolution E2E tests.",
+    rules_template="Shuffle tie test rules.",
+    timezone="America/New_York",
+)
+
 # =============================================================================
 # Constants for easy access
 # =============================================================================
@@ -64,6 +73,7 @@ TEST_ORG_NAME = TEST_ORG.name
 CSV_ORG_NAME = CSV_ORG.name
 DEMO_CSV_ORG_NAME = DEMO_CSV_ORG.name
 USER_EDIT_ORG_NAME = USER_EDIT_ORG.name
+SHUFFLE_TIE_ORG_NAME = SHUFFLE_TIE_ORG.name
 
 # =============================================================================
 # All Organizations (for iteration)
@@ -75,4 +85,5 @@ ALL_ORGANIZATIONS: list[TestOrganization] = [
     CSV_ORG,
     DEMO_CSV_ORG,
     USER_EDIT_ORG,
+    SHUFFLE_TIE_ORG,
 ]

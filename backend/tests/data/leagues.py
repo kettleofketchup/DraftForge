@@ -64,6 +64,17 @@ USER_EDIT_LEAGUE: TestLeague = TestLeague(
     organization_names=["User Edit Org"],
 )
 
+# Shuffle Tie Test League - isolated from other test data
+SHUFFLE_TIE_LEAGUE: TestLeague = TestLeague(
+    pk=6,  # Expected PK after creation
+    name="Shuffle Tie League",
+    steam_league_id=17934,
+    description="Isolated league for shuffle draft tie resolution E2E tests.",
+    rules="Shuffle tie test rules.",
+    timezone="America/New_York",
+    organization_names=["Shuffle Tie Org"],
+)
+
 # =============================================================================
 # Constants for easy access
 # =============================================================================
@@ -83,6 +94,9 @@ DEMO_CSV_STEAM_LEAGUE_ID = DEMO_CSV_LEAGUE.steam_league_id
 USER_EDIT_LEAGUE_NAME = USER_EDIT_LEAGUE.name
 USER_EDIT_STEAM_LEAGUE_ID = USER_EDIT_LEAGUE.steam_league_id
 
+SHUFFLE_TIE_LEAGUE_NAME = SHUFFLE_TIE_LEAGUE.name
+SHUFFLE_TIE_STEAM_LEAGUE_ID = SHUFFLE_TIE_LEAGUE.steam_league_id
+
 # =============================================================================
 # All Leagues (for iteration)
 # =============================================================================
@@ -93,4 +107,5 @@ ALL_LEAGUES: list[TestLeague] = [
     CSV_LEAGUE,
     DEMO_CSV_LEAGUE,
     USER_EDIT_LEAGUE,
+    SHUFFLE_TIE_LEAGUE,
 ]

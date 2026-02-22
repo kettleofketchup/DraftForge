@@ -14,6 +14,7 @@ import type { ConnectionStatus, Unsubscribe } from '~/lib/websocket';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import type { DraftEvent, PlayerPickedPayload, TieRollPayload, WebSocketDraftState, WebSocketMessage } from '~/types/draftEvent';
+import type { TieResolution } from '~/components/teamdraft/types';
 import { PlayerPickedToast } from '~/components/teamdraft/DraftToasts';
 
 const log = getLogger('draftWebSocketStore');
@@ -76,6 +77,7 @@ interface DraftWebSocketState {
   draftState: WebSocketDraftState | null;
   lastEventTimestamp: number | null;
   hasNewEvent: boolean;
+  pendingTieResolution: TieResolution | null;
 
   // Internal tracking
   _connectionId: string | null;
@@ -86,6 +88,8 @@ interface DraftWebSocketState {
   connect: (draftId: number) => void;
   disconnect: () => void;
   clearNewEventFlag: () => void;
+  setPendingTieResolution: (tr: TieResolution) => void;
+  clearPendingTieResolution: () => void;
   reset: () => void;
 }
 
@@ -159,6 +163,7 @@ const initialState = {
   draftState: null,
   lastEventTimestamp: null,
   hasNewEvent: false,
+  pendingTieResolution: null,
   _connectionId: null,
   _unsubscribe: null,
   _currentDraftId: null,
@@ -238,6 +243,18 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
           hasNewEvent: true,
         }));
 
+        // Set pending tie resolution for live tie_roll events
+        if (newEvent.event_type === 'tie_roll') {
+          const trPayload = newEvent.payload as TieRollPayload;
+          set({
+            pendingTieResolution: {
+              tied_teams: trPayload.tied_teams,
+              roll_rounds: trPayload.roll_rounds,
+              winner_id: trPayload.winner_id,
+            },
+          });
+        }
+
         // Show toast for significant events
         if (SIGNIFICANT_EVENTS.includes(newEvent.event_type)) {
           showEventToast(newEvent);
@@ -261,6 +278,14 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
 
   clearNewEventFlag: () => {
     set({ hasNewEvent: false });
+  },
+
+  setPendingTieResolution: (tr: TieResolution) => {
+    set({ pendingTieResolution: tr });
+  },
+
+  clearPendingTieResolution: () => {
+    set({ pendingTieResolution: null });
   },
 
   disconnect: () => {

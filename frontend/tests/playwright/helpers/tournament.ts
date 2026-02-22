@@ -54,6 +54,29 @@ export async function getTournamentByKey(
 }
 
 /**
+ * Reset a tournament to its initial state by re-running its populate function.
+ *
+ * @param context - Playwright BrowserContext for making API requests
+ * @param key - Test configuration key (e.g., 'shuffle_tie_resolution')
+ * @returns Tournament data after reset, or null if reset failed
+ */
+export async function resetTournamentByKey(
+  context: BrowserContext,
+  key: string
+): Promise<TournamentData | null> {
+  const response = await context.request.post(
+    `${API_URL}/tests/reset-tournament/${key}/`,
+    { failOnStatusCode: false }
+  );
+
+  if (!response.ok()) {
+    return null;
+  }
+
+  return response.json();
+}
+
+/**
  * Page Object for Tournament pages.
  *
  * Encapsulates all interactions with tournament UI including:
