@@ -385,6 +385,62 @@ USER_EDIT_USERS: list[TestUser] = [
 ]
 
 # =============================================================================
+# Shuffle Tie Test Users
+# 4 captains + 16 available players for shuffle draft tie resolution tests.
+# Captain 1 has 2000 MMR (picks first), Captains 2-4 have 3000 MMR (tie after pick).
+# All available players have 2000 MMR.
+# =============================================================================
+
+SHUFFLE_TIE_CAPTAINS: list[TestUser] = [
+    TestUser(
+        pk=1060,
+        username="tie_captain_alpha",
+        nickname="Tie Captain Alpha",
+        discord_id="500000000000000001",
+        steam_id_64=76561199000000001,
+        mmr=2000,
+    ),
+    TestUser(
+        pk=1061,
+        username="tie_captain_beta",
+        nickname="Tie Captain Beta",
+        discord_id="500000000000000002",
+        steam_id_64=76561199000000002,
+        mmr=3000,
+    ),
+    TestUser(
+        pk=1062,
+        username="tie_captain_gamma",
+        nickname="Tie Captain Gamma",
+        discord_id="500000000000000003",
+        steam_id_64=76561199000000003,
+        mmr=3000,
+    ),
+    TestUser(
+        pk=1063,
+        username="tie_captain_delta",
+        nickname="Tie Captain Delta",
+        discord_id="500000000000000004",
+        steam_id_64=76561199000000004,
+        mmr=3000,
+    ),
+]
+
+SHUFFLE_TIE_PLAYERS: list[TestUser] = [
+    TestUser(
+        pk=1064 + i,
+        username=f"tie_player_{i + 1:02d}",
+        nickname=f"Tie Player {i + 1:02d}",
+        discord_id=f"50000000000000{i + 5:04d}",
+        steam_id_64=76561199000000005 + i,
+        mmr=2000,
+    )
+    for i in range(16)
+]
+
+SHUFFLE_TIE_USERS: list[TestUser] = SHUFFLE_TIE_CAPTAINS + SHUFFLE_TIE_PLAYERS
+
+# =============================================================================
 # Auth Test Users (for iteration)
 # =============================================================================
 

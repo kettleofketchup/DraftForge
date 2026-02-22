@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useEffect, type FormEvent } from 'react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,8 +17,6 @@ import { DisplayName } from '~/components/user/avatar';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
 import { choosePlayerHook } from '../hooks/choosePlayerHook';
-import { TieResolutionOverlay } from '../TieResolutionOverlay';
-import type { TieResolution } from '../types';
 const log = getLogger('pickPlayerButton');
 
 export const ChoosePlayerButton: React.FC<{
@@ -36,11 +34,6 @@ export const ChoosePlayerButton: React.FC<{
   const setDraft = useUserStore((state) => state.setDraft);
   const setDraftIndex = useUserStore((state) => state.setDraftIndex);
   const autoRefreshDraft = useUserStore((state) => state.autoRefreshDraft);
-
-  const [tieResolution, setTieResolution] = useState<TieResolution | null>(
-    null,
-  );
-  const [showTieOverlay, setShowTieOverlay] = useState(false);
 
   // Check if current user is logged in
   const isLoggedIn = currentUser?.pk != null;
@@ -76,10 +69,6 @@ export const ChoosePlayerButton: React.FC<{
       setCurDraftRound,
       setDraft,
       setDraftIndex,
-      onTieResolution: (resolution) => {
-        setTieResolution(resolution);
-        setShowTieOverlay(true);
-      },
       autoRefreshDraft: autoRefreshDraft || undefined,
     });
 
@@ -126,39 +115,28 @@ export const ChoosePlayerButton: React.FC<{
   }
 
   return (
-    <>
-      <div data-testid="available-player">
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <PrimaryButton size="sm" className="text-xs px-2" data-testid="pickPlayerButton">Pick</PrimaryButton>
-          </AlertDialogTrigger>
-          <AlertDialogContent className={`bg-green-900 ${brandSuccessBg}`}>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Choose player {DisplayName(user)}</AlertDialogTitle>
-              <AlertDialogDescription className="text-green-100">
-                This will add {DisplayName(user)} to your team.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel asChild>
-                <CancelButton>Cancel</CancelButton>
-              </AlertDialogCancel>
-              <AlertDialogAction asChild onClick={handleChange}>
-                <ConfirmButton data-testid="confirmPickButton">Confirm Pick</ConfirmButton>
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      </div>
-      {showTieOverlay && tieResolution && (
-        <TieResolutionOverlay
-          tieResolution={tieResolution}
-          onDismiss={() => {
-            setShowTieOverlay(false);
-            setTieResolution(null);
-          }}
-        />
-      )}
-    </>
+    <div data-testid="available-player">
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <PrimaryButton size="sm" className="text-xs px-2" data-testid="pickPlayerButton">Pick</PrimaryButton>
+        </AlertDialogTrigger>
+        <AlertDialogContent className={`bg-green-900 ${brandSuccessBg}`}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Choose player {DisplayName(user)}</AlertDialogTitle>
+            <AlertDialogDescription className="text-green-100">
+              This will add {DisplayName(user)} to your team.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+              <CancelButton>Cancel</CancelButton>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild onClick={handleChange}>
+              <ConfirmButton data-testid="confirmPickButton">Confirm Pick</ConfirmButton>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 };

@@ -63,6 +63,7 @@ export {
   type TournamentData,
   TournamentPage,
   getTournamentByKey,
+  resetTournamentByKey,
   navigateToTournament,
   clickTeamsTab,
   clickStartDraft,
