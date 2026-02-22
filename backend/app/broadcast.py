@@ -4,8 +4,10 @@ Broadcast helper for sending draft events to WebSocket channel groups.
 
 import logging
 
+import requests
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.conf import settings
 
 from app.serializers import (
     DraftEventSerializer,
@@ -208,3 +210,40 @@ def broadcast_herodraft_state(draft, event_type: str, metadata=None, draft_team=
             f"Failed to broadcast herodraft state to channels: {e}. "
             "WebSocket clients will not receive real-time updates."
         )
+
+def broadcast_herodraft_discord(draft) -> None:
+    """
+    Notify the Discord bot that a hero draft was created.
+    Logs and absorbs any exceptions so it never disrupts the request.
+    """
+    game = draft.game
+    if not game:
+        return
+
+    discord_ids: list[str] = []
+    for team in [game.radiant_team, game.dire_team]:
+        if not team:
+            continue
+        for member in team.members.all():
+            if member.discordId:
+                discord_ids.append(member.discordId)
+
+    if not discord_ids:
+        log.warning(f"No Discord IDs found for HeroDraft {draft.pk}, skipping notification")
+        return
+
+    payload = {
+        "draft_id": draft.pk,
+        "draft_url": f"{settings.FRONTEND_BASE_URL}/herodraft/{draft.pk}",
+        "discord_ids": discord_ids,
+    }
+
+    try:
+        requests.post(
+            f"{settings.BOT_WEBHOOK_URL}/webhook/draft-started",
+            json=payload,
+            headers={"Authorization": f"Bearer {settings.BOT_WEBHOOK_SECRET}"},
+            timeout=5,
+        )
+    except Exception:
+        log.exception(f"Failed to notify bot for HeroDraft {draft.pk}")

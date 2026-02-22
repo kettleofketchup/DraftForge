@@ -10,7 +10,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from app.broadcast import broadcast_herodraft_event
+from app.broadcast import broadcast_herodraft_discord, broadcast_herodraft_event
 from app.functions.herodraft import (
     get_available_heroes,
     submit_choice,
@@ -130,6 +130,7 @@ def create_herodraft(request, game_pk):
     )
 
     broadcast_herodraft_event(draft, "draft_created")
+    broadcast_herodraft_discord(draft)
 
     # Refetch with prefetch for proper serialization
     draft = _get_draft_with_prefetch(draft.pk)

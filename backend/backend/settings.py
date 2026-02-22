@@ -426,6 +426,11 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 AUTH_USER_MODEL = "app.CustomUser"
 
+# Discord Configuration
+DISCORD_BOT_WEBHOOK_URL = os.environ.get("DISCORD_BOT_WEBHOOK_URL", "http://localhost:8089")
+DISCORD_BOT_WEBHOOK_SECRET = os.environ.get("DISCORD_BOT_WEBHOOK_SECRET", "")
+FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL", "https://dota.kettle.sh")
+
 # Celery Configuration
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", f"redis://{REDIS_HOST}:6379/1")
 CELERY_RESULT_BACKEND = os.environ.get(
