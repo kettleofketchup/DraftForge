@@ -17,6 +17,7 @@ import {
   test,
   expect,
   getTournamentByKey,
+  resetTournamentByKey,
   type TournamentData,
 } from '../../fixtures';
 
@@ -25,7 +26,9 @@ test.describe('Shuffle Draft - Tie Resolution Overlay', () => {
 
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
-    const tournament = await getTournamentByKey(context, 'shuffle_tie_resolution');
+    // Reset tournament to fresh state (picks cleared, draft rebuilt)
+    const tournament = await resetTournamentByKey(context, 'shuffle_tie_resolution')
+      ?? await getTournamentByKey(context, 'shuffle_tie_resolution');
     if (!tournament) {
       throw new Error(
         'Could not find shuffle_tie_resolution tournament. ' +

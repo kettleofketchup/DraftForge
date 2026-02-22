@@ -58,7 +58,6 @@ import { TieResolutionOverlay } from './TieResolutionOverlay';
 import type { DraftRoundType, DraftType } from './types';
 import type { TieResolution } from './types';
 import type { TournamentType } from '~/components/tournament/types';
-import type { TieRollPayload } from '~/types/draftEvent';
 const log = getLogger('DraftModal');
 type DraftModalParams = {};
 export const DraftModal: React.FC<DraftModalParams> = ({}) => {
@@ -286,6 +285,7 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
   const wsDraftState = useDraftWebSocketStore((s) => s.draftState);
   const hasNewEvent = useDraftWebSocketStore((s) => s.hasNewEvent);
   const clearNewEventFlag = useDraftWebSocketStore((s) => s.clearNewEventFlag);
+  const pendingTieResolution = useDraftWebSocketStore((s) => s.pendingTieResolution);
   const wsConnect = useDraftWebSocketStore((s) => s.connect);
   const wsDisconnect = useDraftWebSocketStore((s) => s.disconnect);
 
@@ -309,20 +309,16 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
     }
   }, [wsDraftState, handleDraftStateUpdate]);
 
-  // Show TieResolutionOverlay when a tie_roll event arrives via WebSocket
-  const latestEvent = draftEvents[0]; // Events are newest-first
+  // Show TieResolutionOverlay when pendingTieResolution is set in the WS store.
+  // Set from two paths: HTTP response (choosePlayerHook) and live WS draft_event.
+  // NOT set from initial_events, so historical tie_rolls don't re-trigger on remount.
   useEffect(() => {
-    if (latestEvent?.event_type === 'tie_roll' && hasNewEvent) {
-      const payload = latestEvent.payload as TieRollPayload;
-      setTieResolution({
-        tied_teams: payload.tied_teams,
-        roll_rounds: payload.roll_rounds,
-        winner_id: payload.winner_id,
-      });
+    if (pendingTieResolution) {
+      setTieResolution(pendingTieResolution);
       setShowTieOverlay(true);
-      clearNewEventFlag();
+      useDraftWebSocketStore.getState().clearPendingTieResolution();
     }
-  }, [latestEvent, hasNewEvent, clearNewEventFlag]);
+  }, [pendingTieResolution]);
 
   // Auto-advance to latest round when latest_round changes and autoAdvance is enabled
   // Uses primitive value (draft?.latest_round) to avoid infinite loops from object reference changes

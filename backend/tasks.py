@@ -285,6 +285,21 @@ def db_populate_user_edit(
 
 
 @task
+def db_populate_shuffle_tie(
+    c,
+    path: Path = paths.TEST_ENV_FILE,
+    force: bool = False,
+):
+    """Populate shuffle tie resolution test tournament."""
+    load_dotenv(path)
+
+    with c.cd(paths.BACKEND_PATH.absolute()):
+        force_arg = "True" if force else "False"
+        cmd = f'DISABLE_CACHE=true python manage.py shell -c "from tests.populate import populate_shuffle_tie_data; populate_shuffle_tie_data(force={force_arg})"'
+        c.run(cmd, pty=True)
+
+
+@task
 def populate_all(c):
     paths.TEST_DB_PATH.unlink(missing_ok=True)
     paths.TEST_DB_PATH.touch()
@@ -303,6 +318,7 @@ def populate_all(c):
     db_populate_csv_import(c, paths.TEST_ENV_FILE)
     db_populate_user_edit(c, paths.TEST_ENV_FILE)
     db_populate_demo_tournaments(c, paths.TEST_ENV_FILE)
+    db_populate_shuffle_tie(c, paths.TEST_ENV_FILE)
 
 
 ns_db.add_task(db_makemigrations, "makemigrations")
@@ -319,6 +335,7 @@ ns_db_populate.add_task(db_populate_real_tournament, "real-tournament")
 ns_db_populate.add_task(db_populate_csv_import, "csv-import")
 ns_db_populate.add_task(db_populate_user_edit, "user-edit")
 ns_db_populate.add_task(db_populate_demo_tournaments, "demo-tournaments")
+ns_db_populate.add_task(db_populate_shuffle_tie, "shuffle-tie")
 ns_db_populate.add_task(populate_all, "all")
 
 ns_db_migrate.add_task(db_migrate_all, "all")

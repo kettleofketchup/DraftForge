@@ -18,6 +18,7 @@ from .test_auth import (
     login_user,
     login_user_claimer,
     reset_org_admin_team,
+    reset_tournament_by_key,
 )
 from .test_csv import reset_csv_import
 from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
@@ -89,6 +90,11 @@ urlpatterns = [
         "tournament-by-key/<str:key>/",
         get_tournament_by_key,
         name="tournament-by-key",
+    ),
+    path(
+        "reset-tournament/<str:key>/",
+        reset_tournament_by_key,
+        name="test-reset-tournament",
     ),
     path(
         "user/<int:user_pk>/org-membership/",
