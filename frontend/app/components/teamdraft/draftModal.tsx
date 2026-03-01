@@ -291,14 +291,12 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
 
   // Connect/disconnect WebSocket based on modal open state and draft availability
   useEffect(() => {
-    if (open && draft?.pk) {
-      wsConnect(draft.pk);
-    }
+    if (!open || !draft?.pk) return;
+
+    wsConnect(draft.pk);
+
     return () => {
-      // Only disconnect when modal closes, not on every effect rerun
-      if (!open) {
-        wsDisconnect();
-      }
+      wsDisconnect();
     };
   }, [open, draft?.pk, wsConnect, wsDisconnect]);
 

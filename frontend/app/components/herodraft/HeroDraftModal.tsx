@@ -81,13 +81,12 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
 
   // Connect/disconnect WebSocket based on modal open state
   useEffect(() => {
-    if (open && draftId) {
-      wsConnect(draftId);
-    }
+    if (!open || !draftId) return;
+
+    wsConnect(draftId);
+
     return () => {
-      if (!open) {
-        wsDisconnect();
-      }
+      wsDisconnect();
     };
   }, [open, draftId, wsConnect, wsDisconnect]);
 
