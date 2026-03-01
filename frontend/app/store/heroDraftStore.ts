@@ -219,11 +219,14 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
       }
     });
 
+    // Set status to 'connecting' immediately so the guard at the top of
+    // connect() works during the WebSocketManager's 50ms StrictMode debounce.
     set({
       _connectionId: connectionId,
       _unsubscribe: unsubscribe,
       _currentDraftId: draftId,
       wasKicked: false,
+      status: 'connecting',
     });
   },
 

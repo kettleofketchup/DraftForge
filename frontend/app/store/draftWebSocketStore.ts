@@ -269,10 +269,15 @@ export const useDraftWebSocketStore = create<DraftWebSocketState>((set, get) => 
       }
     });
 
+    // Set status to 'connecting' immediately so the guard at the top of
+    // connect() works during the WebSocketManager's 50ms StrictMode debounce.
+    // Without this, status stays 'disconnected' and a StrictMode re-run
+    // bypasses the guard, tears down the pending connection, and creates a new one.
     set({
       _connectionId: connectionId,
       _unsubscribe: unsubscribe,
       _currentDraftId: draftId,
+      status: 'connecting',
     });
   },
 
