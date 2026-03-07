@@ -4,14 +4,6 @@ const DSN =
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _sentry: any = null;
 
-function getSentryEnvironment(): string {
-  if (typeof window === 'undefined') return 'ssr';
-  const hostname = window.location.hostname;
-  if (hostname === 'dota.kettle.sh') return 'production';
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return 'development';
-  return hostname;
-}
-
 export async function initSentry() {
   if (typeof window === 'undefined') return;
 
@@ -31,7 +23,7 @@ export async function initSentry() {
       tracePropagationTargets: [/^\//, /^https:\/\/dota\.kettle\.sh\/api/],
       replaysSessionSampleRate: 0.1,
       replaysOnErrorSampleRate: 1.0,
-      environment: getSentryEnvironment(),
+      environment: import.meta.env.MODE,
     });
   } catch {
     // @sentry/react-router not available in test images
