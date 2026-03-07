@@ -52,7 +52,7 @@ export const TournamentDetailPage: React.FC = () => {
       useUserStore.getState().setTournament(hydratedTournament);
     }
     return () => {
-      useUserStore.getState().setTournament(null as unknown as TournamentType);
+      useUserStore.getState().setTournament(null);
     };
   }, [hydratedTournament]);
 

@@ -59,6 +59,10 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     async def draft_event(self, event):
         """Handle draft.event messages from channel layer."""
+        log.debug(
+            f"DraftConsumer sending draft_event to client "
+            f"(draft={self.draft_id}, channel={self.channel_name})"
+        )
         message = {
             "type": "draft_event",
             "event": event["payload"],
@@ -67,6 +71,10 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         if "draft_state" in event:
             message["draft_state"] = event["draft_state"]
         await self.send(text_data=json.dumps(message))
+
+    async def force_disconnect(self, event):
+        """Test-only: server-initiated connection close."""
+        await self.close(code=1012)  # Service Restart
 
     @database_sync_to_async
     def draft_exists(self, draft_id):
@@ -99,7 +107,11 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             data = DraftSerializerSlim(draft).data
 
             # Add _users dict for frontend cache hydration
-            data["_users"] = _build_users_dict(draft.tournament)
+            # Convert int keys to strings for consistency with broadcast path
+            # (msgpack strict mode forbids int map keys in channel layer)
+            data["_users"] = {
+                str(k): v for k, v in _build_users_dict(draft.tournament).items()
+            }
             return data
         except Draft.DoesNotExist:
             return None
