@@ -294,6 +294,15 @@ def generate_draft_rounds(request):
 
     logging.debug(f"Initialization draft for tournament {tournament.name}")
 
+    # Validate: tournament must have captains assigned to teams
+    if not tournament.captains:
+        return Response(
+            {
+                "error": "Cannot initialize draft: no captains assigned. Assign captains to teams first."
+            },
+            status=400,
+        )
+
     # Set draft style if provided
     draft_style = serializer.validated_data.get("draft_style")
     if draft_style:
@@ -349,6 +358,15 @@ def rebuild_team(request):
     except Draft.DoesNotExist:
         logging.debug(f"Draft doesn't exist for {tournament.pk}, creating new one")
         draft = Draft.objects.create(tournament=tournament)
+
+    # Validate: tournament must have captains assigned to teams
+    if not tournament.captains:
+        return Response(
+            {
+                "error": "Cannot rebuild teams: no captains assigned. Assign captains to teams first."
+            },
+            status=400,
+        )
 
     # IMPORTANT: rebuild_teams MUST be called BEFORE build_rounds
     # so that team MMR calculations use only captains, not old picks

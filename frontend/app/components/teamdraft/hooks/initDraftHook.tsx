@@ -61,9 +61,9 @@ export const initDraftHook = async ({
       return `Tournament Draft has been initialized!`;
     },
     error: (err) => {
-      const val = err.response.data;
+      const val = err.response?.data?.error ?? err.response?.data ?? err.message;
       log.error('Tournament Draft has failed to Reinitialize!', err);
-      return `Failed to Reinitialize tournament draft: ${val}`;
+      return `Failed to initialize draft: ${val}`;
     },
   });
   return promise;
