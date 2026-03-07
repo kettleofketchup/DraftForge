@@ -7,6 +7,7 @@ from .test_auth import (
     create_claimable_user,
     get_tournament_by_key,
     get_user_org_membership,
+    kill_draft_websocket,
     login_admin,
     login_as_discord_id,
     login_as_user,
@@ -135,6 +136,12 @@ urlpatterns = [
         "herodraft-by-key/<str:key>/",
         get_herodraft_by_key,
         name="test-herodraft-by-key",
+    ),
+    # Team draft WebSocket testing
+    path(
+        "kill-draft-ws/<int:draft_id>/",
+        kill_draft_websocket,
+        name="test-draft-kill-ws",
     ),
     # CSV import reset
     path(

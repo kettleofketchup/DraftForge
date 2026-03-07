@@ -260,13 +260,15 @@ test.describe('Captain Draft Pick', () => {
       await tournamentPage.clickStartDraft();
       await tournamentPage.waitForDraftModal();
 
-      // Wait for player list to load - either Pick buttons or Waiting buttons will appear
+      // Wait for player list to load - either Pick buttons or non-pickable buttons will appear
       const dialog = page.locator('[role="dialog"]');
       const pickButton = dialog.locator('[data-testid="pickPlayerButton"]');
-      const waitingButton = dialog.locator('button:has-text("Waiting")');
+      const notYourTurnButton = dialog.locator('[data-testid="pickDisabledNotYourTurn"]');
+      const waitingButton = dialog.locator('[data-testid="pickDisabledWaiting"]');
+      const nonPickable = notYourTurnButton.or(waitingButton);
 
       // Wait for either state to be visible (handles race condition)
-      await expect(pickButton.or(waitingButton).first()).toBeVisible({ timeout: 10000 });
+      await expect(pickButton.or(nonPickable).first()).toBeVisible({ timeout: 10000 });
 
       const hasPickButton = await pickButton.count() > 0;
 
@@ -275,9 +277,9 @@ test.describe('Captain Draft Pick', () => {
         console.log('User can pick - they are either captain or staff');
         await expect(pickButton.first()).toBeVisible();
       } else {
-        // User is not captain - should see waiting buttons
-        console.log('User cannot pick - checking for Waiting buttons');
-        await expect(waitingButton.first()).toBeVisible();
+        // User is not the current captain - should see "Not your turn" or "Waiting..."
+        console.log('User cannot pick - checking for non-pickable buttons');
+        await expect(nonPickable.first()).toBeVisible();
       }
     });
   });

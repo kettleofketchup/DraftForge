@@ -93,7 +93,7 @@ export const ChoosePlayerButton: React.FC<{
     // Not logged in
     if (!isLoggedIn) {
       return (
-        <Button disabled variant="ghost" size="sm" className="text-xs px-2 text-muted-foreground">
+        <Button disabled variant="ghost" size="sm" className="text-xs px-2 text-muted-foreground" data-testid="pickDisabledLogin">
           Login...
         </Button>
       );
@@ -101,14 +101,14 @@ export const ChoosePlayerButton: React.FC<{
     // User is a captain but not their turn
     if (isAnyCaptain) {
       return (
-        <Button disabled variant="ghost" size="sm" className="text-xs px-2 text-muted-foreground">
+        <Button disabled variant="ghost" size="sm" className="text-xs px-2 text-muted-foreground" data-testid="pickDisabledNotYourTurn">
           Not your turn
         </Button>
       );
     }
     // Regular user watching
     return (
-      <Button disabled variant="ghost" size="sm" className="text-xs px-2 text-muted-foreground">
+      <Button disabled variant="ghost" size="sm" className="text-xs px-2 text-muted-foreground" data-testid="pickDisabledWaiting">
         Waiting...
       </Button>
     );

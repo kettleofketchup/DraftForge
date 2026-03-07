@@ -55,7 +55,10 @@ def broadcast_event(event, include_draft_state=True):
                 "tournament__users",
             ).get(pk=event.draft_id)
             draft_state = DraftSerializerSlim(draft).data
-            draft_state["_users"] = _build_users_dict(draft.tournament)
+            # Convert int keys to strings — msgpack strict mode forbids int map keys
+            draft_state["_users"] = {
+                str(k): v for k, v in _build_users_dict(draft.tournament).items()
+            }
         except Exception as e:
             log.warning(f"Failed to serialize draft state: {e}")
 
@@ -79,7 +82,7 @@ def broadcast_event(event, include_draft_state=True):
             message,
         )
 
-        log.debug(
+        log.info(
             f"Broadcast {event.event_type} to draft_{event.draft_id} and tournament_{tournament_id}"
             + (" (with draft state)" if draft_state else "")
         )
