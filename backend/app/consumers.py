@@ -68,6 +68,10 @@ class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             message["draft_state"] = event["draft_state"]
         await self.send(text_data=json.dumps(message))
 
+    async def force_disconnect(self, event):
+        """Test-only: server-initiated connection close."""
+        await self.close(code=1012)  # Service Restart
+
     @database_sync_to_async
     def draft_exists(self, draft_id):
         from app.models import Draft

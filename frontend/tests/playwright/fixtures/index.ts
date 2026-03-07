@@ -37,6 +37,15 @@ export {
   type CaptainContext,
 } from './herodraft';
 
+// Team Draft utilities
+export {
+  killDraftWebSocket,
+  resetTeamDraft,
+} from './teamdraft';
+
+// Draft WebSocket helper
+export { DraftWebSocketHelper } from '../helpers/DraftWebSocketHelper';
+
 // Re-export the extended test from auth (primary test fixture)
 export { test, expect } from './auth';
 
