@@ -719,8 +719,9 @@ def reset_tournament_by_key(request, key: str):
 
     from app.models import Tournament
     from app.serializers import TournamentSerializer
+    from tests.helpers.tournament_config import TEST_TOURNAMENTS
 
-    # Map of keys to their reset/populate functions
+    # Special reset functions for non-standard tournament configs
     RESET_FUNCTIONS = {
         "shuffle_tie_resolution": lambda: __import__(
             "tests.populate.shuffle_tie", fromlist=["populate_shuffle_tie_data"]
@@ -728,14 +729,22 @@ def reset_tournament_by_key(request, key: str):
     }
 
     reset_fn = RESET_FUNCTIONS.get(key)
-    if not reset_fn:
+    if reset_fn:
+        tournament = reset_fn()
+        tournament = Tournament.objects.get(pk=tournament.pk)
+        return Response(TournamentSerializer(tournament).data)
+
+    # Generic reset: look up key in TEST_TOURNAMENTS configs
+    config = next((c for c in TEST_TOURNAMENTS if c.key == key), None)
+    if not config:
         return Response(
-            {"error": f"No reset function for key: {key}"},
+            {"error": f"No reset function or config for key: {key}"},
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    tournament = reset_fn()
-    # Re-fetch from DB to ensure proper datetime conversion
+    # Delete existing tournament with this name, then recreate
+    Tournament.objects.filter(name=config.name).delete()
+    tournament = config.create()
     tournament = Tournament.objects.get(pk=tournament.pk)
     return Response(TournamentSerializer(tournament).data)
 

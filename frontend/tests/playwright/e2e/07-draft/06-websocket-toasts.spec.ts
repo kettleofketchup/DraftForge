@@ -62,7 +62,8 @@ test.describe('WebSocket Toast Notifications', () => {
     await loginAdmin();
 
     // Reset tournament BEFORE navigating (admin is captain with first pick)
-    await resetTournamentByKey(context, 'draft_captain_turn');
+    const resetData = await resetTournamentByKey(context, 'draft_captain_turn');
+    if (resetData) tournamentPk = resetData.pk;
 
     const wsHelper = new DraftWebSocketHelper(page);
     const tournamentPage = new TournamentPage(page);
