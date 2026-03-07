@@ -86,8 +86,11 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
       toast.success(`Refreshed ${result.count} Discord members`);
       // Invalidate Discord search query to re-fetch
       queryClient.invalidateQueries({ queryKey: ['discordSearch'] });
-    } catch {
-      toast.error('Failed to refresh Discord members');
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+        || 'Failed to refresh Discord members';
+      toast.error(message);
     } finally {
       setRefreshing(false);
     }
