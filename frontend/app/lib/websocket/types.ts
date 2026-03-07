@@ -77,4 +77,5 @@ export interface WebSocketConnection {
   connectTimeout: NodeJS.Timeout | null;
   intentionalClose: boolean;
   connectStartTime: number | null;
+  autoDisconnectTimeout: NodeJS.Timeout | null;
 }

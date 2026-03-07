@@ -27,6 +27,9 @@ const DEFAULT_MAX_DELAY_MS = 30000;
 // StrictMode debounce delay
 const CONNECT_DEBOUNCE_MS = 50;
 
+// Auto-disconnect delay: prevents StrictMode unmount/remount from tearing down connections
+const AUTO_DISCONNECT_DELAY_MS = 100;
+
 // Send queue limits
 const MAX_QUEUE_SIZE = 100;
 
@@ -39,15 +42,35 @@ class WebSocketManager {
    * Returns a connectionId for subsequent operations.
    */
   connect(url: string, options: ConnectionOptions = {}): string {
-    // Check for existing connection
+    // Check for existing connection (including pending auto-disconnect)
     const existing = this.connections.get(url);
     if (existing) {
       const status = existing.state.status;
-      if (status === 'connected' || status === 'connecting') {
+      if (status === 'connected' || status === 'connecting' || status === 'reconnecting') {
         log.debug(`Already ${status} to ${url}, reusing connection`);
         // Update options if provided
         existing.options = { ...existing.options, ...options };
+        // Sync current state to new onStateChange callback (StrictMode remount)
+        if (options.onStateChange) {
+          options.onStateChange(existing.state);
+        }
         return url;
+      }
+
+      // Clean up stale entry's pending timeouts before overwriting
+      if (existing.connectTimeout) {
+        clearTimeout(existing.connectTimeout);
+      }
+      if (existing.autoDisconnectTimeout) {
+        clearTimeout(existing.autoDisconnectTimeout);
+      }
+      if (existing.reconnectTimeout) {
+        clearTimeout(existing.reconnectTimeout);
+      }
+      if (existing.ws) {
+        existing.intentionalClose = true;
+        existing.ws.close(1000, 'Replaced by new connection');
+        existing.ws = null;
       }
     }
 
@@ -71,6 +94,7 @@ class WebSocketManager {
       connectTimeout: null,
       intentionalClose: false,
       connectStartTime: null,
+      autoDisconnectTimeout: null,
     };
 
     this.connections.set(url, connection);
@@ -104,6 +128,10 @@ class WebSocketManager {
     if (conn.reconnectTimeout) {
       clearTimeout(conn.reconnectTimeout);
       conn.reconnectTimeout = null;
+    }
+    if (conn.autoDisconnectTimeout) {
+      clearTimeout(conn.autoDisconnectTimeout);
+      conn.autoDisconnectTimeout = null;
     }
 
     // Close WebSocket
@@ -149,6 +177,13 @@ class WebSocketManager {
       return () => {};
     }
 
+    // Cancel pending auto-disconnect (StrictMode remount)
+    if (conn.autoDisconnectTimeout) {
+      clearTimeout(conn.autoDisconnectTimeout);
+      conn.autoDisconnectTimeout = null;
+      log.debug(`Cancelled pending auto-disconnect for ${connectionId}`);
+    }
+
     const subscriber = { id: Symbol(), handler };
     conn.subscribers.add(subscriber);
 
@@ -158,10 +193,16 @@ class WebSocketManager {
       conn.subscribers.delete(subscriber);
       log.debug(`Subscriber removed for ${connectionId}, remaining: ${conn.subscribers.size}`);
 
-      // Auto-disconnect when no subscribers remain
+      // Debounced auto-disconnect: React StrictMode re-subscribes within ~50ms
       if (conn.subscribers.size === 0) {
-        log.debug(`No subscribers left for ${connectionId}, auto-disconnecting`);
-        this.disconnect(connectionId, 'No subscribers');
+        log.debug(`No subscribers left for ${connectionId}, scheduling auto-disconnect`);
+        conn.autoDisconnectTimeout = setTimeout(() => {
+          conn.autoDisconnectTimeout = null;
+          if (conn.subscribers.size === 0) {
+            log.debug(`Auto-disconnecting ${connectionId} (no subscribers after delay)`);
+            this.disconnect(connectionId, 'No subscribers');
+          }
+        }, AUTO_DISCONNECT_DELAY_MS);
       }
     };
   }
