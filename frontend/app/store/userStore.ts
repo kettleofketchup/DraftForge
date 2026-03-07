@@ -74,7 +74,7 @@ interface UserState {
   setAddUserQuery: (query: string) => void;
   setDiscordUserQuery: (query: string) => void;
   setTournaments: (tournaments: TournamentType[]) => void;
-  setTournament: (tournament: TournamentType) => void;
+  setTournament: (tournament: TournamentType | null) => void;
   tournamentsByUser: (user: UserType) => TournamentType[];
   getCurrentUser: () => Promise<void>;
   userAPIError: any;
@@ -269,7 +269,10 @@ export const useUserStore = create<UserState>()(
 
       setTournaments: (tournaments) => set({ tournaments }),
       setTournament: (tournament) => {
-        if (!tournament) return; // Guard against null tournament
+        if (!tournament) {
+          set({ tournament: {} as TournamentType });
+          return;
+        }
         set({ tournament });
         // If a tournament with the same pk exists in tournaments, update it
         set((state) => {
