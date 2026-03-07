@@ -16,6 +16,7 @@ import {
   test,
   expect,
   getTournamentByKey,
+  resetTournamentByKey,
   TournamentPage,
   visitAndWaitForHydration,
   type TournamentData,
@@ -26,7 +27,10 @@ test.describe('Team Draft - Full Lifecycle Sanity', () => {
 
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
-    const tournament = await getTournamentByKey(context, 'draft_not_started');
+
+    // Reset fixture — the full draft test mutates it (starts + completes the draft)
+    const reset = await resetTournamentByKey(context, 'draft_not_started');
+    const tournament = reset ?? await getTournamentByKey(context, 'draft_not_started');
     if (!tournament) {
       throw new Error('Could not find draft_not_started tournament');
     }
@@ -69,8 +73,8 @@ test.describe('Team Draft - Full Lifecycle Sanity', () => {
     page,
     loginAdmin,
   }) => {
-    // Increase timeout for full draft run (16 picks with network waits)
-    test.setTimeout(60_000);
+    // Increase timeout for full draft run (16 picks with WS-driven UI updates)
+    test.setTimeout(120_000);
 
     await loginAdmin();
     await visitAndWaitForHydration(page, `/tournament/${tournamentData.pk}/teams`);
@@ -114,6 +118,9 @@ test.describe('Team Draft - Full Lifecycle Sanity', () => {
         break;
       }
 
+      // Count players before pick to detect when UI updates
+      const playerCountBefore = await dialog.locator('[data-testid="pickPlayerButton"]').count();
+
       // Click the first available pick button
       await pickButton.click();
 
@@ -126,8 +133,12 @@ test.describe('Team Draft - Full Lifecycle Sanity', () => {
         await confirmBtn.click();
       }
 
-      // Wait for the pick to be processed
-      await page.waitForLoadState('networkidle');
+      // Wait for the pick to be processed: player count should decrease
+      // (avoids networkidle which never fires with active WebSocket)
+      await expect.poll(
+        () => dialog.locator('[data-testid="pickPlayerButton"]').count(),
+        { timeout: 10_000 },
+      ).toBeLessThan(playerCountBefore);
 
       picksMade++;
       if (picksMade % 4 === 0) {
