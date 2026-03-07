@@ -996,3 +996,36 @@ def create_claim_request(request):
         },
         status=status.HTTP_201_CREATED,
     )
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def kill_draft_websocket(request, draft_id):
+    """
+    TEST ONLY: Force-disconnect all WebSocket clients for a draft.
+
+    Sends a force.disconnect message to the draft's channel group,
+    causing all connected DraftConsumer instances to close with code 1012.
+    Used by Playwright E2E tests to simulate server-initiated WS drops.
+
+    Args:
+        draft_id: The Draft primary key
+
+    Returns:
+        200: {"killed": True}
+        404: Not in test environment
+    """
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"draft_{draft_id}",
+        {"type": "force.disconnect"},
+    )
+    return Response({"killed": True})
