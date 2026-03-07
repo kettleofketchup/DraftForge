@@ -1,17 +1,22 @@
-const SENTRY_PKG = '@sentry/react-router';
-
 const DSN =
   'https://54c5b2164095f34b34dfb66072ca90f5@o4510850673213440.ingest.us.sentry.io/4510850704867328';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _sentry: any = null;
 
+function getSentryEnvironment(): string {
+  if (typeof window === 'undefined') return 'ssr';
+  const hostname = window.location.hostname;
+  if (hostname === 'dota.kettle.sh') return 'production';
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return 'development';
+  return hostname;
+}
+
 export async function initSentry() {
   if (typeof window === 'undefined') return;
-  if (import.meta.env.DEV) return;
 
   try {
-    const Sentry = await import(/* @vite-ignore */ SENTRY_PKG);
+    const Sentry = await import('@sentry/react-router');
     _sentry = Sentry;
 
     Sentry.init({
@@ -26,10 +31,10 @@ export async function initSentry() {
       tracePropagationTargets: [/^\//, /^https:\/\/dota\.kettle\.sh\/api/],
       replaysSessionSampleRate: 0.1,
       replaysOnErrorSampleRate: 1.0,
-      environment: import.meta.env.MODE,
+      environment: getSentryEnvironment(),
     });
   } catch {
-    // @sentry/react-router not available — expected in dev/test Docker images
+    // @sentry/react-router not available in test images
   }
 }
 
