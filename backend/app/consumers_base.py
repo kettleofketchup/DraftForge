@@ -259,8 +259,8 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             await self.close()
             return False
 
-        # Notify subclass of captain connection
-        if self.user and self.user.is_authenticated:
+        # Notify subclass of captain connection state
+        if self._is_captain:
             await self.on_captain_state_change(self.draft_id, self.user, True)
 
         # Start server-side ping loop
@@ -304,14 +304,13 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
         # Clean up captain channel registration and mark as disconnected
         if (
-            hasattr(self, "user")
+            hasattr(self, "_is_captain")
+            and self._is_captain
+            and hasattr(self, "user")
             and hasattr(self, "draft_id")
-            and self.user
-            and self.user.is_authenticated
         ):
             try:
-                if hasattr(self, "_is_captain") and self._is_captain:
-                    await self._unregister_captain_if_current()
+                await self._unregister_captain_if_current()
                 await self.on_captain_state_change(self.draft_id, self.user, False)
             except Exception as e:
                 log.error(

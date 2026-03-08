@@ -227,7 +227,7 @@ class HeroDraftConsumer(BaseDraftConsumer):
     # --- Connect / Disconnect ---
 
     async def connect(self):
-        # Pre-connection: need draft_id and user for kick detection
+        # Set early for kick detection (base_connect re-sets these to same values)
         self.draft_id = self.scope["url_route"]["kwargs"]["draft_id"]
         self.user = self.scope.get("user")
 
