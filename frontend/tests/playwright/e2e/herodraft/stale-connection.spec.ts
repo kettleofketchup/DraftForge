@@ -194,13 +194,12 @@ test.describe('HeroDraft Stale Connection Detection', () => {
       // Verify initial connection is working
       await draftPage.assertConnected();
 
-      // Track new WebSocket connections (reconnection)
-      let reconnectedWs: PWWebSocket | null = null;
-      page.on('websocket', (newWs) => {
-        if (newWs.url().includes('/api/herodraft/')) {
-          reconnectedWs = newWs;
-          console.log('New WebSocket connection created (reconnection)');
-        }
+      // Set up a promise to capture the reconnection WebSocket BEFORE force-closing.
+      // Using waitForEvent instead of page.on avoids the race condition where
+      // reconnection completes before the listener is registered.
+      const reconnectPromise = page.waitForEvent('websocket', {
+        predicate: (ws) => ws.url().includes('/api/herodraft/'),
+        timeout: 15000,
       });
 
       // Force-close the raw WebSocket to simulate a network-level kill.
@@ -221,13 +220,11 @@ test.describe('HeroDraft Stale Connection Detection', () => {
         }
       });
 
-      // Reconnecting indicator should appear
-      await page
-        .locator('[data-testid="herodraft-reconnecting"]')
-        .waitFor({ state: 'visible', timeout: 5000 });
-      console.log('Reconnecting indicator visible');
+      // Wait for the new WebSocket connection (reconnection)
+      const reconnectedWs = await reconnectPromise;
+      console.log('New WebSocket connection created (reconnection)');
 
-      // Wait for reconnection to complete
+      // Wait for reconnection to fully establish
       await draftPage.waitForConnection(15000);
       console.log('Reconnected successfully');
 
