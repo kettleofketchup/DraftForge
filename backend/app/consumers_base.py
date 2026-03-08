@@ -13,7 +13,6 @@ from abc import abstractmethod
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
-from django.utils import timezone
 
 from telemetry.websocket import TelemetryConsumerMixin
 
@@ -41,8 +40,6 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     Subclasses must implement abstract methods to provide draft-specific behavior.
     """
-
-    _ping_task: asyncio.Task | None = None
 
     # --- Abstract methods subclasses must implement ---
 
@@ -74,13 +71,13 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         """
         ...
 
-    @abstractmethod
-    def get_paused_state_value(self) -> str:
-        """Return the state value representing a paused draft.
+    async def on_captain_state_change(self, draft_id, user, is_connected):
+        """Hook called when a captain connects/disconnects.
 
-        Example: HeroDraftState.PAUSED.value
+        Override in subclasses to handle pause-on-disconnect, event logging,
+        and state broadcasting. Default is a no-op.
         """
-        ...
+        pass
 
     # --- Redis key helpers ---
 
@@ -91,10 +88,6 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
     def _captain_channel_key(self, draft_id: int, user_id: int) -> str:
         prefix = self.get_room_group_prefix()
         return f"{prefix}:{draft_id}:captain:{user_id}:channel"
-
-    def _conn_count_key(self, draft_id: int) -> str:
-        prefix = self.get_room_group_prefix()
-        return f"{prefix}:connections:{draft_id}"
 
     # --- Heartbeat ---
 
@@ -183,100 +176,6 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
 
     # --- Captain connected/disconnected ---
 
-    @database_sync_to_async
-    def mark_captain_connected(self, draft_id, user, is_connected):
-        """Mark a captain as connected/disconnected and handle pause-on-disconnect.
-
-        Only pauses during DRAFTING state (not RESUMING) to prevent infinite
-        time exploit. Broadcasts state changes after transaction commits.
-        """
-        from django.db import transaction
-
-        from app.broadcast import broadcast_herodraft_state
-        from app.models import HeroDraft, HeroDraftEvent, HeroDraftState
-
-        broadcast_event_type = None
-        should_broadcast = False
-
-        try:
-            with transaction.atomic():
-                draft = HeroDraft.objects.select_for_update().get(id=draft_id)
-
-                draft_team = draft.draft_teams.filter(
-                    tournament_team__captain=user
-                ).first()
-
-                if draft_team:
-                    draft_team.is_connected = is_connected
-                    draft_team.save()
-
-                    event_type = (
-                        "captain_connected" if is_connected else "captain_disconnected"
-                    )
-                    HeroDraftEvent.objects.create(
-                        draft=draft,
-                        event_type=event_type,
-                        draft_team=draft_team,
-                        metadata={"user_id": user.id, "username": user.username},
-                    )
-
-                    # Handle pause/resume on disconnect - only during DRAFTING phase
-                    # (when timers are running and picks matter)
-                    # Ignore disconnects during RESUMING to prevent infinite time exploit
-                    if not is_connected and draft.state == HeroDraftState.DRAFTING:
-                        draft.state = HeroDraftState.PAUSED
-                        draft.paused_at = timezone.now()
-                        draft.save()
-                        HeroDraftEvent.objects.create(
-                            draft=draft,
-                            event_type="draft_paused",
-                            draft_team=draft_team,
-                            metadata={"reason": "captain_disconnected"},
-                        )
-                        log.info(
-                            f"HeroDraft {draft_id} paused: captain {user.username} disconnected"
-                        )
-                        broadcast_event_type = "draft_paused"
-                        should_broadcast = True
-                    elif is_connected and draft.state == HeroDraftState.PAUSED:
-                        # All pauses require manual resume via the Resume button
-                        # Just broadcast the connection status change
-                        broadcast_event_type = event_type
-                        should_broadcast = True
-                    else:
-                        # Always broadcast connection status changes so UI updates
-                        broadcast_event_type = event_type
-                        should_broadcast = True
-
-        except HeroDraft.DoesNotExist:
-            return
-
-        # Broadcast AFTER transaction commits to ensure other connections see changes
-        if should_broadcast and broadcast_event_type:
-            try:
-                # Re-fetch draft to get committed state
-                draft = HeroDraft.objects.prefetch_related(
-                    "draft_teams__tournament_team__captain",
-                    "draft_teams__tournament_team__members",
-                    "rounds",
-                ).get(id=draft_id)
-                # Get fresh draft_team from prefetched data (filter() bypasses prefetch cache)
-                # Use DraftTeam.captain property which accesses tournament_team.captain
-                fresh_draft_team = None
-                for dt in draft.draft_teams.all():
-                    if dt.captain and dt.captain.id == user.id:
-                        fresh_draft_team = dt
-                        break
-
-                broadcast_herodraft_state(
-                    draft, broadcast_event_type, draft_team=fresh_draft_team
-                )
-                log.debug(
-                    f"HeroDraft {draft_id} broadcast {broadcast_event_type} after transaction commit"
-                )
-            except Exception as e:
-                log.error(f"Failed to broadcast herodraft state: {e}")
-
     # --- Server-side ping loop ---
 
     async def _ping_loop(self):
@@ -312,6 +211,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         self.user = self.scope.get("user")
         self._connection_tracked = False
         self._is_captain = False
+        self._ping_task = None
 
         # Validate draft exists
         exists = await self.draft_exists(self.draft_id)
@@ -361,9 +261,9 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             await self.close()
             return False
 
-        # Mark captain as connected if authenticated
+        # Notify subclass of captain connection
         if self.user and self.user.is_authenticated:
-            await self.mark_captain_connected(self.draft_id, self.user, True)
+            await self.on_captain_state_change(self.draft_id, self.user, True)
 
         # Start server-side ping loop
         self._ping_task = asyncio.ensure_future(self._ping_loop())
@@ -378,9 +278,13 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         """
         await self.telemetry_disconnect(close_code)
 
-        # Cancel ping loop
-        if self._ping_task:
+        # Cancel ping loop and wait for clean shutdown
+        if getattr(self, "_ping_task", None):
             self._ping_task.cancel()
+            try:
+                await self._ping_task
+            except asyncio.CancelledError:
+                pass
             self._ping_task = None
 
         # Track disconnection
@@ -410,7 +314,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             try:
                 if hasattr(self, "_is_captain") and self._is_captain:
                     await self._unregister_captain_if_current()
-                await self.mark_captain_connected(self.draft_id, self.user, False)
+                await self.on_captain_state_change(self.draft_id, self.user, False)
             except Exception as e:
                 log.error(
                     f"Failed to mark captain disconnected for draft {self.draft_id}: {e}"
