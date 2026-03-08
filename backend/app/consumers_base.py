@@ -25,7 +25,8 @@ HEARTBEAT_TTL = 30
 CAPTAIN_CHANNEL_TTL = 300
 
 # Server-side ping interval in seconds (must be < frontend staleTimeoutMs)
-PING_INTERVAL = 5
+# ~16 bytes per message; 100 connections = ~1.6 KB/s — negligible
+PING_INTERVAL = 1
 
 
 class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
