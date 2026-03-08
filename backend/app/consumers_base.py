@@ -24,8 +24,8 @@ HEARTBEAT_TTL = 30
 # Captain channel registration expires after 5 minutes (cleanup on crash)
 CAPTAIN_CHANNEL_TTL = 300
 
-# Server-side ping interval in seconds
-PING_INTERVAL = 30
+# Server-side ping interval in seconds (must be < frontend staleTimeoutMs)
+PING_INTERVAL = 5
 
 
 class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):

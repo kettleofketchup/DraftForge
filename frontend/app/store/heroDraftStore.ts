@@ -113,7 +113,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
           reconnectAttempts: state.reconnectAttempts,
         });
       },
-      staleTimeoutMs: 45000, // Server pings every 30s; 45s allows for one missed ping
+      staleTimeoutMs: 15000, // Server pings every 5s; 3 missed pings = stale
       telemetry: {
         onConnected: (connUrl, durationMs) => {
           log.debug(`Connected to ${connUrl} in ${durationMs}ms`);
