@@ -102,10 +102,15 @@ export const HeroDraftKickedSchema = z.object({
   reason: z.string(),
 });
 
+export const PingSchema = z.object({
+  type: z.literal("ping"),
+});
+
 // Discriminated union for all WebSocket message types
 export const HeroDraftWebSocketMessageSchema = z.discriminatedUnion("type", [
   InitialStateMessageSchema,
   HeroDraftEventSchema,
   HeroDraftTickSchema,
   HeroDraftKickedSchema,
+  PingSchema,
 ]);
