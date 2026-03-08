@@ -38,6 +38,8 @@ export interface WebSocketTelemetry {
   onMessageReceived?: (url: string, type: string, sizeBytes: number) => void;
   /** Called when a message fails to parse */
   onMessageParseError?: (url: string, error: Error) => void;
+  /** Called when a connection is detected as stale (no messages for staleTimeoutMs) */
+  onStaleDetected?: (url: string, staleDurationMs: number) => void;
 }
 
 export interface ReconnectConfig {
@@ -56,6 +58,8 @@ export interface ConnectionOptions {
   telemetry?: Partial<WebSocketTelemetry>;
   /** Reconnection configuration */
   reconnect?: ReconnectConfig;
+  /** If set, force-reconnect when no message received for this many ms. Only useful for connections that receive periodic server-pushed messages. */
+  staleTimeoutMs?: number;
 }
 
 export type MessageHandler = (message: unknown) => void;
