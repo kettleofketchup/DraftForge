@@ -62,6 +62,15 @@ class WebSocketManager {
         return url;
       }
 
+      // Decrement stale counter for old connection being overwritten
+      if (existing.options.staleTimeoutMs) {
+        this.staleEnabledCount--;
+        if (this.staleEnabledCount <= 0) {
+          this.staleEnabledCount = 0;
+          this.stopStaleChecks();
+        }
+      }
+
       // Clean up stale entry's pending timeouts before overwriting
       if (existing.connectTimeout) {
         clearTimeout(existing.connectTimeout);
