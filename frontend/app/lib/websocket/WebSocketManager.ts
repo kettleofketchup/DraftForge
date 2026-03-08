@@ -351,7 +351,8 @@ class WebSocketManager {
         return;
       }
 
-      // Update last message time
+      // Direct mutation (intentional): avoids updateState() to prevent
+      // onStateChange callback on every message (would trigger re-renders)
       conn.state.lastMessageAt = Date.now();
 
       // Emit telemetry
