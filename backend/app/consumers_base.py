@@ -174,8 +174,6 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
                 f"Failed to start tick broadcaster for draft {self.draft_id}: {e}"
             )
 
-    # --- Captain connected/disconnected ---
-
     # --- Server-side ping loop ---
 
     async def _ping_loop(self):
