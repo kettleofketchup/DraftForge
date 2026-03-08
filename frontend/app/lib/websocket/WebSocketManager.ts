@@ -53,7 +53,20 @@ class WebSocketManager {
       const status = existing.state.status;
       if (status === 'connected' || status === 'connecting' || status === 'reconnecting') {
         log.debug(`Already ${status} to ${url}, reusing connection`);
-        // Update options if provided
+        // Adjust stale counter if staleTimeoutMs changed during reuse
+        const hadStale = !!existing.options.staleTimeoutMs;
+        const hasStale = !!options.staleTimeoutMs;
+        if (hadStale && !hasStale) {
+          this.staleEnabledCount--;
+          if (this.staleEnabledCount <= 0) {
+            this.staleEnabledCount = 0;
+            this.stopStaleChecks();
+          }
+        } else if (!hadStale && hasStale) {
+          this.staleEnabledCount++;
+          this.startStaleChecks();
+        }
+        // Update options
         existing.options = { ...existing.options, ...options };
         // Sync current state to new onStateChange callback (StrictMode remount)
         if (options.onStateChange) {
