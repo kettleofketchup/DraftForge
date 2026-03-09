@@ -113,6 +113,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
           reconnectAttempts: state.reconnectAttempts,
         });
       },
+      staleTimeoutMs: 3000, // Server pings every 1s; 3 missed pings = stale
       telemetry: {
         onConnected: (connUrl, durationMs) => {
           log.debug(`Connected to ${connUrl} in ${durationMs}ms`);
@@ -122,6 +123,9 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
         },
         onReconnecting: (connUrl, attempt, backoffMs) => {
           log.debug(`Reconnecting to ${connUrl}, attempt ${attempt}, backoff ${backoffMs}ms`);
+        },
+        onStaleDetected: (connUrl, staleDurationMs) => {
+          log.warn(`Stale connection: ${connUrl} (${staleDurationMs}ms without messages)`);
         },
       },
     });
