@@ -84,7 +84,7 @@ Bulk-add users to organizations and tournaments via CSV file upload, with client
 
 [:material-arrow-right: CSV Import](../csv-import.md)
 
-![CSV Import Demo](../../assets/gifs/csv_import.gif)
+![CSV Import Demo](https://assets.kettle.sh/draftforge/gifs/csv_import.gif)
 
 **Key Features:**
 

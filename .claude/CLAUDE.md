@@ -392,6 +392,9 @@ just demo::snapshots     # Site screenshots
 just demo::trim          # Trim initial white screen
 just demo::gifs          # Convert videos to GIFs
 
+# Upload to Cloudflare R2
+just r2::upload          # Sync all assets to R2
+
 # Quick workflow (record + GIFs)
 just demo::quick
 ```

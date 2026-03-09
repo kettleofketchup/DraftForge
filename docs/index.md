@@ -17,15 +17,15 @@ DraftForge is a full-stack application for managing:
 
 | Home | Tournaments |
 |------|-------------|
-| ![Home](assets/site_snapshots/home.png) | ![Tournaments](assets/site_snapshots/tournaments.png) |
+| ![Home](https://assets.kettle.sh/draftforge/site_snapshots/home.png) | ![Tournaments](https://assets.kettle.sh/draftforge/site_snapshots/tournaments.png) |
 
 | Tournament Detail | Player Draft |
 |--------------------|--------------|
-| ![Tournament](assets/site_snapshots/tournament.png) | ![Draft](assets/site_snapshots/draft.png) |
+| ![Tournament](https://assets.kettle.sh/draftforge/site_snapshots/tournament.png) | ![Draft](https://assets.kettle.sh/draftforge/site_snapshots/draft.png) |
 
 | Bracket | Hero Draft |
 |---------|------------|
-| ![Bracket](assets/site_snapshots/bracket.png) | ![Hero Draft](assets/site_snapshots/HeroDraft.png) |
+| ![Bracket](https://assets.kettle.sh/draftforge/site_snapshots/bracket.png) | ![Hero Draft](https://assets.kettle.sh/draftforge/site_snapshots/HeroDraft.png) |
 
 </div>
 
@@ -56,18 +56,18 @@ DraftForge is a full-stack application for managing:
 
 | Captain 1 - HeroDraft | Captain 2 - HeroDraft |
 |-----------------------|-----------------------|
-| ![Captain 1](assets/gifs/captain1_herodraft.gif) | ![Captain 2](assets/gifs/captain2_herodraft.gif) |
-| [Full Video](assets/videos/captain1_herodraft.webm) | [Full Video](assets/videos/captain2_herodraft.webm) |
+| ![Captain 1](https://assets.kettle.sh/draftforge/gifs/captain1_herodraft.gif) | ![Captain 2](https://assets.kettle.sh/draftforge/gifs/captain2_herodraft.gif) |
+| [Full Video](https://assets.kettle.sh/draftforge/videos/captain1_herodraft.webm) | [Full Video](https://assets.kettle.sh/draftforge/videos/captain2_herodraft.webm) |
 
 | Shuffle Draft | Snake Draft |
 |---------------|-------------|
-| ![Shuffle Draft](assets/gifs/shuffle_draft.gif) | ![Snake Draft](assets/gifs/snake_draft.gif) |
-| [Full Video](assets/videos/shuffle_draft.webm) | [Full Video](assets/videos/snake_draft.webm) |
+| ![Shuffle Draft](https://assets.kettle.sh/draftforge/gifs/shuffle_draft.gif) | ![Snake Draft](https://assets.kettle.sh/draftforge/gifs/snake_draft.gif) |
+| [Full Video](https://assets.kettle.sh/draftforge/videos/shuffle_draft.webm) | [Full Video](https://assets.kettle.sh/draftforge/videos/snake_draft.webm) |
 
 | CSV Import |
 |------------|
-| ![CSV Import](assets/gifs/csv_import.gif) |
-| [Full Video](assets/videos/csv_import.webm) |
+| ![CSV Import](https://assets.kettle.sh/draftforge/gifs/csv_import.gif) |
+| [Full Video](https://assets.kettle.sh/draftforge/videos/csv_import.webm) |
 
 ### Generate Demos Locally
 

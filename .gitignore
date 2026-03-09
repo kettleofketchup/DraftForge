@@ -320,5 +320,10 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
+# Demo assets (stored in Cloudflare R2, uploaded via just r2::upload)
+docs/assets/videos/
+docs/assets/gifs/
+docs/assets/site_snapshots/
+
 # Git worktrees
 .worktrees/

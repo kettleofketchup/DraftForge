@@ -4,8 +4,8 @@ The Hero Draft system implements Dota 2's Captain's Mode for tournament matches,
 
 | Captain 1 Perspective | Captain 2 Perspective |
 |-----------------------|-----------------------|
-| ![Captain 1](../assets/gifs/captain1_herodraft.gif) | ![Captain 2](../assets/gifs/captain2_herodraft.gif) |
-| [:material-play-circle: Full Video](../assets/videos/captain1_herodraft.webm) | [:material-play-circle: Full Video](../assets/videos/captain2_herodraft.webm) |
+| ![Captain 1](https://assets.kettle.sh/draftforge/gifs/captain1_herodraft.gif) | ![Captain 2](https://assets.kettle.sh/draftforge/gifs/captain2_herodraft.gif) |
+| [:material-play-circle: Full Video](https://assets.kettle.sh/draftforge/videos/captain1_herodraft.webm) | [:material-play-circle: Full Video](https://assets.kettle.sh/draftforge/videos/captain2_herodraft.webm) |
 
 ## Overview
 

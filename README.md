@@ -95,7 +95,7 @@ Open `https://localhost` when ready.
 
 | Home | Tournaments | Tournament Detail | Bracket |
 |------|-------------|-------------------|---------|
-| ![Home](docs/assets/site_snapshots/home.png) | ![Tournaments](docs/assets/site_snapshots/tournaments.png) | ![Tournament](docs/assets/site_snapshots/tournament.png) | ![Bracket](docs/assets/site_snapshots/bracket.png) |
+| ![Home](https://assets.kettle.sh/draftforge/site_snapshots/home.png) | ![Tournaments](https://assets.kettle.sh/draftforge/site_snapshots/tournaments.png) | ![Tournament](https://assets.kettle.sh/draftforge/site_snapshots/tournament.png) | ![Bracket](https://assets.kettle.sh/draftforge/site_snapshots/bracket.png) |
 
 ## Demo Videos
 
@@ -103,18 +103,18 @@ Automated demo recordings are available for key features:
 
 | Captain 1 - HeroDraft | Captain 2 - HeroDraft |
 |-----------------------|-----------------------|
-| ![Captain 1](docs/assets/gifs/captain1_herodraft.gif) | ![Captain 2](docs/assets/gifs/captain2_herodraft.gif) |
-| [Full Video](docs/assets/videos/captain1_herodraft.webm) | [Full Video](docs/assets/videos/captain2_herodraft.webm) |
+| ![Captain 1](https://assets.kettle.sh/draftforge/gifs/captain1_herodraft.gif) | ![Captain 2](https://assets.kettle.sh/draftforge/gifs/captain2_herodraft.gif) |
+| [Full Video](https://assets.kettle.sh/draftforge/videos/captain1_herodraft.webm) | [Full Video](https://assets.kettle.sh/draftforge/videos/captain2_herodraft.webm) |
 
 | Shuffle Draft | Snake Draft |
 |---------------|-------------|
-| ![Shuffle Draft](docs/assets/gifs/shuffle_draft.gif) | ![Snake Draft](docs/assets/gifs/snake_draft.gif) |
-| [Full Video](docs/assets/videos/shuffle_draft.webm) | [Full Video](docs/assets/videos/snake_draft.webm) |
+| ![Shuffle Draft](https://assets.kettle.sh/draftforge/gifs/shuffle_draft.gif) | ![Snake Draft](https://assets.kettle.sh/draftforge/gifs/snake_draft.gif) |
+| [Full Video](https://assets.kettle.sh/draftforge/videos/shuffle_draft.webm) | [Full Video](https://assets.kettle.sh/draftforge/videos/snake_draft.webm) |
 
 | CSV Import |
 |------------|
-| ![CSV Import](docs/assets/gifs/csv_import.gif) |
-| [Full Video](docs/assets/videos/csv_import.webm) |
+| ![CSV Import](https://assets.kettle.sh/draftforge/gifs/csv_import.gif) |
+| [Full Video](https://assets.kettle.sh/draftforge/videos/csv_import.webm) |
 
 ### Generate Demos Locally
 
@@ -131,7 +131,7 @@ inv demo.herodraft   # Hero draft with bracket
 inv demo.csv         # CSV import with bracket
 ```
 
-Full videos: `docs/assets/videos/` | GIF previews: `docs/assets/gifs/`
+Full videos: `https://assets.kettle.sh/draftforge/videos/` | GIF previews: `https://assets.kettle.sh/draftforge/gifs/`
 
 ## Development
 
