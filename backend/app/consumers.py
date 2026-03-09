@@ -4,14 +4,12 @@ WebSocket consumers for draft event broadcasting.
 
 import json
 import logging
-import time
-from datetime import timedelta
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
-from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 
+from app.consumers_base import BaseDraftConsumer
 from telemetry.websocket import TelemetryConsumerMixin
 
 log = logging.getLogger(__name__)
@@ -185,239 +183,192 @@ class TournamentConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
             return []
 
 
-class HeroDraftConsumer(AsyncWebsocketConsumer):
+class HeroDraftConsumer(BaseDraftConsumer):
     """WebSocket consumer for Captain's Mode hero draft."""
 
-    # Redis key patterns for captain connection tracking
-    CAPTAIN_CHANNEL_KEY = "herodraft:{draft_id}:captain:{user_id}:channel"
-    CAPTAIN_HEARTBEAT_KEY = "herodraft:{draft_id}:captain:{user_id}:heartbeat"
+    # --- Abstract method implementations ---
 
-    async def connect(self):
-        self.draft_id = self.scope["url_route"]["kwargs"]["draft_id"]
-        self.room_group_name = f"herodraft_{self.draft_id}"
-        self.user = self.scope.get("user")
-        self._connection_tracked = False
-        self._is_captain = False
-
-        # Verify draft exists
-        draft_exists = await self.draft_exists(self.draft_id)
-        if not draft_exists:
-            log.warning(f"HeroDraft {self.draft_id} not found, closing connection")
-            await self.close()
-            return
-
-        # Check if this user is a captain and kick any existing connection
-        if self.user and self.user.is_authenticated:
-            is_captain = await self.check_is_captain(self.draft_id, self.user)
-            if is_captain:
-                self._is_captain = True
-                await self.kick_existing_captain_connection()
-
-        # Join room group
-        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
-        await self.accept()
-
-        # Track connection count for tick broadcaster
-        await self.track_connection(True)
-
-        # Register captain's channel for future kick detection
-        if self._is_captain:
-            await self.register_captain_channel()
-
-        # Send initial state
-        try:
-            initial_state = await self.get_draft_state(self.draft_id)
-            await self.send(
-                text_data=json.dumps(
-                    {
-                        "type": "initial_state",
-                        "draft_state": initial_state,
-                    }
-                )
-            )
-
-            # Start tick broadcaster if draft is in drafting state
-            # Compare against enum value since initial_state is serialized JSON
-            from app.models import HeroDraftState
-
-            if initial_state.get("state") == HeroDraftState.DRAFTING.value:
-                await self.maybe_start_tick_broadcaster()
-
-        except Exception as e:
-            log.error(
-                f"Failed to send initial state for herodraft {self.draft_id}: {e}"
-            )
-            await self.close()
-            return
-
-        # Mark captain as connected if authenticated
-        if self.user and self.user.is_authenticated:
-            await self.mark_captain_connected(self.draft_id, self.user, True)
-
-    async def disconnect(self, close_code):
-        # Track disconnection
-        if hasattr(self, "_connection_tracked") and self._connection_tracked:
-            await self.track_connection(False)
-
-        # If this connection was kicked by a new connection, don't mark as disconnected
-        # The new connection is already active and has marked the captain as connected
-        was_kicked = getattr(self, "_was_kicked", False)
-        if was_kicked:
-            log.info(
-                f"Skipping disconnect handling for kicked connection "
-                f"(user {getattr(self, 'user', None)}, draft {getattr(self, 'draft_id', None)})"
-            )
-            # Still leave the room group
-            if hasattr(self, "room_group_name"):
-                await self.channel_layer.group_discard(
-                    self.room_group_name, self.channel_name
-                )
-            return
-
-        # Clean up captain channel registration and mark as disconnected
-        if (
-            hasattr(self, "user")
-            and hasattr(self, "draft_id")
-            and self.user
-            and self.user.is_authenticated
-        ):
-            try:
-                # Only clean up if this is still the registered channel
-                # (prevents race condition where new connection already registered)
-                if hasattr(self, "_is_captain") and self._is_captain:
-                    await self.unregister_captain_channel_if_current()
-                await self.mark_captain_connected(self.draft_id, self.user, False)
-            except Exception as e:
-                log.error(
-                    f"Failed to mark captain disconnected for herodraft {self.draft_id}: {e}"
-                )
-
-        # Leave room group
-        if hasattr(self, "room_group_name"):
-            await self.channel_layer.group_discard(
-                self.room_group_name, self.channel_name
-            )
+    def get_room_group_prefix(self) -> str:
+        return "herodraft"
 
     @database_sync_to_async
-    def track_connection(self, is_connecting: bool):
-        """Track WebSocket connection count in Redis."""
-        from app.tasks.herodraft_tick import (
-            decrement_connection_count,
-            increment_connection_count,
-        )
+    def draft_exists(self, draft_id):
+        from app.models import HeroDraft
 
-        try:
-            if is_connecting:
-                increment_connection_count(self.draft_id)
-                self._connection_tracked = True
-            else:
-                decrement_connection_count(self.draft_id)
-                self._connection_tracked = False
-        except Exception as e:
-            log.warning(f"Failed to track connection for draft {self.draft_id}: {e}")
+        return HeroDraft.objects.filter(id=draft_id).exists()
 
     @database_sync_to_async
-    def maybe_start_tick_broadcaster(self):
-        """Start tick broadcaster if not already running."""
-        from app.tasks.herodraft_tick import start_tick_broadcaster
+    def get_initial_state_data(self, draft_id):
+        from app.models import HeroDraft
+        from app.serializers import HeroDraftSerializer
 
-        try:
-            start_tick_broadcaster(self.draft_id)
-        except Exception as e:
-            log.warning(
-                f"Failed to start tick broadcaster for draft {self.draft_id}: {e}"
-            )
+        draft = HeroDraft.objects.prefetch_related(
+            "draft_teams__tournament_team__captain",
+            "draft_teams__tournament_team__members",
+            "rounds",
+        ).get(id=draft_id)
+        return HeroDraftSerializer(draft).data
 
     @database_sync_to_async
-    def check_is_captain(self, draft_id, user):
-        """Check if user is a captain for this draft."""
+    def get_captain_draft_team(self, draft_id, user):
         from app.models import HeroDraft
 
         try:
             draft = HeroDraft.objects.get(id=draft_id)
-            return draft.draft_teams.filter(tournament_team__captain=user).exists()
+            return draft.draft_teams.filter(tournament_team__captain=user).first()
         except HeroDraft.DoesNotExist:
-            return False
+            return None
 
-    async def kick_existing_captain_connection(self):
-        """Kick any existing WebSocket connection for this captain."""
-        from app.tasks.herodraft_tick import get_redis_client
+    def get_active_draft_state_values(self) -> list[str]:
+        from app.models import HeroDraftState
 
-        r = get_redis_client()
-        channel_key = self.CAPTAIN_CHANNEL_KEY.format(
-            draft_id=self.draft_id, user_id=self.user.id
-        )
+        return [HeroDraftState.DRAFTING.value]
 
-        old_channel = r.get(channel_key)
-        log.info(
-            f"[KICK DEBUG] Checking kick for user {self.user.id} in draft {self.draft_id}: "
-            f"old_channel={old_channel!r}, new_channel={self.channel_name!r}"
-        )
-        if old_channel and old_channel != self.channel_name:
-            log.info(
-                f"Kicking existing captain connection for user {self.user.id} "
-                f"in draft {self.draft_id}: {old_channel} -> {self.channel_name}"
-            )
-            # Send kick message to old connection
+    # --- Connect / Disconnect ---
+
+    async def connect(self):
+        # Set early for kick detection (base_connect re-sets these to same values)
+        self.draft_id = self.scope["url_route"]["kwargs"]["draft_id"]
+        self.user = self.scope.get("user")
+
+        # Kick any existing captain connection BEFORE base_connect()
+        if self.user and self.user.is_authenticated:
+            existing_channel = await self._get_existing_captain_channel()
+            if existing_channel and existing_channel != self.channel_name:
+                await self._kick_channel(existing_channel)
+
+        await self.base_connect()
+
+    async def disconnect(self, close_code):
+        await self.base_disconnect(close_code)
+
+    # --- Receive ---
+
+    async def receive(self, text_data):
+        """Handle incoming WebSocket messages from clients."""
+        if not self._is_captain:
+            return  # Only process messages from captains
+
+        try:
+            data = json.loads(text_data)
+            msg_type = data.get("type")
+
+            if msg_type == "heartbeat":
+                await self.handle_heartbeat()
+        except json.JSONDecodeError:
+            pass  # Ignore malformed messages
+
+    # --- Captain state change (pause-on-disconnect) ---
+
+    @database_sync_to_async
+    def on_captain_state_change(self, draft_id, user, is_connected):
+        """Mark captain connected/disconnected and handle pause-on-disconnect.
+
+        Only pauses during DRAFTING state (not RESUMING) to prevent infinite
+        time exploit. Broadcasts state changes after transaction commits.
+        """
+        from django.db import transaction
+
+        from app.broadcast import broadcast_herodraft_state
+        from app.models import HeroDraft, HeroDraftEvent, HeroDraftState
+
+        broadcast_event_type = None
+        should_broadcast = False
+
+        try:
+            with transaction.atomic():
+                draft = HeroDraft.objects.select_for_update().get(id=draft_id)
+
+                draft_team = draft.draft_teams.filter(
+                    tournament_team__captain=user
+                ).first()
+
+                if draft_team:
+                    draft_team.is_connected = is_connected
+                    draft_team.save()
+
+                    event_type = (
+                        "captain_connected" if is_connected else "captain_disconnected"
+                    )
+                    HeroDraftEvent.objects.create(
+                        draft=draft,
+                        event_type=event_type,
+                        draft_team=draft_team,
+                        metadata={"user_id": user.id, "username": user.username},
+                    )
+
+                    # Handle pause on disconnect - only during DRAFTING phase
+                    # (when timers are running and picks matter)
+                    # Ignore disconnects during RESUMING to prevent infinite time exploit
+                    if not is_connected and draft.state == HeroDraftState.DRAFTING:
+                        draft.state = HeroDraftState.PAUSED
+                        draft.paused_at = timezone.now()
+                        draft.save()
+                        HeroDraftEvent.objects.create(
+                            draft=draft,
+                            event_type="draft_paused",
+                            draft_team=draft_team,
+                            metadata={"reason": "captain_disconnected"},
+                        )
+                        log.info(
+                            f"HeroDraft {draft_id} paused: captain {user.username} disconnected"
+                        )
+                        broadcast_event_type = "draft_paused"
+                        should_broadcast = True
+                    elif is_connected and draft.state == HeroDraftState.PAUSED:
+                        broadcast_event_type = event_type
+                        should_broadcast = True
+                    else:
+                        broadcast_event_type = event_type
+                        should_broadcast = True
+
+        except HeroDraft.DoesNotExist:
+            return
+
+        if should_broadcast and broadcast_event_type:
             try:
-                await self.channel_layer.send(
-                    old_channel,
-                    {"type": "herodraft.kicked", "reason": "new_connection"},
+                draft = HeroDraft.objects.prefetch_related(
+                    "draft_teams__tournament_team__captain",
+                    "draft_teams__tournament_team__members",
+                    "rounds",
+                ).get(id=draft_id)
+                fresh_draft_team = None
+                for dt in draft.draft_teams.all():
+                    if dt.captain and dt.captain.id == user.id:
+                        fresh_draft_team = dt
+                        break
+
+                broadcast_herodraft_state(
+                    draft, broadcast_event_type, draft_team=fresh_draft_team
                 )
-                log.info(f"[KICK DEBUG] Sent kick message to {old_channel}")
             except Exception as e:
-                log.warning(f"Failed to send kick message to {old_channel}: {e}")
-        else:
-            log.info(f"[KICK DEBUG] No kick needed - old_channel={old_channel!r}")
+                log.error(f"Failed to broadcast herodraft state: {e}")
 
-    async def register_captain_channel(self):
-        """Register this connection as the captain's active channel."""
+    # --- HeroDraft-specific kick detection ---
+
+    async def _get_existing_captain_channel(self):
+        """Get the existing captain channel from Redis, if any."""
         from app.tasks.herodraft_tick import get_redis_client
 
         r = get_redis_client()
-        channel_key = self.CAPTAIN_CHANNEL_KEY.format(
-            draft_id=self.draft_id, user_id=self.user.id
-        )
-        # Store channel name with expiry (cleaned up if server crashes)
-        r.set(channel_key, self.channel_name, ex=300)
-        # Initialize heartbeat
-        await self.update_captain_heartbeat()
-        log.debug(
-            f"Registered captain channel for user {self.user.id} "
-            f"in draft {self.draft_id}: {self.channel_name}"
-        )
+        channel_key = self._captain_channel_key(self.draft_id, self.user.id)
+        return r.get(channel_key)
 
-    async def unregister_captain_channel_if_current(self):
-        """Unregister captain channel only if it's still this connection."""
-        from app.tasks.herodraft_tick import get_redis_client
-
-        r = get_redis_client()
-        channel_key = self.CAPTAIN_CHANNEL_KEY.format(
-            draft_id=self.draft_id, user_id=self.user.id
+    async def _kick_channel(self, old_channel):
+        """Send kick message to an existing captain connection."""
+        log.info(
+            f"Kicking existing captain connection for user {self.user.id} "
+            f"in draft {self.draft_id}: {old_channel} -> {self.channel_name}"
         )
-        heartbeat_key = self.CAPTAIN_HEARTBEAT_KEY.format(
-            draft_id=self.draft_id, user_id=self.user.id
-        )
-
-        current_channel = r.get(channel_key)
-        if current_channel == self.channel_name:
-            r.delete(channel_key)
-            r.delete(heartbeat_key)
-            log.debug(
-                f"Unregistered captain channel for user {self.user.id} "
-                f"in draft {self.draft_id}"
+        try:
+            await self.channel_layer.send(
+                old_channel,
+                {"type": "herodraft.kicked", "reason": "new_connection"},
             )
+        except Exception as e:
+            log.warning(f"Failed to send kick message to {old_channel}: {e}")
 
-    async def update_captain_heartbeat(self):
-        """Update the captain's heartbeat timestamp."""
-        from app.tasks.herodraft_tick import get_redis_client
-
-        r = get_redis_client()
-        heartbeat_key = self.CAPTAIN_HEARTBEAT_KEY.format(
-            draft_id=self.draft_id, user_id=self.user.id
-        )
-        # Store current timestamp with expiry
-        r.set(heartbeat_key, str(time.time()), ex=30)
+    # --- HeroDraft-specific channel layer handlers ---
 
     async def herodraft_kicked(self, event):
         """Handle being kicked by a newer connection."""
@@ -435,20 +386,6 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
             )
         )
         await self.close(code=4000)  # Custom close code for "kicked"
-
-    async def receive(self, text_data):
-        """Handle incoming WebSocket messages from clients."""
-        if not self._is_captain:
-            return  # Only process messages from captains
-
-        try:
-            data = json.loads(text_data)
-            msg_type = data.get("type")
-
-            if msg_type == "heartbeat":
-                await self.update_captain_heartbeat()
-        except json.JSONDecodeError:
-            pass  # Ignore malformed messages
 
     async def herodraft_event(self, event):
         """Handle herodraft.event messages from channel layer."""
@@ -490,125 +427,3 @@ class HeroDraftConsumer(AsyncWebsocketConsumer):
                 }
             )
         )
-
-    @database_sync_to_async
-    def draft_exists(self, draft_id):
-        from app.models import HeroDraft
-
-        return HeroDraft.objects.filter(id=draft_id).exists()
-
-    @database_sync_to_async
-    def get_draft_state(self, draft_id):
-        from app.models import HeroDraft
-        from app.serializers import HeroDraftSerializer
-
-        draft = HeroDraft.objects.prefetch_related(
-            "draft_teams__tournament_team__captain",
-            "draft_teams__tournament_team__members",
-            "rounds",
-        ).get(id=draft_id)
-        return HeroDraftSerializer(draft).data
-
-    @database_sync_to_async
-    def mark_captain_connected(self, draft_id, user, is_connected):
-        from django.db import transaction
-
-        from app.broadcast import broadcast_herodraft_state
-        from app.models import DraftTeam, HeroDraft, HeroDraftEvent, HeroDraftState
-
-        # Track what to do after transaction commits
-        broadcast_event_type = None
-        should_broadcast = False
-        should_restart_tick_broadcaster = False
-
-        try:
-            with transaction.atomic():
-                draft = HeroDraft.objects.select_for_update().get(id=draft_id)
-
-                draft_team = draft.draft_teams.filter(
-                    tournament_team__captain=user
-                ).first()
-
-                if draft_team:
-                    draft_team.is_connected = is_connected
-                    draft_team.save()
-
-                    event_type = (
-                        "captain_connected" if is_connected else "captain_disconnected"
-                    )
-                    HeroDraftEvent.objects.create(
-                        draft=draft,
-                        event_type=event_type,
-                        draft_team=draft_team,
-                        metadata={"user_id": user.id, "username": user.username},
-                    )
-
-                    # Handle pause/resume on disconnect - only during DRAFTING phase
-                    # (when timers are running and picks matter)
-                    # Ignore disconnects during RESUMING to prevent infinite time exploit
-                    if not is_connected and draft.state == HeroDraftState.DRAFTING:
-                        draft.state = HeroDraftState.PAUSED
-                        draft.paused_at = timezone.now()
-                        draft.save()
-                        HeroDraftEvent.objects.create(
-                            draft=draft,
-                            event_type="draft_paused",
-                            draft_team=draft_team,
-                            metadata={"reason": "captain_disconnected"},
-                        )
-                        log.info(
-                            f"HeroDraft {draft_id} paused: captain {user.username} disconnected"
-                        )
-                        broadcast_event_type = "draft_paused"
-                        should_broadcast = True
-                    elif is_connected and draft.state == HeroDraftState.PAUSED:
-                        # All pauses require manual resume via the Resume button
-                        # Just broadcast the connection status change
-                        broadcast_event_type = event_type
-                        should_broadcast = True
-                    else:
-                        # Always broadcast connection status changes so UI updates
-                        broadcast_event_type = event_type
-                        should_broadcast = True
-
-        except HeroDraft.DoesNotExist:
-            return
-
-        # Broadcast AFTER transaction commits to ensure other connections see changes
-        if should_broadcast and broadcast_event_type:
-            try:
-                # Re-fetch draft to get committed state
-                draft = HeroDraft.objects.prefetch_related(
-                    "draft_teams__tournament_team__captain",
-                    "draft_teams__tournament_team__members",
-                    "rounds",
-                ).get(id=draft_id)
-                # Get fresh draft_team from prefetched data (filter() bypasses prefetch cache)
-                # Use DraftTeam.captain property which accesses tournament_team.captain
-                fresh_draft_team = None
-                for dt in draft.draft_teams.all():
-                    # DraftTeam.captain property returns tournament_team.captain
-                    if dt.captain and dt.captain.id == user.id:
-                        fresh_draft_team = dt
-                        break
-
-                broadcast_herodraft_state(
-                    draft, broadcast_event_type, draft_team=fresh_draft_team
-                )
-                log.debug(
-                    f"HeroDraft {draft_id} broadcast {broadcast_event_type} after transaction commit"
-                )
-            except Exception as e:
-                log.error(f"Failed to broadcast herodraft state: {e}")
-
-        # Restart tick broadcaster AFTER transaction commits
-        if should_restart_tick_broadcaster:
-            from app.tasks.herodraft_tick import start_tick_broadcaster
-
-            try:
-                start_tick_broadcaster(draft_id)
-                log.debug(f"HeroDraft {draft_id} tick broadcaster restarted")
-            except Exception as e:
-                log.warning(
-                    f"Failed to restart tick broadcaster for draft {draft_id}: {e}"
-                )

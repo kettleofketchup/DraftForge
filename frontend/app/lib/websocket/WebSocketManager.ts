@@ -30,12 +30,17 @@ const CONNECT_DEBOUNCE_MS = 50;
 // Auto-disconnect delay: prevents StrictMode unmount/remount from tearing down connections
 const AUTO_DISCONNECT_DELAY_MS = 100;
 
+// Stale connection check interval
+const STALE_CHECK_INTERVAL_MS = 1000;
+
 // Send queue limits
 const MAX_QUEUE_SIZE = 100;
 
 class WebSocketManager {
   private connections = new Map<string, WebSocketConnection>();
   private globalConnectionId = 0;
+  private staleCheckInterval: ReturnType<typeof setInterval> | null = null;
+  private staleEnabledCount = 0;
 
   /**
    * Connect to a WebSocket URL.
@@ -48,13 +53,35 @@ class WebSocketManager {
       const status = existing.state.status;
       if (status === 'connected' || status === 'connecting' || status === 'reconnecting') {
         log.debug(`Already ${status} to ${url}, reusing connection`);
-        // Update options if provided
+        // Adjust stale counter if staleTimeoutMs changed during reuse
+        const hadStale = !!existing.options.staleTimeoutMs;
+        const hasStale = !!options.staleTimeoutMs;
+        if (hadStale && !hasStale) {
+          this.staleEnabledCount--;
+          if (this.staleEnabledCount <= 0) {
+            this.staleEnabledCount = 0;
+            this.stopStaleChecks();
+          }
+        } else if (!hadStale && hasStale) {
+          this.staleEnabledCount++;
+          this.startStaleChecks();
+        }
+        // Update options
         existing.options = { ...existing.options, ...options };
         // Sync current state to new onStateChange callback (StrictMode remount)
         if (options.onStateChange) {
           options.onStateChange(existing.state);
         }
         return url;
+      }
+
+      // Decrement stale counter for old connection being overwritten
+      if (existing.options.staleTimeoutMs) {
+        this.staleEnabledCount--;
+        if (this.staleEnabledCount <= 0) {
+          this.staleEnabledCount = 0;
+          this.stopStaleChecks();
+        }
       }
 
       // Clean up stale entry's pending timeouts before overwriting
@@ -98,6 +125,11 @@ class WebSocketManager {
     };
 
     this.connections.set(url, connection);
+
+    if (options.staleTimeoutMs) {
+      this.staleEnabledCount++;
+      this.startStaleChecks();
+    }
 
     // Debounce connection for React StrictMode
     connection.connectTimeout = setTimeout(() => {
@@ -153,6 +185,15 @@ class WebSocketManager {
       reason,
     });
 
+    // Update stale check tracking
+    if (conn.options.staleTimeoutMs) {
+      this.staleEnabledCount--;
+      if (this.staleEnabledCount <= 0) {
+        this.staleEnabledCount = 0;
+        this.stopStaleChecks();
+      }
+    }
+
     // Remove connection entry
     this.connections.delete(connectionId);
   }
@@ -164,6 +205,8 @@ class WebSocketManager {
     for (const url of this.connections.keys()) {
       this.disconnect(url, 'Manager cleanup');
     }
+    this.stopStaleChecks();
+    this.staleEnabledCount = 0;
   }
 
   /**
@@ -289,6 +332,7 @@ class WebSocketManager {
         error: null,
         reconnectAttempts: 0,
         connectedAt: Date.now(),
+        lastMessageAt: Date.now(),
       });
 
       // Emit telemetry
@@ -320,7 +364,8 @@ class WebSocketManager {
         return;
       }
 
-      // Update last message time
+      // Direct mutation (intentional): avoids updateState() to prevent
+      // onStateChange callback on every message (would trigger re-renders)
       conn.state.lastMessageAt = Date.now();
 
       // Emit telemetry
@@ -439,6 +484,44 @@ class WebSocketManager {
 
     for (const msg of messages) {
       conn.ws.send(JSON.stringify(msg));
+    }
+  }
+
+  private startStaleChecks(): void {
+    if (this.staleCheckInterval) return;
+
+    this.staleCheckInterval = setInterval(() => {
+      const now = Date.now();
+
+      for (const conn of this.connections.values()) {
+        if (!conn.options.staleTimeoutMs) continue;
+        if (conn.state.status !== 'connected') continue;
+        if (!conn.state.lastMessageAt) continue;
+
+        const staleDuration = now - conn.state.lastMessageAt;
+        if (staleDuration > conn.options.staleTimeoutMs) {
+          log.warn(`Stale connection detected: ${conn.url} (no messages for ${staleDuration}ms)`);
+
+          Sentry.captureMessage(
+            `WebSocket stale connection detected: ${conn.url}`,
+            'warning',
+          );
+
+          conn.options.telemetry?.onStaleDetected?.(conn.url, staleDuration);
+
+          // Force close - non-intentional, so onclose triggers scheduleReconnect
+          if (conn.ws) {
+            conn.ws.close(4001, 'Stale connection');
+          }
+        }
+      }
+    }, STALE_CHECK_INTERVAL_MS);
+  }
+
+  private stopStaleChecks(): void {
+    if (this.staleCheckInterval) {
+      clearInterval(this.staleCheckInterval);
+      this.staleCheckInterval = null;
     }
   }
 
