@@ -21,8 +21,8 @@ import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 
-// Video/GIF assets (mounted at public/assets/docs in dev, copied during build)
-const ASSETS_BASE = '/assets/docs';
+// Video/GIF assets stored in Cloudflare R2
+const ASSETS_BASE = 'https://assets.kettle.sh/draftforge';
 
 const StatCard = ({
   value,
