@@ -159,3 +159,69 @@ class EventRepeater(TournamentTemplateMixin, EventConfigMixin):
         if self.description:
             self.description = nh3.clean(self.description)
         super().save(*args, **kwargs)
+
+
+class Event(TournamentTemplateMixin, EventConfigMixin):
+    organization = models.ForeignKey(
+        "app.Organization",
+        on_delete=models.CASCADE,
+        related_name="events",
+    )
+    event_repeater = models.ForeignKey(
+        EventRepeater,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="events",
+    )
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    scheduled_at = models.DateTimeField()
+    signups_open_at = models.DateTimeField(null=True, blank=True)
+    state = models.CharField(
+        max_length=20, choices=EventState.choices, default=EventState.UPCOMING
+    )
+    tournament = models.ForeignKey(
+        "app.Tournament",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="source_event",
+    )
+    created_by = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_events",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-scheduled_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event_repeater", "scheduled_at"],
+                name="unique_repeater_scheduled_at",
+                condition=models.Q(event_repeater__isnull=False),
+            ),
+        ]
+        indexes = [models.Index(fields=["state", "scheduled_at"])]
+
+    def __str__(self):
+        return f"{self.name} ({self.scheduled_at:%Y-%m-%d})"
+
+    def save(self, *args, **kwargs):
+        if self.description:
+            self.description = nh3.clean(self.description)
+        super().save(*args, **kwargs)
+
+    def transition_state(self, new_state):
+        allowed = EVENT_STATE_TRANSITIONS.get(self.state, [])
+        if new_state not in allowed:
+            raise ValueError(
+                f"Cannot transition from '{self.state}' to '{new_state}'. "
+                f"Allowed: {[s.value for s in allowed]}"
+            )
+        self.state = new_state
+        self.save(update_fields=["state", "updated_at"])

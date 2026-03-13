@@ -116,3 +116,141 @@ class EventRepeaterModelTests(EventTestCase):
         )
         self.assertNotIn("<script>", repeater.description)
         self.assertIn("<b>Bold</b>", repeater.description)
+
+
+class EventModelTests(EventTestCase):
+    def test_create_standalone_event(self):
+        from events.models import Event, EventState
+
+        event = Event.objects.create(
+            organization=self.org,
+            name="Standalone",
+            scheduled_at=tz.now() + timedelta(days=7),
+            state=EventState.UPCOMING,
+            created_by=self.admin,
+            tournament_name="Standalone Tourney",
+            tournament_league=self.league,
+        )
+        self.assertIsNone(event.event_repeater)
+        self.assertIsNone(event.tournament)
+
+    def test_state_transition_valid(self):
+        from events.models import Event, EventState
+
+        event = Event.objects.create(
+            organization=self.org,
+            name="Test",
+            scheduled_at=tz.now() + timedelta(days=7),
+            created_by=self.admin,
+            tournament_name="Test",
+            tournament_league=self.league,
+        )
+        event.transition_state(EventState.SIGNUPS_OPEN)
+        self.assertEqual(event.state, EventState.SIGNUPS_OPEN)
+
+    def test_state_transition_invalid(self):
+        from events.models import Event, EventState
+
+        event = Event.objects.create(
+            organization=self.org,
+            name="Test",
+            scheduled_at=tz.now() + timedelta(days=7),
+            created_by=self.admin,
+            tournament_name="Test",
+            tournament_league=self.league,
+        )
+        with self.assertRaises(ValueError):
+            event.transition_state(EventState.IN_PROGRESS)
+
+    def test_cancel_from_any_pre_game_state(self):
+        from events.models import Event, EventState
+
+        for initial in [
+            EventState.UPCOMING,
+            EventState.SIGNUPS_OPEN,
+            EventState.ROLL_CALL,
+        ]:
+            event = Event.objects.create(
+                organization=self.org,
+                name=f"Cancel {initial}",
+                scheduled_at=tz.now() + timedelta(days=7),
+                created_by=self.admin,
+                tournament_name="Test",
+                tournament_league=self.league,
+                state=initial,
+                **(
+                    {"roll_call_enabled": True, "auto_start": False}
+                    if initial == EventState.ROLL_CALL
+                    else {}
+                ),
+            )
+            event.transition_state(EventState.CANCELLED)
+            self.assertEqual(event.state, EventState.CANCELLED)
+
+    def test_unique_repeater_scheduled_at(self):
+        from django.db import IntegrityError
+
+        from events.models import Event, EventRepeater, RepeatFrequency
+
+        repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Weekly",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=1,
+            time_of_day="19:00:00",
+            starts_at="2026-03-01",
+            generate_days_ahead=7,
+            created_by=self.admin,
+            tournament_name="Weekly",
+            tournament_league=self.league,
+        )
+        scheduled = tz.now() + timedelta(days=7)
+        Event.objects.create(
+            organization=self.org,
+            event_repeater=repeater,
+            name="Week 1",
+            scheduled_at=scheduled,
+            created_by=self.admin,
+            tournament_name="Week 1",
+            tournament_league=self.league,
+        )
+        with self.assertRaises(IntegrityError):
+            Event.objects.create(
+                organization=self.org,
+                event_repeater=repeater,
+                name="Duplicate",
+                scheduled_at=scheduled,
+                created_by=self.admin,
+                tournament_name="Dup",
+                tournament_league=self.league,
+            )
+
+    def test_description_sanitized(self):
+        from events.models import Event
+
+        event = Event.objects.create(
+            organization=self.org,
+            name="XSS",
+            description="<script>bad</script><p>Good</p>",
+            scheduled_at=tz.now() + timedelta(days=7),
+            created_by=self.admin,
+            tournament_name="Test",
+            tournament_league=self.league,
+        )
+        self.assertNotIn("<script>", event.description)
+
+    def test_clean_roll_call_auto_start_conflict(self):
+        from events.models import Event
+
+        event = Event(
+            organization=self.org,
+            name="Bad",
+            scheduled_at=tz.now() + timedelta(days=7),
+            created_by=self.admin,
+            tournament_name="Test",
+            tournament_league=self.league,
+            roll_call_enabled=True,
+            auto_start=True,
+        )
+        with self.assertRaises(ValidationError):
+            event.clean()
