@@ -13,7 +13,6 @@ services:
       - ./frontend/vite.config.ts:/app/vite.config.ts
       - ./frontend/react-router.config.ts:/app/react-router.config.ts
       - ./frontend/tsconfig.json:/app/tsconfig.json
-      - ./docs/assets:/app/public/assets/docs:ro
     networks:
       - ci-network
 

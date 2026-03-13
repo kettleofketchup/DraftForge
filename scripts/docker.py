@@ -216,8 +216,6 @@ def docker_frontend_build_prod(c, push=False, release=False):
     """Build production frontend image only."""
     version, image, dockerfile, context = get_frontend()
     content_hash = get_content_hash("frontend")
-    # Pass docs directory as additional build context for assets
-    extra_contexts = {"docs": paths.PROJECT_PATH / "docs"}
     docker_build(
         c,
         image,
@@ -225,7 +223,6 @@ def docker_frontend_build_prod(c, push=False, release=False):
         dockerfile,
         context,
         "runtime",
-        extra_contexts,
         push=push,
         content_hash=content_hash,
         include_version_tag=release,
