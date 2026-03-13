@@ -37,6 +37,7 @@ from tests.populate.constants import (
 )
 from tests.populate.csv_import import populate_csv_import_data
 from tests.populate.demo import populate_demo_tournaments
+from tests.populate.events import populate_events_data
 from tests.populate.organizations import populate_organizations_and_leagues
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.steam import populate_steam_matches
@@ -87,6 +88,7 @@ def populate_all(force=False):
     populate_bracket_unset_winner_tournament(force)
     populate_csv_import_data(force)
     populate_user_edit_data(force)
+    populate_events_data(force)
     populate_demo_tournaments(force)
 
 
@@ -105,6 +107,7 @@ __all__ = [
     "populate_bracket_unset_winner_tournament",
     "populate_csv_import_data",
     "populate_user_edit_data",
+    "populate_events_data",
     "populate_demo_tournaments",
     # Utilities
     "create_user",

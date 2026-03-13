@@ -1038,3 +1038,41 @@ def kill_draft_websocket(request, draft_id):
         {"type": "force.disconnect"},
     )
     return Response({"killed": True})
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def reset_events_data(request):
+    """
+    TEST ONLY: Reset events E2E data to clean state.
+
+    Deletes all EventSignups and resets the E2E Signup Event to signups_open.
+    Used by Playwright tests to ensure consistent state between test runs.
+    """
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from cacheops import invalidate_obj
+
+    from events.models import Event, EventSignup, EventState
+
+    EVENTS_ORG_NAME = "Events Test Org"
+
+    # Reset all events in Events Test Org
+    events = Event.objects.filter(organization__name=EVENTS_ORG_NAME)
+    for event in events:
+        EventSignup.objects.filter(event=event).delete()
+        if event.name == "E2E Signup Event":
+            event.state = EventState.SIGNUPS_OPEN
+            event.tournament = None
+            event.save()
+        invalidate_obj(event)
+
+    return Response(
+        {
+            "success": True,
+            "reset_events": events.count(),
+        }
+    )
