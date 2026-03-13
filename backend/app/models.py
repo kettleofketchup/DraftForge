@@ -69,6 +69,11 @@ class DraftStyles(StrEnum):
     shuffle = "shuffle"
 
 
+class GameType(models.IntegerChoices):
+    DOTA2 = 1, "Dota 2"
+    DEADLOCK = 2, "Deadlock"
+
+
 class CustomUser(AbstractUser):
     # Override username to allow blank (users can be created from Steam only)
     username = models.CharField(max_length=150, unique=True, blank=True, null=True)
@@ -508,6 +513,18 @@ class Tournament(models.Model):
         related_name="tournaments",
         db_column="league_fk_id",
     )
+
+    game_type = models.IntegerField(
+        choices=GameType.choices,
+        default=GameType.DOTA2,
+    )
+    draft_type = models.CharField(
+        max_length=10,
+        choices=[(s.value, s.value.title()) for s in DraftStyles],
+        default=DraftStyles.shuffle.value,
+    )
+    people_per_team = models.IntegerField(default=5)
+    number_of_teams = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
         return self.name

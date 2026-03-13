@@ -2,13 +2,7 @@ import nh3
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from app.models import TOURNAMNET_TYPE_CHOICES, DraftStyles
-
-
-class GameType(models.IntegerChoices):
-    DOTA2 = 1, "Dota 2"
-    DEADLOCK = 2, "Deadlock"
-
+from app.models import TOURNAMNET_TYPE_CHOICES, DraftStyles, GameType
 
 GAME_TYPE_TEAM_SIZE = {
     GameType.DOTA2: 5,
