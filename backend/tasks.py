@@ -24,7 +24,7 @@ ns_db_migrate = Collection("migrate")
 ns_db_populate = Collection("populate")
 ns_db.add_collection(ns_db_populate, "populate")
 ns_db.add_collection(ns_db_migrate, "migrate")
-apps = ["steam", "app", "bracket", "discordbot"]
+apps = ["steam", "app", "bracket", "discordbot", "events"]
 
 
 def check_dbs(c):

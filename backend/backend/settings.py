@@ -112,6 +112,7 @@ INSTALLED_APPS = [
     "steam.apps.SteamConfig",
     "bracket.apps.TournamentConfig",
     "discordbot.apps.DiscordbotConfig",
+    "events.apps.EventsConfig",
     "cacheops",  # Added for django-cacheops
 ]
 
@@ -305,6 +306,11 @@ if not env_bool("DISABLE_CACHE"):
         # Steam match data - cached with shorter timeout for freshness
         "steam.match": {"ops": "all", "timeout": 30 * 60},
         "steam.playermatchstats": {"ops": "all", "timeout": 30 * 60},
+        # Events app
+        "events.eventrepeater": {"ops": "all", "timeout": 60 * 60},
+        "events.event": {"ops": "all", "timeout": 60 * 60},
+        "events.eventteam": {"ops": "all", "timeout": 60 * 60},
+        "events.eventsignup": {"ops": "all", "timeout": 60 * 60},
     }
 else:
     # Disable all caching - but still register models to avoid ImproperlyConfigured errors
@@ -322,6 +328,10 @@ else:
         "league.leagueuser": {"ops": (), "timeout": 0},
         "steam.match": {"ops": (), "timeout": 0},
         "steam.playermatchstats": {"ops": (), "timeout": 0},
+        "events.eventrepeater": {"ops": (), "timeout": 0},
+        "events.event": {"ops": (), "timeout": 0},
+        "events.eventteam": {"ops": (), "timeout": 0},
+        "events.eventsignup": {"ops": (), "timeout": 0},
     }
 
 
