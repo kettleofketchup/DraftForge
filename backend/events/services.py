@@ -1,9 +1,23 @@
+import calendar
+import datetime
 import logging
+from datetime import timedelta
+from zoneinfo import ZoneInfo
 
 from cacheops import invalidate_obj
 from django.db import transaction
 
-from events.models import EventSignup, EventState, SignupStatus, SignupType
+from app.models import Tournament
+from events.models import (
+    Event,
+    EventConfigMixin,
+    EventSignup,
+    EventState,
+    RepeatFrequency,
+    SignupStatus,
+    SignupType,
+    TournamentTemplateMixin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -152,3 +166,157 @@ def _promote_from_waitlist(event):
         next_waitlisted.save(
             update_fields=["status", "waitlist_position", "updated_at"]
         )
+
+
+# ---------------------------------------------------------------------------
+# Event generation
+# ---------------------------------------------------------------------------
+
+TOURNAMENT_TEMPLATE_FIELDS = [
+    f.name for f in TournamentTemplateMixin._meta.get_fields() if hasattr(f, "column")
+]
+EVENT_CONFIG_FIELDS = [
+    f.name for f in EventConfigMixin._meta.get_fields() if hasattr(f, "column")
+]
+
+
+def _get_next_occurrences(repeater, from_date, to_date):
+    """Calculate next occurrence datetimes for a repeater within a date range."""
+    tz_info = ZoneInfo(repeater.timezone)
+    occurrences = []
+    end = to_date
+    if repeater.ends_at:
+        end = min(end, repeater.ends_at)
+
+    if repeater.frequency == RepeatFrequency.DAILY:
+        current = max(from_date, repeater.starts_at)
+        while current <= end:
+            dt = datetime.datetime.combine(
+                current, repeater.time_of_day, tzinfo=tz_info
+            )
+            occurrences.append(dt)
+            current += timedelta(days=1)
+
+    elif repeater.frequency in (
+        RepeatFrequency.WEEKLY,
+        RepeatFrequency.EVERY_TWO_WEEKS,
+    ):
+        step = 7 if repeater.frequency == RepeatFrequency.WEEKLY else 14
+        current = max(from_date, repeater.starts_at)
+        while current.weekday() != repeater.day_of_week:
+            current += timedelta(days=1)
+        while current <= end:
+            dt = datetime.datetime.combine(
+                current, repeater.time_of_day, tzinfo=tz_info
+            )
+            occurrences.append(dt)
+            current += timedelta(days=step)
+
+    elif repeater.frequency == RepeatFrequency.MONTHLY:
+        target_day = repeater.starts_at.day
+        current = max(from_date, repeater.starts_at)
+        while current <= end:
+            try:
+                month_date = current.replace(day=target_day)
+            except ValueError:
+                last_day = calendar.monthrange(current.year, current.month)[1]
+                month_date = current.replace(day=last_day)
+            if from_date <= month_date <= end:
+                dt = datetime.datetime.combine(
+                    month_date, repeater.time_of_day, tzinfo=tz_info
+                )
+                occurrences.append(dt)
+            if current.month == 12:
+                current = current.replace(year=current.year + 1, month=1, day=1)
+            else:
+                current = current.replace(month=current.month + 1, day=1)
+
+    return occurrences
+
+
+def _copy_mixin_fields(source, target, field_names):
+    """Copy mixin field values from source to target model instance."""
+    for field_name in field_names:
+        setattr(target, field_name, getattr(source, field_name))
+
+
+def _today():
+    """Return today's date. Extracted for testability."""
+    return datetime.date.today()
+
+
+def generate_events_for_repeater(repeater):
+    """Generate upcoming events for a repeater. Returns list of created Events."""
+    if not repeater.is_active:
+        return []
+    today = _today()
+    if repeater.ends_at and repeater.ends_at < today:
+        return []
+
+    to_date = today + timedelta(days=repeater.generate_days_ahead)
+    occurrences = _get_next_occurrences(repeater, today, to_date)
+
+    created_events = []
+    for dt in occurrences:
+        if Event.objects.filter(event_repeater=repeater, scheduled_at=dt).exists():
+            continue
+        event = Event(
+            organization=repeater.organization,
+            event_repeater=repeater,
+            name=repeater.name,
+            description=repeater.description,
+            scheduled_at=dt,
+            state=EventState.UPCOMING,
+            created_by=repeater.created_by,
+        )
+        _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
+        _copy_mixin_fields(repeater, event, EVENT_CONFIG_FIELDS)
+        event.tournament_date = dt
+        event.save()
+        created_events.append(event)
+    return created_events
+
+
+# ---------------------------------------------------------------------------
+# Tournament auto-start
+# ---------------------------------------------------------------------------
+
+
+@transaction.atomic
+def auto_start_event(event):
+    """Auto-start a tournament for an event. Returns Tournament or None.
+
+    No select_for_update -- SQLite doesn't support it. Idempotency via state check.
+    """
+    if event.state != EventState.SIGNUPS_OPEN:
+        return None
+    if not event.auto_start:
+        return None
+    if event.roll_call_enabled:
+        return None
+
+    tournament = Tournament.objects.create(
+        name=event.tournament_name,
+        league=event.tournament_league,
+        tournament_type=event.tournament_type,
+        game_type=event.game_type,
+        draft_type=event.draft_type,
+        people_per_team=event.people_per_team,
+        number_of_teams=event.number_of_teams,
+        date_played=event.tournament_date or event.scheduled_at,
+        timezone=event.timezone,
+    )
+
+    confirmed_signups = EventSignup.objects.filter(
+        event=event,
+        status__in=[SignupStatus.CONFIRMED, SignupStatus.APPROVED],
+    ).select_related("user")
+    for signup in confirmed_signups:
+        tournament.users.add(signup.user)
+
+    event.tournament = tournament
+    event.state = EventState.IN_PROGRESS
+    event.save(update_fields=["tournament", "state", "updated_at"])
+    invalidate_obj(event)
+    invalidate_obj(tournament)
+    return tournament
