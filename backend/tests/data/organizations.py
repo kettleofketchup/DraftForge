@@ -64,6 +64,14 @@ SHUFFLE_TIE_ORG: TestOrganization = TestOrganization(
     timezone="America/New_York",
 )
 
+# Events E2E tests — dedicated org for event lifecycle tests
+EVENTS_ORG: TestOrganization = TestOrganization(
+    pk=7,
+    name="Events Test Org",
+    description="Isolated organization for events E2E tests.",
+    timezone="America/New_York",
+)
+
 # =============================================================================
 # Constants for easy access
 # =============================================================================
@@ -74,6 +82,7 @@ CSV_ORG_NAME = CSV_ORG.name
 DEMO_CSV_ORG_NAME = DEMO_CSV_ORG.name
 USER_EDIT_ORG_NAME = USER_EDIT_ORG.name
 SHUFFLE_TIE_ORG_NAME = SHUFFLE_TIE_ORG.name
+EVENTS_ORG_NAME = EVENTS_ORG.name
 
 # =============================================================================
 # All Organizations (for iteration)
@@ -86,4 +95,5 @@ ALL_ORGANIZATIONS: list[TestOrganization] = [
     DEMO_CSV_ORG,
     USER_EDIT_ORG,
     SHUFFLE_TIE_ORG,
+    EVENTS_ORG,
 ]

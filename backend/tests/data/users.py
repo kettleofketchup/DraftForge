@@ -441,6 +441,59 @@ SHUFFLE_TIE_PLAYERS: list[TestUser] = [
 SHUFFLE_TIE_USERS: list[TestUser] = SHUFFLE_TIE_CAPTAINS + SHUFFLE_TIE_PLAYERS
 
 # =============================================================================
+# Events E2E test users (pk=1080-1084)
+# =============================================================================
+
+EVENT_ADMIN_USER: TestUser = TestUser(
+    pk=1080,
+    username="event_org_admin",
+    nickname="EventAdmin",
+    discord_id="880000000000000001",
+    steam_id_64=76561198900100001,
+    mmr=4500,
+    org_id=7,  # Events Test Org
+    league_id=7,  # Events Test League
+    positions=TestPositions(),
+)
+
+EVENT_PLAYER_1: TestUser = TestUser(
+    pk=1081,
+    username="event_player_1",
+    nickname="EventPlayer1",
+    discord_id="880000000000000002",
+    steam_id_64=76561198900100002,
+    mmr=3500,
+    positions=TestPositions(),
+)
+
+EVENT_PLAYER_2: TestUser = TestUser(
+    pk=1082,
+    username="event_player_2",
+    nickname="EventPlayer2",
+    discord_id="880000000000000003",
+    steam_id_64=76561198900100003,
+    mmr=3000,
+    positions=TestPositions(),
+)
+
+EVENT_PLAYER_3: TestUser = TestUser(
+    pk=1083,
+    username="event_player_3",
+    nickname="EventPlayer3",
+    discord_id="880000000000000004",
+    steam_id_64=76561198900100004,
+    mmr=4000,
+    positions=TestPositions(),
+)
+
+EVENTS_USERS: list[TestUser] = [
+    EVENT_ADMIN_USER,
+    EVENT_PLAYER_1,
+    EVENT_PLAYER_2,
+    EVENT_PLAYER_3,
+]
+
+# =============================================================================
 # Auth Test Users (for iteration)
 # =============================================================================
 
