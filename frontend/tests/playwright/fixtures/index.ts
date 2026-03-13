@@ -109,3 +109,14 @@ export {
   editUserField,
   restoreUserField,
 } from '../helpers/edit-user';
+
+// Events utilities
+export {
+  getEventsTestData,
+  resetEventsData,
+  loginEventAdmin,
+  loginEventPlayer,
+  EVENTS_ORG_NAME,
+  EVENTS_EVENT_NAME,
+  type EventInfo,
+} from './events';
