@@ -30,6 +30,16 @@ app.conf.beat_schedule = {
         "task": "app.tasks.avatar_refresh.refresh_all_discord_data",
         "schedule": crontab(hour=4, minute=0),
     },
+    # Event generation - check active repeaters hourly
+    "generate-upcoming-events-hourly": {
+        "task": "events.tasks.generate_upcoming_events",
+        "schedule": 3600.0,
+    },
+    # Auto-start tournaments for due events every minute
+    "auto-start-tournaments-every-minute": {
+        "task": "events.tasks.auto_start_tournaments",
+        "schedule": 60.0,
+    },
 }
 
 
