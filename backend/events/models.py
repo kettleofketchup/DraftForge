@@ -225,3 +225,60 @@ class Event(TournamentTemplateMixin, EventConfigMixin):
             )
         self.state = new_state
         self.save(update_fields=["state", "updated_at"])
+
+
+class EventTeam(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="teams")
+    name = models.CharField(max_length=255)
+    captain = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.CASCADE,
+        related_name="captained_event_teams",
+    )
+    members = models.ManyToManyField(
+        "app.CustomUser", blank=True, related_name="event_teams"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.event.name})"
+
+
+class EventSignup(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="signups")
+    user = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.CASCADE,
+        related_name="event_signups",
+    )
+    event_team = models.ForeignKey(
+        EventTeam,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="signups",
+    )
+    signup_type = models.CharField(
+        max_length=10, choices=SignupType.choices, default=SignupType.USER
+    )
+    status = models.CharField(
+        max_length=20, choices=SignupStatus.choices, default=SignupStatus.RSVP
+    )
+    waitlist_position = models.IntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event", "user"], name="unique_event_user_signup"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user} - {self.event.name} ({self.status})"

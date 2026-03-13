@@ -254,3 +254,77 @@ class EventModelTests(EventTestCase):
         )
         with self.assertRaises(ValidationError):
             event.clean()
+
+
+class EventTeamModelTests(EventTestCase):
+    def setUp(self):
+        from events.models import Event
+
+        self.event = Event.objects.create(
+            organization=self.org,
+            name="Team Event",
+            scheduled_at=tz.now() + timedelta(days=7),
+            created_by=self.admin,
+            tournament_name="Test",
+            tournament_league=self.league,
+            allow_team_signups=True,
+        )
+
+    def test_create_event_team(self):
+        from events.models import EventTeam
+
+        team = EventTeam.objects.create(
+            event=self.event,
+            name="Team Alpha",
+            captain=self.admin,
+        )
+        team.members.add(self.admin, self.user)
+        self.assertEqual(team.members.count(), 2)
+
+    def test_event_team_str(self):
+        from events.models import EventTeam
+
+        team = EventTeam.objects.create(
+            event=self.event,
+            name="Team Alpha",
+            captain=self.admin,
+        )
+        self.assertEqual(str(team), "Team Alpha (Team Event)")
+
+
+class EventSignupModelTests(EventTestCase):
+    def setUp(self):
+        from events.models import Event
+
+        self.event = Event.objects.create(
+            organization=self.org,
+            name="Signup Event",
+            scheduled_at=tz.now() + timedelta(days=7),
+            created_by=self.admin,
+            tournament_name="Test",
+            tournament_league=self.league,
+        )
+
+    def test_create_user_signup(self):
+        from events.models import EventSignup, SignupStatus, SignupType
+
+        signup = EventSignup.objects.create(
+            event=self.event,
+            user=self.user,
+            signup_type=SignupType.USER,
+        )
+        self.assertEqual(signup.status, SignupStatus.RSVP)
+        self.assertIsNone(signup.event_team)
+
+    def test_unique_user_per_event(self):
+        from django.db import IntegrityError
+
+        from events.models import EventSignup, SignupType
+
+        EventSignup.objects.create(
+            event=self.event, user=self.user, signup_type=SignupType.USER
+        )
+        with self.assertRaises(IntegrityError):
+            EventSignup.objects.create(
+                event=self.event, user=self.user, signup_type=SignupType.USER
+            )
