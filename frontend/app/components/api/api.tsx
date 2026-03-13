@@ -124,3 +124,12 @@ export {
 
 // Shared types
 export type { AddMemberPayload, AddUserResponse } from './types';
+
+// Events
+export {
+  getEvents, getEvent, createEvent, updateEvent, deleteEvent,
+  rsvpForEvent, openSignups, startRollCall, startTournament, cancelEvent,
+  getEventSignups, approveSignup, rejectSignup, confirmSignup, cancelSignup,
+} from './eventsAPI';
+
+export type { EventType, EventSignupType, EventTeamType } from '~/components/events/schemas';
