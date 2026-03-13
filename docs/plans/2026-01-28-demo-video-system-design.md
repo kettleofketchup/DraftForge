@@ -61,7 +61,7 @@ just demo::herodraft
     ├─► docker exec frontend npx playwright test \
     │       --config=playwright.demo.config.ts \
     │       --grep "herodraft" --headless
-    └─► Copy videos to docs/assets/videos/
+    └─► Copy videos to https://assets.kettle.sh/draftforge/videos/
 ```
 
 ### Parallel Execution

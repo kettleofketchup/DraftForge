@@ -4,8 +4,8 @@ The draft system allows tournament captains to pick players for their teams. Thr
 
 | Snake Draft | Shuffle Draft |
 |-------------|---------------|
-| ![Snake Draft](../assets/gifs/snake_draft.gif) | ![Shuffle Draft](../assets/gifs/shuffle_draft.gif) |
-| [:material-play-circle: Full Video](../assets/videos/snake_draft.webm) | [:material-play-circle: Full Video](../assets/videos/shuffle_draft.webm) |
+| ![Snake Draft](https://assets.kettle.sh/draftforge/gifs/snake_draft.gif) | ![Shuffle Draft](https://assets.kettle.sh/draftforge/gifs/shuffle_draft.gif) |
+| [:material-play-circle: Full Video](https://assets.kettle.sh/draftforge/videos/snake_draft.webm) | [:material-play-circle: Full Video](https://assets.kettle.sh/draftforge/videos/shuffle_draft.webm) |
 
 ## Draft Styles
 

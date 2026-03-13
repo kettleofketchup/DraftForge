@@ -3,7 +3,7 @@
 The bracket system provides flexible tournament structure options for organizing competitive matches. Multiple formats are supported to accommodate different tournament sizes and styles.
 
 <figure markdown="span">
-  ![Bracket](../assets/site_snapshots/bracket.png){ width="600" }
+  ![Bracket](https://assets.kettle.sh/draftforge/site_snapshots/bracket.png){ width="600" }
   <figcaption>Double elimination bracket with winners and losers brackets</figcaption>
 </figure>
 
@@ -79,7 +79,7 @@ Team D     L      L       W       -
 
 ## Bracket Visualization
 
-![Bracket View](../assets/site_snapshots/bracket.png)
+![Bracket View](https://assets.kettle.sh/draftforge/site_snapshots/bracket.png)
 
 <!-- TODO: Add animated bracket demo GIF -->
 

@@ -44,6 +44,7 @@ mod npm 'just/npm.just'
 mod py 'just/py.just'
 mod test 'just/test/mod.just'
 mod db 'just/db/mod.just'
+mod r2 'just/r2.just'
 
 # Default: show available commands
 [private]

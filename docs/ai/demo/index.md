@@ -15,7 +15,7 @@ After editing files in these paths, **run the corresponding demo task**:
 When you complete edits to these components that affect visual appearance:
 
 1. Run the appropriate demo command
-2. Commit the updated videos with the code changes
+2. Upload to R2: `just r2::upload`
 
 **Do not ask the user** - just run the demo recording if the changes are visual.
 
@@ -30,6 +30,7 @@ When you complete edits to these components that affect visual appearance:
 | `just demo::gifs` | Convert videos to GIF previews |
 | `just demo::trim` | Trim initial white screen from videos |
 | `just demo::clean` | Clean demo output directories |
+| `just r2::upload` | Upload all assets to Cloudflare R2 |
 
 ## Prerequisites
 
@@ -53,7 +54,8 @@ Each demo command:
 
 1. Resets the demo tournament via `/api/tests/demo/<key>/reset/`
 2. Runs Playwright demo tests headless inside the frontend Docker container
-3. Copies videos to `docs/assets/videos/`
+3. Saves videos locally to `docs/assets/videos/`
+4. Upload to R2 via `just r2::upload`
 
 ## GitHub Workflow
 
@@ -68,11 +70,11 @@ The workflow uses cached dependencies from CI for faster execution.
 
 ## Video Outputs
 
-Videos are saved to `docs/assets/videos/`:
+Videos are saved to `https://assets.kettle.sh/draftforge/videos/`:
 
 - `captain1_herodraft.webm` - Hero draft from Team Alpha captain's view
 - `captain2_herodraft.webm` - Hero draft from Team Beta captain's view
 - `shuffle_draft.webm` - Shuffle (MMR-balanced) draft
 - `snake_draft.webm` - Snake draft
 
-GIFs are saved to `docs/assets/gifs/` with the same names (`.gif` extension).
+GIFs are saved to `https://assets.kettle.sh/draftforge/gifs/` with the same names (`.gif` extension).

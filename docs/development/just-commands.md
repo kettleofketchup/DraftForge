@@ -188,8 +188,8 @@ just demo::quick
 
 Output locations:
 
-- Videos: `docs/assets/videos/`
-- GIFs: `docs/assets/gifs/`
+- Videos: `https://assets.kettle.sh/draftforge/videos/`
+- GIFs: `https://assets.kettle.sh/draftforge/gifs/`
 
 ## Docs Commands (`just docs::*`)
 

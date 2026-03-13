@@ -17,11 +17,11 @@ Admins upload a CSV containing Steam Friend IDs, Discord IDs, MMR, positions, an
 - **Three-step modal** — Upload, Preview with validation, Results summary
 
 <figure markdown="span">
-  ![CSV Import Demo](../assets/gifs/csv_import.gif){ width="400" }
+  ![CSV Import Demo](https://assets.kettle.sh/draftforge/gifs/csv_import.gif){ width="400" }
   <figcaption>Creating a tournament, importing 40 players, and generating a bracket</figcaption>
 </figure>
 
-[:material-play-circle: Watch full demo video](../assets/videos/csv_import.webm)
+[:material-play-circle: Watch full demo video](https://assets.kettle.sh/draftforge/videos/csv_import.webm)
 
 ---
 
