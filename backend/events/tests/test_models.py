@@ -58,3 +58,61 @@ class EnumTests(TestCase):
 
     def test_roll_call_mode_values(self):
         self.assertEqual(RollCallMode.MANUAL, "manual")
+
+
+class EventRepeaterModelTests(EventTestCase):
+    def test_create_event_repeater(self):
+        from events.models import EventRepeater, RepeatFrequency
+
+        repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Tuesday Inhouses",
+            description="Weekly inhouse games",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=1,
+            time_of_day="19:00:00",
+            starts_at="2026-03-01",
+            generate_days_ahead=7,
+            is_active=True,
+            created_by=self.admin,
+            tournament_name="Tuesday Inhouse",
+            tournament_league=self.league,
+        )
+        self.assertEqual(repeater.name, "Tuesday Inhouses")
+        self.assertEqual(repeater.frequency, RepeatFrequency.WEEKLY)
+        self.assertTrue(repeater.auto_start)
+
+    def test_event_repeater_str(self):
+        from events.models import EventRepeater, RepeatFrequency
+
+        repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Tuesday Inhouses",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=1,
+            time_of_day="19:00:00",
+            starts_at="2026-03-01",
+            generate_days_ahead=7,
+            created_by=self.admin,
+            tournament_name="Tuesday Inhouse",
+            tournament_league=self.league,
+        )
+        self.assertEqual(str(repeater), "Tuesday Inhouses (weekly)")
+
+    def test_description_sanitized_on_save(self):
+        from events.models import EventRepeater, RepeatFrequency
+
+        repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Test",
+            description='<script>alert("xss")</script><b>Bold</b>',
+            frequency=RepeatFrequency.DAILY,
+            time_of_day="19:00:00",
+            starts_at="2026-03-01",
+            generate_days_ahead=1,
+            created_by=self.admin,
+            tournament_name="Test",
+            tournament_league=self.league,
+        )
+        self.assertNotIn("<script>", repeater.description)
+        self.assertIn("<b>Bold</b>", repeater.description)

@@ -123,3 +123,39 @@ class EventConfigMixin(models.Model):
 
     class Meta:
         abstract = True
+
+
+class EventRepeater(TournamentTemplateMixin, EventConfigMixin):
+    organization = models.ForeignKey(
+        "app.Organization",
+        on_delete=models.CASCADE,
+        related_name="event_repeaters",
+    )
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    frequency = models.CharField(max_length=20, choices=RepeatFrequency.choices)
+    day_of_week = models.IntegerField(null=True, blank=True)
+    time_of_day = models.TimeField()
+    starts_at = models.DateField()
+    ends_at = models.DateField(null=True, blank=True)
+    generate_days_ahead = models.IntegerField(default=7)
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_event_repeaters",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.frequency})"
+
+    def save(self, *args, **kwargs):
+        if self.description:
+            self.description = nh3.clean(self.description)
+        super().save(*args, **kwargs)
