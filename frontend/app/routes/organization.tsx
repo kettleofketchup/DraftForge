@@ -140,7 +140,7 @@ export default function OrganizationDetailPage() {
   const { data: botStatus } = useQuery({
     queryKey: ['discordBotStatus', pk],
     queryFn: () => checkDiscordBotStatus(pk!),
-    enabled: !!pk && hasDiscordServer && isOrgAdmin,
+    enabled: !!pk && !!organization && !!currentUser && hasDiscordServer && !!isOrgAdmin,
     staleTime: 5 * 60 * 1000, // match backend cache TTL
   });
   const hasBotAccess = botStatus?.has_bot ?? null;
