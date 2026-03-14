@@ -41,28 +41,19 @@ def db_makemigrations(c, path: Path = paths.DEBUG_ENV_FILE):
     check_dbs(c)
 
     with c.cd(paths.BACKEND_PATH.absolute()):
-        for app in apps:
-            cmd = f"DISABLE_CACHE=true python manage.py makemigrations {app}"
-            c.run(cmd, pty=True)
-
-        cmd = f"DISABLE_CACHE=true python manage.py makemigrations"
-        c.run(cmd, pty=True)
+        apps_str = " ".join(apps)
+        c.run(
+            f"DISABLE_CACHE=true python manage.py makemigrations {apps_str}", pty=True
+        )
 
 
 @task(pre=[])
 def db_migrate(c, path: Path = paths.DEBUG_ENV_FILE):
+    """Run migrations for a specific environment."""
     load_dotenv(path)
     db_makemigrations(c, path)
-
-    """Run migrations for a specific environment."""
-    load_dotenv(path, override=True)
     with c.cd(paths.BACKEND_PATH.absolute()):
-        for app in apps:
-            cmd = f"DISABLE_CACHE=true python manage.py migrate {app}"
-            c.run(cmd, pty=True)
-
-        cmd = f"DISABLE_CACHE=true python manage.py migrate"
-        c.run(cmd, pty=True)
+        c.run("DISABLE_CACHE=true python manage.py migrate", pty=True)
 
 
 @task(pre=[])
@@ -301,24 +292,12 @@ def db_populate_shuffle_tie(
 
 @task
 def populate_all(c):
+    load_dotenv(paths.TEST_ENV_FILE)
     paths.TEST_DB_PATH.unlink(missing_ok=True)
     paths.TEST_DB_PATH.touch()
     db_migrate_test(c)
-    db_populate_organizations(c, paths.TEST_ENV_FILE)
-    db_populate_users(c, paths.TEST_ENV_FILE)
-    db_populate_test_auth_users(c, paths.TEST_ENV_FILE)  # Test auth users
-    db_populate_tournaments(c, paths.TEST_ENV_FILE)
-    db_populate_steam_mock(c, paths.TEST_ENV_FILE)
-    db_populate_test_tournaments(c, paths.TEST_ENV_FILE)
-    db_populate_bracket_linking(c, paths.TEST_ENV_FILE)
-    db_populate_real_tournament(c, paths.TEST_ENV_FILE)  # Creates TOURNAMENT_USERS
-    db_populate_bracket_unset_winner(
-        c, paths.TEST_ENV_FILE
-    )  # Uses TOURNAMENT_USERS - must run after real_tournament
-    db_populate_csv_import(c, paths.TEST_ENV_FILE)
-    db_populate_user_edit(c, paths.TEST_ENV_FILE)
-    db_populate_demo_tournaments(c, paths.TEST_ENV_FILE)
-    db_populate_shuffle_tie(c, paths.TEST_ENV_FILE)
+    with c.cd(paths.BACKEND_PATH.absolute()):
+        c.run("DISABLE_CACHE=true python manage.py populate_all --force", pty=True)
 
 
 ns_db.add_task(db_makemigrations, "makemigrations")
