@@ -397,3 +397,51 @@ def refresh_discord_members(request):
     cache.set(cooldown_key, True, timeout=300)  # 5-minute cooldown
 
     return JsonResponse({"refreshed": True, "count": len(members)})
+
+
+BOT_ACCESS_CACHE_TTL = 300  # 5 minutes
+
+
+def check_bot_guild_access(guild_id):
+    """
+    Check if the bot can access a Discord guild by fetching 1 member.
+    Returns True if the bot has access, False otherwise.
+    Caches result for 5 minutes.
+    """
+    cache_key = f"discord_bot_access_{guild_id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    bot_token = settings.DISCORD_BOT_TOKEN
+    if not bot_token:
+        return False
+
+    url = f"{settings.DISCORD_API_BASE_URL}/guilds/{guild_id}/members"
+    headers = {"Authorization": f"Bot {bot_token}"}
+
+    try:
+        response = requests.get(url, headers=headers, params={"limit": 1}, timeout=5)
+        has_access = response.status_code == 200
+    except requests.exceptions.RequestException:
+        has_access = False
+
+    cache.set(cache_key, has_access, timeout=BOT_ACCESS_CACHE_TTL)
+    return has_access
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def check_discord_bot_status(request, pk):
+    """Check if the DraftForge bot has access to an organization's Discord server."""
+    from django.shortcuts import get_object_or_404
+
+    org = get_object_or_404(Organization, pk=pk)
+
+    if not org.discord_server_id:
+        return JsonResponse(
+            {"has_bot": False, "reason": "no_server_configured"}, status=200
+        )
+
+    has_access = check_bot_guild_access(org.discord_server_id)
+    return JsonResponse({"has_bot": has_access})

@@ -1,7 +1,7 @@
 import { generateMeta } from '~/lib/seo';
 import { fetchOrganization } from '~/components/api/api';
 import { queryClient } from '~/root';
-import { Building2, ClipboardList, ExternalLink, Pencil, Plus, Upload, Users } from 'lucide-react';
+import { Building2, Calendar, ClipboardList, ExternalLink, Pencil, Plus, Upload, Users } from 'lucide-react';
 import type { Route } from './+types/organization';
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
@@ -39,11 +39,14 @@ export function meta({ data }: Route.MetaArgs) {
 }
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
-import { addOrgMember } from '~/components/api/api';
+import { useQuery } from '@tanstack/react-query';
+import { addOrgMember, checkDiscordBotStatus } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
+import { CreateEventModal, EventStateBadge } from '~/components/events';
+import { useEvents } from '~/hooks/useEvent';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
 import { ClaimsTab, EditOrganizationModal, useOrganization } from '~/components/organization';
-import { PrimaryButton } from '~/components/ui/buttons';
+import { AddDiscordBotButton, PrimaryButton } from '~/components/ui/buttons';
 import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
@@ -74,10 +77,15 @@ export default function OrganizationDetailPage() {
   const { leagues, isLoading: leaguesLoading } = useLeagues(pk);
   const currentUser = useUserStore((state) => state.currentUser);
   const [createLeagueOpen, setCreateLeagueOpen] = useState(false);
+  const [createEventOpen, setCreateEventOpen] = useState(false);
   const [editOrgOpen, setEditOrgOpen] = useState(false);
   const [showAddUser, setShowAddUser] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [activeTab, setActiveTab] = useUrlTabs('leagues');
+
+  const { data: events = [], isLoading: eventsLoading } = useEvents(
+    pk ? { organization: pk } : undefined
+  );
 
   // Org users from store (pk array) + cache resolution
   const { orgUserPks, orgUsersLoading, orgUsersOrgId, getOrgUsers } = useOrgStore();
@@ -128,18 +136,28 @@ export default function OrganizationDetailPage() {
 
   const hasDiscordServer = Boolean(organization?.discord_server_id);
 
+  // Check if the DraftForge bot has access to the org's Discord server
+  const { data: botStatus } = useQuery({
+    queryKey: ['discordBotStatus', pk],
+    queryFn: () => checkDiscordBotStatus(pk!),
+    enabled: !!pk && hasDiscordServer && isOrgAdmin,
+    staleTime: 5 * 60 * 1000, // match backend cache TTL
+  });
+  const hasBotAccess = botStatus?.has_bot ?? null;
+
   // Page nav options for mobile navbar dropdown
   const userCountDisplay = orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUserPks.length;
   const pageNavOptions = useMemo(() => {
     const opts = [
       { value: 'leagues', label: `Leagues (${leagues.length})` },
+      { value: 'events', label: `Events (${events.length})` },
       { value: 'users', label: `Users (${userCountDisplay})` },
     ];
     if (isOrgAdmin) {
       opts.push({ value: 'claims', label: 'Claims' });
     }
     return opts;
-  }, [leagues.length, userCountDisplay, isOrgAdmin]);
+  }, [leagues.length, events.length, userCountDisplay, isOrgAdmin]);
 
   usePageNav(organization ? pageNavOptions : null, activeTab, setActiveTab);
 
@@ -196,19 +214,24 @@ export default function OrganizationDetailPage() {
                   )}
                 </div>
 
-                {/* Discord Link */}
-                {organization.discord_link && (
-                  <a
-                    href={organization.discord_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 transition-colors mb-4"
-                  >
-                    <DiscordIcon className="w-5 h-5" />
-                    <span>Join our Discord</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                )}
+                {/* Discord Link + Bot Status */}
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                  {organization.discord_link && (
+                    <a
+                      href={organization.discord_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 transition-colors"
+                    >
+                      <DiscordIcon className="w-5 h-5" />
+                      <span>Join our Discord</span>
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
+                  {isOrgAdmin && hasDiscordServer && hasBotAccess === false && (
+                    <AddDiscordBotButton size="sm" compact />
+                  )}
+                </div>
 
                 {/* Description */}
                 {organization.description && (
@@ -229,6 +252,10 @@ export default function OrganizationDetailPage() {
           <TabsList className="hidden md:flex mb-4">
             <TabsTrigger value="leagues" data-testid="org-tab-leagues">
               Leagues ({leagues.length})
+            </TabsTrigger>
+            <TabsTrigger value="events" data-testid="org-tab-events">
+              <Calendar className="w-4 h-4 mr-2" />
+              Events ({events.length})
             </TabsTrigger>
             <TabsTrigger value="users" data-testid="org-tab-users">
               <Users className="w-4 h-4 mr-2" />
@@ -266,6 +293,56 @@ export default function OrganizationDetailPage() {
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {leagues.map((league) => (
                   <LeagueCard key={league.pk} league={league} />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Events Tab */}
+          <TabsContent value="events">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Events</h2>
+              {isOrgAdmin && (
+                <PrimaryButton onClick={() => setCreateEventOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Event
+                </PrimaryButton>
+              )}
+            </div>
+
+            {eventsLoading ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Loading events...
+              </div>
+            ) : events.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No events found
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {events.map((event) => (
+                  <div
+                    key={event.id}
+                    className="rounded-lg border border-border bg-card p-4 space-y-2"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-semibold truncate">{event.name}</h3>
+                      <EventStateBadge state={event.state} />
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(event.scheduled_at).toLocaleDateString(undefined, {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>{event.signup_count} signups</span>
+                      <span>{event.confirmed_count} confirmed</span>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
@@ -326,6 +403,15 @@ export default function OrganizationDetailPage() {
             open={createLeagueOpen}
             onOpenChange={setCreateLeagueOpen}
             organizationId={pk}
+          />
+        )}
+
+        {isOrgAdmin && pk && (
+          <CreateEventModal
+            open={createEventOpen}
+            onOpenChange={setCreateEventOpen}
+            organizationId={pk}
+            leagues={leagues}
           />
         )}
 
