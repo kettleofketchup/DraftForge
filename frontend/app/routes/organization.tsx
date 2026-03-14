@@ -229,7 +229,11 @@ export default function OrganizationDetailPage() {
                     </a>
                   )}
                   {isOrgAdmin && hasDiscordServer && hasBotAccess === false && (
-                    <AddDiscordBotButton size="sm" compact />
+                    <AddDiscordBotButton
+                      size="sm"
+                      compact
+                      tooltip="Enable Discord user search and event notifications"
+                    />
                   )}
                 </div>
 

@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { ExternalLink } from 'lucide-react';
 import { Button } from '~/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
 
 const DISCORD_BOT_INVITE_URL =
@@ -21,11 +22,13 @@ export interface AddDiscordBotButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'asChild'> {
   /** Compact mode shows just an icon + short text */
   compact?: boolean;
+  /** Optional tooltip text */
+  tooltip?: string;
 }
 
 const AddDiscordBotButton = React.forwardRef<HTMLButtonElement, AddDiscordBotButtonProps>(
-  ({ compact, className, ...props }, ref) => {
-    return (
+  ({ compact, tooltip, className, ...props }, ref) => {
+    const button = (
       <Button
         ref={ref}
         variant="outline"
@@ -47,6 +50,17 @@ const AddDiscordBotButton = React.forwardRef<HTMLButtonElement, AddDiscordBotBut
         </a>
       </Button>
     );
+
+    if (tooltip) {
+      return (
+        <Tooltip>
+          <TooltipTrigger asChild>{button}</TooltipTrigger>
+          <TooltipContent>{tooltip}</TooltipContent>
+        </Tooltip>
+      );
+    }
+
+    return button;
   }
 );
 
