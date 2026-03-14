@@ -5,6 +5,8 @@ import {
   cancelEvent as cancelEventAPI,
   cancelSignup as cancelSignupAPI,
   confirmSignup as confirmSignupAPI,
+  createEvent as createEventAPI,
+  createEventRepeater as createEventRepeaterAPI,
   getEvent,
   getEvents,
   getEventSignups,
@@ -14,6 +16,7 @@ import {
   startRollCall as startRollCallAPI,
   startTournament as startTournamentAPI,
 } from '~/components/api/api';
+import type { EventRepeaterType } from '~/components/api/api';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
 
 export function useEvents(params?: { organization?: number; state?: string }) {
@@ -73,6 +76,26 @@ export function useEventActionMutation(eventId: number) {
       },
     }),
   };
+}
+
+export function useCreateEventMutation(organizationId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Partial<EventType>) => createEventAPI(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events', { organization: organizationId }] });
+    },
+  });
+}
+
+export function useCreateEventRepeaterMutation(organizationId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Partial<EventRepeaterType>) => createEventRepeaterAPI(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events', { organization: organizationId }] });
+    },
+  });
 }
 
 /** Signup management mutations (approve, reject, confirm, cancel). */

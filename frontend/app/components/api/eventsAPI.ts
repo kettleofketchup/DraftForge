@@ -78,3 +78,58 @@ export async function cancelSignup(signupId: number): Promise<EventSignupType> {
   const { data } = await axios.post<EventSignupType>(`/events/signups/${signupId}/cancel_signup/`);
   return data;
 }
+
+// --- EventRepeater ---
+
+export interface EventRepeaterType {
+  id: number;
+  organization: number;
+  organization_name: string;
+  name: string;
+  description: string;
+  frequency: string;
+  day_of_week: number | null;
+  time_of_day: string;
+  starts_at: string;
+  ends_at: string | null;
+  generate_days_ahead: number;
+  is_active: boolean;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+  tournament_name: string;
+  tournament_league: number;
+  tournament_type: string;
+  game_type: number;
+  draft_type: string;
+  people_per_team: number;
+  number_of_teams: number;
+  tournament_date: string | null;
+  timezone: string;
+  min_players: number | null;
+  max_players: number | null;
+  signup_deadline_hours: number | null;
+  allow_team_signups: boolean;
+  allow_user_signups: boolean;
+  auto_approve: boolean;
+  auto_confirm: boolean;
+  require_mmr_verified: boolean;
+  require_steam_id: boolean;
+  require_profile_complete: boolean;
+  roll_call_enabled: boolean;
+  roll_call_mode: string;
+  auto_start: boolean;
+}
+
+export async function getEventRepeaters(params?: { organization?: number }): Promise<EventRepeaterType[]> {
+  const sp = new URLSearchParams();
+  if (params?.organization) sp.set('organization', String(params.organization));
+  const q = sp.toString();
+  const { data } = await axios.get<EventRepeaterType[]>(`/events/repeaters/${q ? `?${q}` : ''}`);
+  return data;
+}
+
+export async function createEventRepeater(payload: Partial<EventRepeaterType>): Promise<EventRepeaterType> {
+  const { data } = await axios.post<EventRepeaterType>('/events/repeaters/', payload);
+  return data;
+}

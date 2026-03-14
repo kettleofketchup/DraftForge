@@ -291,9 +291,9 @@ urlpatterns = [
     ),
 ]
 
-log.warning(f"Test Environ:  {isTestEnvironment()}")
+log.debug(f"Test Environ:  {isTestEnvironment()}")
 if isTestEnvironment():
-    log.warning("Adding test environment URLs")
+    log.debug("Adding test environment URLs")
     urlpatterns += [
         path("api/tests/", include("tests.urls")),
     ]

@@ -82,3 +82,31 @@ export const eventTeamSchema = z.object({
 });
 
 export type EventTeamType = z.infer<typeof eventTeamSchema>;
+
+export const Frequency = {
+  DAILY: 'daily', WEEKLY: 'weekly', EVERY_TWO_WEEKS: 'every_two_weeks', MONTHLY: 'monthly',
+} as const;
+
+export const createEventInputSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: z.string(),
+  scheduled_at: z.string(),
+  organization: z.number(),
+  tournament_league: z.number({ error: 'League is required' }),
+  tournament_name: z.string().min(1, 'Tournament name is required'),
+  tournament_type: z.string(),
+  game_type: z.number(),
+  draft_type: z.string(),
+  people_per_team: z.number().int().min(1),
+  number_of_teams: z.number().int().min(2),
+  // Recurring fields
+  is_recurring: z.boolean(),
+  frequency: z.string().optional(),
+  day_of_week: z.number().int().min(0).max(6).optional(),
+  time_of_day: z.string().optional(),
+  starts_at: z.string().optional(),
+  ends_at: z.string().optional(),
+  generate_days_ahead: z.number().int().min(1),
+});
+
+export type CreateEventInput = z.infer<typeof createEventInputSchema>;

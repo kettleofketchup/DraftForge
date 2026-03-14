@@ -46,7 +46,7 @@ def init_tracing() -> None:
 
     config = _get_otel_config()
     if config is None:
-        _log.info("OpenTelemetry tracing disabled (not enabled or no endpoint)")
+        _log.debug("OpenTelemetry tracing disabled (not enabled or no endpoint)")
         _tracing_initialized = True
         return
 
@@ -128,7 +128,7 @@ def init_log_export():
 
     config = _get_otel_config()
     if config is None:
-        _log.info("OTel log export disabled (not enabled or no endpoint)")
+        _log.debug("OTel log export disabled (not enabled or no endpoint)")
         _log_export_initialized = True
         return None
 
