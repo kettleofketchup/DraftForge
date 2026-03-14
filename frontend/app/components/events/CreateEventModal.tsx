@@ -62,7 +62,7 @@ export function CreateEventModal({
       game_type: 1,
       draft_type: 'snake',
       people_per_team: 5,
-      number_of_teams: 2,
+      number_of_teams: null,
       is_recurring: false,
       frequency: Frequency.WEEKLY,
       generate_days_ahead: 7,
@@ -244,15 +244,31 @@ export function CreateEventModal({
             name="number_of_teams"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Teams</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    min={2}
-                    {...field}
-                    onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 2)}
-                  />
-                </FormControl>
+                <FormLabel>Max Teams</FormLabel>
+                <div className="flex items-center gap-2">
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={2}
+                      disabled={field.value === null}
+                      value={field.value ?? ''}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        field.onChange(Number.isNaN(v) ? null : Math.max(2, v));
+                      }}
+                      placeholder="No limit"
+                    />
+                  </FormControl>
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={field.value === null}
+                      onChange={(e) => field.onChange(e.target.checked ? null : 2)}
+                      className="h-3.5 w-3.5 rounded border-border accent-primary"
+                    />
+                    Unlimited
+                  </label>
+                </div>
                 <FormMessage />
               </FormItem>
             )}

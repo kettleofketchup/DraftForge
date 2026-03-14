@@ -98,7 +98,7 @@ export const createEventInputSchema = z.object({
   game_type: z.number(),
   draft_type: z.string(),
   people_per_team: z.number().int().min(1),
-  number_of_teams: z.number().int().min(2),
+  number_of_teams: z.number().int().min(2).nullable(),
   // Recurring fields
   is_recurring: z.boolean(),
   frequency: z.string().optional(),

@@ -80,7 +80,7 @@ class TournamentTemplateMixin(models.Model):
         default=DraftStyles.shuffle.value,
     )
     people_per_team = models.IntegerField(default=5)
-    number_of_teams = models.IntegerField(default=2)
+    number_of_teams = models.IntegerField(null=True, blank=True, default=2)
     tournament_date = models.DateTimeField(null=True, blank=True)
 
     class Meta:
