@@ -130,9 +130,11 @@ export type { AddMemberPayload, AddUserResponse } from './types';
 export {
   getEvents, getEvent, createEvent, updateEvent, deleteEvent,
   rsvpForEvent, openSignups, startRollCall, startTournament, cancelEvent,
+  restartTournament,
   getEventSignups, approveSignup, rejectSignup, confirmSignup, cancelSignup,
   getEventRepeaters, createEventRepeater, updateEventRepeater,
   getDiscordChannels,
+  subscribeToRepeater, unsubscribeFromRepeater,
 } from './eventsAPI';
 
 export type { EventRepeaterType, DiscordChannel } from './eventsAPI';

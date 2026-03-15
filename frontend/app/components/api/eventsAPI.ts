@@ -54,6 +54,11 @@ export async function cancelEvent(eventId: number): Promise<EventType> {
   return data;
 }
 
+export async function restartTournament(eventId: number): Promise<EventType> {
+  const { data } = await axios.post<EventType>(`/events/${eventId}/restart_tournament/`);
+  return data;
+}
+
 export async function getEventSignups(eventId: number): Promise<EventSignupType[]> {
   const { data } = await axios.get<EventSignupType[]>(`/events/signups/?event=${eventId}`);
   return data;
@@ -102,6 +107,10 @@ export interface EventRepeaterType {
   tournament_type: string;
   game_type: number;
   draft_type: string;
+  game_mode: string;
+  custom_game_name: string;
+  captains_draft_time: number;
+  lobby_steam_league_id: number | null;
   people_per_team: number;
   number_of_teams: number | null;
   tournament_date: string | null;
@@ -118,7 +127,6 @@ export interface EventRepeaterType {
   require_profile_complete: boolean;
   roll_call_enabled: boolean;
   roll_call_mode: string;
-  auto_start: boolean;
   discord_create_event: boolean;
   discord_sync_signups: boolean;
   discord_event_title: string;
@@ -135,6 +143,10 @@ export interface EventRepeaterType {
   discord_announcement_channel_id: string;
   discord_announcement_hours: number;
   discord_notify_new_events: boolean;
+  discord_profile_reminder_hours: number;
+  discord_confirm_attendance_hours: number;
+  subscriber_count: number;
+  is_subscribed: boolean;
 }
 
 export async function getEventRepeaters(params?: { organization?: number }): Promise<EventRepeaterType[]> {
@@ -159,6 +171,14 @@ export interface DiscordChannel {
   id: string;
   name: string;
   type: number;
+}
+
+export async function subscribeToRepeater(repeaterId: number): Promise<void> {
+  await axios.post(`/events/repeaters/${repeaterId}/subscribe/`);
+}
+
+export async function unsubscribeFromRepeater(repeaterId: number): Promise<void> {
+  await axios.post(`/events/repeaters/${repeaterId}/unsubscribe/`);
 }
 
 export async function getDiscordChannels(

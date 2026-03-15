@@ -12,6 +12,10 @@ export const SignupStatus = {
   CONFIRMED: 'confirmed', WAITLISTED: 'waitlisted', REJECTED: 'rejected', CANCELLED: 'cancelled',
 } as const;
 
+export const GameMode = {
+  NORMAL: 'normal', CAPTAINS_MODE: 'captains_mode', TURBO: 'turbo', CUSTOM: 'custom',
+} as const;
+
 export const eventSchema = z.object({
   id: z.number(),
   organization: z.number(),
@@ -33,6 +37,10 @@ export const eventSchema = z.object({
   tournament_type: z.string(),
   game_type: z.number(),
   draft_type: z.string(),
+  game_mode: z.string(),
+  custom_game_name: z.string(),
+  captains_draft_time: z.number(),
+  lobby_steam_league_id: z.number().nullable(),
   people_per_team: z.number(),
   number_of_teams: z.number().nullable(),
   tournament_date: z.string().nullable(),
@@ -49,7 +57,6 @@ export const eventSchema = z.object({
   require_profile_complete: z.boolean(),
   roll_call_enabled: z.boolean(),
   roll_call_mode: z.string(),
-  auto_start: z.boolean(),
   discord_create_event: z.boolean(),
   discord_sync_signups: z.boolean(),
   discord_event_title: z.string(),
@@ -58,13 +65,16 @@ export const eventSchema = z.object({
   discord_signup_reminder: z.boolean(),
   discord_signup_reminder_hours: z.number(),
   discord_confirm_attendance: z.boolean(),
+  discord_confirm_attendance_hours: z.number(),
   discord_profile_reminder: z.boolean(),
+  discord_profile_reminder_hours: z.number(),
   discord_mark_interested: z.boolean(),
   discord_post_signups: z.boolean(),
   discord_post_signups_channel_id: z.string(),
   discord_announcement: z.boolean(),
   discord_announcement_channel_id: z.string(),
   discord_announcement_hours: z.number(),
+  _warning: z.string().optional(),
 });
 
 export type EventType = z.infer<typeof eventSchema>;
@@ -120,7 +130,9 @@ export const discordConfigSchema = z.object({
   discord_signup_reminder: z.boolean(),
   discord_signup_reminder_hours: z.number().int().min(1),
   discord_confirm_attendance: z.boolean(),
+  discord_confirm_attendance_hours: z.number().int().min(1),
   discord_profile_reminder: z.boolean(),
+  discord_profile_reminder_hours: z.number().int().min(1),
   discord_mark_interested: z.boolean(),
   discord_post_signups: z.boolean(),
   discord_post_signups_channel_id: z.string(),
@@ -138,7 +150,9 @@ export const DISCORD_CONFIG_DEFAULTS = {
   discord_signup_reminder: false,
   discord_signup_reminder_hours: 24,
   discord_confirm_attendance: false,
+  discord_confirm_attendance_hours: 2,
   discord_profile_reminder: false,
+  discord_profile_reminder_hours: 24,
   discord_mark_interested: false,
   discord_post_signups: false,
   discord_post_signups_channel_id: '',
@@ -157,6 +171,10 @@ export const createEventInputSchema = z.object({
   tournament_type: z.string(),
   game_type: z.number(),
   draft_type: z.string(),
+  game_mode: z.string(),
+  custom_game_name: z.string(),
+  captains_draft_time: z.number().int().min(1),
+  lobby_steam_league_id: z.number().nullable().optional(),
   people_per_team: z.number().int().min(1),
   number_of_teams: z.number().int().min(2).nullable(),
   discord_notify_new_events: z.boolean().optional(),
