@@ -307,8 +307,9 @@ export default function EventPage() {
           try {
             await rsvpMutation.mutateAsync();
             toast.success('RSVP submitted!');
-          } catch {
-            toast.error('Failed to RSVP');
+          } catch (err: unknown) {
+            const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+            toast.error(message || 'Failed to RSVP');
           }
         }}
       />
