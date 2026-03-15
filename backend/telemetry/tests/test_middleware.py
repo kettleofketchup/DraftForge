@@ -115,3 +115,22 @@ class TelemetryMiddlewareTest(TestCase):
 
         # user.id should not be present for anonymous users
         self.assertNotIn("user.id", bound_context)
+
+    def test_rejects_invalid_request_id(self):
+        """Middleware ignores invalid X-Request-ID and generates new one."""
+        request = self.factory.get(
+            "/api/tournaments/",
+            HTTP_X_REQUEST_ID="<script>alert('xss')</script>",
+        )
+        response = self.middleware(request)
+        # Should have generated a valid UUID, not used the malicious value
+        uuid.UUID(response["X-Request-ID"])
+
+    def test_rejects_oversized_request_id(self):
+        """Middleware ignores oversized X-Request-ID."""
+        request = self.factory.get(
+            "/api/tournaments/",
+            HTTP_X_REQUEST_ID="a" * 200,
+        )
+        response = self.middleware(request)
+        self.assertTrue(len(response["X-Request-ID"]) <= 64)

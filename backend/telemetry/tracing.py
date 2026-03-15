@@ -12,6 +12,7 @@ _log = logging.getLogger("telemetry.tracing")
 _tracing_initialized = False
 _log_export_initialized = False
 _log_provider = None
+_tracer_provider = None
 
 
 def _get_otel_config() -> tuple[str, dict[str, str]] | None:
@@ -53,7 +54,7 @@ def _build_resource() -> "Resource":
     return Resource.create(
         {
             SERVICE_NAME: service_name,
-            "deployment.environment": environment,
+            "deployment.environment.name": environment,
             "service.version": version,
             "service.instance.id": instance_id,
         }
@@ -73,6 +74,30 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
     )
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
+
+    global _tracer_provider
+    _tracer_provider = provider
+    atexit.register(_shutdown_tracer_provider)
+
+    # Configure metrics export
+    try:
+        from opentelemetry import metrics
+        from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
+            OTLPMetricExporter,
+        )
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+
+        metric_exporter = OTLPMetricExporter(
+            endpoint=endpoint + "/v1/metrics", headers=header_dict or None
+        )
+        metric_reader = PeriodicExportingMetricReader(metric_exporter)
+        meter_provider = MeterProvider(
+            resource=resource, metric_readers=[metric_reader]
+        )
+        metrics.set_meter_provider(meter_provider)
+    except Exception as e:
+        _log.warning(f"Failed to configure metrics export: {e}")
 
     # Instrument Django with hooks for request/user correlation
     try:
@@ -222,6 +247,12 @@ def init_log_export():
 
     _log_export_initialized = True
     return _log_provider
+
+
+def _shutdown_tracer_provider():
+    """Flush remaining spans on process exit."""
+    if _tracer_provider is not None:
+        _tracer_provider.shutdown()
 
 
 def _shutdown_log_provider():

@@ -13,11 +13,13 @@ class InitTracingTest(TestCase):
         from telemetry import tracing
 
         tracing._tracing_initialized = False
+        tracing._tracer_provider = None
 
     def tearDown(self):
         from telemetry import tracing
 
         tracing._tracing_initialized = False
+        tracing._tracer_provider = None
 
     def test_disabled_when_otel_enabled_false(self):
         """Tracing is no-op when OTEL_ENABLED is false."""
@@ -83,11 +85,13 @@ class ResourceAttributesTest(TestCase):
         from telemetry import tracing
 
         tracing._tracing_initialized = False
+        tracing._tracer_provider = None
 
     def tearDown(self):
         from telemetry import tracing
 
         tracing._tracing_initialized = False
+        tracing._tracer_provider = None
 
     @mock.patch("telemetry.tracing._setup_provider")
     def test_resource_includes_deployment_environment(self, mock_setup):
@@ -101,7 +105,7 @@ class ResourceAttributesTest(TestCase):
             init_tracing()
         mock_setup.assert_called_once()
         resource = mock_setup.call_args[0][0]
-        self.assertEqual(resource.attributes.get("deployment.environment"), "prod")
+        self.assertEqual(resource.attributes.get("deployment.environment.name"), "prod")
 
     @mock.patch("telemetry.tracing._setup_provider")
     def test_resource_includes_service_version(self, mock_setup):
@@ -145,7 +149,7 @@ class ResourceAttributesTest(TestCase):
             init_tracing()
         mock_setup.assert_called_once()
         resource = mock_setup.call_args[0][0]
-        self.assertEqual(resource.attributes.get("deployment.environment"), "dev")
+        self.assertEqual(resource.attributes.get("deployment.environment.name"), "dev")
 
 
 class DjangoInstrumentorHooksTest(TestCase):
@@ -155,11 +159,13 @@ class DjangoInstrumentorHooksTest(TestCase):
         from telemetry import tracing
 
         tracing._tracing_initialized = False
+        tracing._tracer_provider = None
 
     def tearDown(self):
         from telemetry import tracing
 
         tracing._tracing_initialized = False
+        tracing._tracer_provider = None
 
     def test_setup_provider_instruments_django_with_hooks(self):
         """_setup_provider calls DjangoInstrumentor with hooks and exclusions."""

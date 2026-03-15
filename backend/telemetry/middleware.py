@@ -1,8 +1,11 @@
 """Django middleware for telemetry context binding."""
 
+import re
 import time
 import uuid
 from typing import Callable
+
+_REQUEST_ID_RE = re.compile(r"^[a-zA-Z0-9\-]{1,64}$")
 
 import structlog
 from django.http import HttpRequest, HttpResponse
@@ -34,7 +37,12 @@ class TelemetryMiddleware:
         start_time = time.perf_counter()
 
         # Get or generate request ID
-        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        client_id = request.headers.get("X-Request-ID", "")
+        request_id = (
+            client_id
+            if client_id and _REQUEST_ID_RE.match(client_id)
+            else str(uuid.uuid4())
+        )
 
         # Extract user ID if authenticated
         user_id = None

@@ -1,6 +1,8 @@
 """Django middleware for per-request database query stats logging."""
 
+import logging
 import os
+import re
 from typing import Callable
 
 from django.db import connection, reset_queries
@@ -11,10 +13,15 @@ from telemetry.logging import get_logger
 
 log = get_logger(__name__)
 
+_SQL_STRING_LITERAL = re.compile(r"'[^']*'")
 
-def _get_slow_threshold_ms() -> float:
-    """Get slow query threshold in milliseconds from env var."""
-    return float(os.environ.get("SLOW_QUERY_THRESHOLD_MS", "50"))
+
+def _sanitize_sql(sql: str, max_length: int = 200) -> str:
+    """Replace string literals with '?' and truncate for safe logging."""
+    sanitized = _SQL_STRING_LITERAL.sub("?", sql)
+    if len(sanitized) > max_length:
+        return sanitized[:max_length] + "...[truncated]"
+    return sanitized
 
 
 class QueryStatsMiddleware:
@@ -40,6 +47,12 @@ class QueryStatsMiddleware:
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]):
         self.get_response = get_response
         self.enabled = env_bool("DB_QUERY_STATS_ENABLED", True)
+        try:
+            self.slow_threshold_ms = float(
+                os.environ.get("SLOW_QUERY_THRESHOLD_MS", "50")
+            )
+        except (ValueError, TypeError):
+            self.slow_threshold_ms = 50.0
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
         if not self.enabled:
@@ -59,7 +72,9 @@ class QueryStatsMiddleware:
             try:
                 self._log_query_stats(request)
             except Exception:
-                pass  # Never break the response for logging failures
+                logging.getLogger("telemetry.db").debug(
+                    "Failed to log query stats", exc_info=True
+                )
             if force_debug:
                 connection.force_debug_cursor = False
 
@@ -79,7 +94,6 @@ class QueryStatsMiddleware:
             )
             return
 
-        threshold_ms = _get_slow_threshold_ms()
         total_time_ms = 0.0
 
         for query in queries:
@@ -87,13 +101,13 @@ class QueryStatsMiddleware:
             query_time_ms = float(query.get("time", 0)) * 1000
             total_time_ms += query_time_ms
 
-            if query_time_ms >= threshold_ms:
+            if query_time_ms >= self.slow_threshold_ms:
                 log.warning(
                     "slow_query",
                     **{
-                        "db.sql": query.get("sql", ""),
+                        "db.sql": _sanitize_sql(query.get("sql", "")),
                         "db.query_time_ms": round(query_time_ms, 2),
-                        "db.threshold_ms": threshold_ms,
+                        "db.threshold_ms": self.slow_threshold_ms,
                         "http.route": request.path,
                     },
                 )

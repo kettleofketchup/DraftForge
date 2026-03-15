@@ -44,7 +44,7 @@ class QueryStatsMiddlewareTest(TestCase):
         self.assertGreaterEqual(call_args[1]["db.query_count"], 1)
 
     def test_logs_slow_queries(self):
-        """Middleware logs individual queries exceeding threshold."""
+        """Middleware logs individual queries exceeding threshold with sanitized SQL."""
 
         def handler_with_query(request):
             from django.contrib.auth import get_user_model
@@ -53,13 +53,12 @@ class QueryStatsMiddlewareTest(TestCase):
             list(User.objects.all()[:1])
             return HttpResponse("OK")
 
-        middleware = QueryStatsMiddleware(handler_with_query)
+        with mock.patch.dict(os.environ, {"SLOW_QUERY_THRESHOLD_MS": "0"}):
+            middleware = QueryStatsMiddleware(handler_with_query)
+
         request = self.factory.get("/api/tournaments/")
 
-        with (
-            mock.patch.dict(os.environ, {"SLOW_QUERY_THRESHOLD_MS": "0"}),
-            mock.patch("telemetry.db.log") as mock_log,
-        ):
+        with mock.patch("telemetry.db.log") as mock_log:
             middleware(request)
 
         warning_calls = [
@@ -68,6 +67,9 @@ class QueryStatsMiddlewareTest(TestCase):
         self.assertGreaterEqual(len(warning_calls), 1)
         self.assertIn("db.query_time_ms", warning_calls[0][1])
         self.assertIn("db.sql", warning_calls[0][1])
+        # SQL should be sanitized: string literals replaced with ?
+        sql_value = warning_calls[0][1]["db.sql"]
+        self.assertNotIn("'", sql_value)
 
     def test_no_slow_query_logs_under_threshold(self):
         """Middleware does not log slow queries when all are fast."""
@@ -79,13 +81,12 @@ class QueryStatsMiddlewareTest(TestCase):
             list(User.objects.all()[:1])
             return HttpResponse("OK")
 
-        middleware = QueryStatsMiddleware(handler_with_query)
+        with mock.patch.dict(os.environ, {"SLOW_QUERY_THRESHOLD_MS": "99999"}):
+            middleware = QueryStatsMiddleware(handler_with_query)
+
         request = self.factory.get("/api/tournaments/")
 
-        with (
-            mock.patch.dict(os.environ, {"SLOW_QUERY_THRESHOLD_MS": "99999"}),
-            mock.patch("telemetry.db.log") as mock_log,
-        ):
+        with mock.patch("telemetry.db.log") as mock_log:
             middleware(request)
 
         warning_calls = [
