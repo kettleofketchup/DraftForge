@@ -179,12 +179,16 @@ class SyncLeagueMatchesTest(TestCase):
         )
 
         mock_api = MagicMock()
+        # Steam API returns newest matches first when start_at_match_id=None.
+        # Incremental sync starts from None, so we get new matches first,
+        # then hit already-known matches which signals we've caught up.
         mock_api.get_match_history.return_value = {
             "result": {
                 "status": 1,
                 "matches": [
-                    {"match_id": 7000000101},
-                    {"match_id": 7000000102},
+                    {"match_id": 7000000102},  # new
+                    {"match_id": 7000000101},  # new
+                    {"match_id": 7000000100},  # already known
                 ],
             }
         }
@@ -195,6 +199,12 @@ class SyncLeagueMatchesTest(TestCase):
 
         self.assertEqual(result["synced_count"], 2)
         mock_process.assert_called()
+        # Verify we start from newest (start_at_match_id=None)
+        mock_api.get_match_history.assert_called_once_with(
+            league_id=17929,
+            start_at_match_id=None,
+            matches_requested=100,
+        )
 
     @patch("steam.functions.league_sync.SteamAPI")
     @patch("steam.functions.league_sync.process_match")

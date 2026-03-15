@@ -140,7 +140,7 @@ OTEL_ENABLED=false
 ### Development with Tracing
 
 ```bash
-# .env.dev with local Jaeger
+# .env.dev with local tracing
 TELEMETRY_ENABLED=true
 LOG_LEVEL=DEBUG
 LOG_FORMAT=pretty

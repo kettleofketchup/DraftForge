@@ -128,6 +128,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "telemetry.middleware.TelemetryMiddleware",  # AFTER AuthenticationMiddleware
+    "telemetry.db.QueryStatsMiddleware",  # AFTER TelemetryMiddleware (uses its context)
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "corsheaders.middleware.CorsMiddleware",

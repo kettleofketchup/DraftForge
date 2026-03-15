@@ -1,13 +1,12 @@
-import logging
-
 from django.utils import timezone
 
 from app.models import CustomUser
 from steam.models import LeagueSyncState, Match, PlayerMatchStats
 from steam.utils.retry import retry_with_backoff
 from steam.utils.steam_api_caller import SteamAPI
+from telemetry.logging import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def link_user_to_stats(player_stats):
@@ -27,7 +26,12 @@ def link_user_to_stats(player_stats):
         user = CustomUser.objects.get(steamid=player_stats.steam_id)
         player_stats.user = user
         player_stats.save(update_fields=["user"])
-        log.debug(f"Linked player {player_stats.steam_id} to user {user.username}")
+        log.debug(
+            "Linked player to user",
+            domain="steam",
+            steam_id=player_stats.steam_id,
+            username=user.username,
+        )
         return True
     except CustomUser.DoesNotExist:
         return False
@@ -47,7 +51,9 @@ def relink_all_users():
         if link_user_to_stats(stats):
             linked_count += 1
 
-    log.info(f"Relinked {linked_count} player stats to users")
+    log.info(
+        "Relinked player stats to users", domain="steam", linked_count=linked_count
+    )
     return linked_count
 
 
@@ -91,12 +97,12 @@ def process_match(match_id, league_id=None, match_seq_num=None):
     success, result = retry_with_backoff(fetch, max_retries=3, base_delay=1.0)
 
     if not success or not result or "result" not in result:
-        log.warning(f"Failed to fetch match {match_id}")
+        log.warning("Failed to fetch match", domain="steam", match_id=match_id)
         return None
 
     data = result["result"]
 
-    match, _ = Match.objects.update_or_create(
+    match, created = Match.objects.update_or_create(
         match_id=data["match_id"],
         defaults={
             "radiant_win": data.get("radiant_win", False),
@@ -107,6 +113,18 @@ def process_match(match_id, league_id=None, match_seq_num=None):
             "league_id": league_id,
         },
     )
+
+    if created:
+        log.info(
+            "New steam match stored",
+            domain="steam",
+            match_id=match.match_id,
+            league_id=league_id,
+            radiant_win=match.radiant_win,
+            duration=match.duration,
+            start_time=match.start_time,
+            game_mode=match.game_mode,
+        )
 
     for player_data in data.get("players", []):
         account_id = player_data.get("account_id")
@@ -155,7 +173,7 @@ def sync_league_matches(league_id, full_sync=False):
     )
 
     if state.is_syncing:
-        log.warning(f"Sync already in progress for league {league_id}")
+        log.warning("Sync already in progress", domain="steam", league_id=league_id)
         return {
             "error": "Sync already in progress",
             "synced_count": 0,
@@ -169,7 +187,11 @@ def sync_league_matches(league_id, full_sync=False):
     synced_count = 0
     failed_count = 0
     failed_ids = list(state.failed_match_ids)
-    start_at_match_id = None if full_sync else state.last_match_id
+    # Always start from newest matches. GetMatchHistory with start_at_match_id
+    # returns matches OLDER than that ID, so passing last_match_id would only
+    # return already-seen matches. Instead, start from None (newest) and
+    # paginate backward until we hit known territory.
+    start_at_match_id = None
     new_last_match_id = state.last_match_id
 
     try:
@@ -181,13 +203,18 @@ def sync_league_matches(league_id, full_sync=False):
             )
 
             if not result or "result" not in result:
-                log.error(f"Failed to fetch match history for league {league_id}")
+                log.error(
+                    "Failed to fetch match history",
+                    domain="steam",
+                    league_id=league_id,
+                )
                 break
 
             matches = result["result"].get("matches", [])
             if not matches:
                 break
 
+            caught_up = False
             for match_data in matches:
                 match_id = match_data["match_id"]
                 match_seq_num = match_data.get("match_seq_num")
@@ -198,6 +225,7 @@ def sync_league_matches(league_id, full_sync=False):
                     and state.last_match_id
                     and match_id <= state.last_match_id
                 ):
+                    caught_up = True
                     continue
 
                 match = process_match(
@@ -216,8 +244,8 @@ def sync_league_matches(league_id, full_sync=False):
             # Pagination: use the last match_id to get older matches
             start_at_match_id = matches[-1]["match_id"]
 
-            # For incremental sync, stop after first batch if we hit known matches
-            if not full_sync:
+            # For incremental sync, stop once we've reached already-known matches
+            if not full_sync and caught_up:
                 break
 
     finally:
@@ -228,7 +256,12 @@ def sync_league_matches(league_id, full_sync=False):
         state.save()
 
     log.info(
-        f"Sync complete for league {league_id}: {synced_count} synced, {failed_count} failed"
+        "League sync complete",
+        domain="steam",
+        league_id=league_id,
+        synced_count=synced_count,
+        failed_count=failed_count,
+        new_last_match_id=new_last_match_id,
     )
 
     return {
@@ -269,7 +302,11 @@ def retry_failed_matches(league_id):
     state.save()
 
     log.info(
-        f"Retry complete for league {league_id}: {retried_count} succeeded, {len(still_failed)} still failed"
+        "Retry failed matches complete",
+        domain="steam",
+        league_id=league_id,
+        retried_count=retried_count,
+        still_failed_count=len(still_failed),
     )
 
     return {
