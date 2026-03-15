@@ -1,3 +1,5 @@
+import logging
+
 from cacheops import invalidate_obj
 from django.db import transaction
 from django.db.models import BooleanField, Count, Exists, OuterRef, Q, Value
@@ -5,6 +7,8 @@ from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
+
+logger = logging.getLogger(__name__)
 
 from app.models import Organization
 from app.permissions_org import has_org_staff_access
@@ -189,12 +193,32 @@ class EventViewSet(viewsets.ModelViewSet):
     )
     def rsvp(self, request, pk=None):
         event = self.get_object()
+        logger.info(
+            "RSVP request: user=%s (pk=%s), event=%s (pk=%s, state=%s)",
+            request.user.username,
+            request.user.pk,
+            event.name,
+            event.pk,
+            event.state,
+        )
         try:
             signup = process_rsvp(event, request.user)
+            logger.info(
+                "RSVP success: user=%s, event=%s, status=%s",
+                request.user.pk,
+                event.pk,
+                signup.status,
+            )
             return Response(
                 EventSignupSerializer(signup).data, status=status.HTTP_201_CREATED
             )
         except ValueError as e:
+            logger.warning(
+                "RSVP rejected: user=%s, event=%s, reason=%s",
+                request.user.pk,
+                event.pk,
+                str(e),
+            )
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
