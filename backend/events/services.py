@@ -56,8 +56,13 @@ def process_rsvp(event, user, event_team=None):
     """Process an RSVP for an event."""
     if event.state != EventState.SIGNUPS_OPEN:
         raise ValueError("Event is not accepting signups.")
-    if EventSignup.objects.filter(event=event, user=user).exists():
-        raise ValueError("User has already signed up for this event.")
+    existing = EventSignup.objects.filter(event=event, user=user).first()
+    if existing:
+        if existing.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+            # Allow re-RSVP after cancellation/rejection — delete old signup
+            existing.delete()
+        else:
+            raise ValueError("User has already signed up for this event.")
 
     signup_type = SignupType.TEAM if event_team else SignupType.USER
 
