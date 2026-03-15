@@ -1,9 +1,8 @@
 import nh3
-from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import models
 
-from app.models import TOURNAMNET_TYPE_CHOICES, DraftStyles, GameType
+from app.models import TOURNAMNET_TYPE_CHOICES, DraftStyles, GameMode, GameType
 
 discord_id_validator = RegexValidator(
     r"^(\d{17,20})?$",
@@ -88,6 +87,24 @@ class TournamentTemplateMixin(models.Model):
     people_per_team = models.IntegerField(default=5)
     number_of_teams = models.IntegerField(null=True, blank=True, default=2)
     tournament_date = models.DateTimeField(null=True, blank=True)
+    game_mode = models.CharField(
+        max_length=20, choices=GameMode.choices, default=GameMode.NORMAL
+    )
+    custom_game_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Custom game/lobby name (for custom game mode)",
+    )
+    captains_draft_time = models.IntegerField(
+        default=10,
+        help_text="Seconds per draft pick in Captain's Mode",
+    )
+    lobby_steam_league_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Steam league ID for Dota 2 lobby ticket",
+    )
 
     class Meta:
         abstract = True
@@ -113,13 +130,6 @@ class EventConfigMixin(models.Model):
         choices=RollCallMode.choices,
         default=RollCallMode.MANUAL,
     )
-    auto_start = models.BooleanField(default=True)
-
-    def clean(self):
-        if self.roll_call_enabled and self.auto_start:
-            raise ValidationError(
-                "auto_start must be False when roll_call_enabled is True."
-            )
 
     class Meta:
         abstract = True

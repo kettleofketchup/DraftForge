@@ -74,6 +74,13 @@ class GameType(models.IntegerChoices):
     DEADLOCK = 2, "Deadlock"
 
 
+class GameMode(models.TextChoices):
+    NORMAL = "normal", "Normal"
+    CAPTAINS_MODE = "captains_mode", "Captain's Mode"
+    TURBO = "turbo", "Turbo"
+    CUSTOM = "custom", "Custom Lobby"
+
+
 class CustomUser(AbstractUser):
     # Override username to allow blank (users can be created from Steam only)
     username = models.CharField(max_length=150, unique=True, blank=True, null=True)
