@@ -80,6 +80,7 @@ export default function EventPage() {
 
   const [activeTab, setActiveTab] = useState(tab || 'details');
   const [showRollCallConfirm, setShowRollCallConfirm] = useState(false);
+  const [showRsvpConfirm, setShowRsvpConfirm] = useState(false);
 
   // Permission check - find org for this event
   const { organizations } = useOrganizations();
@@ -170,7 +171,8 @@ export default function EventPage() {
           <div className="flex flex-wrap gap-2 shrink-0 w-full sm:w-auto">
             {currentUser && event.state === EventState.SIGNUPS_OPEN && (
               <PrimaryButton
-                onClick={() => rsvpMutation.mutate()}
+                size="sm"
+                onClick={() => setShowRsvpConfirm(true)}
                 disabled={rsvpMutation.isPending}
                 className="w-full sm:w-auto"
               >
@@ -271,6 +273,22 @@ export default function EventPage() {
             navigate(`/rollcall/${eventId}`);
           } catch {
             toast.error('Failed to start roll call');
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={showRsvpConfirm}
+        onOpenChange={setShowRsvpConfirm}
+        title="RSVP for Event"
+        description={`Sign up for "${event.name}"? You'll be added to the signup list.`}
+        confirmLabel="RSVP"
+        onConfirm={async () => {
+          try {
+            await rsvpMutation.mutateAsync();
+            toast.success('RSVP submitted!');
+          } catch {
+            toast.error('Failed to RSVP');
           }
         }}
       />
