@@ -187,7 +187,7 @@ export default function EventPage() {
 
           {/* RSVP / Admin actions */}
           <div className="flex flex-wrap gap-2 shrink-0 w-full sm:w-auto">
-            {currentUser && event.state === EventState.SIGNUPS_OPEN && !mySignup && (
+            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && !mySignup && (
               <PrimaryButton
                 size="sm"
                 onClick={() => setShowRsvpConfirm(true)}
@@ -198,7 +198,7 @@ export default function EventPage() {
                 RSVP
               </PrimaryButton>
             )}
-            {currentUser && event.state === EventState.SIGNUPS_OPEN && mySignup && (
+            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && mySignup && (
               <DestructiveButton
                 size="sm"
                 onClick={() => setShowCancelRsvpConfirm(true)}
