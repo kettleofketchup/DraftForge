@@ -9,11 +9,6 @@ discord_id_validator = RegexValidator(
     "Must be a valid Discord snowflake ID",
 )
 
-GAME_TYPE_TEAM_SIZE = {
-    GameType.DOTA2: 5,
-    GameType.DEADLOCK: 6,
-}
-
 
 class EventState(models.TextChoices):
     UPCOMING = "upcoming", "Upcoming"

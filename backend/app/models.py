@@ -502,7 +502,7 @@ class Tournament(models.Model):
 
     state = models.CharField(max_length=20, choices=STATE_CHOICES, default="future")
     tournament_type = models.CharField(
-        max_length=20, choices=TOURNAMNET_TYPE_CHOICES, default="double_elimination"
+        max_length=30, choices=TOURNAMNET_TYPE_CHOICES, default="double_elimination"
     )
 
     steam_league_id = models.IntegerField(

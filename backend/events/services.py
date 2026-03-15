@@ -77,7 +77,7 @@ def process_rsvp(event, user, event_team=None):
             status=SignupStatus.WAITLISTED,
             waitlist_position=max_pos + 1,
         )
-        invalidate_obj(event)
+        invalidate_after_commit(event)
         return signup
 
     # Determine initial status
@@ -101,13 +101,14 @@ def process_rsvp(event, user, event_team=None):
         add_user_to_tournament(event, user)
     elif status == SignupStatus.APPROVED and not event.roll_call_enabled:
         add_user_to_tournament(event, user)
-    invalidate_obj(event)
+    invalidate_after_commit(event)
     return signup
 
 
 APPROVABLE_STATUSES = [SignupStatus.RSVP, SignupStatus.PENDING_APPROVAL]
 
 
+@transaction.atomic
 def approve_signup(signup):
     """Approve a signup."""
     if signup.status not in APPROVABLE_STATUSES:
@@ -117,10 +118,11 @@ def approve_signup(signup):
     # If no roll call, approved means ready for tournament
     if not signup.event.roll_call_enabled:
         add_user_to_tournament(signup.event, signup.user)
-    invalidate_obj(signup.event)
+    invalidate_after_commit(signup.event)
     return signup
 
 
+@transaction.atomic
 def reject_signup(signup):
     """Reject a signup."""
     if signup.status in [SignupStatus.REJECTED, SignupStatus.CANCELLED]:
@@ -129,10 +131,11 @@ def reject_signup(signup):
     signup.save(update_fields=["status", "updated_at"])
     remove_user_from_tournament(signup.event, signup.user)
     _promote_from_waitlist(signup.event)
-    invalidate_obj(signup.event)
+    invalidate_after_commit(signup.event)
     return signup
 
 
+@transaction.atomic
 def confirm_signup(signup):
     """Confirm a signup (e.g., during roll call)."""
     if signup.status != SignupStatus.APPROVED:
@@ -140,10 +143,11 @@ def confirm_signup(signup):
     signup.status = SignupStatus.CONFIRMED
     signup.save(update_fields=["status", "updated_at"])
     add_user_to_tournament(signup.event, signup.user)
-    invalidate_obj(signup.event)
+    invalidate_after_commit(signup.event)
     return signup
 
 
+@transaction.atomic
 def cancel_signup(signup):
     """Cancel a signup."""
     if signup.status in [SignupStatus.CANCELLED, SignupStatus.REJECTED]:
@@ -152,7 +156,7 @@ def cancel_signup(signup):
     signup.save(update_fields=["status", "updated_at"])
     remove_user_from_tournament(signup.event, signup.user)
     _promote_from_waitlist(signup.event)
-    invalidate_obj(signup.event)
+    invalidate_after_commit(signup.event)
     return signup
 
 
@@ -418,6 +422,7 @@ def generate_events_for_repeater(repeater):
     return created_events
 
 
+@transaction.atomic
 def sync_future_events(repeater):
     """Propagate repeater changes to all upcoming events in the series.
 
