@@ -532,6 +532,24 @@ class Tournament(models.Model):
     )
     people_per_team = models.IntegerField(default=5)
     number_of_teams = models.IntegerField(null=True, blank=True)
+    game_mode = models.CharField(
+        max_length=20, choices=GameMode.choices, default=GameMode.NORMAL
+    )
+    custom_game_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Custom game/lobby name (for custom game mode)",
+    )
+    captains_draft_time = models.IntegerField(
+        default=10,
+        help_text="Seconds per draft pick in Captain's Mode",
+    )
+    lobby_steam_league_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Steam league ID for Dota 2 lobby ticket",
+    )
 
     def __str__(self):
         return self.name
