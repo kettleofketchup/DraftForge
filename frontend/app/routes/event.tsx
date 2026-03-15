@@ -98,7 +98,12 @@ export default function EventPage() {
 
   // Check if current user already has an active signup
   const mySignup = useMemo(
-    () => signups?.find((s) => s.user === currentUser?.pk && s.status !== 'cancelled' && s.status !== 'rejected'),
+    () => {
+      if (!signups || !currentUser?.pk) return undefined;
+      return signups.find(
+        (s) => Number(s.user) === Number(currentUser.pk) && s.status !== 'cancelled' && s.status !== 'rejected'
+      );
+    },
     [signups, currentUser?.pk],
   );
 
