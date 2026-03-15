@@ -3,6 +3,7 @@
 import atexit
 import logging
 import os
+from pathlib import Path
 
 # Use stdlib logging for bootstrap messages
 _log = logging.getLogger("telemetry.tracing")
@@ -11,6 +12,7 @@ _log = logging.getLogger("telemetry.tracing")
 _tracing_initialized = False
 _log_export_initialized = False
 _log_provider = None
+_tracer_provider = None
 
 
 def _get_otel_config() -> tuple[str, dict[str, str]] | None:
@@ -23,6 +25,157 @@ def _get_otel_config() -> tuple[str, dict[str, str]] | None:
     if not endpoint:
         return None
     return endpoint, parse_otlp_headers()
+
+
+def _get_service_version() -> str:
+    """Read service version from pyproject.toml."""
+    try:
+        import tomllib
+
+        pyproject_path = Path(__file__).parent.parent.parent / "pyproject.toml"
+        with open(pyproject_path, "rb") as f:
+            data = tomllib.load(f)
+        return data.get("project", {}).get("version", "unknown")
+    except Exception:
+        return "unknown"
+
+
+def _build_resource() -> "Resource":
+    """Build OTel Resource with deployment attributes."""
+    import socket
+
+    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+
+    service_name = os.environ.get("OTEL_SERVICE_NAME", "dtx-backend")
+    environment = os.environ.get("NODE_ENV", "dev")
+    version = _get_service_version()
+    instance_id = socket.gethostname()
+
+    return Resource.create(
+        {
+            SERVICE_NAME: service_name,
+            "deployment.environment.name": environment,
+            "service.version": version,
+            "service.instance.id": instance_id,
+        }
+    )
+
+
+def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> None:
+    """Configure TracerProvider with exporters and instrumentors."""
+    from opentelemetry import trace
+    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    service_name = resource.attributes.get("service.name", "dtx-backend")
+
+    exporter = OTLPSpanExporter(
+        endpoint=endpoint + "/v1/traces", headers=header_dict or None
+    )
+    provider.add_span_processor(BatchSpanProcessor(exporter))
+    trace.set_tracer_provider(provider)
+
+    global _tracer_provider
+    _tracer_provider = provider
+    atexit.register(_shutdown_tracer_provider)
+
+    # Configure metrics export (delta temporality required by Grafana Cloud Mimir)
+    try:
+        from opentelemetry import metrics
+        from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
+            OTLPMetricExporter,
+        )
+        from opentelemetry.sdk.metrics import (
+            Counter,
+            Histogram,
+            MeterProvider,
+            ObservableCounter,
+            ObservableGauge,
+            ObservableUpDownCounter,
+            UpDownCounter,
+        )
+        from opentelemetry.sdk.metrics.export import (
+            AggregationTemporality,
+            PeriodicExportingMetricReader,
+        )
+
+        # Grafana Cloud Mimir requires delta temporality for cumulative counters
+        delta_temporality = {
+            Counter: AggregationTemporality.DELTA,
+            UpDownCounter: AggregationTemporality.CUMULATIVE,
+            Histogram: AggregationTemporality.DELTA,
+            ObservableCounter: AggregationTemporality.DELTA,
+            ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
+            ObservableGauge: AggregationTemporality.DELTA,
+        }
+        metric_exporter = OTLPMetricExporter(
+            endpoint=endpoint + "/v1/metrics",
+            headers=header_dict or None,
+            preferred_temporality=delta_temporality,
+        )
+        metric_reader = PeriodicExportingMetricReader(metric_exporter)
+        meter_provider = MeterProvider(
+            resource=resource, metric_readers=[metric_reader]
+        )
+        metrics.set_meter_provider(meter_provider)
+    except Exception as e:
+        _log.warning(f"Failed to configure metrics export: {e}")
+
+    # Instrument Django with hooks for request/user correlation
+    try:
+        from opentelemetry.instrumentation.django import DjangoInstrumentor
+
+        def _request_hook(span, request):
+            """Inject request ID into OTel span for correlation with structlog."""
+            request_id = request.META.get("HTTP_X_REQUEST_ID", "")
+            if request_id:
+                span.set_attribute("http.request.id", request_id)
+
+        def _response_hook(span, request, response):
+            """Inject user ID into OTel span (AuthenticationMiddleware has run by now)."""
+            if hasattr(request, "user") and request.user.is_authenticated:
+                span.set_attribute("enduser.id", str(request.user.pk))
+
+        DjangoInstrumentor().instrument(
+            request_hook=_request_hook,
+            response_hook=_response_hook,
+            excluded_urls="health,ready,metrics",
+        )
+    except Exception as e:
+        _log.warning(f"Failed to instrument Django: {e}")
+
+    # Instrument requests (for outbound HTTP)
+    try:
+        from opentelemetry.instrumentation.requests import RequestsInstrumentor
+
+        RequestsInstrumentor().instrument()
+    except Exception as e:
+        _log.warning(f"Failed to instrument requests: {e}")
+
+    # Instrument system metrics
+    try:
+        from opentelemetry.instrumentation.system_metrics import (
+            SystemMetricsInstrumentor,
+        )
+
+        SystemMetricsInstrumentor().instrument()
+    except Exception as e:
+        _log.warning(f"Failed to instrument system metrics: {e}")
+
+    # Instrument database (SQLite via dbapi)
+    try:
+        import sqlite3
+
+        from opentelemetry.instrumentation.dbapi import trace_integration
+
+        trace_integration(sqlite3, "connect", "sqlite", capture_parameters=False)
+    except Exception as e:
+        _log.warning(f"Failed to instrument database: {e}")
+
+    _log.info(
+        f"OpenTelemetry tracing initialized: endpoint={endpoint}, "
+        f"service={service_name}, sample_rate={sample_rate}"
+    )
 
 
 def init_tracing() -> None:
@@ -53,58 +206,15 @@ def init_tracing() -> None:
     endpoint, header_dict = config
 
     try:
-        from opentelemetry import trace
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-            OTLPSpanExporter,
-        )
-        from opentelemetry.sdk.resources import SERVICE_NAME, Resource
         from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
-        from opentelemetry.sdk.trace.sampling import TraceIdRatioBased
+        from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 
-        service_name = os.environ.get("OTEL_SERVICE_NAME", "dtx-backend")
+        resource = _build_resource()
         sample_rate = float(os.environ.get("OTEL_TRACES_SAMPLER_ARG", "0.1"))
-
-        resource = Resource.create({SERVICE_NAME: service_name})
-        sampler = TraceIdRatioBased(sample_rate)
+        sampler = ParentBased(root=TraceIdRatioBased(sample_rate))
 
         provider = TracerProvider(resource=resource, sampler=sampler)
-        exporter = OTLPSpanExporter(
-            endpoint=endpoint + "/v1/traces", headers=header_dict or None
-        )
-        provider.add_span_processor(BatchSpanProcessor(exporter))
-        trace.set_tracer_provider(provider)
-
-        # Instrument Django
-        try:
-            from opentelemetry.instrumentation.django import DjangoInstrumentor
-
-            DjangoInstrumentor().instrument()
-        except Exception as e:
-            _log.warning(f"Failed to instrument Django: {e}")
-
-        # Instrument requests (for outbound HTTP)
-        try:
-            from opentelemetry.instrumentation.requests import RequestsInstrumentor
-
-            RequestsInstrumentor().instrument()
-        except Exception as e:
-            _log.warning(f"Failed to instrument requests: {e}")
-
-        # Instrument system metrics
-        try:
-            from opentelemetry.instrumentation.system_metrics import (
-                SystemMetricsInstrumentor,
-            )
-
-            SystemMetricsInstrumentor().instrument()
-        except Exception as e:
-            _log.warning(f"Failed to instrument system metrics: {e}")
-
-        _log.info(
-            f"OpenTelemetry tracing initialized: endpoint={endpoint}, "
-            f"service={service_name}, sample_rate={sample_rate}"
-        )
+        _setup_provider(resource, provider, endpoint, header_dict, sample_rate)
 
     except ImportError as e:
         _log.warning(f"OpenTelemetry packages not available: {e}")
@@ -139,12 +249,8 @@ def init_log_export():
         from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
         from opentelemetry.sdk._logs import LoggerProvider
         from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-        from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
-        service_name = os.environ.get("OTEL_SERVICE_NAME", "dtx-backend")
-        resource = Resource.create({SERVICE_NAME: service_name})
-
-        _log_provider = LoggerProvider(resource=resource)
+        _log_provider = LoggerProvider(resource=_build_resource())
         set_logger_provider(_log_provider)
 
         exporter = OTLPLogExporter(
@@ -163,6 +269,12 @@ def init_log_export():
 
     _log_export_initialized = True
     return _log_provider
+
+
+def _shutdown_tracer_provider():
+    """Flush remaining spans on process exit."""
+    if _tracer_provider is not None:
+        _tracer_provider.shutdown()
 
 
 def _shutdown_log_provider():
