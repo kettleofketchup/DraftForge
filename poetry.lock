@@ -2918,6 +2918,27 @@ instruments = ["celery (>=4.0,<6.0)"]
 test = ["opentelemetry-instrumentation-celery[instruments]", "opentelemetry-test-utils (==0.41b0)", "pytest"]
 
 [[package]]
+name = "opentelemetry-instrumentation-dbapi"
+version = "0.41b0"
+description = "OpenTelemetry Database API instrumentation"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "opentelemetry_instrumentation_dbapi-0.41b0-py3-none-any.whl", hash = "sha256:b34cf3d9c3e7dd0a4ca6a75913a8cebe54b5b977464db4371ed00da48f9040e6"},
+    {file = "opentelemetry_instrumentation_dbapi-0.41b0.tar.gz", hash = "sha256:53a3925eb7e8e89cff45fb90a15c5fb520fc75f934dee36f315af24f1bf25701"},
+]
+
+[package.dependencies]
+opentelemetry-api = ">=1.12,<2.0"
+opentelemetry-instrumentation = "0.41b0"
+opentelemetry-semantic-conventions = "0.41b0"
+wrapt = ">=1.0.0,<2.0.0"
+
+[package.extras]
+test = ["opentelemetry-test-utils (==0.41b0)"]
+
+[[package]]
 name = "opentelemetry-instrumentation-django"
 version = "0.41b0"
 description = "OpenTelemetry Instrumentation for Django"
@@ -5369,4 +5390,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4"
-content-hash = "d647dc08ca10f75fe8a8346fab1e0e6aee57be2cf4761c46ada6d19925f5d41c"
+content-hash = "6e1d02947e1e9e7fe80a2ab615cbf74e6420cfb220d4ef162ec3e8fd31b010a8"
