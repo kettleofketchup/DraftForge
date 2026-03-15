@@ -192,7 +192,7 @@ export function CreateEventModal({
             <FormItem>
               <FormLabel>Event Name</FormLabel>
               <FormControl>
-                <Input placeholder="Weekly inhouse" {...field} />
+                <Input data-testid="event-name-input" placeholder="Weekly inhouse" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -206,7 +206,7 @@ export function CreateEventModal({
             <FormItem>
               <FormLabel>Description</FormLabel>
               <FormControl>
-                <Textarea placeholder="Event description" rows={2} {...field} />
+                <Textarea data-testid="event-description-input" placeholder="Event description" rows={2} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -221,7 +221,7 @@ export function CreateEventModal({
               <FormItem>
                 <FormLabel>Tournament Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="Inhouse #1" {...field} />
+                  <Input data-testid="event-tournament-name-input" placeholder="Inhouse #1" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -239,7 +239,7 @@ export function CreateEventModal({
                   value={field.value?.toString()}
                 >
                   <FormControl>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger data-testid="event-league-select" className="w-full">
                       <SelectValue placeholder="Select league" />
                     </SelectTrigger>
                   </FormControl>
@@ -282,7 +282,7 @@ export function CreateEventModal({
                   value={field.value?.toString()}
                 >
                   <FormControl>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger data-testid="event-game-select" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                   </FormControl>
@@ -304,6 +304,7 @@ export function CreateEventModal({
                 <FormLabel>People Per Team</FormLabel>
                 <FormControl>
                   <Input
+                    data-testid="event-people-per-team-input"
                     type="number"
                     min={1}
                     {...field}
@@ -324,6 +325,7 @@ export function CreateEventModal({
                 <div className="flex items-center gap-2">
                   <FormControl>
                     <Input
+                      data-testid="event-max-teams-input"
                       type="number"
                       min={2}
                       disabled={field.value === null}
@@ -337,6 +339,7 @@ export function CreateEventModal({
                   </FormControl>
                   <label className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap cursor-pointer">
                     <input
+                      data-testid="event-unlimited-checkbox"
                       type="checkbox"
                       checked={field.value === null}
                       onChange={(e) => field.onChange(e.target.checked ? null : 2)}
@@ -360,7 +363,7 @@ export function CreateEventModal({
                 <FormLabel>Draft Type</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger data-testid="event-draft-select" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                   </FormControl>
@@ -383,7 +386,7 @@ export function CreateEventModal({
                 <FormLabel>Bracket Type</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger data-testid="event-bracket-select" className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                   </FormControl>
@@ -412,6 +415,7 @@ export function CreateEventModal({
             <FormItem className="flex items-center gap-3 rounded-md border border-border p-3">
               <FormControl>
                 <input
+                  data-testid="event-recurring-checkbox"
                   type="checkbox"
                   checked={field.value}
                   onChange={field.onChange}
@@ -439,7 +443,7 @@ export function CreateEventModal({
                     <FormLabel>Frequency</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger data-testid="event-frequency-select" className="w-full">
                           <SelectValue placeholder="Select frequency" />
                         </SelectTrigger>
                       </FormControl>
@@ -465,7 +469,7 @@ export function CreateEventModal({
                       value={field.value?.toString()}
                     >
                       <FormControl>
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger data-testid="event-day-select" className="w-full">
                           <SelectValue placeholder="Select day" />
                         </SelectTrigger>
                       </FormControl>
@@ -489,7 +493,7 @@ export function CreateEventModal({
                   <FormItem>
                     <FormLabel>Time</FormLabel>
                     <FormControl>
-                      <Input type="time" {...field} />
+                      <Input data-testid="event-time-input" type="time" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -503,7 +507,7 @@ export function CreateEventModal({
                   <FormItem>
                     <FormLabel>Starts</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} />
+                      <Input data-testid="event-starts-input" type="date" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -517,7 +521,7 @@ export function CreateEventModal({
                   <FormItem>
                     <FormLabel>Ends (optional)</FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} />
+                      <Input data-testid="event-ends-input" type="date" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -533,6 +537,7 @@ export function CreateEventModal({
                   <FormLabel>Generate Days Ahead</FormLabel>
                   <FormControl>
                     <Input
+                      data-testid="event-generate-days-input"
                       type="text"
                       inputMode="numeric"
                       pattern="[0-9]*"
@@ -555,7 +560,7 @@ export function CreateEventModal({
               <FormItem>
                 <FormLabel>Scheduled Date & Time</FormLabel>
                 <FormControl>
-                  <Input type="datetime-local" {...field} />
+                  <Input data-testid="event-scheduled-input" type="datetime-local" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

@@ -77,10 +77,10 @@ test.describe('Roll Call Flow (@cicd)', () => {
 
     // Step 5: Should navigate to roll call page
     await page.waitForURL(/\/rollcall\//);
-    await expect(page.getByText('Roll Call')).toBeVisible();
+    await expect(page.getByTestId('rollcall-heading')).toBeVisible();
 
     // Step 6: Should see the approved player in "Awaiting Confirmation" section
-    await expect(page.getByText('Awaiting Confirmation')).toBeVisible();
+    await expect(page.getByTestId('rollcall-awaiting-section')).toBeVisible();
   });
 
   test('roll call page shows correct state for non-roll-call events', async ({
@@ -92,8 +92,8 @@ test.describe('Roll Call Flow (@cicd)', () => {
     await visitAndWaitForHydration(page, `/rollcall/${eventInfo.pk}`);
 
     // Should show "not in roll call mode" message
-    await expect(page.getByText('not in roll call mode')).toBeVisible();
-    await expect(page.getByText('Back to Event')).toBeVisible();
+    await expect(page.getByTestId('rollcall-not-active')).toBeVisible();
+    await expect(page.getByTestId('rollcall-back-btn')).toBeVisible();
   });
 
   test('event page shows Open Roll Call button when in roll_call state', async ({

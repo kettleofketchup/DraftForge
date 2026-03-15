@@ -80,10 +80,10 @@ export default function RollCallPage() {
     return (
       <div className="container mx-auto py-6 px-4">
         <div className="text-center py-12">
-          <p className="text-muted-foreground mb-4">
+          <p data-testid="rollcall-not-active" className="text-muted-foreground mb-4">
             This event is not in roll call mode.
           </p>
-          <Button variant="outline" onClick={() => navigate(`/events/${eventId}`)}>
+          <Button data-testid="rollcall-back-btn" variant="outline" onClick={() => navigate(`/events/${eventId}`)}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Event
           </Button>
@@ -117,7 +117,7 @@ export default function RollCallPage() {
               >
                 <ArrowLeft className="h-4 w-4" />
               </Button>
-              <h1 className="text-xl md:text-2xl font-bold">Roll Call</h1>
+              <h1 data-testid="rollcall-heading" className="text-xl md:text-2xl font-bold">Roll Call</h1>
               <EventStateBadge state={event.state} />
             </div>
             <p className="text-sm text-muted-foreground ml-11">{event.name}</p>
@@ -142,6 +142,7 @@ export default function RollCallPage() {
                 size="sm"
                 disabled={!hasEnough || actions.startTournament.isPending}
                 onClick={() => setShowStartConfirm(true)}
+                data-testid="rollcall-start-btn"
               >
                 {actions.startTournament.isPending ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -157,7 +158,7 @@ export default function RollCallPage() {
         {/* Confirmed players */}
         {confirmed.length > 0 && (
           <div>
-            <h3 className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+            <h3 data-testid="rollcall-confirmed-section" className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
               Confirmed ({confirmed.length})
             </h3>
             <div className="space-y-1.5">
@@ -176,7 +177,7 @@ export default function RollCallPage() {
         {/* Approved but not confirmed */}
         {approved.length > 0 && (
           <div>
-            <h3 className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+            <h3 data-testid="rollcall-awaiting-section" className="text-sm font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
               Awaiting Confirmation ({approved.length})
             </h3>
             <div className="space-y-1.5">

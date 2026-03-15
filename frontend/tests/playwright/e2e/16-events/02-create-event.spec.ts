@@ -42,7 +42,7 @@ test.describe('Events - Create Event (@cicd)', () => {
 
     // Should see Events heading and Create Event button
     await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Create Event' })).toBeVisible();
+    await expect(page.getByTestId('create-event-btn')).toBeVisible();
   });
 
   test('non-admin cannot see create event button', async ({ context, page }) => {
@@ -52,75 +52,75 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByTestId('org-tab-events').click();
 
     await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Create Event' })).not.toBeVisible();
+    await expect(page.getByTestId('create-event-btn')).not.toBeVisible();
   });
 
   test('opens create event modal with form fields', async ({ page }) => {
     await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
 
     await page.getByTestId('org-tab-events').click();
-    await page.getByRole('button', { name: 'Create Event' }).click();
+    await page.getByTestId('create-event-btn').click();
 
     // Modal should appear with title
     await expect(page.getByRole('heading', { name: 'Create Event' })).toBeVisible();
 
     // Core fields visible
-    await expect(page.getByLabel('Event Name')).toBeVisible();
-    await expect(page.getByLabel('Tournament Name')).toBeVisible();
-    await expect(page.getByLabel('Scheduled Date & Time')).toBeVisible();
+    await expect(page.getByTestId('event-name-input')).toBeVisible();
+    await expect(page.getByTestId('event-tournament-name-input')).toBeVisible();
+    await expect(page.getByTestId('event-scheduled-input')).toBeVisible();
 
     // Recurring checkbox visible but unchecked
-    const recurringCheckbox = page.getByRole('checkbox', { name: 'Recurring Event' });
+    const recurringCheckbox = page.getByTestId('event-recurring-checkbox');
     await expect(recurringCheckbox).toBeVisible();
     await expect(recurringCheckbox).not.toBeChecked();
 
     // Recurring-only fields should NOT be visible
-    await expect(page.getByLabel('Frequency')).not.toBeVisible();
-    await expect(page.getByLabel('Day of Week')).not.toBeVisible();
+    await expect(page.getByTestId('event-frequency-select')).not.toBeVisible();
+    await expect(page.getByTestId('event-day-select')).not.toBeVisible();
   });
 
   test('toggling recurring shows repeater fields', async ({ page }) => {
     await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
 
     await page.getByTestId('org-tab-events').click();
-    await page.getByRole('button', { name: 'Create Event' }).click();
+    await page.getByTestId('create-event-btn').click();
 
     // Check the recurring checkbox
-    await page.getByRole('checkbox', { name: 'Recurring Event' }).check();
+    await page.getByTestId('event-recurring-checkbox').check();
 
     // Title should change
     await expect(page.getByRole('heading', { name: 'Create Recurring Event' })).toBeVisible();
 
     // Recurring fields should now be visible
-    await expect(page.getByLabel('Frequency')).toBeVisible();
-    await expect(page.getByLabel('Day of Week')).toBeVisible();
-    await expect(page.getByLabel('Time')).toBeVisible();
-    await expect(page.getByLabel('Starts')).toBeVisible();
-    await expect(page.getByLabel('Generate Days Ahead')).toBeVisible();
+    await expect(page.getByTestId('event-frequency-select')).toBeVisible();
+    await expect(page.getByTestId('event-day-select')).toBeVisible();
+    await expect(page.getByTestId('event-time-input')).toBeVisible();
+    await expect(page.getByTestId('event-starts-input')).toBeVisible();
+    await expect(page.getByTestId('event-generate-days-input')).toBeVisible();
 
     // Scheduled Date & Time should NOT be visible (only for one-off events)
-    await expect(page.getByLabel('Scheduled Date & Time')).not.toBeVisible();
+    await expect(page.getByTestId('event-scheduled-input')).not.toBeVisible();
   });
 
   test('creates a one-off event via modal', async ({ page }) => {
     await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
 
     await page.getByTestId('org-tab-events').click();
-    await page.getByRole('button', { name: 'Create Event' }).click();
+    await page.getByTestId('create-event-btn').click();
 
     // Fill out form
-    await page.getByLabel('Event Name').fill('E2E One-Off Test');
-    await page.getByLabel('Tournament Name').fill('E2E Tournament');
+    await page.getByTestId('event-name-input').fill('E2E One-Off Test');
+    await page.getByTestId('event-tournament-name-input').fill('E2E Tournament');
 
     // Select league
-    await page.getByRole('combobox', { name: 'League' }).click();
+    await page.getByTestId('event-league-select').click();
     await page.getByRole('option', { name: 'Events Test League' }).click();
 
     // Set scheduled date (tomorrow)
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const dateStr = tomorrow.toISOString().slice(0, 16); // YYYY-MM-DDTHH:mm
-    await page.getByLabel('Scheduled Date & Time').fill(dateStr);
+    await page.getByTestId('event-scheduled-input').fill(dateStr);
 
     // Submit
     await page.getByTestId('form-dialog-submit').click();
@@ -134,22 +134,22 @@ test.describe('Events - Create Event (@cicd)', () => {
     await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
 
     await page.getByTestId('org-tab-events').click();
-    await page.getByRole('button', { name: 'Create Event' }).click();
+    await page.getByTestId('create-event-btn').click();
 
-    await page.getByLabel('Event Name').fill('E2E Double Elim Event');
-    await page.getByLabel('Tournament Name').fill('DE Tournament');
+    await page.getByTestId('event-name-input').fill('E2E Double Elim Event');
+    await page.getByTestId('event-tournament-name-input').fill('DE Tournament');
 
-    await page.getByRole('combobox', { name: 'League' }).click();
+    await page.getByTestId('event-league-select').click();
     await page.getByRole('option', { name: 'Events Test League' }).click();
 
     // Select Double Elimination bracket type
-    await page.getByRole('combobox', { name: 'Bracket Type' }).click();
+    await page.getByTestId('event-bracket-select').click();
     await page.getByRole('option', { name: 'Double Elimination' }).click();
 
     // Set scheduled date
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    await page.getByLabel('Scheduled Date & Time').fill(tomorrow.toISOString().slice(0, 16));
+    await page.getByTestId('event-scheduled-input').fill(tomorrow.toISOString().slice(0, 16));
 
     await page.getByTestId('form-dialog-submit').click();
 
@@ -167,56 +167,56 @@ test.describe('Events - Create Event (@cicd)', () => {
     await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
 
     await page.getByTestId('org-tab-events').click();
-    await page.getByRole('button', { name: 'Create Event' }).click();
+    await page.getByTestId('create-event-btn').click();
 
     // Default should be 5 (Dota 2)
-    await expect(page.getByLabel('People Per Team')).toHaveValue('5');
+    await expect(page.getByTestId('event-people-per-team-input')).toHaveValue('5');
 
     // Switch to Deadlock
-    await page.getByRole('combobox', { name: 'Game' }).click();
+    await page.getByTestId('event-game-select').click();
     await page.getByRole('option', { name: 'Deadlock' }).click();
 
     // People per team should auto-update to 6
-    await expect(page.getByLabel('People Per Team')).toHaveValue('6');
+    await expect(page.getByTestId('event-people-per-team-input')).toHaveValue('6');
 
     // Switch back to Dota 2
-    await page.getByRole('combobox', { name: 'Game' }).click();
+    await page.getByTestId('event-game-select').click();
     await page.getByRole('option', { name: 'Dota 2' }).click();
 
     // Should reset to 5
-    await expect(page.getByLabel('People Per Team')).toHaveValue('5');
+    await expect(page.getByTestId('event-people-per-team-input')).toHaveValue('5');
   });
 
   test('creates a recurring event (event repeater) via modal', async ({ page }) => {
     await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
 
     await page.getByTestId('org-tab-events').click();
-    await page.getByRole('button', { name: 'Create Event' }).click();
+    await page.getByTestId('create-event-btn').click();
 
     // Fill basic fields
-    await page.getByLabel('Event Name').fill('E2E Weekly Recurring');
-    await page.getByLabel('Tournament Name').fill('E2E Recurring Tourney');
+    await page.getByTestId('event-name-input').fill('E2E Weekly Recurring');
+    await page.getByTestId('event-tournament-name-input').fill('E2E Recurring Tourney');
 
     // Select league
-    await page.getByRole('combobox', { name: 'League' }).click();
+    await page.getByTestId('event-league-select').click();
     await page.getByRole('option', { name: 'Events Test League' }).click();
 
     // Toggle recurring
-    await page.getByRole('checkbox', { name: 'Recurring Event' }).check();
+    await page.getByTestId('event-recurring-checkbox').check();
     await expect(page.getByRole('heading', { name: 'Create Recurring Event' })).toBeVisible();
 
     // Fill recurring fields
-    await page.getByRole('combobox', { name: 'Frequency' }).click();
+    await page.getByTestId('event-frequency-select').click();
     await page.getByRole('option', { name: 'Weekly' }).click();
 
-    await page.getByRole('combobox', { name: 'Day of Week' }).click();
+    await page.getByTestId('event-day-select').click();
     await page.getByRole('option', { name: 'Wednesday' }).click();
 
-    await page.getByLabel('Time').fill('19:00');
+    await page.getByTestId('event-time-input').fill('19:00');
 
     // Set start date
     const today = new Date().toISOString().slice(0, 10);
-    await page.getByLabel('Starts').fill(today);
+    await page.getByTestId('event-starts-input').fill(today);
 
     // Submit
     await page.getByTestId('form-dialog-submit').click();

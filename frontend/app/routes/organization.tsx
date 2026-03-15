@@ -460,7 +460,7 @@ export default function OrganizationDetailPage() {
                   </Tooltip>
                 )}
                 {isOrgAdmin && (
-                  <PrimaryButton onClick={() => setCreateEventOpen(true)}>
+                  <PrimaryButton data-testid="create-event-btn" onClick={() => setCreateEventOpen(true)}>
                     <Plus className="w-4 h-4 mr-2" />
                     Create Event
                   </PrimaryButton>
