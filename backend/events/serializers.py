@@ -8,6 +8,8 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
     organization_name = serializers.CharField(
         source="organization.name", read_only=True
     )
+    subscriber_count = serializers.IntegerField(read_only=True, default=0)
+    is_subscribed = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
         model = EventRepeater
@@ -36,6 +38,10 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "people_per_team",
             "number_of_teams",
             "tournament_date",
+            "game_mode",
+            "custom_game_name",
+            "captains_draft_time",
+            "lobby_steam_league_id",
             # EventConfig
             "timezone",
             "min_players",
@@ -50,7 +56,6 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "require_profile_complete",
             "roll_call_enabled",
             "roll_call_mode",
-            "auto_start",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -60,7 +65,9 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "discord_signup_reminder",
             "discord_signup_reminder_hours",
             "discord_confirm_attendance",
+            "discord_confirm_attendance_hours",
             "discord_profile_reminder",
+            "discord_profile_reminder_hours",
             "discord_mark_interested",
             "discord_post_signups",
             "discord_post_signups_channel_id",
@@ -68,11 +75,33 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "discord_announcement_channel_id",
             "discord_announcement_hours",
             "discord_notify_new_events",
+            "subscriber_count",
+            "is_subscribed",
         ]
-        read_only_fields = ["id", "created_by", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "created_by",
+            "created_at",
+            "updated_at",
+            "subscriber_count",
+            "is_subscribed",
+        ]
 
     def validate_description(self, value):
         return nh3.clean(value) if value else value
+
+    def validate(self, data):
+        game_type = data.get(
+            "game_type", self.instance.game_type if self.instance else 1
+        )
+        game_mode = data.get(
+            "game_mode", self.instance.game_mode if self.instance else "normal"
+        )
+        if game_type != 1 and game_mode in ("captains_mode", "turbo"):
+            raise serializers.ValidationError(
+                {"game_mode": f"{game_mode} is only available for Dota 2."}
+            )
+        return data
 
 
 class EventSerializer(serializers.ModelSerializer):
@@ -110,6 +139,10 @@ class EventSerializer(serializers.ModelSerializer):
             "people_per_team",
             "number_of_teams",
             "tournament_date",
+            "game_mode",
+            "custom_game_name",
+            "captains_draft_time",
+            "lobby_steam_league_id",
             # EventConfig
             "timezone",
             "min_players",
@@ -124,7 +157,6 @@ class EventSerializer(serializers.ModelSerializer):
             "require_profile_complete",
             "roll_call_enabled",
             "roll_call_mode",
-            "auto_start",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -134,7 +166,9 @@ class EventSerializer(serializers.ModelSerializer):
             "discord_signup_reminder",
             "discord_signup_reminder_hours",
             "discord_confirm_attendance",
+            "discord_confirm_attendance_hours",
             "discord_profile_reminder",
+            "discord_profile_reminder_hours",
             "discord_mark_interested",
             "discord_post_signups",
             "discord_post_signups_channel_id",
@@ -153,6 +187,19 @@ class EventSerializer(serializers.ModelSerializer):
 
     def validate_description(self, value):
         return nh3.clean(value) if value else value
+
+    def validate(self, data):
+        game_type = data.get(
+            "game_type", self.instance.game_type if self.instance else 1
+        )
+        game_mode = data.get(
+            "game_mode", self.instance.game_mode if self.instance else "normal"
+        )
+        if game_type != 1 and game_mode in ("captains_mode", "turbo"):
+            raise serializers.ValidationError(
+                {"game_mode": f"{game_mode} is only available for Dota 2."}
+            )
+        return data
 
 
 class EventTeamSerializer(serializers.ModelSerializer):
