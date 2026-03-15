@@ -66,7 +66,13 @@ export function DiscordChannelPicker({
           )}
           {channels.map((ch) => (
             <SelectItem key={ch.id} value={ch.id}>
-              # {ch.name}
+              <span className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">#</span>
+                {ch.name}
+                {ch.type_label !== 'text' && (
+                  <span className="text-xs text-muted-foreground">({ch.type_label})</span>
+                )}
+              </span>
             </SelectItem>
           ))}
         </SelectContent>

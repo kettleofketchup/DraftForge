@@ -11,7 +11,13 @@ from cacheops import invalidate_obj
 from django.utils import timezone as tz
 
 from app.models import CustomUser, GameType, League, Organization, PositionsModel
-from events.models import Event, EventRepeater, EventState, RepeatFrequency
+from events.models import (
+    Event,
+    EventRepeater,
+    EventState,
+    OrgEventDefaults,
+    RepeatFrequency,
+)
 from tests.data import (
     ADMIN_USER,
     EVENT_ADMIN_USER,
@@ -32,6 +38,7 @@ def populate_events_data(force=False):
             "pk": EVENTS_ORG.pk,
             "description": EVENTS_ORG.description,
             "timezone": EVENTS_ORG.timezone,
+            "discord_server_id": EVENTS_ORG.discord_server_id or "",
         },
     )
 
@@ -95,8 +102,13 @@ def populate_events_data(force=False):
             "number_of_teams": 2,
             "timezone": EVENTS_ORG.timezone,
             "auto_approve": True,
-            "auto_start": False,
             "max_players": 10,
+            "discord_notify_new_events": True,
+            "discord_announcement": True,
+            "discord_announcement_channel_id": "1482767177063858216",
+            "discord_announcement_hours": 24,
+            "discord_post_signups": True,
+            "discord_post_signups_channel_id": "1482767709279096893",
         },
     )
 
@@ -118,8 +130,29 @@ def populate_events_data(force=False):
             "number_of_teams": 2,
             "timezone": EVENTS_ORG.timezone,
             "auto_approve": True,
-            "auto_start": False,
             "max_players": 10,
+        },
+    )
+
+    # 6. Create org event defaults
+    OrgEventDefaults.objects.update_or_create(
+        organization=org,
+        defaults={
+            "tournament_league": league,
+            "tournament_type": "double_elimination",
+            "game_type": GameType.DOTA2,
+            "draft_type": "shuffle",
+            "people_per_team": 5,
+            "number_of_teams": 2,
+            "timezone": EVENTS_ORG.timezone,
+            "auto_approve": True,
+            "max_players": 10,
+            "discord_notify_new_events": True,
+            "discord_announcement": True,
+            "discord_announcement_channel_id": "1482767177063858216",
+            "discord_announcement_hours": 24,
+            "discord_post_signups": True,
+            "discord_post_signups_channel_id": "1482767709279096893",
         },
     )
 
@@ -129,3 +162,4 @@ def populate_events_data(force=False):
     print(
         f"    Created repeater={repeater.name}, event={event.name} (state={event.state})"
     )
+    print("    Created org event defaults with discord channels")

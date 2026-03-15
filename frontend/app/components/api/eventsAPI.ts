@@ -167,10 +167,66 @@ export async function updateEventRepeater(repeaterId: number, payload: Partial<E
   return data;
 }
 
+// --- OrgEventDefaults ---
+
+export interface OrgEventDefaultsType {
+  organization: number;
+  tournament_name: string;
+  tournament_league: number | null;
+  tournament_type: string;
+  game_type: number;
+  draft_type: string;
+  people_per_team: number;
+  number_of_teams: number | null;
+  tournament_date: string | null;
+  game_mode: string;
+  custom_game_name: string;
+  captains_draft_time: number;
+  lobby_steam_league_id: number | null;
+  timezone: string;
+  min_players: number | null;
+  max_players: number | null;
+  signup_deadline_hours: number | null;
+  allow_team_signups: boolean;
+  allow_user_signups: boolean;
+  auto_approve: boolean;
+  auto_confirm: boolean;
+  require_mmr_verified: boolean;
+  require_steam_id: boolean;
+  require_profile_complete: boolean;
+  roll_call_enabled: boolean;
+  roll_call_mode: string;
+  discord_create_event: boolean;
+  discord_sync_signups: boolean;
+  discord_event_title: string;
+  discord_event_description: string;
+  discord_event_info: string;
+  discord_signup_reminder: boolean;
+  discord_signup_reminder_hours: number;
+  discord_confirm_attendance: boolean;
+  discord_confirm_attendance_hours: number;
+  discord_profile_reminder: boolean;
+  discord_profile_reminder_hours: number;
+  discord_mark_interested: boolean;
+  discord_post_signups: boolean;
+  discord_post_signups_channel_id: string;
+  discord_announcement: boolean;
+  discord_announcement_channel_id: string;
+  discord_announcement_hours: number;
+}
+
+export async function getOrgEventDefaults(orgId: number): Promise<OrgEventDefaultsType> {
+  const { data } = await axios.get<OrgEventDefaultsType>(
+    `/events/defaults/?organization=${orgId}`
+  );
+  return data;
+}
+
 export interface DiscordChannel {
   id: string;
   name: string;
   type: number;
+  type_label: string;
 }
 
 export async function subscribeToRepeater(repeaterId: number): Promise<void> {

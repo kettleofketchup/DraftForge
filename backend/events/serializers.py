@@ -1,7 +1,7 @@
 import nh3
 from rest_framework import serializers
 
-from events.models import Event, EventRepeater, EventSignup, EventTeam
+from events.models import Event, EventRepeater, EventSignup, EventTeam, OrgEventDefaults
 
 
 class EventRepeaterSerializer(serializers.ModelSerializer):
@@ -249,3 +249,10 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+
+class OrgEventDefaultsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrgEventDefaults
+        exclude = ["id", "created_at", "updated_at"]
+        read_only_fields = ["organization"]

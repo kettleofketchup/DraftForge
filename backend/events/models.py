@@ -67,10 +67,12 @@ class RollCallMode(models.TextChoices):
 class TournamentTemplateMixin(models.Model):
     """Abstract mixin for tournament creation blueprint fields."""
 
-    tournament_name = models.CharField(max_length=255)
+    tournament_name = models.CharField(max_length=255, blank=True, default="")
     tournament_league = models.ForeignKey(
         "app.League",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="+",
     )
     tournament_type = models.CharField(
@@ -168,9 +170,17 @@ class DiscordEventConfigMixin(models.Model):
         default=False,
         help_text="Require attendance confirmation via Discord message reply on event day",
     )
+    discord_confirm_attendance_hours = models.IntegerField(
+        default=2,
+        help_text="Hours before event to send attendance confirmation request",
+    )
     discord_profile_reminder = models.BooleanField(
         default=False,
         help_text="Remind users to complete their profile before the event",
+    )
+    discord_profile_reminder_hours = models.IntegerField(
+        default=24,
+        help_text="Hours before event to send profile update reminder",
     )
     discord_mark_interested = models.BooleanField(
         default=False,
@@ -229,7 +239,7 @@ class EventRepeater(TournamentTemplateMixin, EventConfigMixin, DiscordEventConfi
         related_name="created_event_repeaters",
     )
     discord_notify_new_events = models.BooleanField(
-        default=False,
+        default=True,
         help_text="Notify users when new events are generated and ready for signup",
     )
     created_at = models.DateTimeField(auto_now_add=True)
@@ -368,3 +378,55 @@ class EventSignup(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.event.name} ({self.status})"
+
+
+class RepeaterSubscription(models.Model):
+    """User subscription to an event repeater for new event notifications."""
+
+    event_repeater = models.ForeignKey(
+        EventRepeater,
+        on_delete=models.CASCADE,
+        related_name="subscriptions",
+    )
+    user = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.CASCADE,
+        related_name="repeater_subscriptions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["event_repeater", "user"],
+                name="unique_repeater_user_subscription",
+            ),
+        ]
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.user} → {self.event_repeater.name}"
+
+
+class OrgEventDefaults(
+    TournamentTemplateMixin, EventConfigMixin, DiscordEventConfigMixin
+):
+    """Organization-level default configuration for new events and repeaters.
+
+    All fields are optional with sensible defaults. When creating a new event
+    or repeater, the frontend pre-fills the form from these defaults.
+    """
+
+    organization = models.OneToOneField(
+        "app.Organization",
+        on_delete=models.CASCADE,
+        related_name="event_defaults",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Org event defaults"
+
+    def __str__(self):
+        return f"Event defaults for {self.organization.name}"

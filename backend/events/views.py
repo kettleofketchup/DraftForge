@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
+from app.models import Organization
 from app.permissions_org import has_org_staff_access
 from events.models import (
     Event,
@@ -13,6 +14,7 @@ from events.models import (
     EventSignup,
     EventState,
     EventTeam,
+    OrgEventDefaults,
     RepeaterSubscription,
     SignupStatus,
 )
@@ -21,6 +23,7 @@ from events.serializers import (
     EventSerializer,
     EventSignupSerializer,
     EventTeamSerializer,
+    OrgEventDefaultsSerializer,
 )
 from events.services import (
     approve_signup,
@@ -65,7 +68,13 @@ def _annotate_event_qs(qs):
 
 class EventRepeaterViewSet(viewsets.ModelViewSet):
     serializer_class = EventRepeaterSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOrgStaff]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def check_object_permissions(self, request, obj):
+        super().check_object_permissions(request, obj)
+        if self.action in ("update", "partial_update", "destroy"):
+            if not has_org_staff_access(request.user, obj.organization):
+                self.permission_denied(request)
 
     def get_queryset(self):
         qs = EventRepeater.objects.select_related(
@@ -331,3 +340,44 @@ class EventTeamViewSet(viewsets.ModelViewSet):
         if event_id:
             qs = qs.filter(event_id=event_id)
         return qs
+
+
+class OrgEventDefaultsViewSet(viewsets.GenericViewSet):
+    """Get or update event defaults for an organization.
+
+    GET   /events/defaults/?organization=<pk>  — returns defaults (auto-creates if missing)
+    PATCH /events/defaults/<pk>/               — update defaults (org staff only)
+    """
+
+    serializer_class = OrgEventDefaultsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return OrgEventDefaults.objects.select_related("organization")
+
+    def list(self, request):
+        org_id = request.query_params.get("organization")
+        if not org_id:
+            return Response(
+                {"error": "organization param required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            org = Organization.objects.get(pk=int(org_id))
+        except Organization.DoesNotExist:
+            return Response(
+                {"error": "Organization not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        defaults, _ = OrgEventDefaults.objects.get_or_create(organization=org)
+        return Response(OrgEventDefaultsSerializer(defaults).data)
+
+    def partial_update(self, request, pk=None):
+        defaults = self.get_object()
+        if not has_org_staff_access(request.user, defaults.organization):
+            raise PermissionDenied("Staff access required.")
+        serializer = self.get_serializer(defaults, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        invalidate_obj(defaults)
+        return Response(serializer.data)

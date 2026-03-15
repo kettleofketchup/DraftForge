@@ -1,4 +1,5 @@
 import { Pencil, Repeat, Users } from 'lucide-react';
+import { Link } from 'react-router';
 import { Button } from '~/components/ui/button';
 import {
   Tooltip,
@@ -23,9 +24,10 @@ interface EventStripProps {
 
 export function EventStrip({ event, onEdit, onEditSeries, className }: EventStripProps) {
   return (
-    <div
+    <Link
+      to={`/events/${event.id}`}
       className={cn(
-        'flex items-center gap-3 rounded-lg p-3 border border-border/50 bg-muted/25 hover:bg-muted/45 transition-colors',
+        'flex items-center gap-3 rounded-lg p-3 border border-border/50 bg-muted/25 hover:bg-muted/45 transition-colors cursor-pointer',
         className,
       )}
       data-testid={`event-strip-${event.id}`}
@@ -71,7 +73,7 @@ export function EventStrip({ event, onEdit, onEditSeries, className }: EventStri
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  onClick={() => onEdit(event)}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(event); }}
                   data-testid={`event-edit-${event.id}`}
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -87,7 +89,7 @@ export function EventStrip({ event, onEdit, onEditSeries, className }: EventStri
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  onClick={() => onEditSeries(event.event_repeater!)}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEditSeries(event.event_repeater!); }}
                   data-testid={`event-edit-series-${event.id}`}
                 >
                   <Repeat className="h-3.5 w-3.5" />
@@ -98,6 +100,6 @@ export function EventStrip({ event, onEdit, onEditSeries, className }: EventStri
           )}
         </div>
       )}
-    </div>
+    </Link>
   );
 }

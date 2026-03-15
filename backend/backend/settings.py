@@ -314,6 +314,8 @@ else:
         "events.event": {"ops": "all", "timeout": 60 * 60},
         "events.eventteam": {"ops": "all", "timeout": 60 * 60},
         "events.eventsignup": {"ops": "all", "timeout": 60 * 60},
+        "events.repeatersubscription": {"ops": "all", "timeout": 60 * 60},
+        "events.orgeventdefaults": {"ops": "all", "timeout": 60 * 60},
     }
 
 CACHEOPS_DEGRADE_ON_FAILURE = True

@@ -70,6 +70,7 @@ EVENTS_ORG: TestOrganization = TestOrganization(
     name="Events Test Org",
     description="Isolated organization for events E2E tests.",
     timezone="America/New_York",
+    discord_server_id="1467168401805017142",
 )
 
 # =============================================================================

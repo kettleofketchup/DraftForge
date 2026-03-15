@@ -8,8 +8,25 @@ import {
   FormMessage,
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
 import { DiscordChannelPicker } from './DiscordChannelPicker';
+
+const REMINDER_HOURS_OPTIONS = [
+  { value: 1, label: '1 hour before' },
+  { value: 2, label: '2 hours before' },
+  { value: 4, label: '4 hours before' },
+  { value: 6, label: '6 hours before' },
+  { value: 12, label: '12 hours before' },
+  { value: 24, label: '1 day before' },
+  { value: 48, label: '2 days before' },
+];
 
 export const DiscordIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
@@ -29,6 +46,8 @@ interface DiscordConfigSectionProps {
 export function DiscordConfigSection({ control, watch, isRepeater, organizationId }: DiscordConfigSectionProps) {
   const createEvent = watch('discord_create_event');
   const signupReminder = watch('discord_signup_reminder');
+  const profileReminder = watch('discord_profile_reminder');
+  const confirmAttendance = watch('discord_confirm_attendance');
   const postSignups = watch('discord_post_signups');
   const announcement = watch('discord_announcement');
 
@@ -214,7 +233,7 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
       </div>
 
       {/* Profile reminder */}
-      <div className="rounded-md border border-border p-3">
+      <div className="rounded-md border border-border p-3 space-y-3">
         <FormField
           control={control}
           name="discord_profile_reminder"
@@ -239,10 +258,41 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
             </FormItem>
           )}
         />
+        {profileReminder && (
+          <div className="ml-7">
+            <FormField
+              control={control}
+              name="discord_profile_reminder_hours"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>When to send</FormLabel>
+                  <Select
+                    onValueChange={(val) => field.onChange(parseInt(val, 10))}
+                    value={field.value?.toString()}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {REMINDER_HOURS_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={String(opt.value)}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        )}
       </div>
 
       {/* Confirm attendance */}
-      <div className="rounded-md border border-border p-3">
+      <div className="rounded-md border border-border p-3 space-y-3">
         <FormField
           control={control}
           name="discord_confirm_attendance"
@@ -267,6 +317,37 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
             </FormItem>
           )}
         />
+        {confirmAttendance && (
+          <div className="ml-7">
+            <FormField
+              control={control}
+              name="discord_confirm_attendance_hours"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>When to send</FormLabel>
+                  <Select
+                    onValueChange={(val) => field.onChange(parseInt(val, 10))}
+                    value={field.value?.toString()}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {REMINDER_HOURS_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={String(opt.value)}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        )}
       </div>
 
       {/* Post event signup embed */}
@@ -376,10 +457,10 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
                 </FormControl>
                 <div>
                   <FormLabel className="text-sm font-medium cursor-pointer">
-                    Notify new events
+                    Message interested users
                   </FormLabel>
                   <FormDescription>
-                    Post a notification when new events are generated and ready for signup
+                    DM subscribed users when new events are created or cancelled
                   </FormDescription>
                 </div>
               </FormItem>

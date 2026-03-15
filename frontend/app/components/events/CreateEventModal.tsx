@@ -1,8 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { createEvent, createEventRepeater } from '~/components/api/api';
+import { createEvent, createEventRepeater, getOrgEventDefaults } from '~/components/api/api';
 import { FormDialog } from '~/components/ui/dialogs';
 import {
   Form,
@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
@@ -44,6 +44,13 @@ export function CreateEventModal({
 }: CreateEventModalProps) {
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [defaultsApplied, setDefaultsApplied] = useState(false);
+
+  const { data: orgDefaults } = useQuery({
+    queryKey: ['org-event-defaults', organizationId],
+    queryFn: () => getOrgEventDefaults(organizationId),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const form = useForm<CreateEventInput>({
     resolver: zodResolver(createEventInputSchema),
@@ -69,6 +76,50 @@ export function CreateEventModal({
       generate_days_ahead: 7,
     },
   });
+
+  useEffect(() => {
+    if (orgDefaults && open && !defaultsApplied) {
+      form.reset({
+        name: '',
+        description: '',
+        scheduled_at: '',
+        organization: organizationId,
+        tournament_name: orgDefaults.tournament_name || '',
+        tournament_league: orgDefaults.tournament_league ?? undefined,
+        tournament_type: orgDefaults.tournament_type,
+        game_type: orgDefaults.game_type,
+        draft_type: orgDefaults.draft_type,
+        people_per_team: orgDefaults.people_per_team,
+        number_of_teams: orgDefaults.number_of_teams,
+        discord_notify_new_events: true,
+        discord_create_event: orgDefaults.discord_create_event,
+        discord_sync_signups: orgDefaults.discord_sync_signups,
+        discord_event_title: orgDefaults.discord_event_title,
+        discord_event_description: orgDefaults.discord_event_description,
+        discord_event_info: orgDefaults.discord_event_info,
+        discord_signup_reminder: orgDefaults.discord_signup_reminder,
+        discord_signup_reminder_hours: orgDefaults.discord_signup_reminder_hours,
+        discord_confirm_attendance: orgDefaults.discord_confirm_attendance,
+        discord_confirm_attendance_hours: orgDefaults.discord_confirm_attendance_hours,
+        discord_profile_reminder: orgDefaults.discord_profile_reminder,
+        discord_profile_reminder_hours: orgDefaults.discord_profile_reminder_hours,
+        discord_mark_interested: orgDefaults.discord_mark_interested,
+        discord_post_signups: orgDefaults.discord_post_signups,
+        discord_post_signups_channel_id: orgDefaults.discord_post_signups_channel_id,
+        discord_announcement: orgDefaults.discord_announcement,
+        discord_announcement_channel_id: orgDefaults.discord_announcement_channel_id,
+        discord_announcement_hours: orgDefaults.discord_announcement_hours,
+        is_recurring: false,
+        frequency: Frequency.WEEKLY,
+        generate_days_ahead: 7,
+      });
+      setDefaultsApplied(true);
+    }
+  }, [orgDefaults, open, defaultsApplied]);
+
+  useEffect(() => {
+    if (!open) setDefaultsApplied(false);
+  }, [open]);
 
   const isRecurring = form.watch('is_recurring');
 
@@ -101,6 +152,7 @@ export function CreateEventModal({
       queryClient.invalidateQueries({ queryKey: ['events'] });
       onOpenChange(false);
       form.reset();
+      setDefaultsApplied(false);
     } catch {
       toast.error('Failed to create event');
     } finally {

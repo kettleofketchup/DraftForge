@@ -1,7 +1,7 @@
 import { generateMeta } from '~/lib/seo';
 import { fetchOrganization } from '~/components/api/api';
 import { queryClient } from '~/root';
-import { Building2, Calendar, ClipboardList, ExternalLink, Pencil, Plus, Upload, Users } from 'lucide-react';
+import { Building2, Calendar, ClipboardList, ExternalLink, Mail, MailCheck, Pencil, Plus, Settings, Upload, Users } from 'lucide-react';
 import type { Route } from './+types/organization';
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
@@ -39,17 +39,20 @@ export function meta({ data }: Route.MetaArgs) {
 }
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { addOrgMember, checkDiscordBotStatus } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
 import { CreateEventModal, EditEventModal, EditRepeaterModal, EventStrip, type EventType } from '~/components/events';
 import type { EventRepeaterType } from '~/components/api/api';
-import { useEvents, useEventRepeaters } from '~/hooks/useEvent';
+import { useEvents, useEventRepeaters, useRepeaterSubscriptionMutation } from '~/hooks/useEvent';
 import { Repeat, CalendarDays } from 'lucide-react';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
 import { ClaimsTab, EditOrganizationModal, useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
+import { Button } from '~/components/ui/button';
 import { AddDiscordBotButton, PrimaryButton } from '~/components/ui/buttons';
+import { FormDialog } from '~/components/ui/dialogs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
 import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
@@ -60,6 +63,8 @@ import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 import { usePageNav } from '~/hooks/usePageNav';
+import { cn } from '~/lib/utils';
+import { toast } from 'sonner';
 
 // Discord icon component
 const DiscordIcon = ({ className }: { className?: string }) => (
@@ -104,7 +109,11 @@ function EventsList({ events, loading, onEdit, onEditSeries }: { events: EventTy
   );
 }
 
-function RepeatersList({ repeaters, loading }: { repeaters: EventRepeaterType[]; loading: boolean }) {
+function RepeatersList({ repeaters, loading, onEdit }: { repeaters: EventRepeaterType[]; loading: boolean; onEdit?: (repeater: EventRepeaterType) => void }) {
+  const currentUser = useUserStore((state) => state.currentUser);
+  const { subscribe, unsubscribe } = useRepeaterSubscriptionMutation();
+  const isPending = subscribe.isPending || unsubscribe.isPending;
+
   if (loading) {
     return <div className="text-center py-8 text-muted-foreground">Loading repeating events...</div>;
   }
@@ -128,11 +137,60 @@ function RepeatersList({ repeaters, loading }: { repeaters: EventRepeaterType[];
                   {r.day_of_week != null && ` on ${DAY_LABELS[r.day_of_week]}`}
                   {' at '}
                   {r.time_of_day.slice(0, 5)}
+                  {r.subscriber_count > 0 && (
+                    <span className="ml-2 text-xs">{'\u00B7'} {r.subscriber_count} subscribed</span>
+                  )}
                 </p>
               </div>
-              <Badge variant={r.is_active ? 'default' : 'secondary'}>
-                {r.is_active ? 'Active' : 'Paused'}
-              </Badge>
+              <div className="flex items-center gap-2 shrink-0">
+                {currentUser && r.discord_notify_new_events && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn("h-8 w-8", r.is_subscribed && "text-interactive")}
+                        disabled={isPending}
+                        onClick={() => {
+                          if (r.is_subscribed) {
+                            unsubscribe.mutate(r.id, {
+                              onError: () => toast.error('Failed to unsubscribe'),
+                            });
+                          } else {
+                            subscribe.mutate(r.id, {
+                              onSuccess: () => toast.success('Subscribed to notifications'),
+                              onError: () => toast.error('Failed to subscribe'),
+                            });
+                          }
+                        }}
+                      >
+                        {r.is_subscribed ? <MailCheck className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {r.is_subscribed ? 'Unsubscribe from notifications' : 'Get notified about new events'}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                {onEdit && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => onEdit(r)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Edit repeating event</TooltipContent>
+                  </Tooltip>
+                )}
+                <Badge variant={r.is_active ? 'default' : 'secondary'}>
+                  {r.is_active ? 'Active' : 'Paused'}
+                </Badge>
+              </div>
             </div>
           </div>
         ))}
@@ -144,6 +202,7 @@ function RepeatersList({ repeaters, loading }: { repeaters: EventRepeaterType[];
 export default function OrganizationDetailPage() {
   const { organizationId } = useParams();
   const pk = organizationId ? parseInt(organizationId, 10) : undefined;
+  const queryClient = useQueryClient();
   const { organization, isLoading: orgLoading, refetch } = useOrganization(pk);
   const { leagues, isLoading: leaguesLoading } = useLeagues(pk);
   const currentUser = useUserStore((state) => state.currentUser);
@@ -154,6 +213,7 @@ export default function OrganizationDetailPage() {
   const [editingRepeaterId, setEditingRepeaterId] = useState<number | null>(null);
   const [showAddUser, setShowAddUser] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
+  const [editDefaultsOpen, setEditDefaultsOpen] = useState(false);
   const [activeTab, setActiveTab] = useUrlTabs('leagues');
 
   const { data: events = [], isLoading: eventsLoading } = useEvents(
@@ -384,18 +444,35 @@ export default function OrganizationDetailPage() {
           <TabsContent value="events">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Events</h2>
-              {isOrgAdmin && (
-                <PrimaryButton onClick={() => setCreateEventOpen(true)}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Event
-                </PrimaryButton>
-              )}
+              <div className="flex items-center gap-2">
+                {canEditEvents && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9"
+                        onClick={() => setEditDefaultsOpen(true)}
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Edit event defaults</TooltipContent>
+                  </Tooltip>
+                )}
+                {isOrgAdmin && (
+                  <PrimaryButton onClick={() => setCreateEventOpen(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Event
+                  </PrimaryButton>
+                )}
+              </div>
             </div>
 
             {/* Desktop: side-by-side columns */}
             <div className="hidden lg:grid lg:grid-cols-2 lg:gap-6">
               <EventsList events={events} loading={eventsLoading} onEdit={canEditEvents ? setEditingEvent : undefined} onEditSeries={canEditEvents ? setEditingRepeaterId : undefined} />
-              <RepeatersList repeaters={repeaters} loading={repeatersLoading} />
+              <RepeatersList repeaters={repeaters} loading={repeatersLoading} onEdit={canEditEvents ? (r) => setEditingRepeaterId(r.id) : undefined} />
             </div>
 
             {/* Mobile: sub-tabs */}
@@ -415,7 +492,7 @@ export default function OrganizationDetailPage() {
                   <EventsList events={events} loading={eventsLoading} onEdit={canEditEvents ? setEditingEvent : undefined} onEditSeries={canEditEvents ? setEditingRepeaterId : undefined} />
                 </TabsContent>
                 <TabsContent value="repeaters">
-                  <RepeatersList repeaters={repeaters} loading={repeatersLoading} />
+                  <RepeatersList repeaters={repeaters} loading={repeatersLoading} onEdit={canEditEvents ? (r) => setEditingRepeaterId(r.id) : undefined} />
                 </TabsContent>
               </Tabs>
             </div>
@@ -505,7 +582,10 @@ export default function OrganizationDetailPage() {
             open={editOrgOpen}
             onOpenChange={setEditOrgOpen}
             organization={organization}
-            onSuccess={refetch}
+            onSuccess={() => {
+              refetch();
+              queryClient.invalidateQueries({ queryKey: ['discordBotStatus', pk] });
+            }}
           />
         )}
 
@@ -532,6 +612,21 @@ export default function OrganizationDetailPage() {
             isAdded={isUserAdded}
                         hasDiscordServer={hasDiscordServer}
           />
+        )}
+
+        {editDefaultsOpen && (
+          <FormDialog
+            open={editDefaultsOpen}
+            onOpenChange={setEditDefaultsOpen}
+            title="Organization Event Defaults"
+            description="Default settings applied when creating new events."
+            submitLabel="Save Defaults"
+            isSubmitting={false}
+            onSubmit={() => setEditDefaultsOpen(false)}
+            size="lg"
+          >
+            <p className="text-muted-foreground text-sm">Event defaults editor coming soon.</p>
+          </FormDialog>
         )}
     </div>
   );

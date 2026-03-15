@@ -23,11 +23,19 @@ def _fetch_guild_channels(guild_id):
     headers = {"Authorization": f"Bot {settings.DISCORD_BOT_TOKEN}"}
     response = requests.get(url, headers=headers, timeout=10)
     response.raise_for_status()
-    # Type 0 = text channel, Type 5 = announcement channel
+    # Type 0 = text, Type 5 = announcement, Type 15 = forum
+    # Forum channels require thread creation (different API) — include but flag them
+    POSTABLE_TYPES = {0, 5, 15}
+    TYPE_LABELS = {0: "text", 5: "announcement", 15: "forum"}
     return [
-        {"id": ch["id"], "name": ch["name"], "type": ch["type"]}
+        {
+            "id": ch["id"],
+            "name": ch["name"],
+            "type": ch["type"],
+            "type_label": TYPE_LABELS.get(ch["type"], "unknown"),
+        }
         for ch in response.json()
-        if ch["type"] in (0, 5)
+        if ch["type"] in POSTABLE_TYPES
     ]
 
 

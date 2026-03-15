@@ -135,7 +135,8 @@ export {
   getEventRepeaters, createEventRepeater, updateEventRepeater,
   getDiscordChannels,
   subscribeToRepeater, unsubscribeFromRepeater,
+  getOrgEventDefaults,
 } from './eventsAPI';
 
-export type { EventRepeaterType, DiscordChannel } from './eventsAPI';
+export type { EventRepeaterType, DiscordChannel, OrgEventDefaultsType } from './eventsAPI';
 export type { EventType, EventSignupType, EventTeamType } from '~/components/events/schemas';
