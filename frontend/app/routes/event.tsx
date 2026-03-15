@@ -192,7 +192,8 @@ export default function EventPage() {
                 size="sm"
                 onClick={() => setShowCancelRsvpConfirm(true)}
                 loading={signupActions.cancel.isPending}
-                className="w-full sm:w-auto"
+                depth={false}
+                className="bg-gradient-to-r from-red-700 to-violet-900 hover:from-red-600 hover:to-violet-800 shadow-lg active:translate-y-0.5 w-full sm:w-auto"
               >
                 <XCircle className="h-4 w-4 mr-2" />
                 Cancel RSVP
@@ -243,8 +244,9 @@ export default function EventPage() {
                   size="sm"
                   onClick={() => actions.cancelEvent.mutate()}
                   loading={actions.cancelEvent.isPending}
+                  depth={false}
                   data-testid="event-cancel-btn"
-                  className="w-full sm:w-auto"
+                  className="bg-gradient-to-r from-red-700 to-violet-900 hover:from-red-600 hover:to-violet-800 shadow-lg active:translate-y-0.5 w-full sm:w-auto"
                 >
                   <XCircle className="h-4 w-4 mr-2" />
                   Cancel Event
