@@ -123,7 +123,7 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
             <CancelButton
               onClick={handleCancel}
               disabled={isLoading}
-              variant={cancelVariant ?? (variant === 'warning' ? 'success' : 'destructive')}
+              variant={cancelVariant ?? (variant === 'warning' ? 'success' : 'default')}
               data-testid={cancelTestId}
             >
               {cancelLabel}
