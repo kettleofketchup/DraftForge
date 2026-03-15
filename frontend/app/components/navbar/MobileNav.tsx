@@ -256,7 +256,7 @@ export function MobileNav() {
             to="/events"
             icon={<CalendarIcon />}
             title="Events"
-            subtitle="Inhouses"
+            subtitle="Sign up here"
             iconClassName="text-accent"
             onClick={closeNav}
           />

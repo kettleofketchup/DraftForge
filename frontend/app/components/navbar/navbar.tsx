@@ -548,7 +548,7 @@ const NavLinks = ({ className }: { className?: string }) => {
         to="/events"
         icon={<CalendarIcon />}
         title="Events"
-        subtitle="Inhouses"
+        subtitle="Sign up here"
         hideTextOnSmall
         className="[&_svg]:text-accent"
       />
