@@ -143,7 +143,7 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByRole('option', { name: 'Events Test League' }).click();
 
     // Select Double Elimination bracket type
-    await page.getByLabel('Bracket Type').click();
+    await page.getByRole('combobox', { name: 'Bracket Type' }).click();
     await page.getByRole('option', { name: 'Double Elimination' }).click();
 
     // Set scheduled date
@@ -173,14 +173,14 @@ test.describe('Events - Create Event (@cicd)', () => {
     await expect(page.getByLabel('People Per Team')).toHaveValue('5');
 
     // Switch to Deadlock
-    await page.getByLabel('Game').click();
+    await page.getByRole('combobox', { name: 'Game' }).click();
     await page.getByRole('option', { name: 'Deadlock' }).click();
 
     // People per team should auto-update to 6
     await expect(page.getByLabel('People Per Team')).toHaveValue('6');
 
     // Switch back to Dota 2
-    await page.getByLabel('Game').click();
+    await page.getByRole('combobox', { name: 'Game' }).click();
     await page.getByRole('option', { name: 'Dota 2' }).click();
 
     // Should reset to 5
