@@ -136,6 +136,7 @@ export {
   getDiscordChannels,
   subscribeToRepeater, unsubscribeFromRepeater,
   getOrgEventDefaults,
+  updateOrgEventDefaults,
 } from './eventsAPI';
 
 export type { EventRepeaterType, DiscordChannel, OrgEventDefaultsType } from './eventsAPI';

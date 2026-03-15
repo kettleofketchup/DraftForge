@@ -21,6 +21,7 @@ import {
   subscribeToRepeater,
   unsubscribeFromRepeater,
   updateEvent as updateEventAPI,
+  updateOrgEventDefaults,
 } from '~/components/api/api';
 import type { EventRepeaterType } from '~/components/api/api';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
@@ -172,4 +173,15 @@ export function useRepeaterSubscriptionMutation() {
       },
     }),
   };
+}
+
+export function useUpdateOrgDefaultsMutation(orgId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
+      updateOrgEventDefaults(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['org-event-defaults', orgId] });
+    },
+  });
 }

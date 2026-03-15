@@ -170,6 +170,7 @@ export async function updateEventRepeater(repeaterId: number, payload: Partial<E
 // --- OrgEventDefaults ---
 
 export interface OrgEventDefaultsType {
+  id: number;
   organization: number;
   tournament_name: string;
   tournament_league: number | null;
@@ -218,6 +219,17 @@ export interface OrgEventDefaultsType {
 export async function getOrgEventDefaults(orgId: number): Promise<OrgEventDefaultsType> {
   const { data } = await axios.get<OrgEventDefaultsType>(
     `/events/defaults/?organization=${orgId}`
+  );
+  return data;
+}
+
+export async function updateOrgEventDefaults(
+  defaultsId: number,
+  payload: Partial<OrgEventDefaultsType>
+): Promise<OrgEventDefaultsType> {
+  const { data } = await axios.patch<OrgEventDefaultsType>(
+    `/events/defaults/${defaultsId}/`,
+    payload
   );
   return data;
 }

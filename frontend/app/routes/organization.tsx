@@ -42,7 +42,7 @@ import { useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { addOrgMember, checkDiscordBotStatus } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
-import { CreateEventModal, EditEventModal, EditRepeaterModal, EventStrip, type EventType } from '~/components/events';
+import { CreateEventModal, EditEventModal, EditOrgDefaultsModal, EditRepeaterModal, EventStrip, type EventType } from '~/components/events';
 import type { EventRepeaterType } from '~/components/api/api';
 import { useEvents, useEventRepeaters, useRepeaterSubscriptionMutation } from '~/hooks/useEvent';
 import { Repeat, CalendarDays } from 'lucide-react';
@@ -51,7 +51,6 @@ import { ClaimsTab, EditOrganizationModal, useOrganization } from '~/components/
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { AddDiscordBotButton, PrimaryButton } from '~/components/ui/buttons';
-import { FormDialog } from '~/components/ui/dialogs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
 import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
 import { UserList } from '~/components/user';
@@ -614,19 +613,12 @@ export default function OrganizationDetailPage() {
           />
         )}
 
-        {editDefaultsOpen && (
-          <FormDialog
+        {editDefaultsOpen && pk && (
+          <EditOrgDefaultsModal
+            organizationId={pk}
             open={editDefaultsOpen}
             onOpenChange={setEditDefaultsOpen}
-            title="Organization Event Defaults"
-            description="Default settings applied when creating new events."
-            submitLabel="Save Defaults"
-            isSubmitting={false}
-            onSubmit={() => setEditDefaultsOpen(false)}
-            size="lg"
-          >
-            <p className="text-muted-foreground text-sm">Event defaults editor coming soon.</p>
-          </FormDialog>
+          />
         )}
     </div>
   );

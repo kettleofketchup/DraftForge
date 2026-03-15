@@ -6,6 +6,7 @@ export {
 
 export { CreateEventModal } from './CreateEventModal';
 export { EditEventModal } from './EditEventModal';
+export { EditOrgDefaultsModal } from './EditOrgDefaultsModal';
 export { EditRepeaterModal } from './EditRepeaterModal';
 export { EventStateBadge } from './EventStateBadge';
 export { EventStrip } from './EventStrip';
