@@ -39,7 +39,7 @@ export function LobbyConfigSection({ control, watch }: LobbyConfigSectionProps) 
 
   return (
     <div className="space-y-4">
-      <h4 className="text-sm font-medium text-muted-foreground">Lobby Settings</h4>
+      <h4 className="text-sm font-medium text-muted-foreground">Lobby & Tournament Config</h4>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <FormField
