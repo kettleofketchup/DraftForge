@@ -21,9 +21,9 @@ from events.serializers import (
 )
 from events.services import (
     approve_signup,
-    auto_start_event,
     cancel_signup,
     confirm_signup,
+    finalize_event_tournament,
     process_rsvp,
     reject_signup,
     sync_future_events,
@@ -150,26 +150,20 @@ class EventViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def start_tournament(self, request, pk=None):
-        """Manual tournament start (after roll call). Creates tournament from event config."""
+        """Manual tournament start (after roll call). Transitions tournament to in_progress."""
         event = self.get_object()
         if not has_org_staff_access(request.user, event.organization):
             return Response(status=status.HTTP_403_FORBIDDEN)
-        original_auto_start = event.auto_start
-        try:
-            event.auto_start = True
-            if event.state == EventState.ROLL_CALL:
-                event.state = EventState.SIGNUPS_OPEN
-            tournament = auto_start_event(event)
-            if tournament:
-                event.refresh_from_db()
-                return Response(EventSerializer(event).data)
+        if not event.tournament:
             return Response(
-                {"error": "Could not start tournament."},
+                {"error": "No tournament linked to this event."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        except Exception:
-            event.auto_start = original_auto_start
-            raise
+        finalize_event_tournament(event)
+        event.state = EventState.IN_PROGRESS
+        event.save(update_fields=["state", "updated_at"])
+        event.refresh_from_db()
+        return Response(EventSerializer(event).data)
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):

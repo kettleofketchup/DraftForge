@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from cacheops import invalidate_obj
 from django.db import transaction
 
+from app.cache_utils import invalidate_after_commit
 from app.models import Tournament
 from events.models import (
     DiscordEventConfigMixin,
@@ -96,6 +97,8 @@ def process_rsvp(event, user, event_team=None):
         signup_type=signup_type,
         status=status,
     )
+    if status == SignupStatus.CONFIRMED:
+        add_user_to_tournament(event, user)
     invalidate_obj(event)
     return signup
 
@@ -109,6 +112,9 @@ def approve_signup(signup):
         raise ValueError(f"Cannot approve signup in '{signup.status}' status.")
     signup.status = SignupStatus.APPROVED
     signup.save(update_fields=["status", "updated_at"])
+    # If no roll call, approved means ready for tournament
+    if not signup.event.roll_call_enabled:
+        add_user_to_tournament(signup.event, signup.user)
     invalidate_obj(signup.event)
     return signup
 
@@ -119,6 +125,7 @@ def reject_signup(signup):
         raise ValueError(f"Cannot reject signup in '{signup.status}' status.")
     signup.status = SignupStatus.REJECTED
     signup.save(update_fields=["status", "updated_at"])
+    remove_user_from_tournament(signup.event, signup.user)
     _promote_from_waitlist(signup.event)
     invalidate_obj(signup.event)
     return signup
@@ -130,6 +137,7 @@ def confirm_signup(signup):
         raise ValueError("Only approved signups can be confirmed.")
     signup.status = SignupStatus.CONFIRMED
     signup.save(update_fields=["status", "updated_at"])
+    add_user_to_tournament(signup.event, signup.user)
     invalidate_obj(signup.event)
     return signup
 
@@ -140,6 +148,7 @@ def cancel_signup(signup):
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
     signup.status = SignupStatus.CANCELLED
     signup.save(update_fields=["status", "updated_at"])
+    remove_user_from_tournament(signup.event, signup.user)
     _promote_from_waitlist(signup.event)
     invalidate_obj(signup.event)
     return signup
@@ -162,11 +171,132 @@ def _promote_from_waitlist(event):
             next_waitlisted.status = SignupStatus.APPROVED
             if event.auto_confirm:
                 next_waitlisted.status = SignupStatus.CONFIRMED
+                add_user_to_tournament(event, next_waitlisted.user)
         else:
             next_waitlisted.status = SignupStatus.RSVP
         next_waitlisted.save(
             update_fields=["status", "waitlist_position", "updated_at"]
         )
+
+
+# ---------------------------------------------------------------------------
+# Tournament lifecycle
+# ---------------------------------------------------------------------------
+
+LOBBY_CONFIG_FIELDS = [
+    "game_mode",
+    "custom_game_name",
+    "captains_draft_time",
+    "lobby_steam_league_id",
+]
+
+
+@transaction.atomic
+def create_tournament_for_event(event):
+    """Create a future Tournament from event template fields. Returns Tournament."""
+    tournament = Tournament.objects.create(
+        name=event.tournament_name,
+        league=event.tournament_league,
+        tournament_type=event.tournament_type,
+        game_type=event.game_type,
+        draft_type=event.draft_type,
+        people_per_team=event.people_per_team,
+        number_of_teams=event.number_of_teams,
+        date_played=event.tournament_date or event.scheduled_at,
+        timezone=event.timezone,
+        game_mode=event.game_mode,
+        custom_game_name=event.custom_game_name,
+        captains_draft_time=event.captains_draft_time,
+        lobby_steam_league_id=event.lobby_steam_league_id,
+        state="future",
+    )
+    event.tournament = tournament
+    event.save(update_fields=["tournament", "updated_at"])
+    invalidate_after_commit(event)
+    return tournament
+
+
+def add_user_to_tournament(event, user):
+    """Add a user to the event's linked future tournament."""
+    if event.tournament and event.tournament.state == "future":
+        event.tournament.users.add(user)
+        invalidate_obj(event.tournament)
+
+
+def remove_user_from_tournament(event, user):
+    """Remove a user from the event's linked future tournament."""
+    if event.tournament and event.tournament.state == "future":
+        event.tournament.users.remove(user)
+        invalidate_obj(event.tournament)
+
+
+def finalize_event_tournament(event):
+    """Transition linked tournament from future to in_progress."""
+    if event.tournament and event.tournament.state == "future":
+        event.tournament.state = "in_progress"
+        event.tournament.save(update_fields=["state"])
+        invalidate_obj(event.tournament)
+
+
+def sync_tournament_from_event(event):
+    """Cascade event config changes to linked Tournament.
+
+    Returns dict with 'synced' (bool) and 'warning' (str or None).
+    """
+    if not event.tournament:
+        return {"synced": False, "warning": None}
+
+    state = event.tournament.state
+    if state == "future":
+        event.tournament.name = event.tournament_name
+        event.tournament.league = event.tournament_league
+        event.tournament.tournament_type = event.tournament_type
+        event.tournament.game_type = event.game_type
+        event.tournament.draft_type = event.draft_type
+        event.tournament.people_per_team = event.people_per_team
+        event.tournament.number_of_teams = event.number_of_teams
+        event.tournament.date_played = event.tournament_date or event.scheduled_at
+        event.tournament.timezone = event.timezone
+        for field in LOBBY_CONFIG_FIELDS:
+            setattr(event.tournament, field, getattr(event, field))
+        event.tournament.save()
+        return {"synced": True, "warning": None}
+    elif state == "in_progress":
+        return {
+            "synced": False,
+            "warning": "Tournament is in progress. Changes were saved to the event but not applied to the active tournament.",
+        }
+    else:
+        return {
+            "synced": False,
+            "warning": "Tournament has already completed. Changes were saved to the event only.",
+        }
+
+
+@transaction.atomic
+def restart_event_tournament(event):
+    """Delete existing tournament, create fresh one, re-add confirmed users."""
+    if not event.tournament:
+        raise ValueError("No tournament to restart.")
+
+    old_tournament = event.tournament
+    event.tournament = None
+    event.save(update_fields=["tournament", "updated_at"])
+    old_tournament.delete()
+
+    tournament = create_tournament_for_event(event)
+
+    confirmed = EventSignup.objects.filter(
+        event=event,
+        status__in=[SignupStatus.CONFIRMED, SignupStatus.APPROVED],
+    ).select_related("user")
+    for signup in confirmed:
+        tournament.users.add(signup.user)
+
+    event.state = EventState.SIGNUPS_OPEN
+    event.save(update_fields=["state", "updated_at"])
+    invalidate_after_commit(tournament, event)
+    return tournament
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +408,7 @@ def generate_events_for_repeater(repeater):
         _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
         event.tournament_date = dt
         event.save()
+        create_tournament_for_event(event)
         created_events.append(event)
     return created_events
 
@@ -291,7 +422,7 @@ def sync_future_events(repeater):
     future_events = Event.objects.filter(
         event_repeater=repeater,
         state=EventState.UPCOMING,
-    )
+    ).select_related("tournament")
     shared_fields = ["name", "description"]
     update_fields = (
         shared_fields
@@ -308,51 +439,7 @@ def sync_future_events(repeater):
         _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
         event.tournament_date = event.scheduled_at
         event.save(update_fields=update_fields + ["tournament_date", "updated_at"])
+        sync_tournament_from_event(event)
         updated += 1
     logger.info("Synced %d upcoming events for repeater %s", updated, repeater.pk)
     return updated
-
-
-# ---------------------------------------------------------------------------
-# Tournament auto-start
-# ---------------------------------------------------------------------------
-
-
-@transaction.atomic
-def auto_start_event(event):
-    """Auto-start a tournament for an event. Returns Tournament or None.
-
-    No select_for_update -- SQLite doesn't support it. Idempotency via state check.
-    """
-    if event.state != EventState.SIGNUPS_OPEN:
-        return None
-    if not event.auto_start:
-        return None
-    if event.roll_call_enabled:
-        return None
-
-    tournament = Tournament.objects.create(
-        name=event.tournament_name,
-        league=event.tournament_league,
-        tournament_type=event.tournament_type,
-        game_type=event.game_type,
-        draft_type=event.draft_type,
-        people_per_team=event.people_per_team,
-        number_of_teams=event.number_of_teams,
-        date_played=event.tournament_date or event.scheduled_at,
-        timezone=event.timezone,
-    )
-
-    confirmed_signups = EventSignup.objects.filter(
-        event=event,
-        status__in=[SignupStatus.CONFIRMED, SignupStatus.APPROVED],
-    ).select_related("user")
-    for signup in confirmed_signups:
-        tournament.users.add(signup.user)
-
-    event.tournament = tournament
-    event.state = EventState.IN_PROGRESS
-    event.save(update_fields=["tournament", "state", "updated_at"])
-    invalidate_obj(event)
-    invalidate_obj(tournament)
-    return tournament
