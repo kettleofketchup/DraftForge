@@ -147,7 +147,6 @@ def populate_events_data(force=False):
             "timezone": EVENTS_ORG.timezone,
             "auto_approve": True,
             "max_players": 10,
-            "discord_notify_new_events": True,
             "discord_announcement": True,
             "discord_announcement_channel_id": "1482767177063858216",
             "discord_announcement_hours": 24,
