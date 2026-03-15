@@ -204,7 +204,8 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             event.transition_state(EventState.SIGNUPS_OPEN)
-            return Response(EventSerializer(event).data)
+            qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
+            return Response(EventSerializer(qs.first()).data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -215,7 +216,8 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             event.transition_state(EventState.ROLL_CALL)
-            return Response(EventSerializer(event).data)
+            qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
+            return Response(EventSerializer(qs.first()).data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -255,7 +257,8 @@ class EventViewSet(viewsets.ModelViewSet):
                     event.save(update_fields=["tournament", "updated_at"])
                     tournament.delete()
                 event.transition_state(EventState.CANCELLED)
-            return Response(EventSerializer(event).data)
+            qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
+            return Response(EventSerializer(qs.first()).data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -332,6 +335,12 @@ class EventTeamViewSet(viewsets.ModelViewSet):
     serializer_class = EventTeamSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def check_object_permissions(self, request, obj):
+        super().check_object_permissions(request, obj)
+        if self.action in ("create", "update", "partial_update", "destroy"):
+            if not has_org_staff_access(request.user, obj.event.organization):
+                self.permission_denied(request)
+
     def get_queryset(self):
         qs = EventTeam.objects.select_related("event", "captain").annotate(
             member_count=Count("members"),
@@ -340,6 +349,13 @@ class EventTeamViewSet(viewsets.ModelViewSet):
         if event_id:
             qs = qs.filter(event_id=event_id)
         return qs
+
+    def perform_create(self, serializer):
+        event = serializer.validated_data.get("event")
+        if not has_org_staff_access(self.request.user, event.organization):
+            raise PermissionDenied(
+                "You do not have permission to create teams for this event."
+            )
 
 
 class OrgEventDefaultsViewSet(viewsets.GenericViewSet):

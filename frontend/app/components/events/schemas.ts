@@ -174,7 +174,7 @@ export const createEventInputSchema = z.object({
   game_mode: z.string(),
   custom_game_name: z.string(),
   captains_draft_time: z.number().int().min(1),
-  lobby_steam_league_id: z.number().nullable().optional(),
+  lobby_steam_league_id: z.number().nullable(),
   people_per_team: z.number().int().min(1),
   number_of_teams: z.number().int().min(2).nullable(),
   discord_notify_new_events: z.boolean().optional(),

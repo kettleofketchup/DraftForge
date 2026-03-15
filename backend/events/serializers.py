@@ -254,5 +254,52 @@ class EventSignupSerializer(serializers.ModelSerializer):
 class OrgEventDefaultsSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrgEventDefaults
-        exclude = ["id", "created_at", "updated_at"]
-        read_only_fields = ["organization"]
+        fields = [
+            "id",
+            "organization",
+            # TournamentTemplateMixin
+            "tournament_name",
+            "tournament_league",
+            "tournament_type",
+            "game_type",
+            "draft_type",
+            "people_per_team",
+            "number_of_teams",
+            "game_mode",
+            "custom_game_name",
+            "captains_draft_time",
+            "lobby_steam_league_id",
+            # EventConfigMixin
+            "timezone",
+            "min_players",
+            "max_players",
+            "signup_deadline_hours",
+            "allow_team_signups",
+            "allow_user_signups",
+            "auto_approve",
+            "auto_confirm",
+            "require_mmr_verified",
+            "require_steam_id",
+            "require_profile_complete",
+            "roll_call_enabled",
+            "roll_call_mode",
+            # DiscordEventConfigMixin
+            "discord_create_event",
+            "discord_sync_signups",
+            "discord_event_title",
+            "discord_event_description",
+            "discord_event_info",
+            "discord_signup_reminder",
+            "discord_signup_reminder_hours",
+            "discord_confirm_attendance",
+            "discord_confirm_attendance_hours",
+            "discord_profile_reminder",
+            "discord_profile_reminder_hours",
+            "discord_mark_interested",
+            "discord_post_signups",
+            "discord_post_signups_channel_id",
+            "discord_announcement",
+            "discord_announcement_channel_id",
+            "discord_announcement_hours",
+        ]
+        read_only_fields = ["id", "organization"]
