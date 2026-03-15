@@ -1,6 +1,7 @@
 from django.db.models import Count, Q
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
 from app.permissions_org import has_org_staff_access
@@ -25,6 +26,7 @@ from events.services import (
     confirm_signup,
     process_rsvp,
     reject_signup,
+    sync_future_events,
 )
 
 
@@ -69,7 +71,14 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
+        org = serializer.validated_data.get("organization")
+        if not has_org_staff_access(self.request.user, org):
+            raise PermissionDenied("You do not have staff access to this organization.")
         serializer.save(created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        repeater = serializer.save()
+        sync_future_events(repeater)
 
 
 class EventViewSet(viewsets.ModelViewSet):
@@ -91,6 +100,9 @@ class EventViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
+        org = serializer.validated_data.get("organization")
+        if not has_org_staff_access(self.request.user, org):
+            raise PermissionDenied("You do not have staff access to this organization.")
         serializer.save(created_by=self.request.user)
 
     def check_object_permissions(self, request, obj):

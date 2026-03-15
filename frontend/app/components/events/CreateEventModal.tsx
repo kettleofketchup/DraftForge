@@ -7,6 +7,7 @@ import { FormDialog } from '~/components/ui/dialogs';
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -22,7 +23,9 @@ import {
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
 import { useQueryClient } from '@tanstack/react-query';
-import { createEventInputSchema, Frequency, type CreateEventInput } from './schemas';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
+import { createEventInputSchema, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, type CreateEventInput } from './schemas';
 import type { LeagueType } from '~/components/league';
 
 interface CreateEventModalProps {
@@ -31,15 +34,6 @@ interface CreateEventModalProps {
   organizationId: number;
   leagues: LeagueType[];
 }
-
-const FREQUENCY_LABELS: Record<string, string> = {
-  [Frequency.DAILY]: 'Daily',
-  [Frequency.WEEKLY]: 'Weekly',
-  [Frequency.EVERY_TWO_WEEKS]: 'Every Two Weeks',
-  [Frequency.MONTHLY]: 'Monthly',
-};
-
-const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export function CreateEventModal({
   open,
@@ -63,6 +57,8 @@ export function CreateEventModal({
       draft_type: 'snake',
       people_per_team: 5,
       number_of_teams: null,
+      discord_notify_new_events: false,
+      ...DISCORD_CONFIG_DEFAULTS,
       is_recurring: false,
       frequency: Frequency.WEEKLY,
       generate_days_ahead: 7,
@@ -75,11 +71,12 @@ export function CreateEventModal({
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at, ...shared } = data;
+      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at, discord_notify_new_events, ...shared } = data;
 
       if (is_recurring) {
         await createEventRepeater({
           ...shared,
+          discord_notify_new_events: discord_notify_new_events ?? false,
           frequency,
           day_of_week: day_of_week ?? null,
           time_of_day: time_of_day || '19:00',
@@ -117,6 +114,16 @@ export function CreateEventModal({
       size="lg"
     >
       <Form {...form}>
+        <Tabs defaultValue="event">
+          <TabsList className="w-full">
+            <TabsTrigger value="event">Event</TabsTrigger>
+            <TabsTrigger value="discord">
+              <DiscordIcon className="h-4 w-4" />
+              Discord
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="event" className="space-y-4">
         <FormField
           control={form.control}
           name="name"
@@ -341,9 +348,7 @@ export function CreateEventModal({
                 <FormLabel className="text-sm font-medium cursor-pointer">
                   Recurring Event (Event Repeater)
                 </FormLabel>
-                <p className="text-xs text-muted-foreground">
-                  Automatically generates events on a schedule
-                </p>
+                <FormDescription>Automatically generates events on a schedule</FormDescription>
               </div>
             </FormItem>
           )}
@@ -351,7 +356,7 @@ export function CreateEventModal({
 
         {isRecurring ? (
           <>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="frequency"
@@ -402,7 +407,7 @@ export function CreateEventModal({
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <FormField
                 control={form.control}
                 name="time_of_day"
@@ -462,9 +467,7 @@ export function CreateEventModal({
                       onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 7)}
                     />
                   </FormControl>
-                  <p className="text-xs text-muted-foreground">
-                    How many days in advance to generate events
-                  </p>
+                  <FormDescription>How many days in advance to generate events</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -485,6 +488,18 @@ export function CreateEventModal({
             )}
           />
         )}
+
+          </TabsContent>
+
+          <TabsContent value="discord" className="space-y-4">
+            <DiscordConfigSection
+              control={form.control}
+              watch={form.watch}
+              isRepeater={isRecurring}
+              organizationId={organizationId}
+            />
+          </TabsContent>
+        </Tabs>
       </Form>
     </FormDialog>
   );

@@ -51,6 +51,23 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "roll_call_enabled",
             "roll_call_mode",
             "auto_start",
+            # DiscordConfig
+            "discord_create_event",
+            "discord_sync_signups",
+            "discord_event_title",
+            "discord_event_description",
+            "discord_event_info",
+            "discord_signup_reminder",
+            "discord_signup_reminder_hours",
+            "discord_confirm_attendance",
+            "discord_profile_reminder",
+            "discord_mark_interested",
+            "discord_post_signups",
+            "discord_post_signups_channel_id",
+            "discord_announcement",
+            "discord_announcement_channel_id",
+            "discord_announcement_hours",
+            "discord_notify_new_events",
         ]
         read_only_fields = ["id", "created_by", "created_at", "updated_at"]
 
@@ -108,6 +125,22 @@ class EventSerializer(serializers.ModelSerializer):
             "roll_call_enabled",
             "roll_call_mode",
             "auto_start",
+            # DiscordConfig
+            "discord_create_event",
+            "discord_sync_signups",
+            "discord_event_title",
+            "discord_event_description",
+            "discord_event_info",
+            "discord_signup_reminder",
+            "discord_signup_reminder_hours",
+            "discord_confirm_attendance",
+            "discord_profile_reminder",
+            "discord_mark_interested",
+            "discord_post_signups",
+            "discord_post_signups_channel_id",
+            "discord_announcement",
+            "discord_announcement_channel_id",
+            "discord_announcement_hours",
         ]
         read_only_fields = [
             "id",

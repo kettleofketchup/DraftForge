@@ -9,6 +9,7 @@ from django.db import transaction
 
 from app.models import Tournament
 from events.models import (
+    DiscordEventConfigMixin,
     Event,
     EventConfigMixin,
     EventSignup,
@@ -178,6 +179,9 @@ TOURNAMENT_TEMPLATE_FIELDS = [
 EVENT_CONFIG_FIELDS = [
     f.name for f in EventConfigMixin._meta.get_fields() if hasattr(f, "column")
 ]
+DISCORD_CONFIG_FIELDS = [
+    f.name for f in DiscordEventConfigMixin._meta.get_fields() if hasattr(f, "column")
+]
 
 
 def _get_next_occurrences(repeater, from_date, to_date):
@@ -271,10 +275,42 @@ def generate_events_for_repeater(repeater):
         )
         _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
         _copy_mixin_fields(repeater, event, EVENT_CONFIG_FIELDS)
+        _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
         event.tournament_date = dt
         event.save()
         created_events.append(event)
     return created_events
+
+
+def sync_future_events(repeater):
+    """Propagate repeater changes to all upcoming events in the series.
+
+    Only updates events that haven't progressed past 'upcoming' state
+    (i.e. signups haven't opened yet), so in-progress events are untouched.
+    """
+    future_events = Event.objects.filter(
+        event_repeater=repeater,
+        state=EventState.UPCOMING,
+    )
+    shared_fields = ["name", "description"]
+    update_fields = (
+        shared_fields
+        + TOURNAMENT_TEMPLATE_FIELDS
+        + EVENT_CONFIG_FIELDS
+        + DISCORD_CONFIG_FIELDS
+    )
+    updated = 0
+    for event in future_events:
+        for field_name in shared_fields:
+            setattr(event, field_name, getattr(repeater, field_name))
+        _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
+        _copy_mixin_fields(repeater, event, EVENT_CONFIG_FIELDS)
+        _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
+        event.tournament_date = event.scheduled_at
+        event.save(update_fields=update_fields + ["tournament_date", "updated_at"])
+        updated += 1
+    logger.info("Synced %d upcoming events for repeater %s", updated, repeater.pk)
+    return updated
 
 
 # ---------------------------------------------------------------------------

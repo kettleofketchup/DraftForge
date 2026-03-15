@@ -48,9 +48,9 @@ export interface FormDialogProps {
 
 const sizeClasses: Record<FormDialogSize, string> = {
   sm: 'sm:max-w-sm',
-  md: 'sm:max-w-md',
-  lg: 'sm:max-w-lg',
-  xl: 'sm:max-w-2xl',
+  md: 'sm:max-w-md md:max-w-lg',
+  lg: 'sm:max-w-lg md:max-w-2xl',
+  xl: 'sm:max-w-2xl md:max-w-4xl',
   full: 'sm:max-w-6xl',
 };
 
@@ -101,7 +101,10 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
         <DialogContent
           ref={ref}
           className={cn(
-            'max-w-[calc(100%-2rem)]',
+            // Full-screen on mobile
+            'h-full max-w-full rounded-none top-0 left-0 translate-x-0 translate-y-0',
+            // Centered dialog on sm+
+            'sm:h-auto sm:max-w-[calc(100%-2rem)] sm:rounded-lg sm:top-[50%] sm:left-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%]',
             // Disable zoom animation for large dialogs - causes expensive layout calculations
             'data-[state=open]:!zoom-in-100 data-[state=closed]:!zoom-out-100',
             sizeClasses[size],
@@ -125,7 +128,7 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
             )}
           </DialogHeader>
 
-          <ScrollArea className="max-h-[60vh] pr-4">
+          <ScrollArea className="max-h-[calc(100vh-10rem)] sm:max-h-[60vh] pr-4">
             <form onSubmit={handleSubmit} className="space-y-4">
               {children}
             </form>
@@ -135,9 +138,9 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
             <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
               <Button
                 type="button"
-                variant="outline"
                 onClick={() => onOpenChange(false)}
                 disabled={isSubmitting}
+                className="bg-gradient-to-r from-red-700 to-violet-900 hover:from-red-600 hover:to-violet-800 text-white shadow-lg active:translate-y-0.5"
                 data-testid="modal-cancel-button"
               >
                 {cancelLabel}

@@ -34,7 +34,7 @@ export const eventSchema = z.object({
   game_type: z.number(),
   draft_type: z.string(),
   people_per_team: z.number(),
-  number_of_teams: z.number(),
+  number_of_teams: z.number().nullable(),
   tournament_date: z.string().nullable(),
   timezone: z.string(),
   min_players: z.number().nullable(),
@@ -50,6 +50,21 @@ export const eventSchema = z.object({
   roll_call_enabled: z.boolean(),
   roll_call_mode: z.string(),
   auto_start: z.boolean(),
+  discord_create_event: z.boolean(),
+  discord_sync_signups: z.boolean(),
+  discord_event_title: z.string(),
+  discord_event_description: z.string(),
+  discord_event_info: z.string(),
+  discord_signup_reminder: z.boolean(),
+  discord_signup_reminder_hours: z.number(),
+  discord_confirm_attendance: z.boolean(),
+  discord_profile_reminder: z.boolean(),
+  discord_mark_interested: z.boolean(),
+  discord_post_signups: z.boolean(),
+  discord_post_signups_channel_id: z.string(),
+  discord_announcement: z.boolean(),
+  discord_announcement_channel_id: z.string(),
+  discord_announcement_hours: z.number(),
 });
 
 export type EventType = z.infer<typeof eventSchema>;
@@ -87,6 +102,51 @@ export const Frequency = {
   DAILY: 'daily', WEEKLY: 'weekly', EVERY_TWO_WEEKS: 'every_two_weeks', MONTHLY: 'monthly',
 } as const;
 
+export const FREQUENCY_LABELS: Record<string, string> = {
+  [Frequency.DAILY]: 'Daily',
+  [Frequency.WEEKLY]: 'Weekly',
+  [Frequency.EVERY_TWO_WEEKS]: 'Every Two Weeks',
+  [Frequency.MONTHLY]: 'Monthly',
+};
+
+export const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+export const discordConfigSchema = z.object({
+  discord_create_event: z.boolean(),
+  discord_sync_signups: z.boolean(),
+  discord_event_title: z.string(),
+  discord_event_description: z.string(),
+  discord_event_info: z.string(),
+  discord_signup_reminder: z.boolean(),
+  discord_signup_reminder_hours: z.number().int().min(1),
+  discord_confirm_attendance: z.boolean(),
+  discord_profile_reminder: z.boolean(),
+  discord_mark_interested: z.boolean(),
+  discord_post_signups: z.boolean(),
+  discord_post_signups_channel_id: z.string(),
+  discord_announcement: z.boolean(),
+  discord_announcement_channel_id: z.string(),
+  discord_announcement_hours: z.number().int().min(1),
+});
+
+export const DISCORD_CONFIG_DEFAULTS = {
+  discord_create_event: false,
+  discord_sync_signups: false,
+  discord_event_title: '',
+  discord_event_description: '',
+  discord_event_info: '',
+  discord_signup_reminder: false,
+  discord_signup_reminder_hours: 24,
+  discord_confirm_attendance: false,
+  discord_profile_reminder: false,
+  discord_mark_interested: false,
+  discord_post_signups: false,
+  discord_post_signups_channel_id: '',
+  discord_announcement: false,
+  discord_announcement_channel_id: '',
+  discord_announcement_hours: 24,
+} as const;
+
 export const createEventInputSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string(),
@@ -99,6 +159,7 @@ export const createEventInputSchema = z.object({
   draft_type: z.string(),
   people_per_team: z.number().int().min(1),
   number_of_teams: z.number().int().min(2).nullable(),
+  discord_notify_new_events: z.boolean().optional(),
   // Recurring fields
   is_recurring: z.boolean(),
   frequency: z.string().optional(),
@@ -107,6 +168,6 @@ export const createEventInputSchema = z.object({
   starts_at: z.string().optional(),
   ends_at: z.string().optional(),
   generate_days_ahead: z.number().int().min(1),
-});
+}).merge(discordConfigSchema);
 
 export type CreateEventInput = z.infer<typeof createEventInputSchema>;

@@ -69,6 +69,16 @@ export async function loginEventAdmin(context: BrowserContext) {
   return resp.json();
 }
 
+/** Trigger event generation synchronously (calls the Celery task directly). */
+export async function triggerEventGeneration(context: BrowserContext): Promise<string> {
+  const resp = await context.request.post(`${API_URL}/tests/events/generate/`);
+  if (!resp.ok()) {
+    throw new Error(`Event generation trigger failed: ${resp.status()}`);
+  }
+  const data = await resp.json();
+  return data.message;
+}
+
 /** Login as an event player (pk=1081). */
 export async function loginEventPlayer(context: BrowserContext) {
   const resp = await context.request.post(`${API_URL}/tests/login-as/`, {

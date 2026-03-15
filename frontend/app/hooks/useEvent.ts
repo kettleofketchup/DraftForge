@@ -7,14 +7,17 @@ import {
   confirmSignup as confirmSignupAPI,
   createEvent as createEventAPI,
   createEventRepeater as createEventRepeaterAPI,
+  updateEventRepeater as updateEventRepeaterAPI,
   getEvent,
   getEvents,
+  getEventRepeaters,
   getEventSignups,
   openSignups as openSignupsAPI,
   rejectSignup as rejectSignupAPI,
   rsvpForEvent,
   startRollCall as startRollCallAPI,
   startTournament as startTournamentAPI,
+  updateEvent as updateEventAPI,
 } from '~/components/api/api';
 import type { EventRepeaterType } from '~/components/api/api';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
@@ -78,6 +81,13 @@ export function useEventActionMutation(eventId: number) {
   };
 }
 
+export function useEventRepeaters(params?: { organization?: number }) {
+  return useQuery<EventRepeaterType[]>({
+    queryKey: ['event-repeaters', params],
+    queryFn: () => getEventRepeaters(params),
+  });
+}
+
 export function useCreateEventMutation(organizationId: number) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -94,6 +104,29 @@ export function useCreateEventRepeaterMutation(organizationId: number) {
     mutationFn: (payload: Partial<EventRepeaterType>) => createEventRepeaterAPI(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['events', { organization: organizationId }] });
+      queryClient.invalidateQueries({ queryKey: ['event-repeaters', { organization: organizationId }] });
+    },
+  });
+}
+
+export function useUpdateEventRepeaterMutation(repeaterId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Partial<EventRepeaterType>) => updateEventRepeaterAPI(repeaterId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event-repeaters'] });
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+    },
+  });
+}
+
+export function useUpdateEventMutation(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: Partial<EventType>) => updateEventAPI(eventId, payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['event', eventId], data);
+      queryClient.invalidateQueries({ queryKey: ['events'] });
     },
   });
 }

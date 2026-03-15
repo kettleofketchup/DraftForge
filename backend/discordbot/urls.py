@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .services.channels import get_discord_channels
 from .services.users import (
     check_discord_bot_status,
     get_discord_members,
@@ -40,5 +41,10 @@ urlpatterns = [
         "organizations/<int:pk>/bot-status/",
         check_discord_bot_status,
         name="discord-bot-status",
+    ),
+    path(
+        "organizations/<int:pk>/channels/",
+        get_discord_channels,
+        name="discord-channels",
     ),
 ]

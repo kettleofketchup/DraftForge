@@ -42,10 +42,13 @@ import { useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { addOrgMember, checkDiscordBotStatus } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
-import { CreateEventModal, EventStateBadge } from '~/components/events';
-import { useEvents } from '~/hooks/useEvent';
+import { CreateEventModal, EditEventModal, EditRepeaterModal, EventStrip, type EventType } from '~/components/events';
+import type { EventRepeaterType } from '~/components/api/api';
+import { useEvents, useEventRepeaters } from '~/hooks/useEvent';
+import { Repeat, CalendarDays } from 'lucide-react';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
 import { ClaimsTab, EditOrganizationModal, useOrganization } from '~/components/organization';
+import { Badge } from '~/components/ui/badge';
 import { AddDiscordBotButton, PrimaryButton } from '~/components/ui/buttons';
 import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
 import { UserList } from '~/components/user';
@@ -70,6 +73,74 @@ const DiscordIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const FREQUENCY_LABELS: Record<string, string> = {
+  daily: 'Daily',
+  weekly: 'Weekly',
+  every_two_weeks: 'Every 2 weeks',
+  monthly: 'Monthly',
+};
+
+function EventsList({ events, loading, onEdit, onEditSeries }: { events: EventType[]; loading: boolean; onEdit?: (event: EventType) => void; onEditSeries?: (repeaterId: number) => void }) {
+  if (loading) {
+    return <div className="text-center py-8 text-muted-foreground">Loading events...</div>;
+  }
+  if (events.length === 0) {
+    return <div className="text-center py-8 text-muted-foreground">No events found</div>;
+  }
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-3 hidden lg:block">
+        <CalendarDays className="inline h-4 w-4 mr-1.5 align-text-bottom" />
+        Events ({events.length})
+      </h3>
+      <div className="grid gap-2">
+        {events.map((event) => (
+          <EventStrip key={event.id} event={event} onEdit={onEdit} onEditSeries={onEditSeries} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RepeatersList({ repeaters, loading }: { repeaters: EventRepeaterType[]; loading: boolean }) {
+  if (loading) {
+    return <div className="text-center py-8 text-muted-foreground">Loading repeating events...</div>;
+  }
+  if (repeaters.length === 0) {
+    return <div className="text-center py-8 text-muted-foreground">No repeating events found</div>;
+  }
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-3 hidden lg:block">
+        <Repeat className="inline h-4 w-4 mr-1.5 align-text-bottom" />
+        Repeating Events ({repeaters.length})
+      </h3>
+      <div className="grid gap-3">
+        {repeaters.map((r) => (
+          <div key={r.id} className="rounded-lg border border-border p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-medium truncate">{r.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {FREQUENCY_LABELS[r.frequency] ?? r.frequency}
+                  {r.day_of_week != null && ` on ${DAY_LABELS[r.day_of_week]}`}
+                  {' at '}
+                  {r.time_of_day.slice(0, 5)}
+                </p>
+              </div>
+              <Badge variant={r.is_active ? 'default' : 'secondary'}>
+                {r.is_active ? 'Active' : 'Paused'}
+              </Badge>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function OrganizationDetailPage() {
   const { organizationId } = useParams();
   const pk = organizationId ? parseInt(organizationId, 10) : undefined;
@@ -79,11 +150,16 @@ export default function OrganizationDetailPage() {
   const [createLeagueOpen, setCreateLeagueOpen] = useState(false);
   const [createEventOpen, setCreateEventOpen] = useState(false);
   const [editOrgOpen, setEditOrgOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<EventType | null>(null);
+  const [editingRepeaterId, setEditingRepeaterId] = useState<number | null>(null);
   const [showAddUser, setShowAddUser] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [activeTab, setActiveTab] = useUrlTabs('leagues');
 
   const { data: events = [], isLoading: eventsLoading } = useEvents(
+    pk ? { organization: pk } : undefined
+  );
+  const { data: repeaters = [], isLoading: repeatersLoading } = useEventRepeaters(
     pk ? { organization: pk } : undefined
   );
 
@@ -103,6 +179,8 @@ export default function OrganizationDetailPage() {
     currentUser?.is_superuser ||
     organization?.owner?.pk === currentUser?.pk ||
     organization?.admins?.some((a) => a.pk === currentUser?.pk);
+
+  const canEditEvents = isOrgAdmin || currentUser?.is_staff;
 
   // Staff can add members but not edit org settings
   const canAddMembers =
@@ -314,42 +392,33 @@ export default function OrganizationDetailPage() {
               )}
             </div>
 
-            {eventsLoading ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Loading events...
-              </div>
-            ) : events.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                No events found
-              </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {events.map((event) => (
-                  <div
-                    key={event.id}
-                    className="rounded-lg border border-border bg-card p-4 space-y-2"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-semibold truncate">{event.name}</h3>
-                      <EventStateBadge state={event.state} />
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(event.scheduled_at).toLocaleDateString(undefined, {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })}
-                    </p>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span>{event.signup_count} signups</span>
-                      <span>{event.confirmed_count} confirmed</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            {/* Desktop: side-by-side columns */}
+            <div className="hidden lg:grid lg:grid-cols-2 lg:gap-6">
+              <EventsList events={events} loading={eventsLoading} onEdit={canEditEvents ? setEditingEvent : undefined} onEditSeries={canEditEvents ? setEditingRepeaterId : undefined} />
+              <RepeatersList repeaters={repeaters} loading={repeatersLoading} />
+            </div>
+
+            {/* Mobile: sub-tabs */}
+            <div className="lg:hidden">
+              <Tabs defaultValue="upcoming">
+                <TabsList className="w-full mb-4">
+                  <TabsTrigger value="upcoming" className="flex-1 gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    Events ({events.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="repeaters" className="flex-1 gap-1.5">
+                    <Repeat className="h-3.5 w-3.5" />
+                    Repeating ({repeaters.length})
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="upcoming">
+                  <EventsList events={events} loading={eventsLoading} onEdit={canEditEvents ? setEditingEvent : undefined} onEditSeries={canEditEvents ? setEditingRepeaterId : undefined} />
+                </TabsContent>
+                <TabsContent value="repeaters">
+                  <RepeatersList repeaters={repeaters} loading={repeatersLoading} />
+                </TabsContent>
+              </Tabs>
+            </div>
           </TabsContent>
 
           {/* Users Tab */}
@@ -418,6 +487,18 @@ export default function OrganizationDetailPage() {
             leagues={leagues}
           />
         )}
+
+        <EditEventModal
+          event={editingEvent}
+          open={editingEvent !== null}
+          onOpenChange={(open) => { if (!open) setEditingEvent(null); }}
+        />
+
+        <EditRepeaterModal
+          repeater={repeaters.find((r) => r.id === editingRepeaterId) ?? null}
+          open={editingRepeaterId !== null}
+          onOpenChange={(open) => { if (!open) setEditingRepeaterId(null); }}
+        />
 
         {organization && (
           <EditOrganizationModal

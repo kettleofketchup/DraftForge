@@ -1,8 +1,14 @@
 import nh3
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import models
 
 from app.models import TOURNAMNET_TYPE_CHOICES, DraftStyles, GameType
+
+discord_id_validator = RegexValidator(
+    r"^(\d{17,20})?$",
+    "Must be a valid Discord snowflake ID",
+)
 
 GAME_TYPE_TEAM_SIZE = {
     GameType.DOTA2: 5,
@@ -119,7 +125,79 @@ class EventConfigMixin(models.Model):
         abstract = True
 
 
-class EventRepeater(TournamentTemplateMixin, EventConfigMixin):
+class DiscordEventConfigMixin(models.Model):
+    """Abstract mixin for Discord integration configuration."""
+
+    discord_create_event = models.BooleanField(
+        default=False, help_text="Create a Discord scheduled event"
+    )
+    discord_sync_signups = models.BooleanField(
+        default=False, help_text="Sync signups to the Discord event"
+    )
+    discord_event_title = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Custom title for Discord event (blank = use event name)",
+    )
+    discord_event_description = models.TextField(
+        blank=True, default="", help_text="Custom description for Discord event"
+    )
+    discord_event_info = models.TextField(
+        blank=True,
+        default="",
+        help_text="Additional info shown in the Discord event",
+    )
+    discord_signup_reminder = models.BooleanField(
+        default=False, help_text="Send a signup reminder before the event"
+    )
+    discord_signup_reminder_hours = models.IntegerField(
+        default=24, help_text="Hours before event to send signup reminder"
+    )
+    discord_confirm_attendance = models.BooleanField(
+        default=False,
+        help_text="Require attendance confirmation via Discord message reply on event day",
+    )
+    discord_profile_reminder = models.BooleanField(
+        default=False,
+        help_text="Remind users to complete their profile before the event",
+    )
+    discord_mark_interested = models.BooleanField(
+        default=False,
+        help_text="Mark signups as 'interested' on the Discord scheduled event",
+    )
+    discord_post_signups = models.BooleanField(
+        default=False,
+        help_text="Post an event embed to a channel for reaction-based signups",
+    )
+    discord_post_signups_channel_id = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        validators=[discord_id_validator],
+        help_text="Discord channel ID to post signup embed in",
+    )
+    discord_announcement = models.BooleanField(
+        default=False,
+        help_text="Post a pre-day announcement in a channel",
+    )
+    discord_announcement_channel_id = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        validators=[discord_id_validator],
+        help_text="Discord channel ID for pre-day announcement",
+    )
+    discord_announcement_hours = models.IntegerField(
+        default=24,
+        help_text="Hours before event to post announcement",
+    )
+
+    class Meta:
+        abstract = True
+
+
+class EventRepeater(TournamentTemplateMixin, EventConfigMixin, DiscordEventConfigMixin):
     organization = models.ForeignKey(
         "app.Organization",
         on_delete=models.CASCADE,
@@ -140,6 +218,10 @@ class EventRepeater(TournamentTemplateMixin, EventConfigMixin):
         null=True,
         related_name="created_event_repeaters",
     )
+    discord_notify_new_events = models.BooleanField(
+        default=False,
+        help_text="Notify users when new events are generated and ready for signup",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -155,7 +237,7 @@ class EventRepeater(TournamentTemplateMixin, EventConfigMixin):
         super().save(*args, **kwargs)
 
 
-class Event(TournamentTemplateMixin, EventConfigMixin):
+class Event(TournamentTemplateMixin, EventConfigMixin, DiscordEventConfigMixin):
     organization = models.ForeignKey(
         "app.Organization",
         on_delete=models.CASCADE,

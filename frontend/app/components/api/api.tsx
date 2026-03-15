@@ -131,8 +131,9 @@ export {
   getEvents, getEvent, createEvent, updateEvent, deleteEvent,
   rsvpForEvent, openSignups, startRollCall, startTournament, cancelEvent,
   getEventSignups, approveSignup, rejectSignup, confirmSignup, cancelSignup,
-  getEventRepeaters, createEventRepeater,
+  getEventRepeaters, createEventRepeater, updateEventRepeater,
+  getDiscordChannels,
 } from './eventsAPI';
 
-export type { EventRepeaterType } from './eventsAPI';
+export type { EventRepeaterType, DiscordChannel } from './eventsAPI';
 export type { EventType, EventSignupType, EventTeamType } from '~/components/events/schemas';

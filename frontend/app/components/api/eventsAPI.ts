@@ -103,7 +103,7 @@ export interface EventRepeaterType {
   game_type: number;
   draft_type: string;
   people_per_team: number;
-  number_of_teams: number;
+  number_of_teams: number | null;
   tournament_date: string | null;
   timezone: string;
   min_players: number | null;
@@ -119,6 +119,22 @@ export interface EventRepeaterType {
   roll_call_enabled: boolean;
   roll_call_mode: string;
   auto_start: boolean;
+  discord_create_event: boolean;
+  discord_sync_signups: boolean;
+  discord_event_title: string;
+  discord_event_description: string;
+  discord_event_info: string;
+  discord_signup_reminder: boolean;
+  discord_signup_reminder_hours: number;
+  discord_confirm_attendance: boolean;
+  discord_profile_reminder: boolean;
+  discord_mark_interested: boolean;
+  discord_post_signups: boolean;
+  discord_post_signups_channel_id: string;
+  discord_announcement: boolean;
+  discord_announcement_channel_id: string;
+  discord_announcement_hours: number;
+  discord_notify_new_events: boolean;
 }
 
 export async function getEventRepeaters(params?: { organization?: number }): Promise<EventRepeaterType[]> {
@@ -132,4 +148,26 @@ export async function getEventRepeaters(params?: { organization?: number }): Pro
 export async function createEventRepeater(payload: Partial<EventRepeaterType>): Promise<EventRepeaterType> {
   const { data } = await axios.post<EventRepeaterType>('/events/repeaters/', payload);
   return data;
+}
+
+export async function updateEventRepeater(repeaterId: number, payload: Partial<EventRepeaterType>): Promise<EventRepeaterType> {
+  const { data } = await axios.patch<EventRepeaterType>(`/events/repeaters/${repeaterId}/`, payload);
+  return data;
+}
+
+export interface DiscordChannel {
+  id: string;
+  name: string;
+  type: number;
+}
+
+export async function getDiscordChannels(
+  orgId: number,
+  refresh = false
+): Promise<DiscordChannel[]> {
+  const params = refresh ? '?refresh=true' : '';
+  const { data } = await axios.get<{ channels: DiscordChannel[] }>(
+    `/discord/organizations/${orgId}/channels/${params}`
+  );
+  return data.channels;
 }

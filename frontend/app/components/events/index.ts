@@ -5,4 +5,7 @@ export {
 } from './schemas';
 
 export { CreateEventModal } from './CreateEventModal';
+export { EditEventModal } from './EditEventModal';
+export { EditRepeaterModal } from './EditRepeaterModal';
 export { EventStateBadge } from './EventStateBadge';
+export { EventStrip } from './EventStrip';

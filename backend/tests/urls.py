@@ -5,6 +5,7 @@ from common.utils import isTestEnvironment
 from .test_auth import (
     create_claim_request,
     create_claimable_user,
+    generate_events,
     get_tournament_by_key,
     get_user_org_membership,
     kill_draft_websocket,
@@ -161,6 +162,12 @@ urlpatterns = [
         "events/reset/",
         reset_events_data,
         name="reset-events",
+    ),
+    # Events generation trigger (synchronous)
+    path(
+        "events/generate/",
+        generate_events,
+        name="generate-events",
     ),
     # Demo tournament endpoints (for video recording)
     # More specific paths first to avoid <str:key> catching them

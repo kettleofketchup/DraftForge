@@ -114,6 +114,7 @@ export {
 export {
   getEventsTestData,
   resetEventsData,
+  triggerEventGeneration,
   loginEventAdmin,
   loginEventPlayer,
   EVENTS_ORG_NAME,
