@@ -127,7 +127,7 @@ test.describe('Events - Create Event (@cicd)', () => {
 
     // Modal should close and event should appear in list
     await expect(page.getByRole('heading', { name: 'Create Event' })).not.toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('E2E One-Off Test')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E One-Off Test').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('creates event with double elimination bracket type', async ({ page }) => {
