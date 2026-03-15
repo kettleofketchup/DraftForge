@@ -20,4 +20,5 @@ export default [
   route('profile', 'routes/profile.tsx'),
   route('edit-profile', 'routes/editProfile.tsx'),
   route('herodraft/:id', 'routes/herodraft.tsx'),
+  route('rollcall/:eventId', 'routes/rollcall.tsx'),
 ] satisfies RouteConfig;

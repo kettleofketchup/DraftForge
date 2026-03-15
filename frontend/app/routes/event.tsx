@@ -45,6 +45,7 @@ import {
   UserCheck,
   UserX,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Badge } from '~/components/ui/badge';
 import { EventStateBadge } from '~/components/events';
@@ -66,6 +67,7 @@ import { useOrganizations } from '~/components/organization';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { usePageNav } from '~/hooks/usePageNav';
 import { useUserStore } from '~/store/userStore';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 
 export default function EventPage() {
   const { eventId, tab } = useParams<{ eventId: string; tab?: string }>();
@@ -77,6 +79,7 @@ export default function EventPage() {
   const currentUser = useUserStore((state) => state.currentUser);
 
   const [activeTab, setActiveTab] = useState(tab || 'details');
+  const [showRollCallConfirm, setShowRollCallConfirm] = useState(false);
 
   // Permission check - find org for this event
   const { organizations } = useOrganizations();
@@ -193,7 +196,7 @@ export default function EventPage() {
               <SecondaryButton
                 color="orange"
                 size="sm"
-                onClick={() => actions.startRollCall.mutate()}
+                onClick={() => setShowRollCallConfirm(true)}
                 disabled={actions.startRollCall.isPending}
                 data-testid="event-start-rollcall-btn"
                 className="w-full sm:w-auto"
@@ -205,12 +208,11 @@ export default function EventPage() {
             {isAdmin && event.state === EventState.ROLL_CALL && (
               <PrimaryButton
                 size="sm"
-                onClick={() => actions.startTournament.mutate()}
-                disabled={actions.startTournament.isPending}
+                onClick={() => navigate(`/rollcall/${eventId}`)}
                 data-testid="event-start-tournament-btn"
                 className="w-full sm:w-auto"
               >
-                Start Tournament
+                Open Roll Call
               </PrimaryButton>
             )}
 
@@ -255,6 +257,23 @@ export default function EventPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <ConfirmDialog
+        open={showRollCallConfirm}
+        onOpenChange={setShowRollCallConfirm}
+        title="Start Roll Call"
+        description={`Freeze signups and begin roll call for "${event.name}"? Players will need to be confirmed before the tournament can start.`}
+        confirmLabel="Start Roll Call"
+        onConfirm={async () => {
+          try {
+            await actions.startRollCall.mutateAsync();
+            toast.success('Roll call started');
+            navigate(`/rollcall/${eventId}`);
+          } catch {
+            toast.error('Failed to start roll call');
+          }
+        }}
+      />
     </div>
   );
 }
