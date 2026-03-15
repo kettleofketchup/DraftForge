@@ -46,6 +46,7 @@ export function useEventSignups(eventId: number | null) {
     queryKey: ['event-signups', eventId],
     queryFn: () => getEventSignups(eventId!),
     enabled: eventId !== null,
+    staleTime: 5 * 1000, // 5s — signups change frequently during event lifecycle
   });
 }
 
@@ -55,6 +56,10 @@ export function useRsvpMutation(eventId: number) {
     mutationFn: () => rsvpForEvent(eventId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+    },
+    onError: () => {
+      // Refetch signups on error (e.g., "already signed up") so UI toggles correctly
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
     },
   });
