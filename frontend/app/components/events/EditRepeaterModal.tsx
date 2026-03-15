@@ -8,6 +8,7 @@ import { FormDialog } from '~/components/ui/dialogs';
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -25,6 +26,7 @@ import { Textarea } from '~/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { useUpdateEventRepeaterMutation } from '~/hooks/useEvent';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
+import { LobbyConfigSection } from './LobbyConfigSection';
 import { discordConfigSchema, DISCORD_CONFIG_DEFAULTS, Frequency, FREQUENCY_LABELS, DAY_LABELS } from './schemas';
 
 const editRepeaterSchema = z.object({
@@ -34,6 +36,10 @@ const editRepeaterSchema = z.object({
   tournament_type: z.string(),
   game_type: z.number(),
   draft_type: z.string(),
+  game_mode: z.string(),
+  custom_game_name: z.string(),
+  captains_draft_time: z.number().int().min(1),
+  lobby_steam_league_id: z.number().nullable(),
   people_per_team: z.number().int().min(1),
   number_of_teams: z.number().int().min(2).nullable(),
   frequency: z.string(),
@@ -62,9 +68,13 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
       name: '',
       description: '',
       tournament_name: '',
-      tournament_type: 'single_elimination',
+      tournament_type: 'double_elimination',
       game_type: 1,
-      draft_type: 'snake',
+      draft_type: 'shuffle',
+      game_mode: 'normal',
+      custom_game_name: '',
+      captains_draft_time: 10,
+      lobby_steam_league_id: null,
       people_per_team: 5,
       number_of_teams: null,
       frequency: Frequency.WEEKLY,
@@ -72,7 +82,7 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
       time_of_day: '19:00',
       ends_at: '',
       generate_days_ahead: 7,
-      discord_notify_new_events: false,
+      discord_notify_new_events: true,
       ...DISCORD_CONFIG_DEFAULTS,
     },
   });
@@ -86,6 +96,10 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
         tournament_type: repeater.tournament_type,
         game_type: repeater.game_type,
         draft_type: repeater.draft_type,
+        game_mode: repeater.game_mode,
+        custom_game_name: repeater.custom_game_name,
+        captains_draft_time: repeater.captains_draft_time,
+        lobby_steam_league_id: repeater.lobby_steam_league_id,
         people_per_team: repeater.people_per_team,
         number_of_teams: repeater.number_of_teams,
         frequency: repeater.frequency,
@@ -101,7 +115,9 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
         discord_signup_reminder: repeater.discord_signup_reminder,
         discord_signup_reminder_hours: repeater.discord_signup_reminder_hours,
         discord_confirm_attendance: repeater.discord_confirm_attendance,
+        discord_confirm_attendance_hours: repeater.discord_confirm_attendance_hours,
         discord_profile_reminder: repeater.discord_profile_reminder,
+        discord_profile_reminder_hours: repeater.discord_profile_reminder_hours,
         discord_notify_new_events: repeater.discord_notify_new_events,
         discord_mark_interested: repeater.discord_mark_interested,
         discord_post_signups: repeater.discord_post_signups,
@@ -311,6 +327,14 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
                     const gameType = parseInt(val, 10);
                     field.onChange(gameType);
                     form.setValue('people_per_team', gameType === 2 ? 6 : 5);
+                    // Reset Dota-only fields when switching to non-Dota
+                    const currentMode = form.getValues('game_mode');
+                    if (gameType !== 1) {
+                      if (currentMode === 'captains_mode' || currentMode === 'turbo') {
+                        form.setValue('game_mode', 'normal');
+                      }
+                      form.setValue('lobby_steam_league_id', null);
+                    }
                   }}
                   value={field.value?.toString()}
                 >
@@ -398,9 +422,9 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="snake">Snake Draft</SelectItem>
-                    <SelectItem value="shuffle">Shuffle</SelectItem>
-                    <SelectItem value="normal">Manual</SelectItem>
+                    <SelectItem value="shuffle">Shuffle — MMR point buy draft</SelectItem>
+                    <SelectItem value="snake">Snake Draft — Captains pick in snake order</SelectItem>
+                    <SelectItem value="normal">Manual — Manually assign players</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -421,16 +445,21 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="single_elimination">Single Elimination</SelectItem>
                     <SelectItem value="double_elimination">Double Elimination</SelectItem>
+                    <SelectItem value="single_elimination">Single Elimination</SelectItem>
                     <SelectItem value="swiss">Swiss Bracket</SelectItem>
                   </SelectContent>
                 </Select>
+                <FormDescription>
+                  Double elimination works best with teams that are a power of 2 (2, 4, 8, 16)
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
         </div>
+
+        <LobbyConfigSection control={form.control} watch={form.watch} />
 
           </TabsContent>
 
