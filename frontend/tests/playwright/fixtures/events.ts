@@ -25,6 +25,7 @@ export const EVENTS_EVENT_NAME = 'E2E Signup Event';
 export interface EventInfo {
   pk: number;
   orgPk: number;
+  leaguePk: number;
   name: string;
   state: string;
 }
@@ -46,6 +47,7 @@ export async function getEventsTestData(context: BrowserContext): Promise<EventI
   return {
     pk: signupEvent.id,
     orgPk: eventsOrg.pk,
+    leaguePk: signupEvent.tournament_league,
     name: signupEvent.name,
     state: signupEvent.state,
   };
