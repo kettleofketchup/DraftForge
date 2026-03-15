@@ -225,6 +225,7 @@ class EventTeamSerializer(serializers.ModelSerializer):
 class EventSignupSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.nickname", read_only=True)
     user_avatar = serializers.CharField(source="user.avatar", read_only=True)
+    user_data = serializers.SerializerMethodField()
 
     class Meta:
         model = EventSignup
@@ -234,6 +235,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "user",
             "username",
             "user_avatar",
+            "user_data",
             "event_team",
             "signup_type",
             "status",
@@ -249,6 +251,11 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def get_user_data(self, obj):
+        from app.serializers import TournamentUserSerializer
+
+        return TournamentUserSerializer(obj.user).data
 
 
 class OrgEventDefaultsSerializer(serializers.ModelSerializer):

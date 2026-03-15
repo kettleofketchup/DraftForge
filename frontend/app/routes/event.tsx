@@ -53,6 +53,8 @@ import type { EventSignupType } from '~/components/events/schemas';
 import { PrimaryButton, SecondaryButton, DestructiveButton } from '~/components/ui/buttons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
+import { UserStrip } from '~/components/user';
+import type { UserType } from '~/components/user/types';
 import {
   useEvent,
   useEventSignups,
@@ -349,66 +351,78 @@ function SignupsTab({
   }
 
   return (
-    <div className="space-y-2">
-      {signups.map((signup) => (
-        <Card key={signup.id} className="p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3 min-w-0">
-              {signup.user_avatar && (
-                <img
-                  src={signup.user_avatar}
-                  alt=""
-                  className="w-8 h-8 rounded-full"
-                />
-              )}
-              <div className="min-w-0">
-                <p className="font-medium truncate">
-                  {signup.username ?? `User #${signup.user}`}
-                </p>
-                <p className="text-xs text-muted-foreground">{signup.signup_type}</p>
-              </div>
-            </div>
+    <div className="space-y-1.5">
+      {signups.map((signup) => {
+        const userData = signup.user_data;
 
-            <div className="flex items-center gap-2 shrink-0">
-              <EventStateBadge state={signup.status} />
-
-              {isAdmin && (
-                <div className="flex gap-1">
-                  {signup.status === 'pending_approval' && (
-                    <>
-                      <SecondaryButton
-                        color="green"
-                        size="sm"
-                        onClick={() => signupActions.approve.mutate(signup.id)}
-                        disabled={signupActions.approve.isPending}
-                      >
-                        <CheckCircle2 className="h-3 w-3" />
-                      </SecondaryButton>
-                      <DestructiveButton
-                        size="sm"
-                        onClick={() => signupActions.reject.mutate(signup.id)}
-                        loading={signupActions.reject.isPending}
-                      >
-                        <UserX className="h-3 w-3" />
-                      </DestructiveButton>
-                    </>
-                  )}
-                  {signup.status === 'approved' && (
-                    <SecondaryButton
-                      color="blue"
-                      size="sm"
-                      onClick={() => signupActions.confirm.mutate(signup.id)}
-                      disabled={signupActions.confirm.isPending}
-                    >
-                      <UserCheck className="h-3 w-3" />
-                    </SecondaryButton>
-                  )}
-                </div>
-              )}
-            </div>
+        const adminActions = isAdmin ? (
+          <div className="flex gap-1">
+            {(signup.status === 'rsvp' || signup.status === 'pending_approval') && (
+              <>
+                <SecondaryButton
+                  color="green"
+                  size="sm"
+                  onClick={() => signupActions.approve.mutate(signup.id)}
+                  disabled={signupActions.approve.isPending}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline ml-1">Approve</span>
+                </SecondaryButton>
+                <DestructiveButton
+                  size="sm"
+                  onClick={() => signupActions.reject.mutate(signup.id)}
+                  loading={signupActions.reject.isPending}
+                >
+                  <UserX className="h-3.5 w-3.5" />
+                </DestructiveButton>
+              </>
+            )}
+            {signup.status === 'approved' && (
+              <SecondaryButton
+                color="blue"
+                size="sm"
+                onClick={() => signupActions.confirm.mutate(signup.id)}
+                disabled={signupActions.confirm.isPending}
+              >
+                <UserCheck className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline ml-1">Confirm</span>
+              </SecondaryButton>
+            )}
           </div>
-        </Card>
-      ))}
+        ) : undefined;
+
+        if (userData) {
+          return (
+            <UserStrip
+              key={signup.id}
+              user={userData as unknown as UserType}
+              compact
+              showPositions
+              contextSlot={<EventStateBadge state={signup.status} />}
+              actionSlot={adminActions}
+            />
+          );
+        }
+
+        // Fallback for signups without full user data
+        return (
+          <div
+            key={signup.id}
+            className="flex items-center gap-3 rounded-lg p-2 border border-border/50 bg-muted/25"
+          >
+            <div className="w-9 h-9 rounded-full bg-muted shrink-0 flex items-center justify-center text-xs text-muted-foreground">
+              {(signup.username ?? '?')[0]?.toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium truncate">
+                {signup.username ?? `User #${signup.user}`}
+              </p>
+            </div>
+            <EventStateBadge state={signup.status} />
+            {adminActions}
+          </div>
+        );
+      })}
     </div>
   );
 }
