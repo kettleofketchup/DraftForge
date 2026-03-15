@@ -61,7 +61,6 @@ function makeDailyRepeater(overrides: Record<string, unknown> = {}) {
     number_of_teams: null,
     timezone: 'UTC',
     auto_approve: true,
-    auto_start: false,
     max_players: null,
     ...overrides,
   };

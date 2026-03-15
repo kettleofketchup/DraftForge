@@ -35,11 +35,6 @@ app.conf.beat_schedule = {
         "task": "events.tasks.generate_upcoming_events",
         "schedule": 3600.0,
     },
-    # Auto-start tournaments for due events every minute
-    "auto-start-tournaments-every-minute": {
-        "task": "events.tasks.auto_start_tournaments",
-        "schedule": 60.0,
-    },
 }
 
 

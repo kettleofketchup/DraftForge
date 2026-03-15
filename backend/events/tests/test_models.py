@@ -1,6 +1,5 @@
 from datetime import timedelta
 
-from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone as tz
 
@@ -80,7 +79,6 @@ class EventRepeaterModelTests(EventTestCase):
         )
         self.assertEqual(repeater.name, "Tuesday Inhouses")
         self.assertEqual(repeater.frequency, RepeatFrequency.WEEKLY)
-        self.assertTrue(repeater.auto_start)
 
     def test_event_repeater_str(self):
         from events.models import EventRepeater, RepeatFrequency
@@ -179,7 +177,7 @@ class EventModelTests(EventTestCase):
                 tournament_league=self.league,
                 state=initial,
                 **(
-                    {"roll_call_enabled": True, "auto_start": False}
+                    {"roll_call_enabled": True}
                     if initial == EventState.ROLL_CALL
                     else {}
                 ),
@@ -238,22 +236,6 @@ class EventModelTests(EventTestCase):
             tournament_league=self.league,
         )
         self.assertNotIn("<script>", event.description)
-
-    def test_clean_roll_call_auto_start_conflict(self):
-        from events.models import Event
-
-        event = Event(
-            organization=self.org,
-            name="Bad",
-            scheduled_at=tz.now() + timedelta(days=7),
-            created_by=self.admin,
-            tournament_name="Test",
-            tournament_league=self.league,
-            roll_call_enabled=True,
-            auto_start=True,
-        )
-        with self.assertRaises(ValidationError):
-            event.clean()
 
 
 class EventTeamModelTests(EventTestCase):
