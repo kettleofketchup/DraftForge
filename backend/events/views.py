@@ -1,5 +1,6 @@
+from cacheops import invalidate_obj
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import BooleanField, Count, Exists, OuterRef, Q, Value
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -12,6 +13,7 @@ from events.models import (
     EventSignup,
     EventState,
     EventTeam,
+    RepeaterSubscription,
     SignupStatus,
 )
 from events.serializers import (
@@ -68,7 +70,20 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = EventRepeater.objects.select_related(
             "organization", "tournament_league", "created_by"
+        ).annotate(
+            subscriber_count=Count("subscriptions"),
         )
+        if self.request.user.is_authenticated:
+            qs = qs.annotate(
+                is_subscribed=Exists(
+                    RepeaterSubscription.objects.filter(
+                        event_repeater=OuterRef("pk"),
+                        user=self.request.user,
+                    )
+                )
+            )
+        else:
+            qs = qs.annotate(is_subscribed=Value(False, output_field=BooleanField()))
         org_id = self.request.query_params.get("organization")
         if org_id:
             qs = qs.filter(organization_id=org_id)
@@ -83,6 +98,35 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         repeater = serializer.save()
         sync_future_events(repeater)
+
+    @action(
+        detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated]
+    )
+    def subscribe(self, request, pk=None):
+        """Subscribe to event notifications for this repeater.
+        Any authenticated user can subscribe (not limited to org staff).
+        """
+        repeater = self.get_object()
+        _, created = RepeaterSubscription.objects.get_or_create(
+            event_repeater=repeater, user=request.user
+        )
+        if created:
+            invalidate_obj(repeater)
+            return Response({"detail": "Subscribed"}, status=status.HTTP_201_CREATED)
+        return Response({"detail": "Already subscribed"}, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated]
+    )
+    def unsubscribe(self, request, pk=None):
+        """Unsubscribe from event notifications for this repeater."""
+        repeater = self.get_object()
+        deleted, _ = RepeaterSubscription.objects.filter(
+            event_repeater=repeater, user=request.user
+        ).delete()
+        if deleted:
+            invalidate_obj(repeater)
+        return Response({"detail": "Unsubscribed"}, status=status.HTTP_200_OK)
 
 
 class EventViewSet(viewsets.ModelViewSet):
@@ -183,8 +227,8 @@ class EventViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             finalize_event_tournament(event)
-            event.refresh_from_db()
-            return Response(EventSerializer(event).data)
+            qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
+            return Response(EventSerializer(qs.first()).data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
