@@ -25,6 +25,7 @@ import { Textarea } from '~/components/ui/textarea';
 import { useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
+import { LobbyConfigSection } from './LobbyConfigSection';
 import { createEventInputSchema, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, type CreateEventInput } from './schemas';
 import type { LeagueType } from '~/components/league';
 
@@ -52,12 +53,16 @@ export function CreateEventModal({
       scheduled_at: '',
       organization: organizationId,
       tournament_name: '',
-      tournament_type: 'single_elimination',
+      tournament_type: 'double_elimination',
       game_type: 1,
-      draft_type: 'snake',
+      draft_type: 'shuffle',
+      game_mode: 'normal',
+      custom_game_name: '',
+      captains_draft_time: 10,
+      lobby_steam_league_id: null,
       people_per_team: 5,
       number_of_teams: null,
-      discord_notify_new_events: false,
+      discord_notify_new_events: true,
       ...DISCORD_CONFIG_DEFAULTS,
       is_recurring: false,
       frequency: Frequency.WEEKLY,
@@ -209,6 +214,14 @@ export function CreateEventModal({
                     field.onChange(gameType);
                     // Update people_per_team default when switching games
                     form.setValue('people_per_team', gameType === 2 ? 6 : 5);
+                    // Reset Dota-only fields when switching to non-Dota
+                    const currentMode = form.getValues('game_mode');
+                    if (gameType !== 1) {
+                      if (currentMode === 'captains_mode' || currentMode === 'turbo') {
+                        form.setValue('game_mode', 'normal');
+                      }
+                      form.setValue('lobby_steam_league_id', null);
+                    }
                   }}
                   value={field.value?.toString()}
                 >
@@ -296,9 +309,9 @@ export function CreateEventModal({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="snake">Snake Draft</SelectItem>
-                    <SelectItem value="shuffle">Shuffle</SelectItem>
-                    <SelectItem value="normal">Manual</SelectItem>
+                    <SelectItem value="shuffle">Shuffle — MMR point buy draft</SelectItem>
+                    <SelectItem value="snake">Snake Draft — Captains pick in snake order</SelectItem>
+                    <SelectItem value="normal">Manual — Manually assign players</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -319,16 +332,21 @@ export function CreateEventModal({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="single_elimination">Single Elimination</SelectItem>
                     <SelectItem value="double_elimination">Double Elimination</SelectItem>
+                    <SelectItem value="single_elimination">Single Elimination</SelectItem>
                     <SelectItem value="swiss">Swiss Bracket</SelectItem>
                   </SelectContent>
                 </Select>
+                <FormDescription>
+                  Double elimination works best with teams that are a power of 2 (2, 4, 8, 16)
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
           />
         </div>
+
+        <LobbyConfigSection control={form.control} watch={form.watch} />
 
         {/* Recurring toggle */}
         <FormField
