@@ -47,7 +47,7 @@ const contentVariantStyles = {
 
 // Description text styling per variant
 const descriptionVariantStyles = {
-  default: '',
+  default: 'text-green-100',
   destructive: 'text-slate-300',
   warning: 'text-orange-200',
 };
@@ -123,7 +123,7 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
             <CancelButton
               onClick={handleCancel}
               disabled={isLoading}
-              variant={cancelVariant ?? (variant === 'warning' ? 'success' : 'default')}
+              variant={cancelVariant ?? (variant === 'warning' ? 'success' : 'destructive')}
               data-testid={cancelTestId}
             >
               {cancelLabel}
