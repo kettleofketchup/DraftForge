@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Count, Q
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -23,10 +24,13 @@ from events.services import (
     approve_signup,
     cancel_signup,
     confirm_signup,
+    create_tournament_for_event,
     finalize_event_tournament,
     process_rsvp,
     reject_signup,
+    restart_event_tournament,
     sync_future_events,
+    sync_tournament_from_event,
 )
 
 
@@ -102,8 +106,22 @@ class EventViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         org = serializer.validated_data.get("organization")
         if not has_org_staff_access(self.request.user, org):
-            raise PermissionDenied("You do not have staff access to this organization.")
-        serializer.save(created_by=self.request.user)
+            raise PermissionDenied(
+                "You do not have permission to create events for this organization."
+            )
+        event = serializer.save(created_by=self.request.user)
+        create_tournament_for_event(event)
+
+    def perform_update(self, serializer):
+        event = serializer.save()
+        result = sync_tournament_from_event(event)
+        self._cascade_warning = result.get("warning")
+
+    def update(self, request, *args, **kwargs):
+        response = super().update(request, *args, **kwargs)
+        if hasattr(self, "_cascade_warning") and self._cascade_warning:
+            response.data["_warning"] = self._cascade_warning
+        return response
 
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
@@ -150,20 +168,25 @@ class EventViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def start_tournament(self, request, pk=None):
-        """Manual tournament start (after roll call). Transitions tournament to in_progress."""
+        """Start the tournament (after roll call or directly)."""
         event = self.get_object()
         if not has_org_staff_access(request.user, event.organization):
             return Response(status=status.HTTP_403_FORBIDDEN)
-        if not event.tournament:
-            return Response(
-                {"error": "No tournament linked to this event."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        finalize_event_tournament(event)
-        event.state = EventState.IN_PROGRESS
-        event.save(update_fields=["state", "updated_at"])
-        event.refresh_from_db()
-        return Response(EventSerializer(event).data)
+        try:
+            if event.state == EventState.ROLL_CALL:
+                event.transition_state(EventState.IN_PROGRESS)
+            elif event.state == EventState.SIGNUPS_OPEN:
+                event.transition_state(EventState.IN_PROGRESS)
+            else:
+                return Response(
+                    {"error": f"Cannot start tournament from '{event.state}' state."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            finalize_event_tournament(event)
+            event.refresh_from_db()
+            return Response(EventSerializer(event).data)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
@@ -171,8 +194,29 @@ class EventViewSet(viewsets.ModelViewSet):
         if not has_org_staff_access(request.user, event.organization):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
-            event.transition_state(EventState.CANCELLED)
+            with transaction.atomic():
+                # Delete linked tournament before cancelling
+                if event.tournament:
+                    tournament = event.tournament
+                    event.tournament = None
+                    event.save(update_fields=["tournament", "updated_at"])
+                    tournament.delete()
+                event.transition_state(EventState.CANCELLED)
             return Response(EventSerializer(event).data)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"])
+    def restart_tournament(self, request, pk=None):
+        """Delete current tournament, create fresh one, reopen signups."""
+        event = self.get_object()
+        if not has_org_staff_access(request.user, event.organization):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        try:
+            restart_event_tournament(event)
+            event.refresh_from_db()
+            qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
+            return Response(EventSerializer(qs.first()).data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
