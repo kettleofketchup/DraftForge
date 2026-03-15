@@ -113,7 +113,7 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByLabel('Tournament Name').fill('E2E Tournament');
 
     // Select league
-    await page.getByLabel('League').click();
+    await page.getByRole('combobox', { name: 'League' }).click();
     await page.getByRole('option', { name: 'Events Test League' }).click();
 
     // Set scheduled date (tomorrow)
@@ -139,7 +139,7 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByLabel('Event Name').fill('E2E Double Elim Event');
     await page.getByLabel('Tournament Name').fill('DE Tournament');
 
-    await page.getByLabel('League').click();
+    await page.getByRole('combobox', { name: 'League' }).click();
     await page.getByRole('option', { name: 'Events Test League' }).click();
 
     // Select Double Elimination bracket type
@@ -198,7 +198,7 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByLabel('Tournament Name').fill('E2E Recurring Tourney');
 
     // Select league
-    await page.getByLabel('League').click();
+    await page.getByRole('combobox', { name: 'League' }).click();
     await page.getByRole('option', { name: 'Events Test League' }).click();
 
     // Toggle recurring
