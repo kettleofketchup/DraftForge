@@ -450,8 +450,9 @@ function SignupsTab({
 
   return (
     <div className="space-y-1.5">
-      {signups.map((signup) => {
+      {signups.map((signup, index) => {
         const userData = signup.user_data;
+        const position = signup.waitlist_position ?? index + 1;
 
         const adminActions = isAdmin ? (
           <div className="flex gap-1">
@@ -489,6 +490,13 @@ function SignupsTab({
           </div>
         ) : undefined;
 
+        const statusSlot = (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-muted-foreground">#{position}</span>
+            <EventStateBadge state={signup.status} />
+          </div>
+        );
+
         if (userData) {
           return (
             <UserStrip
@@ -496,7 +504,7 @@ function SignupsTab({
               user={userData as unknown as UserType}
               compact
               showPositions
-              contextSlot={<EventStateBadge state={signup.status} />}
+              contextSlot={statusSlot}
               actionSlot={adminActions}
             />
           );
@@ -516,7 +524,7 @@ function SignupsTab({
                 {signup.username ?? `User #${signup.user}`}
               </p>
             </div>
-            <EventStateBadge state={signup.status} />
+            {statusSlot}
             {adminActions}
           </div>
         );
