@@ -49,7 +49,7 @@ export function LobbyConfigSection({ control, watch }: LobbyConfigSectionProps) 
             <FormItem>
               <FormLabel>Game Mode</FormLabel>
               <Select
-                onValueChange={(val) => field.onChange(val)}
+                onValueChange={field.onChange}
                 value={field.value}
               >
                 <FormControl>

@@ -27,7 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { useUpdateEventRepeaterMutation } from '~/hooks/useEvent';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
-import { discordConfigSchema, DISCORD_CONFIG_DEFAULTS, Frequency, FREQUENCY_LABELS, DAY_LABELS } from './schemas';
+import { discordConfigSchema, GameType, GameMode, DISCORD_CONFIG_DEFAULTS, Frequency, FREQUENCY_LABELS, DAY_LABELS } from './schemas';
 
 const editRepeaterSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -326,12 +326,12 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
                   onValueChange={(val) => {
                     const gameType = parseInt(val, 10);
                     field.onChange(gameType);
-                    form.setValue('people_per_team', gameType === 2 ? 6 : 5);
+                    form.setValue('people_per_team', gameType === GameType.DEADLOCK ? 6 : 5);
                     // Reset Dota-only fields when switching to non-Dota
                     const currentMode = form.getValues('game_mode');
-                    if (gameType !== 1) {
-                      if (currentMode === 'captains_mode' || currentMode === 'turbo') {
-                        form.setValue('game_mode', 'normal');
+                    if (gameType !== GameType.DOTA2) {
+                      if (currentMode === GameMode.CAPTAINS_MODE || currentMode === GameMode.TURBO) {
+                        form.setValue('game_mode', GameMode.NORMAL);
                       }
                       form.setValue('lobby_steam_league_id', null);
                     }
