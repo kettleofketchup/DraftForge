@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveSignup as approveSignupAPI,
   cancelEvent as cancelEventAPI,
+  restartTournament as restartTournamentAPI,
   cancelSignup as cancelSignupAPI,
   confirmSignup as confirmSignupAPI,
   createEvent as createEventAPI,
@@ -17,6 +18,8 @@ import {
   rsvpForEvent,
   startRollCall as startRollCallAPI,
   startTournament as startTournamentAPI,
+  subscribeToRepeater,
+  unsubscribeFromRepeater,
   updateEvent as updateEventAPI,
 } from '~/components/api/api';
 import type { EventRepeaterType } from '~/components/api/api';
@@ -73,6 +76,13 @@ export function useEventActionMutation(eventId: number) {
     }),
     cancelEvent: useMutation({
       mutationFn: () => cancelEventAPI(eventId),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['event', eventId], data);
+        queryClient.invalidateQueries({ queryKey: ['events'] });
+      },
+    }),
+    restartTournament: useMutation({
+      mutationFn: () => restartTournamentAPI(eventId),
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         queryClient.invalidateQueries({ queryKey: ['events'] });
@@ -143,5 +153,23 @@ export function useSignupActionMutations(eventId: number) {
     reject: useMutation({ mutationFn: (id: number) => rejectSignupAPI(id), onSuccess: invalidate }),
     confirm: useMutation({ mutationFn: (id: number) => confirmSignupAPI(id), onSuccess: invalidate }),
     cancel: useMutation({ mutationFn: (id: number) => cancelSignupAPI(id), onSuccess: invalidate }),
+  };
+}
+
+export function useRepeaterSubscriptionMutation() {
+  const queryClient = useQueryClient();
+  return {
+    subscribe: useMutation({
+      mutationFn: (repeaterId: number) => subscribeToRepeater(repeaterId),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['event-repeaters'] });
+      },
+    }),
+    unsubscribe: useMutation({
+      mutationFn: (repeaterId: number) => unsubscribeFromRepeater(repeaterId),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['event-repeaters'] });
+      },
+    }),
   };
 }
