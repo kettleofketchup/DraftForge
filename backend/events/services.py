@@ -99,6 +99,8 @@ def process_rsvp(event, user, event_team=None):
     )
     if status == SignupStatus.CONFIRMED:
         add_user_to_tournament(event, user)
+    elif status == SignupStatus.APPROVED and not event.roll_call_enabled:
+        add_user_to_tournament(event, user)
     invalidate_obj(event)
     return signup
 
@@ -171,6 +173,8 @@ def _promote_from_waitlist(event):
             next_waitlisted.status = SignupStatus.APPROVED
             if event.auto_confirm:
                 next_waitlisted.status = SignupStatus.CONFIRMED
+                add_user_to_tournament(event, next_waitlisted.user)
+            elif not event.roll_call_enabled:
                 add_user_to_tournament(event, next_waitlisted.user)
         else:
             next_waitlisted.status = SignupStatus.RSVP
@@ -260,6 +264,7 @@ def sync_tournament_from_event(event):
         for field in LOBBY_CONFIG_FIELDS:
             setattr(event.tournament, field, getattr(event, field))
         event.tournament.save()
+        invalidate_obj(event.tournament)
         return {"synced": True, "warning": None}
     elif state == "in_progress":
         return {
