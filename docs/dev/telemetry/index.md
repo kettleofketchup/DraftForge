@@ -37,5 +37,5 @@ def my_function():
 - [Logging Guide](logging.md) - How to add logging to code
 - [Tracing Guide](tracing.md) - OpenTelemetry setup
 - [Context Guide](context.md) - Adding context to new endpoints
-- [Local Observability](local-observability.md) - Running Jaeger locally
+- [Local Observability](local-observability.md) - Local tracing setup
 - [Reference](reference.md) - Environment variable reference

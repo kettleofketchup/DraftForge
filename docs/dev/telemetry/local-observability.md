@@ -2,28 +2,65 @@
 
 This guide covers running observability tools locally for development.
 
-## Running Jaeger
+## Production: Grafana Cloud Tempo
 
-Jaeger is an open-source distributed tracing platform. It provides a UI to visualize traces.
+In production, traces are sent to **Grafana Cloud Tempo** via OTLP. No local infrastructure is needed for production tracing -- it is enabled by default in `docker/.env.prod`.
 
-### Quick Start with Docker
+## Local Tracing Options
+
+For local development, you can point the OTLP exporter at any compatible collector.
+
+### Option 1: Grafana Cloud (Recommended)
+
+Use the same Grafana Cloud instance as production:
 
 ```bash
-# Start Jaeger all-in-one container
-docker run -d --name jaeger \
-  -p 16686:16686 \
-  -p 4317:4317 \
-  jaegertracing/jaeger:latest
+export OTEL_ENABLED=true
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-<region>.grafana.net/otlp
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Basic <base64-encoded>"
+export OTEL_SERVICE_NAME=dtx-backend-dev
+export OTEL_TRACES_SAMPLER_ARG=1.0  # 100% sampling for local dev
 ```
 
-Ports:
+### Option 2: Local Grafana + Tempo
 
-| Port | Service |
-|------|---------|
-| 16686 | Jaeger UI |
-| 4317 | OTLP gRPC receiver |
+Run a local Grafana stack with Tempo for trace storage:
 
-### Configure Django
+```bash
+docker run -d --name tempo \
+  -p 4317:4317 \
+  -p 3200:3200 \
+  grafana/tempo:latest \
+  -config.file=/etc/tempo.yaml
+
+docker run -d --name grafana \
+  -p 3001:3000 \
+  grafana/grafana:latest
+```
+
+Then configure Django:
+
+```bash
+export OTEL_ENABLED=true
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export OTEL_SERVICE_NAME=dtx-backend-dev
+export OTEL_TRACES_SAMPLER_ARG=1.0
+```
+
+View traces in Grafana at http://localhost:3001 (add Tempo as a data source).
+
+### Option 3: Any OTLP-Compatible Collector
+
+OpenTelemetry supports many backends. Set `OTEL_EXPORTER_OTLP_ENDPOINT` to any OTLP-compatible collector:
+
+| Backend | Endpoint Format |
+|---------|-----------------|
+| Grafana Cloud Tempo | `https://otlp-gateway-<region>.grafana.net/otlp` |
+| Grafana Tempo (self-hosted) | `http://tempo:4317` |
+| Honeycomb | `https://api.honeycomb.io` |
+| Datadog | `http://datadog-agent:4317` |
+
+## Configure Django
 
 Set environment variables to enable tracing:
 
@@ -48,19 +85,6 @@ OTEL_TRACES_SAMPLER_ARG=1.0
 ```bash
 cd backend
 python manage.py runserver
-```
-
-### View Traces
-
-1. Open http://localhost:16686
-2. Select "dtx-backend" from the Service dropdown
-3. Click "Find Traces"
-
-### Stopping Jaeger
-
-```bash
-docker stop jaeger
-docker rm jaeger
 ```
 
 ## Viewing Structured Logs
@@ -107,34 +131,9 @@ python manage.py runserver 2>&1 | jq 'select(.duration_ms > 100)'
 python manage.py runserver 2>&1 | jq '{event, duration_ms, "http.route"}'
 ```
 
-## Docker Compose Integration
-
-Add Jaeger to your Docker Compose for integrated development:
-
-```yaml
-# docker-compose.debug.yaml
-services:
-  jaeger:
-    image: jaegertracing/jaeger:latest
-    ports:
-      - "16686:16686"
-      - "4317:4317"
-    networks:
-      - dev-network
-
-  backend:
-    environment:
-      - OTEL_ENABLED=true
-      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317
-      - OTEL_SERVICE_NAME=dtx-backend
-      - OTEL_TRACES_SAMPLER_ARG=1.0
-    depends_on:
-      - jaeger
-```
-
 ## Troubleshooting
 
-### No Traces in Jaeger
+### No Traces Appearing
 
 1. **Check OTEL_ENABLED**
    ```bash
@@ -147,89 +146,13 @@ services:
    # Should connect (may return error page, but connection works)
    ```
 
-3. **Check Jaeger logs**
-   ```bash
-   docker logs jaeger
-   ```
-
-4. **Verify Django initialization**
+3. **Verify Django initialization**
    Look for this log at startup:
    ```
    telemetry_initialized otel_enabled=True
    ```
 
-### Jaeger Container Won't Start
-
-```bash
-# Check if port is in use
-lsof -i :16686
-lsof -i :4317
-
-# Remove existing container
-docker rm -f jaeger
-
-# Start fresh
-docker run -d --name jaeger ...
-```
-
-### High Memory Usage
-
-Jaeger stores traces in memory by default. For extended sessions:
-
-```bash
-# Restart Jaeger to clear traces
-docker restart jaeger
-```
-
-Or use Jaeger with persistent storage (advanced):
-
-```bash
-docker run -d --name jaeger \
-  -e SPAN_STORAGE_TYPE=badger \
-  -e BADGER_EPHEMERAL=false \
-  -e BADGER_DIRECTORY_VALUE=/badger/data \
-  -e BADGER_DIRECTORY_KEY=/badger/key \
-  -v jaeger_data:/badger \
-  -p 16686:16686 \
-  -p 4317:4317 \
-  jaegertracing/jaeger:latest
-```
-
-## Alternative: Grafana Stack
-
-For a more complete observability setup:
-
-```yaml
-# docker-compose.observability.yaml
-services:
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - "3001:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-
-  tempo:
-    image: grafana/tempo:latest
-    ports:
-      - "4317:4317"
-    command: ["-config.file=/etc/tempo.yaml"]
-    volumes:
-      - ./tempo.yaml:/etc/tempo.yaml
-
-  loki:
-    image: grafana/loki:latest
-    ports:
-      - "3100:3100"
-
-volumes:
-  grafana_data:
-```
-
-This provides:
-
-- **Grafana**: Dashboard and visualization
-- **Tempo**: Trace storage (Jaeger alternative)
-- **Loki**: Log aggregation
-
-Configure Django to send traces to Tempo at `http://tempo:4317`.
+4. **Check sample rate**
+   ```bash
+   echo $OTEL_TRACES_SAMPLER_ARG  # Should be > 0
+   ```

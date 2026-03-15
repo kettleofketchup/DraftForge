@@ -75,26 +75,19 @@ OTEL_EXPORTER_OTLP_HEADERS=api-key=your-api-key,x-custom-header=value
 
 ## Local Development
 
-See [Local Observability](local-observability.md) for running Jaeger locally.
+See [Local Observability](local-observability.md) for local tracing options.
 
 Quick start:
 
 ```bash
-# Start Jaeger
-docker run -d --name jaeger \
-  -p 16686:16686 \
-  -p 4317:4317 \
-  jaegertracing/jaeger:latest
-
-# Enable tracing
+# Enable tracing (point to your collector)
 export OTEL_ENABLED=true
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+export OTEL_TRACES_SAMPLER_ARG=1.0  # 100% sampling for local dev
 
 # Start Django
 python manage.py runserver
 ```
-
-View traces at http://localhost:16686
 
 ## Production Backends
 
@@ -102,8 +95,8 @@ OpenTelemetry supports many backends:
 
 | Backend | Endpoint Format |
 |---------|-----------------|
-| Jaeger | `http://jaeger:4317` |
-| Grafana Tempo | `http://tempo:4317` |
+| Grafana Cloud Tempo | `https://otlp-gateway-<region>.grafana.net/otlp` |
+| Grafana Tempo (self-hosted) | `http://tempo:4317` |
 | Honeycomb | `https://api.honeycomb.io` |
 | Datadog | `http://datadog-agent:4317` |
 
