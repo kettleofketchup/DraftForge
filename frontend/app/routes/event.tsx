@@ -102,6 +102,16 @@ export default function EventPage() {
     [signups, currentUser?.pk],
   );
 
+  // Split signups into active and waitlisted
+  const activeSignups = useMemo(
+    () => (signups ?? []).filter((s) => s.status !== 'waitlisted' && s.status !== 'cancelled' && s.status !== 'rejected'),
+    [signups],
+  );
+  const waitlistedSignups = useMemo(
+    () => (signups ?? []).filter((s) => s.status === 'waitlisted'),
+    [signups],
+  );
+
   const handleTabChange = useCallback(
     (newTab: string) => {
       setActiveTab(newTab);
@@ -115,9 +125,10 @@ export default function EventPage() {
   const pageNavOptions = useMemo(
     () => [
       { value: 'details', label: 'Details' },
-      { value: 'signups', label: `${signupCount} Signups` },
+      { value: 'signups', label: `${activeSignups.length} Signups` },
+      { value: 'waitlist', label: `${waitlistedSignups.length} Waitlist` },
     ],
-    [signupCount],
+    [activeSignups.length, waitlistedSignups.length],
   );
 
   usePageNav(event ? pageNavOptions : null, activeTab, handleTabChange);
@@ -262,7 +273,10 @@ export default function EventPage() {
               Details
             </TabsTrigger>
             <TabsTrigger value="signups" data-testid="event-tab-signups">
-              Signups ({event.signup_count})
+              Signups ({activeSignups.length})
+            </TabsTrigger>
+            <TabsTrigger value="waitlist" data-testid="event-tab-waitlist">
+              Waitlist ({waitlistedSignups.length})
             </TabsTrigger>
           </TabsList>
 
@@ -272,7 +286,15 @@ export default function EventPage() {
 
           <TabsContent value="signups">
             <SignupsTab
-              signups={signups ?? []}
+              signups={activeSignups}
+              isAdmin={isAdmin}
+              signupActions={signupActions}
+            />
+          </TabsContent>
+
+          <TabsContent value="waitlist">
+            <SignupsTab
+              signups={waitlistedSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
             />
