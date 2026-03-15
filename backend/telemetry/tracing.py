@@ -79,17 +79,39 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
     _tracer_provider = provider
     atexit.register(_shutdown_tracer_provider)
 
-    # Configure metrics export
+    # Configure metrics export (delta temporality required by Grafana Cloud Mimir)
     try:
         from opentelemetry import metrics
         from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
             OTLPMetricExporter,
         )
-        from opentelemetry.sdk.metrics import MeterProvider
-        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+        from opentelemetry.sdk.metrics import (
+            Counter,
+            Histogram,
+            MeterProvider,
+            ObservableCounter,
+            ObservableGauge,
+            ObservableUpDownCounter,
+            UpDownCounter,
+        )
+        from opentelemetry.sdk.metrics.export import (
+            AggregationTemporality,
+            PeriodicExportingMetricReader,
+        )
 
+        # Grafana Cloud Mimir requires delta temporality for cumulative counters
+        delta_temporality = {
+            Counter: AggregationTemporality.DELTA,
+            UpDownCounter: AggregationTemporality.CUMULATIVE,
+            Histogram: AggregationTemporality.DELTA,
+            ObservableCounter: AggregationTemporality.DELTA,
+            ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
+            ObservableGauge: AggregationTemporality.DELTA,
+        }
         metric_exporter = OTLPMetricExporter(
-            endpoint=endpoint + "/v1/metrics", headers=header_dict or None
+            endpoint=endpoint + "/v1/metrics",
+            headers=header_dict or None,
+            preferred_temporality=delta_temporality,
         )
         metric_reader = PeriodicExportingMetricReader(metric_exporter)
         meter_provider = MeterProvider(
