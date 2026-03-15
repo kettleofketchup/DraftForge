@@ -70,7 +70,7 @@ test.describe('Events - Create Event (@cicd)', () => {
     await expect(page.getByLabel('Scheduled Date & Time')).toBeVisible();
 
     // Recurring checkbox visible but unchecked
-    const recurringCheckbox = page.getByRole('checkbox');
+    const recurringCheckbox = page.getByRole('checkbox', { name: 'Recurring Event' });
     await expect(recurringCheckbox).toBeVisible();
     await expect(recurringCheckbox).not.toBeChecked();
 
@@ -86,7 +86,7 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByRole('button', { name: 'Create Event' }).click();
 
     // Check the recurring checkbox
-    await page.getByRole('checkbox').check();
+    await page.getByRole('checkbox', { name: 'Recurring Event' }).check();
 
     // Title should change
     await expect(page.getByRole('heading', { name: 'Create Recurring Event' })).toBeVisible();
