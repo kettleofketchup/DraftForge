@@ -81,6 +81,7 @@ export default function EventPage() {
   const [activeTab, setActiveTab] = useState(tab || 'details');
   const [showRollCallConfirm, setShowRollCallConfirm] = useState(false);
   const [showRsvpConfirm, setShowRsvpConfirm] = useState(false);
+  const [showCancelRsvpConfirm, setShowCancelRsvpConfirm] = useState(false);
 
   // Permission check - find org for this event
   const { organizations } = useOrganizations();
@@ -94,6 +95,12 @@ export default function EventPage() {
   const rsvpMutation = useRsvpMutation(id ?? 0);
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
+
+  // Check if current user already has an active signup
+  const mySignup = useMemo(
+    () => signups?.find((s) => s.user === currentUser?.pk && s.status !== 'cancelled' && s.status !== 'rejected'),
+    [signups, currentUser?.pk],
+  );
 
   const handleTabChange = useCallback(
     (newTab: string) => {
@@ -169,7 +176,7 @@ export default function EventPage() {
 
           {/* RSVP / Admin actions */}
           <div className="flex flex-wrap gap-2 shrink-0 w-full sm:w-auto">
-            {currentUser && event.state === EventState.SIGNUPS_OPEN && (
+            {currentUser && event.state === EventState.SIGNUPS_OPEN && !mySignup && (
               <PrimaryButton
                 size="sm"
                 onClick={() => setShowRsvpConfirm(true)}
@@ -179,6 +186,17 @@ export default function EventPage() {
                 <Users className="h-4 w-4 mr-2" />
                 RSVP
               </PrimaryButton>
+            )}
+            {currentUser && event.state === EventState.SIGNUPS_OPEN && mySignup && (
+              <DestructiveButton
+                size="sm"
+                onClick={() => setShowCancelRsvpConfirm(true)}
+                loading={signupActions.cancel.isPending}
+                className="w-full sm:w-auto"
+              >
+                <XCircle className="h-4 w-4 mr-2" />
+                Cancel RSVP
+              </DestructiveButton>
             )}
 
             {isAdmin && event.state === EventState.UPCOMING && (
@@ -289,6 +307,24 @@ export default function EventPage() {
             toast.success('RSVP submitted!');
           } catch {
             toast.error('Failed to RSVP');
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={showCancelRsvpConfirm}
+        onOpenChange={setShowCancelRsvpConfirm}
+        title="Cancel RSVP"
+        description={`Remove your signup from "${event.name}"?`}
+        confirmLabel="Cancel RSVP"
+        variant="destructive"
+        onConfirm={async () => {
+          if (!mySignup) return;
+          try {
+            await signupActions.cancel.mutateAsync(mySignup.id);
+            toast.success('RSVP cancelled');
+          } catch {
+            toast.error('Failed to cancel RSVP');
           }
         }}
       />
