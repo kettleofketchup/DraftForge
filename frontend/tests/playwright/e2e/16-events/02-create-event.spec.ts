@@ -202,14 +202,14 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByRole('option', { name: 'Events Test League' }).click();
 
     // Toggle recurring
-    await page.getByRole('checkbox').check();
+    await page.getByRole('checkbox', { name: 'Recurring Event' }).check();
     await expect(page.getByRole('heading', { name: 'Create Recurring Event' })).toBeVisible();
 
     // Fill recurring fields
-    await page.getByLabel('Frequency').click();
+    await page.getByRole('combobox', { name: 'Frequency' }).click();
     await page.getByRole('option', { name: 'Weekly' }).click();
 
-    await page.getByLabel('Day of Week').click();
+    await page.getByRole('combobox', { name: 'Day of Week' }).click();
     await page.getByRole('option', { name: 'Wednesday' }).click();
 
     await page.getByLabel('Time').fill('19:00');
