@@ -111,8 +111,8 @@ test.describe('Events - Detail Page', () => {
     await loginEventAdmin(context);
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
 
-    // Admin should see Start Tournament and Cancel buttons
-    await expect(page.getByTestId('event-start-tournament-btn')).toBeVisible({ timeout: 10000 });
+    // Admin should see Start Roll Call and Cancel buttons
+    await expect(page.getByTestId('event-start-rollcall-btn')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('event-cancel-btn')).toBeVisible();
 
     // Should NOT see Open Signups (already open)
@@ -124,21 +124,21 @@ test.describe('Events - Detail Page', () => {
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
 
     // Player should not see admin action buttons
-    await expect(page.getByTestId('event-start-tournament-btn')).not.toBeVisible();
+    await expect(page.getByTestId('event-start-rollcall-btn')).not.toBeVisible();
     await expect(page.getByTestId('event-cancel-btn')).not.toBeVisible();
   });
 
-  test('details tab shows tournament config', async ({ context, page }) => {
+  test('details tab shows tournament info', async ({ context, page }) => {
     await loginEventAdmin(context);
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
 
-    // Tournament config card
-    await expect(page.getByText('Tournament Config')).toBeVisible();
+    // Tournament info card
+    await expect(page.getByText('Tournament Info')).toBeVisible();
     await expect(page.getByText('Dota 2')).toBeVisible();
     await expect(page.getByText('shuffle')).toBeVisible();
 
-    // Event info card
-    await expect(page.getByText('Event Info')).toBeVisible();
+    // Signup rules card
+    await expect(page.getByText('Signup Rules')).toBeVisible();
   });
 
   test('tab navigation via URL', async ({ context, page }) => {
@@ -177,27 +177,33 @@ test.describe('Events - Signup Flow', () => {
     await resetEventsData(context);
   });
 
-  test('player can RSVP for event via signups tab', async ({ context, page }) => {
+  test('player can RSVP for event via UI button', async ({ context, page }) => {
     await loginEventPlayer(context);
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}/signups`);
 
     // Initially no signups
     await expect(page.getByText('No Signups Yet')).toBeVisible();
 
-    // RSVP via API directly (UI RSVP button is a future task)
-    const rsvpResp = await context.request.post(`${API_URL}/events/${eventInfo.pk}/rsvp/`);
-    expect(rsvpResp.ok()).toBeTruthy();
+    // Click the RSVP button (appears after signups data loads)
+    const rsvpBtn = page.getByTestId('event-rsvp-btn');
+    await expect(rsvpBtn).toBeVisible({ timeout: 10000 });
+    await rsvpBtn.click();
 
-    // Reload to see signup
-    await page.reload();
+    // Confirmation dialog appears — click confirm
+    const confirmDialog = page.getByRole('alertdialog');
+    await expect(confirmDialog).toBeVisible();
+    await confirmDialog.getByRole('button', { name: /rsvp/i }).click();
+
+    // Should see the player's signup appear
     await expect(page.getByText('EventPlayer1')).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can approve signup', async ({ browser }) => {
-    // Player RSVPs
+    // Player RSVPs via API (separate context)
     const playerCtx = await browser.newContext({ ignoreHTTPSErrors: true });
     await loginEventPlayer(playerCtx);
-    await playerCtx.request.post(`${API_URL}/events/${eventInfo.pk}/rsvp/`);
+    const rsvpResp = await playerCtx.request.post(`${API_URL}/events/${eventInfo.pk}/rsvp/`);
+    expect(rsvpResp.ok()).toBeTruthy();
     await playerCtx.close();
 
     // Admin views and approves
