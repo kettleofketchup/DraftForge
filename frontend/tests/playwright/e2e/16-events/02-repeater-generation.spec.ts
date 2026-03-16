@@ -26,6 +26,8 @@ import {
   resetEventsData,
   triggerEventGeneration,
   loginEventAdmin,
+  postWithCsrf,
+  patchWithCsrf,
   type EventInfo,
 } from '../../fixtures';
 
@@ -99,10 +101,7 @@ test.describe('Events - Repeater Generation (@cicd)', () => {
 
   test('creates a daily repeater and generates events', async ({ context }) => {
     // Create a daily repeater via API
-    const createResp = await context.request.post(`${API_URL}/events/repeaters/`, {
-      data: makeDailyRepeater(eventInfo.orgPk, eventInfo.leaguePk),
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const createResp = await postWithCsrf(context, `${API_URL}/events/repeaters/`, makeDailyRepeater(eventInfo.orgPk, eventInfo.leaguePk));
     if (!createResp.ok()) {
       console.error('Create repeater failed:', createResp.status(), await createResp.text());
     }
@@ -127,16 +126,13 @@ test.describe('Events - Repeater Generation (@cicd)', () => {
     context,
   }) => {
     // Create a repeater with specific config
-    const createResp = await context.request.post(`${API_URL}/events/repeaters/`, {
-      data: makeDailyRepeater(eventInfo.orgPk, eventInfo.leaguePk, {
-        name: 'E2E Config Inherit',
-        game_type: 2, // Deadlock
-        draft_type: 'snake',
-        people_per_team: 6,
-        number_of_teams: 4,
-      }),
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const createResp = await postWithCsrf(context, `${API_URL}/events/repeaters/`, makeDailyRepeater(eventInfo.orgPk, eventInfo.leaguePk, {
+      name: 'E2E Config Inherit',
+      game_type: 2, // Deadlock
+      draft_type: 'snake',
+      people_per_team: 6,
+      number_of_teams: 4,
+    }));
     expect(createResp.ok()).toBeTruthy();
 
     // Trigger generation
@@ -163,10 +159,7 @@ test.describe('Events - Repeater Generation (@cicd)', () => {
 
   test('editing a repeater syncs config to future events', async ({ context }) => {
     // Create a daily repeater
-    const createResp = await context.request.post(`${API_URL}/events/repeaters/`, {
-      data: makeDailyRepeater(eventInfo.orgPk, eventInfo.leaguePk, { name: 'E2E Sync Test' }),
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const createResp = await postWithCsrf(context, `${API_URL}/events/repeaters/`, makeDailyRepeater(eventInfo.orgPk, eventInfo.leaguePk, { name: 'E2E Sync Test' }));
     expect(createResp.ok()).toBeTruthy();
     const repeater = await createResp.json();
 
@@ -184,16 +177,10 @@ test.describe('Events - Repeater Generation (@cicd)', () => {
     expect(syncEvents.length).toBeGreaterThanOrEqual(1);
 
     // PATCH the repeater to change tournament_name and draft_type
-    const patchResp = await context.request.patch(
-      `${API_URL}/events/repeaters/${repeater.id}/`,
-      {
-        data: {
-          tournament_name: 'Synced Tournament',
-          draft_type: 'normal',
-        },
-        headers: { 'Content-Type': 'application/json' },
-      },
-    );
+    const patchResp = await patchWithCsrf(context, `${API_URL}/events/repeaters/${repeater.id}/`, {
+      tournament_name: 'Synced Tournament',
+      draft_type: 'normal',
+    });
     expect(patchResp.ok()).toBeTruthy();
 
     // Re-list events — future (upcoming) events should have updated config
@@ -214,10 +201,7 @@ test.describe('Events - Repeater Generation (@cicd)', () => {
 
   test('generated events appear on org events page', async ({ context, page }) => {
     // Create a daily repeater
-    const createResp = await context.request.post(`${API_URL}/events/repeaters/`, {
-      data: makeDailyRepeater(eventInfo.orgPk, eventInfo.leaguePk, { name: 'E2E Visible Event' }),
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const createResp = await postWithCsrf(context, `${API_URL}/events/repeaters/`, makeDailyRepeater(eventInfo.orgPk, eventInfo.leaguePk, { name: 'E2E Visible Event' }));
     expect(createResp.ok()).toBeTruthy();
 
     // Trigger generation

@@ -22,6 +22,45 @@ const API_URL = `https://${DOCKER_HOST}/api`;
 export const EVENTS_ORG_NAME = 'Events Test Org';
 export const EVENTS_EVENT_NAME = 'E2E Signup Event';
 
+/** Extract CSRF token from context cookies. Must be called after login. */
+export async function getCsrfToken(context: BrowserContext): Promise<string> {
+  const cookies = await context.cookies();
+  const csrf = cookies.find((c) => c.name === 'csrftoken');
+  return csrf?.value || '';
+}
+
+/** POST with CSRF token header (required for DRF SessionAuthentication). */
+export async function postWithCsrf(
+  context: BrowserContext,
+  url: string,
+  data?: Record<string, unknown>,
+): Promise<import('@playwright/test').APIResponse> {
+  const csrfToken = await getCsrfToken(context);
+  return context.request.post(url, {
+    data,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrfToken,
+    },
+  });
+}
+
+/** PATCH with CSRF token header. */
+export async function patchWithCsrf(
+  context: BrowserContext,
+  url: string,
+  data?: Record<string, unknown>,
+): Promise<import('@playwright/test').APIResponse> {
+  const csrfToken = await getCsrfToken(context);
+  return context.request.patch(url, {
+    data,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrfToken,
+    },
+  });
+}
+
 export interface EventInfo {
   pk: number;
   orgPk: number;

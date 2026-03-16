@@ -117,6 +117,8 @@ export {
   triggerEventGeneration,
   loginEventAdmin,
   loginEventPlayer,
+  postWithCsrf,
+  patchWithCsrf,
   EVENTS_ORG_NAME,
   EVENTS_EVENT_NAME,
   type EventInfo,

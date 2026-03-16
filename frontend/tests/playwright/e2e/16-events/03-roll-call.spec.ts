@@ -17,6 +17,7 @@ import {
   resetEventsData,
   loginEventAdmin,
   loginEventPlayer,
+  postWithCsrf,
   type EventInfo,
 } from '../../fixtures';
 
@@ -41,9 +42,7 @@ test.describe('Roll Call Flow (@cicd)', () => {
   }) => {
     // Step 1: Player RSVPs to the event
     await loginEventPlayer(context);
-    const rsvpResp = await context.request.post(
-      `${API_URL}/events/${eventInfo.pk}/rsvp/`,
-    );
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${eventInfo.pk}/rsvp/`);
     expect(rsvpResp.ok()).toBeTruthy();
 
     // Step 2: Admin approves the signup
@@ -55,9 +54,7 @@ test.describe('Roll Call Flow (@cicd)', () => {
     expect(signups.length).toBeGreaterThan(0);
 
     const signupId = signups[0].id;
-    const approveResp = await context.request.post(
-      `${API_URL}/events/signups/${signupId}/approve/`,
-    );
+    const approveResp = await postWithCsrf(context, `${API_URL}/events/signups/${signupId}/approve/`);
     expect(approveResp.ok()).toBeTruthy();
 
     // Step 3: Navigate to event page and start roll call
@@ -103,9 +100,7 @@ test.describe('Roll Call Flow (@cicd)', () => {
     await loginEventAdmin(context);
 
     // Transition to roll call via API
-    const resp = await context.request.post(
-      `${API_URL}/events/${eventInfo.pk}/start_roll_call/`,
-    );
+    const resp = await postWithCsrf(context, `${API_URL}/events/${eventInfo.pk}/start_roll_call/`);
     expect(resp.ok()).toBeTruthy();
 
     // Visit event page

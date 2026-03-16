@@ -23,6 +23,7 @@ import {
   resetEventsData,
   loginEventAdmin,
   loginEventPlayer,
+  postWithCsrf,
   type EventInfo,
 } from '../../fixtures';
 
@@ -202,7 +203,7 @@ test.describe('Events - Signup Flow', () => {
     // Player RSVPs via API (separate context)
     const playerCtx = await browser.newContext({ ignoreHTTPSErrors: true });
     await loginEventPlayer(playerCtx);
-    const rsvpResp = await playerCtx.request.post(`${API_URL}/events/${eventInfo.pk}/rsvp/`);
+    const rsvpResp = await postWithCsrf(playerCtx, `${API_URL}/events/${eventInfo.pk}/rsvp/`);
     expect(rsvpResp.ok()).toBeTruthy();
     await playerCtx.close();
 
