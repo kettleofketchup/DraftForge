@@ -213,12 +213,9 @@ test.describe('Events - Signup Flow', () => {
     await loginEventAdmin(adminCtx);
     await visitAndWaitForHydration(adminPage, `/events/${eventInfo.pk}/signups`);
 
-    // Should see the signup with RSVP status
-    await expect(adminPage.getByText('EventPlayer1')).toBeVisible({ timeout: 10000 });
-
-    // Admin approves (since auto_approve is true, it may already be approved -- test the badge)
-    // The EventStateBadge should show a status
-    await expect(adminPage.getByText(/Approved|RSVP/)).toBeVisible();
+    // Should see the signup with approved status (auto_approve is enabled on test event)
+    await expect(adminPage.getByText('EventPlayer1').first()).toBeVisible({ timeout: 10000 });
+    await expect(adminPage.getByText('Approved').first()).toBeVisible();
 
     await adminCtx.close();
   });

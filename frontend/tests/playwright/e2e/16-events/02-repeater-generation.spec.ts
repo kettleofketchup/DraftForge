@@ -207,13 +207,11 @@ test.describe('Events - Repeater Generation (@cicd)', () => {
     // Trigger generation
     await triggerEventGeneration(context);
 
-    // Navigate to the org events page
-    await visitAndWaitForHydration(
-      page,
-      `/events?organization=${eventInfo.orgPk}`,
-    );
+    // Navigate to the org page events tab
+    await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
+    await page.getByTestId('org-tab-events').click();
 
-    // The generated event name should appear in the page
-    await expect(page.getByText('E2E Visible Event')).toBeVisible({ timeout: 10000 });
+    // The generated event name should appear in the events list
+    await expect(page.getByText('E2E Visible Event').first()).toBeVisible({ timeout: 10000 });
   });
 });

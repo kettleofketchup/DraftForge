@@ -45,7 +45,7 @@ test.describe('Roll Call Flow (@cicd)', () => {
     const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${eventInfo.pk}/rsvp/`);
     expect(rsvpResp.ok()).toBeTruthy();
 
-    // Step 2: Admin approves the signup
+    // Step 2: Admin checks the signup (auto_approve may have already approved it)
     await loginEventAdmin(context);
     const signupsResp = await context.request.get(
       `${API_URL}/events/signups/?event=${eventInfo.pk}`,
@@ -53,9 +53,12 @@ test.describe('Roll Call Flow (@cicd)', () => {
     const signups = await signupsResp.json();
     expect(signups.length).toBeGreaterThan(0);
 
-    const signupId = signups[0].id;
-    const approveResp = await postWithCsrf(context, `${API_URL}/events/signups/${signupId}/approve/`);
-    expect(approveResp.ok()).toBeTruthy();
+    // Approve only if not already approved (auto_approve may have done it)
+    const signup = signups[0];
+    if (signup.status === 'rsvp' || signup.status === 'pending_approval') {
+      const approveResp = await postWithCsrf(context, `${API_URL}/events/signups/${signup.id}/approve/`);
+      expect(approveResp.ok()).toBeTruthy();
+    }
 
     // Step 3: Navigate to event page and start roll call
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
