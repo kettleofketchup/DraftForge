@@ -34,6 +34,78 @@ export const DiscordIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+/** Reusable checkbox field for Discord config options */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function CheckboxField({ control, name, label, description }: {
+  control: Control<any>;
+  name: string;
+  label: string;
+  description: string;
+}) {
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <FormItem className="flex items-center gap-3">
+          <FormControl>
+            <input
+              type="checkbox"
+              checked={field.value}
+              onChange={field.onChange}
+              className="h-4 w-4 rounded border-border accent-primary"
+            />
+          </FormControl>
+          <div>
+            <FormLabel className="text-sm font-medium cursor-pointer">{label}</FormLabel>
+            <FormDescription>{description}</FormDescription>
+          </div>
+        </FormItem>
+      )}
+    />
+  );
+}
+
+/** Reusable hours dropdown for reminder timing */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function HoursSelect({ control, name, label }: {
+  control: Control<any>;
+  name: string;
+  label?: string;
+}) {
+  return (
+    <div className="ml-7">
+      <FormField
+        control={control}
+        name={name}
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>{label ?? 'When to send'}</FormLabel>
+            <Select
+              onValueChange={(val) => field.onChange(parseInt(val, 10))}
+              value={field.value?.toString()}
+            >
+              <FormControl>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {REMINDER_HOURS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={String(opt.value)}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </div>
+  );
+}
+
 interface DiscordConfigSectionProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   control: Control<any>;
@@ -44,132 +116,65 @@ interface DiscordConfigSectionProps {
 }
 
 export function DiscordConfigSection({ control, watch, isRepeater, organizationId }: DiscordConfigSectionProps) {
-  const createEvent = watch('discord_create_event');
-  const signupReminder = watch('discord_signup_reminder');
-  const profileReminder = watch('discord_profile_reminder');
-  const confirmAttendance = watch('discord_confirm_attendance');
-  const postSignups = watch('discord_post_signups');
-  const announcement = watch('discord_announcement');
+  const [createEvent, signupReminder, profileReminder, confirmAttendance, postSignups, announcement] = watch([
+    'discord_create_event',
+    'discord_signup_reminder',
+    'discord_profile_reminder',
+    'discord_confirm_attendance',
+    'discord_post_signups',
+    'discord_announcement',
+  ]);
 
   return (
     <div className="space-y-3">
       {/* Create Discord event */}
       <div className="rounded-md border border-border p-3 space-y-3">
-        <FormField
-          control={control}
-          name="discord_create_event"
-          render={({ field }) => (
-            <FormItem className="flex items-center gap-3">
-              <FormControl>
-                <input
-                  type="checkbox"
-                  checked={field.value}
-                  onChange={field.onChange}
-                  className="h-4 w-4 rounded border-border accent-primary"
-                />
-              </FormControl>
-              <div>
-                <FormLabel className="text-sm font-medium cursor-pointer">
-                  Create Discord scheduled event
-                </FormLabel>
-                <FormDescription>
-                  Automatically creates a scheduled event in your Discord server
-                </FormDescription>
-              </div>
-            </FormItem>
-          )}
+        <CheckboxField control={control} name="discord_create_event"
+          label="Create Discord scheduled event"
+          description="Automatically creates a scheduled event in your Discord server"
         />
-
         {createEvent && (
           <div className="space-y-3 ml-7">
-            <FormField
-              control={control}
-              name="discord_sync_signups"
-              render={({ field }) => (
-                <FormItem className="flex items-center gap-3">
-                  <FormControl>
-                    <input
-                      type="checkbox"
-                      checked={field.value}
-                      onChange={field.onChange}
-                      className="h-4 w-4 rounded border-border accent-primary"
-                    />
-                  </FormControl>
-                  <div>
-                    <FormLabel className="text-sm cursor-pointer">
-                      Synchronize signups
-                    </FormLabel>
-                    <FormDescription>
-                      Keep website and Discord event signups in sync
-                    </FormDescription>
-                  </div>
-                </FormItem>
-              )}
+            <CheckboxField control={control} name="discord_sync_signups"
+              label="Synchronize signups"
+              description="Keep website and Discord event signups in sync"
             />
-
-            <FormField
-              control={control}
-              name="discord_mark_interested"
-              render={({ field }) => (
-                <FormItem className="flex items-center gap-3">
-                  <FormControl>
-                    <input type="checkbox" checked={field.value} onChange={field.onChange}
-                      className="h-4 w-4 rounded border-border accent-primary" />
-                  </FormControl>
-                  <div>
-                    <FormLabel className="text-sm cursor-pointer">Mark signups as interested</FormLabel>
-                    <FormDescription>Players who sign up will be marked as interested on the Discord event</FormDescription>
-                  </div>
-                </FormItem>
-              )}
+            <CheckboxField control={control} name="discord_mark_interested"
+              label="Mark signups as interested"
+              description="Players who sign up will be marked as interested on the Discord event"
             />
-
-            <FormField
-              control={control}
-              name="discord_event_title"
+            <FormField control={control} name="discord_event_title"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Event title</FormLabel>
                   <FormControl>
                     <Input placeholder="Leave blank to use event name" {...field} />
                   </FormControl>
-                  <FormDescription>
-                    Custom title for the Discord event. If blank, the event name is used.
-                  </FormDescription>
+                  <FormDescription>Custom title for the Discord event. If blank, the event name is used.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-
-            <FormField
-              control={control}
-              name="discord_event_description"
+            <FormField control={control} name="discord_event_description"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Event description</FormLabel>
                   <FormControl>
                     <Textarea placeholder="Discord event description" rows={2} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    Shown as the main description of the Discord scheduled event
-                  </FormDescription>
+                  <FormDescription>Shown as the main description of the Discord scheduled event</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-
-            <FormField
-              control={control}
-              name="discord_event_info"
+            <FormField control={control} name="discord_event_info"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Additional info</FormLabel>
                   <FormControl>
                     <Textarea placeholder="Extra details, rules, links..." rows={2} {...field} />
                   </FormControl>
-                  <FormDescription>
-                    Extra information appended to the Discord event details
-                  </FormDescription>
+                  <FormDescription>Extra information appended to the Discord event details</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -180,191 +185,42 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
 
       {/* Signup reminder */}
       <div className="rounded-md border border-border p-3 space-y-3">
-        <FormField
-          control={control}
-          name="discord_signup_reminder"
-          render={({ field }) => (
-            <FormItem className="flex items-center gap-3">
-              <FormControl>
-                <input
-                  type="checkbox"
-                  checked={field.value}
-                  onChange={field.onChange}
-                  className="h-4 w-4 rounded border-border accent-primary"
-                />
-              </FormControl>
-              <div>
-                <FormLabel className="text-sm font-medium cursor-pointer">
-                  Send signup reminder
-                </FormLabel>
-                <FormDescription>
-                  DM users who haven't signed up yet before the event starts
-                </FormDescription>
-              </div>
-            </FormItem>
-          )}
+        <CheckboxField control={control} name="discord_signup_reminder"
+          label="Send signup reminder"
+          description="DM users who haven't signed up yet before the event starts"
         />
-
         {signupReminder && (
-          <div className="ml-7">
-            <FormField
-              control={control}
-              name="discord_signup_reminder_hours"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Hours before event</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min={1}
-                      {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 24)}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    How many hours before the event to send the reminder
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
+          <HoursSelect control={control} name="discord_signup_reminder_hours" label="Hours before event" />
         )}
       </div>
 
       {/* Profile reminder */}
       <div className="rounded-md border border-border p-3 space-y-3">
-        <FormField
-          control={control}
-          name="discord_profile_reminder"
-          render={({ field }) => (
-            <FormItem className="flex items-center gap-3">
-              <FormControl>
-                <input
-                  type="checkbox"
-                  checked={field.value}
-                  onChange={field.onChange}
-                  className="h-4 w-4 rounded border-border accent-primary"
-                />
-              </FormControl>
-              <div>
-                <FormLabel className="text-sm font-medium cursor-pointer">
-                  Profile update reminder
-                </FormLabel>
-                <FormDescription>
-                  DM signed-up users to complete their profile (Steam ID, MMR) before the event
-                </FormDescription>
-              </div>
-            </FormItem>
-          )}
+        <CheckboxField control={control} name="discord_profile_reminder"
+          label="Profile update reminder"
+          description="DM signed-up users to complete their profile (Steam ID, MMR) before the event"
         />
         {profileReminder && (
-          <div className="ml-7">
-            <FormField
-              control={control}
-              name="discord_profile_reminder_hours"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>When to send</FormLabel>
-                  <Select
-                    onValueChange={(val) => field.onChange(parseInt(val, 10))}
-                    value={field.value?.toString()}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {REMINDER_HOURS_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={String(opt.value)}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
+          <HoursSelect control={control} name="discord_profile_reminder_hours" />
         )}
       </div>
 
       {/* Confirm attendance */}
       <div className="rounded-md border border-border p-3 space-y-3">
-        <FormField
-          control={control}
-          name="discord_confirm_attendance"
-          render={({ field }) => (
-            <FormItem className="flex items-center gap-3">
-              <FormControl>
-                <input
-                  type="checkbox"
-                  checked={field.value}
-                  onChange={field.onChange}
-                  className="h-4 w-4 rounded border-border accent-primary"
-                />
-              </FormControl>
-              <div>
-                <FormLabel className="text-sm font-medium cursor-pointer">
-                  Confirm attendance via Discord
-                </FormLabel>
-                <FormDescription>
-                  Require players to reply to a Discord message on event day to confirm they'll attend
-                </FormDescription>
-              </div>
-            </FormItem>
-          )}
+        <CheckboxField control={control} name="discord_confirm_attendance"
+          label="Confirm attendance via Discord"
+          description="Require players to reply to a Discord message on event day to confirm they'll attend"
         />
         {confirmAttendance && (
-          <div className="ml-7">
-            <FormField
-              control={control}
-              name="discord_confirm_attendance_hours"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>When to send</FormLabel>
-                  <Select
-                    onValueChange={(val) => field.onChange(parseInt(val, 10))}
-                    value={field.value?.toString()}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {REMINDER_HOURS_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={String(opt.value)}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
+          <HoursSelect control={control} name="discord_confirm_attendance_hours" />
         )}
       </div>
 
       {/* Post event signup embed */}
       <div className="rounded-md border border-border p-3 space-y-3">
-        <FormField control={control} name="discord_post_signups"
-          render={({ field }) => (
-            <FormItem className="flex items-center gap-3">
-              <FormControl>
-                <input type="checkbox" checked={field.value} onChange={field.onChange}
-                  className="h-4 w-4 rounded border-border accent-primary" />
-              </FormControl>
-              <div>
-                <FormLabel className="text-sm font-medium cursor-pointer">Post event signup embed</FormLabel>
-                <FormDescription>Post an embed to a channel where users can react to sign up</FormDescription>
-              </div>
-            </FormItem>
-          )}
+        <CheckboxField control={control} name="discord_post_signups"
+          label="Post event signup embed"
+          description="Post an embed to a channel where users can react to sign up"
         />
         {postSignups && (
           <div className="ml-7">
@@ -373,11 +229,7 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
                 <FormItem>
                   <FormLabel>Signup channel</FormLabel>
                   <FormControl>
-                    <DiscordChannelPicker
-                      organizationId={organizationId}
-                      value={field.value}
-                      onChange={field.onChange}
-                    />
+                    <DiscordChannelPicker organizationId={organizationId} value={field.value} onChange={field.onChange} />
                   </FormControl>
                   <FormDescription>Channel where the signup embed will be posted</FormDescription>
                   <FormMessage />
@@ -390,19 +242,9 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
 
       {/* Pre-day announcement */}
       <div className="rounded-md border border-border p-3 space-y-3">
-        <FormField control={control} name="discord_announcement"
-          render={({ field }) => (
-            <FormItem className="flex items-center gap-3">
-              <FormControl>
-                <input type="checkbox" checked={field.value} onChange={field.onChange}
-                  className="h-4 w-4 rounded border-border accent-primary" />
-              </FormControl>
-              <div>
-                <FormLabel className="text-sm font-medium cursor-pointer">Pre-day announcement</FormLabel>
-                <FormDescription>Post an announcement in a channel before the event</FormDescription>
-              </div>
-            </FormItem>
-          )}
+        <CheckboxField control={control} name="discord_announcement"
+          label="Pre-day announcement"
+          description="Post an announcement in a channel before the event"
         />
         {announcement && (
           <div className="ml-7 space-y-3">
@@ -411,11 +253,7 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
                 <FormItem>
                   <FormLabel>Announcement channel</FormLabel>
                   <FormControl>
-                    <DiscordChannelPicker
-                      organizationId={organizationId}
-                      value={field.value}
-                      onChange={field.onChange}
-                    />
+                    <DiscordChannelPicker organizationId={organizationId} value={field.value} onChange={field.onChange} />
                   </FormControl>
                   <FormDescription>Channel where the announcement will be posted</FormDescription>
                   <FormMessage />
@@ -442,29 +280,9 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
       {/* Notify new events — repeater only */}
       {isRepeater && (
         <div className="rounded-md border border-border p-3">
-          <FormField
-            control={control}
-            name="discord_notify_new_events"
-            render={({ field }) => (
-              <FormItem className="flex items-center gap-3">
-                <FormControl>
-                  <input
-                    type="checkbox"
-                    checked={field.value}
-                    onChange={field.onChange}
-                    className="h-4 w-4 rounded border-border accent-primary"
-                  />
-                </FormControl>
-                <div>
-                  <FormLabel className="text-sm font-medium cursor-pointer">
-                    Message interested users
-                  </FormLabel>
-                  <FormDescription>
-                    DM subscribed users when new events are created or cancelled
-                  </FormDescription>
-                </div>
-              </FormItem>
-            )}
+          <CheckboxField control={control} name="discord_notify_new_events"
+            label="Message interested users"
+            description="DM subscribed users when new events are created or cancelled"
           />
         </div>
       )}
