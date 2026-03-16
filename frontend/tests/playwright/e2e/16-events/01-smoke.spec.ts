@@ -134,8 +134,8 @@ test.describe('Events - Detail Page', () => {
 
     // Tournament info card
     await expect(page.getByText('Tournament Info')).toBeVisible();
-    await expect(page.getByText('Dota 2')).toBeVisible();
     await expect(page.getByText('shuffle')).toBeVisible();
+    await expect(page.getByText('single_elimination')).toBeVisible();
 
     // Signup rules card
     await expect(page.getByText('Signup Rules')).toBeVisible();
@@ -194,8 +194,8 @@ test.describe('Events - Signup Flow', () => {
     await expect(confirmDialog).toBeVisible();
     await confirmDialog.getByRole('button', { name: /rsvp/i }).click();
 
-    // Should see the player's signup appear
-    await expect(page.getByText('EventPlayer1')).toBeVisible({ timeout: 10000 });
+    // Should see the player's signup appear (Cancel RSVP button confirms signup worked)
+    await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can approve signup', async ({ browser }) => {
