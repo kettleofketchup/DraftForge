@@ -71,25 +71,50 @@ def dev_test(c):
 
 @task
 def setup(c):
+    import time
+
+    from rich.console import Console
+
     from backend.tasks import populate_all
     from scripts.docker import docker_build_all, docker_pull_all
     from scripts.update import update_for_test
 
     load_dotenv(paths.TEST_ENV_FILE)
 
-    # Ensure test stack is down before setup
-    print("Ensuring test stack is down...")
+    steps = [
+        ("Stopping test stack", lambda: _setup_stop_stack(c)),
+        ("Updating dependencies", lambda: update_for_test(c)),
+        ("Building Docker images", lambda: docker_build_all(c)),
+        ("Populating test database", lambda: populate_all(c)),
+        ("Starting test stack", lambda: dev_test(c)),
+    ]
+
+    console = Console()
+    total = len(steps)
+    overall_start = time.time()
+    console.print(f"\n[bold]Test Setup ({total} steps)[/bold]\n")
+
+    for i, (name, fn) in enumerate(steps, 1):
+        console.print(f"  [dim][{i}/{total}][/dim] [bold blue]{name}[/bold blue]...")
+        step_start = time.time()
+        fn()
+        elapsed = time.time() - step_start
+        console.print(
+            f"  [dim][{i}/{total}][/dim] [bold blue]{name}[/bold blue] [green]{elapsed:.1f}s[/green]\n"
+        )
+
+    overall = time.time() - overall_start
+    console.print(f"[bold green]Test setup completed in {overall:.1f}s[/bold green]\n")
+
+
+def _setup_stop_stack(c):
+    """Stop the test Docker stack."""
     with c.cd(paths.PROJECT_PATH):
         cmd = (
             f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} "
             f"-f {paths.DOCKER_COMPOSE_TEST_PATH.resolve()} down --remove-orphans"
         )
         c.run(cmd, warn=True)
-
-    update_for_test(c)
-    docker_build_all(c)
-    populate_all(c)
-    dev_test(c)
 
 
 ns_test.add_task(setup, "setup")

@@ -59,7 +59,8 @@ export const UserCard: React.FC<Props> = memo(
     }, [user.pk, getUsers]);
 
     const hasError = () => {
-      if (!mmr) {
+      // Only show MMR error when viewing in an org context
+      if (organizationId && !mmr) {
         return true;
       }
 
@@ -150,7 +151,7 @@ export const UserCard: React.FC<Props> = memo(
     const errorInfo = () => {
       return (
         <div className="flex flex-col items-end">
-          {!mmr && (
+          {organizationId && !mmr && (
             <span className="font-semibold text-red-500">MMR: Not added</span>
           )}
           {!user.positions && (
@@ -274,7 +275,7 @@ export const UserCard: React.FC<Props> = memo(
           </div>
 
           {/* Error info row */}
-          {(!mmr || !user.positions) && (
+          {((organizationId && !mmr) || !user.positions) && (
             <div className="flex justify-end">
               {errorInfo()}
             </div>

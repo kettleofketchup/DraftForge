@@ -116,6 +116,11 @@ def ensure_league_user(user, org_user, league):
 
 def flush_redis_cache():
     """Flush Redis cache to ensure fresh data after population."""
+    import os
+
+    if os.environ.get("DISABLE_CACHE", "").lower() in ("true", "1", "yes"):
+        return
+
     try:
         import redis
         from django.conf import settings
@@ -186,6 +191,8 @@ def get_or_create_demo_user(username, user_data, organization=None):
     user = CustomUser.objects.filter(discordId=user_data["discord_id"]).first()
     if not user:
         user = CustomUser.objects.filter(username=username).first()
+    if not user and steam_account_id:
+        user = CustomUser.objects.filter(steam_account_id=steam_account_id).first()
 
     if not user:
         # Create new user with real position data
@@ -229,38 +236,51 @@ def get_or_create_demo_user(username, user_data, organization=None):
     return user
 
 
+_discord_avatar_cache: dict[str, str] | None = None
+
+
+def _get_discord_avatar_cache() -> dict[str, str]:
+    """Fetch all guild members once and cache discord_id -> avatar_hash mapping."""
+    global _discord_avatar_cache
+    if _discord_avatar_cache is not None:
+        return _discord_avatar_cache
+
+    try:
+        from discordbot.services.users import get_discord_members_data
+
+        members = get_discord_members_data()
+        _discord_avatar_cache = {}
+        for member in members:
+            user_data = member.get("user", {})
+            discord_id = user_data.get("id")
+            avatar_hash = user_data.get("avatar")
+            if discord_id and avatar_hash:
+                _discord_avatar_cache[discord_id] = avatar_hash
+        print(f"  Cached {len(_discord_avatar_cache)} Discord avatars from bulk fetch")
+    except Exception as e:
+        print(f"  Discord API unavailable for avatars: {e}")
+        _discord_avatar_cache = {}
+
+    return _discord_avatar_cache
+
+
 def fetch_discord_avatars_for_users(users):
-    """Fetch Discord avatars for a list of users (sync, for population only)."""
-    import os
-
-    import requests
-
-    token = os.environ.get("DISCORD_BOT_TOKEN")
-    if not token:
-        print("No DISCORD_BOT_TOKEN, skipping avatar fetch")
+    """Update avatars for users using cached bulk guild member data."""
+    avatar_map = _get_discord_avatar_cache()
+    if not avatar_map:
         return
 
-    headers = {"Authorization": f"Bot {token}"}
-
+    updated = 0
     for user in users:
         if not user.discordId:
             continue
-        try:
-            resp = requests.get(
-                f"https://discord.com/api/v10/users/{user.discordId}",
-                headers=headers,
-                timeout=5,
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                avatar_hash = data.get("avatar")
-                if avatar_hash:
-                    # Store just the hash — avatarUrl property constructs the full URL
-                    user.avatar = avatar_hash
-                    user.save(update_fields=["avatar"])
-                    print(f"  Updated avatar for {user.username}")
-        except Exception as e:
-            print(f"  Failed to fetch avatar for {user.username}: {e}")
+        avatar_hash = avatar_map.get(user.discordId)
+        if avatar_hash and user.avatar != avatar_hash:
+            user.avatar = avatar_hash
+            user.save(update_fields=["avatar"])
+            updated += 1
+    if updated:
+        print(f"  Updated {updated} avatars")
 
 
 # Backwards compatibility aliases (with underscore prefix)

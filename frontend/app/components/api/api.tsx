@@ -96,6 +96,7 @@ export {
   addOrgMember,
   searchDiscordMembers,
   refreshDiscordMembers,
+  checkDiscordBotStatus,
   type DiscordSearchResult,
   importCSVToOrg,
   importCSVToTournament,
@@ -124,3 +125,19 @@ export {
 
 // Shared types
 export type { AddMemberPayload, AddUserResponse } from './types';
+
+// Events
+export {
+  getEvents, getEvent, createEvent, updateEvent, deleteEvent,
+  rsvpForEvent, openSignups, startRollCall, startTournament, cancelEvent,
+  restartTournament,
+  getEventSignups, approveSignup, rejectSignup, confirmSignup, cancelSignup,
+  getEventRepeaters, createEventRepeater, updateEventRepeater,
+  getDiscordChannels,
+  subscribeToRepeater, unsubscribeFromRepeater,
+  getOrgEventDefaults,
+  updateOrgEventDefaults,
+} from './eventsAPI';
+
+export type { EventRepeaterType, DiscordChannel, OrgEventDefaultsType } from './eventsAPI';
+export type { EventType, EventSignupType, EventTeamType } from '~/components/events/schemas';

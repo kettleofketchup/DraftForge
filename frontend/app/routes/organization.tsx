@@ -1,7 +1,7 @@
 import { generateMeta } from '~/lib/seo';
 import { fetchOrganization } from '~/components/api/api';
 import { queryClient } from '~/root';
-import { Building2, ClipboardList, ExternalLink, Pencil, Plus, Upload, Users } from 'lucide-react';
+import { Building2, Calendar, ClipboardList, ExternalLink, Mail, MailCheck, Pencil, Plus, Settings, Upload, Users } from 'lucide-react';
 import type { Route } from './+types/organization';
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
@@ -39,11 +39,19 @@ export function meta({ data }: Route.MetaArgs) {
 }
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
-import { addOrgMember } from '~/components/api/api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { addOrgMember, checkDiscordBotStatus } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
+import { CreateEventModal, EditEventModal, EditOrgDefaultsModal, EditRepeaterModal, EventStrip, type EventType } from '~/components/events';
+import type { EventRepeaterType } from '~/components/api/api';
+import { useEvents, useEventRepeaters, useRepeaterSubscriptionMutation } from '~/hooks/useEvent';
+import { Repeat, CalendarDays } from 'lucide-react';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
 import { ClaimsTab, EditOrganizationModal, useOrganization } from '~/components/organization';
-import { PrimaryButton } from '~/components/ui/buttons';
+import { Badge } from '~/components/ui/badge';
+import { Button } from '~/components/ui/button';
+import { AddDiscordBotButton, PrimaryButton } from '~/components/ui/buttons';
+import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
 import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
 import { UserList } from '~/components/user';
 import { AddUserModal } from '~/components/user/AddUserModal';
@@ -54,6 +62,8 @@ import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 import { usePageNav } from '~/hooks/usePageNav';
+import { cn } from '~/lib/utils';
+import { toast } from 'sonner';
 
 // Discord icon component
 const DiscordIcon = ({ className }: { className?: string }) => (
@@ -67,17 +77,150 @@ const DiscordIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const FREQUENCY_LABELS: Record<string, string> = {
+  daily: 'Daily',
+  weekly: 'Weekly',
+  every_two_weeks: 'Every 2 weeks',
+  monthly: 'Monthly',
+};
+
+function EventsList({ events, loading, onEdit, onEditSeries }: { events: EventType[]; loading: boolean; onEdit?: (event: EventType) => void; onEditSeries?: (repeaterId: number) => void }) {
+  if (loading) {
+    return <div className="text-center py-8 text-muted-foreground">Loading events...</div>;
+  }
+  if (events.length === 0) {
+    return <div className="text-center py-8 text-muted-foreground">No events found</div>;
+  }
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-3 hidden lg:block">
+        <CalendarDays className="inline h-4 w-4 mr-1.5 align-text-bottom" />
+        Events ({events.length})
+      </h3>
+      <div className="grid gap-2">
+        {events.map((event) => (
+          <EventStrip key={event.id} event={event} onEdit={onEdit} onEditSeries={onEditSeries} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RepeatersList({ repeaters, loading, onEdit }: { repeaters: EventRepeaterType[]; loading: boolean; onEdit?: (repeater: EventRepeaterType) => void }) {
+  const currentUser = useUserStore((state) => state.currentUser);
+  const { subscribe, unsubscribe } = useRepeaterSubscriptionMutation();
+  const isPending = subscribe.isPending || unsubscribe.isPending;
+
+  if (loading) {
+    return <div className="text-center py-8 text-muted-foreground">Loading repeating events...</div>;
+  }
+  if (repeaters.length === 0) {
+    return <div className="text-center py-8 text-muted-foreground">No repeating events found</div>;
+  }
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-3 hidden lg:block">
+        <Repeat className="inline h-4 w-4 mr-1.5 align-text-bottom" />
+        Repeating Events ({repeaters.length})
+      </h3>
+      <div className="grid gap-3">
+        {repeaters.map((r) => (
+          <div key={r.id} className="rounded-lg border border-border p-4">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="font-medium truncate">{r.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  {FREQUENCY_LABELS[r.frequency] ?? r.frequency}
+                  {r.day_of_week != null && ` on ${DAY_LABELS[r.day_of_week]}`}
+                  {' at '}
+                  {r.time_of_day.slice(0, 5)}
+                  {r.subscriber_count > 0 && (
+                    <span className="ml-2 text-xs">{'\u00B7'} {r.subscriber_count} subscribed</span>
+                  )}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {currentUser && r.discord_notify_new_events && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn("h-8 w-8", r.is_subscribed && "text-interactive")}
+                        disabled={isPending}
+                        onClick={() => {
+                          if (r.is_subscribed) {
+                            unsubscribe.mutate(r.id, {
+                              onError: () => toast.error('Failed to unsubscribe'),
+                            });
+                          } else {
+                            subscribe.mutate(r.id, {
+                              onSuccess: () => toast.success('Subscribed to notifications'),
+                              onError: () => toast.error('Failed to subscribe'),
+                            });
+                          }
+                        }}
+                      >
+                        {r.is_subscribed ? <MailCheck className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {r.is_subscribed ? 'Unsubscribe from notifications' : 'Get notified about new events'}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                {onEdit && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => onEdit(r)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Edit repeating event</TooltipContent>
+                  </Tooltip>
+                )}
+                <Badge variant={r.is_active ? 'default' : 'secondary'}>
+                  {r.is_active ? 'Active' : 'Paused'}
+                </Badge>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function OrganizationDetailPage() {
   const { organizationId } = useParams();
   const pk = organizationId ? parseInt(organizationId, 10) : undefined;
+  const queryClient = useQueryClient();
   const { organization, isLoading: orgLoading, refetch } = useOrganization(pk);
   const { leagues, isLoading: leaguesLoading } = useLeagues(pk);
   const currentUser = useUserStore((state) => state.currentUser);
   const [createLeagueOpen, setCreateLeagueOpen] = useState(false);
+  const [createEventOpen, setCreateEventOpen] = useState(false);
   const [editOrgOpen, setEditOrgOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<EventType | null>(null);
+  const [editingRepeaterId, setEditingRepeaterId] = useState<number | null>(null);
   const [showAddUser, setShowAddUser] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
+  const [editDefaultsOpen, setEditDefaultsOpen] = useState(false);
   const [activeTab, setActiveTab] = useUrlTabs('leagues');
+
+  const { data: events = [], isLoading: eventsLoading } = useEvents(
+    pk ? { organization: pk } : undefined
+  );
+  const { data: repeaters = [], isLoading: repeatersLoading } = useEventRepeaters(
+    pk ? { organization: pk } : undefined
+  );
 
   // Org users from store (pk array) + cache resolution
   const { orgUserPks, orgUsersLoading, orgUsersOrgId, getOrgUsers } = useOrgStore();
@@ -95,6 +238,8 @@ export default function OrganizationDetailPage() {
     currentUser?.is_superuser ||
     organization?.owner?.pk === currentUser?.pk ||
     organization?.admins?.some((a) => a.pk === currentUser?.pk);
+
+  const canEditEvents = isOrgAdmin || currentUser?.is_staff;
 
   // Staff can add members but not edit org settings
   const canAddMembers =
@@ -128,18 +273,28 @@ export default function OrganizationDetailPage() {
 
   const hasDiscordServer = Boolean(organization?.discord_server_id);
 
+  // Check if the DraftForge bot has access to the org's Discord server
+  const { data: botStatus } = useQuery({
+    queryKey: ['discordBotStatus', pk],
+    queryFn: () => checkDiscordBotStatus(pk!),
+    enabled: !!pk && !!organization && !!currentUser && hasDiscordServer && !!isOrgAdmin,
+    staleTime: 5 * 60 * 1000, // match backend cache TTL
+  });
+  const hasBotAccess = botStatus?.has_bot ?? null;
+
   // Page nav options for mobile navbar dropdown
   const userCountDisplay = orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUserPks.length;
   const pageNavOptions = useMemo(() => {
     const opts = [
       { value: 'leagues', label: `Leagues (${leagues.length})` },
+      { value: 'events', label: `Events (${events.length})` },
       { value: 'users', label: `Users (${userCountDisplay})` },
     ];
     if (isOrgAdmin) {
       opts.push({ value: 'claims', label: 'Claims' });
     }
     return opts;
-  }, [leagues.length, userCountDisplay, isOrgAdmin]);
+  }, [leagues.length, events.length, userCountDisplay, isOrgAdmin]);
 
   usePageNav(organization ? pageNavOptions : null, activeTab, setActiveTab);
 
@@ -196,19 +351,28 @@ export default function OrganizationDetailPage() {
                   )}
                 </div>
 
-                {/* Discord Link */}
-                {organization.discord_link && (
-                  <a
-                    href={organization.discord_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 transition-colors mb-4"
-                  >
-                    <DiscordIcon className="w-5 h-5" />
-                    <span>Join our Discord</span>
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                )}
+                {/* Discord Link + Bot Status */}
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                  {organization.discord_link && (
+                    <a
+                      href={organization.discord_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-indigo-400 hover:text-indigo-300 transition-colors"
+                    >
+                      <DiscordIcon className="w-5 h-5" />
+                      <span>Join our Discord</span>
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
+                  {isOrgAdmin && hasDiscordServer && hasBotAccess === false && (
+                    <AddDiscordBotButton
+                      size="sm"
+                      compact
+                      tooltip="Enable Discord user search and event notifications"
+                    />
+                  )}
+                </div>
 
                 {/* Description */}
                 {organization.description && (
@@ -229,6 +393,10 @@ export default function OrganizationDetailPage() {
           <TabsList className="hidden md:flex mb-4">
             <TabsTrigger value="leagues" data-testid="org-tab-leagues">
               Leagues ({leagues.length})
+            </TabsTrigger>
+            <TabsTrigger value="events" data-testid="org-tab-events">
+              <Calendar className="w-4 h-4 mr-2" />
+              Events ({events.length})
             </TabsTrigger>
             <TabsTrigger value="users" data-testid="org-tab-users">
               <Users className="w-4 h-4 mr-2" />
@@ -269,6 +437,64 @@ export default function OrganizationDetailPage() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          {/* Events Tab */}
+          <TabsContent value="events">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Events</h2>
+              <div className="flex items-center gap-2">
+                {canEditEvents && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9"
+                        onClick={() => setEditDefaultsOpen(true)}
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Edit event defaults</TooltipContent>
+                  </Tooltip>
+                )}
+                {isOrgAdmin && (
+                  <PrimaryButton data-testid="create-event-btn" onClick={() => setCreateEventOpen(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Event
+                  </PrimaryButton>
+                )}
+              </div>
+            </div>
+
+            {/* Desktop: side-by-side columns */}
+            <div className="hidden lg:grid lg:grid-cols-2 lg:gap-6">
+              <EventsList events={events} loading={eventsLoading} onEdit={canEditEvents ? setEditingEvent : undefined} onEditSeries={canEditEvents ? setEditingRepeaterId : undefined} />
+              <RepeatersList repeaters={repeaters} loading={repeatersLoading} onEdit={canEditEvents ? (r) => setEditingRepeaterId(r.id) : undefined} />
+            </div>
+
+            {/* Mobile: sub-tabs */}
+            <div className="lg:hidden">
+              <Tabs defaultValue="upcoming">
+                <TabsList className="w-full mb-4">
+                  <TabsTrigger value="upcoming" className="flex-1 gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    Events ({events.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="repeaters" className="flex-1 gap-1.5">
+                    <Repeat className="h-3.5 w-3.5" />
+                    Repeating ({repeaters.length})
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="upcoming">
+                  <EventsList events={events} loading={eventsLoading} onEdit={canEditEvents ? setEditingEvent : undefined} onEditSeries={canEditEvents ? setEditingRepeaterId : undefined} />
+                </TabsContent>
+                <TabsContent value="repeaters">
+                  <RepeatersList repeaters={repeaters} loading={repeatersLoading} onEdit={canEditEvents ? (r) => setEditingRepeaterId(r.id) : undefined} />
+                </TabsContent>
+              </Tabs>
+            </div>
           </TabsContent>
 
           {/* Users Tab */}
@@ -329,12 +555,36 @@ export default function OrganizationDetailPage() {
           />
         )}
 
+        {isOrgAdmin && pk && (
+          <CreateEventModal
+            open={createEventOpen}
+            onOpenChange={setCreateEventOpen}
+            organizationId={pk}
+            leagues={leagues}
+          />
+        )}
+
+        <EditEventModal
+          event={editingEvent}
+          open={editingEvent !== null}
+          onOpenChange={(open) => { if (!open) setEditingEvent(null); }}
+        />
+
+        <EditRepeaterModal
+          repeater={repeaters.find((r) => r.id === editingRepeaterId) ?? null}
+          open={editingRepeaterId !== null}
+          onOpenChange={(open) => { if (!open) setEditingRepeaterId(null); }}
+        />
+
         {organization && (
           <EditOrganizationModal
             open={editOrgOpen}
             onOpenChange={setEditOrgOpen}
             organization={organization}
-            onSuccess={refetch}
+            onSuccess={() => {
+              refetch();
+              queryClient.invalidateQueries({ queryKey: ['discordBotStatus', pk] });
+            }}
           />
         )}
 
@@ -360,6 +610,14 @@ export default function OrganizationDetailPage() {
             onAdd={handleAddMember}
             isAdded={isUserAdded}
                         hasDiscordServer={hasDiscordServer}
+          />
+        )}
+
+        {editDefaultsOpen && pk && (
+          <EditOrgDefaultsModal
+            organizationId={pk}
+            open={editDefaultsOpen}
+            onOpenChange={setEditDefaultsOpen}
           />
         )}
     </div>

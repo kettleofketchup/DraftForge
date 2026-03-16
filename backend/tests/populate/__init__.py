@@ -18,6 +18,8 @@ Or import specific functions:
     from tests.populate import populate_users, populate_tournaments
 """
 
+from tests.helpers.tournament_config import populate_test_tournaments
+
 # Re-export commonly used functions for backwards compatibility
 from tests.populate.bracket import (
     populate_bracket_linking_scenario,
@@ -37,6 +39,7 @@ from tests.populate.constants import (
 )
 from tests.populate.csv_import import populate_csv_import_data
 from tests.populate.demo import populate_demo_tournaments
+from tests.populate.events import populate_events_data
 from tests.populate.organizations import populate_organizations_and_leagues
 from tests.populate.shuffle_tie import populate_shuffle_tie_data
 from tests.populate.steam import populate_steam_matches
@@ -61,33 +64,58 @@ def populate_all(force=False):
     """
     Run all population functions in the correct order.
 
-    This is the main entry point for populating the test database.
-    Functions are run in dependency order:
-    1. Organizations and leagues (required by all others)
-    2. Users (required by tournaments)
-    3. Test auth users (for Playwright/Cypress tests)
-    4. Real Tournament 38 (for Steam league sync testing)
-    5. Test tournaments (various scenarios)
-    6. Steam matches (bracket game data)
-    7. Bracket linking scenario (specific test case)
-    8. Bracket unset winner tournament (E2E test)
-    9. Demo tournaments (for video recording)
-
     Args:
         force: If True, recreate data even if it exists
     """
-    populate_organizations_and_leagues(force)
-    populate_users(force)
-    populate_test_auth_users(force)
-    populate_real_tournament_38(force)
-    populate_tournaments(force)
-    populate_shuffle_tie_data(force)
-    populate_steam_matches(force)
-    populate_bracket_linking_scenario(force)
-    populate_bracket_unset_winner_tournament(force)
-    populate_csv_import_data(force)
-    populate_user_edit_data(force)
-    populate_demo_tournaments(force)
+    import io
+    import sys
+    import time
+
+    from rich.console import Console
+    from rich.table import Table
+
+    steps = [
+        ("Organizations & Leagues", populate_organizations_and_leagues),
+        ("Users", populate_users),
+        ("Test Auth Users", populate_test_auth_users),
+        ("Tournaments", populate_tournaments),
+        ("Steam Matches", populate_steam_matches),
+        ("Test Tournaments", populate_test_tournaments),
+        ("Bracket Linking", populate_bracket_linking_scenario),
+        ("Real Tournament 38", populate_real_tournament_38),
+        ("Bracket Unset Winner", populate_bracket_unset_winner_tournament),
+        ("CSV Import Data", populate_csv_import_data),
+        ("User Edit Data", populate_user_edit_data),
+        ("Shuffle Tie Data", populate_shuffle_tie_data),
+        ("Events Data", populate_events_data),
+        ("Demo Tournaments", populate_demo_tournaments),
+    ]
+
+    console = Console()
+    total = len(steps)
+    console.print(f"\n[bold]Populating test database ({total} steps)[/bold]\n")
+
+    results = []
+    overall_start = time.time()
+
+    for i, (name, fn) in enumerate(steps, 1):
+        console.print(f"  [dim][{i}/{total}][/dim] [blue]{name}[/blue]...", end=" ")
+        start = time.time()
+        # Capture stdout from populate functions to keep output clean
+        old_stdout = sys.stdout
+        sys.stdout = io.StringIO()
+        try:
+            fn(force)
+        finally:
+            sys.stdout = old_stdout
+        elapsed = time.time() - start
+        console.print(f"[green]{elapsed:.1f}s[/green]")
+        results.append((name, elapsed))
+
+    overall = time.time() - overall_start
+    console.print(
+        f"\n[bold green]All {total} steps completed in {overall:.1f}s[/bold green]\n"
+    )
 
 
 __all__ = [
@@ -105,7 +133,9 @@ __all__ = [
     "populate_bracket_unset_winner_tournament",
     "populate_csv_import_data",
     "populate_user_edit_data",
+    "populate_events_data",
     "populate_demo_tournaments",
+    "populate_test_tournaments",
     # Utilities
     "create_user",
     "generate_mock_discord_members",

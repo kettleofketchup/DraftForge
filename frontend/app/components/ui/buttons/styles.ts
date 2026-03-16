@@ -55,6 +55,10 @@ export const brandSecondary3D = `${button3DBase} ${button3DDisabled} ${brandSeco
 // Brand secondary opaque with 3D depth (for colored dialog backgrounds)
 export const brandSecondaryOpaque3D = `${button3DBase} ${button3DDisabled} ${brandSecondaryOpaque} border-b-violet-700/50`;
 
+// Neutral opaque - gray/slate for cancel buttons on colored dialog backgrounds
+export const brandNeutralOpaque = 'bg-slate-700 border border-slate-500/30 text-slate-100 hover:bg-slate-600';
+export const brandNeutralOpaque3D = `${button3DBase} ${button3DDisabled} ${brandNeutralOpaque} border-b-slate-800/50`;
+
 // Variant-specific 3D styles with disabled state
 export const button3DVariants = {
   destructive: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} bg-red-600 text-white hover:bg-red-500 border-b-red-800 shadow-red-900/50`,

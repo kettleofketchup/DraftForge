@@ -201,6 +201,15 @@ export async function refreshDiscordMembers(
   return response.data;
 }
 
+export async function checkDiscordBotStatus(
+  orgId: number,
+): Promise<{ has_bot: boolean; reason?: string }> {
+  const response = await axios.get<{ has_bot: boolean; reason?: string }>(
+    `/discord/organizations/${orgId}/bot-status/`,
+  );
+  return response.data;
+}
+
 // CSV Import
 export interface CSVImportRow {
   steam_friend_id?: string;

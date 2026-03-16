@@ -8,6 +8,8 @@ export default [
   route('organizations/:organizationId', 'routes/organization.tsx'),
   route('leagues', 'routes/leagues.tsx'),
   route('leagues/:leagueId/:tab?', 'routes/league.tsx'),
+  route('events', 'routes/events.tsx'),
+  route('events/:eventId/:tab?', 'routes/event.tsx'),
   route('leaderboard', 'routes/leaderboard.tsx'),
   route('about', 'routes/about.tsx'),
   route('blog', 'routes/blog.tsx'),
@@ -18,4 +20,5 @@ export default [
   route('profile', 'routes/profile.tsx'),
   route('edit-profile', 'routes/editProfile.tsx'),
   route('herodraft/:id', 'routes/herodraft.tsx'),
+  route('rollcall/:eventId', 'routes/rollcall.tsx'),
 ] satisfies RouteConfig;

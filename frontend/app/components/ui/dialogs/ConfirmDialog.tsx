@@ -47,7 +47,7 @@ const contentVariantStyles = {
 
 // Description text styling per variant
 const descriptionVariantStyles = {
-  default: '',
+  default: 'text-green-100',
   destructive: 'text-slate-300',
   warning: 'text-orange-200',
 };

@@ -3,6 +3,9 @@ export { brandBg, brandDepthColors, brandErrorBg, brandErrorCard, brandErrorPrim
 export type { Button3DVariant } from './styles';
 
 // Base Buttons
+export { AddDiscordBotButton } from './AddDiscordBotButton';
+export type { AddDiscordBotButtonProps } from './AddDiscordBotButton';
+
 export { CancelButton } from './CancelButton';
 export type { CancelButtonProps, CancelButtonVariant } from './CancelButton';
 

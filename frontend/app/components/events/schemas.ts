@@ -1,0 +1,210 @@
+import { z } from 'zod';
+
+export const GameType = { DOTA2: 1, DEADLOCK: 2 } as const;
+
+export const EventState = {
+  UPCOMING: 'upcoming', SIGNUPS_OPEN: 'signups_open', ROLL_CALL: 'roll_call',
+  IN_PROGRESS: 'in_progress', COMPLETED: 'completed', CANCELLED: 'cancelled',
+} as const;
+
+export const SignupStatus = {
+  RSVP: 'rsvp', PENDING_APPROVAL: 'pending_approval', APPROVED: 'approved',
+  CONFIRMED: 'confirmed', WAITLISTED: 'waitlisted', REJECTED: 'rejected', CANCELLED: 'cancelled',
+} as const;
+
+export const GameMode = {
+  NORMAL: 'normal', CAPTAINS_MODE: 'captains_mode', TURBO: 'turbo', CUSTOM: 'custom',
+} as const;
+
+export const eventSchema = z.object({
+  id: z.number(),
+  organization: z.number(),
+  organization_name: z.string(),
+  event_repeater: z.number().nullable(),
+  name: z.string(),
+  description: z.string(),
+  scheduled_at: z.string(),
+  signups_open_at: z.string().nullable(),
+  state: z.string(),
+  tournament: z.number().nullable(),
+  created_by: z.number().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  signup_count: z.number(),
+  confirmed_count: z.number(),
+  tournament_name: z.string(),
+  tournament_league: z.number(),
+  tournament_type: z.string(),
+  game_type: z.number(),
+  draft_type: z.string(),
+  game_mode: z.string(),
+  custom_game_name: z.string(),
+  captains_draft_time: z.number(),
+  lobby_steam_league_id: z.number().nullable(),
+  people_per_team: z.number(),
+  number_of_teams: z.number().nullable(),
+  tournament_date: z.string().nullable(),
+  timezone: z.string(),
+  min_players: z.number().nullable(),
+  max_players: z.number().nullable(),
+  signup_deadline_hours: z.number().nullable(),
+  allow_team_signups: z.boolean(),
+  allow_user_signups: z.boolean(),
+  auto_approve: z.boolean(),
+  auto_confirm: z.boolean(),
+  require_mmr_verified: z.boolean(),
+  require_steam_id: z.boolean(),
+  require_profile_complete: z.boolean(),
+  roll_call_enabled: z.boolean(),
+  roll_call_mode: z.string(),
+  discord_create_event: z.boolean(),
+  discord_sync_signups: z.boolean(),
+  discord_event_title: z.string(),
+  discord_event_description: z.string(),
+  discord_event_info: z.string(),
+  discord_signup_reminder: z.boolean(),
+  discord_signup_reminder_hours: z.number(),
+  discord_confirm_attendance: z.boolean(),
+  discord_confirm_attendance_hours: z.number(),
+  discord_profile_reminder: z.boolean(),
+  discord_profile_reminder_hours: z.number(),
+  discord_mark_interested: z.boolean(),
+  discord_post_signups: z.boolean(),
+  discord_post_signups_channel_id: z.string(),
+  discord_announcement: z.boolean(),
+  discord_announcement_channel_id: z.string(),
+  discord_announcement_hours: z.number(),
+  _warning: z.string().optional(),
+});
+
+export type EventType = z.infer<typeof eventSchema>;
+
+export const eventSignupSchema = z.object({
+  id: z.number(),
+  event: z.number(),
+  user: z.number(),
+  username: z.string().nullable(),
+  user_avatar: z.string().nullable(),
+  user_data: z.object({
+    pk: z.number(),
+    username: z.string(),
+    nickname: z.string().nullable(),
+    avatar: z.string().nullable(),
+    discordId: z.string().nullable(),
+    discordNickname: z.string().nullable(),
+    positions: z.object({
+      carry: z.number(),
+      mid: z.number(),
+      offlane: z.number(),
+      soft_support: z.number(),
+      hard_support: z.number(),
+    }).nullable(),
+    steam_account_id: z.number().nullable(),
+    avatarUrl: z.string().nullable(),
+  }).nullable(),
+  event_team: z.number().nullable(),
+  signup_type: z.string(),
+  status: z.string(),
+  waitlist_position: z.number().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export type EventSignupType = z.infer<typeof eventSignupSchema>;
+
+export const eventTeamSchema = z.object({
+  id: z.number(),
+  event: z.number(),
+  name: z.string(),
+  captain: z.number(),
+  captain_name: z.string().nullable(),
+  member_count: z.number(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export type EventTeamType = z.infer<typeof eventTeamSchema>;
+
+export const Frequency = {
+  DAILY: 'daily', WEEKLY: 'weekly', EVERY_TWO_WEEKS: 'every_two_weeks', MONTHLY: 'monthly',
+} as const;
+
+export const FREQUENCY_LABELS: Record<string, string> = {
+  [Frequency.DAILY]: 'Daily',
+  [Frequency.WEEKLY]: 'Weekly',
+  [Frequency.EVERY_TWO_WEEKS]: 'Every Two Weeks',
+  [Frequency.MONTHLY]: 'Monthly',
+};
+
+export const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+export const discordConfigSchema = z.object({
+  discord_create_event: z.boolean(),
+  discord_sync_signups: z.boolean(),
+  discord_event_title: z.string(),
+  discord_event_description: z.string(),
+  discord_event_info: z.string(),
+  discord_signup_reminder: z.boolean(),
+  discord_signup_reminder_hours: z.number().int().min(1),
+  discord_confirm_attendance: z.boolean(),
+  discord_confirm_attendance_hours: z.number().int().min(1),
+  discord_profile_reminder: z.boolean(),
+  discord_profile_reminder_hours: z.number().int().min(1),
+  discord_mark_interested: z.boolean(),
+  discord_post_signups: z.boolean(),
+  discord_post_signups_channel_id: z.string(),
+  discord_announcement: z.boolean(),
+  discord_announcement_channel_id: z.string(),
+  discord_announcement_hours: z.number().int().min(1),
+});
+
+export const DISCORD_CONFIG_DEFAULTS = {
+  discord_create_event: false,
+  discord_sync_signups: false,
+  discord_event_title: '',
+  discord_event_description: '',
+  discord_event_info: '',
+  discord_signup_reminder: false,
+  discord_signup_reminder_hours: 24,
+  discord_confirm_attendance: false,
+  discord_confirm_attendance_hours: 2,
+  discord_profile_reminder: false,
+  discord_profile_reminder_hours: 24,
+  discord_mark_interested: false,
+  discord_post_signups: false,
+  discord_post_signups_channel_id: '',
+  discord_announcement: false,
+  discord_announcement_channel_id: '',
+  discord_announcement_hours: 24,
+} as const;
+
+export const createEventInputSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: z.string(),
+  scheduled_at: z.string(),
+  organization: z.number(),
+  tournament_league: z.number({ error: 'League is required' }),
+  tournament_name: z.string().min(1, 'Tournament name is required'),
+  tournament_type: z.string(),
+  game_type: z.number(),
+  draft_type: z.string(),
+  game_mode: z.string(),
+  custom_game_name: z.string(),
+  captains_draft_time: z.number().int().min(1),
+  lobby_steam_league_id: z.number().nullable(),
+  people_per_team: z.number().int().min(1),
+  number_of_teams: z.number().int().min(2).nullable(),
+  discord_notify_new_events: z.boolean().optional(),
+  signup_mode: z.enum(['immediate', 'scheduled', 'manual']),
+  signup_days_before: z.number().int().min(1).optional(),
+  // Recurring fields
+  is_recurring: z.boolean(),
+  frequency: z.string().optional(),
+  day_of_week: z.number().int().min(0).max(6).optional(),
+  time_of_day: z.string().optional(),
+  starts_at: z.string().optional(),
+  ends_at: z.string().optional(),
+  generate_days_ahead: z.number().int().min(1),
+}).merge(discordConfigSchema);
+
+export type CreateEventInput = z.infer<typeof createEventInputSchema>;

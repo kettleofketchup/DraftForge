@@ -69,6 +69,18 @@ class DraftStyles(StrEnum):
     shuffle = "shuffle"
 
 
+class GameType(models.IntegerChoices):
+    DOTA2 = 1, "Dota 2"
+    DEADLOCK = 2, "Deadlock"
+
+
+class GameMode(models.TextChoices):
+    NORMAL = "normal", "Normal"
+    CAPTAINS_MODE = "captains_mode", "Captain's Mode"
+    TURBO = "turbo", "Turbo"
+    CUSTOM = "custom", "Custom Lobby"
+
+
 class CustomUser(AbstractUser):
     # Override username to allow blank (users can be created from Steam only)
     username = models.CharField(max_length=150, unique=True, blank=True, null=True)
@@ -490,7 +502,7 @@ class Tournament(models.Model):
 
     state = models.CharField(max_length=20, choices=STATE_CHOICES, default="future")
     tournament_type = models.CharField(
-        max_length=20, choices=TOURNAMNET_TYPE_CHOICES, default="double_elimination"
+        max_length=30, choices=TOURNAMNET_TYPE_CHOICES, default="double_elimination"
     )
 
     steam_league_id = models.IntegerField(
@@ -507,6 +519,36 @@ class Tournament(models.Model):
         blank=True,
         related_name="tournaments",
         db_column="league_fk_id",
+    )
+
+    game_type = models.IntegerField(
+        choices=GameType.choices,
+        default=GameType.DOTA2,
+    )
+    draft_type = models.CharField(
+        max_length=10,
+        choices=[(s.value, s.value.title()) for s in DraftStyles],
+        default=DraftStyles.shuffle.value,
+    )
+    people_per_team = models.IntegerField(default=5)
+    number_of_teams = models.IntegerField(null=True, blank=True)
+    game_mode = models.CharField(
+        max_length=20, choices=GameMode.choices, default=GameMode.NORMAL
+    )
+    custom_game_name = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Custom game/lobby name (for custom game mode)",
+    )
+    captains_draft_time = models.IntegerField(
+        default=10,
+        help_text="Seconds per draft pick in Captain's Mode",
+    )
+    lobby_steam_league_id = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Steam league ID for Dota 2 lobby ticket",
     )
 
     def __str__(self):

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '~/components/ui/button';
+import { AddDiscordBotButton } from '~/components/ui/buttons';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -56,8 +57,9 @@ export const DiscordMemberResults: React.FC<DiscordMemberResultsProps> = ({
 
   if (!hasDiscordServer) {
     return (
-      <div className="py-8 text-center text-sm text-muted-foreground">
-        No Discord server configured for this organization
+      <div className="flex flex-col items-center gap-3 py-8 text-center text-sm text-muted-foreground">
+        <p>No Discord server configured for this organization</p>
+        <AddDiscordBotButton />
       </div>
     );
   }

@@ -5,6 +5,7 @@ from common.utils import isTestEnvironment
 from .test_auth import (
     create_claim_request,
     create_claimable_user,
+    generate_events,
     get_tournament_by_key,
     get_user_org_membership,
     kill_draft_websocket,
@@ -18,6 +19,7 @@ from .test_auth import (
     login_staff,
     login_user,
     login_user_claimer,
+    reset_events_data,
     reset_org_admin_team,
     reset_tournament_by_key,
 )
@@ -154,6 +156,18 @@ urlpatterns = [
         "discord/<int:org_id>/seed-members/",
         seed_discord_members,
         name="test-seed-discord-members",
+    ),
+    # Events reset
+    path(
+        "events/reset/",
+        reset_events_data,
+        name="reset-events",
+    ),
+    # Events generation trigger (synchronous)
+    path(
+        "events/generate/",
+        generate_events,
+        name="generate-events",
     ),
     # Demo tournament endpoints (for video recording)
     # More specific paths first to avoid <str:key> catching them

@@ -75,6 +75,14 @@ SHUFFLE_TIE_LEAGUE: TestLeague = TestLeague(
     organization_names=["Shuffle Tie Org"],
 )
 
+# Events E2E tests
+EVENTS_LEAGUE: TestLeague = TestLeague(
+    pk=7,
+    name="Events Test League",
+    steam_league_id=17935,
+    organization_names=["Events Test Org"],
+)
+
 # =============================================================================
 # Constants for easy access
 # =============================================================================
@@ -97,6 +105,9 @@ USER_EDIT_STEAM_LEAGUE_ID = USER_EDIT_LEAGUE.steam_league_id
 SHUFFLE_TIE_LEAGUE_NAME = SHUFFLE_TIE_LEAGUE.name
 SHUFFLE_TIE_STEAM_LEAGUE_ID = SHUFFLE_TIE_LEAGUE.steam_league_id
 
+EVENTS_LEAGUE_NAME = EVENTS_LEAGUE.name
+EVENTS_LEAGUE_STEAM_ID = EVENTS_LEAGUE.steam_league_id
+
 # =============================================================================
 # All Leagues (for iteration)
 # =============================================================================
@@ -108,4 +119,5 @@ ALL_LEAGUES: list[TestLeague] = [
     DEMO_CSV_LEAGUE,
     USER_EDIT_LEAGUE,
     SHUFFLE_TIE_LEAGUE,
+    EVENTS_LEAGUE,
 ]

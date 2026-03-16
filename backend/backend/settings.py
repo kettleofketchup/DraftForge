@@ -112,6 +112,7 @@ INSTALLED_APPS = [
     "steam.apps.SteamConfig",
     "bracket.apps.TournamentConfig",
     "discordbot.apps.DiscordbotConfig",
+    "events.apps.EventsConfig",
     "cacheops",  # Added for django-cacheops
 ]
 
@@ -289,8 +290,11 @@ CACHEOPS_REDIS = {
     "socket_connect_timeout": 2,  # Timeout for initial connection (prevents hanging)
 }
 
-# Enable caching for tournament-related models
-if not env_bool("DISABLE_CACHE"):
+# When DISABLE_CACHE is set, fully disable cacheops (no Redis connection attempts)
+if env_bool("DISABLE_CACHE"):
+    CACHEOPS_ENABLED = False
+    CACHEOPS = {}
+else:
     CACHEOPS = {
         "app.organization": {"ops": "all", "timeout": 60 * 60},
         "app.league": {"ops": "all", "timeout": 60 * 60},
@@ -306,37 +310,34 @@ if not env_bool("DISABLE_CACHE"):
         # Steam match data - cached with shorter timeout for freshness
         "steam.match": {"ops": "all", "timeout": 30 * 60},
         "steam.playermatchstats": {"ops": "all", "timeout": 30 * 60},
+        # Events app
+        "events.eventrepeater": {"ops": "all", "timeout": 60 * 60},
+        "events.event": {"ops": "all", "timeout": 60 * 60},
+        "events.eventteam": {"ops": "all", "timeout": 60 * 60},
+        "events.eventsignup": {"ops": "all", "timeout": 60 * 60},
+        "events.repeatersubscription": {"ops": "all", "timeout": 60 * 60},
+        "events.orgeventdefaults": {"ops": "all", "timeout": 60 * 60},
     }
-else:
-    # Disable all caching - but still register models to avoid ImproperlyConfigured errors
-    # when @cached_as is called with model classes
-    CACHEOPS = {
-        "app.organization": {"ops": (), "timeout": 0},
-        "app.league": {"ops": (), "timeout": 0},
-        "app.tournament": {"ops": (), "timeout": 0},
-        "app.team": {"ops": (), "timeout": 0},
-        "app.customuser": {"ops": (), "timeout": 0},
-        "app.draft": {"ops": (), "timeout": 0},
-        "app.game": {"ops": (), "timeout": 0},
-        "app.draftround": {"ops": (), "timeout": 0},
-        "org.orguser": {"ops": (), "timeout": 0},
-        "league.leagueuser": {"ops": (), "timeout": 0},
-        "steam.match": {"ops": (), "timeout": 0},
-        "steam.playermatchstats": {"ops": (), "timeout": 0},
-    }
-
 
 CACHEOPS_DEGRADE_ON_FAILURE = True
 
 # Channel Layers for WebSocket support
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [(REDIS_HOST, 6379)],
+if env_bool("DISABLE_CACHE"):
+    # In-memory channel layer when Redis is unavailable (populate, local tests)
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
         },
-    },
-}
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [(REDIS_HOST, 6379)],
+            },
+        },
+    }
 
 
 # Password validation

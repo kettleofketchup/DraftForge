@@ -153,6 +153,7 @@ urlpatterns = [
     path("api/steam/", include("steam.urls")),
     path("api/bracket/", include("bracket.urls")),
     path("api/discord/", include("discordbot.urls")),
+    path("api/events/", include("events.urls")),
     # HeroDraft (Captain's Mode) endpoints
     path(
         "api/games/<int:game_pk>/create-herodraft/",
@@ -290,9 +291,9 @@ urlpatterns = [
     ),
 ]
 
-log.warning(f"Test Environ:  {isTestEnvironment()}")
+log.debug(f"Test Environ:  {isTestEnvironment()}")
 if isTestEnvironment():
-    log.warning("Adding test environment URLs")
+    log.debug("Adding test environment URLs")
     urlpatterns += [
         path("api/tests/", include("tests.urls")),
     ]
