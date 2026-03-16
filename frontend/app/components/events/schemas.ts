@@ -195,6 +195,7 @@ export const createEventInputSchema = z.object({
   people_per_team: z.number().int().min(1),
   number_of_teams: z.number().int().min(2).nullable(),
   discord_notify_new_events: z.boolean().optional(),
+  open_signups: z.boolean(),
   // Recurring fields
   is_recurring: z.boolean(),
   frequency: z.string().optional(),

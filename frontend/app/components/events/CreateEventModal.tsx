@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { createEvent, createEventRepeater, getOrgEventDefaults } from '~/components/api/api';
+import { createEvent, createEventRepeater, getOrgEventDefaults, openSignups } from '~/components/api/api';
 import { FormDialog } from '~/components/ui/dialogs';
 import {
   Form,
