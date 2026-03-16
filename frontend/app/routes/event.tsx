@@ -55,14 +55,15 @@ import { PrimaryButton, SecondaryButton, DestructiveButton } from '~/components/
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { UserStrip } from '~/components/user';
-import type { UserType } from '~/components/user/types';
 import {
   useEvent,
   useEventSignups,
+  useEventSignupUsers,
   useRsvpMutation,
   useEventActionMutation,
   useSignupActionMutations,
 } from '~/hooks/useEvent';
+import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrganization } from '~/components/organization';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { usePageNav } from '~/hooks/usePageNav';
@@ -76,6 +77,7 @@ export default function EventPage() {
 
   const { data: event, isLoading, error } = useEvent(id);
   const { data: signups } = useEventSignups(id);
+  useEventSignupUsers(signups);
   const currentUser = useUserStore((state) => state.currentUser);
 
   const [activeTab, setActiveTab] = useState(tab || 'details');
@@ -442,6 +444,13 @@ function SignupsTab({
   isAdmin: boolean;
   signupActions: ReturnType<typeof useSignupActionMutations>;
 }) {
+  const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
+  const resolvedUsers = useResolvedUsers(userPks);
+  const userMap = useMemo(
+    () => new Map(resolvedUsers.map((u) => [u.pk, u])),
+    [resolvedUsers],
+  );
+
   if (signups.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -454,7 +463,7 @@ function SignupsTab({
   return (
     <div className="space-y-1.5">
       {signups.map((signup, index) => {
-        const userData = signup.user_data;
+        const user = userMap.get(signup.user);
         const position = signup.waitlist_position ?? index + 1;
 
         const adminActions = isAdmin ? (
@@ -500,11 +509,11 @@ function SignupsTab({
           </div>
         );
 
-        if (userData) {
+        if (user) {
           return (
             <UserStrip
               key={signup.id}
-              user={userData as unknown as UserType}
+              user={user}
               compact
               showPositions
               contextSlot={statusSlot}
@@ -513,7 +522,7 @@ function SignupsTab({
           );
         }
 
-        // Fallback for signups without full user data
+        // Fallback for signups not yet in cache
         return (
           <div
             key={signup.id}

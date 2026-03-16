@@ -32,13 +32,14 @@ import { EventStateBadge } from '~/components/events';
 import { EventState } from '~/components/events/schemas';
 import type { EventSignupType } from '~/components/events/schemas';
 import { UserStrip } from '~/components/user';
-import type { UserType } from '~/components/user/types';
 import {
   useEvent,
   useEventSignups,
+  useEventSignupUsers,
   useEventActionMutation,
   useSignupActionMutations,
 } from '~/hooks/useEvent';
+import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrganizations } from '~/components/organization';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { ConfirmDialog } from '~/components/ui/dialogs';
@@ -50,6 +51,7 @@ export default function RollCallPage() {
 
   const { data: event, isLoading } = useEvent(id);
   const { data: signups = [] } = useEventSignups(id);
+  useEventSignupUsers(signups);
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
 
@@ -91,6 +93,14 @@ export default function RollCallPage() {
       </div>
     );
   }
+
+  // Resolve all signup users from cache
+  const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
+  const resolvedUsers = useResolvedUsers(userPks);
+  const userMap = useMemo(
+    () => new Map(resolvedUsers.map((u) => [u.pk, u])),
+    [resolvedUsers],
+  );
 
   // Separate signups by status
   const confirmed = signups.filter((s) => s.status === 'confirmed');
@@ -166,6 +176,7 @@ export default function RollCallPage() {
                 <SignupStrip
                   key={signup.id}
                   signup={signup}
+                  userMap={userMap}
                   isAdmin={isAdmin}
                   signupActions={signupActions}
                 />
@@ -185,6 +196,7 @@ export default function RollCallPage() {
                 <SignupStrip
                   key={signup.id}
                   signup={signup}
+                  userMap={userMap}
                   isAdmin={isAdmin}
                   signupActions={signupActions}
                 />
@@ -204,6 +216,7 @@ export default function RollCallPage() {
                 <SignupStrip
                   key={signup.id}
                   signup={signup}
+                  userMap={userMap}
                   isAdmin={isAdmin}
                   signupActions={signupActions}
                 />
@@ -244,14 +257,16 @@ export default function RollCallPage() {
 /** Individual signup strip with confirm/reject actions */
 function SignupStrip({
   signup,
+  userMap,
   isAdmin,
   signupActions,
 }: {
   signup: EventSignupType;
+  userMap: Map<number, import('~/store/userCacheTypes').UserEntry>;
   isAdmin: boolean;
   signupActions: ReturnType<typeof useSignupActionMutations>;
 }) {
-  const userData = signup.user_data;
+  const user = userMap.get(signup.user);
 
   const actionSlot = isAdmin ? (
     <div className="flex gap-1">
@@ -288,10 +303,10 @@ function SignupStrip({
     </div>
   ) : undefined;
 
-  if (userData) {
+  if (user) {
     return (
       <UserStrip
-        user={userData as unknown as UserType}
+        user={user}
         compact
         showPositions
         contextSlot={<EventStateBadge state={signup.status} />}
@@ -300,6 +315,7 @@ function SignupStrip({
     );
   }
 
+  // Fallback for signups not yet in cache
   return (
     <div className="flex items-center gap-3 rounded-lg p-2 border border-border/50 bg-muted/25">
       <div className="w-9 h-9 rounded-full bg-muted shrink-0 flex items-center justify-center text-xs text-muted-foreground">

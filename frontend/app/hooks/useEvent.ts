@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -25,6 +26,8 @@ import {
 } from '~/components/api/api';
 import type { EventRepeaterType } from '~/components/api/api';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
+import type { UserType } from '~/components/user/types';
+import { useUserCacheStore } from '~/store/userCacheStore';
 
 export function useEvents(params?: { organization?: number; state?: string }) {
   return useQuery<EventType[]>({
@@ -189,4 +192,20 @@ export function useUpdateOrgDefaultsMutation(orgId: number) {
       queryClient.invalidateQueries({ queryKey: ['org-event-defaults', orgId] });
     },
   });
+}
+
+/**
+ * Upsert signup user data into the entity adapter cache.
+ * Call this after fetching signups to ensure all signup users are in the cache.
+ */
+export function useEventSignupUsers(signups: EventSignupType[] | undefined) {
+  useEffect(() => {
+    if (!signups) return;
+    const users = signups
+      .map((s) => s.user_data)
+      .filter(Boolean) as UserType[];
+    if (users.length > 0) {
+      useUserCacheStore.getState().upsert(users);
+    }
+  }, [signups]);
 }
