@@ -63,7 +63,7 @@ import {
   useEventActionMutation,
   useSignupActionMutations,
 } from '~/hooks/useEvent';
-import { useOrganizations } from '~/components/organization';
+import { useOrganization } from '~/components/organization';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { usePageNav } from '~/hooks/usePageNav';
 import { useUserStore } from '~/store/userStore';
@@ -83,12 +83,8 @@ export default function EventPage() {
   const [showRsvpConfirm, setShowRsvpConfirm] = useState(false);
   const [showCancelRsvpConfirm, setShowCancelRsvpConfirm] = useState(false);
 
-  // Permission check - find org for this event
-  const { organizations } = useOrganizations();
-  const eventOrg = useMemo(
-    () => organizations.find((o) => o.pk === event?.organization) || null,
-    [organizations, event?.organization],
-  );
+  // Permission check - fetch the specific org for this event
+  const { organization: eventOrg } = useOrganization(event?.organization ?? undefined);
   const isAdmin = useIsOrganizationAdmin(eventOrg);
 
   // Mutations
