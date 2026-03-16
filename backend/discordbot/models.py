@@ -80,3 +80,32 @@ class RSVP(models.Model):
 
     def __str__(self):
         return f"{self.discord_username}: {self.status}"
+
+
+class DiscordMessageLog(models.Model):
+    """Audit log for all outbound Discord messages."""
+
+    # What was sent
+    channel_id = models.CharField(max_length=64)
+    embed_data = models.JSONField()
+
+    # Discord response
+    discord_message_id = models.CharField(max_length=64, null=True, blank=True)
+    status_code = models.IntegerField(null=True, blank=True)
+    response_data = models.JSONField(null=True, blank=True)
+    success = models.BooleanField(default=False)
+
+    # Context — what triggered this message
+    source = models.CharField(max_length=64, default="unknown")
+    source_id = models.IntegerField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["source", "source_id"]),
+        ]
+
+    def __str__(self):
+        return f"{self.source}:{self.source_id} → {self.channel_id} ({'ok' if self.success else 'fail'})"

@@ -1,7 +1,7 @@
 # backend/discordbot/admin.py
 from django.contrib import admin
 
-from .models import RSVP, EventTemplate, ScheduledEvent
+from .models import RSVP, DiscordMessageLog, EventTemplate, ScheduledEvent
 
 
 @admin.register(EventTemplate)
@@ -35,3 +35,10 @@ class RSVPAdmin(admin.ModelAdmin):
     list_filter = ["status"]
     search_fields = ["discord_username", "discord_user_id"]
     raw_id_fields = ["scheduled_event"]
+
+
+@admin.register(DiscordMessageLog)
+class DiscordMessageLogAdmin(admin.ModelAdmin):
+    list_display = ["source", "source_id", "channel_id", "success", "created_at"]
+    list_filter = ["source", "success"]
+    readonly_fields = ["embed_data", "response_data"]
