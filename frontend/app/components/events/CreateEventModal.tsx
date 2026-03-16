@@ -71,6 +71,7 @@ export function CreateEventModal({
       number_of_teams: null,
       discord_notify_new_events: true,
       ...DISCORD_CONFIG_DEFAULTS,
+      open_signups: true,
       is_recurring: false,
       frequency: Frequency.WEEKLY,
       generate_days_ahead: 7,
@@ -96,6 +97,7 @@ export function CreateEventModal({
         people_per_team: orgDefaults.people_per_team,
         number_of_teams: orgDefaults.number_of_teams,
         discord_notify_new_events: true,
+        open_signups: true,
         discord_create_event: orgDefaults.discord_create_event,
         discord_sync_signups: orgDefaults.discord_sync_signups,
         discord_event_title: orgDefaults.discord_event_title,
@@ -131,7 +133,7 @@ export function CreateEventModal({
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at, discord_notify_new_events, ...shared } = data;
+      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at, discord_notify_new_events, open_signups: shouldOpenSignups, ...shared } = data;
 
       if (is_recurring) {
         await createEventRepeater({
@@ -146,11 +148,16 @@ export function CreateEventModal({
         });
         toast.success('Recurring event created');
       } else {
-        await createEvent({
+        const created = await createEvent({
           ...shared,
           scheduled_at,
         });
-        toast.success('Event created');
+        if (shouldOpenSignups && created.id) {
+          await openSignups(created.id);
+          toast.success('Event created with signups open');
+        } else {
+          toast.success('Event created');
+        }
       }
 
       queryClient.invalidateQueries({ queryKey: ['events'] });
@@ -406,6 +413,31 @@ export function CreateEventModal({
         </div>
 
         <LobbyConfigSection control={form.control} watch={form.watch} />
+
+        {/* Open signups toggle */}
+        <FormField
+          control={form.control}
+          name="open_signups"
+          render={({ field }) => (
+            <FormItem className="flex items-center gap-3 rounded-md border border-border p-3">
+              <FormControl>
+                <input
+                  data-testid="event-open-signups-checkbox"
+                  type="checkbox"
+                  checked={field.value}
+                  onChange={field.onChange}
+                  className="h-4 w-4 rounded border-border accent-primary"
+                />
+              </FormControl>
+              <div>
+                <FormLabel className="text-sm font-medium cursor-pointer">
+                  Open signups immediately
+                </FormLabel>
+                <FormDescription>Start accepting RSVPs as soon as the event is created</FormDescription>
+              </div>
+            </FormItem>
+          )}
+        />
 
         {/* Recurring toggle */}
         <FormField
