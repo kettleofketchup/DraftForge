@@ -21,7 +21,16 @@ def _get_headers():
     }
 
 
-def sync_send_embed(channel_id, title, description, color, fields=None, footer=None):
+def sync_send_embed(
+    channel_id,
+    title,
+    description,
+    color,
+    fields=None,
+    footer=None,
+    source="unknown",
+    source_id=None,
+):
     """
     Send a rich embed to a Discord channel.
 
@@ -32,10 +41,14 @@ def sync_send_embed(channel_id, title, description, color, fields=None, footer=N
         color: Integer color value (e.g., 0x00FF00)
         fields: Optional list of field dicts with 'name', 'value', 'inline'
         footer: Optional footer dict with 'text'
+        source: Descriptive label for what triggered this send
+        source_id: Optional ID of the source object (e.g., tournament pk)
 
     Returns:
         dict: API response or None on error
     """
+    from .models import DiscordMessageLog
+
     url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages"
 
     embed = {
@@ -52,13 +65,50 @@ def sync_send_embed(channel_id, title, description, color, fields=None, footer=N
 
     payload = {"embeds": [embed]}
 
+    log_entry = DiscordMessageLog.objects.create(
+        channel_id=channel_id,
+        embed_data=embed,
+        source=source or "unknown",
+        source_id=source_id,
+    )
+
     try:
         response = requests.post(url, json=payload, headers=_get_headers())
+        response_data = response.json()
+        log_entry.status_code = response.status_code
+        log_entry.response_data = response_data
         response.raise_for_status()
-        log.info(f"Sent embed to channel {channel_id}: {title}")
-        return response.json()
+        log_entry.discord_message_id = response_data.get("id")
+        log_entry.success = True
+        log_entry.save()
+        log.info(
+            "Sent embed to channel %s: %s (source=%s, source_id=%s)",
+            channel_id,
+            title,
+            source,
+            source_id,
+        )
+        return response_data
     except requests.RequestException as e:
-        log.error(f"Failed to send embed to channel {channel_id}: {e}")
+        log_entry.status_code = (
+            getattr(e.response, "status_code", None)
+            if hasattr(e, "response") and e.response
+            else log_entry.status_code
+        )
+        try:
+            log_entry.response_data = log_entry.response_data or (
+                e.response.json() if hasattr(e, "response") and e.response else None
+            )
+        except Exception:
+            pass
+        log_entry.save()
+        log.error(
+            "Failed to send embed to channel %s: %s (source=%s, source_id=%s)",
+            channel_id,
+            e,
+            source,
+            source_id,
+        )
         return None
 
 
@@ -104,6 +154,8 @@ def sync_send_tournament_created(tournament, channel_id=None):
         description=embed["description"],
         color=embed["color"],
         fields=embed.get("fields"),
+        source="tournament_created",
+        source_id=tournament.pk,
     )
 
 
@@ -122,6 +174,8 @@ def sync_send_draft_ready(draft, channel_id=None):
         title=embed["title"],
         description=embed["description"],
         color=embed["color"],
+        source="draft_ready",
+        source_id=draft.pk,
     )
 
 
@@ -140,6 +194,8 @@ def sync_send_results_posted(tournament, channel_id=None):
         title=embed["title"],
         description=embed["description"],
         color=embed["color"],
+        source="results_posted",
+        source_id=tournament.pk,
     )
 
 
