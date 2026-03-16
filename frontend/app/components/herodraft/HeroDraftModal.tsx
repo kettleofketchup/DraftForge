@@ -16,6 +16,7 @@ import { CompletedDraftView } from "./CompletedDraftView";
 import { submitPick, setReady, triggerRoll, submitChoice, pauseDraft, resumeDraft } from "./api";
 import type { HeroDraft, HeroDraftEvent } from "./types";
 import { DisplayName } from "~/components/user/avatar";
+import { UserAvatar } from "~/components/user/UserAvatar";
 import { getHeroIcon, getHeroName as getHeroNameFromLib } from "~/lib/dota/heroes";
 import { CaptainToast, HeroActionToast } from "./DraftToasts";
 import { Send, ArrowLeft, Users, Pause, Play } from "lucide-react";
@@ -35,6 +36,27 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
+
+/** Shows which captain is currently choosing, with their avatar */
+function WaitingForCaptain({
+  rollWinnerTeam,
+  teams,
+  testId,
+}: {
+  rollWinnerTeam: HeroDraft['roll_winner'] | null;
+  teams: HeroDraft['draft_teams'];
+  testId: string;
+}) {
+  const winnerStillChoosing = rollWinnerTeam?.is_first_pick === null && rollWinnerTeam?.is_radiant === null;
+  const loserTeam = teams.find((t) => t.id !== rollWinnerTeam?.id);
+  const choosingCaptain = winnerStillChoosing ? rollWinnerTeam?.captain : loserTeam?.captain;
+  return (
+    <div className="flex items-center gap-2" data-testid={testId}>
+      {choosingCaptain && <UserAvatar user={choosingCaptain} size="md" />}
+      <p>Waiting for <strong>{choosingCaptain ? DisplayName(choosingCaptain) : 'captain'}</strong> to choose...</p>
+    </div>
+  );
+}
 
 interface HeroDraftModalProps {
   draftId: number;
@@ -526,10 +548,12 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                           )}
                         </div>
                       </div>
-                    ) : isOnTeam ? (
-                      <p data-testid="herodraft-team-spectating">Waiting for your captain to choose...</p>
                     ) : (
-                      <p data-testid="herodraft-spectating">Spectating...</p>
+                      <WaitingForCaptain
+                        rollWinnerTeam={rollWinnerTeam}
+                        teams={draft.draft_teams}
+                        testId={isOnTeam ? "herodraft-team-spectating" : "herodraft-spectating"}
+                      />
                     )}
                   </div>
                 </div>
@@ -699,7 +723,14 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
                               ? "Paused by captain or staff"
                               : allCaptainsConnected
                                 ? "Click Resume to continue"
-                                : "Waiting for captain to reconnect..."}
+                                : (() => {
+                                    const disconnected = draft.draft_teams.filter(t => !t.is_connected);
+                                    if (disconnected.length === 0) return 'Waiting for reconnect...';
+                                    const names = disconnected
+                                      .map(t => t.captain ? DisplayName(t.captain) : 'captain')
+                                      .join(' & ');
+                                    return `Waiting for ${names} to reconnect...`;
+                                  })()}
                           </p>
                           <div className="flex flex-col gap-2 items-center">
                             {canResume && allCaptainsConnected && (
