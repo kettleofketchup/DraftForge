@@ -35,6 +35,11 @@ app.conf.beat_schedule = {
         "task": "events.tasks.generate_upcoming_events",
         "schedule": 3600.0,
     },
+    # Auto-open signups for events with signups_open_at
+    "open-scheduled-signups-every-minute": {
+        "task": "events.tasks.open_scheduled_signups",
+        "schedule": 60.0,
+    },
 }
 
 

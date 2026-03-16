@@ -15,8 +15,9 @@ export async function getEvent(eventId: number): Promise<EventType> {
   return data;
 }
 
-export async function createEvent(payload: Partial<EventType>): Promise<EventType> {
-  const { data } = await axios.post<EventType>('/events/', payload);
+export async function createEvent(payload: Partial<EventType>, openSignups = false): Promise<EventType> {
+  const params = openSignups ? '?open_signups=true' : '';
+  const { data } = await axios.post<EventType>(`/events/${params}`, payload);
   return data;
 }
 

@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
-import { createEvent, createEventRepeater, getOrgEventDefaults, openSignups } from '~/components/api/api';
+import { createEvent, createEventRepeater, getOrgEventDefaults } from '~/components/api/api';
 import { FormDialog } from '~/components/ui/dialogs';
 import {
   Form,
@@ -71,7 +71,8 @@ export function CreateEventModal({
       number_of_teams: null,
       discord_notify_new_events: true,
       ...DISCORD_CONFIG_DEFAULTS,
-      open_signups: true,
+      signup_mode: 'immediate' as const,
+      signup_days_before: 3,
       is_recurring: false,
       frequency: Frequency.WEEKLY,
       generate_days_ahead: 7,
@@ -97,7 +98,8 @@ export function CreateEventModal({
         people_per_team: orgDefaults.people_per_team,
         number_of_teams: orgDefaults.number_of_teams,
         discord_notify_new_events: true,
-        open_signups: true,
+        signup_mode: 'immediate' as const,
+        signup_days_before: 3,
         discord_create_event: orgDefaults.discord_create_event,
         discord_sync_signups: orgDefaults.discord_sync_signups,
         discord_event_title: orgDefaults.discord_event_title,
@@ -133,7 +135,7 @@ export function CreateEventModal({
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at, discord_notify_new_events, open_signups: shouldOpenSignups, ...shared } = data;
+      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at, discord_notify_new_events, signup_mode, signup_days_before, ...shared } = data;
 
       if (is_recurring) {
         await createEventRepeater({
@@ -148,16 +150,26 @@ export function CreateEventModal({
         });
         toast.success('Recurring event created');
       } else {
-        const created = await createEvent({
+        // Calculate signups_open_at for scheduled mode
+        let signupsOpenAt: string | undefined;
+        if (signup_mode === 'scheduled' && scheduled_at && signup_days_before) {
+          const eventDate = new Date(scheduled_at);
+          eventDate.setDate(eventDate.getDate() - signup_days_before);
+          signupsOpenAt = eventDate.toISOString();
+        }
+
+        await createEvent({
           ...shared,
           scheduled_at,
-        });
-        if (shouldOpenSignups && created.id) {
-          await openSignups(created.id);
-          toast.success('Event created with signups open');
-        } else {
-          toast.success('Event created');
-        }
+          ...(signupsOpenAt ? { signups_open_at: signupsOpenAt } : {}),
+        }, signup_mode === 'immediate');
+
+        const modeMessages = {
+          immediate: 'Event created with signups open',
+          scheduled: `Event created — signups open ${signup_days_before} days before`,
+          manual: 'Event created',
+        };
+        toast.success(modeMessages[signup_mode]);
       }
 
       queryClient.invalidateQueries({ queryKey: ['events'] });
@@ -414,30 +426,78 @@ export function CreateEventModal({
 
         <LobbyConfigSection control={form.control} watch={form.watch} />
 
-        {/* Open signups toggle */}
-        <FormField
-          control={form.control}
-          name="open_signups"
-          render={({ field }) => (
-            <FormItem className="flex items-center gap-3 rounded-md border border-border p-3">
-              <FormControl>
-                <input
-                  data-testid="event-open-signups-checkbox"
-                  type="checkbox"
-                  checked={field.value}
-                  onChange={field.onChange}
-                  className="h-4 w-4 rounded border-border accent-primary"
-                />
-              </FormControl>
-              <div>
-                <FormLabel className="text-sm font-medium cursor-pointer">
-                  Open signups immediately
-                </FormLabel>
-                <FormDescription>Start accepting RSVPs as soon as the event is created</FormDescription>
-              </div>
-            </FormItem>
-          )}
-        />
+        {/* Signup mode */}
+        {!isRecurring && (
+          <div className="rounded-md border border-border p-3 space-y-3">
+            <FormLabel className="text-sm font-medium">When to open signups</FormLabel>
+            <FormField
+              control={form.control}
+              name="signup_mode"
+              render={({ field }) => (
+                <FormItem className="space-y-2">
+                  <FormControl>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          value="immediate"
+                          checked={field.value === 'immediate'}
+                          onChange={() => field.onChange('immediate')}
+                          className="h-4 w-4 accent-primary"
+                          data-testid="event-signup-immediate"
+                        />
+                        <span className="text-sm">Open immediately</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          value="scheduled"
+                          checked={field.value === 'scheduled'}
+                          onChange={() => field.onChange('scheduled')}
+                          className="h-4 w-4 accent-primary"
+                          data-testid="event-signup-scheduled"
+                        />
+                        <span className="text-sm">Open days before event</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          value="manual"
+                          checked={field.value === 'manual'}
+                          onChange={() => field.onChange('manual')}
+                          className="h-4 w-4 accent-primary"
+                          data-testid="event-signup-manual"
+                        />
+                        <span className="text-sm">Open manually</span>
+                      </label>
+                    </div>
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            {form.watch('signup_mode') === 'scheduled' && (
+              <FormField
+                control={form.control}
+                name="signup_days_before"
+                render={({ field }) => (
+                  <FormItem className="ml-6">
+                    <FormLabel>Days before event</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        data-testid="event-signup-days-input"
+                        {...field}
+                        onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 3)}
+                      />
+                    </FormControl>
+                    <FormDescription>Signups will open this many days before the scheduled date</FormDescription>
+                  </FormItem>
+                )}
+              />
+            )}
+          </div>
+        )}
 
         {/* Recurring toggle */}
         <FormField

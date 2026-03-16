@@ -168,6 +168,9 @@ class EventViewSet(viewsets.ModelViewSet):
             )
         event = serializer.save(created_by=self.request.user)
         create_tournament_for_event(event)
+        # Auto-open signups if requested via query param
+        if self.request.query_params.get("open_signups") == "true":
+            event.transition_state(EventState.SIGNUPS_OPEN)
 
     def perform_update(self, serializer):
         event = serializer.save()
