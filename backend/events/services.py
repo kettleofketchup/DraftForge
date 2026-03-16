@@ -193,6 +193,8 @@ def _promote_from_waitlist(event):
                 add_user_to_tournament(event, next_waitlisted.user)
             elif not event.roll_call_enabled:
                 add_user_to_tournament(event, next_waitlisted.user)
+        elif event.auto_approve:
+            next_waitlisted.status = SignupStatus.PENDING_APPROVAL
         else:
             next_waitlisted.status = SignupStatus.RSVP
         next_waitlisted.save(

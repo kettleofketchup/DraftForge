@@ -26,7 +26,7 @@ import {
 } from '~/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
-import { discordConfigSchema, DISCORD_CONFIG_DEFAULTS } from './schemas';
+import { discordConfigSchema, DISCORD_CONFIG_DEFAULTS, GameType, GameMode } from './schemas';
 
 const orgDefaultsSchema = z.object({
   // Tournament defaults
@@ -196,7 +196,14 @@ export function EditOrgDefaultsModal({
                       onValueChange={(val) => {
                         const gameType = parseInt(val, 10);
                         field.onChange(gameType);
-                        form.setValue('people_per_team', gameType === 2 ? 6 : 5);
+                        form.setValue('people_per_team', gameType === GameType.DEADLOCK ? 6 : 5);
+                        // Reset Dota-only fields when switching to non-Dota
+                        const currentMode = form.getValues('game_mode');
+                        if (gameType !== GameType.DOTA2) {
+                          if (currentMode === GameMode.CAPTAINS_MODE || currentMode === GameMode.TURBO) {
+                            form.setValue('game_mode', GameMode.NORMAL);
+                          }
+                        }
                       }}
                       value={field.value?.toString()}
                     >

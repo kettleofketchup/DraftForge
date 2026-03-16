@@ -170,7 +170,10 @@ class EventViewSet(viewsets.ModelViewSet):
         create_tournament_for_event(event)
         # Auto-open signups if requested via query param
         if self.request.query_params.get("open_signups") == "true":
-            event.transition_state(EventState.SIGNUPS_OPEN)
+            try:
+                event.transition_state(EventState.SIGNUPS_OPEN)
+            except ValueError:
+                pass  # Event already in a non-upcoming state
 
     def perform_update(self, serializer):
         event = serializer.save()
@@ -364,7 +367,7 @@ class EventTeamViewSet(viewsets.ModelViewSet):
 
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
-        if self.action in ("create", "update", "partial_update", "destroy"):
+        if self.action in ("update", "partial_update", "destroy"):
             if not has_org_staff_access(request.user, obj.event.organization):
                 self.permission_denied(request)
 
@@ -383,6 +386,7 @@ class EventTeamViewSet(viewsets.ModelViewSet):
             raise PermissionDenied(
                 "You do not have permission to create teams for this event."
             )
+        serializer.save()
 
 
 class OrgEventDefaultsViewSet(viewsets.GenericViewSet):

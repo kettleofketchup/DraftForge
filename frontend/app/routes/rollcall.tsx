@@ -40,7 +40,7 @@ import {
   useSignupActionMutations,
 } from '~/hooks/useEvent';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
-import { useOrganizations } from '~/components/organization';
+import { useOrganization } from '~/components/organization';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 
@@ -55,14 +55,18 @@ export default function RollCallPage() {
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
 
-  const { organizations } = useOrganizations();
-  const eventOrg = useMemo(
-    () => organizations.find((o) => o.pk === event?.organization) || null,
-    [organizations, event?.organization],
-  );
+  const { organization: eventOrg } = useOrganization(event?.organization ?? undefined);
   const isAdmin = useIsOrganizationAdmin(eventOrg);
 
   const [showStartConfirm, setShowStartConfirm] = useState(false);
+
+  // Resolve all signup users from cache
+  const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
+  const resolvedUsers = useResolvedUsers(userPks);
+  const userMap = useMemo(
+    () => new Map(resolvedUsers.map((u) => [u.pk, u])),
+    [resolvedUsers],
+  );
 
   if (isLoading) {
     return (
@@ -93,14 +97,6 @@ export default function RollCallPage() {
       </div>
     );
   }
-
-  // Resolve all signup users from cache
-  const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
-  const resolvedUsers = useResolvedUsers(userPks);
-  const userMap = useMemo(
-    () => new Map(resolvedUsers.map((u) => [u.pk, u])),
-    [resolvedUsers],
-  );
 
   // Separate signups by status
   const confirmed = signups.filter((s) => s.status === 'confirmed');
