@@ -391,27 +391,11 @@ test.describe('Roll Call Demo', () => {
     await demoClick(page, tournamentConfirmBtn, 200);
 
     // =========================================================================
-    // Step 18 — Wait for navigation back to event page
+    // Step 18 — App auto-navigates to tournament page, show it with players
     // =========================================================================
-    console.log('Step 18: Show success on event page');
-    await page.waitForTimeout(2000);
-
-    // =========================================================================
-    // Step 19 — Navigate to the tournament page to show players
-    // =========================================================================
-    console.log('Step 19: Navigate to tournament page');
-    // Get the event data to find the tournament link
-    const eventDataResp = await context.request.get(`${API_URL}/events/${eventPk}/`);
-    const eventData = await eventDataResp.json();
-    const tournamentPk = eventData.tournament;
-    if (tournamentPk) {
-      await page.goto(`${BASE_URL}/tournament/${tournamentPk}/teams/draft`);
-      await page.waitForTimeout(3000); // Show the tournament with players
-      console.log(`Step 19: Showing tournament ${tournamentPk}`);
-    } else {
-      console.log('Step 19: No tournament found, staying on event page');
-      await page.waitForTimeout(1000);
-    }
+    console.log('Step 18: Show tournament page with players');
+    await page.waitForURL(/\/tournament\//, { timeout: 10000 });
+    await page.waitForTimeout(3000); // Show the tournament with confirmed players
 
     // =========================================================================
     // Save video

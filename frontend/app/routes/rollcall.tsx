@@ -238,9 +238,15 @@ export default function RollCallPage() {
         confirmLabel="Start Tournament"
         onConfirm={async () => {
           try {
-            await actions.startTournament.mutateAsync();
+            const result = await actions.startTournament.mutateAsync();
             toast.success('Tournament started!');
-            navigate(`/events/${eventId}`);
+            // Navigate to the tournament page if available, otherwise back to event
+            const tournamentPk = result?.tournament;
+            if (tournamentPk) {
+              navigate(`/tournament/${tournamentPk}/teams/draft`);
+            } else {
+              navigate(`/events/${eventId}`);
+            }
           } catch {
             toast.error('Failed to start tournament');
           }
