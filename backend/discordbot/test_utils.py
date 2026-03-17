@@ -73,6 +73,56 @@ def get_message_reactions(channel_id, message_id):
     return [r["emoji"]["name"] for r in msg["reactions"]]
 
 
+def get_test_bot_tokens():
+    """Return available test bot tokens. Warns if none configured."""
+    tokens = {}
+    main = getattr(settings, "DISCORD_BOT_TOKEN", "")
+    bot2 = getattr(settings, "DISCORD_TEST_BOT_2_TOKEN", "")
+    bot3 = getattr(settings, "DISCORD_TEST_BOT_3_TOKEN", "")
+    if main:
+        tokens["main"] = main
+    if bot2:
+        tokens["player1"] = bot2
+    if bot3:
+        tokens["player2"] = bot3
+    return tokens
+
+
+def add_reaction_as(token, channel_id, message_id, emoji):
+    """Add a reaction to a message using a specific bot token."""
+    import urllib.parse
+
+    encoded = urllib.parse.quote(emoji)
+    url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}/reactions/{encoded}/@me"
+    headers = {
+        "Authorization": f"Bot {token}",
+        "Content-Type": "application/json",
+    }
+    try:
+        response = requests.put(url, headers=headers)
+        response.raise_for_status()
+        return True
+    except requests.RequestException as e:
+        logger.error(f"Failed to add reaction {emoji} with token ...{token[-6:]}: {e}")
+        return False
+
+
+def get_bot_user_id(token):
+    """Get the Discord user ID for a bot token via GET /users/@me."""
+    url = f"{DISCORD_API_BASE}/users/@me"
+    headers = {
+        "Authorization": f"Bot {token}",
+        "Content-Type": "application/json",
+    }
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json().get("id")
+    except requests.RequestException as e:
+        logger.error(f"Failed to get bot user ID: {e}")
+        return None
+
+
 def delete_discord_message(channel_id, message_id):
     """Delete a message from a Discord channel. Used in test tearDown."""
     url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}"
