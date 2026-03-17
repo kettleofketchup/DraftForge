@@ -43,11 +43,17 @@ def _signup_counts(event):
 
 
 def build_announcement_embed(event):
-    desc = event.description or "No description."
+    title = event.discord_event_title or event.name
+    desc = event.discord_event_description or event.description or "No description."
+
+    if event.discord_event_info:
+        desc += f"\n\n{event.discord_event_info}"
+
     if url := _event_url(event):
         desc += f"\n\n[View Event]({url})"
+
     return {
-        "title": f"📢 {event.name}",
+        "title": f"📢 {title}",
         "description": desc,
         "color": COLOR_ANNOUNCEMENT,
         "fields": [
@@ -62,6 +68,7 @@ def build_announcement_embed(event):
                 "inline": True,
             },
         ],
+        "footer": {"text": "React: ✅ Interested | ❌ Not interested"},
     }
 
 

@@ -208,10 +208,14 @@ def sync_add_reactions(channel_id, message_id, emojis=None):
         message_id: Discord message ID
         emojis: List of emoji strings (defaults to RSVP emojis)
     """
+    import time
+
     if emojis is None:
         emojis = ["\u2705", "\u2753", "\u274c"]  # checkmark, question, x
 
-    for emoji in emojis:
+    for i, emoji in enumerate(emojis):
+        if i > 0:
+            time.sleep(0.3)  # Discord rate limits reactions at ~1/s
         url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}/reactions/{emoji}/@me"
         try:
             response = requests.put(url, headers=_get_headers())

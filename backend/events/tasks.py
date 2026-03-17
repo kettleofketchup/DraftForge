@@ -53,22 +53,30 @@ def open_scheduled_signups():
 
 @shared_task
 def send_event_announcement(event_id):
-    """Send event announcement to the configured Discord channel."""
+    """Send event announcement to the configured Discord channel with RSVP reactions."""
+    from discordbot.utils import sync_add_reactions
     from events.discord import build_announcement_embed
 
     event = Event.objects.select_related("organization").get(pk=event_id)
     if not event.discord_announcement or not event.discord_announcement_channel_id:
         return "Skipped: announcement disabled"
     embed = build_announcement_embed(event)
-    sync_send_embed(
+    result = sync_send_embed(
         channel_id=event.discord_announcement_channel_id,
         title=embed["title"],
         description=embed["description"],
         color=embed["color"],
         fields=embed.get("fields"),
+        footer=embed.get("footer"),
         source="event_announcement",
         source_id=event.pk,
     )
+    if result and result.get("id"):
+        sync_add_reactions(
+            event.discord_announcement_channel_id,
+            result["id"],
+            emojis=["\u2705", "\u274c"],  # ✅ ❌
+        )
     return f"Announced event {event.pk}"
 
 
