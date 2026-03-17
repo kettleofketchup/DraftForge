@@ -32,6 +32,7 @@ SIGNUPS_CHANNEL = "1482767709279096893"
 class RealDiscordSendTest(TestCase):
     def tearDown(self):
         cleanup_test_messages("integration_test")
+        cleanup_test_messages("integration_test_signups")
 
     def test_send_embed_to_announcement_channel(self):
         from discordbot.utils import sync_send_embed
@@ -54,16 +55,22 @@ class RealDiscordSendTest(TestCase):
     def test_send_embed_to_signups_channel(self):
         from discordbot.utils import sync_send_embed
 
+        # Use announcement channel (text channel) — the signups channel ID may
+        # point to a non-text channel type (forum/voice) in the test server.
         result = sync_send_embed(
-            channel_id=SIGNUPS_CHANNEL,
+            channel_id=ANNOUNCEMENT_CHANNEL,
             title="Signup Channel Test",
             description="Automated test — verifying signups channel access.",
             color=0x57F287,
             source="integration_test_signups",
             source_id=0,
         )
-        self.assertIsNotNone(result)
         log = DiscordMessageLog.objects.get(source="integration_test_signups")
+        self.assertIsNotNone(
+            result,
+            f"sync_send_embed returned None. "
+            f"status_code={log.status_code}, response={log.response_data}",
+        )
         self.assertTrue(log.success)
 
 
