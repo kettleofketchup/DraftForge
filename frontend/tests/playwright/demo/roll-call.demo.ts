@@ -184,40 +184,68 @@ test.describe('Roll Call Demo', () => {
     // =========================================================================
     // Step 0 — Reset and prepare event data (all in recording context)
     // =========================================================================
-    console.log('Step 0: Reset events data and bulk RSVP');
+    console.log('Step 0: Reset events data, create event, and bulk RSVP');
 
-    // Reset events data
+    // Wipe all events for a clean slate
     const resetResponse = await context.request.post(
-      `${API_URL}/tests/events/reset/`,
+      `${API_URL}/tests/events/demo-reset/`,
       { failOnStatusCode: false },
     );
     console.log(`Step 0: Reset response: ${resetResponse.status()}`);
 
-    // Find the Events Test Org dynamically
+    // Find the Events Test Org and league dynamically
     const orgsResp = await context.request.get(`${API_URL}/organizations/`);
     const orgs = await orgsResp.json();
     const eventsOrg = orgs.find((o: { name: string }) => o.name === 'Events Test Org');
     if (!eventsOrg) throw new Error('Events Test Org not found — run just db::populate::all');
     const orgPk = eventsOrg.pk;
 
-    // Get the E2E Signup Event
-    const eventsResponse = await context.request.get(
-      `${API_URL}/events/?organization=${orgPk}`,
-      { failOnStatusCode: false },
-    );
-    console.log(`Step 0: Events response: ${eventsResponse.status()}`);
+    const leaguesResp = await context.request.get(`${API_URL}/leagues/?organization=${orgPk}`);
+    const leagues = await leaguesResp.json();
+    const leaguePk = leagues[0]?.pk ?? orgPk;
 
-    const eventsData = await eventsResponse.json();
-    const signupEvent = Array.isArray(eventsData)
-      ? eventsData.find((e: { name?: string }) => e.name === 'E2E Signup Event')
-      : eventsData.results?.find((e: { name?: string }) => e.name === 'E2E Signup Event');
+    // Get CSRF token for API calls
+    const cookies = await context.cookies();
+    const csrfToken = cookies.find((c) => c.name === 'csrftoken')?.value || '';
 
-    if (!signupEvent) {
-      throw new Error(`Could not find "E2E Signup Event" in organization ${orgPk}`);
+    // Create a fresh event for the demo (signups_open, auto_approve)
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const createEventResp = await context.request.post(`${API_URL}/events/`, {
+      data: {
+        organization: orgPk,
+        name: 'Wednesday Inhouse',
+        description: 'Weekly inhouse event',
+        scheduled_at: tomorrow.toISOString(),
+        tournament_name: 'Inhouse Tournament',
+        tournament_league: leaguePk,
+        tournament_type: 'double_elimination',
+        game_type: 1,
+        draft_type: 'shuffle',
+        people_per_team: 5,
+        number_of_teams: 2,
+        timezone: 'America/New_York',
+        auto_approve: true,
+        max_players: 20,
+      },
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+    });
+
+    if (!createEventResp.ok()) {
+      const err = await createEventResp.text();
+      throw new Error(`Failed to create demo event: ${createEventResp.status()} ${err}`);
     }
+    const signupEvent = await createEventResp.json();
 
     const eventPk = signupEvent.pk || signupEvent.id;
-    console.log(`Step 0: Found E2E Signup Event (pk=${eventPk})`);
+    console.log(`Step 0: Created demo event (pk=${eventPk})`);
+
+    // Open signups so players can RSVP
+    const openResp = await context.request.post(
+      `${API_URL}/events/${eventPk}/open_signups/`,
+      { headers: { 'X-CSRFToken': csrfToken } },
+    );
+    console.log(`Step 0: Open signups response: ${openResp.status()}`);
 
     // Bulk RSVP all 20 players
     const bulkRsvpResponse = await context.request.post(

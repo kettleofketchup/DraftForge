@@ -195,7 +195,8 @@ test.describe('Event Creation Demo', () => {
     // Step 0 — Reset demo data (login already done in recording context)
     // =========================================================================
     console.log('Step 0: Reset events data and find org');
-    await context.request.post(`${API_URL}/tests/events/reset/`);
+    // Use demo-reset to wipe ALL events/repeaters for a clean org page
+    await context.request.post(`${API_URL}/tests/events/demo-reset/`);
 
     // Find the Events Test Org dynamically (PK may differ across environments)
     const orgsResp = await context.request.get(`${API_URL}/organizations/`);
@@ -203,10 +204,10 @@ test.describe('Event Creation Demo', () => {
     const eventsOrg = orgs.find((o: { name: string }) => o.name === 'Events Test Org');
     if (!eventsOrg) throw new Error('Events Test Org not found — run just db::populate::all');
     const orgPk = eventsOrg.pk;
-    // Find the league for this org
-    const eventsResp = await context.request.get(`${API_URL}/events/?organization=${orgPk}`);
-    const events = await eventsResp.json();
-    const leaguePk = events[0]?.tournament_league ?? orgPk;
+    // Find the league for this org (events were wiped, so get from leagues API)
+    const leaguesResp = await context.request.get(`${API_URL}/leagues/?organization=${orgPk}`);
+    const leagues = await leaguesResp.json();
+    const leaguePk = leagues[0]?.pk ?? orgPk;
     console.log(`Found Events Test Org: pk=${orgPk}, league=${leaguePk}`);
 
     // =========================================================================
