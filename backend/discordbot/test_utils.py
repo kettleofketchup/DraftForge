@@ -53,6 +53,26 @@ def assert_discord_message_delivered(log_entry):
     return False
 
 
+def fetch_message(channel_id, message_id):
+    """Fetch a single message from Discord by ID."""
+    url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}"
+    try:
+        response = requests.get(url, headers=_get_headers())
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        logger.error(f"Failed to fetch message {message_id}: {e}")
+        return None
+
+
+def get_message_reactions(channel_id, message_id):
+    """Get reaction emojis on a message. Returns list of emoji strings, e.g. ['✅', '❌']."""
+    msg = fetch_message(channel_id, message_id)
+    if not msg or "reactions" not in msg:
+        return []
+    return [r["emoji"]["name"] for r in msg["reactions"]]
+
+
 def delete_discord_message(channel_id, message_id):
     """Delete a message from a Discord channel. Used in test tearDown."""
     url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}"

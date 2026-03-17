@@ -18,6 +18,7 @@ from discordbot.models import DiscordMessageLog
 from discordbot.test_utils import (
     assert_discord_message_delivered,
     fetch_channel_messages,
+    get_message_reactions,
 )
 
 SKIP_REASON = "DISCORD_BOT_TOKEN not configured"
@@ -137,3 +138,8 @@ class RealEventAnnouncementTaskTest(TestCase):
 
         delivered = assert_discord_message_delivered(log)
         self.assertTrue(delivered)
+
+        # Verify bot added RSVP reactions
+        reactions = get_message_reactions(ANNOUNCEMENT_CHANNEL, log.discord_message_id)
+        self.assertIn("✅", reactions, f"Missing ✅ reaction. Found: {reactions}")
+        self.assertIn("❌", reactions, f"Missing ❌ reaction. Found: {reactions}")
