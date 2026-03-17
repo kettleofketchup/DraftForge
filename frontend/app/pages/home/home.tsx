@@ -2,12 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   Award,
+  CalendarDays,
   ChevronRight,
   Code2,
   FileSpreadsheet,
   Gamepad2,
   Gavel,
   GitBranch,
+  ListChecks,
   Shield,
   Swords,
   Trophy,
@@ -279,6 +281,43 @@ export default function HomePage() {
               docsPath="/features/csv-import/"
             />
             <FeatureCard
+              icon={CalendarDays}
+              title="Event System"
+              description="Schedule recurring events with Discord integration, automated signups, and tournament auto-creation."
+              features={[
+                'Recurring event series with automatic generation',
+                'Discord channel picker for signup posts and announcements',
+                'Organization-level event defaults',
+                'Repeater subscriptions with notifications',
+                'Pre-day announcements and signup reminders',
+              ]}
+              delay={0.45}
+              gifSrc={`${ASSETS_BASE}/gifs/event_creation.gif`}
+              modalMedia={[
+                { src: `${ASSETS_BASE}/videos/event_creation.webm`, caption: 'Event Creation', type: 'video' },
+                { src: `${ASSETS_BASE}/videos/roll_call.webm`, caption: 'Roll Call', type: 'video' },
+              ]}
+              docsPath="/features/events/"
+            />
+            <FeatureCard
+              icon={ListChecks}
+              title="Roll Call & Signups"
+              description="Manage player attendance with RSVP confirmations, waitlists, and a dedicated roll call page before tournaments."
+              features={[
+                'RSVP with confirmation dialog and cancel/re-signup',
+                'Waitlist with automatic promotion',
+                'Dedicated roll call page with confirm/remove',
+                'Player count thresholds for tournament start',
+                'UserStrip with avatar, positions, and MMR',
+              ]}
+              delay={0.5}
+              gifSrc={`${ASSETS_BASE}/gifs/roll_call.gif`}
+              modalMedia={[
+                { src: `${ASSETS_BASE}/videos/roll_call.webm`, caption: 'Roll Call Demo', type: 'video' },
+              ]}
+              docsPath="/features/events/roll-call/"
+            />
+            <FeatureCard
               icon={Gamepad2}
               title="Dota 2 Custom Lobbies"
               description="Automated lobby creation during tournament drafts with league-scoped configuration and captain auto-invites."
@@ -289,7 +328,7 @@ export default function HomePage() {
                 'Lobby restart and regenerate controls',
                 'Spectator lobby visibility',
               ]}
-              delay={0.5}
+              delay={0.6}
               comingSoon
               docsPath="/features/planned/dota-lobbies/"
             />
@@ -297,7 +336,7 @@ export default function HomePage() {
               icon={Users}
               title="Team Management"
               description="Create and manage rosters, track player stats, and coordinate with Discord integration."
-              delay={0.6}
+              delay={0.7}
               comingSoon
               docsPath="/features/planned/team-management/"
             />
@@ -305,7 +344,7 @@ export default function HomePage() {
               icon={Award}
               title="League System"
               description="Season-based competitive leagues with ELO ratings, standings, and match history."
-              delay={0.7}
+              delay={0.8}
               comingSoon
               docsPath="/features/planned/league-rating/"
             />
@@ -313,7 +352,7 @@ export default function HomePage() {
               icon={Shield}
               title="Guild Discord Integration"
               description="Seamless Discord server integration for roster syncing and tournament announcements."
-              delay={0.8}
+              delay={0.9}
               comingSoon
               docsPath="/features/planned/discord-integration/"
             />
@@ -321,7 +360,7 @@ export default function HomePage() {
               icon={Gavel}
               title="Auction Draft"
               description="Captain nomination bidding with salary caps, real-time WebSocket auctions, and shuffle draft fallback."
-              delay={0.9}
+              delay={1.0}
               comingSoon
               docsPath="/features/planned/auction-house/"
             />

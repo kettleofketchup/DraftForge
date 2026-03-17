@@ -1119,3 +1119,28 @@ def reset_events_data(request):
             "deleted_generated": deleted_generated,
         }
     )
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def bulk_rsvp_for_event(request, event_pk):
+    """TEST ONLY: Bulk RSVP multiple users for an event."""
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from events.models import Event
+    from events.services import process_rsvp
+
+    event = Event.objects.get(pk=event_pk)
+    user_pks = request.data.get("user_pks", [])
+    results = []
+    for pk in user_pks:
+        try:
+            user = CustomUser.objects.get(pk=pk)
+            signup = process_rsvp(event, user)
+            results.append({"user_pk": pk, "status": signup.status})
+        except (CustomUser.DoesNotExist, ValueError) as e:
+            results.append({"user_pk": pk, "error": str(e)})
+    return Response({"results": results, "count": len(results)})

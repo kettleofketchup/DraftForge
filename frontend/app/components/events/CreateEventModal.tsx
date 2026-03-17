@@ -196,8 +196,8 @@ export function CreateEventModal({
       <Form {...form}>
         <Tabs defaultValue="event">
           <TabsList className="w-full">
-            <TabsTrigger value="event">Event</TabsTrigger>
-            <TabsTrigger value="discord">
+            <TabsTrigger value="event" data-testid="event-modal-tab-event">Event</TabsTrigger>
+            <TabsTrigger value="discord" data-testid="event-modal-tab-discord">
               <DiscordIcon className="h-4 w-4" />
               Discord
             </TabsTrigger>
@@ -264,7 +264,7 @@ export function CreateEventModal({
                   </FormControl>
                   <SelectContent>
                     {leagues.map((league) => (
-                      <SelectItem key={league.pk} value={String(league.pk)}>
+                      <SelectItem key={league.pk} value={String(league.pk)} data-testid={`event-league-option-${league.pk}`}>
                         {league.name}
                       </SelectItem>
                     ))}
@@ -541,7 +541,7 @@ export function CreateEventModal({
                       </FormControl>
                       <SelectContent>
                         {Object.entries(FREQUENCY_LABELS).map(([val, label]) => (
-                          <SelectItem key={val} value={val}>{label}</SelectItem>
+                          <SelectItem key={val} value={val} data-testid={`event-frequency-option-${val}`}>{label}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -567,7 +567,7 @@ export function CreateEventModal({
                       </FormControl>
                       <SelectContent>
                         {DAY_LABELS.map((label, idx) => (
-                          <SelectItem key={idx} value={String(idx)}>{label}</SelectItem>
+                          <SelectItem key={idx} value={String(idx)} data-testid={`event-day-option-${idx}`}>{label}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

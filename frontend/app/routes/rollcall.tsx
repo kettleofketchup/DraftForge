@@ -271,6 +271,7 @@ function SignupStrip({
           <SecondaryButton
             color="green"
             size="sm"
+            data-testid="rollcall-confirm-btn"
             onClick={() => signupActions.confirm.mutate(signup.id)}
             disabled={signupActions.confirm.isPending}
           >

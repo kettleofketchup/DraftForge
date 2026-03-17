@@ -3,6 +3,7 @@ from django.urls import path
 from common.utils import isTestEnvironment
 
 from .test_auth import (
+    bulk_rsvp_for_event,
     create_claim_request,
     create_claimable_user,
     generate_events,
@@ -168,6 +169,12 @@ urlpatterns = [
         "events/generate/",
         generate_events,
         name="generate-events",
+    ),
+    # Events bulk RSVP
+    path(
+        "events/<int:event_pk>/bulk-rsvp/",
+        bulk_rsvp_for_event,
+        name="bulk-rsvp",
     ),
     # Demo tournament endpoints (for video recording)
     # More specific paths first to avoid <str:key> catching them

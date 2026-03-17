@@ -10,6 +10,11 @@ description: DraftForge test infrastructure for writing backend unit tests, Play
 This skill documents live code. When modifying test infrastructure, update the relevant reference file.
 To verify current state, read the source files referenced in each section.
 
+## Critical Rules
+
+1. **Always use `data-testid` selectors** in Playwright tests and demos. Never use `getByLabel`, `getByText`, or `getByRole('combobox')` for element interaction. See [playwright-fixtures.md](references/playwright-fixtures.md) for the full policy and exceptions.
+2. **Use `postWithCsrf`/`patchWithCsrf`** for all POST/PATCH calls to DRF ViewSet endpoints (not test endpoints). See [playwright-fixtures.md](references/playwright-fixtures.md) for CSRF handling.
+
 ## Architecture Overview
 
 Two-layer test data system:

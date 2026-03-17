@@ -87,6 +87,9 @@ nav:
       - Hero Draft: features/herodraft.md
       - Bracket: features/bracket.md
       - CSV Import: features/csv-import.md
+      - Events:
+          - Overview: features/events.md
+          - Roll Call: features/events/roll-call.md
       - Planned:
           - Overview: features/planned/index.md
           - Team Management & Seasons: features/planned/team-management.md
