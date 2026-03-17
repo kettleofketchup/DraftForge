@@ -9,6 +9,12 @@ from django.db import transaction
 
 from app.cache_utils import invalidate_after_commit
 from app.models import Tournament
+from events.discord import (
+    notify_event_announced,
+    notify_mark_interested,
+    notify_new_event,
+    notify_signup_changed,
+)
 from events.models import (
     DiscordEventConfigMixin,
     Event,
@@ -91,6 +97,7 @@ def process_rsvp(event, user, event_team=None):
             waitlist_position=max_pos + 1,
         )
         invalidate_after_commit(event)
+        transaction.on_commit(lambda: notify_signup_changed(event))
         return signup
 
     # Determine initial status
@@ -115,6 +122,9 @@ def process_rsvp(event, user, event_team=None):
     elif status == SignupStatus.APPROVED and not event.roll_call_enabled:
         add_user_to_tournament(event, user)
     invalidate_after_commit(event)
+    transaction.on_commit(lambda: notify_signup_changed(event))
+    if status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED):
+        transaction.on_commit(lambda: notify_mark_interested(event, user.pk))
     return signup
 
 
@@ -132,6 +142,7 @@ def approve_signup(signup):
     if not signup.event.roll_call_enabled:
         add_user_to_tournament(signup.event, signup.user)
     invalidate_after_commit(signup.event)
+    transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
@@ -145,6 +156,7 @@ def reject_signup(signup):
     remove_user_from_tournament(signup.event, signup.user)
     _promote_from_waitlist(signup.event)
     invalidate_after_commit(signup.event)
+    transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
@@ -157,6 +169,7 @@ def confirm_signup(signup):
     signup.save(update_fields=["status", "updated_at"])
     add_user_to_tournament(signup.event, signup.user)
     invalidate_after_commit(signup.event)
+    transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
@@ -170,6 +183,7 @@ def cancel_signup(signup):
     remove_user_from_tournament(signup.event, signup.user)
     _promote_from_waitlist(signup.event)
     invalidate_after_commit(signup.event)
+    transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
 
@@ -434,6 +448,8 @@ def generate_events_for_repeater(repeater):
         event.save()
         create_tournament_for_event(event)
         created_events.append(event)
+        if repeater.discord_notify_new_events:
+            notify_new_event(event)
     return created_events
 
 

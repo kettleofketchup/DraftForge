@@ -174,6 +174,10 @@ class EventViewSet(viewsets.ModelViewSet):
                 event.transition_state(EventState.SIGNUPS_OPEN)
             except ValueError:
                 pass  # Event already in a non-upcoming state
+        from events.discord import notify_create_discord_event, notify_event_announced
+
+        notify_event_announced(event)
+        notify_create_discord_event(event)
 
     def perform_update(self, serializer):
         event = serializer.save()
@@ -234,6 +238,9 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             event.transition_state(EventState.SIGNUPS_OPEN)
+            from events.discord import notify_event_announced
+
+            notify_event_announced(event)
             qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
             return Response(EventSerializer(qs.first()).data)
         except ValueError as e:
