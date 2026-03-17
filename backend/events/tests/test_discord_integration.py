@@ -17,7 +17,6 @@ from django.test import TestCase
 from discordbot.models import DiscordMessageLog
 from discordbot.test_utils import (
     assert_discord_message_delivered,
-    cleanup_test_messages,
     fetch_channel_messages,
 )
 
@@ -30,10 +29,6 @@ SIGNUPS_CHANNEL = "1482767709279096893"
 
 @unittest.skipUnless(HAS_TOKEN, SKIP_REASON)
 class RealDiscordSendTest(TestCase):
-    def tearDown(self):
-        cleanup_test_messages("integration_test")
-        cleanup_test_messages("integration_test_signups")
-
     def test_send_embed_to_announcement_channel(self):
         from discordbot.utils import sync_send_embed
 
@@ -76,9 +71,6 @@ class RealDiscordSendTest(TestCase):
 
 @unittest.skipUnless(HAS_TOKEN, SKIP_REASON)
 class RealDiscordReadBackTest(TestCase):
-    def tearDown(self):
-        cleanup_test_messages("readback_test")
-
     def test_message_read_back(self):
         from discordbot.utils import sync_send_embed
 
@@ -105,9 +97,6 @@ class RealDiscordReadBackTest(TestCase):
 
 @unittest.skipUnless(HAS_TOKEN, SKIP_REASON)
 class RealEventAnnouncementTaskTest(TestCase):
-    def tearDown(self):
-        cleanup_test_messages("event_announcement")
-
     def test_announcement_task_end_to_end(self):
         from datetime import timedelta
 
