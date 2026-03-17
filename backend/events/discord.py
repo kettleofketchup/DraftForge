@@ -23,6 +23,11 @@ COLOR_PROFILE = 0xEB459E  # Fuchsia
 COLOR_NEW_EVENT = 0x00B0F4  # Cyan
 
 
+def _discord_timestamp(dt, style="F"):
+    """Format a datetime as a Discord timestamp. Style: F=full, R=relative, t=time, d=date."""
+    return f"<t:{int(dt.timestamp())}:{style}>"
+
+
 def _event_url(event):
     return (
         f"{SITE_URL}/org/{event.organization_id}/events/{event.pk}" if SITE_URL else ""
@@ -59,7 +64,7 @@ def build_announcement_embed(event):
         "fields": [
             {
                 "name": "When",
-                "value": event.scheduled_at.strftime("%A, %B %d at %I:%M %p %Z"),
+                "value": _discord_timestamp(event.scheduled_at),
                 "inline": True,
             },
             {
@@ -97,7 +102,7 @@ def build_new_event_embed(event):
         "fields": [
             {
                 "name": "When",
-                "value": event.scheduled_at.strftime("%A, %B %d at %I:%M %p %Z"),
+                "value": _discord_timestamp(event.scheduled_at),
                 "inline": True,
             },
         ],
