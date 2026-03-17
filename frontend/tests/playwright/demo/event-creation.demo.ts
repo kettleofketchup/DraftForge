@@ -230,6 +230,9 @@ test.describe('Event Creation Demo', () => {
         `recorded_at: ${new Date().toISOString()}\n`,
     );
 
+    // Pause to show the organization page before clicking Events tab
+    await page.waitForTimeout(2000);
+
     // =========================================================================
     // Step 2 — Click Events tab
     // =========================================================================

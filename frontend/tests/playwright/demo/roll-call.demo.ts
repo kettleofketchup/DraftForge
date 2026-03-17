@@ -391,10 +391,27 @@ test.describe('Roll Call Demo', () => {
     await demoClick(page, tournamentConfirmBtn, 200);
 
     // =========================================================================
-    // Step 18 — Pause to show success
+    // Step 18 — Wait for navigation back to event page
     // =========================================================================
-    console.log('Step 18: Show success');
+    console.log('Step 18: Show success on event page');
     await page.waitForTimeout(2000);
+
+    // =========================================================================
+    // Step 19 — Navigate to the tournament page to show players
+    // =========================================================================
+    console.log('Step 19: Navigate to tournament page');
+    // Get the event data to find the tournament link
+    const eventDataResp = await context.request.get(`${API_URL}/events/${eventPk}/`);
+    const eventData = await eventDataResp.json();
+    const tournamentPk = eventData.tournament;
+    if (tournamentPk) {
+      await page.goto(`${BASE_URL}/tournament/${tournamentPk}/teams/draft`);
+      await page.waitForTimeout(3000); // Show the tournament with players
+      console.log(`Step 19: Showing tournament ${tournamentPk}`);
+    } else {
+      console.log('Step 19: No tournament found, staying on event page');
+      await page.waitForTimeout(1000);
+    }
 
     // =========================================================================
     // Save video
