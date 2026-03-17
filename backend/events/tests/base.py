@@ -1,6 +1,10 @@
+from datetime import timedelta
+
 from django.test import TestCase
+from django.utils import timezone as tz
 
 from app.models import CustomUser, League, Organization, PositionsModel
+from events.models import Event, EventState
 
 
 class EventTestCase(TestCase):
@@ -41,4 +45,19 @@ class EventTestCase(TestCase):
             name="Event Test League",
             organization=cls.org,
             steam_league_id=99999,
+        )
+
+        cls.event = Event.objects.create(
+            organization=cls.org,
+            name="Test Event",
+            description="A test event for unit tests.",
+            scheduled_at=tz.now() + timedelta(days=7),
+            state=EventState.UPCOMING,
+            created_by=cls.admin,
+            tournament_name="Test Event Tourney",
+            tournament_league=cls.league,
+            max_players=10,
+            require_steam_id=True,
+            require_mmr_verified=True,
+            require_profile_complete=True,
         )
