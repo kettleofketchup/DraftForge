@@ -4,6 +4,52 @@ from django.test import TestCase
 from requests.exceptions import HTTPError
 
 
+class SyncEditMessageTest(TestCase):
+    @patch("discordbot.utils.requests.patch")
+    def test_edit_message_sends_patch(self, mock_patch):
+        from discordbot.utils import sync_edit_message
+
+        mock_patch.return_value = MagicMock(
+            status_code=200,
+            json=MagicMock(return_value={"id": "111222333"}),
+        )
+        mock_patch.return_value.raise_for_status = MagicMock()
+
+        result = sync_edit_message(
+            channel_id="123456789",
+            message_id="111222333",
+            embed={"title": "Updated", "description": "New content", "color": 0x00FF00},
+        )
+
+        mock_patch.assert_called_once()
+        self.assertIsNotNone(result)
+
+    @patch("discordbot.utils.requests.patch")
+    def test_edit_message_with_components(self, mock_patch):
+        from discordbot.utils import sync_edit_message
+
+        mock_patch.return_value = MagicMock(status_code=200)
+        mock_patch.return_value.json.return_value = {"id": "111222333"}
+        mock_patch.return_value.raise_for_status = MagicMock()
+
+        components = [
+            {
+                "type": 1,
+                "components": [{"type": 2, "label": "Click", "custom_id": "test"}],
+            }
+        ]
+        sync_edit_message(
+            channel_id="123456789",
+            message_id="111222333",
+            embed={"title": "Test"},
+            components=components,
+        )
+
+        call_args = mock_patch.call_args
+        payload = call_args.kwargs.get("json") or call_args[1].get("json")
+        self.assertIn("components", payload)
+
+
 class SyncSendEmbedLoggingTest(TestCase):
     @patch("discordbot.utils.requests.post")
     def test_send_embed_creates_log_on_success(self, mock_post):

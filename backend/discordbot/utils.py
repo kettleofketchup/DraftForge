@@ -199,6 +199,36 @@ def sync_send_results_posted(tournament, channel_id=None):
     )
 
 
+def sync_edit_message(channel_id, message_id, embed=None, components=None):
+    """Edit an existing Discord message (embed and/or components).
+
+    Args:
+        channel_id: Discord channel ID
+        message_id: Discord message ID
+        embed: Optional embed dict to replace
+        components: Optional components list to replace
+
+    Returns:
+        dict: API response or None on error
+    """
+    url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}"
+
+    payload = {}
+    if embed:
+        payload["embeds"] = [embed]
+    if components is not None:
+        payload["components"] = components
+
+    try:
+        response = requests.patch(url, json=payload, headers=_get_headers())
+        response.raise_for_status()
+        log.info(f"Edited message {message_id} in channel {channel_id}")
+        return response.json()
+    except requests.RequestException as e:
+        log.error(f"Failed to edit message {message_id}: {e}")
+        return None
+
+
 def sync_add_reactions(channel_id, message_id, emojis=None):
     """
     Add reaction emojis to a message for RSVP.
