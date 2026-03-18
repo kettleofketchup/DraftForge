@@ -22,6 +22,7 @@ import * as fs from 'fs';
 
 const BASE_URL = `https://${DOCKER_HOST}`;
 const VIDEO_OUTPUT_DIR = 'demo-results/videos/event_creation';
+const FINAL_VIDEO_DIR = '../docs/assets/videos';
 const DEMO_METADATA_FILE = path.join('demo-results/videos', 'event_creation.demo.yaml');
 
 // ---------------------------------------------------------------------------
@@ -419,9 +420,11 @@ test.describe('Event Creation Demo', () => {
         .map((f) => ({ name: f, time: fs.statSync(path.join(videoDir, f)).mtimeMs }))
         .sort((a, b) => b.time - a.time);
       const src = path.join(videoDir, sorted[0].name);
-      // Copy to the shared videos dir with the proper name
-      const sharedDir = path.resolve(process.cwd(), 'demo-results/videos');
-      const dest = path.join(sharedDir, 'event_creation.webm');
+      // Copy to docs/assets/videos/ which is OUTSIDE Playwright's outputDir
+      // (Playwright cleans outputDir between test runs, so demo-results/ is unsafe)
+      const finalDir = path.resolve(process.cwd(), FINAL_VIDEO_DIR);
+      if (!fs.existsSync(finalDir)) fs.mkdirSync(finalDir, { recursive: true });
+      const dest = path.join(finalDir, 'event_creation.webm');
       fs.copyFileSync(src, dest);
       console.log(`Video saved: ${dest}`);
     }
