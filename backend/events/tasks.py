@@ -53,52 +53,65 @@ def open_scheduled_signups():
 
 @shared_task
 def send_event_announcement(event_id):
-    """Send event announcement to the configured Discord channel with RSVP reactions."""
-    from discordbot.utils import sync_add_reactions
-    from events.discord import build_announcement_embed
+    """Send event announcement with interactive signup components."""
+    from discordbot.utils import sync_send_embed_with_components
+    from events.discord import build_announcement_components, build_announcement_embed
 
-    event = Event.objects.select_related("organization").get(pk=event_id)
+    event = Event.objects.select_related("organization", "event_repeater").get(
+        pk=event_id
+    )
     if not event.discord_announcement or not event.discord_announcement_channel_id:
         return "Skipped: announcement disabled"
+
     embed = build_announcement_embed(event)
-    result = sync_send_embed(
+    components = build_announcement_components(event)
+
+    sync_send_embed_with_components(
         channel_id=event.discord_announcement_channel_id,
-        title=embed["title"],
-        description=embed["description"],
-        color=embed["color"],
-        fields=embed.get("fields"),
-        footer=embed.get("footer"),
+        embed=embed,
+        components=components,
         source="event_announcement",
         source_id=event.pk,
     )
-    if result and result.get("id"):
-        sync_add_reactions(
-            event.discord_announcement_channel_id,
-            result["id"],
-            emojis=["\u2705", "\u274c"],  # ✅ ❌
-        )
     return f"Announced event {event.pk}"
 
 
 @shared_task
 def send_signup_update(event_id):
-    """Post signup update embed to the configured Discord channel."""
-    from events.discord import build_signup_update_embed
+    """Edit the original announcement embed with updated signup lists."""
+    from discordbot.utils import sync_edit_message
+    from events.discord import build_announcement_components, build_announcement_embed
 
-    event = Event.objects.select_related("organization").get(pk=event_id)
-    if not event.discord_post_signups or not event.discord_post_signups_channel_id:
-        return "Skipped: signup posting disabled"
-    embed = build_signup_update_embed(event)
-    sync_send_embed(
-        channel_id=event.discord_post_signups_channel_id,
-        title=embed["title"],
-        description=embed["description"],
-        color=embed["color"],
-        fields=embed.get("fields"),
-        source="signup_update",
-        source_id=event.pk,
+    event = Event.objects.select_related("organization", "event_repeater").get(
+        pk=event_id
     )
-    return f"Posted signup update for event {event.pk}"
+
+    log_entry = (
+        DiscordMessageLog.objects.filter(
+            source="event_announcement",
+            source_id=event.pk,
+            success=True,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+    if not log_entry or not log_entry.discord_message_id:
+        logger.info(
+            "No announcement message found for event %s, skipping update", event.pk
+        )
+        return "Skipped: no announcement message"
+
+    embed = build_announcement_embed(event)
+    components = build_announcement_components(event)
+
+    sync_edit_message(
+        channel_id=log_entry.channel_id,
+        message_id=log_entry.discord_message_id,
+        embed=embed,
+        components=components,
+    )
+    return f"Updated announcement for event {event.pk}"
 
 
 @shared_task

@@ -199,6 +199,56 @@ def sync_send_results_posted(tournament, channel_id=None):
     )
 
 
+def sync_send_embed_with_components(
+    channel_id, embed, components=None, source=None, source_id=None
+):
+    """Send an embed with interactive components to a Discord channel."""
+    from .models import DiscordMessageLog
+
+    url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages"
+
+    payload = {"embeds": [embed]}
+    if components:
+        payload["components"] = components
+
+    log_entry = DiscordMessageLog.objects.create(
+        channel_id=channel_id,
+        embed_data=embed,
+        source=source or "unknown",
+        source_id=source_id,
+    )
+
+    try:
+        response = requests.post(url, json=payload, headers=_get_headers())
+        response_data = response.json()
+        log_entry.status_code = response.status_code
+        log_entry.response_data = response_data
+        response.raise_for_status()
+        log_entry.discord_message_id = response_data.get("id")
+        log_entry.success = True
+        log_entry.save()
+        log.info(
+            "Sent embed with components to channel %s (source=%s, source_id=%s)",
+            channel_id,
+            source,
+            source_id,
+        )
+        return response_data
+    except requests.RequestException as e:
+        log_entry.status_code = (
+            getattr(e.response, "status_code", None)
+            if hasattr(e, "response") and e.response
+            else log_entry.status_code
+        )
+        log_entry.save()
+        log.error(
+            "Failed to send embed with components to channel %s: %s",
+            channel_id,
+            e,
+        )
+        return None
+
+
 def sync_edit_message(channel_id, message_id, embed=None, components=None):
     """Edit an existing Discord message (embed and/or components).
 
