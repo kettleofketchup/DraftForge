@@ -51,6 +51,7 @@ function CheckboxField({ control, name, label, description }: {
           <FormControl>
             <input
               type="checkbox"
+              data-testid={`discord-${name}`}
               checked={field.value}
               onChange={field.onChange}
               className="h-4 w-4 rounded border-border accent-primary"

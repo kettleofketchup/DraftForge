@@ -307,13 +307,49 @@ test.describe('Event Creation Demo', () => {
     await page.waitForTimeout(1000);
 
     // =========================================================================
-    // Step 9 — Click Discord tab → pause 2s to show Discord config
+    // Step 9 — Click Discord tab and configure Discord integration
     // =========================================================================
     console.log('Step 9: Click Discord tab');
     const discordTab = page.locator('[data-testid="event-modal-tab-discord"]');
     await discordTab.waitFor({ state: 'visible', timeout: 5000 });
     await demoClick(page, discordTab, 300);
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(1000);
+
+    // Enable "Post event signup embed"
+    console.log('Step 9b: Enable post signup embed');
+    const postSignupsCheckbox = page.locator('[data-testid="discord-discord_post_signups"]');
+    await postSignupsCheckbox.waitFor({ state: 'visible', timeout: 5000 });
+    await demoClick(page, postSignupsCheckbox, 200);
+    await page.waitForTimeout(500);
+
+    // Select signup channel from the channel picker
+    console.log('Step 9c: Select signup channel');
+    const signupChannelSelect = page.locator('[data-testid="discord-post-signups-channel"]').first();
+    // If channel picker is visible, try to select a channel
+    try {
+      await signupChannelSelect.waitFor({ state: 'visible', timeout: 3000 });
+      await demoClick(page, signupChannelSelect, 200);
+      await page.waitForTimeout(500);
+      // Select first channel option
+      const channelOption = page.getByRole('option').first();
+      await channelOption.waitFor({ state: 'visible', timeout: 3000 });
+      await demoClick(page, channelOption, 150);
+      await page.waitForTimeout(500);
+    } catch {
+      console.log('Step 9c: Channel picker not available (no Discord server configured), skipping');
+    }
+
+    // Enable "Pre-day announcement"
+    console.log('Step 9d: Enable pre-day announcement');
+    await smoothScroll(page, 200, 300);
+    const announcementCheckbox = page.locator('[data-testid="discord-discord_announcement"]');
+    await announcementCheckbox.waitFor({ state: 'visible', timeout: 5000 });
+    await demoClick(page, announcementCheckbox, 200);
+    await page.waitForTimeout(1000);
+
+    // Pause to show Discord config
+    console.log('Step 9e: Show Discord config');
+    await page.waitForTimeout(1500);
 
     // =========================================================================
     // Step 10 — Click back to Event tab
