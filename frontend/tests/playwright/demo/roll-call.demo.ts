@@ -20,8 +20,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 const BASE_URL = `https://${DOCKER_HOST}`;
-const VIDEO_OUTPUT_DIR = 'demo-results/videos';
-const DEMO_METADATA_FILE = path.join(VIDEO_OUTPUT_DIR, 'roll_call.demo.yaml');
+const VIDEO_OUTPUT_DIR = 'demo-results/videos/roll_call';
+const DEMO_METADATA_FILE = path.join('demo-results/videos', 'roll_call.demo.yaml');
 
 const PLAYER_PKS = Array.from({ length: 20 }, (_, i) => 1081 + i);
 
@@ -438,7 +438,9 @@ test.describe('Roll Call Demo', () => {
         .map((f) => ({ name: f, time: fs.statSync(path.join(videoDir, f)).mtimeMs }))
         .sort((a, b) => b.time - a.time);
       const src = path.join(videoDir, sorted[0].name);
-      const dest = path.join(videoDir, 'roll_call.webm');
+      // Copy to the shared videos dir with the proper name
+      const sharedDir = path.resolve(process.cwd(), 'demo-results/videos');
+      const dest = path.join(sharedDir, 'roll_call.webm');
       if (src !== dest) {
         fs.copyFileSync(src, dest);
         console.log(`Video saved: ${dest}`);

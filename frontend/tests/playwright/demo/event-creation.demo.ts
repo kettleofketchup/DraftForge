@@ -21,8 +21,8 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 const BASE_URL = `https://${DOCKER_HOST}`;
-const VIDEO_OUTPUT_DIR = 'demo-results/videos';
-const DEMO_METADATA_FILE = path.join(VIDEO_OUTPUT_DIR, 'event_creation.demo.yaml');
+const VIDEO_OUTPUT_DIR = 'demo-results/videos/event_creation';
+const DEMO_METADATA_FILE = path.join('demo-results/videos', 'event_creation.demo.yaml');
 
 // ---------------------------------------------------------------------------
 // Cursor helpers
@@ -419,11 +419,11 @@ test.describe('Event Creation Demo', () => {
         .map((f) => ({ name: f, time: fs.statSync(path.join(videoDir, f)).mtimeMs }))
         .sort((a, b) => b.time - a.time);
       const src = path.join(videoDir, sorted[0].name);
-      const dest = path.join(videoDir, 'event_creation.webm');
-      if (src !== dest) {
-        fs.copyFileSync(src, dest);
-        console.log(`Video saved: ${dest}`);
-      }
+      // Copy to the shared videos dir with the proper name
+      const sharedDir = path.resolve(process.cwd(), 'demo-results/videos');
+      const dest = path.join(sharedDir, 'event_creation.webm');
+      fs.copyFileSync(src, dest);
+      console.log(`Video saved: ${dest}`);
     }
 
     await browser.close();
