@@ -312,6 +312,8 @@ else:
         "app.draftround": {"ops": "all", "timeout": 60 * 60},
         # Organization/League membership models
         "org.orguser": {"ops": "all", "timeout": 60 * 60},
+        "org.playerdotaprofile": {"ops": "all", "timeout": 60 * 60},
+        "org.playerdeadlockprofile": {"ops": "all", "timeout": 60 * 60},
         "league.leagueuser": {"ops": "all", "timeout": 60 * 60},
         # Steam match data - cached with shorter timeout for freshness
         "steam.match": {"ops": "all", "timeout": 30 * 60},
