@@ -48,6 +48,7 @@ def _signup_counts(event):
 
 
 def build_announcement_embed(event):
+    """Build embed for event announcement with signup lists."""
     title = event.discord_event_title or event.name
     desc = event.discord_event_description or event.description or "No description."
 
@@ -57,23 +58,79 @@ def build_announcement_embed(event):
     if url := _event_url(event):
         desc += f"\n\n[View Event]({url})"
 
+    fields = [
+        {
+            "name": "When",
+            "value": _discord_timestamp(event.scheduled_at),
+            "inline": True,
+        },
+        {
+            "name": "Max Players",
+            "value": str(event.max_players or "Unlimited"),
+            "inline": True,
+        },
+    ]
+
+    # Add signup list fields
+    signups = EventSignup.objects.filter(event=event).select_related("user")
+
+    # Left column: confirmed/approved (✅) + pending (⏳)
+    active = signups.exclude(
+        status__in=[
+            SignupStatus.CANCELLED,
+            SignupStatus.REJECTED,
+            SignupStatus.WAITLISTED,
+        ]
+    )
+    if active.exists():
+        lines = []
+        for s in active[:20]:
+            icon = (
+                "✅"
+                if s.status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED)
+                else "⏳"
+            )
+            name = s.user.nickname or s.user.username or f"User {s.user.pk}"
+            lines.append(f"{icon} {name}")
+        remaining = active.count() - 20
+        if remaining > 0:
+            lines.append(f"*and {remaining} more...*")
+        count = active.count()
+        max_display = str(event.max_players) if event.max_players else "∞"
+        fields.append(
+            {
+                "name": f"Signed Up ({count}/{max_display})",
+                "value": "\n".join(lines),
+                "inline": True,
+            }
+        )
+
+    # Right column: waitlisted
+    waitlisted = signups.filter(status=SignupStatus.WAITLISTED).order_by(
+        "waitlist_position"
+    )
+    if waitlisted.exists():
+        lines = []
+        for s in waitlisted[:20]:
+            name = s.user.nickname or s.user.username or f"User {s.user.pk}"
+            lines.append(name)
+        remaining = waitlisted.count() - 20
+        if remaining > 0:
+            lines.append(f"*and {remaining} more...*")
+        fields.append(
+            {
+                "name": f"Waitlisted ({waitlisted.count()})",
+                "value": "\n".join(lines),
+                "inline": True,
+            }
+        )
+
     return {
         "title": f"📢 {title}",
         "description": desc,
         "color": COLOR_ANNOUNCEMENT,
-        "fields": [
-            {
-                "name": "When",
-                "value": _discord_timestamp(event.scheduled_at),
-                "inline": True,
-            },
-            {
-                "name": "Max Players",
-                "value": str(event.max_players or "Unlimited"),
-                "inline": True,
-            },
-        ],
-        "footer": {"text": "React: ✅ Interested | ❌ Not interested"},
+        "fields": fields,
+        "timestamp": event.scheduled_at.isoformat(),
     }
 
 
