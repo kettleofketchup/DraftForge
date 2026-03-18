@@ -307,48 +307,49 @@ test.describe('Event Creation Demo', () => {
     await page.waitForTimeout(1000);
 
     // =========================================================================
-    // Step 9 — Click Discord tab and configure Discord integration
+    // Step 9 — Click Discord tab and show Discord integration config
     // =========================================================================
     console.log('Step 9: Click Discord tab');
     const discordTab = page.locator('[data-testid="event-modal-tab-discord"]');
     await discordTab.waitFor({ state: 'visible', timeout: 5000 });
     await demoClick(page, discordTab, 300);
+    await page.waitForTimeout(1500);
+
+    // Org defaults pre-configure: post_signups=true, announcement=true with channels
+    // Scroll down slowly to show all Discord config options with channel selections
+    console.log('Step 9b: Scroll through Discord config');
+    await smoothScroll(page, 300, 1000);
+    await page.waitForTimeout(1000);
+    await smoothScroll(page, 300, 1000);
     await page.waitForTimeout(1000);
 
-    // Enable "Post event signup embed"
-    console.log('Step 9b: Enable post signup embed');
-    const postSignupsCheckbox = page.locator('[data-testid="discord-discord_post_signups"]');
-    await postSignupsCheckbox.waitFor({ state: 'visible', timeout: 5000 });
-    await demoClick(page, postSignupsCheckbox, 200);
-    await page.waitForTimeout(500);
-
-    // Select signup channel from the channel picker
-    console.log('Step 9c: Select signup channel');
-    const signupChannelSelect = page.locator('[data-testid="discord-post-signups-channel"]').first();
-    // If channel picker is visible, try to select a channel
+    // Click the signup channel picker to show the channel dropdown
+    console.log('Step 9c: Show channel picker dropdown');
     try {
-      await signupChannelSelect.waitFor({ state: 'visible', timeout: 3000 });
-      await demoClick(page, signupChannelSelect, 200);
-      await page.waitForTimeout(500);
-      // Select first channel option
-      const channelOption = page.getByRole('option').first();
-      await channelOption.waitFor({ state: 'visible', timeout: 3000 });
-      await demoClick(page, channelOption, 150);
+      // The channel picker Select trigger
+      const channelSelect = page.locator('button[role="combobox"]').first();
+      await channelSelect.waitFor({ state: 'visible', timeout: 3000 });
+      await demoClick(page, channelSelect, 200);
+      await page.waitForTimeout(1500);
+
+      // Select "announcements" channel
+      const announcementsOption = page.getByRole('option', { name: /announcements/ });
+      try {
+        await announcementsOption.waitFor({ state: 'visible', timeout: 3000 });
+        await demoClick(page, announcementsOption, 200);
+      } catch {
+        // If no announcements channel, select first option
+        const firstOption = page.getByRole('option').first();
+        await firstOption.waitFor({ state: 'visible', timeout: 2000 });
+        await demoClick(page, firstOption, 200);
+      }
       await page.waitForTimeout(500);
     } catch {
-      console.log('Step 9c: Channel picker not available (no Discord server configured), skipping');
+      console.log('Step 9c: Channel picker not interactive, continuing');
     }
 
-    // Enable "Pre-day announcement"
-    console.log('Step 9d: Enable pre-day announcement');
-    await smoothScroll(page, 200, 300);
-    const announcementCheckbox = page.locator('[data-testid="discord-discord_announcement"]');
-    await announcementCheckbox.waitFor({ state: 'visible', timeout: 5000 });
-    await demoClick(page, announcementCheckbox, 200);
-    await page.waitForTimeout(1000);
-
-    // Pause to show Discord config
-    console.log('Step 9e: Show Discord config');
+    // Pause to show final Discord config state
+    console.log('Step 9d: Show Discord config');
     await page.waitForTimeout(1500);
 
     // =========================================================================
