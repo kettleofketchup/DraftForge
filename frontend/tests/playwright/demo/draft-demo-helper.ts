@@ -300,11 +300,11 @@ export async function runDraftDemo(config: DraftDemoConfig): Promise<void> {
   console.log(`Setup: Test pick successful (network status: ${setupPickStatus})`);
 
   // Reset draft for clean video recording
-  await setupContext.request.post(
-    `${API_URL}/tests/tournament/${tournament.pk}/reset-draft/`,
+  const resetResp2 = await setupContext.request.post(
+    `${API_URL}/tests/demo/${tournamentKey}/reset/`,
     { failOnStatusCode: false }
   );
-  console.log('Setup: Reset draft for video recording');
+  console.log(`Setup: Reset draft for video recording (status: ${resetResp2.status()})`);
 
   // Re-initialize draft with correct style
   try {
