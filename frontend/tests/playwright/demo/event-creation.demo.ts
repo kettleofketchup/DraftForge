@@ -356,7 +356,7 @@ test.describe('Event Creation Demo', () => {
       const channelSelect = page.locator('[data-testid="discord-signup-channel-select"]');
       await channelSelect.waitFor({ state: 'visible', timeout: 3000 });
       await demoClick(page, channelSelect, 200);
-      await page.waitForTimeout(1500);
+      await page.waitForTimeout(800);
 
       // Select "announcements" channel
       const announcementsOption = page.getByRole('option', { name: /announcements/ });
@@ -368,24 +368,19 @@ test.describe('Event Creation Demo', () => {
         await firstOption.waitFor({ state: 'visible', timeout: 2000 });
         await demoClick(page, firstOption, 200);
       }
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(300);
     } catch {
       console.log('Step 9c: Channel picker not interactive, continuing');
     }
 
     // Continue scrolling to show announcement section and remaining options
     console.log('Step 9d: Scroll to show announcement + remaining Discord config');
-    await smoothScrollDialog(page, 300, 1000);
+    await smoothScrollDialog(page, 400, 800);
+    await page.waitForTimeout(500);
+    await smoothScrollDialog(page, 400, 800);
+    await page.waitForTimeout(500);
+    await smoothScrollDialog(page, 400, 800);
     await page.waitForTimeout(1000);
-    await smoothScrollDialog(page, 300, 1000);
-    await page.waitForTimeout(1000);
-    await smoothScrollDialog(page, 300, 1000);
-    await page.waitForTimeout(1000);
-
-    // Scroll to very bottom to show all remaining Discord options
-    console.log('Step 9e: Scroll to bottom of Discord config');
-    await smoothScrollDialog(page, 400, 1000);
-    await page.waitForTimeout(1500);
 
     // =========================================================================
     // Step 10 — Click back to Event tab
