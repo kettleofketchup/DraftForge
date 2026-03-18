@@ -103,8 +103,6 @@ async function smoothScroll(page: Page, deltaY: number, durationMs: number) {
   await page.evaluate(
     ({ dy, ms }) => {
       return new Promise<void>((resolve) => {
-        // The app uses a ScrollArea with id="outlet_root" as the scrollable container.
-        // Find its inner viewport div (has data-radix-scroll-area-viewport).
         const root = document.getElementById('outlet_root');
         const el =
           root?.querySelector('[data-radix-scroll-area-viewport]') ||
@@ -127,6 +125,37 @@ async function smoothScroll(page: Page, deltaY: number, durationMs: number) {
     { dy: deltaY, ms: durationMs },
   );
   // Wait for the animation to actually finish on screen
+  await page.waitForTimeout(durationMs + 100);
+}
+
+/** Smooth scroll inside a dialog's ScrollArea viewport. */
+async function smoothScrollDialog(page: Page, deltaY: number, durationMs: number) {
+  await page.evaluate(
+    ({ dy, ms }) => {
+      return new Promise<void>((resolve) => {
+        // Find the dialog's scroll area viewport (not the page's)
+        const dialog = document.querySelector('[role="dialog"]');
+        const el =
+          dialog?.querySelector('[data-slot="scroll-area-viewport"]') ||
+          dialog?.querySelector('[data-radix-scroll-area-viewport]') ||
+          dialog;
+        if (!el) { resolve(); return; }
+        const start = (el as HTMLElement).scrollTop;
+        const steps = Math.max(1, Math.round(ms / 16));
+        let i = 0;
+        const tick = () => {
+          i++;
+          const t = i / steps;
+          const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+          (el as HTMLElement).scrollTop = start + dy * ease;
+          if (i < steps) requestAnimationFrame(tick);
+          else resolve();
+        };
+        requestAnimationFrame(tick);
+      });
+    },
+    { dy: deltaY, ms: durationMs },
+  );
   await page.waitForTimeout(durationMs + 100);
 }
 
@@ -318,7 +347,7 @@ test.describe('Event Creation Demo', () => {
     // Org defaults pre-configure: post_signups=true, announcement=true with channels
     // Scroll down slowly to show all Discord config sections
     console.log('Step 9b: Scroll through Discord config (top section)');
-    await smoothScroll(page, 250, 800);
+    await smoothScrollDialog(page, 250, 800);
     await page.waitForTimeout(800);
 
     // Click the signup channel picker to show the channel dropdown
@@ -346,16 +375,16 @@ test.describe('Event Creation Demo', () => {
 
     // Continue scrolling to show announcement section and remaining options
     console.log('Step 9d: Scroll to show announcement + remaining Discord config');
-    await smoothScroll(page, 300, 1000);
+    await smoothScrollDialog(page, 300, 1000);
     await page.waitForTimeout(1000);
-    await smoothScroll(page, 300, 1000);
+    await smoothScrollDialog(page, 300, 1000);
     await page.waitForTimeout(1000);
-    await smoothScroll(page, 300, 1000);
+    await smoothScrollDialog(page, 300, 1000);
     await page.waitForTimeout(1000);
 
     // Scroll to very bottom to show all remaining Discord options
     console.log('Step 9e: Scroll to bottom of Discord config');
-    await smoothScroll(page, 400, 1000);
+    await smoothScrollDialog(page, 400, 1000);
     await page.waitForTimeout(1500);
 
     // =========================================================================
