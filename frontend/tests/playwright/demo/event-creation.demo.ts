@@ -326,8 +326,7 @@ test.describe('Event Creation Demo', () => {
     // Click the signup channel picker to show the channel dropdown
     console.log('Step 9c: Show channel picker dropdown');
     try {
-      // The channel picker Select trigger
-      const channelSelect = page.locator('button[role="combobox"]').first();
+      const channelSelect = page.locator('[data-testid="discord-signup-channel-select"]');
       await channelSelect.waitFor({ state: 'visible', timeout: 3000 });
       await demoClick(page, channelSelect, 200);
       await page.waitForTimeout(1500);
