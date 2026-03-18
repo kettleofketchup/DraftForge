@@ -316,12 +316,10 @@ test.describe('Event Creation Demo', () => {
     await page.waitForTimeout(1500);
 
     // Org defaults pre-configure: post_signups=true, announcement=true with channels
-    // Scroll down slowly to show all Discord config options with channel selections
-    console.log('Step 9b: Scroll through Discord config');
-    await smoothScroll(page, 300, 1000);
-    await page.waitForTimeout(1000);
-    await smoothScroll(page, 300, 1000);
-    await page.waitForTimeout(1000);
+    // Scroll down slowly to show all Discord config sections
+    console.log('Step 9b: Scroll through Discord config (top section)');
+    await smoothScroll(page, 250, 800);
+    await page.waitForTimeout(800);
 
     // Click the signup channel picker to show the channel dropdown
     console.log('Step 9c: Show channel picker dropdown');
@@ -337,7 +335,6 @@ test.describe('Event Creation Demo', () => {
         await announcementsOption.waitFor({ state: 'visible', timeout: 3000 });
         await demoClick(page, announcementsOption, 200);
       } catch {
-        // If no announcements channel, select first option
         const firstOption = page.getByRole('option').first();
         await firstOption.waitFor({ state: 'visible', timeout: 2000 });
         await demoClick(page, firstOption, 200);
@@ -347,8 +344,18 @@ test.describe('Event Creation Demo', () => {
       console.log('Step 9c: Channel picker not interactive, continuing');
     }
 
-    // Pause to show final Discord config state
-    console.log('Step 9d: Show Discord config');
+    // Continue scrolling to show announcement section and remaining options
+    console.log('Step 9d: Scroll to show announcement + remaining Discord config');
+    await smoothScroll(page, 300, 1000);
+    await page.waitForTimeout(1000);
+    await smoothScroll(page, 300, 1000);
+    await page.waitForTimeout(1000);
+    await smoothScroll(page, 300, 1000);
+    await page.waitForTimeout(1000);
+
+    // Scroll to very bottom to show all remaining Discord options
+    console.log('Step 9e: Scroll to bottom of Discord config');
+    await smoothScroll(page, 400, 1000);
     await page.waitForTimeout(1500);
 
     // =========================================================================
