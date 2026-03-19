@@ -59,6 +59,7 @@ export default function RollCallPage() {
   const isAdmin = useIsOrganizationAdmin(eventOrg);
 
   const [showStartConfirm, setShowStartConfirm] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   // Resolve all signup users from cache
   const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
@@ -82,7 +83,7 @@ export default function RollCallPage() {
     );
   }
 
-  if (event.state !== EventState.ROLL_CALL) {
+  if (event.state !== EventState.ROLL_CALL && !isNavigating) {
     return (
       <div className="container mx-auto py-6 px-4">
         <div className="text-center py-12">
@@ -238,10 +239,18 @@ export default function RollCallPage() {
         confirmLabel="Start Tournament"
         onConfirm={async () => {
           try {
-            await actions.startTournament.mutateAsync();
+            setIsNavigating(true);
+            const result = await actions.startTournament.mutateAsync();
             toast.success('Tournament started!');
-            navigate(`/events/${eventId}`);
+            // Navigate to the tournament page if available, otherwise back to event
+            const tournamentPk = result?.tournament;
+            if (tournamentPk) {
+              navigate(`/tournament/${tournamentPk}/teams/draft`);
+            } else {
+              navigate(`/events/${eventId}`);
+            }
           } catch {
+            setIsNavigating(false);
             toast.error('Failed to start tournament');
           }
         }}
@@ -271,6 +280,7 @@ function SignupStrip({
           <SecondaryButton
             color="green"
             size="sm"
+            data-testid="rollcall-confirm-btn"
             onClick={() => signupActions.confirm.mutate(signup.id)}
             disabled={signupActions.confirm.isPending}
           >

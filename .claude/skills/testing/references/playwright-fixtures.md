@@ -92,6 +92,47 @@ Re-exports all fixtures and helpers:
 - Tournament helpers (`TournamentPage` class, `navigateToTournament`)
 - League helpers (`LeaguePage` class, `navigateToLeague`)
 
+## Locator Policy: Always Use `data-testid`
+
+**All Playwright tests and demos MUST use `data-testid` selectors for element interaction.**
+
+```typescript
+// CORRECT — stable, decoupled from UI text
+await page.locator('[data-testid="event-name-input"]').fill('Weekly Inhouse');
+await page.locator('[data-testid="event-league-select"]').click();
+await page.locator('[data-testid="event-league-option-7"]').click();
+
+// WRONG — fragile, breaks when text or structure changes
+await page.getByLabel('Event Name').fill('Weekly Inhouse');
+await page.getByRole('combobox', { name: 'League' }).click();
+await page.getByText('Events Test League').click();
+```
+
+**Exceptions (keep semantic locators):**
+- `getByRole('option', { name: '...' })` — Radix `SelectItem` does NOT forward `data-testid` to the DOM, so use `getByRole('option')` for dropdown items
+- `getByRole('heading')` — for asserting dialog/page titles (semantic validation)
+- `getByRole('alertdialog')` — for confirmation dialogs (semantic structure)
+- `getByRole('button', { name: /.../ })` — inside dialogs only (confirm/cancel buttons)
+
+**When adding new UI components:**
+1. Add `data-testid` to every interactive element (inputs, selects, buttons, checkboxes, tabs)
+2. Use naming convention: `{feature}-{element}-{qualifier}` (e.g., `event-league-select`, `event-frequency-option-weekly`)
+3. For dynamic list items: `{feature}-{element}-{id}` (e.g., `event-league-option-7`, `event-day-option-3`)
+
+## CSRF Token Handling
+
+DRF's `SessionAuthentication` enforces CSRF on POST/PATCH/DELETE requests. Use the CSRF helpers from event fixtures:
+
+```typescript
+import { postWithCsrf, patchWithCsrf } from '../../fixtures';
+
+// Test endpoints (/api/tests/*) are @csrf_exempt — use context.request directly
+await context.request.post(`${API_URL}/tests/events/reset/`);
+
+// DRF ViewSet endpoints need CSRF
+const resp = await postWithCsrf(context, `${API_URL}/events/repeaters/`, data);
+```
+
 ## Writing New Fixtures
 
 1. Create `fixtures/{feature}.ts`

@@ -1119,3 +1119,83 @@ def reset_events_data(request):
             "deleted_generated": deleted_generated,
         }
     )
+
+
+@csrf_exempt
+@api_view(["POST"])
+def reset_events_demo(request):
+    """TEST ONLY: Wipe ALL events, repeaters, signups, and tournaments for demo recording.
+
+    Unlike reset_events_data which preserves fixtures, this removes everything
+    so the demo starts with a completely clean org page.
+    """
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from cacheops import invalidate_obj
+
+    from app.models import Tournament
+    from events.models import Event, EventRepeater, EventSignup, RepeaterSubscription
+
+    EVENTS_ORG_NAME = "Events Test Org"
+
+    # Delete all signups
+    signups_deleted = EventSignup.objects.filter(
+        event__organization__name=EVENTS_ORG_NAME
+    ).delete()[0]
+
+    # Delete all tournaments linked to events
+    tournament_pks = Event.objects.filter(
+        organization__name=EVENTS_ORG_NAME, tournament__isnull=False
+    ).values_list("tournament_id", flat=True)
+    tournaments_deleted = Tournament.objects.filter(pk__in=tournament_pks).delete()[0]
+
+    # Delete all events
+    events_deleted = Event.objects.filter(organization__name=EVENTS_ORG_NAME).delete()[
+        0
+    ]
+
+    # Delete all subscriptions
+    RepeaterSubscription.objects.filter(
+        event_repeater__organization__name=EVENTS_ORG_NAME
+    ).delete()
+
+    # Delete all repeaters
+    repeaters_deleted = EventRepeater.objects.filter(
+        organization__name=EVENTS_ORG_NAME
+    ).delete()[0]
+
+    return Response(
+        {
+            "success": True,
+            "signups_deleted": signups_deleted,
+            "events_deleted": events_deleted,
+            "repeaters_deleted": repeaters_deleted,
+            "tournaments_deleted": tournaments_deleted,
+        }
+    )
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def bulk_rsvp_for_event(request, event_pk):
+    """TEST ONLY: Bulk RSVP multiple users for an event."""
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from events.models import Event
+    from events.services import process_rsvp
+
+    event = Event.objects.get(pk=event_pk)
+    user_pks = request.data.get("user_pks", [])
+    results = []
+    for pk in user_pks:
+        try:
+            user = CustomUser.objects.get(pk=pk)
+            signup = process_rsvp(event, user)
+            results.append({"user_pk": pk, "status": signup.status})
+        except (CustomUser.DoesNotExist, ValueError) as e:
+            results.append({"user_pk": pk, "error": str(e)})
+    return Response({"results": results, "count": len(results)})

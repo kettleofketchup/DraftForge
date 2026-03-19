@@ -470,6 +470,8 @@ DEMO_VIDEO_NAMES = [
     "shuffle_draft.webm",
     "snake_draft.webm",
     "csv_import.webm",
+    "event_creation.webm",
+    "roll_call.webm",
 ]
 
 # Per-video GIF start time overrides (seconds). Overrides start_from_middle.
@@ -719,6 +721,22 @@ def demo_csv(c):
     print("=== CSV Import Demo ===")
     _reset_demo_data(c, "csv")
     _run_demo(c, spec="CSV Import")
+    _copy_demo_videos(c)
+
+
+@task
+def demo_event_creation(c):
+    """Record event creation demo."""
+    print("=== Event Creation Demo ===")
+    _run_demo(c, spec="event creation")
+    _copy_demo_videos(c)
+
+
+@task
+def demo_roll_call(c):
+    """Record roll call demo."""
+    print("=== Roll Call Demo ===")
+    _run_demo(c, spec="roll call")
     _copy_demo_videos(c)
 
 
@@ -1186,6 +1204,8 @@ ns_demo.add_task(demo_shuffle, "shuffle")
 ns_demo.add_task(demo_snake, "snake")
 ns_demo.add_task(demo_herodraft, "herodraft")
 ns_demo.add_task(demo_csv, "csv")
+ns_demo.add_task(demo_event_creation, "event-creation")
+ns_demo.add_task(demo_roll_call, "roll-call")
 ns_demo.add_task(demo_snapshots, "snapshots")
 ns_demo.add_task(demo_all, "all")
 ns_demo.add_task(demo_gifs, "gifs")

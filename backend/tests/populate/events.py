@@ -25,6 +25,7 @@ from tests.data import (
     EVENTS_ORG,
     EVENTS_USERS,
 )
+from tests.populate.utils import ensure_league_user, ensure_org_user
 
 
 def populate_events_data(force=False):
@@ -52,9 +53,44 @@ def populate_events_data(force=False):
         },
     )
 
-    # 3. Create test users
-    for user_data in EVENTS_USERS:
-        positions = PositionsModel.objects.create()
+    # 3. Create admin user
+    admin_positions = PositionsModel.objects.create(
+        carry=EVENT_ADMIN_USER.positions.carry if EVENT_ADMIN_USER.positions else 3,
+        mid=EVENT_ADMIN_USER.positions.mid if EVENT_ADMIN_USER.positions else 3,
+        offlane=EVENT_ADMIN_USER.positions.offlane if EVENT_ADMIN_USER.positions else 3,
+        soft_support=(
+            EVENT_ADMIN_USER.positions.soft_support if EVENT_ADMIN_USER.positions else 3
+        ),
+        hard_support=(
+            EVENT_ADMIN_USER.positions.hard_support if EVENT_ADMIN_USER.positions else 3
+        ),
+    )
+    admin_user, created = CustomUser.objects.update_or_create(
+        pk=EVENT_ADMIN_USER.pk,
+        defaults={
+            "username": EVENT_ADMIN_USER.username,
+            "nickname": EVENT_ADMIN_USER.nickname,
+            "discordId": EVENT_ADMIN_USER.discord_id,
+            "steamid": EVENT_ADMIN_USER.steam_id_64,
+            "has_active_dota_mmr": True,
+            "positions": admin_positions,
+        },
+    )
+    if created:
+        admin_user.set_unusable_password()
+        admin_user.save()
+    admin_org_user = ensure_org_user(admin_user, org, mmr=EVENT_ADMIN_USER.mmr or 4500)
+    ensure_league_user(admin_user, admin_org_user, league)
+
+    # 3b. Create player users with varied MMR
+    for i, user_data in enumerate(EVENTS_USERS):
+        positions = PositionsModel.objects.create(
+            carry=user_data.positions.carry if user_data.positions else 3,
+            mid=user_data.positions.mid if user_data.positions else 3,
+            offlane=user_data.positions.offlane if user_data.positions else 3,
+            soft_support=user_data.positions.soft_support if user_data.positions else 3,
+            hard_support=user_data.positions.hard_support if user_data.positions else 3,
+        )
         user, created = CustomUser.objects.update_or_create(
             pk=user_data.pk,
             defaults={
@@ -69,6 +105,10 @@ def populate_events_data(force=False):
         if created:
             user.set_unusable_password()
             user.save()
+        # Create OrgUser and LeagueUser with varied MMR (2000-5800)
+        mmr = 2000 + (i * 200)
+        org_user = ensure_org_user(user, org, mmr=mmr)
+        ensure_league_user(user, org_user, league)
 
     # 4. Grant admin access
     event_admin = CustomUser.objects.filter(pk=EVENT_ADMIN_USER.pk).first()

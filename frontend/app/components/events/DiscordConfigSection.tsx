@@ -51,6 +51,7 @@ function CheckboxField({ control, name, label, description }: {
           <FormControl>
             <input
               type="checkbox"
+              data-testid={`discord-${name}`}
               checked={field.value}
               onChange={field.onChange}
               className="h-4 w-4 rounded border-border accent-primary"
@@ -229,7 +230,7 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
                 <FormItem>
                   <FormLabel>Signup channel</FormLabel>
                   <FormControl>
-                    <DiscordChannelPicker organizationId={organizationId} value={field.value} onChange={field.onChange} />
+                    <DiscordChannelPicker organizationId={organizationId} value={field.value} onChange={field.onChange} data-testid="discord-signup-channel-select" />
                   </FormControl>
                   <FormDescription>Channel where the signup embed will be posted</FormDescription>
                   <FormMessage />

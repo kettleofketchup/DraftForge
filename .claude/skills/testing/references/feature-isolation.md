@@ -122,5 +122,11 @@ await visitAndWait(page, '/organizations/3/');  // Fragile!
 | Users | 1030-1031 | League roles |
 | Users | 1040-1044 | CSV Import |
 | Users | 1050-1052 | User Edit |
+| Org | 6 | Shuffle Tie |
+| Org | 7 | Events |
+| League | 6 (steam=17934) | Shuffle Tie |
+| League | 7 (steam=17935) | Events |
+| Users | 1060-1079 | Shuffle Tie |
+| Users | 1080-1100 | Events (admin + 20 players) |
 
 When adding new features, pick the next available PK range.

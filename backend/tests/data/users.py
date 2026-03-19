@@ -441,7 +441,7 @@ SHUFFLE_TIE_PLAYERS: list[TestUser] = [
 SHUFFLE_TIE_USERS: list[TestUser] = SHUFFLE_TIE_CAPTAINS + SHUFFLE_TIE_PLAYERS
 
 # =============================================================================
-# Events E2E test users (pk=1080-1084)
+# Events E2E test users (pk=1080-1100)
 # =============================================================================
 
 EVENT_ADMIN_USER: TestUser = TestUser(
@@ -486,11 +486,180 @@ EVENT_PLAYER_3: TestUser = TestUser(
     positions=TestPositions(),
 )
 
+EVENT_PLAYER_4: TestUser = TestUser(
+    pk=1084,
+    username="event_player_4",
+    nickname="EventPlayer4",
+    discord_id="880000000000000005",
+    steam_id_64=76561198000000004,
+    positions=TestPositions(carry=5, mid=4, offlane=1, soft_support=1, hard_support=1),
+)
+
+EVENT_PLAYER_5: TestUser = TestUser(
+    pk=1085,
+    username="event_player_5",
+    nickname="EventPlayer5",
+    discord_id="880000000000000006",
+    steam_id_64=76561198000000005,
+    positions=TestPositions(carry=1, mid=1, offlane=2, soft_support=5, hard_support=4),
+)
+
+EVENT_PLAYER_6: TestUser = TestUser(
+    pk=1086,
+    username="event_player_6",
+    nickname="EventPlayer6",
+    discord_id="880000000000000007",
+    steam_id_64=76561198000000006,
+    positions=TestPositions(carry=2, mid=5, offlane=2, soft_support=1, hard_support=1),
+)
+
+EVENT_PLAYER_7: TestUser = TestUser(
+    pk=1087,
+    username="event_player_7",
+    nickname="EventPlayer7",
+    discord_id="880000000000000008",
+    steam_id_64=76561198000000007,
+    positions=TestPositions(carry=1, mid=1, offlane=5, soft_support=3, hard_support=2),
+)
+
+EVENT_PLAYER_8: TestUser = TestUser(
+    pk=1088,
+    username="event_player_8",
+    nickname="EventPlayer8",
+    discord_id="880000000000000009",
+    steam_id_64=76561198000000008,
+    positions=TestPositions(carry=1, mid=2, offlane=1, soft_support=4, hard_support=5),
+)
+
+EVENT_PLAYER_9: TestUser = TestUser(
+    pk=1089,
+    username="event_player_9",
+    nickname="EventPlayer9",
+    discord_id="880000000000000010",
+    steam_id_64=76561198000000009,
+    positions=TestPositions(carry=4, mid=3, offlane=2, soft_support=1, hard_support=1),
+)
+
+EVENT_PLAYER_10: TestUser = TestUser(
+    pk=1090,
+    username="event_player_10",
+    nickname="EventPlayer10",
+    discord_id="880000000000000011",
+    steam_id_64=76561198000000010,
+    positions=TestPositions(carry=1, mid=1, offlane=3, soft_support=5, hard_support=3),
+)
+
+EVENT_PLAYER_11: TestUser = TestUser(
+    pk=1091,
+    username="event_player_11",
+    nickname="EventPlayer11",
+    discord_id="880000000000000012",
+    steam_id_64=76561198000000011,
+    positions=TestPositions(carry=5, mid=2, offlane=3, soft_support=1, hard_support=1),
+)
+
+EVENT_PLAYER_12: TestUser = TestUser(
+    pk=1092,
+    username="event_player_12",
+    nickname="EventPlayer12",
+    discord_id="880000000000000013",
+    steam_id_64=76561198000000012,
+    positions=TestPositions(carry=1, mid=4, offlane=1, soft_support=2, hard_support=5),
+)
+
+EVENT_PLAYER_13: TestUser = TestUser(
+    pk=1093,
+    username="event_player_13",
+    nickname="EventPlayer13",
+    discord_id="880000000000000014",
+    steam_id_64=76561198000000013,
+    positions=TestPositions(carry=2, mid=1, offlane=5, soft_support=4, hard_support=1),
+)
+
+EVENT_PLAYER_14: TestUser = TestUser(
+    pk=1094,
+    username="event_player_14",
+    nickname="EventPlayer14",
+    discord_id="880000000000000015",
+    steam_id_64=76561198000000014,
+    positions=TestPositions(carry=1, mid=1, offlane=1, soft_support=3, hard_support=5),
+)
+
+EVENT_PLAYER_15: TestUser = TestUser(
+    pk=1095,
+    username="event_player_15",
+    nickname="EventPlayer15",
+    discord_id="880000000000000016",
+    steam_id_64=76561198000000015,
+    positions=TestPositions(carry=4, mid=5, offlane=3, soft_support=2, hard_support=1),
+)
+
+EVENT_PLAYER_16: TestUser = TestUser(
+    pk=1096,
+    username="event_player_16",
+    nickname="EventPlayer16",
+    discord_id="880000000000000017",
+    steam_id_64=76561198000000016,
+    positions=TestPositions(carry=1, mid=2, offlane=4, soft_support=5, hard_support=3),
+)
+
+EVENT_PLAYER_17: TestUser = TestUser(
+    pk=1097,
+    username="event_player_17",
+    nickname="EventPlayer17",
+    discord_id="880000000000000018",
+    steam_id_64=76561198000000017,
+    positions=TestPositions(carry=3, mid=1, offlane=1, soft_support=2, hard_support=5),
+)
+
+EVENT_PLAYER_18: TestUser = TestUser(
+    pk=1098,
+    username="event_player_18",
+    nickname="EventPlayer18",
+    discord_id="880000000000000019",
+    steam_id_64=76561198000000018,
+    positions=TestPositions(carry=5, mid=3, offlane=4, soft_support=1, hard_support=2),
+)
+
+EVENT_PLAYER_19: TestUser = TestUser(
+    pk=1099,
+    username="event_player_19",
+    nickname="EventPlayer19",
+    discord_id="880000000000000020",
+    steam_id_64=76561198000000019,
+    positions=TestPositions(carry=2, mid=1, offlane=2, soft_support=4, hard_support=5),
+)
+
+EVENT_PLAYER_20: TestUser = TestUser(
+    pk=1100,
+    username="event_player_20",
+    nickname="EventPlayer20",
+    discord_id="880000000000000021",
+    steam_id_64=76561198000000020,
+    positions=TestPositions(carry=1, mid=5, offlane=3, soft_support=1, hard_support=3),
+)
+
 EVENTS_USERS: list[TestUser] = [
-    EVENT_ADMIN_USER,
     EVENT_PLAYER_1,
     EVENT_PLAYER_2,
     EVENT_PLAYER_3,
+    EVENT_PLAYER_4,
+    EVENT_PLAYER_5,
+    EVENT_PLAYER_6,
+    EVENT_PLAYER_7,
+    EVENT_PLAYER_8,
+    EVENT_PLAYER_9,
+    EVENT_PLAYER_10,
+    EVENT_PLAYER_11,
+    EVENT_PLAYER_12,
+    EVENT_PLAYER_13,
+    EVENT_PLAYER_14,
+    EVENT_PLAYER_15,
+    EVENT_PLAYER_16,
+    EVENT_PLAYER_17,
+    EVENT_PLAYER_18,
+    EVENT_PLAYER_19,
+    EVENT_PLAYER_20,
 ]
 
 # =============================================================================

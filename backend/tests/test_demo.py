@@ -245,8 +245,17 @@ def _reset_demo_draft(tournament, draft_style: str):
     # Clear all draft rounds (picks)
     DraftRound.objects.filter(draft=draft).delete()
 
+    # Reset draft state to pending
+    draft.state = "pending"
+    draft.save()
+
     # Rebuild rounds for fresh draft
     draft.build_rounds()
+
+    from cacheops import invalidate_obj
+
+    invalidate_obj(draft)
+    invalidate_obj(tournament)
 
     return Response(
         {

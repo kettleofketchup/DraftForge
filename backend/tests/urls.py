@@ -3,6 +3,7 @@ from django.urls import path
 from common.utils import isTestEnvironment
 
 from .test_auth import (
+    bulk_rsvp_for_event,
     create_claim_request,
     create_claimable_user,
     generate_events,
@@ -20,6 +21,7 @@ from .test_auth import (
     login_user,
     login_user_claimer,
     reset_events_data,
+    reset_events_demo,
     reset_org_admin_team,
     reset_tournament_by_key,
 )
@@ -157,17 +159,29 @@ urlpatterns = [
         seed_discord_members,
         name="test-seed-discord-members",
     ),
-    # Events reset
+    # Events reset (preserves fixtures for E2E tests)
     path(
         "events/reset/",
         reset_events_data,
         name="reset-events",
+    ),
+    # Events demo reset (wipes everything for clean demo recording)
+    path(
+        "events/demo-reset/",
+        reset_events_demo,
+        name="reset-events-demo",
     ),
     # Events generation trigger (synchronous)
     path(
         "events/generate/",
         generate_events,
         name="generate-events",
+    ),
+    # Events bulk RSVP
+    path(
+        "events/<int:event_pk>/bulk-rsvp/",
+        bulk_rsvp_for_event,
+        name="bulk-rsvp",
     ),
     # Demo tournament endpoints (for video recording)
     # More specific paths first to avoid <str:key> catching them

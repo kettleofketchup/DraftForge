@@ -15,6 +15,7 @@ interface DiscordChannelPickerProps {
   value: string;
   onChange: (channelId: string) => void;
   disabled?: boolean;
+  'data-testid'?: string;
 }
 
 export function DiscordChannelPicker({
@@ -22,6 +23,7 @@ export function DiscordChannelPicker({
   value,
   onChange,
   disabled,
+  'data-testid': testId,
 }: DiscordChannelPickerProps) {
   const [channels, setChannels] = useState<DiscordChannel[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,7 +56,7 @@ export function DiscordChannelPicker({
         onValueChange={onChange}
         disabled={disabled || loading}
       >
-        <SelectTrigger className="w-full">
+        <SelectTrigger className="w-full" data-testid={testId}>
           <SelectValue placeholder={loading ? 'Loading...' : 'Select channel'} />
         </SelectTrigger>
         <SelectContent>

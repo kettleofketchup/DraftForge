@@ -28,6 +28,14 @@ csv:
     {{inv}} demo.csv
 
 [group('demo')]
+event-creation:
+    {{inv}} demo.event-creation
+
+[group('demo')]
+roll-call:
+    {{inv}} demo.roll-call
+
+[group('demo')]
 snapshots:
     {{inv}} demo.snapshots
 
