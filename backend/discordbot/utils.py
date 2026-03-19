@@ -206,6 +206,8 @@ def sync_send_embed_with_components(
     source=None,
     source_id=None,
     forum_thread_name=None,
+    content=None,
+    allowed_mentions=None,
 ):
     """Send an embed with components to a Discord channel.
 
@@ -234,6 +236,10 @@ def sync_send_embed_with_components(
     message_content = {"embeds": embeds}
     if components:
         message_content["components"] = components
+    if content:
+        message_content["content"] = content
+    if allowed_mentions:
+        message_content["allowed_mentions"] = allowed_mentions
 
     # Build payload — forum thread wraps message in a "message" key
     if forum_thread_name:

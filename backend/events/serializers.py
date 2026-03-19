@@ -74,6 +74,8 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "discord_announcement",
             "discord_announcement_channel_id",
             "discord_announcement_hours",
+            "discord_announcement_role_ids",
+            "discord_signup_role_ids",
             "discord_notify_new_events",
             "subscriber_count",
             "is_subscribed",
@@ -175,6 +177,8 @@ class EventSerializer(serializers.ModelSerializer):
             "discord_announcement",
             "discord_announcement_channel_id",
             "discord_announcement_hours",
+            "discord_announcement_role_ids",
+            "discord_signup_role_ids",
         ]
         read_only_fields = [
             "id",
@@ -308,5 +312,7 @@ class OrgEventDefaultsSerializer(serializers.ModelSerializer):
             "discord_announcement",
             "discord_announcement_channel_id",
             "discord_announcement_hours",
+            "discord_announcement_role_ids",
+            "discord_signup_role_ids",
         ]
         read_only_fields = ["id", "organization"]

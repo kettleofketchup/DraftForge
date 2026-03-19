@@ -224,7 +224,7 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
           description="Post an embed to a channel where users can react to sign up"
         />
         {postSignups && (
-          <div className="ml-7">
+          <div className="ml-7 space-y-3">
             <FormField control={control} name="discord_post_signups_channel_id"
               render={({ field }) => (
                 <FormItem>
@@ -233,6 +233,25 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
                     <DiscordChannelPicker organizationId={organizationId} value={field.value} onChange={field.onChange} data-testid="discord-signup-channel-select" />
                   </FormControl>
                   <FormDescription>Channel where the signup embed will be posted</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField control={control} name="discord_signup_role_ids"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Mention roles in signup post</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Role IDs (comma-separated, e.g., 123456789,987654321)"
+                      value={Array.isArray(field.value) ? field.value.join(', ') : ''}
+                      onChange={(e) => {
+                        const ids = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                        field.onChange(ids);
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>Discord role IDs to @mention in the signup post</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -270,6 +289,25 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
                       onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 24)} />
                   </FormControl>
                   <FormDescription>How many hours before the event to post the announcement</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField control={control} name="discord_announcement_role_ids"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Mention roles in announcement</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Role IDs (comma-separated, e.g., 123456789,987654321)"
+                      value={Array.isArray(field.value) ? field.value.join(', ') : ''}
+                      onChange={(e) => {
+                        const ids = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                        field.onChange(ids);
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>Discord role IDs to @mention when announcement is posted</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

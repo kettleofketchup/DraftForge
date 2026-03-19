@@ -74,6 +74,8 @@ export const eventSchema = z.object({
   discord_announcement: z.boolean(),
   discord_announcement_channel_id: z.string(),
   discord_announcement_hours: z.number(),
+  discord_announcement_role_ids: z.array(z.string()).default([]),
+  discord_signup_role_ids: z.array(z.string()).default([]),
   _warning: z.string().optional(),
 });
 
@@ -156,6 +158,8 @@ export const discordConfigSchema = z.object({
   discord_announcement: z.boolean(),
   discord_announcement_channel_id: z.string(),
   discord_announcement_hours: z.number().int().min(1),
+  discord_announcement_role_ids: z.array(z.string()).default([]),
+  discord_signup_role_ids: z.array(z.string()).default([]),
 });
 
 export const DISCORD_CONFIG_DEFAULTS = {
@@ -176,6 +180,8 @@ export const DISCORD_CONFIG_DEFAULTS = {
   discord_announcement: false,
   discord_announcement_channel_id: '',
   discord_announcement_hours: 24,
+  discord_announcement_role_ids: [] as string[],
+  discord_signup_role_ids: [] as string[],
 } as const;
 
 export const createEventInputSchema = z.object({

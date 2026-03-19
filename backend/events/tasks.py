@@ -75,6 +75,8 @@ def send_event_announcement(event_id):
     result = build_announcement_v2(event)
     embeds = result["embeds"]
     components = result["components"]
+    signup_content = result.get("content")
+    signup_mentions = result.get("allowed_mentions")
     thread_name = event.discord_event_title or event.name
     guild_id = event.organization.discord_server_id
 
@@ -91,6 +93,8 @@ def send_event_announcement(event_id):
             source="event_announcement",
             source_id=event.pk,
             forum_thread_name=thread_name,
+            content=signup_content,
+            allowed_mentions=signup_mentions,
         )
 
         if signup_post_result and guild_id:
@@ -124,12 +128,14 @@ def send_event_announcement(event_id):
     # Step 2: Post lightweight announcement linking to the signup post
     from events.discord.embeds import build_announcement_notice
 
-    notice_embed = build_announcement_notice(event, signup_message_link)
+    notice_result = build_announcement_notice(event, signup_message_link)
     sync_send_embed_with_components(
         channel_id=event.discord_announcement_channel_id,
-        embed=notice_embed,
+        embed=notice_result["embed"],
         source="event_notice",
         source_id=event.pk,
+        content=notice_result.get("content"),
+        allowed_mentions=notice_result.get("allowed_mentions"),
     )
 
     return f"Announced event {event.pk} (signup: {signup_message_link})"

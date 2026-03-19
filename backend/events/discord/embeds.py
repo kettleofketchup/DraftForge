@@ -337,7 +337,21 @@ def build_announcement_v2(event):
 
     components = build_announcement_components(event)
 
-    return {"embeds": [title_embed, content_embed], "components": components}
+    # Role mentions — go in message content, not in embeds
+    signup_role_ids = getattr(event, "discord_signup_role_ids", None) or []
+    content = ""
+    allowed_mentions = None
+    if signup_role_ids:
+        mentions = " ".join(f"<@&{rid}>" for rid in signup_role_ids)
+        content = mentions
+        allowed_mentions = {"roles": [str(rid) for rid in signup_role_ids]}
+
+    result = {"embeds": [title_embed, content_embed], "components": components}
+    if content:
+        result["content"] = content
+    if allowed_mentions:
+        result["allowed_mentions"] = allowed_mentions
+    return result
 
 
 def build_announcement_notice(event, signup_link=None):
@@ -369,7 +383,7 @@ def build_announcement_notice(event, signup_link=None):
 
     event_url = _event_url(event)
 
-    return {
+    embed = {
         "author": {
             "name": "DraftForge",
             "icon_url": LOGO_URL,
@@ -381,6 +395,17 @@ def build_announcement_notice(event, signup_link=None):
         "thumbnail": {"url": LOGO_URL},
         "timestamp": event.scheduled_at.isoformat(),
     }
+
+    # Role mentions for announcement
+    announcement_role_ids = getattr(event, "discord_announcement_role_ids", None) or []
+    result = {"embed": embed}
+    if announcement_role_ids:
+        mentions = " ".join(f"<@&{rid}>" for rid in announcement_role_ids)
+        result["content"] = mentions
+        result["allowed_mentions"] = {
+            "roles": [str(rid) for rid in announcement_role_ids]
+        }
+    return result
 
 
 def build_signup_update_embed(event):
