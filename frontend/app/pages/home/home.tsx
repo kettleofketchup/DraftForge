@@ -242,9 +242,9 @@ export default function HomePage() {
             <FeatureCard
               icon={GitBranch}
               title="Team Draft Composition"
-              description="Draft 40+ team members in minutes with Snake, Normal, and Shuffle draft modes balanced by MMR."
+              description="Draft 40+ team members in minutes with Snake, Normal, and MMR Market draft modes balanced by MMR."
               features={[
-                'Snake, Normal, and Shuffle draft modes',
+                'Snake, Normal, and MMR Market draft modes',
                 'MMR-balanced team generation',
                 'Real-time WebSocket draft updates',
                 'Captain pick order with trade support',
@@ -254,11 +254,11 @@ export default function HomePage() {
               gifSrc={`${ASSETS_BASE}/gifs/snake_draft.gif`}
               quickMedia={[
                 { src: `${ASSETS_BASE}/gifs/snake_draft.gif`, caption: 'Snake Draft', type: 'gif' },
-                { src: `${ASSETS_BASE}/gifs/shuffle_draft.gif`, caption: 'Shuffle Draft', type: 'gif' },
+                { src: `${ASSETS_BASE}/gifs/shuffle_draft.gif`, caption: 'MMR Market', type: 'gif' },
               ]}
               modalMedia={[
                 { src: `${ASSETS_BASE}/videos/snake_draft.webm`, caption: 'Snake Draft', type: 'video' },
-                { src: `${ASSETS_BASE}/videos/shuffle_draft.webm`, caption: 'Shuffle Draft', type: 'video' },
+                { src: `${ASSETS_BASE}/videos/shuffle_draft.webm`, caption: 'MMR Market', type: 'video' },
               ]}
               docsPath="/features/draft/"
             />
@@ -359,7 +359,7 @@ export default function HomePage() {
             <FeatureCard
               icon={Gavel}
               title="Auction Draft"
-              description="Captain nomination bidding with salary caps, real-time WebSocket auctions, and shuffle draft fallback."
+              description="Captain nomination bidding with salary caps, real-time WebSocket auctions, and MMR Market fallback."
               delay={1.0}
               comingSoon
               docsPath="/features/planned/auction-house/"

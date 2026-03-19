@@ -510,28 +510,28 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
                   setSelectedStyle(v as 'snake' | 'normal' | 'shuffle')
                 }
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full !h-auto py-3 !whitespace-normal [&_[data-slot=select-value]]:!line-clamp-none ring-1 ring-violet-400/30 border-violet-400/20 hover:ring-violet-400/50">
                   <SelectValue placeholder="Select draft style" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="snake">
-                    <div className="flex flex-col">
+                  <SelectItem value="snake" className="py-3">
+                    <div className="flex flex-col gap-0.5">
                       <span className="font-medium">Snake Draft</span>
                       <span className="text-xs text-muted-foreground">
                         1st, 2nd, 3rd, 4th, 4th, 3rd, 2nd, 1st...
                       </span>
                     </div>
                   </SelectItem>
-                  <SelectItem value="normal">
-                    <div className="flex flex-col">
+                  <SelectItem value="normal" className="py-3">
+                    <div className="flex flex-col gap-0.5">
                       <span className="font-medium">Normal Draft</span>
                       <span className="text-xs text-muted-foreground">
                         1st, 2nd, 3rd, 4th, 1st, 2nd, 3rd, 4th...
                       </span>
                     </div>
                   </SelectItem>
-                  <SelectItem value="shuffle">
-                    <div className="flex flex-col">
+                  <SelectItem value="shuffle" className="py-3">
+                    <div className="flex flex-col gap-0.5">
                       <span className="font-medium">Shuffle Draft</span>
                       <span className="text-xs text-muted-foreground">
                         Lowest MMR team picks first, recalculated each round
