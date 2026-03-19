@@ -247,7 +247,6 @@ def _reset_demo_draft(tournament, draft_style: str):
 
     # Reset draft state to pending
     draft.state = "pending"
-    draft.latest_round = None
     draft.save()
 
     # Rebuild rounds for fresh draft

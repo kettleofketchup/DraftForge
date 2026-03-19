@@ -59,6 +59,7 @@ export default function RollCallPage() {
   const isAdmin = useIsOrganizationAdmin(eventOrg);
 
   const [showStartConfirm, setShowStartConfirm] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   // Resolve all signup users from cache
   const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
@@ -82,7 +83,7 @@ export default function RollCallPage() {
     );
   }
 
-  if (event.state !== EventState.ROLL_CALL) {
+  if (event.state !== EventState.ROLL_CALL && !isNavigating) {
     return (
       <div className="container mx-auto py-6 px-4">
         <div className="text-center py-12">
@@ -238,6 +239,7 @@ export default function RollCallPage() {
         confirmLabel="Start Tournament"
         onConfirm={async () => {
           try {
+            setIsNavigating(true);
             const result = await actions.startTournament.mutateAsync();
             toast.success('Tournament started!');
             // Navigate to the tournament page if available, otherwise back to event
@@ -248,6 +250,7 @@ export default function RollCallPage() {
               navigate(`/events/${eventId}`);
             }
           } catch {
+            setIsNavigating(false);
             toast.error('Failed to start tournament');
           }
         }}
