@@ -108,7 +108,7 @@ def build_announcement_embeds(event):
         )
 
     info_embed = {
-        "title": f"\U0001f4e2 {title}",
+        "title": title,
         "description": desc,
         "color": COLOR_ANNOUNCEMENT,
         "fields": info_fields,
@@ -206,11 +206,20 @@ def build_announcement_v2(event):
     if event.discord_event_info:
         desc += f"\n\n{event.discord_event_info}"
 
+    # Format time in event's configured timezone
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(event.timezone) if event.timezone else None
+    local_dt = event.scheduled_at.astimezone(tz) if tz else event.scheduled_at
+    date_str = local_dt.strftime("%A, %B %-d")  # "Friday, March 20"
+    time_str = local_dt.strftime("%-I:%M %p")  # "8:50 PM"
+    tz_name = local_dt.strftime("%Z")  # "EST"
+
     # Top row: When | Max Players | Event Page (all inline)
     fields = [
         {
             "name": "When",
-            "value": _discord_timestamp(event.scheduled_at, style="f"),
+            "value": f"{date_str}\n> {time_str} {tz_name}",
             "inline": True,
         },
         {
@@ -247,13 +256,11 @@ def build_announcement_v2(event):
     )
     active_lines = []
     for s in active[:20]:
-        icon = (
-            "\u2705"
-            if s.status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED)
-            else "\u23f3"
-        )
         name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-        active_lines.append(f"> {icon} {name}")
+        if s.status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED):
+            active_lines.append(f"> {name}")
+        else:
+            active_lines.append(f"> *{name} (pending)*")
     if active.count() > 20:
         active_lines.append(f"> *and {active.count() - 20} more...*")
     count = active.count()
@@ -296,7 +303,7 @@ def build_announcement_v2(event):
             "icon_url": LOGO_URL,
             "url": event_url,
         },
-        "title": f"\U0001f4e2 {title}",
+        "title": title,
         "description": desc,
         "color": COLOR_ANNOUNCEMENT,
         "fields": fields,
