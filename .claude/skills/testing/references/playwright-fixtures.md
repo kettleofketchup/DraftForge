@@ -82,11 +82,64 @@ For multi-browser hero draft E2E scenarios.
 
 Provides `captainA` and `captainB` (separate `BrowserContext` + `Page` per captain), `heroDraft` info object, and draft utility functions.
 
+## Events Fixture (`fixtures/events.ts`)
+
+For events E2E tests on the dedicated Events Test Org.
+
+### Functions
+
+| Function | Endpoint | Purpose |
+|----------|----------|---------|
+| `getEventsTestData(context)` | GET `/api/organizations/` + `/api/events/` | Look up Events Test Org and E2E Signup Event by name |
+| `resetEventsData(context)` | POST `/api/tests/events/reset/` | Reset events: delete signups, delete generated events, reset E2E Signup Event |
+| `triggerEventGeneration(context)` | POST `/api/tests/events/generate/` | Run `generate_upcoming_events()` synchronously (bypasses Celery beat) |
+| `loginEventAdmin(context)` | POST `/api/tests/login-as/` (pk=1080) | Login as Events Test Org admin |
+| `loginEventPlayer(context)` | POST `/api/tests/login-as/` (pk=1081) | Login as event player |
+
+### Constants
+
+| Export | Value |
+|--------|-------|
+| `EVENTS_ORG_NAME` | `'Events Test Org'` |
+| `EVENTS_EVENT_NAME` | `'E2E Signup Event'` |
+
+### Types
+
+```typescript
+interface EventInfo {
+  pk: number;      // Event PK
+  orgPk: number;   // Organization PK
+  name: string;
+  state: string;
+}
+```
+
+### Usage Pattern for Repeater Generation Tests
+
+```typescript
+// 1. Login + reset
+await resetEventsData(context);
+await loginEventAdmin(context);
+
+// 2. Create repeater via API
+await context.request.post(`${API_URL}/events/repeaters/`, {
+  data: { organization: 7, name: 'Test', frequency: 'daily', ... },
+});
+
+// 3. Trigger generation synchronously
+await triggerEventGeneration(context);
+
+// 4. Verify events were created
+const resp = await context.request.get(`${API_URL}/events/?organization=7`);
+const events = await resp.json();
+```
+
 ## Fixture Index (`fixtures/index.ts`)
 
 Re-exports all fixtures and helpers:
 - Auth utilities (all login functions, types)
 - HeroDraft utilities
+- Events utilities (`getEventsTestData`, `resetEventsData`, `triggerEventGeneration`, `loginEventAdmin`, `loginEventPlayer`)
 - General helpers (`visitAndWaitForHydration`, `waitForLoadingToComplete`)
 - User card helpers (`getUserCard`, `removeUser`)
 - Tournament helpers (`TournamentPage` class, `navigateToTournament`)

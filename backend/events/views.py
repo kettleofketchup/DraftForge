@@ -184,6 +184,23 @@ class EventViewSet(viewsets.ModelViewSet):
         result = sync_tournament_from_event(event)
         self._cascade_warning = result.get("warning")
 
+        # If Discord config is set but no announcement has been sent yet, send it now.
+        # This handles the case where an admin edits an event to add Discord config.
+        from discordbot.models import DiscordMessageLog
+
+        if event.discord_announcement and event.discord_announcement_channel_id:
+            has_announcement = DiscordMessageLog.objects.filter(
+                source="event_announcement", source_id=event.pk, success=True
+            ).exists()
+            if not has_announcement:
+                from events.discord import (
+                    notify_create_discord_event,
+                    notify_event_announced,
+                )
+
+                notify_event_announced(event)
+                notify_create_discord_event(event)
+
     def update(self, request, *args, **kwargs):
         response = super().update(request, *args, **kwargs)
         if hasattr(self, "_cascade_warning") and self._cascade_warning:

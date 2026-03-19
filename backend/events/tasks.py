@@ -52,6 +52,44 @@ def open_scheduled_signups():
 
 
 @shared_task
+def ensure_discord_announcements():
+    """Catch-up task: find events with Discord config that haven't been announced yet.
+
+    Runs every 5 minutes via celery beat. Handles:
+    - Events where the announcement task failed or was never dispatched
+    - Events edited after creation to add Discord config
+    - Any gap where notify_event_announced wasn't called
+    """
+    from discordbot.models import DiscordMessageLog
+
+    # Find events that should have announcements but don't
+    events = Event.objects.filter(
+        discord_announcement=True,
+        discord_announcement_channel_id__gt="",
+        state__in=[EventState.UPCOMING, EventState.SIGNUPS_OPEN],
+    ).exclude(
+        pk__in=DiscordMessageLog.objects.filter(
+            source="event_announcement", success=True
+        ).values_list("source_id", flat=True)
+    )
+
+    sent = 0
+    for event in events:
+        try:
+            send_event_announcement(event.pk)
+            sent += 1
+            logger.info("Catch-up announcement sent for event %s", event.pk)
+        except Exception:
+            logger.exception("Failed catch-up announcement for event %s", event.pk)
+
+    if sent:
+        logger.info(
+            "ensure_discord_announcements: sent %d catch-up announcements", sent
+        )
+    return f"Checked {events.count()} events, sent {sent} announcements"
+
+
+@shared_task
 def send_event_announcement(event_id):
     """Create event signup post + announcement.
 

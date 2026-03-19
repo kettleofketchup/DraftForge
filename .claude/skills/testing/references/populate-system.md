@@ -23,8 +23,8 @@ Pydantic models defining test entity schemas:
 | File | Exports |
 |------|---------|
 | `users.py` | ADMIN_USER(1001), STAFF_USER(1002), REGULAR_USER(1003), CLAIMABLE_USER(1010), USER_CLAIMER(1011), ORG_ADMIN_USER(1020), ORG_STAFF_USER(1021), LEAGUE_ADMIN_USER(1030), LEAGUE_STAFF_USER(1031), TOURNAMENT_USERS(20), CSV_IMPORT_USERS(5) |
-| `organizations.py` | DTX_ORG(pk=1), TEST_ORG(pk=2), CSV_ORG(pk=3) + name constants |
-| `leagues.py` | DTX_LEAGUE(pk=1, steam=17929), TEST_LEAGUE(pk=2, steam=17930), CSV_LEAGUE(pk=3, steam=17931) + name/id constants |
+| `organizations.py` | DTX_ORG(pk=1), TEST_ORG(pk=2), CSV_ORG(pk=3), EVENTS_ORG(pk=7) + name constants |
+| `leagues.py` | DTX_LEAGUE(pk=1, steam=17929), TEST_LEAGUE(pk=2, steam=17930), CSV_LEAGUE(pk=3, steam=17931), EVENTS_LEAGUE(pk=7, steam=17935) + name/id constants |
 | `teams.py` | 4 real tournament teams, 2 herodraft demo teams, 4 bracket-unset-winner teams |
 | `tournaments.py` | 6 DynamicTournamentConfig objects + REAL_TOURNAMENT_38, DEMO_HERODRAFT_TOURNAMENT, BRACKET_UNSET_WINNER_TOURNAMENT, CSV_IMPORT_TOURNAMENT |
 | `__init__.py` | Re-exports all models + all constants from above files |
@@ -34,16 +34,19 @@ Pydantic models defining test entity schemas:
 Execution order in `populate_all(force=False)`:
 
 ```
-1. populate_organizations_and_leagues   → organizations.py
-2. populate_users                       → users.py (Discord API or mock)
-3. populate_test_auth_users             → users.py (9 specific PK users)
-4. populate_real_tournament_38          → tournaments.py
-5. populate_tournaments                 → tournaments.py (6 dynamic configs)
-6. populate_steam_matches               → steam_matches.py
-7. populate_bracket_linking_scenario    → bracket_linking.py
-8. populate_bracket_unset_winner_tournament → bracket_unset_winner.py
-9. populate_csv_import_data             → csv_import.py
-10. populate_demo_tournaments           → demo.py
+1.  populate_organizations_and_leagues   → organizations.py
+2.  populate_users                       → users.py (Discord API or mock)
+3.  populate_test_auth_users             → users.py (9 specific PK users)
+4.  populate_real_tournament_38          → tournaments.py
+5.  populate_tournaments                 → tournaments.py (6 dynamic configs)
+6.  populate_steam_matches               → steam_matches.py
+7.  populate_bracket_linking_scenario    → bracket_linking.py
+8.  populate_bracket_unset_winner_tournament → bracket_unset_winner.py
+9.  populate_csv_import_data             → csv_import.py
+10. populate_demo_tournaments            → demo.py
+11. populate_user_edit_data              → user_edit.py
+12. populate_events_data                 → events.py (Events Test Org/League, repeater, signup event)
+13. populate_shuffle_tie_data            → shuffle_tie.py
 ```
 
 ### Key Functions
@@ -55,6 +58,7 @@ Execution order in `populate_all(force=False)`:
 | `populate_test_auth_users` | users.py | Creates 9 users with specific PKs, assigns org/league roles |
 | `populate_tournaments` | tournaments.py | Auto-discovers DynamicTournamentConfig objects, creates them |
 | `populate_csv_import_data` | csv_import.py | Creates CSV org/league/tournament, 5 users, generates fixture CSVs |
+| `populate_events_data` | events.py | Creates Events Test Org (pk=7), league (pk=7), 4 users (pk=1080-1083), "Weekly Inhouse" repeater, "E2E Signup Event" |
 
 ### Shared Utilities (`backend/tests/populate/utils.py`)
 

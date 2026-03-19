@@ -45,6 +45,11 @@ app.conf.beat_schedule = {
         "task": "events.tasks.check_event_reminders",
         "schedule": 30.0,
     },
+    # Catch-up: ensure all events with Discord config have announcements
+    "ensure-discord-announcements": {
+        "task": "events.tasks.ensure_discord_announcements",
+        "schedule": 300.0,  # Every 5 minutes
+    },
 }
 
 

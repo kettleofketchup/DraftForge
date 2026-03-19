@@ -83,9 +83,11 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | Org | DTX | 1 | - |
 | Org | Test Organization | 2 | - |
 | Org | CSV Import Org | 3 | - |
+| Org | Events Test Org | 7 | - |
 | League | DTX League | 1 | 17929 |
 | League | Test League | 2 | 17930 |
 | League | CSV Import League | 3 | 17931 |
+| League | Events Test League | 7 | 17935 |
 
 | User | PK | Role | Login fixture |
 |------|----|------|--------------|
@@ -96,5 +98,7 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | org_staff_tester | 1021 | org staff (org 1) | `loginOrgStaff()` |
 | league_admin_tester | 1030 | league admin | `loginLeagueAdmin()` |
 | league_staff_tester | 1031 | league staff | `loginLeagueStaff()` |
+| event_org_admin | 1080 | org admin (org 7) | `loginEventAdmin()` |
+| event_player_1 | 1081 | regular | `loginEventPlayer()` |
 
 > **NOTE**: When this table drifts from source, read `backend/tests/data/users.py` and `backend/tests/data/organizations.py` for truth.

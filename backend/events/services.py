@@ -448,6 +448,9 @@ def generate_events_for_repeater(repeater):
         event.save()
         create_tournament_for_event(event)
         created_events.append(event)
+        # Send Discord signup post + announcement for the new event
+        if event.discord_announcement and event.discord_announcement_channel_id:
+            notify_event_announced(event)
         if repeater.discord_notify_new_events:
             notify_new_event(event)
         if event.discord_create_event:
