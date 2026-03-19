@@ -17,10 +17,16 @@ def build_announcement_components(event):
         },
         {
             "type": 2,  # Button
-            "style": 4,  # Danger (red)
+            "style": 2,  # Secondary (grey)
+            "label": "Tentative",
+            "custom_id": f"event_tentative:{event.pk}",
+            "emoji": {"name": "\u2753"},
+        },
+        {
+            "type": 2,  # Button
+            "style": 2,  # Secondary (grey)
             "label": "Decline",
             "custom_id": f"event_decline:{event.pk}",
-            "emoji": {"name": "\u274c"},
         },
     ]
 
@@ -30,22 +36,9 @@ def build_announcement_components(event):
             {
                 "type": 2,
                 "style": 2,  # Secondary (grey)
-                "label": "Notify Me",
+                "label": "Notify Me for Future Events",
                 "custom_id": f"event_notify:{event.pk}",
                 "emoji": {"name": "\U0001f514"},
-            }
-        )
-
-    # View Event — link button
-    site_url = getattr(settings, "SITE_URL", "")
-    if site_url:
-        buttons.append(
-            {
-                "type": 2,
-                "style": 5,  # Link
-                "label": "View Event",
-                "url": f"{site_url}/events/{event.pk}/",
-                "emoji": {"name": "\U0001f517"},
             }
         )
 

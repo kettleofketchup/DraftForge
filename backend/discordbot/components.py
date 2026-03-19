@@ -93,7 +93,7 @@ class NotifyButton(ui.Button):
 
     def __init__(self, event_id):
         super().__init__(
-            label="Notify Me",
+            label="Notify Me for Future Events",
             style=discord.ButtonStyle.secondary,
             custom_id=f"event_notify:{event_id}",
             emoji="\U0001f514",
@@ -122,15 +122,48 @@ class NotifyButton(ui.Button):
             )
 
 
+class TentativeButton(ui.Button):
+    """Grey 'Tentative' button. custom_id='event_tentative:{event_id}'"""
+
+    def __init__(self, event_id):
+        super().__init__(
+            label="Tentative",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"event_tentative:{event_id}",
+            emoji="\u2753",
+        )
+        self.event_id = event_id
+
+    async def callback(self, interaction: discord.Interaction):
+        from asgiref.sync import sync_to_async
+
+        from events.discord import handle_tentative_button
+
+        result = await sync_to_async(handle_tentative_button)(
+            event_id=self.event_id,
+            discord_user_id=str(interaction.user.id),
+        )
+
+        if result["action"] == "tentative":
+            await interaction.response.send_message(
+                "\u2753 Marked as tentative. We'll count you as interested!",
+                ephemeral=True,
+            )
+        elif result["action"] == "error":
+            await interaction.response.send_message(
+                result.get("message", "Something went wrong."),
+                ephemeral=True,
+            )
+
+
 class DeclineButton(ui.Button):
-    """Red 'Decline' button. custom_id='event_decline:{event_id}'"""
+    """Grey 'Decline' button. custom_id='event_decline:{event_id}'"""
 
     def __init__(self, event_id):
         super().__init__(
             label="Decline",
-            style=discord.ButtonStyle.danger,
+            style=discord.ButtonStyle.secondary,
             custom_id=f"event_decline:{event_id}",
-            emoji="\u274c",
         )
         self.event_id = event_id
 
@@ -146,7 +179,7 @@ class DeclineButton(ui.Button):
 
         if result["action"] == "declined":
             await interaction.response.send_message(
-                "\u274c You've declined the event.",
+                "You've declined the event.",
                 ephemeral=True,
             )
         elif result["action"] == "not_signed_up":

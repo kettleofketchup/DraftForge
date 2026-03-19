@@ -46,6 +46,18 @@ def _signup_counts(event):
     return active, confirmed
 
 
+def _user_list(signups, max_items=20):
+    """Build a newline-separated list of user nicknames from signups."""
+    lines = []
+    for s in signups[:max_items]:
+        name = s.user.nickname or s.user.username or f"User {s.user.pk}"
+        lines.append(name)
+    remaining = signups.count() - max_items
+    if remaining > 0:
+        lines.append(f"*and {remaining} more...*")
+    return "\n".join(lines) if lines else "*None yet*"
+
+
 def build_announcement_embed(event):
     """Build embed for event announcement with signup lists."""
     title = event.discord_event_title or event.name
@@ -54,13 +66,11 @@ def build_announcement_embed(event):
     if event.discord_event_info:
         desc += f"\n\n{event.discord_event_info}"
 
-    if url := _event_url(event):
-        desc += f"\n\n[View Event]({url})"
-
+    # Top row: When | Max Players | Event Link (all inline)
     fields = [
         {
             "name": "When",
-            "value": _discord_timestamp(event.scheduled_at),
+            "value": _discord_timestamp(event.scheduled_at, style="f"),
             "inline": True,
         },
         {
@@ -70,59 +80,70 @@ def build_announcement_embed(event):
         },
     ]
 
-    # Add signup list fields
+    url = _event_url(event)
+    if url:
+        fields.append(
+            {
+                "name": "Event Page",
+                "value": f"[View on Site]({url})",
+                "inline": True,
+            }
+        )
+
+    # Bottom row: Signed Up | Declined | Tentative (all inline, always shown)
     signups = EventSignup.objects.filter(event=event).select_related("user")
 
-    # Left column: confirmed/approved + pending
+    # Signed Up: confirmed/approved (✅) + pending (⏳)
     active = signups.exclude(
         status__in=[
             SignupStatus.CANCELLED,
             SignupStatus.REJECTED,
             SignupStatus.WAITLISTED,
+            SignupStatus.TENTATIVE,
         ]
     )
-    if active.exists():
-        lines = []
-        for s in active[:20]:
-            icon = (
-                "\u2705"
-                if s.status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED)
-                else "\u23f3"
-            )
-            name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-            lines.append(f"{icon} {name}")
-        remaining = active.count() - 20
-        if remaining > 0:
-            lines.append(f"*and {remaining} more...*")
-        count = active.count()
-        max_display = str(event.max_players) if event.max_players else "\u221e"
-        fields.append(
-            {
-                "name": f"Signed Up ({count}/{max_display})",
-                "value": "\n".join(lines),
-                "inline": True,
-            }
+    active_lines = []
+    for s in active[:20]:
+        icon = (
+            "\u2705"
+            if s.status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED)
+            else "\u23f3"
         )
-
-    # Right column: waitlisted
-    waitlisted = signups.filter(status=SignupStatus.WAITLISTED).order_by(
-        "waitlist_position"
+        name = s.user.nickname or s.user.username or f"User {s.user.pk}"
+        active_lines.append(f"{icon} {name}")
+    if active.count() > 20:
+        active_lines.append(f"*and {active.count() - 20} more...*")
+    count = active.count()
+    max_display = str(event.max_players) if event.max_players else "\u221e"
+    fields.append(
+        {
+            "name": f"\u2705 Signed Up ({count}/{max_display})",
+            "value": "\n".join(active_lines) if active_lines else "*None yet*",
+            "inline": True,
+        }
     )
-    if waitlisted.exists():
-        lines = []
-        for s in waitlisted[:20]:
-            name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-            lines.append(name)
-        remaining = waitlisted.count() - 20
-        if remaining > 0:
-            lines.append(f"*and {remaining} more...*")
-        fields.append(
-            {
-                "name": f"Waitlisted ({waitlisted.count()})",
-                "value": "\n".join(lines),
-                "inline": True,
-            }
-        )
+
+    # Declined
+    declined = signups.filter(
+        status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED]
+    )
+    fields.append(
+        {
+            "name": f"\u274c Declined ({declined.count()})",
+            "value": _user_list(declined),
+            "inline": True,
+        }
+    )
+
+    # Tentative
+    tentative = signups.filter(status=SignupStatus.TENTATIVE)
+    fields.append(
+        {
+            "name": f"\u2753 Tentative ({tentative.count()})",
+            "value": _user_list(tentative),
+            "inline": True,
+        }
+    )
 
     return {
         "title": f"\U0001f4e2 {title}",

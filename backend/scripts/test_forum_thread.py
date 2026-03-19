@@ -84,14 +84,31 @@ player2 = CustomUser.objects.create(
     username="player_two", nickname="PlayerTwo", positions=positions2
 )
 
+positions3 = PositionsModel.objects.create()
+player3 = CustomUser.objects.create(
+    username="player_three", nickname="MaybeMike", positions=positions3
+)
+positions4 = PositionsModel.objects.create()
+player4 = CustomUser.objects.create(
+    username="player_four", nickname="DeclinedDave", positions=positions4
+)
+
 signup1 = EventSignup.objects.create(
     event=event, user=player1, status=SignupStatus.CONFIRMED
 )
 signup2 = EventSignup.objects.create(
     event=event, user=player2, status=SignupStatus.APPROVED
 )
+signup3 = EventSignup.objects.create(
+    event=event, user=player3, status=SignupStatus.TENTATIVE
+)
+signup4 = EventSignup.objects.create(
+    event=event, user=player4, status=SignupStatus.CANCELLED
+)
 print(f"Signup 1: {player1.nickname} - {signup1.status}")
 print(f"Signup 2: {player2.nickname} - {signup2.status}")
+print(f"Signup 3: {player3.nickname} - {signup3.status}")
+print(f"Signup 4: {player4.nickname} - {signup4.status}")
 print()
 
 # Send the announcement

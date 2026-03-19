@@ -39,6 +39,7 @@ class SignupStatus(models.TextChoices):
     APPROVED = "approved", "Approved"
     CONFIRMED = "confirmed", "Confirmed"
     WAITLISTED = "waitlisted", "Waitlisted"
+    TENTATIVE = "tentative", "Tentative"
     REJECTED = "rejected", "Rejected"
     CANCELLED = "cancelled", "Cancelled"
 

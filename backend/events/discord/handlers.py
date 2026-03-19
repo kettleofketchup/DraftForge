@@ -335,3 +335,49 @@ def handle_decline_button(event_id, discord_user_id):
         return {"action": "declined", "message": "You've declined the event."}
     except EventSignup.DoesNotExist:
         return {"action": "not_signed_up", "message": "You weren't signed up."}
+
+
+def handle_tentative_button(event_id, discord_user_id):
+    """Handle Tentative button click. Creates a TENTATIVE signup (doesn't take a spot)."""
+    from app.models import CustomUser
+
+    try:
+        event = Event.objects.get(pk=event_id)
+    except Event.DoesNotExist:
+        return {"action": "error", "message": "Event not found."}
+
+    if event.state != EventState.SIGNUPS_OPEN:
+        return {"action": "error", "message": "Event is not accepting signups."}
+
+    try:
+        user = CustomUser.objects.get(discordId=str(discord_user_id))
+    except CustomUser.DoesNotExist:
+        return {"action": "error", "message": "Your Discord account isn't linked."}
+
+    # Check for existing signup
+    existing = EventSignup.objects.filter(event=event, user=user).first()
+    if existing:
+        if existing.status == SignupStatus.TENTATIVE:
+            return {
+                "action": "already_tentative",
+                "message": "You're already marked as tentative.",
+            }
+        if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+            return {
+                "action": "error",
+                "message": f"You're already signed up (status: {existing.status}).",
+            }
+        # Allow re-tentative after cancel/reject
+        existing.delete()
+
+    EventSignup.objects.create(
+        event=event,
+        user=user,
+        status=SignupStatus.TENTATIVE,
+    )
+    logger.info(
+        "Discord tentative: user=%s event=%s",
+        user.pk,
+        event.pk,
+    )
+    return {"action": "tentative", "message": "Marked as tentative."}

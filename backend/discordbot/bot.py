@@ -152,6 +152,12 @@ class KettleBot(discord.Client):
 
                 button = SignupButton(event_id)
                 await button.callback(interaction)
+            elif custom_id.startswith("event_tentative:"):
+                event_id = int(custom_id.split(":")[1])
+                from discordbot.components import TentativeButton
+
+                button = TentativeButton(event_id)
+                await button.callback(interaction)
             elif custom_id.startswith("event_decline:"):
                 event_id = int(custom_id.split(":")[1])
                 from discordbot.components import DeclineButton

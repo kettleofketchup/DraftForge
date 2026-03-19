@@ -44,6 +44,7 @@ from events.discord.handlers import (
     handle_rank_medal_select,
     handle_signup_button,
     handle_signup_modal_submit,
+    handle_tentative_button,
 )
 from events.discord.reactions import handle_reaction_cancel, handle_reaction_signup
 
@@ -83,6 +84,7 @@ __all__ = [
     "handle_battle_cup_submit",
     "handle_notify_button",
     "handle_decline_button",
+    "handle_tentative_button",
     # reactions
     "handle_reaction_signup",
     "handle_reaction_cancel",
