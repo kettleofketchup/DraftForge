@@ -53,12 +53,12 @@ def open_scheduled_signups():
 
 @shared_task
 def send_event_announcement(event_id):
-    """Send event announcement using Components V2 layout.
+    """Send event announcement as embed + action row buttons.
 
-    Uses Discord Components V2 (flag 32768) for rich layout with separators,
-    containers, and text displays. Falls back to embed-based message if V2 fails.
+    Uses standard embed with thumbnail logo, inline field grid for layout,
+    and action rows for interactive buttons.
     """
-    from discordbot.utils import sync_send_v2_message
+    from discordbot.utils import sync_send_embed_with_components
     from events.discord.embeds import build_announcement_v2
 
     event = Event.objects.select_related("organization", "event_repeater").get(
@@ -67,21 +67,24 @@ def send_event_announcement(event_id):
     if not event.discord_announcement or not event.discord_announcement_channel_id:
         return "Skipped: announcement disabled"
 
-    v2_payload = build_announcement_v2(event)
+    result = build_announcement_v2(event)
+    embed = result["embed"]
+    components = result["components"]
     channel_id = event.discord_announcement_channel_id
     thread_name = event.discord_event_title or event.name
 
     # Try forum thread first if signups channel is configured
     if event.discord_post_signups and event.discord_post_signups_channel_id:
-        result = sync_send_v2_message(
+        send_result = sync_send_embed_with_components(
             channel_id=event.discord_post_signups_channel_id,
-            v2_payload=v2_payload,
+            embed=embed,
+            components=components,
             source="event_announcement",
             source_id=event.pk,
             forum_thread_name=thread_name,
         )
-        if result:
-            return f"Announced event {event.pk} (forum thread: {result.get('id')})"
+        if send_result:
+            return f"Announced event {event.pk} (forum thread: {send_result.get('id')})"
 
         logger.info(
             "Forum thread failed for event %s, falling back to announcement channel",
@@ -89,9 +92,10 @@ def send_event_announcement(event_id):
         )
 
     # Regular message to announcement channel
-    sync_send_v2_message(
+    sync_send_embed_with_components(
         channel_id=channel_id,
-        v2_payload=v2_payload,
+        embed=embed,
+        components=components,
         source="event_announcement",
         source_id=event.pk,
     )
@@ -100,8 +104,8 @@ def send_event_announcement(event_id):
 
 @shared_task
 def send_signup_update(event_id):
-    """Edit the original announcement with updated signup lists (V2)."""
-    from discordbot.utils import sync_edit_v2_message
+    """Edit the original announcement embed with updated signup lists."""
+    from discordbot.utils import sync_edit_message
     from events.discord.embeds import build_announcement_v2
 
     event = Event.objects.select_related("organization", "event_repeater").get(
@@ -124,7 +128,7 @@ def send_signup_update(event_id):
         )
         return "Skipped: no announcement message"
 
-    v2_payload = build_announcement_v2(event)
+    result = build_announcement_v2(event)
 
     # For forum threads, the message lives in the thread channel
     edit_channel_id = log_entry.channel_id
@@ -133,10 +137,11 @@ def send_signup_update(event_id):
         if log_entry.response_data.get("message"):
             edit_channel_id = thread_id
 
-    sync_edit_v2_message(
+    sync_edit_message(
         channel_id=edit_channel_id,
         message_id=log_entry.discord_message_id,
-        v2_payload=v2_payload,
+        embed=result["embed"],
+        components=result["components"],
     )
     return f"Updated announcement for event {event.pk}"
 

@@ -178,13 +178,15 @@ def build_announcement_embed(event):
 
 
 def build_announcement_v2(event):
-    """Build a Components V2 message payload for event announcement.
+    """Build embed + components payload for event announcement.
 
-    Returns the full message dict with flags + components (no embeds).
-    Uses Container with accent color, TextDisplay for content,
-    Separators for visual dividers, and ActionRows for buttons.
+    Returns dict with 'embed' (single embed dict) and 'components' (action rows).
+    The embed has: logo thumbnail, title, description, event details row,
+    signup/declined/tentative row, and event page link.
     """
     from events.discord.components import build_announcement_components
+
+    LOGO_URL = "https://assets.kettle.sh/draftforge/DFLogo.png"
 
     title = event.discord_event_title or event.name
     desc = event.discord_event_description or event.description or "No description."
@@ -192,17 +194,34 @@ def build_announcement_v2(event):
     if event.discord_event_info:
         desc += f"\n\n{event.discord_event_info}"
 
-    # Event details line
-    details_parts = [f"**When:** {_discord_timestamp(event.scheduled_at, style='f')}"]
-    details_parts.append(f"**Max Players:** {event.max_players or 'Unlimited'}")
+    # Top row: When | Max Players | Event Page (all inline)
+    fields = [
+        {
+            "name": "When",
+            "value": _discord_timestamp(event.scheduled_at, style="f"),
+            "inline": True,
+        },
+        {
+            "name": "Max Players",
+            "value": str(event.max_players or "Unlimited"),
+            "inline": True,
+        },
+    ]
+
     url = _event_url(event)
     if url:
-        details_parts.append(f"**[Event Page]({url})**")
-    details_line = "  \u2022  ".join(details_parts)
+        fields.append(
+            {
+                "name": "Event Page",
+                "value": f"[View on Site]({url})",
+                "inline": True,
+            }
+        )
 
-    # Build signup lists
+    # Signup lists
     signups = EventSignup.objects.filter(event=event).select_related("user")
 
+    # Signed Up
     active = signups.exclude(
         status__in=[
             SignupStatus.CANCELLED,
@@ -211,122 +230,61 @@ def build_announcement_v2(event):
             SignupStatus.TENTATIVE,
         ]
     )
+    active_lines = []
+    for s in active[:20]:
+        icon = (
+            "\u2705"
+            if s.status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED)
+            else "\u23f3"
+        )
+        name = s.user.nickname or s.user.username or f"User {s.user.pk}"
+        active_lines.append(f"{icon} {name}")
+    if active.count() > 20:
+        active_lines.append(f"*and {active.count() - 20} more...*")
     count = active.count()
     max_display = str(event.max_players) if event.max_players else "\u221e"
-    active_lines = [f"### \u2705 Signed Up ({count}/{max_display})"]
-    if active.exists():
-        for s in active[:20]:
-            icon = (
-                "\u2705"
-                if s.status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED)
-                else "\u23f3"
-            )
-            name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-            active_lines.append(f"{icon} {name}")
-        if active.count() > 20:
-            active_lines.append(f"*and {active.count() - 20} more...*")
-    else:
-        active_lines.append("*None yet*")
+    fields.append(
+        {
+            "name": f"\u2705 Signed Up ({count}/{max_display})",
+            "value": "\n".join(active_lines) if active_lines else "*None yet*",
+            "inline": True,
+        }
+    )
 
+    # Declined
     declined = signups.filter(
         status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED]
     )
-    declined_lines = [f"### \u274c Declined ({declined.count()})"]
-    if declined.exists():
-        for s in declined[:20]:
-            name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-            declined_lines.append(name)
-    else:
-        declined_lines.append("*None yet*")
-
-    tentative = signups.filter(status=SignupStatus.TENTATIVE)
-    tentative_lines = [f"### \u2753 Tentative ({tentative.count()})"]
-    if tentative.exists():
-        for s in tentative[:20]:
-            name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-            tentative_lines.append(name)
-    else:
-        tentative_lines.append("*None yet*")
-
-    LOGO_URL = "https://assets.kettle.sh/draftforge/DFLogo.png"
-    site_url = SITE_URL or "https://localhost"
-    event_url = f"{site_url}/org/{event.organization_id}/events/{event.pk}"
-
-    # Build waitlist
-    waitlisted = signups.filter(status=SignupStatus.WAITLISTED).order_by(
-        "waitlist_position"
+    fields.append(
+        {
+            "name": f"\u274c Declined ({declined.count()})",
+            "value": _user_list(declined),
+            "inline": True,
+        }
     )
-    waitlist_lines = [f"### \U0001f4cb Waitlisted ({waitlisted.count()})"]
-    if waitlisted.exists():
-        for s in waitlisted[:20]:
-            name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-            waitlist_lines.append(name)
-    else:
-        waitlist_lines.append("*None yet*")
 
-    # Build the V2 components
-    container_children = [
-        # Title section: logo thumbnail + title text
+    # Tentative
+    tentative = signups.filter(status=SignupStatus.TENTATIVE)
+    fields.append(
         {
-            "type": 9,  # Section
-            "components": [
-                {"type": 10, "content": f"# \U0001f4e2 {title}"},
-            ],
-            "accessory": {
-                "type": 11,  # Thumbnail
-                "media": {"url": LOGO_URL},
-            },
-        },
-        # Description
-        {"type": 10, "content": desc},
-        # Separator
-        {"type": 14, "divider": True, "spacing": 1},
-        # Event details
-        {"type": 10, "content": details_line},
-        # Separator
-        {"type": 14, "divider": True, "spacing": 1},
-        # Signed Up + Declined section with "View Event" button accessory
-        {
-            "type": 9,  # Section
-            "components": [
-                {"type": 10, "content": "\n".join(active_lines)},
-                {"type": 10, "content": "\n".join(declined_lines)},
-            ],
-            "accessory": {
-                "type": 2,  # Button
-                "style": 5,  # Link
-                "label": "View Event",
-                "url": event_url,
-                "emoji": {"name": "\U0001f517"},
-            },
-        },
-        # Tentative + Waitlisted section
-        {
-            "type": 9,  # Section
-            "components": [
-                {"type": 10, "content": "\n".join(tentative_lines)},
-                {"type": 10, "content": "\n".join(waitlist_lines)},
-            ],
-            "accessory": {
-                "type": 11,  # Thumbnail
-                "media": {"url": LOGO_URL},
-            },
-        },
-    ]
+            "name": f"\u2753 Tentative ({tentative.count()})",
+            "value": _user_list(tentative),
+            "inline": True,
+        }
+    )
 
-    container = {
-        "type": 17,
-        "accent_color": COLOR_ANNOUNCEMENT,
-        "components": container_children,
+    embed = {
+        "title": f"\U0001f4e2 {title}",
+        "description": desc,
+        "color": COLOR_ANNOUNCEMENT,
+        "fields": fields,
+        "thumbnail": {"url": LOGO_URL},
+        "timestamp": event.scheduled_at.isoformat(),
     }
 
-    # Action rows (outside the container)
-    action_rows = build_announcement_components(event)
+    components = build_announcement_components(event)
 
-    return {
-        "flags": 1 << 15,  # IS_COMPONENTS_V2
-        "components": [container] + action_rows,
-    }
+    return {"embed": embed, "components": components}
 
 
 def build_signup_update_embed(event):
