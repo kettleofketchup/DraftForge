@@ -12,7 +12,7 @@ from events.models import EventSignup, SignupStatus
 
 logger = logging.getLogger(__name__)
 
-SITE_URL = getattr(settings, "SITE_URL", "")
+SITE_URL = getattr(settings, "SITE_URL", "") or "https://localhost"
 
 # Colors
 COLOR_ANNOUNCEMENT = 0x5865F2  # Discord blurple
@@ -56,6 +56,18 @@ def _user_list(signups, max_items=20):
     if remaining > 0:
         lines.append(f"*and {remaining} more...*")
     return "\n".join(lines) if lines else "*None yet*"
+
+
+def _user_list_quoted(signups, max_items=20):
+    """Build a blockquoted list of user nicknames from signups."""
+    lines = []
+    for s in signups[:max_items]:
+        name = s.user.nickname or s.user.username or f"User {s.user.pk}"
+        lines.append(f"> {name}")
+    remaining = signups.count() - max_items
+    if remaining > 0:
+        lines.append(f"> *and {remaining} more...*")
+    return "\n".join(lines) if lines else "> *None yet*"
 
 
 def build_announcement_embeds(event):
@@ -218,7 +230,10 @@ def build_announcement_v2(event):
             }
         )
 
-    # Signup lists
+    # Force row break — signup fields go on their own row
+    fields.append({"name": "\u200b", "value": "\u200b", "inline": False})
+
+    # Signup lists (blockquoted player names)
     signups = EventSignup.objects.filter(event=event).select_related("user")
 
     # Signed Up
@@ -238,15 +253,15 @@ def build_announcement_v2(event):
             else "\u23f3"
         )
         name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-        active_lines.append(f"{icon} {name}")
+        active_lines.append(f"> {icon} {name}")
     if active.count() > 20:
-        active_lines.append(f"*and {active.count() - 20} more...*")
+        active_lines.append(f"> *and {active.count() - 20} more...*")
     count = active.count()
     max_display = str(event.max_players) if event.max_players else "\u221e"
     fields.append(
         {
             "name": f"\u2705 Signed Up ({count}/{max_display})",
-            "value": "\n".join(active_lines) if active_lines else "*None yet*",
+            "value": "\n".join(active_lines) if active_lines else "> *None yet*",
             "inline": True,
         }
     )
@@ -258,7 +273,7 @@ def build_announcement_v2(event):
     fields.append(
         {
             "name": f"\u274c Declined ({declined.count()})",
-            "value": _user_list(declined),
+            "value": _user_list_quoted(declined),
             "inline": True,
         }
     )
@@ -268,7 +283,7 @@ def build_announcement_v2(event):
     fields.append(
         {
             "name": f"\u2753 Tentative ({tentative.count()})",
-            "value": _user_list(tentative),
+            "value": _user_list_quoted(tentative),
             "inline": True,
         }
     )
