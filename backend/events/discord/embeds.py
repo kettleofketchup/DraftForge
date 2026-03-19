@@ -59,23 +59,20 @@ def _user_list(signups, max_items=20):
 
 
 def build_announcement_embeds(event):
-    """Build a single embed for event announcement with info + participants.
+    """Build two embeds for event announcement: info + participants.
 
-    Returns a list with one embed dict (for the Discord API 'embeds' array).
+    Returns a list of embed dicts (for the Discord API 'embeds' array).
+    Embed 1: Event info (title, description, when, max players, link)
+    Embed 2: Participants (signed up, declined, tentative)
     """
-    return [build_announcement_embed(event)]
-
-
-def build_announcement_embed(event):
-    """Build single embed for event announcement with signup lists."""
     title = event.discord_event_title or event.name
     desc = event.discord_event_description or event.description or "No description."
 
     if event.discord_event_info:
         desc += f"\n\n{event.discord_event_info}"
 
-    # Top row: When | Max Players | Event Link (all inline)
-    fields = [
+    # Embed 1: Event info
+    info_fields = [
         {
             "name": "When",
             "value": _discord_timestamp(event.scheduled_at, style="f"),
@@ -90,7 +87,7 @@ def build_announcement_embed(event):
 
     url = _event_url(event)
     if url:
-        fields.append(
+        info_fields.append(
             {
                 "name": "Event Page",
                 "value": f"[View on Site]({url})",
@@ -98,7 +95,14 @@ def build_announcement_embed(event):
             }
         )
 
-    # Participants section
+    info_embed = {
+        "title": f"\U0001f4e2 {title}",
+        "description": desc,
+        "color": COLOR_ANNOUNCEMENT,
+        "fields": info_fields,
+    }
+
+    # Embed 2: Participants
     signups = EventSignup.objects.filter(event=event).select_related("user")
 
     active = signups.exclude(
@@ -123,18 +127,18 @@ def build_announcement_embed(event):
     count = active.count()
     max_display = str(event.max_players) if event.max_players else "\u221e"
 
-    fields.append(
+    participant_fields = [
         {
             "name": f"\u2705 Signed Up ({count}/{max_display})",
             "value": "\n".join(active_lines) if active_lines else "*None yet*",
             "inline": True,
-        }
-    )
+        },
+    ]
 
     declined = signups.filter(
         status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED]
     )
-    fields.append(
+    participant_fields.append(
         {
             "name": f"\u274c Declined ({declined.count()})",
             "value": _user_list(declined),
@@ -143,7 +147,7 @@ def build_announcement_embed(event):
     )
 
     tentative = signups.filter(status=SignupStatus.TENTATIVE)
-    fields.append(
+    participant_fields.append(
         {
             "name": f"\u2753 Tentative ({tentative.count()})",
             "value": _user_list(tentative),
@@ -151,13 +155,26 @@ def build_announcement_embed(event):
         }
     )
 
-    return {
-        "title": f"\U0001f4e2 {title}",
-        "description": desc,
+    participants_embed = {
         "color": COLOR_ANNOUNCEMENT,
-        "fields": fields,
+        "fields": participant_fields,
         "timestamp": event.scheduled_at.isoformat(),
     }
+
+    return [info_embed, participants_embed]
+
+
+def build_announcement_embed(event):
+    """Backward-compatible single embed (returns first embed only).
+
+    Use build_announcement_embeds() for the full two-embed layout.
+    """
+    embeds = build_announcement_embeds(event)
+    # Merge into single embed for callers that expect one dict
+    combined = embeds[0].copy()
+    combined["fields"] = embeds[0]["fields"] + embeds[1]["fields"]
+    combined["timestamp"] = embeds[1].get("timestamp")
+    return combined
 
 
 def build_signup_update_embed(event):
