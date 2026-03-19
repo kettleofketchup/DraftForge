@@ -66,8 +66,9 @@ class BuildAnnouncementEmbedSignupListTest(EventTestCase):
     def test_empty_signup_list(self):
         embed = build_announcement_embed(self.event)
         field_names = [f["name"] for f in embed.get("fields", [])]
-        # No signup fields when no signups
-        self.assertFalse(any("Signed Up" in n for n in field_names))
+        # Signed Up field always shown, even when empty (shows "None yet")
+        signed_up = next(f for f in embed["fields"] if "Signed Up" in f["name"])
+        self.assertIn("None yet", signed_up["value"])
 
     def test_signup_list_shows_confirmed_users(self):
         from events.models import EventSignup, SignupStatus
@@ -91,6 +92,7 @@ class BuildAnnouncementEmbedSignupListTest(EventTestCase):
 
     def test_waitlisted_in_separate_field(self):
         from app.models import CustomUser, PositionsModel
+        from events.discord.embeds import build_announcement_v2
         from events.models import EventSignup, SignupStatus
 
         self.event.max_players = 1
@@ -106,9 +108,15 @@ class BuildAnnouncementEmbedSignupListTest(EventTestCase):
             status=SignupStatus.WAITLISTED,
             waitlist_position=1,
         )
-        embed = build_announcement_embed(self.event)
-        field_names = [f["name"] for f in embed["fields"]]
+        # Use build_announcement_v2 which includes the Waitlisted field
+        result = build_announcement_v2(self.event)
+        content_embed = result["embeds"][1]
+        field_names = [f["name"] for f in content_embed["fields"]]
         self.assertTrue(any("Waitlisted" in n for n in field_names))
+        waitlist_field = next(
+            f for f in content_embed["fields"] if "Waitlisted" in f["name"]
+        )
+        self.assertIn("waitlisted_user", waitlist_field["value"])
 
     def test_signup_fields_are_inline(self):
         from events.models import EventSignup, SignupStatus
