@@ -340,6 +340,42 @@ def build_announcement_v2(event):
     return {"embeds": [title_embed, content_embed], "components": components}
 
 
+def build_announcement_notice(event, signup_link=None):
+    """Build a lightweight announcement embed that links to the signup post.
+
+    Posted to the announcement channel to notify users about a new event.
+    Not updated — just a one-time heads up.
+    """
+    LOGO_URL = "https://assets.kettle.sh/draftforge/DFLogo.png"
+    title = event.discord_event_title or event.name
+
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(event.timezone) if event.timezone else None
+    local_dt = event.scheduled_at.astimezone(tz) if tz else event.scheduled_at
+    date_line = local_dt.strftime("%A, %B %-d")
+    time_line = local_dt.strftime("%-I:%M %p %Z")
+
+    desc = f"A new event is coming up!\n\n"
+    desc += f"**When:** {date_line} at {time_line}\n"
+    desc += f"**Max Players:** {event.max_players or 'Unlimited'}\n"
+
+    if signup_link:
+        desc += f"\n\U0001f449 **[Sign up here!]({signup_link})**"
+
+    url = _event_url(event)
+    if url:
+        desc += f"\n[View on site]({url})"
+
+    return {
+        "title": f"\U0001f4e2 {title}",
+        "description": desc,
+        "color": COLOR_ANNOUNCEMENT,
+        "thumbnail": {"url": LOGO_URL},
+        "timestamp": event.scheduled_at.isoformat(),
+    }
+
+
 def build_signup_update_embed(event):
     active, confirmed = _signup_counts(event)
     max_display = str(event.max_players) if event.max_players else "\u221e"

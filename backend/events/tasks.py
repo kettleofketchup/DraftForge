@@ -53,12 +53,17 @@ def open_scheduled_signups():
 
 @shared_task
 def send_event_announcement(event_id):
-    """Send event announcement as embed + action row buttons.
+    """Create event signup post + announcement.
 
-    Uses standard embed with thumbnail logo, inline field grid for layout,
-    and action rows for interactive buttons.
+    1. Signup post: full embed + buttons in the signups channel (forum thread
+       or regular message). This is where users sign up. Updated on changes.
+    2. Announcement: lightweight message in the announcement channel linking
+       to the signup post. Posted once, not updated.
+
+    If no signups channel is configured, the signup post goes to the
+    announcement channel instead (no separate announcement needed).
     """
-    from discordbot.utils import sync_send_embed_with_components
+    from discordbot.utils import sync_send_embed, sync_send_embed_with_components
     from events.discord.embeds import build_announcement_v2
 
     event = Event.objects.select_related("organization", "event_repeater").get(
@@ -70,12 +75,16 @@ def send_event_announcement(event_id):
     result = build_announcement_v2(event)
     embeds = result["embeds"]
     components = result["components"]
-    channel_id = event.discord_announcement_channel_id
     thread_name = event.discord_event_title or event.name
+    guild_id = event.organization.discord_server_id
 
-    # Try forum thread first if signups channel is configured
+    # Step 1: Create the signup post
+    signup_post_result = None
+    signup_message_link = None
+
     if event.discord_post_signups and event.discord_post_signups_channel_id:
-        send_result = sync_send_embed_with_components(
+        # Signups channel configured — post there (forum thread or regular)
+        signup_post_result = sync_send_embed_with_components(
             channel_id=event.discord_post_signups_channel_id,
             embed=embeds,
             components=components,
@@ -83,23 +92,51 @@ def send_event_announcement(event_id):
             source_id=event.pk,
             forum_thread_name=thread_name,
         )
-        if send_result:
-            return f"Announced event {event.pk} (forum thread: {send_result.get('id')})"
 
-        logger.info(
-            "Forum thread failed for event %s, falling back to announcement channel",
-            event.pk,
+        if signup_post_result and guild_id:
+            # Build Discord message link
+            if signup_post_result.get("message"):
+                # Forum thread — link is /guild/thread_id/message_id
+                thread_id = signup_post_result["id"]
+                msg_id = signup_post_result["message"]["id"]
+                signup_message_link = (
+                    f"https://discord.com/channels/{guild_id}/{thread_id}/{msg_id}"
+                )
+            else:
+                # Regular message
+                channel_id = event.discord_post_signups_channel_id
+                msg_id = signup_post_result["id"]
+                signup_message_link = (
+                    f"https://discord.com/channels/{guild_id}/{channel_id}/{msg_id}"
+                )
+
+    if not signup_post_result:
+        # No signups channel or it failed — post to announcement channel directly
+        sync_send_embed_with_components(
+            channel_id=event.discord_announcement_channel_id,
+            embed=embeds,
+            components=components,
+            source="event_announcement",
+            source_id=event.pk,
         )
+        return f"Announced event {event.pk}"
 
-    # Regular message to announcement channel
-    sync_send_embed_with_components(
-        channel_id=channel_id,
-        embed=embeds,
-        components=components,
-        source="event_announcement",
+    # Step 2: Post lightweight announcement linking to the signup post
+    from events.discord.embeds import build_announcement_notice
+
+    notice_embed = build_announcement_notice(event, signup_message_link)
+    sync_send_embed(
+        channel_id=event.discord_announcement_channel_id,
+        title=notice_embed["title"],
+        description=notice_embed["description"],
+        color=notice_embed["color"],
+        fields=notice_embed.get("fields"),
+        footer=notice_embed.get("footer"),
+        source="event_notice",
         source_id=event.pk,
     )
-    return f"Announced event {event.pk}"
+
+    return f"Announced event {event.pk} (signup: {signup_message_link})"
 
 
 @shared_task
