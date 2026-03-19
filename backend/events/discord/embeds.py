@@ -293,7 +293,7 @@ def build_announcement_v2(event):
 
     event_url = f"{SITE_URL}/org/{event.organization_id}/events/{event.pk}"
 
-    # Embed 1: Title + logo thumbnail (compact, no fields to compress)
+    # Embed 1: Title + description + logo thumbnail
     title_embed = {
         "author": {
             "name": "DraftForge",
@@ -301,13 +301,13 @@ def build_announcement_v2(event):
             "url": event_url,
         },
         "title": title,
+        "description": desc,
         "color": COLOR_ANNOUNCEMENT,
         "thumbnail": {"url": LOGO_URL},
     }
 
-    # Embed 2: Description + full-width fields + timestamp
+    # Embed 2: Full-width fields + timestamp
     content_embed = {
-        "description": desc,
         "color": COLOR_ANNOUNCEMENT,
         "fields": fields,
         "timestamp": event.scheduled_at.isoformat(),
