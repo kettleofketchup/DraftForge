@@ -24,14 +24,14 @@ def build_announcement_components(event):
             },
             {
                 "type": 2,  # Button
-                "style": 2,  # Secondary (grey)
+                "style": 1,  # Primary (blue)
                 "label": "Tentative",
                 "custom_id": f"event_tentative:{event.pk}",
                 "emoji": {"name": "\u2753"},
             },
             {
                 "type": 2,  # Button
-                "style": 2,  # Secondary (grey) — ❌ is readable on grey
+                "style": 4,  # Danger (red)
                 "label": "Decline",
                 "custom_id": f"event_decline:{event.pk}",
                 "emoji": {"name": "\u274c"},
