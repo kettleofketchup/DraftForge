@@ -367,7 +367,14 @@ def build_announcement_notice(event, signup_link=None):
     if url:
         desc += f"\n[View on site]({url})"
 
+    event_url = _event_url(event)
+
     return {
+        "author": {
+            "name": "DraftForge",
+            "icon_url": LOGO_URL,
+            "url": event_url or signup_link or "",
+        },
         "title": f"\U0001f4e2 {title}",
         "description": desc,
         "color": COLOR_ANNOUNCEMENT,
