@@ -214,7 +214,8 @@ def build_announcement_v2(event):
     local_dt = event.scheduled_at.astimezone(tz) if tz else event.scheduled_at
     tz_time = local_dt.strftime("%-I:%M %p %Z")  # "6:00 PM EST"
 
-    when_value = f"{_discord_timestamp(event.scheduled_at, style='D')}\n> {_discord_timestamp(event.scheduled_at, style='t')} ({tz_time})"
+    date_line = local_dt.strftime("%A, %B %-d")  # "Friday, March 20"
+    when_value = f"{date_line}\n> {_discord_timestamp(event.scheduled_at, style='t')} ({tz_time})"
 
     # Top row: When | Max Players | Event Page (all inline)
     fields = [
