@@ -288,12 +288,18 @@ def build_announcement_v2(event):
         }
     )
 
+    event_url = f"{SITE_URL}/org/{event.organization_id}/events/{event.pk}"
+
     embed = {
+        "author": {
+            "name": "DraftForge",
+            "icon_url": LOGO_URL,
+            "url": event_url,
+        },
         "title": f"\U0001f4e2 {title}",
         "description": desc,
         "color": COLOR_ANNOUNCEMENT,
         "fields": fields,
-        "thumbnail": {"url": LOGO_URL},
         "timestamp": event.scheduled_at.isoformat(),
     }
 
