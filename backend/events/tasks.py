@@ -125,13 +125,9 @@ def send_event_announcement(event_id):
     from events.discord.embeds import build_announcement_notice
 
     notice_embed = build_announcement_notice(event, signup_message_link)
-    sync_send_embed(
+    sync_send_embed_with_components(
         channel_id=event.discord_announcement_channel_id,
-        title=notice_embed["title"],
-        description=notice_embed["description"],
-        color=notice_embed["color"],
-        fields=notice_embed.get("fields"),
-        footer=notice_embed.get("footer"),
+        embed=notice_embed,
         source="event_notice",
         source_id=event.pk,
     )
