@@ -73,6 +73,8 @@ event = Event.objects.create(
     auto_approve=True,
     game_type=GameType.DOTA2,
     discord_create_event=True,
+    discord_announcement_role_ids=["1484230449973956649"],  # @bots
+    discord_signup_role_ids=["1484230449973956649"],  # @bots
 )
 
 # Create some test signups so the embed shows users
