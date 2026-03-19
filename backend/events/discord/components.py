@@ -34,7 +34,7 @@ def build_announcement_components(event):
                 "style": 4,  # Danger (red)
                 "label": "Decline",
                 "custom_id": f"event_decline:{event.pk}",
-                "emoji": {"name": "\u274c"},
+                "emoji": {"name": "\U0001f1fd"},  # Regional indicator X
             },
         ],
     }
