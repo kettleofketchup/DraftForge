@@ -90,6 +90,9 @@ def build_announcement_embed(event):
             }
         )
 
+    # Row separator — forces signup fields onto their own line
+    fields.append({"name": "\u200b", "value": "\u200b", "inline": False})
+
     # Bottom row: Signed Up | Declined | Tentative (all inline, always shown)
     signups = EventSignup.objects.filter(event=event).select_related("user")
 
