@@ -200,16 +200,50 @@ def sync_send_results_posted(tournament, channel_id=None):
 
 
 def sync_send_embed_with_components(
-    channel_id, embed, components=None, source=None, source_id=None
+    channel_id,
+    embed,
+    components=None,
+    source=None,
+    source_id=None,
+    forum_thread_name=None,
 ):
-    """Send an embed with interactive components to a Discord channel."""
+    """Send an embed with components to a Discord channel.
+
+    If forum_thread_name is provided, creates a forum thread instead of a regular
+    message. Falls back to regular message if forum thread creation fails.
+
+    For forum threads:
+    - The response contains the thread object with thread["id"] (thread channel ID)
+    - The initial message ID is at response["message"]["id"]
+    - Both are stored in DiscordMessageLog for later edits
+
+    Args:
+        channel_id: Discord channel ID (text or forum)
+        embed: Embed dict
+        components: Optional action row components
+        source: Log source identifier
+        source_id: Log source PK
+        forum_thread_name: If set, create a forum thread with this title
+
+    Returns:
+        dict: API response or None on error
+    """
     from .models import DiscordMessageLog
 
-    url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages"
-
-    payload = {"embeds": [embed]}
+    message_content = {"embeds": [embed]}
     if components:
-        payload["components"] = components
+        message_content["components"] = components
+
+    # Build payload — forum thread wraps message in a "message" key
+    if forum_thread_name:
+        url = f"{DISCORD_API_BASE}/channels/{channel_id}/threads"
+        payload = {
+            "name": forum_thread_name[:100],
+            "message": message_content,
+        }
+    else:
+        url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages"
+        payload = message_content
 
     log_entry = DiscordMessageLog.objects.create(
         channel_id=channel_id,
@@ -224,15 +258,29 @@ def sync_send_embed_with_components(
         log_entry.status_code = response.status_code
         log_entry.response_data = response_data
         response.raise_for_status()
-        log_entry.discord_message_id = response_data.get("id")
+
+        if forum_thread_name and response_data.get("message"):
+            # Forum thread — store initial message ID for edits
+            log_entry.discord_message_id = response_data["message"].get("id")
+            log.info(
+                "Created forum thread '%s' in channel %s (source=%s, thread_id=%s)",
+                forum_thread_name,
+                channel_id,
+                source,
+                response_data.get("id"),
+            )
+        else:
+            # Regular message
+            log_entry.discord_message_id = response_data.get("id")
+            log.info(
+                "Sent embed to channel %s (source=%s, source_id=%s)",
+                channel_id,
+                source,
+                source_id,
+            )
+
         log_entry.success = True
         log_entry.save()
-        log.info(
-            "Sent embed with components to channel %s (source=%s, source_id=%s)",
-            channel_id,
-            source,
-            source_id,
-        )
         return response_data
     except requests.RequestException as e:
         log_entry.status_code = (
@@ -240,12 +288,14 @@ def sync_send_embed_with_components(
             if hasattr(e, "response") and e.response
             else log_entry.status_code
         )
+        try:
+            log_entry.response_data = (
+                e.response.json() if hasattr(e, "response") and e.response else None
+            )
+        except Exception:
+            pass
         log_entry.save()
-        log.error(
-            "Failed to send embed with components to channel %s: %s",
-            channel_id,
-            e,
-        )
+        log.error("Failed to send to channel %s: %s", channel_id, e)
         return None
 
 
