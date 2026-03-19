@@ -141,6 +141,40 @@ class KettleBot(discord.Client):
 
         await self._remove_rsvp(payload)
 
+    async def on_interaction(self, interaction: discord.Interaction):
+        """Route component and modal interactions to event signup handlers."""
+        custom_id = interaction.data.get("custom_id", "") if interaction.data else ""
+
+        if interaction.type == discord.InteractionType.component:
+            if custom_id.startswith("event_signup:"):
+                event_id = int(custom_id.split(":")[1])
+                from discordbot.components import SignupButton
+
+                button = SignupButton(event_id)
+                await button.callback(interaction)
+            elif custom_id.startswith("event_notify:"):
+                event_id = int(custom_id.split(":")[1])
+                from discordbot.components import NotifyButton
+
+                button = NotifyButton(event_id)
+                await button.callback(interaction)
+            elif custom_id.startswith("rank_medal:"):
+                event_id = int(custom_id.split(":")[1])
+                from discordbot.components import MedalSelect
+
+                select = MedalSelect(event_id)
+                select._values = interaction.data.get("values", [])
+                await select.callback(interaction)
+            elif custom_id.startswith("rank_details:"):
+                parts = custom_id.split(":")
+                event_id = int(parts[1])
+                rank_status = parts[2]
+                from discordbot.components import RankDetailsButton
+
+                button = RankDetailsButton(event_id, rank_status)
+                await button.callback(interaction)
+        # Modal submissions are auto-dispatched by discord.py to Modal.on_submit
+
     async def _handle_rsvp(self, payload, status):
         """Create or update RSVP record."""
         # Import here to avoid circular imports
