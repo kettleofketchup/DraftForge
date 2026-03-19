@@ -375,6 +375,11 @@ def handle_tentative_button(event_id, discord_user_id):
         user=user,
         status=SignupStatus.TENTATIVE,
     )
+    # Trigger embed update
+    from events.discord.dispatch import notify_signup_changed
+
+    notify_signup_changed(event)
+
     logger.info(
         "Discord tentative: user=%s event=%s",
         user.pk,
