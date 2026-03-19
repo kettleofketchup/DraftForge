@@ -206,20 +206,16 @@ def build_announcement_v2(event):
     if event.discord_event_info:
         desc += f"\n\n{event.discord_event_info}"
 
-    # Format time in event's configured timezone
-    from zoneinfo import ZoneInfo
-
-    tz = ZoneInfo(event.timezone) if event.timezone else None
-    local_dt = event.scheduled_at.astimezone(tz) if tz else event.scheduled_at
-    date_str = local_dt.strftime("%A, %B %-d")  # "Friday, March 20"
-    time_str = local_dt.strftime("%-I:%M %p")  # "8:50 PM"
-    tz_name = local_dt.strftime("%Z")  # "EST"
+    # Discord timestamps — rendered client-side in user's local timezone
+    unix_ts = int(event.scheduled_at.timestamp())
+    # D = date without year, t = short time, R = relative
+    when_value = f"{_discord_timestamp(event.scheduled_at, style='D')} {_discord_timestamp(event.scheduled_at, style='t')}\n> {_discord_timestamp(event.scheduled_at, style='R')}"
 
     # Top row: When | Max Players | Event Page (all inline)
     fields = [
         {
             "name": "When",
-            "value": f"{date_str}\n> {time_str} {tz_name}",
+            "value": when_value,
             "inline": True,
         },
         {
@@ -297,13 +293,20 @@ def build_announcement_v2(event):
 
     event_url = f"{SITE_URL}/org/{event.organization_id}/events/{event.pk}"
 
-    embed = {
+    # Embed 1: Title + logo thumbnail (compact, no fields to compress)
+    title_embed = {
         "author": {
             "name": "DraftForge",
             "icon_url": LOGO_URL,
             "url": event_url,
         },
         "title": title,
+        "color": COLOR_ANNOUNCEMENT,
+        "thumbnail": {"url": LOGO_URL},
+    }
+
+    # Embed 2: Description + full-width fields + timestamp
+    content_embed = {
         "description": desc,
         "color": COLOR_ANNOUNCEMENT,
         "fields": fields,
@@ -312,7 +315,7 @@ def build_announcement_v2(event):
 
     components = build_announcement_components(event)
 
-    return {"embed": embed, "components": components}
+    return {"embeds": [title_embed, content_embed], "components": components}
 
 
 def build_signup_update_embed(event):

@@ -68,7 +68,7 @@ def send_event_announcement(event_id):
         return "Skipped: announcement disabled"
 
     result = build_announcement_v2(event)
-    embed = result["embed"]
+    embeds = result["embeds"]
     components = result["components"]
     channel_id = event.discord_announcement_channel_id
     thread_name = event.discord_event_title or event.name
@@ -77,7 +77,7 @@ def send_event_announcement(event_id):
     if event.discord_post_signups and event.discord_post_signups_channel_id:
         send_result = sync_send_embed_with_components(
             channel_id=event.discord_post_signups_channel_id,
-            embed=embed,
+            embed=embeds,
             components=components,
             source="event_announcement",
             source_id=event.pk,
@@ -94,7 +94,7 @@ def send_event_announcement(event_id):
     # Regular message to announcement channel
     sync_send_embed_with_components(
         channel_id=channel_id,
-        embed=embed,
+        embed=embeds,
         components=components,
         source="event_announcement",
         source_id=event.pk,
@@ -140,7 +140,7 @@ def send_signup_update(event_id):
     sync_edit_message(
         channel_id=edit_channel_id,
         message_id=log_entry.discord_message_id,
-        embed=result["embed"],
+        embed=result["embeds"],
         components=result["components"],
     )
     return f"Updated announcement for event {event.pk}"
