@@ -1,12 +1,9 @@
-"""One-off script to test forum thread creation for event announcements.
+"""Test forum thread creation with repeater, signup users, and all buttons.
 
-Run from the backend directory:
-    DJANGO_SETTINGS_MODULE=backend.settings DISABLE_CACHE=true \
-    ../.venv/bin/python scripts/test_forum_thread.py
+Run: just py::script scripts/test_forum_thread.py
 """
 
 import os
-import sys
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 
@@ -14,52 +11,99 @@ import django
 
 django.setup()
 
-from datetime import timedelta
+from datetime import time, timedelta
 
 from django.test.runner import DiscoverRunner
 from django.utils import timezone
 
-# Set up in-memory test DB
 runner = DiscoverRunner(verbosity=0)
 old_config = runner.setup_databases()
 
-from app.models import CustomUser, Organization, PositionsModel
+from app.models import CustomUser, GameType, Organization, PositionsModel
 from discordbot.models import DiscordMessageLog
-from events.models import Event, EventState
+from events.models import (
+    Event,
+    EventRepeater,
+    EventSignup,
+    EventState,
+    RepeatFrequency,
+    SignupStatus,
+)
 from events.tasks import send_event_announcement
 
-# Create test data
+# Create org
 org = Organization.objects.create(
-    name="Forum Thread Test Org",
+    name="Forum Test Org",
     discord_server_id="1467168401805017142",
 )
-positions = PositionsModel.objects.create()
-user = CustomUser.objects.create(
-    username="forum_admin", nickname="ForumAdmin", positions=positions
+
+# Create repeater (so Notify Me button shows)
+positions_admin = PositionsModel.objects.create()
+admin_user = CustomUser.objects.create(
+    username="forum_admin", nickname="ForumAdmin", positions=positions_admin
 )
-event = Event.objects.create(
+repeater = EventRepeater.objects.create(
     organization=org,
-    name="Forum Thread Test Event",
-    description="This should appear as a forum post with signup buttons!",
-    scheduled_at=timezone.now() + timedelta(days=1),
-    state=EventState.SIGNUPS_OPEN,
-    created_by=user,
+    name="Weekly Inhouse",
+    frequency=RepeatFrequency.WEEKLY,
+    day_of_week=2,
+    time_of_day=time(20, 0),
+    starts_at=timezone.now().date(),
+    is_active=True,
+    created_by=admin_user,
+    discord_notify_new_events=True,
     discord_announcement=True,
-    discord_announcement_channel_id="1482767177063858216",  # text channel fallback
-    discord_post_signups=True,
-    discord_post_signups_channel_id="1482767709279096893",  # forum channel
-    max_players=10,
+    discord_announcement_channel_id="1482767177063858216",
 )
 
-print(f"Created event pk={event.pk}: {event.name}")
-print(f"Announcement channel: {event.discord_announcement_channel_id}")
-print(f"Signups channel (forum): {event.discord_post_signups_channel_id}")
+# Create event linked to repeater
+event = Event.objects.create(
+    organization=org,
+    event_repeater=repeater,
+    name="Weekly Inhouse — March 19",
+    description="Join us for our weekly inhouse! All skill levels welcome.",
+    scheduled_at=timezone.now() + timedelta(days=1),
+    state=EventState.SIGNUPS_OPEN,
+    created_by=admin_user,
+    discord_announcement=True,
+    discord_announcement_channel_id="1482767177063858216",
+    discord_post_signups=True,
+    discord_post_signups_channel_id="1482767709279096893",
+    max_players=10,
+    auto_approve=True,
+    game_type=GameType.DOTA2,
+)
+
+# Create some test signups so the embed shows users
+positions1 = PositionsModel.objects.create()
+player1 = CustomUser.objects.create(
+    username="player_one", nickname="PlayerOne", positions=positions1
+)
+positions2 = PositionsModel.objects.create()
+player2 = CustomUser.objects.create(
+    username="player_two", nickname="PlayerTwo", positions=positions2
+)
+
+signup1 = EventSignup.objects.create(
+    event=event, user=player1, status=SignupStatus.CONFIRMED
+)
+signup2 = EventSignup.objects.create(
+    event=event, user=player2, status=SignupStatus.APPROVED
+)
+print(f"Signup 1: {player1.nickname} - {signup1.status}")
+print(f"Signup 2: {player2.nickname} - {signup2.status}")
+print()
+
+# Send the announcement
+print(f"Event: {event.name} (repeater={repeater.name})")
+print(f"Forum channel: {event.discord_post_signups_channel_id}")
 print()
 
 result = send_event_announcement(event.pk)
 print(f"Result: {result}")
 print()
 
+# Show logs
 logs = DiscordMessageLog.objects.filter(
     source="event_announcement", source_id=event.pk
 ).order_by("created_at")

@@ -122,6 +122,45 @@ class NotifyButton(ui.Button):
             )
 
 
+class DeclineButton(ui.Button):
+    """Red 'Decline' button. custom_id='event_decline:{event_id}'"""
+
+    def __init__(self, event_id):
+        super().__init__(
+            label="Decline",
+            style=discord.ButtonStyle.danger,
+            custom_id=f"event_decline:{event_id}",
+            emoji="\u274c",
+        )
+        self.event_id = event_id
+
+    async def callback(self, interaction: discord.Interaction):
+        from asgiref.sync import sync_to_async
+
+        from events.discord import handle_decline_button
+
+        result = await sync_to_async(handle_decline_button)(
+            event_id=self.event_id,
+            discord_user_id=str(interaction.user.id),
+        )
+
+        if result["action"] == "declined":
+            await interaction.response.send_message(
+                "\u274c You've declined the event.",
+                ephemeral=True,
+            )
+        elif result["action"] == "not_signed_up":
+            await interaction.response.send_message(
+                "You weren't signed up for this event.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(
+                result.get("message", "Something went wrong."),
+                ephemeral=True,
+            )
+
+
 class EventSignupModal(ui.Modal):
     """Modal that collects player profile data for event signup.
 

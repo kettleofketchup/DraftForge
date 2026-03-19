@@ -144,6 +144,13 @@ def build_announcement_components(event):
             "custom_id": f"event_signup:{event.pk}",
             "emoji": {"name": "\u2705"},
         },
+        {
+            "type": 2,  # Button
+            "style": 4,  # Danger (red)
+            "label": "Decline",
+            "custom_id": f"event_decline:{event.pk}",
+            "emoji": {"name": "\u274c"},
+        },
     ]
 
     # Notify Me — only if event has a repeater
@@ -709,3 +716,28 @@ def handle_notify_button(event_id, discord_user_id):
         sub.delete()
     invalidate_obj(event.event_repeater)  # Invalidate subscriber count cache
     return {"subscribed": created}
+
+
+def handle_decline_button(event_id, discord_user_id):
+    """Handle Decline button click. Cancels signup if exists, or no-ops."""
+    from app.models import CustomUser
+    from events.services import cancel_signup
+
+    try:
+        event = Event.objects.get(pk=event_id)
+    except Event.DoesNotExist:
+        return {"action": "error", "message": "Event not found."}
+
+    try:
+        user = CustomUser.objects.get(discordId=str(discord_user_id))
+    except CustomUser.DoesNotExist:
+        return {"action": "error", "message": "Your Discord account isn't linked."}
+
+    try:
+        signup = EventSignup.objects.get(event=event, user=user)
+        if signup.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+            return {"action": "already_declined", "message": "You've already declined."}
+        cancel_signup(signup)
+        return {"action": "declined", "message": "You've declined the event."}
+    except EventSignup.DoesNotExist:
+        return {"action": "not_signed_up", "message": "You weren't signed up."}
