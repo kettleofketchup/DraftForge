@@ -248,10 +248,35 @@ def build_announcement_v2(event):
     else:
         tentative_lines.append("*None yet*")
 
+    LOGO_URL = "https://assets.kettle.sh/draftforge/DFLogo.png"
+    site_url = SITE_URL or "https://localhost"
+    event_url = f"{site_url}/org/{event.organization_id}/events/{event.pk}"
+
+    # Build waitlist
+    waitlisted = signups.filter(status=SignupStatus.WAITLISTED).order_by(
+        "waitlist_position"
+    )
+    waitlist_lines = [f"### \U0001f4cb Waitlisted ({waitlisted.count()})"]
+    if waitlisted.exists():
+        for s in waitlisted[:20]:
+            name = s.user.nickname or s.user.username or f"User {s.user.pk}"
+            waitlist_lines.append(name)
+    else:
+        waitlist_lines.append("*None yet*")
+
     # Build the V2 components
     container_children = [
-        # Title
-        {"type": 10, "content": f"# \U0001f4e2 {title}"},
+        # Title section: logo thumbnail + title text
+        {
+            "type": 9,  # Section
+            "components": [
+                {"type": 10, "content": f"# \U0001f4e2 {title}"},
+            ],
+            "accessory": {
+                "type": 11,  # Thumbnail
+                "media": {"url": LOGO_URL},
+            },
+        },
         # Description
         {"type": 10, "content": desc},
         # Separator
@@ -260,19 +285,32 @@ def build_announcement_v2(event):
         {"type": 10, "content": details_line},
         # Separator
         {"type": 14, "divider": True, "spacing": 1},
-        # Signup lists — three TextDisplays side by side won't work,
-        # so combine into one formatted block
+        # Signed Up + Declined section with "View Event" button accessory
         {
-            "type": 10,
-            "content": "\n".join(active_lines),
+            "type": 9,  # Section
+            "components": [
+                {"type": 10, "content": "\n".join(active_lines)},
+                {"type": 10, "content": "\n".join(declined_lines)},
+            ],
+            "accessory": {
+                "type": 2,  # Button
+                "style": 5,  # Link
+                "label": "View Event",
+                "url": event_url,
+                "emoji": {"name": "\U0001f517"},
+            },
         },
+        # Tentative + Waitlisted section
         {
-            "type": 10,
-            "content": "\n".join(declined_lines),
-        },
-        {
-            "type": 10,
-            "content": "\n".join(tentative_lines),
+            "type": 9,  # Section
+            "components": [
+                {"type": 10, "content": "\n".join(tentative_lines)},
+                {"type": 10, "content": "\n".join(waitlist_lines)},
+            ],
+            "accessory": {
+                "type": 11,  # Thumbnail
+                "media": {"url": LOGO_URL},
+            },
         },
     ]
 
