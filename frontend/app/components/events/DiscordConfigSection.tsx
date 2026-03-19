@@ -17,6 +17,7 @@ import {
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
 import { DiscordChannelPicker } from './DiscordChannelPicker';
+import { DiscordRolePicker } from './DiscordRolePicker';
 
 const REMINDER_HOURS_OPTIONS = [
   { value: 1, label: '1 hour before' },
@@ -242,13 +243,10 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
                 <FormItem>
                   <FormLabel>Mention roles in signup post</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="Role IDs (comma-separated, e.g., 123456789,987654321)"
-                      value={Array.isArray(field.value) ? field.value.join(', ') : ''}
-                      onChange={(e) => {
-                        const ids = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-                        field.onChange(ids);
-                      }}
+                    <DiscordRolePicker
+                      organizationId={organizationId}
+                      value={field.value || []}
+                      onChange={field.onChange}
                     />
                   </FormControl>
                   <FormDescription>Discord role IDs to @mention in the signup post</FormDescription>
@@ -298,13 +296,10 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
                 <FormItem>
                   <FormLabel>Mention roles in announcement</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="Role IDs (comma-separated, e.g., 123456789,987654321)"
-                      value={Array.isArray(field.value) ? field.value.join(', ') : ''}
-                      onChange={(e) => {
-                        const ids = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-                        field.onChange(ids);
-                      }}
+                    <DiscordRolePicker
+                      organizationId={organizationId}
+                      value={field.value || []}
+                      onChange={field.onChange}
                     />
                   </FormControl>
                   <FormDescription>Discord role IDs to @mention when announcement is posted</FormDescription>
