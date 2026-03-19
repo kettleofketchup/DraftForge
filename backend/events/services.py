@@ -450,6 +450,10 @@ def generate_events_for_repeater(repeater):
         created_events.append(event)
         if repeater.discord_notify_new_events:
             notify_new_event(event)
+        if event.discord_create_event:
+            from events.discord import notify_create_discord_event
+
+            notify_create_discord_event(event)
     return created_events
 
 

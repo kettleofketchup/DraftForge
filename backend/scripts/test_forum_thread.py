@@ -72,6 +72,7 @@ event = Event.objects.create(
     max_players=10,
     auto_approve=True,
     game_type=GameType.DOTA2,
+    discord_create_event=True,
 )
 
 # Create some test signups so the embed shows users
@@ -126,6 +127,12 @@ print()
 
 result = send_event_announcement(event.pk)
 print(f"Result: {result}")
+
+# Create Discord scheduled event (synchronous — no Celery worker in script)
+from events.tasks import create_discord_scheduled_event
+
+discord_event_result = create_discord_scheduled_event(event.pk)
+print(f"Discord scheduled event: {discord_event_result}")
 print()
 
 # Show logs
