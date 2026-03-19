@@ -70,6 +70,47 @@ class KettleBot(discord.Client):
             return
 
         emoji = str(payload.emoji)
+
+        # New events system: ✅ = signup, ❌ = cancel
+        if emoji == "\u2705":
+            from asgiref.sync import sync_to_async
+
+            from events.discord import handle_reaction_signup
+
+            success, detail = await sync_to_async(handle_reaction_signup)(
+                str(payload.message_id), str(payload.user_id)
+            )
+            if success:
+                log.info(
+                    f"Event signup via reaction: user={payload.user_id} detail={detail}"
+                )
+                return
+            elif detail != "not_event_message":
+                # Was an event message but signup failed (already signed up, event closed, etc.)
+                log.info(
+                    f"Event signup skipped: user={payload.user_id} detail={detail}"
+                )
+                return
+            # Fall through to old ScheduledEvent RSVP system
+
+        if emoji == "\u274c":
+            from asgiref.sync import sync_to_async
+
+            from events.discord import handle_reaction_cancel
+
+            success, detail = await sync_to_async(handle_reaction_cancel)(
+                str(payload.message_id), str(payload.user_id)
+            )
+            if success:
+                log.info(f"Event cancel via reaction: user={payload.user_id}")
+                return
+            elif detail != "not_event_message":
+                log.info(
+                    f"Event cancel skipped: user={payload.user_id} detail={detail}"
+                )
+                return
+
+        # Legacy ScheduledEvent RSVP system
         if emoji not in RSVP_EMOJIS:
             return
 
@@ -78,10 +119,73 @@ class KettleBot(discord.Client):
     async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
         """Remove RSVP when user removes reaction."""
         emoji = str(payload.emoji)
+
+        # New events system: removing ✅ = cancel signup
+        if emoji == "\u2705":
+            from asgiref.sync import sync_to_async
+
+            from events.discord import handle_reaction_cancel
+
+            success, detail = await sync_to_async(handle_reaction_cancel)(
+                str(payload.message_id), str(payload.user_id)
+            )
+            if success:
+                log.info(f"Event cancel via reaction remove: user={payload.user_id}")
+                return
+            elif detail != "not_event_message":
+                return
+
+        # Legacy ScheduledEvent RSVP system
         if emoji not in RSVP_EMOJIS:
             return
 
         await self._remove_rsvp(payload)
+
+    async def on_interaction(self, interaction: discord.Interaction):
+        """Route component and modal interactions to event signup handlers."""
+        custom_id = interaction.data.get("custom_id", "") if interaction.data else ""
+
+        if interaction.type == discord.InteractionType.component:
+            if custom_id.startswith("event_signup:"):
+                event_id = int(custom_id.split(":")[1])
+                from discordbot.components import SignupButton
+
+                button = SignupButton(event_id)
+                await button.callback(interaction)
+            elif custom_id.startswith("event_tentative:"):
+                event_id = int(custom_id.split(":")[1])
+                from discordbot.components import TentativeButton
+
+                button = TentativeButton(event_id)
+                await button.callback(interaction)
+            elif custom_id.startswith("event_decline:"):
+                event_id = int(custom_id.split(":")[1])
+                from discordbot.components import DeclineButton
+
+                button = DeclineButton(event_id)
+                await button.callback(interaction)
+            elif custom_id.startswith("event_notify:"):
+                event_id = int(custom_id.split(":")[1])
+                from discordbot.components import NotifyButton
+
+                button = NotifyButton(event_id)
+                await button.callback(interaction)
+            elif custom_id.startswith("rank_medal:"):
+                event_id = int(custom_id.split(":")[1])
+                from discordbot.components import MedalSelect
+
+                select = MedalSelect(event_id)
+                select._values = interaction.data.get("values", [])
+                await select.callback(interaction)
+            elif custom_id.startswith("rank_details:"):
+                parts = custom_id.split(":")
+                event_id = int(parts[1])
+                rank_status = parts[2]
+                from discordbot.components import RankDetailsButton
+
+                button = RankDetailsButton(event_id, rank_status)
+                await button.callback(interaction)
+        # Modal submissions are auto-dispatched by discord.py to Modal.on_submit
 
     async def _handle_rsvp(self, payload, status):
         """Create or update RSVP record."""

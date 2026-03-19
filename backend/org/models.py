@@ -1,6 +1,9 @@
 from django.db import models
 from django.utils import timezone
 
+from org.models_profiles import PlayerDeadlockProfile  # noqa: F401
+from org.models_profiles import PlayerDotaProfile  # noqa: F401
+
 
 class OrgUser(models.Model):
     """User's membership and MMR within an organization."""

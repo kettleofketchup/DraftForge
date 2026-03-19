@@ -110,7 +110,8 @@ class EventAPITests(EventTestCase):
         self._create_event()
         r = self.client.get(f"/api/events/?organization={self.org.pk}")
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(r.data), 1)
+        # Base class creates self.event for the same org, plus the one above
+        self.assertEqual(len(r.data), 2)
 
     def test_filter_by_state(self):
         self._create_event(state=EventState.SIGNUPS_OPEN)

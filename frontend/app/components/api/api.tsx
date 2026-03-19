@@ -134,10 +134,11 @@ export {
   getEventSignups, approveSignup, rejectSignup, confirmSignup, cancelSignup,
   getEventRepeaters, createEventRepeater, updateEventRepeater,
   getDiscordChannels,
+  getDiscordRoles,
   subscribeToRepeater, unsubscribeFromRepeater,
   getOrgEventDefaults,
   updateOrgEventDefaults,
 } from './eventsAPI';
 
-export type { EventRepeaterType, DiscordChannel, OrgEventDefaultsType } from './eventsAPI';
+export type { EventRepeaterType, DiscordChannel, DiscordRole, OrgEventDefaultsType } from './eventsAPI';
 export type { EventType, EventSignupType, EventTeamType } from '~/components/events/schemas';

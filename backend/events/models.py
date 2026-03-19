@@ -39,6 +39,7 @@ class SignupStatus(models.TextChoices):
     APPROVED = "approved", "Approved"
     CONFIRMED = "confirmed", "Confirmed"
     WAITLISTED = "waitlisted", "Waitlisted"
+    TENTATIVE = "tentative", "Tentative"
     REJECTED = "rejected", "Rejected"
     CANCELLED = "cancelled", "Cancelled"
 
@@ -206,6 +207,16 @@ class DiscordEventConfigMixin(models.Model):
     discord_announcement_hours = models.IntegerField(
         default=24,
         help_text="Hours before event to post announcement",
+    )
+    discord_announcement_role_ids = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of Discord role IDs to @ mention in the announcement",
+    )
+    discord_signup_role_ids = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of Discord role IDs to @ mention in the signup post",
     )
 
     class Meta:

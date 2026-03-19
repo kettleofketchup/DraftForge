@@ -40,6 +40,11 @@ app.conf.beat_schedule = {
         "task": "events.tasks.open_scheduled_signups",
         "schedule": 60.0,
     },
+    # Check for event reminders every 30 seconds
+    "check-event-reminders": {
+        "task": "events.tasks.check_event_reminders",
+        "schedule": 30.0,
+    },
 }
 
 

@@ -242,6 +242,14 @@ export interface DiscordChannel {
   type_label: string;
 }
 
+export interface DiscordRole {
+  id: string;
+  name: string;
+  color: number;
+  mentionable: boolean;
+  position: number;
+}
+
 export async function subscribeToRepeater(repeaterId: number): Promise<void> {
   await axios.post(`/events/repeaters/${repeaterId}/subscribe/`);
 }
@@ -259,4 +267,15 @@ export async function getDiscordChannels(
     `/discord/organizations/${orgId}/channels/${params}`
   );
   return data.channels;
+}
+
+export async function getDiscordRoles(
+  orgId: number,
+  refresh = false
+): Promise<DiscordRole[]> {
+  const params = refresh ? '?refresh=true' : '';
+  const { data } = await axios.get<{ roles: DiscordRole[] }>(
+    `/discord/organizations/${orgId}/roles/${params}`
+  );
+  return data.roles;
 }
