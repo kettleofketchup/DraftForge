@@ -215,6 +215,8 @@ def create_discord_scheduled_event(event_id):
     guild_id = event.organization.discord_server_id
     if not guild_id:
         return "Skipped: no discord_server_id on organization"
+    from datetime import timedelta
+
     import requests as req
 
     from discordbot.utils import DISCORD_API_BASE, _get_headers
@@ -225,6 +227,7 @@ def create_discord_scheduled_event(event_id):
         "name": title,
         "description": description[:1000],
         "scheduled_start_time": event.scheduled_at.isoformat(),
+        "scheduled_end_time": (event.scheduled_at + timedelta(hours=3)).isoformat(),
         "privacy_level": 2,
         "entity_type": 3,
         "entity_metadata": {"location": "DraftForge"},
