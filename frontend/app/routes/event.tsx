@@ -42,6 +42,7 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
+  Trash2,
   UserCheck,
   UserX,
 } from 'lucide-react';
@@ -268,6 +269,26 @@ export default function EventPage() {
                   Cancel Event
                 </DestructiveButton>
               )}
+
+            {isAdmin && (
+              <DestructiveButton
+                size="sm"
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to permanently delete this event? This cannot be undone.')) {
+                    actions.deleteEvent.mutate(undefined, {
+                      onSuccess: () => navigate(`/org/${event.organization}/events`),
+                    });
+                  }
+                }}
+                loading={actions.deleteEvent.isPending}
+                depth={false}
+                data-testid="event-delete-btn"
+                className="bg-gradient-to-r from-red-800 to-red-950 hover:from-red-700 hover:to-red-900 shadow-lg active:translate-y-0.5 w-full sm:w-auto"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Event
+              </DestructiveButton>
+            )}
           </div>
         </div>
 

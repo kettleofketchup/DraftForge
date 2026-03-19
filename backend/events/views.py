@@ -297,6 +297,26 @@ class EventViewSet(viewsets.ModelViewSet):
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    def perform_destroy(self, instance):
+        """Clean up tournament and Discord messages before deleting event."""
+        with transaction.atomic():
+            # Delete linked tournament
+            if instance.tournament:
+                tournament = instance.tournament
+                instance.tournament = None
+                instance.save(update_fields=["tournament", "updated_at"])
+                tournament.delete()
+
+            # Clean up Discord messages (announcements, signup posts)
+            from discordbot.models import DiscordMessageLog
+
+            DiscordMessageLog.objects.filter(
+                source__in=["event_announcement", "event_notice"],
+                source_id=instance.pk,
+            ).delete()
+
+            instance.delete()
+
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
         event = self.get_object()

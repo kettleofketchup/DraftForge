@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveSignup as approveSignupAPI,
   cancelEvent as cancelEventAPI,
+  deleteEvent as deleteEventAPI,
   restartTournament as restartTournamentAPI,
   cancelSignup as cancelSignupAPI,
   confirmSignup as confirmSignupAPI,
@@ -88,6 +89,13 @@ export function useEventActionMutation(eventId: number) {
       onSuccess: (data) => {
         queryClient.setQueryData(['event', eventId], data);
         queryClient.invalidateQueries({ queryKey: ['events'] });
+      },
+    }),
+    deleteEvent: useMutation({
+      mutationFn: () => deleteEventAPI(eventId),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['events'] });
+        queryClient.removeQueries({ queryKey: ['event', eventId] });
       },
     }),
     restartTournament: useMutation({
