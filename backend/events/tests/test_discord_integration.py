@@ -166,10 +166,17 @@ class RealEventAnnouncementTaskTest(TestCase):
         delivered = assert_discord_message_delivered(log)
         self.assertTrue(delivered)
 
-        # Verify bot added RSVP reactions
-        reactions = get_message_reactions(ANNOUNCEMENT_CHANNEL, log.discord_message_id)
-        self.assertIn("✅", reactions, f"Missing ✅ reaction. Found: {reactions}")
-        self.assertIn("❌", reactions, f"Missing ❌ reaction. Found: {reactions}")
+        # Verify message has interactive components (buttons) instead of reactions
+        from discordbot.test_utils import fetch_message
+
+        msg = fetch_message(ANNOUNCEMENT_CHANNEL, log.discord_message_id)
+        self.assertIsNotNone(msg)
+        components = msg.get("components", [])
+        self.assertTrue(
+            len(components) > 0,
+            f"Expected interactive components on announcement, got none. "
+            f"Message keys: {list(msg.keys())}",
+        )
 
 
 @unittest.skipUnless(HAS_MULTI_USER, SKIP_MULTI_USER)
@@ -179,6 +186,10 @@ class MultiUserReactionTest(TestCase):
     Requires DISCORD_TEST_BOT_2_TOKEN (and optionally DISCORD_TEST_BOT_3_TOKEN)
     set in backend/.env. Each token represents a different Discord bot user that
     simulates a player reacting to the event announcement.
+
+    Note: Announcements now use interactive buttons (components) instead of
+    emoji reactions. These tests verify that users can still add manual reactions
+    to component-based messages.
     """
 
     @classmethod
@@ -274,8 +285,8 @@ class MultiUserReactionTest(TestCase):
                 break
 
         self.assertIsNotNone(check_reaction, "✅ reaction not found on message")
-        # Main bot adds ✅ during announcement + each test bot adds ✅
-        expected_min = 1 + len(reacting_bots)
+        # Only test bots add reactions (main bot uses components, not reactions)
+        expected_min = len(reacting_bots)
         self.assertGreaterEqual(
             check_reaction["count"],
             expected_min,
