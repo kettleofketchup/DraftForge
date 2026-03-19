@@ -230,7 +230,8 @@ def sync_send_embed_with_components(
     """
     from .models import DiscordMessageLog
 
-    message_content = {"embeds": [embed]}
+    embeds = embed if isinstance(embed, list) else [embed]
+    message_content = {"embeds": embeds}
     if components:
         message_content["components"] = components
 
@@ -247,7 +248,7 @@ def sync_send_embed_with_components(
 
     log_entry = DiscordMessageLog.objects.create(
         channel_id=channel_id,
-        embed_data=embed,
+        embed_data=embeds[0] if embeds else {},
         source=source or "unknown",
         source_id=source_id,
     )
@@ -305,7 +306,7 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
     Args:
         channel_id: Discord channel ID
         message_id: Discord message ID
-        embed: Optional embed dict to replace
+        embed: Optional embed dict or list of embed dicts
         components: Optional components list to replace
 
     Returns:
@@ -315,7 +316,7 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
 
     payload = {}
     if embed:
-        payload["embeds"] = [embed]
+        payload["embeds"] = embed if isinstance(embed, list) else [embed]
     if components is not None:
         payload["components"] = components
 

@@ -59,7 +59,8 @@ def send_event_announcement(event_id):
     Otherwise sends a regular message to discord_announcement_channel_id.
     """
     from discordbot.utils import sync_send_embed_with_components
-    from events.discord import build_announcement_components, build_announcement_embed
+    from events.discord import build_announcement_components
+    from events.discord.embeds import build_announcement_embeds
 
     event = Event.objects.select_related("organization", "event_repeater").get(
         pk=event_id
@@ -67,7 +68,7 @@ def send_event_announcement(event_id):
     if not event.discord_announcement or not event.discord_announcement_channel_id:
         return "Skipped: announcement disabled"
 
-    embed = build_announcement_embed(event)
+    embeds = build_announcement_embeds(event)
     components = build_announcement_components(event)
     channel_id = event.discord_announcement_channel_id
 
@@ -80,7 +81,7 @@ def send_event_announcement(event_id):
     if event.discord_post_signups and event.discord_post_signups_channel_id:
         result = sync_send_embed_with_components(
             channel_id=post_channel,
-            embed=embed,
+            embed=embeds,
             components=components,
             source="event_announcement",
             source_id=event.pk,
@@ -98,7 +99,7 @@ def send_event_announcement(event_id):
     # Regular message to announcement channel
     sync_send_embed_with_components(
         channel_id=channel_id,
-        embed=embed,
+        embed=embeds,
         components=components,
         source="event_announcement",
         source_id=event.pk,
@@ -110,7 +111,8 @@ def send_event_announcement(event_id):
 def send_signup_update(event_id):
     """Edit the original announcement embed with updated signup lists."""
     from discordbot.utils import sync_edit_message
-    from events.discord import build_announcement_components, build_announcement_embed
+    from events.discord import build_announcement_components
+    from events.discord.embeds import build_announcement_embeds
 
     event = Event.objects.select_related("organization", "event_repeater").get(
         pk=event_id
@@ -132,7 +134,7 @@ def send_signup_update(event_id):
         )
         return "Skipped: no announcement message"
 
-    embed = build_announcement_embed(event)
+    embeds = build_announcement_embeds(event)
     components = build_announcement_components(event)
 
     # For forum threads, the message lives in the thread channel (not the forum channel).
@@ -147,7 +149,7 @@ def send_signup_update(event_id):
     sync_edit_message(
         channel_id=edit_channel_id,
         message_id=log_entry.discord_message_id,
-        embed=embed,
+        embed=embeds,
         components=components,
     )
     return f"Updated announcement for event {event.pk}"
