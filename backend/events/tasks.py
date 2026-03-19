@@ -52,41 +52,84 @@ def open_scheduled_signups():
 
 
 @shared_task
-def ensure_discord_announcements():
-    """Catch-up task: find events with Discord config that haven't been announced yet.
+def sync_discord_events():
+    """Reconciliation task: ensure Discord matches the DB for all active events.
 
-    Runs every 5 minutes via celery beat. Handles:
-    - Events where the announcement task failed or was never dispatched
-    - Events edited after creation to add Discord config
-    - Any gap where notify_event_announced wasn't called
+    Runs every 5 minutes via celery beat. Scans all active events and ensures:
+    1. Signup posts exist (forum thread or regular message)
+    2. Announcement notices exist (if announcement channel configured)
+    3. Discord scheduled events exist (if discord_create_event enabled)
+
+    Self-heals: catches failed dispatches, late config changes, events created
+    before the Discord feature, worker downtime, and any other gaps.
     """
+    from datetime import timedelta
+
     from discordbot.models import DiscordMessageLog
 
-    # Find events that should have announcements but don't
-    events = Event.objects.filter(
-        discord_announcement=True,
-        discord_announcement_channel_id__gt="",
-        state__in=[EventState.UPCOMING, EventState.SIGNUPS_OPEN],
-    ).exclude(
-        pk__in=DiscordMessageLog.objects.filter(
-            source="event_announcement", success=True
-        ).values_list("source_id", flat=True)
+    # Only process active events (not completed/cancelled) scheduled within 30 days
+    active_events = Event.objects.filter(
+        state__in=[EventState.UPCOMING, EventState.SIGNUPS_OPEN, EventState.ROLL_CALL],
+        scheduled_at__gte=timezone.now() - timedelta(days=1),
+        scheduled_at__lte=timezone.now() + timedelta(days=30),
+    ).select_related("organization", "event_repeater")
+
+    # Get all existing successful log entries in one query
+    existing_logs = set(
+        DiscordMessageLog.objects.filter(
+            success=True,
+            source__in=["event_announcement", "event_notice", "create_discord_event"],
+        ).values_list("source", "source_id")
     )
 
-    sent = 0
-    for event in events:
-        try:
-            send_event_announcement(event.pk)
-            sent += 1
-            logger.info("Catch-up announcement sent for event %s", event.pk)
-        except Exception:
-            logger.exception("Failed catch-up announcement for event %s", event.pk)
+    signup_posts_created = 0
+    notices_created = 0
+    discord_events_created = 0
 
-    if sent:
+    for event in active_events:
+        # 1. Signup post (forum thread or channel message)
+        if (
+            event.discord_announcement
+            and event.discord_announcement_channel_id
+            and ("event_announcement", event.pk) not in existing_logs
+        ):
+            try:
+                send_event_announcement(event.pk)
+                signup_posts_created += 1
+                logger.info("Sync: created signup post for event %s", event.pk)
+            except Exception:
+                logger.exception("Sync: failed signup post for event %s", event.pk)
+
+        # 2. Discord scheduled event
+        if (
+            event.discord_create_event
+            and event.organization.discord_server_id
+            and ("create_discord_event", event.pk) not in existing_logs
+        ):
+            try:
+                create_discord_scheduled_event(event.pk)
+                discord_events_created += 1
+                logger.info(
+                    "Sync: created Discord scheduled event for event %s", event.pk
+                )
+            except Exception:
+                logger.exception(
+                    "Sync: failed Discord scheduled event for event %s", event.pk
+                )
+
+    total = signup_posts_created + notices_created + discord_events_created
+    if total:
         logger.info(
-            "ensure_discord_announcements: sent %d catch-up announcements", sent
+            "sync_discord_events: %d signup posts, %d notices, %d scheduled events",
+            signup_posts_created,
+            notices_created,
+            discord_events_created,
         )
-    return f"Checked {events.count()} events, sent {sent} announcements"
+    return (
+        f"Scanned {active_events.count()} events: "
+        f"{signup_posts_created} signup posts, "
+        f"{discord_events_created} scheduled events created"
+    )
 
 
 @shared_task
