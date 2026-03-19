@@ -58,16 +58,19 @@ def _user_list(signups, max_items=20):
     return "\n".join(lines) if lines else "*None yet*"
 
 
-def _user_list_quoted(signups, max_items=20):
-    """Build a blockquoted list of user nicknames from signups."""
+def _user_list_quoted(signups, max_items=20, numbered=True):
+    """Build a blockquoted numbered list of user nicknames from signups."""
     lines = []
-    for s in signups[:max_items]:
+    for i, s in enumerate(signups[:max_items], 1):
         name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-        lines.append(f"> {name}")
+        if numbered:
+            lines.append(f"> {i}. {name}")
+        else:
+            lines.append(f"> {name}")
     remaining = signups.count() - max_items
     if remaining > 0:
         lines.append(f"> *and {remaining} more...*")
-    return "\n".join(lines) if lines else "> *None yet*"
+    return "\n".join(lines) if lines else "> *—*"
 
 
 def build_announcement_embeds(event):
@@ -257,12 +260,12 @@ def build_announcement_v2(event):
         ]
     )
     active_lines = []
-    for s in active[:20]:
+    for i, s in enumerate(active[:20], 1):
         name = s.user.nickname or s.user.username or f"User {s.user.pk}"
         if s.status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED):
-            active_lines.append(f"> {name}")
+            active_lines.append(f"> {i}. {name}")
         else:
-            active_lines.append(f"> *{name} (pending)*")
+            active_lines.append(f"> {i}. *{name} (pending)*")
     if active.count() > 20:
         active_lines.append(f"> *and {active.count() - 20} more...*")
     count = active.count()
@@ -296,6 +299,19 @@ def build_announcement_v2(event):
             "inline": True,
         }
     )
+
+    # Waitlisted
+    waitlisted = signups.filter(status=SignupStatus.WAITLISTED).order_by(
+        "waitlist_position"
+    )
+    if waitlisted.exists():
+        fields.append(
+            {
+                "name": f"\U0001f4cb Waitlisted ({waitlisted.count()})",
+                "value": _user_list_quoted(waitlisted),
+                "inline": True,
+            }
+        )
 
     event_url = f"{SITE_URL}/org/{event.organization_id}/events/{event.pk}"
 

@@ -105,10 +105,18 @@ signup3 = EventSignup.objects.create(
 signup4 = EventSignup.objects.create(
     event=event, user=player4, status=SignupStatus.CANCELLED
 )
+positions5 = PositionsModel.objects.create()
+player5 = CustomUser.objects.create(
+    username="player_five", nickname="WaitingWendy", positions=positions5
+)
+signup5 = EventSignup.objects.create(
+    event=event, user=player5, status=SignupStatus.WAITLISTED, waitlist_position=1
+)
 print(f"Signup 1: {player1.nickname} - {signup1.status}")
 print(f"Signup 2: {player2.nickname} - {signup2.status}")
 print(f"Signup 3: {player3.nickname} - {signup3.status}")
 print(f"Signup 4: {player4.nickname} - {signup4.status}")
+print(f"Signup 5: {player5.nickname} - {signup5.status}")
 print()
 
 # Send the announcement
