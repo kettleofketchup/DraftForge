@@ -206,10 +206,18 @@ def build_announcement_v2(event):
     if event.discord_event_info:
         desc += f"\n\n{event.discord_event_info}"
 
-    # Discord timestamps — rendered client-side in user's local timezone
-    unix_ts = int(event.scheduled_at.timestamp())
-    # D = date without year, t = short time, R = relative
-    when_value = f"{_discord_timestamp(event.scheduled_at, style='D')} {_discord_timestamp(event.scheduled_at, style='t')}\n> {_discord_timestamp(event.scheduled_at, style='R')}"
+    # Line 1: "Thursday, March 20" (day of week + date, no year)
+    # Built manually since Discord has no format for this
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(event.timezone) if event.timezone else None
+    local_dt = event.scheduled_at.astimezone(tz) if tz else event.scheduled_at
+    date_line = local_dt.strftime("%A, %B %-d")  # "Thursday, March 20"
+
+    # Line 2: "6:00 PM EST" in event's configured timezone
+    time_line = local_dt.strftime("%-I:%M %p %Z")  # "6:00 PM EST"
+
+    when_value = f"{date_line}\n> {time_line}"
 
     # Top row: When | Max Players | Event Page (all inline)
     fields = [
