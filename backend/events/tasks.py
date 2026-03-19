@@ -53,14 +53,13 @@ def open_scheduled_signups():
 
 @shared_task
 def send_event_announcement(event_id):
-    """Send event announcement with interactive signup components.
+    """Send event announcement using Components V2 layout.
 
-    If discord_post_signups_channel_id is a forum channel, creates a forum thread.
-    Otherwise sends a regular message to discord_announcement_channel_id.
+    Uses Discord Components V2 (flag 32768) for rich layout with separators,
+    containers, and text displays. Falls back to embed-based message if V2 fails.
     """
-    from discordbot.utils import sync_send_embed_with_components
-    from events.discord import build_announcement_components
-    from events.discord.embeds import build_announcement_embeds
+    from discordbot.utils import sync_send_v2_message
+    from events.discord.embeds import build_announcement_v2
 
     event = Event.objects.select_related("organization", "event_repeater").get(
         pk=event_id
@@ -68,21 +67,15 @@ def send_event_announcement(event_id):
     if not event.discord_announcement or not event.discord_announcement_channel_id:
         return "Skipped: announcement disabled"
 
-    embeds = build_announcement_embeds(event)
-    components = build_announcement_components(event)
+    v2_payload = build_announcement_v2(event)
     channel_id = event.discord_announcement_channel_id
-
-    # If a separate signups channel is configured, try it as a forum first.
-    # Forum channels create threaded posts; text channels get regular messages.
-    post_channel = event.discord_post_signups_channel_id or channel_id
     thread_name = event.discord_event_title or event.name
 
-    # Try forum thread on the signups channel
+    # Try forum thread first if signups channel is configured
     if event.discord_post_signups and event.discord_post_signups_channel_id:
-        result = sync_send_embed_with_components(
-            channel_id=post_channel,
-            embed=embeds,
-            components=components,
+        result = sync_send_v2_message(
+            channel_id=event.discord_post_signups_channel_id,
+            v2_payload=v2_payload,
             source="event_announcement",
             source_id=event.pk,
             forum_thread_name=thread_name,
@@ -90,17 +83,15 @@ def send_event_announcement(event_id):
         if result:
             return f"Announced event {event.pk} (forum thread: {result.get('id')})"
 
-        # Forum failed — fall back to announcement channel as regular message
         logger.info(
             "Forum thread failed for event %s, falling back to announcement channel",
             event.pk,
         )
 
     # Regular message to announcement channel
-    sync_send_embed_with_components(
+    sync_send_v2_message(
         channel_id=channel_id,
-        embed=embeds,
-        components=components,
+        v2_payload=v2_payload,
         source="event_announcement",
         source_id=event.pk,
     )
@@ -109,10 +100,9 @@ def send_event_announcement(event_id):
 
 @shared_task
 def send_signup_update(event_id):
-    """Edit the original announcement embed with updated signup lists."""
-    from discordbot.utils import sync_edit_message
-    from events.discord import build_announcement_components
-    from events.discord.embeds import build_announcement_embeds
+    """Edit the original announcement with updated signup lists (V2)."""
+    from discordbot.utils import sync_edit_v2_message
+    from events.discord.embeds import build_announcement_v2
 
     event = Event.objects.select_related("organization", "event_repeater").get(
         pk=event_id
@@ -134,23 +124,19 @@ def send_signup_update(event_id):
         )
         return "Skipped: no announcement message"
 
-    embeds = build_announcement_embeds(event)
-    components = build_announcement_components(event)
+    v2_payload = build_announcement_v2(event)
 
-    # For forum threads, the message lives in the thread channel (not the forum channel).
-    # The thread ID is stored in response_data["id"] from forum thread creation.
+    # For forum threads, the message lives in the thread channel
     edit_channel_id = log_entry.channel_id
     if log_entry.response_data and log_entry.response_data.get("id"):
-        # This was a forum thread — use the thread channel ID for editing
         thread_id = log_entry.response_data.get("id")
         if log_entry.response_data.get("message"):
             edit_channel_id = thread_id
 
-    sync_edit_message(
+    sync_edit_v2_message(
         channel_id=edit_channel_id,
         message_id=log_entry.discord_message_id,
-        embed=embeds,
-        components=components,
+        v2_payload=v2_payload,
     )
     return f"Updated announcement for event {event.pk}"
 

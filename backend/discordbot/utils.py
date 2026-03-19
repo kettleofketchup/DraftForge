@@ -300,6 +300,101 @@ def sync_send_embed_with_components(
         return None
 
 
+def sync_send_v2_message(
+    channel_id, v2_payload, source=None, source_id=None, forum_thread_name=None
+):
+    """Send a Components V2 message (no embeds, full component layout).
+
+    Args:
+        channel_id: Discord channel ID (text or forum)
+        v2_payload: Dict with 'flags' and 'components' keys
+        source: Log source identifier
+        source_id: Log source PK
+        forum_thread_name: If set, create a forum thread
+
+    Returns:
+        dict: API response or None on error
+    """
+    from .models import DiscordMessageLog
+
+    if forum_thread_name:
+        url = f"{DISCORD_API_BASE}/channels/{channel_id}/threads"
+        payload = {
+            "name": forum_thread_name[:100],
+            "message": v2_payload,
+        }
+    else:
+        url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages"
+        payload = v2_payload
+
+    log_entry = DiscordMessageLog.objects.create(
+        channel_id=channel_id,
+        embed_data={
+            "v2": True,
+            "component_count": len(v2_payload.get("components", [])),
+        },
+        source=source or "unknown",
+        source_id=source_id,
+    )
+
+    try:
+        response = requests.post(url, json=payload, headers=_get_headers())
+        response_data = response.json()
+        log_entry.status_code = response.status_code
+        log_entry.response_data = response_data
+        response.raise_for_status()
+
+        if forum_thread_name and response_data.get("message"):
+            log_entry.discord_message_id = response_data["message"].get("id")
+            log.info(
+                "Created V2 forum thread '%s' in %s (thread=%s)",
+                forum_thread_name,
+                channel_id,
+                response_data.get("id"),
+            )
+        else:
+            log_entry.discord_message_id = response_data.get("id")
+            log.info("Sent V2 message to %s", channel_id)
+
+        log_entry.success = True
+        log_entry.save()
+        return response_data
+    except requests.RequestException as e:
+        log_entry.status_code = (
+            getattr(e.response, "status_code", None)
+            if hasattr(e, "response") and e.response
+            else log_entry.status_code
+        )
+        try:
+            log_entry.response_data = (
+                e.response.json() if hasattr(e, "response") and e.response else None
+            )
+        except Exception:
+            pass
+        log_entry.save()
+        log.error("Failed to send V2 message to %s: %s", channel_id, e)
+        return None
+
+
+def sync_edit_v2_message(channel_id, message_id, v2_payload):
+    """Edit a Components V2 message.
+
+    Args:
+        channel_id: Channel or thread ID where the message lives
+        message_id: Message ID to edit
+        v2_payload: Dict with 'flags' and 'components' keys
+    """
+    url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}"
+    try:
+        response = requests.patch(url, json=v2_payload, headers=_get_headers())
+        response.raise_for_status()
+        log.info("Edited V2 message %s in %s", message_id, channel_id)
+        return response.json()
+    except requests.RequestException as e:
+        log.error("Failed to edit V2 message %s: %s", message_id, e)
+        return None
+
+
 def sync_edit_message(channel_id, message_id, embed=None, components=None):
     """Edit an existing Discord message (embed and/or components).
 

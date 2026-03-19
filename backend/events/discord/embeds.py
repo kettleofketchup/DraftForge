@@ -177,6 +177,120 @@ def build_announcement_embed(event):
     return combined
 
 
+def build_announcement_v2(event):
+    """Build a Components V2 message payload for event announcement.
+
+    Returns the full message dict with flags + components (no embeds).
+    Uses Container with accent color, TextDisplay for content,
+    Separators for visual dividers, and ActionRows for buttons.
+    """
+    from events.discord.components import build_announcement_components
+
+    title = event.discord_event_title or event.name
+    desc = event.discord_event_description or event.description or "No description."
+
+    if event.discord_event_info:
+        desc += f"\n\n{event.discord_event_info}"
+
+    # Event details line
+    details_parts = [f"**When:** {_discord_timestamp(event.scheduled_at, style='f')}"]
+    details_parts.append(f"**Max Players:** {event.max_players or 'Unlimited'}")
+    url = _event_url(event)
+    if url:
+        details_parts.append(f"**[Event Page]({url})**")
+    details_line = "  \u2022  ".join(details_parts)
+
+    # Build signup lists
+    signups = EventSignup.objects.filter(event=event).select_related("user")
+
+    active = signups.exclude(
+        status__in=[
+            SignupStatus.CANCELLED,
+            SignupStatus.REJECTED,
+            SignupStatus.WAITLISTED,
+            SignupStatus.TENTATIVE,
+        ]
+    )
+    count = active.count()
+    max_display = str(event.max_players) if event.max_players else "\u221e"
+    active_lines = [f"### \u2705 Signed Up ({count}/{max_display})"]
+    if active.exists():
+        for s in active[:20]:
+            icon = (
+                "\u2705"
+                if s.status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED)
+                else "\u23f3"
+            )
+            name = s.user.nickname or s.user.username or f"User {s.user.pk}"
+            active_lines.append(f"{icon} {name}")
+        if active.count() > 20:
+            active_lines.append(f"*and {active.count() - 20} more...*")
+    else:
+        active_lines.append("*None yet*")
+
+    declined = signups.filter(
+        status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED]
+    )
+    declined_lines = [f"### \u274c Declined ({declined.count()})"]
+    if declined.exists():
+        for s in declined[:20]:
+            name = s.user.nickname or s.user.username or f"User {s.user.pk}"
+            declined_lines.append(name)
+    else:
+        declined_lines.append("*None yet*")
+
+    tentative = signups.filter(status=SignupStatus.TENTATIVE)
+    tentative_lines = [f"### \u2753 Tentative ({tentative.count()})"]
+    if tentative.exists():
+        for s in tentative[:20]:
+            name = s.user.nickname or s.user.username or f"User {s.user.pk}"
+            tentative_lines.append(name)
+    else:
+        tentative_lines.append("*None yet*")
+
+    # Build the V2 components
+    container_children = [
+        # Title
+        {"type": 10, "content": f"# \U0001f4e2 {title}"},
+        # Description
+        {"type": 10, "content": desc},
+        # Separator
+        {"type": 14, "divider": True, "spacing": 1},
+        # Event details
+        {"type": 10, "content": details_line},
+        # Separator
+        {"type": 14, "divider": True, "spacing": 1},
+        # Signup lists — three TextDisplays side by side won't work,
+        # so combine into one formatted block
+        {
+            "type": 10,
+            "content": "\n".join(active_lines),
+        },
+        {
+            "type": 10,
+            "content": "\n".join(declined_lines),
+        },
+        {
+            "type": 10,
+            "content": "\n".join(tentative_lines),
+        },
+    ]
+
+    container = {
+        "type": 17,
+        "accent_color": COLOR_ANNOUNCEMENT,
+        "components": container_children,
+    }
+
+    # Action rows (outside the container)
+    action_rows = build_announcement_components(event)
+
+    return {
+        "flags": 1 << 15,  # IS_COMPONENTS_V2
+        "components": [container] + action_rows,
+    }
+
+
 def build_signup_update_embed(event):
     active, confirmed = _signup_counts(event)
     max_display = str(event.max_players) if event.max_players else "\u221e"
