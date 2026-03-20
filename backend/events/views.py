@@ -186,12 +186,26 @@ class EventViewSet(viewsets.ModelViewSet):
 
         # If Discord config is set but no announcement has been sent yet, send it now.
         # This handles the case where an admin edits an event to add Discord config.
-        from discordbot.models import DiscordMessageLog
-
         if event.discord_announcement and event.discord_announcement_channel_id:
-            has_announcement = DiscordMessageLog.objects.filter(
-                source="event_announcement", source_id=event.pk, success=True
-            ).exists()
+            from discordbot.models import DiscordEvent
+
+            try:
+                discord_event = event.discord_event
+                has_announcement = (
+                    discord_event.signup_message
+                    and discord_event.signup_message.has_posted
+                )
+            except DiscordEvent.DoesNotExist:
+                has_announcement = False
+
+            # Fall back to DiscordMessageLog for pre-migration events
+            if not has_announcement:
+                from discordbot.models import DiscordMessageLog
+
+                has_announcement = DiscordMessageLog.objects.filter(
+                    source="event_announcement", source_id=event.pk, success=True
+                ).exists()
+
             if not has_announcement:
                 from events.discord import (
                     notify_create_discord_event,
@@ -307,7 +321,16 @@ class EventViewSet(viewsets.ModelViewSet):
                 instance.save(update_fields=["tournament", "updated_at"])
                 tournament.delete()
 
-            # Clean up Discord messages (announcements, signup posts)
+            # Delete DiscordEvent (cascades to messages, logs, DMs)
+            from discordbot.models import DiscordEvent
+
+            try:
+                discord_event = instance.discord_event
+                discord_event.delete()
+            except DiscordEvent.DoesNotExist:
+                pass
+
+            # Clean up legacy DiscordMessageLog entries for pre-migration data
             from discordbot.models import DiscordMessageLog
 
             DiscordMessageLog.objects.filter(
