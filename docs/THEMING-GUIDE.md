@@ -312,6 +312,35 @@ Do **not** use `<Button>` directly for user-facing actions. Reserve `<Button>` f
 </div>
 ```
 
+### User Avatars
+
+**ALWAYS use `<UserAvatar>` component** for displaying user avatars. Handles Discord CDN, fallback generation, online indicators, and multiple sizes.
+
+```tsx
+import { UserAvatar } from '~/components/user/UserAvatar';
+
+// From a UserType object
+<UserAvatar user={user} size="md" />
+
+// From partial data (e.g., DM recipient)
+<UserAvatar user={{ nickname: "Player", discordId: "123" }} size="sm" />
+
+// With online indicator
+<UserAvatar user={user} size="lg" showOnline online />
+
+// Captain border
+<UserAvatar user={captain} size="md" border="captain" />
+
+// Direct URL
+<UserAvatar src="https://cdn.discordapp.com/avatars/..." size="sm" />
+```
+
+**Sizes:** `tiny` (16px) | `xs` (20px) | `sm` (24px) | `md` (32px) | `lg` (40px) | `xl` (48px)
+
+**Borders:** `none` | `primary` (violet ring) | `muted` (subtle) | `captain` (gold ring)
+
+**DO NOT** use `<img>` with `AvatarUrl()` directly — use `<UserAvatar>` which wraps `AvatarUrl` with proper loading states, fallback initials, and memoization.
+
 ---
 
 ## Navbar Styling
