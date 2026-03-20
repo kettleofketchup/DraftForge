@@ -22,10 +22,15 @@ def verify_discord_signature(request) -> bool:
     Returns True if signature is valid, False otherwise.
     """
     try:
-        from nacl.exceptions import BadSignature
         from nacl.signing import VerifyKey
-    except ImportError:
-        log.error("PyNaCl not installed - cannot verify Discord signatures")
+
+        # PyNaCl 1.6+ uses BadSignatureError, older versions use BadSignature
+        try:
+            from nacl.exceptions import BadSignatureError as BadSignature
+        except ImportError:
+            from nacl.exceptions import BadSignature
+    except ImportError as e:
+        log.error("PyNaCl not installed - cannot verify Discord signatures: %s", e)
         return False
 
     public_key = getattr(settings, "DISCORD_PUBLIC_KEY", None)
