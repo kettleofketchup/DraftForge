@@ -28,9 +28,7 @@ def _discord_timestamp(dt, style="F"):
 
 
 def _event_url(event):
-    return (
-        f"{SITE_URL}/org/{event.organization_id}/events/{event.pk}" if SITE_URL else ""
-    )
+    return f"{SITE_URL}/events/{event.pk}" if SITE_URL else ""
 
 
 def _signup_counts(event):
@@ -313,7 +311,7 @@ def build_announcement_v2(event):
             }
         )
 
-    event_url = f"{SITE_URL}/org/{event.organization_id}/events/{event.pk}"
+    event_url = f"{SITE_URL}/events/{event.pk}"
 
     # Embed 1: Title + description + logo thumbnail
     title_embed = {

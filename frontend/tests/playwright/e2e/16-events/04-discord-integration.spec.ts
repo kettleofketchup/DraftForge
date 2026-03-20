@@ -72,7 +72,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await page.waitForTimeout(2000);
 
     // 4. Navigate to the event page
-    await visitAndWaitForHydration(page, `/org/${eventInfo.orgPk}/events/${eventId}`);
+    await visitAndWaitForHydration(page, `/events/${eventId}`);
 
     // 5. Click the Discord tab
     await page.getByTestId('event-tab-discord').click();
@@ -91,7 +91,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
 
   test('Discord tab shows "not configured" when no Discord config', async ({ context, page }) => {
     // Navigate to the existing E2E Signup Event (which has no Discord config)
-    await visitAndWaitForHydration(page, `/org/${eventInfo.orgPk}/events/${eventInfo.pk}`);
+    await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
 
     // Click Discord tab
     await page.getByTestId('event-tab-discord').click();
