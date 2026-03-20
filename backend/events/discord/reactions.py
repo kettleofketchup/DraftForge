@@ -17,23 +17,39 @@ def handle_reaction_signup(discord_message_id, discord_user_id):
     Returns (success: bool, detail: str) tuple.
     """
     from app.models import CustomUser
-    from discordbot.models import DiscordMessageLog
+    from discordbot.models import DiscordEventMsgSignup
     from events.models import Event
     from events.services import process_rsvp
 
     # 1. Find the event from the announcement message
-    log_entry = DiscordMessageLog.objects.filter(
-        discord_message_id=str(discord_message_id),
-        source="event_announcement",
-        success=True,
-    ).first()
-    if not log_entry:
-        return False, "not_event_message"
+    # Try new model first
+    signup_msg = (
+        DiscordEventMsgSignup.objects.filter(
+            message_id=str(discord_message_id),
+            has_posted=True,
+        )
+        .select_related("event")
+        .first()
+    )
 
-    try:
-        event = Event.objects.get(pk=log_entry.source_id)
-    except Event.DoesNotExist:
-        return False, "event_not_found"
+    if signup_msg:
+        event = signup_msg.event
+    else:
+        # Fall back to DiscordMessageLog for pre-migration messages
+        from discordbot.models import DiscordMessageLog
+
+        log_entry = DiscordMessageLog.objects.filter(
+            discord_message_id=str(discord_message_id),
+            source="event_announcement",
+            success=True,
+        ).first()
+        if not log_entry:
+            return False, "not_event_message"
+
+        try:
+            event = Event.objects.get(pk=log_entry.source_id)
+        except Event.DoesNotExist:
+            return False, "event_not_found"
 
     # 2. Find the user by Discord ID
     try:
@@ -67,22 +83,38 @@ def handle_reaction_cancel(discord_message_id, discord_user_id):
     Returns (success: bool, detail: str) tuple.
     """
     from app.models import CustomUser
-    from discordbot.models import DiscordMessageLog
+    from discordbot.models import DiscordEventMsgSignup
     from events.models import Event, EventSignup
     from events.services import cancel_signup
 
-    log_entry = DiscordMessageLog.objects.filter(
-        discord_message_id=str(discord_message_id),
-        source="event_announcement",
-        success=True,
-    ).first()
-    if not log_entry:
-        return False, "not_event_message"
+    # Try new model first
+    signup_msg = (
+        DiscordEventMsgSignup.objects.filter(
+            message_id=str(discord_message_id),
+            has_posted=True,
+        )
+        .select_related("event")
+        .first()
+    )
 
-    try:
-        event = Event.objects.get(pk=log_entry.source_id)
-    except Event.DoesNotExist:
-        return False, "event_not_found"
+    if signup_msg:
+        event = signup_msg.event
+    else:
+        # Fall back to DiscordMessageLog for pre-migration messages
+        from discordbot.models import DiscordMessageLog
+
+        log_entry = DiscordMessageLog.objects.filter(
+            discord_message_id=str(discord_message_id),
+            source="event_announcement",
+            success=True,
+        ).first()
+        if not log_entry:
+            return False, "not_event_message"
+
+        try:
+            event = Event.objects.get(pk=log_entry.source_id)
+        except Event.DoesNotExist:
+            return False, "event_not_found"
 
     try:
         user = CustomUser.objects.get(discordId=str(discord_user_id))
