@@ -359,6 +359,39 @@ class EventViewSet(viewsets.ModelViewSet):
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=True, methods=["get"])
+    def discord(self, request, pk=None):
+        """Get Discord state for this event (org staff only).
+        GET /api/events/<pk>/discord/
+        """
+        event = self.get_object()
+        if not has_org_staff_access(request.user, event.organization):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+
+        from discordbot.models import DiscordEvent
+
+        try:
+            discord_event = event.discord_event
+        except DiscordEvent.DoesNotExist:
+            return Response({"detail": "No Discord state for this event"}, status=404)
+
+        from cacheops import cached_as
+
+        from discordbot.models import DiscordEventDM, DiscordEventLog
+        from discordbot.serializers_discord_event import DiscordEventDetailSerializer
+
+        @cached_as(
+            DiscordEvent,
+            DiscordEventLog,
+            DiscordEventDM,
+            extra=f"discord_state:{pk}",
+            timeout=60,
+        )
+        def get_data():
+            return DiscordEventDetailSerializer(discord_event).data
+
+        return Response(get_data())
+
     @action(detail=True, methods=["post"])
     def restart_tournament(self, request, pk=None):
         """Delete current tournament, create fresh one, reopen signups."""
