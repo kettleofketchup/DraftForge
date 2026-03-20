@@ -1199,3 +1199,18 @@ def bulk_rsvp_for_event(request, event_pk):
         except (CustomUser.DoesNotExist, ValueError) as e:
             results.append({"user_pk": pk, "error": str(e)})
     return Response({"results": results, "count": len(results)})
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def sync_discord_events_test(request):
+    """TEST ONLY: Trigger sync_discord_events synchronously."""
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from events.tasks import sync_discord_events
+
+    result = sync_discord_events()
+    return Response({"message": result})

@@ -129,3 +129,13 @@ export async function loginEventPlayer(context: BrowserContext) {
   if (!resp.ok()) throw new Error(`Login event player failed: ${resp.status()}`);
   return resp.json();
 }
+
+/** Trigger sync_discord_events synchronously. */
+export async function syncDiscordEvents(context: BrowserContext): Promise<string> {
+  const resp = await context.request.post(`${API_URL}/tests/events/sync-discord/`);
+  if (!resp.ok()) {
+    throw new Error(`Discord sync trigger failed: ${resp.status()}`);
+  }
+  const data = await resp.json();
+  return data.message;
+}

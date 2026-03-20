@@ -24,6 +24,7 @@ from .test_auth import (
     reset_events_demo,
     reset_org_admin_team,
     reset_tournament_by_key,
+    sync_discord_events_test,
 )
 from .test_csv import reset_csv_import
 from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
@@ -182,6 +183,12 @@ urlpatterns = [
         "events/<int:event_pk>/bulk-rsvp/",
         bulk_rsvp_for_event,
         name="bulk-rsvp",
+    ),
+    # Discord events sync (synchronous trigger)
+    path(
+        "events/sync-discord/",
+        sync_discord_events_test,
+        name="sync-discord-events",
     ),
     # Demo tournament endpoints (for video recording)
     # More specific paths first to avoid <str:key> catching them

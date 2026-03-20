@@ -119,6 +119,7 @@ export {
   loginEventPlayer,
   postWithCsrf,
   patchWithCsrf,
+  syncDiscordEvents,
   EVENTS_ORG_NAME,
   EVENTS_EVENT_NAME,
   type EventInfo,
