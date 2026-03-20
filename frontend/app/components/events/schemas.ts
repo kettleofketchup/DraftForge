@@ -215,3 +215,57 @@ export const createEventInputSchema = z.object({
 }).merge(discordConfigSchema);
 
 export type CreateEventInput = z.infer<typeof createEventInputSchema>;
+
+export const discordEventMsgSchema = z.object({
+  id: z.number(),
+  channel_id: z.string(),
+  channel_type: z.string(),
+  message_id: z.string(),
+  thread_id: z.string(),
+  has_posted: z.boolean(),
+  message_last_updated: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const discordEventLogSchema = z.object({
+  id: z.number(),
+  action: z.string(),
+  target_type: z.string(),
+  message_id: z.string(),
+  status_code: z.number().nullable(),
+  error_message: z.string(),
+  success: z.boolean(),
+  created_at: z.string(),
+});
+
+export const discordEventDMSchema = z.object({
+  id: z.number(),
+  dm_type: z.number(),
+  dm_type_display: z.string(),
+  username: z.string().nullable(),
+  nickname: z.string().nullable(),
+  discord_user_id: z.string().nullable(),
+  can_send: z.boolean(),
+  message_id: z.string(),
+  sent_at: z.string().nullable(),
+  delivered: z.boolean(),
+  responded: z.boolean(),
+  response_text: z.string(),
+  responded_at: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export const discordEventStateSchema = z.object({
+  id: z.number(),
+  guild_id: z.string(),
+  scheduled_event_id: z.string(),
+  signup_message: discordEventMsgSchema.nullable(),
+  announcement: discordEventMsgSchema.nullable(),
+  logs: z.array(discordEventLogSchema),
+  dms: z.array(discordEventDMSchema),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export type DiscordEventState = z.infer<typeof discordEventStateSchema>;

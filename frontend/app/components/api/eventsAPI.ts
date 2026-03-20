@@ -258,6 +258,15 @@ export async function unsubscribeFromRepeater(repeaterId: number): Promise<void>
   await axios.post(`/events/repeaters/${repeaterId}/unsubscribe/`);
 }
 
+export async function getEventDiscordState(eventId: number) {
+  try {
+    const { data } = await axios.get(`/events/${eventId}/discord/`);
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 export async function getDiscordChannels(
   orgId: number,
   refresh = false

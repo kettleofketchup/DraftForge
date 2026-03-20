@@ -51,6 +51,7 @@ import { toast } from 'sonner';
 import { Badge } from '~/components/ui/badge';
 import { EventStateBadge } from '~/components/events';
 import { EventState } from '~/components/events/schemas';
+import { DiscordLogSection } from '~/components/events/DiscordLogSection';
 import type { EventSignupType } from '~/components/events/schemas';
 import { PrimaryButton, SecondaryButton, DestructiveButton } from '~/components/ui/buttons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
@@ -159,8 +160,9 @@ export default function EventPage() {
       { value: 'details', label: 'Details' },
       { value: 'signups', label: `${activeSignups.length} Signups` },
       { value: 'waitlist', label: `${waitlistedSignups.length} Waitlist` },
+      ...(isAdmin ? [{ value: 'discord', label: 'Discord' }] : []),
     ],
-    [activeSignups.length, waitlistedSignups.length],
+    [activeSignups.length, waitlistedSignups.length, isAdmin],
   );
 
   usePageNav(event ? pageNavOptions : null, activeTab, handleTabChange);
@@ -333,6 +335,11 @@ export default function EventPage() {
             <TabsTrigger value="waitlist" data-testid="event-tab-waitlist">
               Waitlist ({waitlistedSignups.length})
             </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger value="discord" data-testid="event-tab-discord">
+                Discord
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="details">
@@ -354,6 +361,12 @@ export default function EventPage() {
               signupActions={signupActions}
             />
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="discord">
+              <DiscordLogSection eventId={event.id} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 

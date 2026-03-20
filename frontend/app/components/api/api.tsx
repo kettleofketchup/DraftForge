@@ -133,6 +133,7 @@ export {
   restartTournament,
   getEventSignups, approveSignup, rejectSignup, confirmSignup, cancelSignup,
   getEventRepeaters, createEventRepeater, updateEventRepeater,
+  getEventDiscordState,
   getDiscordChannels,
   getDiscordRoles,
   subscribeToRepeater, unsubscribeFromRepeater,
