@@ -64,14 +64,27 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     const event = await createResp.json();
     const eventId = event.id;
 
-    // 2. Trigger discord sync (this runs synchronously in test)
-    const syncResult = await syncDiscordEvents(context);
-    expect(syncResult).toContain('signup posts');
+    // 2. Wait for Celery worker to process send_event_announcement
+    // Poll the Discord state API until it shows up (max 30s)
+    let discordReady = false;
+    for (let i = 0; i < 15; i++) {
+      await page.waitForTimeout(2000);
+      const discordResp = await context.request.get(`${API_URL}/events/${eventId}/discord/`);
+      if (discordResp.ok()) {
+        const data = await discordResp.json();
+        if (data.signup_message?.has_posted) {
+          discordReady = true;
+          break;
+        }
+      }
+      // Trigger sync as backup on iteration 5
+      if (i === 5) {
+        await syncDiscordEvents(context);
+      }
+    }
+    expect(discordReady).toBeTruthy();
 
-    // 3. Wait briefly for async processing
-    await page.waitForTimeout(2000);
-
-    // 4. Navigate to the event page
+    // 3. Navigate to the event page
     await visitAndWaitForHydration(page, `/events/${eventId}`);
 
     // 5. Click the Discord tab
