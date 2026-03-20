@@ -109,3 +109,181 @@ class DiscordMessageLog(models.Model):
 
     def __str__(self):
         return f"{self.source}:{self.source_id} → {self.channel_id} ({'ok' if self.success else 'fail'})"
+
+
+# ---------------------------------------------------------------------------
+# Discord Event models
+# ---------------------------------------------------------------------------
+
+
+class ChannelType(models.TextChoices):
+    TEXT = "text", "Text"
+    FORUM = "forum", "Forum"
+    ANNOUNCEMENT = "announcement", "Announcement"
+
+
+class DMType(models.IntegerChoices):
+    SIGNUP_REMINDER = 1, "Signup Reminder"
+    PROFILE_UPDATE = 2, "Profile Update Required"
+    ATTENDANCE_CONFIRM = 3, "Attendance Confirmation"
+    TEAM_DRAFT_STARTED = 4, "Team Draft Started"
+    HERO_DRAFT_STARTED = 5, "Hero Draft Started"
+    TOURNAMENT_UPDATE = 6, "Tournament Update"
+    EVENT_CANCELLED = 7, "Event Cancelled"
+
+
+class DiscordEventMsgMixin(models.Model):
+    """Abstract base for Discord messages tied to an event."""
+
+    event = models.ForeignKey(
+        "events.Event",
+        on_delete=models.CASCADE,
+        related_name="%(class)s_set",
+    )
+    channel_id = models.CharField(max_length=64)
+    channel_type = models.CharField(
+        max_length=20,
+        choices=ChannelType.choices,
+        default=ChannelType.TEXT,
+    )
+    message_id = models.CharField(max_length=64, null=True, blank=True)
+    thread_id = models.CharField(max_length=64, null=True, blank=True)
+    has_posted = models.BooleanField(default=False)
+    message_last_updated = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
+
+class DiscordEventMsgSignup(DiscordEventMsgMixin):
+    """The signup post for a Discord event."""
+
+    class Meta:
+        verbose_name = "Discord Event Signup Message"
+        verbose_name_plural = "Discord Event Signup Messages"
+
+    def __str__(self):
+        return f"Signup msg for event {self.event_id} (posted={self.has_posted})"
+
+
+class DiscordEventMsgAnnouncement(DiscordEventMsgMixin):
+    """The announcement post for a Discord event."""
+
+    class Meta:
+        verbose_name = "Discord Event Announcement Message"
+        verbose_name_plural = "Discord Event Announcement Messages"
+
+    def __str__(self):
+        return f"Announcement msg for event {self.event_id} (posted={self.has_posted})"
+
+
+class DiscordEvent(models.Model):
+    """Links a platform Event to its Discord guild presence."""
+
+    event = models.OneToOneField(
+        "events.Event",
+        on_delete=models.CASCADE,
+        related_name="discord_event",
+    )
+    guild_id = models.CharField(max_length=64)
+    scheduled_event_id = models.CharField(max_length=64, null=True, blank=True)
+
+    signup_message = models.OneToOneField(
+        DiscordEventMsgSignup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="discord_event",
+    )
+    announcement = models.OneToOneField(
+        DiscordEventMsgAnnouncement,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="discord_event",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Discord Event"
+        verbose_name_plural = "Discord Events"
+
+    def __str__(self):
+        return f"DiscordEvent for event {self.event_id} (guild={self.guild_id})"
+
+
+class DiscordEventDM(models.Model):
+    """A direct message sent to a user about a Discord event."""
+
+    discord_event = models.ForeignKey(
+        DiscordEvent,
+        on_delete=models.CASCADE,
+        related_name="dms",
+    )
+    org_user = models.ForeignKey(
+        "org.OrgUser",
+        on_delete=models.CASCADE,
+        related_name="discord_event_dms",
+    )
+    dm_type = models.IntegerField(choices=DMType.choices)
+    message_id = models.CharField(max_length=64, null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    delivered = models.BooleanField(default=False)
+    responded = models.BooleanField(default=False)
+    response_text = models.TextField(blank=True, default="")
+    responded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Discord Event DM"
+        verbose_name_plural = "Discord Event DMs"
+
+    def __str__(self):
+        return f"DM({self.get_dm_type_display()}) → {self.org_user_id}"
+
+    @property
+    def discord_user_id(self):
+        """Return the Discord user ID from the linked CustomUser."""
+        return self.org_user.user.discordId
+
+    @property
+    def can_send(self):
+        """Whether we can send a DM (user has a Discord ID)."""
+        return bool(self.org_user.user.discordId)
+
+
+class DiscordEventLog(models.Model):
+    """Audit log for Discord event API interactions."""
+
+    discord_event = models.ForeignKey(
+        DiscordEvent,
+        on_delete=models.CASCADE,
+        related_name="logs",
+    )
+    dm = models.ForeignKey(
+        DiscordEventDM,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="logs",
+    )
+    action = models.CharField(max_length=64)
+    target_type = models.CharField(max_length=64, blank=True, default="")
+    message_id = models.CharField(max_length=64, null=True, blank=True)
+    status_code = models.IntegerField(null=True, blank=True)
+    response_data = models.JSONField(null=True, blank=True)
+    error_message = models.TextField(blank=True, default="")
+    success = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Discord Event Log"
+        verbose_name_plural = "Discord Event Logs"
+
+    def __str__(self):
+        return f"{self.action} ({'ok' if self.success else 'fail'}) for event {self.discord_event_id}"
