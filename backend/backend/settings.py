@@ -416,6 +416,10 @@ ALLOWED_HOSTS = [
     "backend",
 ]
 
+# Allow ngrok domains in test/dev for Discord interaction webhook verification
+if TEST or DEBUG:
+    ALLOWED_HOSTS += [".ngrok-free.dev", ".ngrok.io"]
+
 
 with contextlib.suppress(ImportError):
     from backend.local_settings import *  # noqa: F403
