@@ -110,6 +110,9 @@ class EventSerializer(serializers.ModelSerializer):
     organization_name = serializers.CharField(
         source="organization.name", read_only=True
     )
+    event_repeater_name = serializers.CharField(
+        source="event_repeater.name", read_only=True, default=None
+    )
     # Use annotated fields from queryset (no per-row queries)
     signup_count = serializers.IntegerField(read_only=True, default=0)
     confirmed_count = serializers.IntegerField(read_only=True, default=0)
@@ -121,6 +124,7 @@ class EventSerializer(serializers.ModelSerializer):
             "organization",
             "organization_name",
             "event_repeater",
+            "event_repeater_name",
             "name",
             "description",
             "scheduled_at",
