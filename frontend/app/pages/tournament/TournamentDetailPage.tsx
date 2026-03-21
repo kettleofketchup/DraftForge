@@ -11,6 +11,7 @@ import { useTournamentSocket } from '~/hooks/useTournamentSocket';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import type { TournamentType } from '~/components/tournament/types';
 import TournamentTabs from './tabs/TournamentTabs';
+import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 
 import { getLogger } from '~/lib/logger';
 const log = getLogger('TournamentDetailPage');
@@ -55,6 +56,58 @@ export const TournamentDetailPage: React.FC = () => {
       useUserStore.getState().setTournament(null);
     };
   }, [hydratedTournament]);
+
+  const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
+    if (!tournament) return [];
+    const segments: BreadcrumbSegment[] = [];
+
+    // Organization (from league)
+    const league = typeof tournament.league === 'object' ? tournament.league : null;
+    if (league?.organization_name && tournament.organization_pk) {
+      segments.push({
+        type: 'organization',
+        label: league.organization_name,
+        href: `/organizations/${tournament.organization_pk}`,
+      });
+    }
+
+    // League
+    if (league) {
+      segments.push({
+        type: 'league',
+        label: league.name,
+        href: `/leagues/${league.pk}`,
+      });
+    }
+
+    // Event Series (from source_event.event_repeater)
+    const sourceEvent = tournament.source_event;
+    if (sourceEvent?.event_repeater) {
+      segments.push({
+        type: 'event-series',
+        label: sourceEvent.event_repeater.name,
+      });
+    }
+
+    // Event (from source_event)
+    if (sourceEvent) {
+      segments.push({
+        type: 'event',
+        label: sourceEvent.name,
+        href: `/events/${sourceEvent.id}`,
+      });
+    }
+
+    // Tournament (current page)
+    if (tournament.name) {
+      segments.push({
+        type: 'tournament',
+        label: tournament.name,
+      });
+    }
+
+    return segments;
+  }, [tournament]);
 
   // UI state from tournamentStore
   const setLive = useTournamentStore((state) => state.setLive);
@@ -191,6 +244,7 @@ export const TournamentDetailPage: React.FC = () => {
       className="max-w-full overflow-x-hidden px-2 sm:container sm:mx-auto sm:p-4"
       data-testid="tournamentDetailPage"
     >
+      {breadcrumbSegments.length > 1 && <EntityBreadcrumb segments={breadcrumbSegments} />}
       {title()}
       <TournamentTabs />
     </div>
