@@ -70,6 +70,7 @@ import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { usePageNav } from '~/hooks/usePageNav';
 import { useUserStore } from '~/store/userStore';
 import { ConfirmDialog } from '~/components/ui/dialogs';
+import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 
 export default function EventPage() {
   const { eventId, tab } = useParams<{ eventId: string; tab?: string }>();
@@ -94,6 +95,33 @@ export default function EventPage() {
   const rsvpMutation = useRsvpMutation(id ?? 0);
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
+
+  const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
+    if (!event) return [];
+    const segments: BreadcrumbSegment[] = [];
+
+    if (event.organization_name && event.organization) {
+      segments.push({
+        type: 'organization',
+        label: event.organization_name,
+        href: `/organizations/${event.organization}`,
+      });
+    }
+
+    if (event.event_repeater && event.event_repeater_name) {
+      segments.push({
+        type: 'event-series',
+        label: event.event_repeater_name,
+      });
+    }
+
+    segments.push({
+      type: 'event',
+      label: event.name,
+    });
+
+    return segments;
+  }, [event]);
 
   // Check if current user already has an active signup
   const mySignup = useMemo(
@@ -167,6 +195,7 @@ export default function EventPage() {
   return (
     <div className="container mx-auto py-6 px-4 space-y-6">
       <div className="flex flex-col gap-6 rounded-lg border border-border bg-base-200/50 p-4 md:p-6">
+        {breadcrumbSegments.length > 1 && <EntityBreadcrumb segments={breadcrumbSegments} />}
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3">
           <div className="space-y-2 min-w-0">

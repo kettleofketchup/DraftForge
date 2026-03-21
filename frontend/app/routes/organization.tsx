@@ -64,6 +64,7 @@ import { useUserStore } from '~/store/userStore';
 import { usePageNav } from '~/hooks/usePageNav';
 import { cn } from '~/lib/utils';
 import { toast } from 'sonner';
+import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 
 // Discord icon component
 const DiscordIcon = ({ className }: { className?: string }) => (
@@ -298,6 +299,13 @@ export default function OrganizationDetailPage() {
 
   usePageNav(organization ? pageNavOptions : null, activeTab, setActiveTab);
 
+  const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
+    if (!organization) return [];
+    return [
+      { type: 'organization' as const, label: organization.name },
+    ];
+  }, [organization]);
+
   if (orgLoading) {
     return (
       <div className="container mx-auto p-4 text-center">
@@ -316,6 +324,7 @@ export default function OrganizationDetailPage() {
 
   return (
     <div className="container mx-auto p-4">
+        <EntityBreadcrumb segments={breadcrumbSegments} />
         {/* Organization Header */}
         <div className="card bg-base-200 shadow-lg mb-8">
           <div className="card-body">

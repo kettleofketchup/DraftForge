@@ -43,6 +43,7 @@ import { useOrgStore } from '~/store/orgStore';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useIsLeagueAdmin } from '~/hooks/usePermissions';
 import { usePageNav } from '~/hooks/usePageNav';
+import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 
 export default function LeaguePage() {
   const { leagueId, tab } = useParams<{ leagueId: string; tab?: string }>();
@@ -99,6 +100,27 @@ export default function LeaguePage() {
   // Permission check for edit - includes org admins via useIsLeagueAdmin
   const canEdit = useIsLeagueAdmin(league);
 
+  const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
+    if (!league) return [];
+    const segments: BreadcrumbSegment[] = [];
+
+    const org = typeof league.organization === 'object' ? league.organization : null;
+    if (league.organization_name && org) {
+      segments.push({
+        type: 'organization',
+        label: league.organization_name,
+        href: `/organizations/${org.pk}`,
+      });
+    }
+
+    segments.push({
+      type: 'league',
+      label: league.name,
+    });
+
+    return segments;
+  }, [league]);
+
   // Page nav options for mobile navbar dropdown
   const leagueUserPks = useLeagueStore((s) => s.leagueUserPks);
   const leagueUsersLoading = useLeagueStore((s) => s.leagueUsersLoading);
@@ -134,6 +156,7 @@ export default function LeaguePage() {
   return (
     <div className="container mx-auto py-6 px-4 space-y-6">
       <div className="flex flex-col gap-6 rounded-lg border border-border bg-base-200/50 p-4 md:p-6">
+        {breadcrumbSegments.length > 1 && <EntityBreadcrumb segments={breadcrumbSegments} />}
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3">
           <div className="space-y-2 min-w-0">
