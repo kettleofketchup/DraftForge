@@ -21,6 +21,7 @@ export const eventSchema = z.object({
   organization: z.number(),
   organization_name: z.string(),
   event_repeater: z.number().nullable(),
+  event_repeater_name: z.string().nullable(),
   name: z.string(),
   description: z.string(),
   scheduled_at: z.string(),

@@ -47,6 +47,15 @@ export const LeagueMinimalSchema = z.object({
   organization_name: z.string().nullable(),
 });
 
+export const SourceEventSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  event_repeater: z.object({
+    id: z.number(),
+    name: z.string(),
+  }).nullable(),
+});
+
 export const TournamentSchema = z.object({
   name: z.string().nullable(),
   date_played: z.string().nullable(), // ISO datetime string
@@ -72,6 +81,7 @@ export const TournamentSchema = z.object({
   organization_pk: z.number().nullable().optional(),
   // League PK
   league_pk: z.number().nullable().optional(),
+  source_event: SourceEventSchema.nullable().optional(),
 });
 
 // Schema for creating a new tournament
