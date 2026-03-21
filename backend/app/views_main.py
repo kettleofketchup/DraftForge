@@ -356,6 +356,8 @@ class TournamentView(viewsets.ModelViewSet):
         if league_id:
             queryset = queryset.filter(league_id=league_id)
         return queryset.prefetch_related(
+            "source_event",
+            "source_event__event_repeater",
             "users",
             "users__positions",
             "teams__members",

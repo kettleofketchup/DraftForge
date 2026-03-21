@@ -897,6 +897,7 @@ class TournamentSerializer(serializers.ModelSerializer):
     )
     organization_pk = serializers.SerializerMethodField()
     league_pk = serializers.SerializerMethodField()
+    source_event = serializers.SerializerMethodField()
 
     def get_organization_pk(self, tournament):
         """Return the primary organization's PK for this tournament."""
@@ -908,6 +909,19 @@ class TournamentSerializer(serializers.ModelSerializer):
     def get_league_pk(self, tournament):
         """Return the league's PK for this tournament."""
         return tournament.league.pk if tournament.league else None
+
+    def get_source_event(self, tournament):
+        """Return lightweight source event data (event that spawned this tournament)."""
+        event = tournament.source_event.first()
+        if not event:
+            return None
+        result = {"id": event.id, "name": event.name, "event_repeater": None}
+        if event.event_repeater:
+            result["event_repeater"] = {
+                "id": event.event_repeater.id,
+                "name": event.event_repeater.name,
+            }
+        return result
 
     def get_users(self, tournament):
         """Return user PKs only — full data provided via _users dict."""
@@ -933,6 +947,7 @@ class TournamentSerializer(serializers.ModelSerializer):
             "league_id_write",
             "organization_pk",
             "league_pk",
+            "source_event",
         )
 
     def update(self, instance, validated_data):
