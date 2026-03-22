@@ -470,3 +470,45 @@ def build_profile_reminder_embed(event):
         "description": f"Please make sure you have: {req_text}",
         "color": COLOR_PROFILE,
     }
+
+
+def build_subscriber_dm_embed(event):
+    """Build DM embed for subscriber pre-event notification."""
+    url = _event_url(event)
+    signup_link = ""
+    try:
+        de = event.discord_event
+        if de.signup_message and de.signup_message.has_posted:
+            sm = de.signup_message
+            guild_id = de.guild_id
+            channel = sm.thread_id or sm.channel_id
+            signup_link = (
+                f"https://discord.com/channels/{guild_id}/{channel}/{sm.message_id}"
+            )
+    except Exception:
+        logger.debug("Could not build signup link for event %s", event.pk)
+
+    description = f"**{event.name}** is starting soon!\n\n"
+    description += f"\U0001f4c5 {_discord_timestamp(event.scheduled_at)}\n"
+    if signup_link:
+        description += f"\n\U0001f517 **[Sign up on Discord]({signup_link})**\n"
+    if url:
+        description += f"\U0001f310 **[View Event]({url})**\n"
+
+    title = f"\U0001f514 Event Reminder: {event.name}"[:256]
+
+    embed = {
+        "title": title,
+        "description": description,
+        "color": COLOR_REMINDER,
+    }
+
+    # Add branding
+    if hasattr(event, "organization") and event.organization:
+        embed["author"] = {
+            "name": event.organization.name,
+        }
+        if event.organization.logo:
+            embed["author"]["icon_url"] = event.organization.logo
+
+    return embed

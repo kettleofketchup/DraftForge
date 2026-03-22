@@ -35,6 +35,7 @@ from events.discord.embeds import (
     build_profile_reminder_embed,
     build_signup_reminder_embed,
     build_signup_update_embed,
+    build_subscriber_dm_embed,
 )
 from events.discord.handlers import (
     _check_deadlock_profile_complete,
@@ -72,6 +73,7 @@ __all__ = [
     "build_signup_reminder_embed",
     "build_attendance_reminder_embed",
     "build_profile_reminder_embed",
+    "build_subscriber_dm_embed",
     # components
     "build_announcement_components",
     # dispatch

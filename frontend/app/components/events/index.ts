@@ -12,3 +12,4 @@ export { EditRepeaterModal } from './EditRepeaterModal';
 export { EventStateBadge } from './EventStateBadge';
 export { EventStrip } from './EventStrip';
 export { MmrApprovalModal } from './MmrApprovalModal';
+export { SubscriberList } from './SubscriberList';

@@ -131,6 +131,17 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Subscribed"}, status=status.HTTP_201_CREATED)
         return Response({"detail": "Already subscribed"}, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=["get"])
+    def subscribers(self, request, pk=None):
+        """List all subscribers for this repeater."""
+        repeater = self.get_object()
+        subs = RepeaterSubscription.objects.filter(
+            event_repeater=repeater
+        ).select_related("user")
+        from events.serializers import RepeaterSubscriptionSerializer
+
+        return Response(RepeaterSubscriptionSerializer(subs, many=True).data)
+
     @action(
         detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated]
     )

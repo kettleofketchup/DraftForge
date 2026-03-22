@@ -53,6 +53,7 @@ import { toast } from 'sonner';
 
 import { Badge } from '~/components/ui/badge';
 import { EventStateBadge } from '~/components/events';
+import { SubscriberList } from '~/components/events/SubscriberList';
 import { EventState, GameType } from '~/components/events/schemas';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
 import { DiscordLogSection } from '~/components/events/DiscordLogSection';
@@ -647,6 +648,12 @@ function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>[
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {event.event_repeater && (
+        <div className="md:col-span-2 lg:col-span-3">
+          <SubscriberList repeaterId={event.event_repeater} />
+        </div>
       )}
     </div>
   );

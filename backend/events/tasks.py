@@ -744,4 +744,124 @@ def check_event_reminders():
                 source_id=event.pk,
             )
 
+    # 4. Subscriber DM notifications
+    from discordbot.models import DMType as DMTypeChoices
+
+    dm_events = Event.objects.filter(
+        state__in=[EventState.SIGNUPS_OPEN, EventState.ROLL_CALL],
+        discord_subscriber_dm=True,
+        event_repeater__isnull=False,
+    )
+    for event in dm_events:
+        # Skip if any DMs already sent for this event
+        from discordbot.models import DiscordEventDM
+
+        has_dms = DiscordEventDM.objects.filter(
+            discord_event__event=event,
+            dm_type=DMTypeChoices.SIGNUP_REMINDER,
+        ).exists()
+        if has_dms:
+            continue
+        threshold = event.scheduled_at - timedelta(
+            hours=event.discord_subscriber_dm_hours
+        )
+        if now >= threshold:
+            send_subscriber_notifications(event.pk)
+
     return "Checked reminders"
+
+
+@shared_task
+def send_subscriber_notifications(event_id):
+    """Send DM to all repeater subscribers for an upcoming event.
+
+    Uses create-first pattern for crash safety:
+    1. Create DiscordEventDM record (delivered=False)
+    2. Send DM
+    3. Update record with delivery status
+
+    Rate-limited at 1 DM/second to respect Discord limits.
+    """
+    import time
+
+    from discordbot.models import DiscordEventDM, DMType
+    from discordbot.utils import sync_send_dm
+    from events.discord.embeds import build_subscriber_dm_embed
+    from events.models import RepeaterSubscription
+    from org.models import OrgUser
+
+    try:
+        event = Event.objects.select_related("event_repeater", "organization").get(
+            pk=event_id
+        )
+    except Event.DoesNotExist:
+        return f"Event {event_id} not found"
+
+    if not event.event_repeater:
+        return "No repeater"
+
+    try:
+        discord_event = event.discord_event
+    except DiscordEvent.DoesNotExist:
+        return "No Discord event"
+
+    embed = build_subscriber_dm_embed(event)
+    subs = RepeaterSubscription.objects.filter(
+        event_repeater=event.event_repeater
+    ).select_related("user")
+
+    sent = 0
+    skipped = 0
+    failed = 0
+
+    for sub in subs:
+        if not sub.user.discordId:
+            continue
+
+        # Get OrgUser — skip if not a member
+        org_user = OrgUser.objects.filter(
+            user=sub.user, organization=event.organization
+        ).first()
+        if not org_user:
+            continue
+
+        # Idempotency: skip if already tracked
+        if DiscordEventDM.objects.filter(
+            discord_event=discord_event,
+            org_user=org_user,
+            dm_type=DMType.SIGNUP_REMINDER,
+        ).exists():
+            skipped += 1
+            continue
+
+        # Create record FIRST (crash safety + idempotency)
+        dm_record = DiscordEventDM.objects.create(
+            discord_event=discord_event,
+            org_user=org_user,
+            dm_type=DMType.SIGNUP_REMINDER,
+            delivered=False,
+        )
+
+        # Send DM
+        result = sync_send_dm(sub.user.discordId, embed=embed)
+
+        # Update delivery status
+        if result:
+            dm_record.message_id = result.get("id", "")
+            dm_record.sent_at = timezone.now()
+            dm_record.delivered = True
+            dm_record.save(update_fields=["message_id", "sent_at", "delivered"])
+            sent += 1
+        else:
+            failed += 1
+
+        time.sleep(1.0)  # Respect Discord DM rate limits
+
+    logger.info(
+        "Subscriber DMs for event %s: sent=%d, skipped=%d, failed=%d",
+        event_id,
+        sent,
+        skipped,
+        failed,
+    )
+    return f"Sent {sent} DMs, skipped {skipped}, failed {failed} for event {event_id}"

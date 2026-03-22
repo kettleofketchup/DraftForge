@@ -139,3 +139,47 @@ export async function syncDiscordEvents(context: BrowserContext): Promise<string
   const data = await resp.json();
   return data.message;
 }
+
+/** Simulate a Discord signup via backend test endpoint. */
+export async function simulateDiscordSignup(
+  context: BrowserContext,
+  eventId: number,
+  data: {
+    discord_user_id: string;
+    discord_username: string;
+    rank_status: string;
+    rank_medal?: string;
+    battle_cup_tier?: number;
+    positions?: string[];
+    friend_id?: string;
+  },
+): Promise<import('@playwright/test').APIResponse> {
+  return context.request.post(
+    `${API_URL}/tests/events/${eventId}/discord-signup/`,
+    { data, headers: { 'Content-Type': 'application/json' } },
+  );
+}
+
+/** Send a test notification DM to a specific Discord user. */
+export async function sendTestNotification(
+  context: BrowserContext,
+  eventId: number,
+  discordUserId: string,
+): Promise<import('@playwright/test').APIResponse> {
+  return context.request.post(
+    `${API_URL}/tests/events/${eventId}/send-notification/`,
+    {
+      data: { discord_user_id: discordUserId },
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+}
+
+/** Verify Discord messages for an event. */
+export async function verifyDiscordMessages(
+  context: BrowserContext,
+  eventId: number,
+) {
+  const resp = await context.request.get(`${API_URL}/tests/events/${eventId}/discord-verify/`);
+  return resp.json();
+}

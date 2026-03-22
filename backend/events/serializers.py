@@ -1,7 +1,14 @@
 import nh3
 from rest_framework import serializers
 
-from events.models import Event, EventRepeater, EventSignup, EventTeam, OrgEventDefaults
+from events.models import (
+    Event,
+    EventRepeater,
+    EventSignup,
+    EventTeam,
+    OrgEventDefaults,
+    RepeaterSubscription,
+)
 
 
 class EventRepeaterSerializer(serializers.ModelSerializer):
@@ -79,6 +86,8 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "discord_announcement_hours",
             "discord_announcement_role_ids",
             "discord_signup_role_ids",
+            "discord_subscriber_dm",
+            "discord_subscriber_dm_hours",
             "discord_require_rank_screenshot",
             "discord_require_battlecup_screenshot",
             "min_mmr",
@@ -192,6 +201,8 @@ class EventSerializer(serializers.ModelSerializer):
             "discord_announcement_hours",
             "discord_announcement_role_ids",
             "discord_signup_role_ids",
+            "discord_subscriber_dm",
+            "discord_subscriber_dm_hours",
             "discord_require_rank_screenshot",
             "discord_require_battlecup_screenshot",
             "min_mmr",
@@ -370,8 +381,21 @@ class OrgEventDefaultsSerializer(serializers.ModelSerializer):
             "discord_announcement_hours",
             "discord_announcement_role_ids",
             "discord_signup_role_ids",
+            "discord_subscriber_dm",
+            "discord_subscriber_dm_hours",
             "discord_require_rank_screenshot",
             "discord_require_battlecup_screenshot",
             "min_mmr",
         ]
         read_only_fields = ["id", "organization"]
+
+
+class RepeaterSubscriptionSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    nickname = serializers.CharField(source="user.nickname", read_only=True)
+    discordId = serializers.CharField(source="user.discordId", read_only=True)
+    avatar = serializers.CharField(source="user.avatar", read_only=True)
+
+    class Meta:
+        model = RepeaterSubscription
+        fields = ["id", "username", "nickname", "discordId", "avatar", "created_at"]

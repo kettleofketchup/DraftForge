@@ -4,7 +4,6 @@
  */
 
 import type { Control, UseFormWatch } from 'react-hook-form';
-import { Checkbox } from '~/components/ui/checkbox';
 import {
   FormControl,
   FormDescription,
@@ -17,6 +16,37 @@ import { Input } from '~/components/ui/input';
 interface ApprovalConfigSectionProps {
   control: Control<any>;
   watch: UseFormWatch<any>;
+}
+
+/** Reusable checkbox field matching DiscordConfigSection pattern */
+function CheckboxField({ control, name, label, description }: {
+  control: Control<any>;
+  name: string;
+  label: string;
+  description: string;
+}) {
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <FormItem className="flex items-center gap-3">
+          <FormControl>
+            <input
+              type="checkbox"
+              checked={field.value}
+              onChange={field.onChange}
+              className="h-4 w-4 rounded border-border accent-primary"
+            />
+          </FormControl>
+          <div>
+            <FormLabel className="text-sm font-medium cursor-pointer">{label}</FormLabel>
+            <FormDescription className="text-xs">{description}</FormDescription>
+          </div>
+        </FormItem>
+      )}
+    />
+  );
 }
 
 export function ApprovalConfigSection({ control, watch }: ApprovalConfigSectionProps) {
@@ -37,50 +67,20 @@ export function ApprovalConfigSection({ control, watch }: ApprovalConfigSectionP
 
         {/* Active MMR */}
         <div className="rounded-lg border border-border p-4 space-y-3">
-          <FormField
+          <CheckboxField
             control={control}
             name="allow_active_mmr"
-            render={({ field }) => (
-              <FormItem className="flex items-center gap-3">
-                <FormControl>
-                  <Checkbox
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-                <div>
-                  <FormLabel className="text-sm font-medium">Active MMR Players</FormLabel>
-                  <FormDescription className="text-xs">
-                    Players with a current ranked medal
-                  </FormDescription>
-                </div>
-              </FormItem>
-            )}
+            label="Active MMR Players"
+            description="Players with a current ranked medal"
           />
-
           {allowActiveMmr && (
             <div className="ml-7 space-y-3 border-l-2 border-primary/20 pl-4">
-              <FormField
+              <CheckboxField
                 control={control}
                 name="discord_require_rank_screenshot"
-                render={({ field }) => (
-                  <FormItem className="flex items-center gap-3">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <div>
-                      <FormLabel className="text-sm">Require MMR screenshot</FormLabel>
-                      <FormDescription className="text-xs">
-                        Player must upload a screenshot before signup completes
-                      </FormDescription>
-                    </div>
-                  </FormItem>
-                )}
+                label="Require MMR screenshot"
+                description="Player must upload a screenshot before signup completes"
               />
-
               <FormField
                 control={control}
                 name="min_mmr"
@@ -113,48 +113,19 @@ export function ApprovalConfigSection({ control, watch }: ApprovalConfigSectionP
 
         {/* Previous Rank */}
         <div className="rounded-lg border border-border p-4 space-y-3">
-          <FormField
+          <CheckboxField
             control={control}
             name="allow_previous_rank"
-            render={({ field }) => (
-              <FormItem className="flex items-center gap-3">
-                <FormControl>
-                  <Checkbox
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-                <div>
-                  <FormLabel className="text-sm font-medium">Previously Ranked Players</FormLabel>
-                  <FormDescription className="text-xs">
-                    Players who had a rank but are no longer active
-                  </FormDescription>
-                </div>
-              </FormItem>
-            )}
+            label="Previously Ranked Players"
+            description="Players who had a rank but are no longer active"
           />
-
           {allowPreviousRank && (
             <div className="ml-7 border-l-2 border-primary/20 pl-4">
-              <FormField
+              <CheckboxField
                 control={control}
                 name="discord_require_rank_screenshot"
-                render={({ field }) => (
-                  <FormItem className="flex items-center gap-3">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <div>
-                      <FormLabel className="text-sm">Require rank screenshot</FormLabel>
-                      <FormDescription className="text-xs">
-                        Player must upload a screenshot of their previous rank
-                      </FormDescription>
-                    </div>
-                  </FormItem>
-                )}
+                label="Require rank screenshot"
+                description="Player must upload a screenshot of their previous rank"
               />
             </div>
           )}
@@ -162,48 +133,19 @@ export function ApprovalConfigSection({ control, watch }: ApprovalConfigSectionP
 
         {/* Battle Cup (Never Ranked) */}
         <div className="rounded-lg border border-border p-4 space-y-3">
-          <FormField
+          <CheckboxField
             control={control}
             name="allow_battlecup_rating"
-            render={({ field }) => (
-              <FormItem className="flex items-center gap-3">
-                <FormControl>
-                  <Checkbox
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-                <div>
-                  <FormLabel className="text-sm font-medium">Battle Cup Players (Never Ranked)</FormLabel>
-                  <FormDescription className="text-xs">
-                    Players who have never played ranked — use battle cup tier for estimation
-                  </FormDescription>
-                </div>
-              </FormItem>
-            )}
+            label="Battle Cup Players (Never Ranked)"
+            description="Players who have never played ranked — use battle cup tier for estimation"
           />
-
           {allowBattlecupRating && (
             <div className="ml-7 border-l-2 border-primary/20 pl-4">
-              <FormField
+              <CheckboxField
                 control={control}
                 name="discord_require_battlecup_screenshot"
-                render={({ field }) => (
-                  <FormItem className="flex items-center gap-3">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <div>
-                      <FormLabel className="text-sm">Require battle cup screenshot</FormLabel>
-                      <FormDescription className="text-xs">
-                        Player must upload a screenshot of their battle cup ticket tier
-                      </FormDescription>
-                    </div>
-                  </FormItem>
-                )}
+                label="Require battle cup screenshot"
+                description="Player must upload a screenshot of their battle cup ticket tier"
               />
             </div>
           )}
@@ -214,67 +156,25 @@ export function ApprovalConfigSection({ control, watch }: ApprovalConfigSectionP
       <div className="space-y-4">
         <h4 className="text-sm font-semibold text-foreground">General Requirements</h4>
 
-        <FormField
+        <CheckboxField
           control={control}
           name="require_steam_id"
-          render={({ field }) => (
-            <FormItem className="flex items-center gap-3">
-              <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              </FormControl>
-              <div>
-                <FormLabel className="text-sm">Require Friend ID</FormLabel>
-                <FormDescription className="text-xs">
-                  Player must provide their Dota 2 Friend ID
-                </FormDescription>
-              </div>
-            </FormItem>
-          )}
+          label="Require Friend ID"
+          description="Player must provide their Dota 2 Friend ID"
         />
 
-        <FormField
+        <CheckboxField
           control={control}
           name="require_mmr_verified"
-          render={({ field }) => (
-            <FormItem className="flex items-center gap-3">
-              <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              </FormControl>
-              <div>
-                <FormLabel className="text-sm">Require verified MMR</FormLabel>
-                <FormDescription className="text-xs">
-                  Player must have admin-verified MMR on their org profile
-                </FormDescription>
-              </div>
-            </FormItem>
-          )}
+          label="Require verified MMR"
+          description="Player must have admin-verified MMR on their org profile"
         />
 
-        <FormField
+        <CheckboxField
           control={control}
           name="require_profile_complete"
-          render={({ field }) => (
-            <FormItem className="flex items-center gap-3">
-              <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              </FormControl>
-              <div>
-                <FormLabel className="text-sm">Require complete profile</FormLabel>
-                <FormDescription className="text-xs">
-                  Player must have nickname, Steam ID, and Discord linked
-                </FormDescription>
-              </div>
-            </FormItem>
-          )}
+          label="Require complete profile"
+          description="Player must have nickname, Steam ID, and Discord linked"
         />
       </div>
     </div>

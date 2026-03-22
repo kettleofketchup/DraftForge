@@ -164,6 +164,8 @@ export interface EventRepeaterType {
   discord_announcement: boolean;
   discord_announcement_channel_id: string;
   discord_announcement_hours: number;
+  discord_subscriber_dm: boolean;
+  discord_subscriber_dm_hours: number;
   discord_require_rank_screenshot: boolean;
   discord_require_battlecup_screenshot: boolean;
   min_mmr: number | null;
@@ -242,6 +244,8 @@ export interface OrgEventDefaultsType {
   discord_announcement: boolean;
   discord_announcement_channel_id: string;
   discord_announcement_hours: number;
+  discord_subscriber_dm: boolean;
+  discord_subscriber_dm_hours: number;
   discord_require_rank_screenshot: boolean;
   discord_require_battlecup_screenshot: boolean;
   min_mmr: number | null;
@@ -286,6 +290,22 @@ export async function subscribeToRepeater(repeaterId: number): Promise<void> {
 
 export async function unsubscribeFromRepeater(repeaterId: number): Promise<void> {
   await axios.post(`/events/repeaters/${repeaterId}/unsubscribe/`);
+}
+
+export interface RepeaterSubscriber {
+  id: number;
+  username: string;
+  nickname: string | null;
+  discordId: string | null;
+  avatar: string | null;
+  created_at: string;
+}
+
+export async function getRepeaterSubscribers(repeaterId: number): Promise<RepeaterSubscriber[]> {
+  const { data } = await axios.get<RepeaterSubscriber[]>(
+    `/events/repeaters/${repeaterId}/subscribers/`,
+  );
+  return data;
 }
 
 export async function getEventDiscordState(eventId: number) {
