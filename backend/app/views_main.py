@@ -222,10 +222,31 @@ class UserView(viewsets.ModelViewSet):
         return self.partial_update(request, *args, **kwargs)
 
     def get_permissions(self):
-        self.permission_classes = [IsStaff]
         if self.request.method == "GET":
             self.permission_classes = [AllowAny]
+        elif self.request.method in ("PATCH", "PUT"):
+            self.permission_classes = [IsAuthenticated]
+        else:
+            self.permission_classes = [IsStaff]
         return super(UserView, self).get_permissions()
+
+    def check_object_permissions(self, request, obj):
+        """Allow org admins/staff to edit users in their organizations."""
+        super().check_object_permissions(request, obj)
+        if request.method in ("PATCH", "PUT") and not request.user.is_staff:
+            from app.permissions_org import has_org_staff_access
+            from org.models import OrgUser
+
+            # Check if the target user shares an org where requester is staff
+            target_orgs = OrgUser.objects.filter(user=obj).select_related(
+                "organization"
+            )
+            has_access = any(
+                has_org_staff_access(request.user, ou.organization)
+                for ou in target_orgs
+            )
+            if not has_access:
+                self.permission_denied(request)
 
     @permission_classes((IsAdminUser,))
     def delete(self, request, *args, **kwargs):
