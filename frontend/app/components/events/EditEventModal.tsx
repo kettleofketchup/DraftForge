@@ -117,6 +117,9 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
         discord_announcement: event.discord_announcement,
         discord_announcement_channel_id: event.discord_announcement_channel_id,
         discord_announcement_hours: event.discord_announcement_hours,
+        discord_require_rank_screenshot: event.discord_require_rank_screenshot,
+        discord_require_battlecup_screenshot: event.discord_require_battlecup_screenshot,
+        min_mmr: event.min_mmr ?? null,
       });
     }
   }, [event, open]);

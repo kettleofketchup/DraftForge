@@ -131,6 +131,58 @@ class SignupProcessingTests(EventTestCase):
         cancelled = cancel_signup(signup)
         self.assertEqual(cancelled.status, SignupStatus.CANCELLED)
 
+    def test_approve_with_mmr_override_sets_orguser(self):
+        """Approving with mmr_override sets OrgUser.mmr and has_active_dota_mmr."""
+        from events.services import approve_signup
+        from org.models import OrgUser
+
+        signup = EventSignup.objects.create(
+            event=self.event, user=self.user, status=SignupStatus.RSVP
+        )
+        org_user, _ = OrgUser.objects.get_or_create(
+            user=self.user, organization=self.event.organization
+        )
+        approve_signup(signup, mmr_override=3500)
+        org_user.refresh_from_db()
+        self.assertEqual(org_user.mmr, 3500)
+        self.assertTrue(org_user.has_active_dota_mmr)
+        self.assertIsNotNone(org_user.dota_mmr_last_verified)
+
+    def test_approve_without_mmr_override_unchanged(self):
+        """Approving without mmr_override doesn't change OrgUser.mmr."""
+        from events.services import approve_signup
+        from org.models import OrgUser
+
+        signup = EventSignup.objects.create(
+            event=self.event, user=self.user, status=SignupStatus.RSVP
+        )
+        org_user, _ = OrgUser.objects.get_or_create(
+            user=self.user, organization=self.event.organization
+        )
+        approve_signup(signup)
+        org_user.refresh_from_db()
+        self.assertEqual(org_user.mmr, 0)
+        self.assertFalse(org_user.has_active_dota_mmr)
+
+    def test_check_requirements_reads_orguser(self):
+        """check_requirements uses OrgUser.has_active_dota_mmr, not CustomUser."""
+        from events.services import check_requirements
+        from org.models import OrgUser
+
+        self.event.require_mmr_verified = True
+        self.event.save()
+
+        org_user, _ = OrgUser.objects.get_or_create(
+            user=self.user, organization=self.event.organization
+        )
+        # OrgUser has_active_dota_mmr=False by default
+        self.assertFalse(check_requirements(self.event, self.user))
+
+        # Set on OrgUser (not CustomUser)
+        org_user.has_active_dota_mmr = True
+        org_user.save()
+        self.assertTrue(check_requirements(self.event, self.user))
+
 
 class WaitlistPromotionTests(EventTestCase):
     def setUp(self):

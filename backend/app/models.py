@@ -1899,6 +1899,7 @@ class OrgLog(models.Model):
         ("delete", "Delete Organization"),
         ("approve_claim", "Approve Profile Claim"),
         ("reject_claim", "Reject Profile Claim"),
+        ("set_mmr", "Set MMR"),
     ]
 
     organization = models.ForeignKey(

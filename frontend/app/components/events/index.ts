@@ -10,3 +10,4 @@ export { EditOrgDefaultsModal } from './EditOrgDefaultsModal';
 export { EditRepeaterModal } from './EditRepeaterModal';
 export { EventStateBadge } from './EventStateBadge';
 export { EventStrip } from './EventStrip';
+export { MmrApprovalModal } from './MmrApprovalModal';

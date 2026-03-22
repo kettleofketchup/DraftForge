@@ -65,8 +65,11 @@ export async function getEventSignups(eventId: number): Promise<EventSignupType[
   return data;
 }
 
-export async function approveSignup(signupId: number): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(`/events/signups/${signupId}/approve/`);
+export async function approveSignup(signupId: number, mmr?: number): Promise<EventSignupType> {
+  const { data } = await axios.post<EventSignupType>(
+    `/events/signups/${signupId}/approve/`,
+    mmr != null ? { mmr } : undefined,
+  );
   return data;
 }
 
@@ -82,6 +85,21 @@ export async function confirmSignup(signupId: number): Promise<EventSignupType> 
 
 export async function cancelSignup(signupId: number): Promise<EventSignupType> {
   const { data } = await axios.post<EventSignupType>(`/events/signups/${signupId}/cancel_signup/`);
+  return data;
+}
+
+export async function unconfirmSignup(signupId: number): Promise<EventSignupType> {
+  const { data } = await axios.post<EventSignupType>(`/events/signups/${signupId}/unconfirm/`);
+  return data;
+}
+
+export async function demoteSignup(signupId: number): Promise<EventSignupType> {
+  const { data } = await axios.post<EventSignupType>(`/events/signups/${signupId}/demote/`);
+  return data;
+}
+
+export async function reinstateSignup(signupId: number): Promise<EventSignupType> {
+  const { data } = await axios.post<EventSignupType>(`/events/signups/${signupId}/reinstate/`);
   return data;
 }
 
@@ -143,6 +161,9 @@ export interface EventRepeaterType {
   discord_announcement: boolean;
   discord_announcement_channel_id: string;
   discord_announcement_hours: number;
+  discord_require_rank_screenshot: boolean;
+  discord_require_battlecup_screenshot: boolean;
+  min_mmr: number | null;
   discord_notify_new_events: boolean;
   discord_profile_reminder_hours: number;
   discord_confirm_attendance_hours: number;
@@ -215,6 +236,9 @@ export interface OrgEventDefaultsType {
   discord_announcement: boolean;
   discord_announcement_channel_id: string;
   discord_announcement_hours: number;
+  discord_require_rank_screenshot: boolean;
+  discord_require_battlecup_screenshot: boolean;
+  min_mmr: number | null;
 }
 
 export async function getOrgEventDefaults(orgId: number): Promise<OrgEventDefaultsType> {

@@ -34,12 +34,15 @@ from events.services import (
     cancel_signup,
     confirm_signup,
     create_tournament_for_event,
+    demote_to_waitlist,
     finalize_event_tournament,
     process_rsvp,
+    reinstate_signup,
     reject_signup,
     restart_event_tournament,
     sync_future_events,
     sync_tournament_from_event,
+    unconfirm_signup,
 )
 
 
@@ -186,7 +189,12 @@ class EventViewSet(viewsets.ModelViewSet):
 
         # If Discord config is set but no announcement has been sent yet, send it now.
         # This handles the case where an admin edits an event to add Discord config.
-        if event.discord_announcement and event.discord_announcement_channel_id:
+        # Only send when signups are open — not for upcoming events.
+        if (
+            event.state == EventState.SIGNUPS_OPEN
+            and event.discord_announcement
+            and event.discord_announcement_channel_id
+        ):
             from discordbot.models import DiscordEvent
 
             try:
@@ -377,13 +385,10 @@ class EventViewSet(viewsets.ModelViewSet):
 
         from cacheops import cached_as
 
-        from discordbot.models import DiscordEventDM, DiscordEventLog
         from discordbot.serializers_discord_event import DiscordEventDetailSerializer
 
         @cached_as(
             DiscordEvent,
-            DiscordEventLog,
-            DiscordEventDM,
             extra=f"discord_state:{pk}",
             timeout=60,
         )
@@ -409,7 +414,7 @@ class EventViewSet(viewsets.ModelViewSet):
 
 class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = EventSignupSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
         qs = EventSignup.objects.select_related("user", "event", "event_team")
@@ -423,10 +428,43 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         signup = self.get_object()
         if not has_org_staff_access(request.user, signup.event.organization):
             return Response(status=status.HTTP_403_FORBIDDEN)
+
+        # Optional MMR override from admin
+        mmr_override = None
+        if request.data:
+            raw_mmr = request.data.get("mmr")
+            if raw_mmr is not None:
+                try:
+                    mmr_override = int(raw_mmr)
+                except (TypeError, ValueError):
+                    return Response(
+                        {"error": "mmr must be an integer."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not (0 <= mmr_override <= 20000):
+                    return Response(
+                        {"error": "mmr must be between 0 and 20000."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
         try:
-            return Response(EventSignupSerializer(approve_signup(signup)).data)
+            result = approve_signup(signup, mmr_override=mmr_override)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Audit log for MMR override
+        if mmr_override is not None:
+            from app.models import OrgLog
+
+            OrgLog.objects.create(
+                organization=signup.event.organization,
+                actor=request.user,
+                action="set_mmr",
+                target_user=signup.user,
+                details={"mmr": mmr_override, "event_id": signup.event.pk},
+            )
+
+        return Response(EventSignupSerializer(result).data)
 
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
@@ -460,10 +498,45 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=True, methods=["post"])
+    def unconfirm(self, request, pk=None):
+        """Revert a confirmed signup back to approved."""
+        signup = self.get_object()
+        if not has_org_staff_access(request.user, signup.event.organization):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        try:
+            return Response(EventSignupSerializer(unconfirm_signup(signup)).data)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"])
+    def demote(self, request, pk=None):
+        """Move an active signup to the end of the waitlist."""
+        signup = self.get_object()
+        if not has_org_staff_access(request.user, signup.event.organization):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        try:
+            return Response(EventSignupSerializer(demote_to_waitlist(signup)).data)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"])
+    def reinstate(self, request, pk=None):
+        """Reinstate a cancelled signup (user can reinstate their own)."""
+        signup = self.get_object()
+        if signup.user != request.user and not has_org_staff_access(
+            request.user, signup.event.organization
+        ):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        try:
+            return Response(EventSignupSerializer(reinstate_signup(signup)).data)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class EventTeamViewSet(viewsets.ModelViewSet):
     serializer_class = EventTeamSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)

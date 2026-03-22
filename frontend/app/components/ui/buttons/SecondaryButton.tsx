@@ -3,7 +3,7 @@ import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
 import { brandSecondary, brandSecondary3D, button3DBase, button3DDisabled } from './styles';
 
-export type SecondaryColor = 'green' | 'blue' | 'purple' | 'orange' | 'red' | 'sky' | 'cyan' | 'lime';
+export type SecondaryColor = 'green' | 'blue' | 'purple' | 'orange' | 'red' | 'sky' | 'cyan' | 'lime' | 'emerald';
 
 export interface SecondaryButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
@@ -22,6 +22,7 @@ const colorStyles: Record<SecondaryColor, string> = {
   sky: `${button3DBase} ${button3DDisabled} bg-sky-800 hover:bg-sky-700 text-white border-b-sky-950 shadow-sky-900/50`,
   cyan: `${button3DBase} ${button3DDisabled} bg-cyan-700 hover:bg-cyan-600 text-white border-b-cyan-900 shadow-cyan-900/50`,
   lime: `${button3DBase} ${button3DDisabled} bg-lime-700 hover:bg-lime-600 text-white border-b-lime-900 shadow-lime-900/50`,
+  emerald: `${button3DBase} ${button3DDisabled} bg-emerald-800 hover:bg-emerald-700 text-white border-b-emerald-950 shadow-emerald-900/50`,
 };
 
 /**

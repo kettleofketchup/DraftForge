@@ -311,6 +311,40 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
         )}
       </div>
 
+      {/* Signup Requirements */}
+      <div className="rounded-md border border-border p-3 space-y-3">
+        <h4 className="text-sm font-medium">Signup Requirements</h4>
+        <CheckboxField control={control} name="discord_require_rank_screenshot"
+          label="Require MMR screenshot (active rank)"
+          description="Players must upload a screenshot showing their current rank medal and MMR"
+        />
+        <CheckboxField control={control} name="discord_require_battlecup_screenshot"
+          label="Require Battle Cup screenshot (never ranked)"
+          description="Players without a rank must upload a Battle Cup screenshot to verify MMR"
+        />
+        <FormField control={control} name="min_mmr"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Minimum MMR</FormLabel>
+              <FormControl>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="No minimum"
+                  value={field.value ?? ''}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    field.onChange(Number.isNaN(v) ? null : Math.max(0, v));
+                  }}
+                />
+              </FormControl>
+              <FormDescription>Minimum MMR required to sign up. Leave empty for no minimum.</FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+
       {/* Notify new events — repeater only */}
       {isRepeater && (
         <div className="rounded-md border border-border p-3">

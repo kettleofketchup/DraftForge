@@ -132,6 +132,7 @@ export {
   rsvpForEvent, openSignups, startRollCall, startTournament, cancelEvent,
   restartTournament,
   getEventSignups, approveSignup, rejectSignup, confirmSignup, cancelSignup,
+  unconfirmSignup, demoteSignup, reinstateSignup,
   getEventRepeaters, createEventRepeater, updateEventRepeater,
   getEventDiscordState,
   getDiscordChannels,

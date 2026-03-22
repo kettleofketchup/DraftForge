@@ -170,6 +170,101 @@ class KettleBot(discord.Client):
 
                 button = NotifyButton(event_id)
                 await button.callback(interaction)
+            elif custom_id.startswith("pos_select_"):
+                # Save position immediately on selection
+                event_id = int(custom_id.split(":")[1])
+                pos_number = custom_id.split(":")[0].replace(
+                    "pos_select_", ""
+                )  # "1", "2", or "3"
+                selected = interaction.data.get("values", [])
+                if selected:
+                    from asgiref.sync import sync_to_async
+
+                    from events.discord import _get_org_user
+                    from events.models import Event
+
+                    event = await sync_to_async(
+                        Event.objects.select_related("organization").get
+                    )(pk=event_id)
+                    org_user, _ = await sync_to_async(_get_org_user)(
+                        event, str(interaction.user.id)
+                    )
+                    if org_user:
+                        from cacheops import invalidate_obj
+
+                        from org.models_profiles import PlayerDotaProfile
+
+                        profile = await sync_to_async(
+                            lambda: PlayerDotaProfile.objects.get_or_create(
+                                org_user=org_user
+                            )[0]
+                        )()
+                        pos_val = selected[0]
+                        # Set the selected position
+                        if pos_val == "1":
+                            profile.pos_1 = True
+                        if pos_val == "2":
+                            profile.pos_2 = True
+                        if pos_val == "3":
+                            profile.pos_3 = True
+                        if pos_val == "4":
+                            profile.pos_4 = True
+                        if pos_val == "5":
+                            profile.pos_5 = True
+                        await sync_to_async(profile.save)()
+                        await sync_to_async(invalidate_obj)(profile)
+                await interaction.response.defer()
+            elif custom_id.startswith("pos_confirm:"):
+                event_id = int(custom_id.split(":")[1])
+                from asgiref.sync import sync_to_async
+
+                from events.discord import _get_org_user
+                from events.models import Event
+
+                event = await sync_to_async(
+                    Event.objects.select_related("organization").get
+                )(pk=event_id)
+                org_user, _ = await sync_to_async(_get_org_user)(
+                    event, str(interaction.user.id)
+                )
+                if org_user:
+                    from org.models_profiles import PlayerDotaProfile
+
+                    profile = await sync_to_async(
+                        lambda: PlayerDotaProfile.objects.get_or_create(
+                            org_user=org_user
+                        )[0]
+                    )()
+                    rank_status = profile.rank_status or "never"
+                    require_screenshot = (
+                        event.discord_require_rank_screenshot
+                        if rank_status == "active"
+                        else (
+                            event.discord_require_battlecup_screenshot
+                            if rank_status == "never"
+                            else False
+                        )
+                    )
+                    from discordbot.components import RankDetailsView
+
+                    view = RankDetailsView(
+                        event_id,
+                        rank_status,
+                        require_screenshot=require_screenshot,
+                        min_mmr=event.min_mmr,
+                    )
+                    labels = {
+                        "active": "\U0001f3c5 **Now select your rank:**",
+                        "previous": "\U0001f4dd **Now select your previous rank:**",
+                        "never": "\U0001f4dd **Now select your Battle Cup tier:**",
+                    }
+                    await interaction.response.edit_message(
+                        content=labels.get(rank_status, labels["never"]), view=view
+                    )
+                else:
+                    await interaction.response.send_message(
+                        "\u274c User not found.", ephemeral=True
+                    )
             elif custom_id.startswith("rank_medal:"):
                 event_id = int(custom_id.split(":")[1])
                 from discordbot.components import MedalSelect
@@ -177,14 +272,96 @@ class KettleBot(discord.Client):
                 select = MedalSelect(event_id)
                 select._values = interaction.data.get("values", [])
                 await select.callback(interaction)
-            elif custom_id.startswith("rank_details:"):
-                parts = custom_id.split(":")
-                event_id = int(parts[1])
-                rank_status = parts[2]
-                from discordbot.components import RankDetailsButton
+            elif custom_id.startswith("rank_star:"):
+                event_id = int(custom_id.split(":")[1])
+                from asgiref.sync import sync_to_async
 
-                button = RankDetailsButton(event_id, rank_status)
-                await button.callback(interaction)
+                from events.discord import handle_rank_medal_select
+
+                star_values = interaction.data.get("values", [])
+                star = star_values[0] if star_values else "1"
+
+                # Find medal from message components' select default option
+                medal_value = None
+                if interaction.message and interaction.message.components:
+                    for row in interaction.message.components:
+                        for child in row.children:
+                            if (
+                                hasattr(child, "custom_id")
+                                and child.custom_id
+                                and child.custom_id.startswith("rank_medal:")
+                            ):
+                                if hasattr(child, "options"):
+                                    for opt in child.options:
+                                        if opt.default:
+                                            medal_value = opt.value
+                                            break
+
+                medal = medal_value or "Herald"
+                medal_with_star = (
+                    f"{medal} {star}" if medal != "Immortal" else "Immortal"
+                )
+
+                result = await sync_to_async(handle_rank_medal_select)(
+                    event_id=event_id,
+                    discord_user_id=str(interaction.user.id),
+                    medal=medal_with_star,
+                )
+
+                if result.get("action") == "error":
+                    await interaction.response.edit_message(
+                        content=f"\u274c {result['message']}",
+                        view=None,
+                    )
+                    return
+
+                status = result.get("status", "pending")
+
+                # Check if screenshot is required
+                from events.models import Event
+
+                event = await sync_to_async(Event.objects.get)(pk=event_id)
+                if event.discord_require_rank_screenshot:
+                    from discordbot.components import ScreenshotUploadPromptView
+
+                    view = ScreenshotUploadPromptView(event_id, "rank")
+                    await interaction.response.edit_message(
+                        content=f"\u2705 Rank set to **{medal_with_star}**. Status: **{status}**\n\n\U0001f4f7 **Please upload your MMR screenshot:**",
+                        view=view,
+                    )
+                else:
+                    await interaction.response.edit_message(
+                        content=f"\u2705 Rank set to **{medal_with_star}**. You're signed up! Status: **{status}**",
+                        view=None,
+                    )
+            elif custom_id.startswith("rank_status:"):
+                event_id = int(custom_id.split(":")[1])
+                from discordbot.components import RankStatusSelect
+
+                select = RankStatusSelect(event_id)
+                select._values = interaction.data.get("values", [])
+                await select.callback(interaction)
+            elif custom_id.startswith("bcup_tier:"):
+                event_id = int(custom_id.split(":")[1])
+                from discordbot.components import BattleCupTierSelect
+
+                select = BattleCupTierSelect(event_id)
+                select._values = interaction.data.get("values", [])
+                await select.callback(interaction)
+            elif custom_id.startswith("screenshot_upload:"):
+                # Handled by discord.py view system (ScreenshotUploadPromptView)
+                # Only handle as fallback if view timed out / bot restarted
+                if not interaction.response.is_done():
+                    try:
+                        parts = custom_id.split(":")
+                        event_id = int(parts[1])
+                        screenshot_type = parts[2]
+                        from discordbot.components import ScreenshotUploadButton
+
+                        button = ScreenshotUploadButton(event_id, screenshot_type)
+                        await button.callback(interaction)
+                    except discord.errors.HTTPException:
+                        pass  # View already handled it
         # Modal submissions are auto-dispatched by discord.py to Modal.on_submit
 
     async def _handle_rsvp(self, payload, status):

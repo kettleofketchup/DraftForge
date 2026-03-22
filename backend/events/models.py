@@ -218,6 +218,19 @@ class DiscordEventConfigMixin(models.Model):
         blank=True,
         help_text="List of Discord role IDs to @ mention in the signup post",
     )
+    discord_require_rank_screenshot = models.BooleanField(
+        default=False,
+        help_text="Require active ranked players to upload MMR screenshot",
+    )
+    discord_require_battlecup_screenshot = models.BooleanField(
+        default=False,
+        help_text="Require never-ranked players to upload battle cup ticket screenshot",
+    )
+    min_mmr = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Minimum MMR required for event approval (null = no minimum)",
+    )
 
     class Meta:
         abstract = True

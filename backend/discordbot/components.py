@@ -13,6 +13,76 @@ from django.conf import settings
 log = logging.getLogger(__name__)
 
 SITE_URL = getattr(settings, "SITE_URL", "")
+IS_COMPONENTS_V2 = 1 << 15  # 32768
+
+
+async def send_modal_v2(interaction: discord.Interaction, modal: ui.Modal):
+    """Send a modal with IS_COMPONENTS_V2 flag for Label + Select support.
+
+    discord.py's send_modal doesn't set the V2 flag, so Label-wrapped
+    String Selects in modals get rejected. This helper sends the modal
+    response manually with the flag included.
+    """
+    from discord.webhook.async_ import async_context
+
+    adapter = async_context.get()
+    http = interaction._state.http
+
+    payload = modal.to_dict()
+    payload["flags"] = IS_COMPONENTS_V2
+
+    data = {
+        "type": discord.InteractionResponseType.modal.value,
+        "data": payload,
+    }
+
+    from discord.http import MultipartParameters
+
+    params = MultipartParameters(payload=data, multipart=None, files=None)
+
+    await adapter.create_interaction_response(
+        interaction.id,
+        interaction.token,
+        session=interaction._session,
+        proxy=http.proxy,
+        proxy_auth=http.proxy_auth,
+        params=params,
+    )
+
+    if not modal.is_finished():
+        interaction._state.store_view(modal)
+    interaction.response._response_type = discord.InteractionResponseType.modal
+
+
+DOTA_POSITIONS = [
+    discord.SelectOption(label="1: Hard Carry", value="1", emoji="\u2694\ufe0f"),
+    discord.SelectOption(label="2: Midlane", value="2", emoji="\U0001f3af"),
+    discord.SelectOption(label="3: Offlane", value="3", emoji="\U0001f6e1\ufe0f"),
+    discord.SelectOption(label="4: Soft Support", value="4", emoji="\U0001f49a"),
+    discord.SelectOption(label="5: Hard Support", value="5", emoji="\U0001f49b"),
+]
+
+DOTA_MEDALS = [
+    "Herald",
+    "Guardian",
+    "Crusader",
+    "Archon",
+    "Legend",
+    "Ancient",
+    "Divine",
+    "Immortal",
+]
+DOTA_STARS = ["1", "2", "3", "4", "5"]
+
+
+def _medal_options():
+    """Build SelectOption list for Dota 2 medals."""
+    return [discord.SelectOption(label=m, value=m) for m in DOTA_MEDALS]
+
+
+def _star_options():
+    """Build SelectOption list for medal stars 1-5."""
+    return [discord.SelectOption(label=f"Star {s}", value=s) for s in DOTA_STARS]
 
 
 class EventSignupView(ui.View):
@@ -67,6 +137,7 @@ class SignupButton(ui.Button):
         result = await sync_to_async(handle_signup_button)(
             event_id=self.event_id,
             discord_user_id=str(interaction.user.id),
+            discord_username=interaction.user.name,
         )
 
         if result["action"] == "signed_up":
@@ -79,8 +150,18 @@ class SignupButton(ui.Button):
                 event_id=self.event_id,
                 game_type=result["game_type"],
                 prefill=result.get("prefill", {}),
+                event_config={
+                    "require_steam_id": result.get("require_steam_id", True),
+                    "require_rank_screenshot": result.get(
+                        "require_rank_screenshot", False
+                    ),
+                    "require_battlecup_screenshot": result.get(
+                        "require_battlecup_screenshot", False
+                    ),
+                    "min_mmr": result.get("min_mmr"),
+                },
             )
-            await interaction.response.send_modal(modal)
+            await send_modal_v2(interaction, modal)
         elif result["action"] == "error":
             await interaction.response.send_message(
                 f"\u274c {result['message']}",
@@ -202,27 +283,30 @@ class EventSignupModal(ui.Modal):
     - Deadlock: Steam ID, rank (text), rank date
     """
 
-    def __init__(self, event_id, game_type, prefill=None):
+    def __init__(self, event_id, game_type, prefill=None, event_config=None):
         self.event_id = event_id
         self.game_type = game_type
+        self.event_config = event_config or {}
         prefill = prefill or {}
 
         super().__init__(title="Event Sign Up")
 
-        # Steam Friend ID — always shown if missing
-        if "unverified_steam_id" not in prefill or not prefill["unverified_steam_id"]:
-            self.steam_id_input = ui.TextInput(
-                label="Steam Friend ID",
-                placeholder="Your Steam Friend ID (number from Dotabuff URL)",
-                custom_id=f"signup_steam:{event_id}",
+        # Friend ID — shown if missing and required by event
+        require_friend_id = (self.event_config or {}).get("require_steam_id", True)
+        has_friend_id = prefill.get("unverified_friend_id")
+        if require_friend_id and not has_friend_id:
+            self.friend_id_input = ui.TextInput(
+                label="Dota 2 Friend ID",
+                placeholder="Your Friend ID (number from your Dotabuff URL)",
+                custom_id=f"signup_friend_id:{event_id}",
                 required=True,
                 max_length=20,
                 style=discord.TextStyle.short,
-                default=str(prefill.get("unverified_steam_id", "")),
+                default=str(prefill.get("unverified_friend_id", "")),
             )
-            self.add_item(self.steam_id_input)
+            self.add_item(self.friend_id_input)
         else:
-            self.steam_id_input = None
+            self.friend_id_input = None
 
         if game_type == 1:  # Dota 2
             self._add_dota_fields(event_id, prefill)
@@ -230,27 +314,46 @@ class EventSignupModal(ui.Modal):
             self._add_deadlock_fields(event_id, prefill)
 
     def _add_dota_fields(self, event_id, prefill):
-        # NOTE: discord.py Modals only support TextInput, NOT Select menus.
-        # Positions and rank status are collected as text, parsed on submit.
-        self.positions_input = ui.TextInput(
-            label="Preferred Positions (pick 1-3)",
-            placeholder="e.g., 1,2,5 (1=Carry, 2=Mid, 3=Off, 4=Soft Sup, 5=Hard Sup)",
-            custom_id=f"signup_positions:{event_id}",
-            required=True,
-            max_length=20,
-            style=discord.TextStyle.short,
-        )
-        self.add_item(self.positions_input)
+        # Modal only has Steam ID + Rank Status.
+        # Positions are collected in a follow-up ephemeral message (3 selects).
+        self.pos_1_select = None
+        self.pos_2_select = None
+        self.pos_3_select = None
 
-        self.rank_status_input = ui.TextInput(
-            label="Rank Status",
-            placeholder="active, previous, or never",
+        # String Select in modals requires Label wrapper + IS_COMPONENTS_V2 flag
+        self.rank_status_input = ui.Select(
+            placeholder="Select your ranked status",
             custom_id=f"signup_rank_status:{event_id}",
-            required=True,
-            max_length=20,
-            style=discord.TextStyle.short,
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(
+                    label="I have an active MMR",
+                    value="active",
+                    description="Currently ranked in Dota 2",
+                    emoji="\U0001f3af",
+                ),
+                discord.SelectOption(
+                    label="I had an MMR",
+                    value="previous",
+                    description="Previously ranked but not currently",
+                    emoji="\u23f0",
+                ),
+                discord.SelectOption(
+                    label="I've never had an MMR",
+                    value="never",
+                    description="Never played ranked Dota 2",
+                    emoji="\U0001f195",
+                ),
+            ],
         )
-        self.add_item(self.rank_status_input)
+        self.add_item(
+            ui.Label(
+                text="Rank Status",
+                description="What's your Dota 2 ranked status?",
+                component=self.rank_status_input,
+            )
+        )
 
     def _add_deadlock_fields(self, event_id, prefill):
         self.rank_input = ui.TextInput(
@@ -281,15 +384,17 @@ class EventSignupModal(ui.Modal):
 
         # Collect values from fields
         values = {}
-        if self.steam_id_input:
-            values["unverified_steam_id"] = self.steam_id_input.value
+        if self.friend_id_input:
+            values["unverified_friend_id"] = self.friend_id_input.value
 
         if self.game_type == 1:  # Dota 2
-            # Parse comma-separated position numbers from TextInput
-            values["positions"] = [
-                p.strip() for p in self.positions_input.value.split(",") if p.strip()
-            ]
-            values["rank_status"] = self.rank_status_input.value.strip().lower()
+            # Positions collected in follow-up ephemeral, not in modal
+            values["positions"] = []
+            values["rank_status"] = (
+                self.rank_status_input.values[0]
+                if self.rank_status_input and self.rank_status_input.values
+                else None
+            )
         elif self.game_type == 2:  # Deadlock
             values["deadlock_rank"] = self.rank_input.value
             values["deadlock_date"] = self.rank_date_input.value
@@ -302,13 +407,33 @@ class EventSignupModal(ui.Modal):
         )
 
         if result["action"] == "needs_rank_details":
-            # Step 2: send ephemeral follow-up for rank details
-            view = RankDetailsView(
-                event_id=self.event_id,
-                rank_status=values["rank_status"],
+            # Show position selection first, then rank details after
+            rank_status = values.get("rank_status", "never")
+            require_screenshot = (
+                self.event_config.get("require_rank_screenshot", False)
+                if rank_status == "active"
+                else (
+                    self.event_config.get("require_battlecup_screenshot", False)
+                    if rank_status == "never"
+                    else False
+                )
+            )
+            view = PositionSelectView(
+                self.event_id,
+                rank_status,
+                require_screenshot=require_screenshot,
+                min_mmr=self.event_config.get("min_mmr"),
             )
             await interaction.response.send_message(
-                result["message"],
+                "\U0001f3ae **Select your preferred positions:**",
+                view=view,
+                ephemeral=True,
+            )
+        elif result["action"] == "needs_rank_status":
+            # Fallback if rank_status wasn't captured
+            view = RankStatusSelectView(event_id=self.event_id)
+            await interaction.response.send_message(
+                "\U0001f3ae **What's your Dota 2 ranked status?**",
                 view=view,
                 ephemeral=True,
             )
@@ -331,41 +456,49 @@ class EventSignupModal(ui.Modal):
         )
 
 
-class RankDetailsView(ui.View):
-    """Ephemeral follow-up view for collecting rank details after modal submit.
+class RankStatusSelectView(ui.View):
+    """Ephemeral select for MMR status after modal submit.
 
-    Shown when rank_status is 'active', 'previous', or 'never' for Dota 2 events.
+    Options:
+    - I have an active MMR → shows MedalSelect
+    - I had an MMR → shows PreviousRankModal via button
+    - I've never had an MMR → shows BattleCupModal via button
     """
 
-    def __init__(self, event_id, rank_status):
-        super().__init__(timeout=300)  # 5 min timeout for follow-up
+    def __init__(self, event_id):
+        super().__init__(timeout=300)
         self.event_id = event_id
-        self.rank_status = rank_status
-
-        if rank_status == "active":
-            self.add_item(MedalSelect(event_id))
-        elif rank_status in ("previous", "never"):
-            self.add_item(RankDetailsButton(event_id, rank_status))
+        self.add_item(RankStatusSelect(event_id))
 
 
-class MedalSelect(ui.Select):
-    """Select menu for active rank medal."""
+class RankStatusSelect(ui.Select):
+    """Select menu for rank status choice."""
 
     def __init__(self, event_id):
         super().__init__(
-            placeholder="Select your current medal",
-            custom_id=f"rank_medal:{event_id}",
+            placeholder="Select your ranked status",
+            custom_id=f"rank_status:{event_id}",
             min_values=1,
             max_values=1,
             options=[
-                discord.SelectOption(label="Herald", value="Herald"),
-                discord.SelectOption(label="Guardian", value="Guardian"),
-                discord.SelectOption(label="Crusader", value="Crusader"),
-                discord.SelectOption(label="Archon", value="Archon"),
-                discord.SelectOption(label="Legend", value="Legend"),
-                discord.SelectOption(label="Ancient", value="Ancient"),
-                discord.SelectOption(label="Divine", value="Divine"),
-                discord.SelectOption(label="Immortal", value="Immortal"),
+                discord.SelectOption(
+                    label="I have an active MMR",
+                    value="active",
+                    description="Currently ranked in Dota 2",
+                    emoji="\U0001f3af",
+                ),
+                discord.SelectOption(
+                    label="I had an MMR",
+                    value="previous",
+                    description="Previously ranked but not currently",
+                    emoji="\u23f0",
+                ),
+                discord.SelectOption(
+                    label="I've never had an MMR",
+                    value="never",
+                    description="Never played ranked Dota 2",
+                    emoji="\U0001f195",
+                ),
             ],
         )
         self.event_id = event_id
@@ -373,119 +506,418 @@ class MedalSelect(ui.Select):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
+        from events.discord import handle_rank_status_select
+
+        rank_status = self.values[0]
+
+        # Save rank_status to profile
+        await sync_to_async(handle_rank_status_select)(
+            event_id=self.event_id,
+            discord_user_id=str(interaction.user.id),
+            rank_status=rank_status,
+        )
+
+        view = RankDetailsView(self.event_id, rank_status)
+        labels = {
+            "active": "\U0001f3c5 **Select your current medal and star:**",
+            "previous": "\U0001f3c5 **Select your previous medal and star:**",
+            "never": "\U0001f4dd **Select your Battle Cup tier:**",
+        }
+        await interaction.response.edit_message(
+            content=labels.get(rank_status, labels["never"]),
+            view=view,
+        )
+
+
+class PositionSelectView(ui.View):
+    """Ephemeral view with 3 position selects. Confirm saves positions and shows rank details."""
+
+    def __init__(self, event_id, rank_status, require_screenshot=False, min_mmr=None):
+        super().__init__(timeout=300)
+        self.event_id = event_id
+        self.rank_status = rank_status
+        self.require_screenshot = require_screenshot
+        self.min_mmr = min_mmr
+
+        self.pos_1 = ui.Select(
+            placeholder="1st Choice Position",
+            custom_id=f"pos_select_1:{event_id}",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(label=o.label, value=o.value, emoji=o.emoji)
+                for o in DOTA_POSITIONS
+            ],
+        )
+        self.add_item(self.pos_1)
+
+        self.pos_2 = ui.Select(
+            placeholder="2nd Choice Position",
+            custom_id=f"pos_select_2:{event_id}",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(label=o.label, value=o.value, emoji=o.emoji)
+                for o in DOTA_POSITIONS
+            ],
+        )
+        self.add_item(self.pos_2)
+
+        self.pos_3 = ui.Select(
+            placeholder="3rd Choice Position (optional)",
+            custom_id=f"pos_select_3:{event_id}",
+            min_values=0,
+            max_values=1,
+            options=[
+                discord.SelectOption(label=o.label, value=o.value, emoji=o.emoji)
+                for o in DOTA_POSITIONS
+            ],
+        )
+        self.add_item(self.pos_3)
+
+        self.add_item(
+            PositionConfirmButton(event_id, rank_status, require_screenshot, min_mmr)
+        )
+
+
+class PositionConfirmButton(ui.Button):
+    """Confirm button that saves positions and transitions to rank details."""
+
+    def __init__(self, event_id, rank_status, require_screenshot=False, min_mmr=None):
+        super().__init__(
+            label="Confirm Positions",
+            style=discord.ButtonStyle.success,
+            custom_id=f"pos_confirm:{event_id}",
+            emoji="\u2705",
+        )
+        self.event_id = event_id
+        self.rank_status = rank_status
+        self.require_screenshot = require_screenshot
+        self.min_mmr = min_mmr
+
+    async def callback(self, interaction: discord.Interaction):
+        from asgiref.sync import sync_to_async
+
+        from events.discord import _get_org_user
+        from events.models import Event
+
+        # Collect positions from sibling selects
+        positions = []
+        for item in self.view.children:
+            if isinstance(item, ui.Select) and item.values:
+                positions.extend(item.values)
+
+        # Save positions to profile
+        event = await sync_to_async(Event.objects.select_related("organization").get)(
+            pk=self.event_id
+        )
+        org_user, _ = await sync_to_async(_get_org_user)(
+            event, str(interaction.user.id)
+        )
+
+        if org_user:
+            from cacheops import invalidate_obj
+
+            from org.models_profiles import PlayerDotaProfile
+
+            profile = await sync_to_async(
+                lambda: PlayerDotaProfile.objects.get_or_create(org_user=org_user)[0]
+            )()
+            profile.pos_1 = "1" in positions
+            profile.pos_2 = "2" in positions
+            profile.pos_3 = "3" in positions
+            profile.pos_4 = "4" in positions
+            profile.pos_5 = "5" in positions
+            await sync_to_async(profile.save)()
+            await sync_to_async(invalidate_obj)(profile)
+
+        # Now show rank details
+        view = RankDetailsView(
+            self.event_id,
+            self.rank_status,
+            require_screenshot=self.require_screenshot,
+            min_mmr=self.min_mmr,
+        )
+        labels = {
+            "active": "\U0001f3c5 **Now select your rank:**",
+            "previous": "\U0001f4dd **Now select your previous rank:**",
+            "never": "\U0001f4dd **Now select your Battle Cup tier:**",
+        }
+        await interaction.response.edit_message(
+            content=labels.get(self.rank_status, labels["never"]),
+            view=view,
+        )
+
+
+class RankDetailsView(ui.View):
+    """Ephemeral follow-up for collecting rank details. All selects, no modals.
+
+    - active: Medal + Star selects → signs up
+    - previous: Medal + Star selects → signs up (date not required)
+    - never: Battle Cup Tier select → signs up
+    """
+
+    def __init__(self, event_id, rank_status, require_screenshot=False, min_mmr=None):
+        super().__init__(timeout=300)
+        self.event_id = event_id
+        self.rank_status = rank_status
+        self.require_screenshot = require_screenshot
+        self.min_mmr = min_mmr
+
+        if rank_status in ("active", "previous"):
+            self.add_item(MedalSelect(event_id))
+            self.add_item(
+                StarSelect(event_id, rank_status, require_screenshot=require_screenshot)
+            )
+        elif rank_status == "never":
+            self.add_item(
+                BattleCupTierSelect(event_id, require_screenshot=require_screenshot)
+            )
+
+
+class MedalSelect(ui.Select):
+    """Select menu for rank medal."""
+
+    def __init__(self, event_id):
+        super().__init__(
+            placeholder="Select your medal",
+            custom_id=f"rank_medal:{event_id}",
+            min_values=1,
+            max_values=1,
+            options=_medal_options(),
+        )
+        self.event_id = event_id
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+
+
+class StarSelect(ui.Select):
+    """Select menu for medal star 1-5. Triggers signup on selection."""
+
+    def __init__(self, event_id, rank_status="active", require_screenshot=False):
+        super().__init__(
+            placeholder="Select your star (1-5)",
+            custom_id=f"rank_star:{event_id}",
+            min_values=1,
+            max_values=1,
+            options=_star_options(),
+        )
+        self.event_id = event_id
+        self.rank_status = rank_status
+        self.require_screenshot = require_screenshot
+
+    async def callback(self, interaction: discord.Interaction):
+        from asgiref.sync import sync_to_async
+
         from events.discord import handle_rank_medal_select
+
+        medal_select = None
+        for item in self.view.children:
+            if isinstance(item, MedalSelect) and item.values:
+                medal_select = item
+                break
+
+        medal = medal_select.values[0] if medal_select else "Herald"
+        star = self.values[0]
+        medal_with_star = f"{medal} {star}" if medal != "Immortal" else "Immortal"
 
         result = await sync_to_async(handle_rank_medal_select)(
             event_id=self.event_id,
             discord_user_id=str(interaction.user.id),
-            medal=self.values[0],
+            medal=medal_with_star,
         )
 
-        await interaction.response.edit_message(
-            content=f"\u2705 Rank set to **{self.values[0]}**. You're signed up! Status: **{result['status']}**",
-            view=None,
-        )
+        label = "Rank" if self.rank_status == "active" else "Previous rank"
+        if self.require_screenshot:
+            view = ScreenshotUploadPromptView(self.event_id, "rank")
+            await interaction.response.edit_message(
+                content=(
+                    f"\u2705 {label} set to **{medal_with_star}**. Status: **{result['status']}**\n\n"
+                    "\U0001f4f7 **Please upload your MMR screenshot to complete verification:**"
+                ),
+                view=view,
+            )
+        else:
+            await interaction.response.edit_message(
+                content=f"\u2705 {label} set to **{medal_with_star}**. You're signed up! Status: **{result['status']}**",
+                view=None,
+            )
 
 
-class RankDetailsButton(ui.Button):
-    """Button that opens a mini-modal for previous rank / battle cup details."""
+class BattleCupTierSelect(ui.Select):
+    """Select menu for Battle Cup tier. Triggers signup on selection."""
 
-    def __init__(self, event_id, rank_status):
-        label = (
-            "Enter Rank Details"
-            if rank_status == "previous"
-            else "Enter Battle Cup Info"
-        )
+    def __init__(self, event_id, require_screenshot=False):
         super().__init__(
-            label=label,
-            style=discord.ButtonStyle.primary,
-            custom_id=f"rank_details:{event_id}:{rank_status}",
+            placeholder="Select your max Battle Cup tier",
+            custom_id=f"bcup_tier:{event_id}",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(label=f"Tier {t}", value=str(t))
+                for t in range(1, 9)
+            ],
         )
         self.event_id = event_id
-        self.rank_status = rank_status
+        self.require_screenshot = require_screenshot
 
     async def callback(self, interaction: discord.Interaction):
-        if self.rank_status == "previous":
-            modal = PreviousRankModal(self.event_id)
-        else:
-            modal = BattleCupModal(self.event_id)
-        await interaction.response.send_modal(modal)
-
-
-class PreviousRankModal(ui.Modal, title="Previous Rank"):
-    """Modal for previously ranked players."""
-
-    def __init__(self, event_id):
-        super().__init__()
-        self.event_id = event_id
-
-        self.medal_input = ui.TextInput(
-            label="What was your highest medal?",
-            placeholder="e.g., Legend, Ancient, Divine",
-            custom_id=f"prev_medal:{event_id}",
-            required=True,
-            max_length=50,
-            style=discord.TextStyle.short,
-        )
-        self.add_item(self.medal_input)
-
-        self.date_input = ui.TextInput(
-            label="When were you last ranked?",
-            placeholder="e.g., January 2026, 6 months ago",
-            custom_id=f"prev_date:{event_id}",
-            required=True,
-            max_length=50,
-            style=discord.TextStyle.short,
-        )
-        self.add_item(self.date_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        from asgiref.sync import sync_to_async
-
-        from events.discord import handle_previous_rank_submit
-
-        result = await sync_to_async(handle_previous_rank_submit)(
-            event_id=self.event_id,
-            discord_user_id=str(interaction.user.id),
-            medal=self.medal_input.value,
-            date_text=self.date_input.value,
-        )
-
-        await interaction.response.send_message(
-            f"\u2705 Rank info saved. You're signed up! Status: **{result['status']}**",
-            ephemeral=True,
-        )
-
-
-class BattleCupModal(ui.Modal, title="Battle Cup Info"):
-    """Modal for never-ranked players."""
-
-    def __init__(self, event_id):
-        super().__init__()
-        self.event_id = event_id
-
-        self.tier_input = ui.TextInput(
-            label="Max Battle Cup ticket tier you can buy",
-            placeholder="Enter the number (e.g., 3, 5, 8)",
-            custom_id=f"bcup_tier:{event_id}",
-            required=True,
-            max_length=5,
-            style=discord.TextStyle.short,
-        )
-        self.add_item(self.tier_input)
-
-    async def on_submit(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
         from events.discord import handle_battle_cup_submit
 
+        tier = self.values[0]
+
         result = await sync_to_async(handle_battle_cup_submit)(
             event_id=self.event_id,
             discord_user_id=str(interaction.user.id),
-            tier=self.tier_input.value,
+            tier=tier,
         )
 
+        if self.require_screenshot:
+            view = ScreenshotUploadPromptView(self.event_id, "battlecup")
+            await interaction.response.edit_message(
+                content=(
+                    f"\u2705 Battle Cup tier {tier} saved. Status: **{result['status']}**\n\n"
+                    "\U0001f4f7 **Please upload your Battle Cup screenshot to complete verification:**"
+                ),
+                view=view,
+            )
+        else:
+            await interaction.response.edit_message(
+                content=f"\u2705 Battle Cup tier {tier} saved. You're signed up! Status: **{result['status']}**",
+                view=None,
+            )
+
+
+# ---------------------------------------------------------------------------
+# Screenshot upload flow (V2 modals)
+# ---------------------------------------------------------------------------
+
+SCREENSHOT_EXAMPLE_URLS = {
+    "rank": "https://assets.kettle.sh/draftforge/discord/rank/dota2/dota2_rank.png",
+    "battlecup": "https://assets.kettle.sh/draftforge/discord/rank/dota2/battlecup_ticket.png",
+}
+
+
+class ScreenshotUploadPromptView(ui.View):
+    """Ephemeral prompt with Upload Screenshot button."""
+
+    def __init__(self, event_id, screenshot_type):
+        super().__init__(timeout=300)
+        self.event_id = event_id
+        self.screenshot_type = screenshot_type
+        self.example_url = SCREENSHOT_EXAMPLE_URLS.get(screenshot_type, "")
+        self.add_item(ScreenshotUploadButton(event_id, screenshot_type))
+
+
+class ScreenshotUploadButton(ui.Button):
+    """Button that opens the screenshot upload modal."""
+
+    def __init__(self, event_id, screenshot_type):
+        label = (
+            "Upload MMR Screenshot"
+            if screenshot_type == "rank"
+            else "Upload Battle Cup Screenshot"
+        )
+        super().__init__(
+            label=label,
+            style=discord.ButtonStyle.primary,
+            custom_id=f"screenshot_upload:{event_id}:{screenshot_type}",
+            emoji="\U0001f4f8",
+        )
+        self.event_id = event_id
+        self.screenshot_type = screenshot_type
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.response.is_done():
+            log.warning("Screenshot upload interaction already acknowledged")
+            return
+        modal = ScreenshotUploadModal(self.event_id, self.screenshot_type)
+        await send_modal_v2(interaction, modal)
+
+
+class ScreenshotUploadModal(ui.Modal):
+    """V2 modal with TextDisplay (example + tips) and FileUpload or URL fallback."""
+
+    def __init__(self, event_id, screenshot_type):
+        self.event_id = event_id
+        self.screenshot_type = screenshot_type
+
+        title = (
+            "Upload MMR Screenshot"
+            if screenshot_type == "rank"
+            else "Upload Battle Cup Screenshot"
+        )
+        super().__init__(title=title)
+
+        from discordbot.screenshot_tips import SCREENSHOT_TIPS
+
+        example_url = SCREENSHOT_EXAMPLE_URLS.get(screenshot_type, "")
+
+        # Show example + tips (only TextDisplay type 10 is allowed in modals, not MediaGallery)
+        if hasattr(ui, "TextDisplay"):
+            label = "MMR" if screenshot_type == "rank" else "Battle Cup ticket"
+            self.add_item(
+                ui.TextDisplay(
+                    content=f"**Example {label} screenshot:**\n{example_url}\n\n{SCREENSHOT_TIPS}"
+                )
+            )
+
+        # Add FileUpload if available, otherwise fall back to TextInput for URL
+        if hasattr(ui, "FileUpload"):
+            self.file_upload = ui.FileUpload(
+                custom_id=f"screenshot_file:{event_id}:{screenshot_type}",
+            )
+            self.add_item(ui.Label(text="Screenshot", component=self.file_upload))
+            self.url_input = None
+        else:
+            self.file_upload = None
+            self.url_input = ui.TextInput(
+                label="Imgur Link",
+                placeholder="Paste your imgur.com link here",
+                custom_id=f"screenshot_url:{event_id}:{screenshot_type}",
+                required=True,
+                style=discord.TextStyle.short,
+            )
+            self.add_item(self.url_input)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        from asgiref.sync import sync_to_async
+
+        from events.discord import handle_screenshot_upload
+
+        # Get URL from file upload or text input
+        if self.file_upload and interaction.data.get("resolved", {}).get("files"):
+            files = interaction.data["resolved"]["files"]
+            attachment_url = list(files.values())[0].get("url", "") if files else ""
+        elif self.url_input:
+            attachment_url = self.url_input.value
+        else:
+            attachment_url = ""
+
+        result = await sync_to_async(handle_screenshot_upload)(
+            event_id=self.event_id,
+            discord_user_id=str(interaction.user.id),
+            screenshot_type=self.screenshot_type,
+            attachment_url=attachment_url,
+        )
+
+        if result.get("success"):
+            await interaction.response.send_message(
+                "\u2705 Screenshot uploaded successfully! You're all set.",
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(
+                f"\u274c {result.get('message', 'Upload failed.')}",
+                ephemeral=True,
+            )
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        log.exception("ScreenshotUploadModal error: %s", error)
         await interaction.response.send_message(
-            f"\u2705 Battle Cup tier saved. You're signed up! Status: **{result['status']}**",
+            "\u274c Something went wrong.",
             ephemeral=True,
         )

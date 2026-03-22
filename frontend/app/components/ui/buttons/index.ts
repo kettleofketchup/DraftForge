@@ -1,5 +1,5 @@
 // Shared styles
-export { brandBg, brandDepthColors, brandErrorBg, brandErrorCard, brandErrorPrimary, brandGlow, brandGradient, brandSecondary, brandSecondary3D, brandSecondaryOpaque, brandSecondaryOpaque3D, brandSuccessBg, button3DBase, button3DDisabled, button3DVariants } from './styles';
+export { brandBg, brandDepthColors, brandErrorBg, brandErrorCard, brandErrorPrimary, brandGlow, brandGradient, brandHighlight, brandHighlightText, brandSecondary, brandSecondary3D, brandSecondaryOpaque, brandSecondaryOpaque3D, brandSuccessBg, button3DBase, button3DDisabled, button3DVariants } from './styles';
 export type { Button3DVariant } from './styles';
 
 // Base Buttons
@@ -10,6 +10,9 @@ export { CancelButton } from './CancelButton';
 export type { CancelButtonProps, CancelButtonVariant } from './CancelButton';
 
 export { ConfirmButton } from './ConfirmButton';
+
+export { HighlightButton } from './HighlightButton';
+export type { HighlightButtonProps } from './HighlightButton';
 export type { ConfirmButtonProps, ConfirmButtonVariant } from './ConfirmButton';
 
 export { DestructiveButton } from './DestructiveButton';

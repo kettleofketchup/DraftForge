@@ -52,14 +52,14 @@ class PlayerDotaProfileTest(TestCase):
         )
         self.assertEqual(profile.battle_cup_tier, 5)
 
-    def test_unverified_steam_id(self):
+    def test_friend_id(self):
         from org.models_profiles import PlayerDotaProfile
 
         profile = PlayerDotaProfile.objects.create(
             org_user=self.org_user,
-            unverified_steam_id="123456789",
+            friend_id="123456789",
         )
-        self.assertEqual(profile.unverified_steam_id, "123456789")
+        self.assertEqual(profile.unverified_friend_id, "123456789")
         # Verify it did NOT touch CustomUser.steam_account_id
         self.user.refresh_from_db()
         self.assertIsNone(self.user.steam_account_id)
@@ -93,11 +93,11 @@ class PlayerDeadlockProfileTest(TestCase):
         )
         self.assertEqual(profile.rank, "idk maybe like medium?")
 
-    def test_unverified_steam_id_on_deadlock(self):
+    def test_friend_id_on_deadlock(self):
         from org.models_profiles import PlayerDeadlockProfile
 
         profile = PlayerDeadlockProfile.objects.create(
             org_user=self.org_user,
-            unverified_steam_id="987654321",
+            friend_id="987654321",
         )
-        self.assertEqual(profile.unverified_steam_id, "987654321")
+        self.assertEqual(profile.unverified_friend_id, "987654321")

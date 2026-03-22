@@ -121,13 +121,14 @@ def sync_discord_events():
     discord_events_created = 0
 
     for event in active_events:
-        # 1. Signup post (forum thread or channel message)
+        # 1. Signup post — only when signups are actually open
         has_signup = (
             event.pk in events_with_signup_post
             or ("event_announcement", event.pk) in existing_logs
         )
         if (
-            event.discord_announcement
+            event.state == EventState.SIGNUPS_OPEN
+            and event.discord_announcement
             and event.discord_announcement_channel_id
             and not has_signup
         ):
@@ -198,6 +199,8 @@ def send_event_announcement(event_id):
     event = Event.objects.select_related("organization", "event_repeater").get(
         pk=event_id
     )
+    if event.state != EventState.SIGNUPS_OPEN:
+        return f"Skipped: event state is {event.state}, not signups_open"
     if not event.discord_announcement or not event.discord_announcement_channel_id:
         return "Skipped: announcement disabled"
 

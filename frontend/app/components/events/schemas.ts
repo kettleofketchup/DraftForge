@@ -77,6 +77,9 @@ export const eventSchema = z.object({
   discord_announcement_hours: z.number(),
   discord_announcement_role_ids: z.array(z.string()).default([]),
   discord_signup_role_ids: z.array(z.string()).default([]),
+  discord_require_rank_screenshot: z.boolean(),
+  discord_require_battlecup_screenshot: z.boolean(),
+  min_mmr: z.number().nullable(),
   _warning: z.string().optional(),
 });
 
@@ -104,6 +107,21 @@ export const eventSignupSchema = z.object({
     }).nullable(),
     steam_account_id: z.number().nullable(),
     avatarUrl: z.string().nullable(),
+  }).nullable(),
+  dota_profile: z.object({
+    positions: z.object({
+      pos_1: z.boolean(),
+      pos_2: z.boolean(),
+      pos_3: z.boolean(),
+      pos_4: z.boolean(),
+      pos_5: z.boolean(),
+    }),
+    rank_status: z.string(),
+    rank_medal: z.string().nullable(),
+    mmr: z.number().nullable(),
+    rank_screenshot: z.string().nullable(),
+    battlecup_screenshot: z.string().nullable(),
+    battle_cup_tier: z.number().nullable(),
   }).nullable(),
   event_team: z.number().nullable(),
   signup_type: z.string(),
@@ -161,6 +179,9 @@ export const discordConfigSchema = z.object({
   discord_announcement_hours: z.number().int().min(1),
   discord_announcement_role_ids: z.array(z.string()).default([]),
   discord_signup_role_ids: z.array(z.string()).default([]),
+  discord_require_rank_screenshot: z.boolean(),
+  discord_require_battlecup_screenshot: z.boolean(),
+  min_mmr: z.number().int().min(0).nullable(),
 });
 
 export const DISCORD_CONFIG_DEFAULTS = {
@@ -183,6 +204,9 @@ export const DISCORD_CONFIG_DEFAULTS = {
   discord_announcement_hours: 24,
   discord_announcement_role_ids: [] as string[],
   discord_signup_role_ids: [] as string[],
+  discord_require_rank_screenshot: false,
+  discord_require_battlecup_screenshot: false,
+  min_mmr: null as number | null,
 } as const;
 
 export const createEventInputSchema = z.object({
@@ -220,8 +244,8 @@ export const discordEventMsgSchema = z.object({
   id: z.number(),
   channel_id: z.string(),
   channel_type: z.string(),
-  message_id: z.string(),
-  thread_id: z.string(),
+  message_id: z.string().nullable(),
+  thread_id: z.string().nullable(),
   has_posted: z.boolean(),
   message_last_updated: z.string().nullable(),
   created_at: z.string(),
@@ -259,7 +283,7 @@ export const discordEventDMSchema = z.object({
 export const discordEventStateSchema = z.object({
   id: z.number(),
   guild_id: z.string(),
-  scheduled_event_id: z.string(),
+  scheduled_event_id: z.string().nullable(),
   signup_message: discordEventMsgSchema.nullable(),
   announcement: discordEventMsgSchema.nullable(),
   logs: z.array(discordEventLogSchema),

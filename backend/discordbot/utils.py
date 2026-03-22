@@ -431,6 +431,67 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
         return None
 
 
+def sync_create_dm_channel(user_id):
+    """Create a DM channel with a Discord user.
+
+    Args:
+        user_id: Discord user ID
+
+    Returns:
+        str: DM channel ID, or None on error
+    """
+    url = f"{DISCORD_API_BASE}/users/@me/channels"
+    payload = {"recipient_id": str(user_id)}
+
+    try:
+        response = requests.post(url, json=payload, headers=_get_headers())
+        response.raise_for_status()
+        data = response.json()
+        return data.get("id")
+    except requests.RequestException as e:
+        log.error("Failed to create DM channel for user %s: %s", user_id, e)
+        return None
+
+
+def sync_send_dm(user_id, embed=None, content=None):
+    """Send a DM to a Discord user.
+
+    Creates a DM channel then sends a message with optional embed.
+
+    Args:
+        user_id: Discord user ID
+        embed: Optional embed dict
+        content: Optional text content
+
+    Returns:
+        dict: API response with message data, or None on error
+    """
+    dm_channel_id = sync_create_dm_channel(user_id)
+    if not dm_channel_id:
+        return None
+
+    url = f"{DISCORD_API_BASE}/channels/{dm_channel_id}/messages"
+    payload = {}
+    if content:
+        payload["content"] = content
+    if embed:
+        payload["embeds"] = [embed]
+
+    if not payload:
+        log.warning("sync_send_dm called with no content or embed")
+        return None
+
+    try:
+        response = requests.post(url, json=payload, headers=_get_headers())
+        response.raise_for_status()
+        data = response.json()
+        log.info("Sent DM to user %s (message_id=%s)", user_id, data.get("id"))
+        return data
+    except requests.RequestException as e:
+        log.error("Failed to send DM to user %s: %s", user_id, e)
+        return None
+
+
 def sync_add_reactions(channel_id, message_id, emojis=None):
     """
     Add reaction emojis to a message for RSVP.

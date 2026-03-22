@@ -17,6 +17,9 @@ import {
   getEventSignups,
   openSignups as openSignupsAPI,
   rejectSignup as rejectSignupAPI,
+  unconfirmSignup as unconfirmSignupAPI,
+  demoteSignup as demoteSignupAPI,
+  reinstateSignup as reinstateSignupAPI,
   rsvpForEvent,
   startRollCall as startRollCallAPI,
   startTournament as startTournamentAPI,
@@ -166,10 +169,13 @@ export function useSignupActionMutations(eventId: number) {
     queryClient.invalidateQueries({ queryKey: ['event', eventId] });
   };
   return {
-    approve: useMutation({ mutationFn: (id: number) => approveSignupAPI(id), onSuccess: invalidate }),
+    approve: useMutation({ mutationFn: ({ id, mmr }: { id: number; mmr?: number }) => approveSignupAPI(id, mmr), onSuccess: invalidate }),
     reject: useMutation({ mutationFn: (id: number) => rejectSignupAPI(id), onSuccess: invalidate }),
     confirm: useMutation({ mutationFn: (id: number) => confirmSignupAPI(id), onSuccess: invalidate }),
     cancel: useMutation({ mutationFn: (id: number) => cancelSignupAPI(id), onSuccess: invalidate }),
+    unconfirm: useMutation({ mutationFn: (id: number) => unconfirmSignupAPI(id), onSuccess: invalidate }),
+    demote: useMutation({ mutationFn: (id: number) => demoteSignupAPI(id), onSuccess: invalidate }),
+    reinstate: useMutation({ mutationFn: (id: number) => reinstateSignupAPI(id), onSuccess: invalidate }),
   };
 }
 
