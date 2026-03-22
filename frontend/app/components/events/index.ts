@@ -4,6 +4,7 @@ export {
   type CreateEventInput, type EventSignupType, type EventTeamType, type EventType,
 } from './schemas';
 
+export { ApprovalConfigSection } from './ApprovalConfigSection';
 export { CreateEventModal } from './CreateEventModal';
 export { EditEventModal } from './EditEventModal';
 export { EditOrgDefaultsModal } from './EditOrgDefaultsModal';

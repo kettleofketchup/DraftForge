@@ -23,7 +23,9 @@ import {
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { ShieldCheck } from 'lucide-react';
 import { useUpdateEventMutation } from '~/hooks/useEvent';
+import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
 import { discordConfigSchema, GameType, GameMode, DISCORD_CONFIG_DEFAULTS } from './schemas';
@@ -159,6 +161,10 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
         <Tabs defaultValue="event">
           <TabsList className="w-full">
             <TabsTrigger value="event">Event</TabsTrigger>
+            <TabsTrigger value="approval">
+              <ShieldCheck className="h-4 w-4" />
+              Approval
+            </TabsTrigger>
             <TabsTrigger value="discord">
               <DiscordIcon className="h-4 w-4" />
               Discord
@@ -368,6 +374,10 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
 
         <LobbyConfigSection control={form.control} watch={form.watch} />
 
+          </TabsContent>
+
+          <TabsContent value="approval" className="space-y-4">
+            <ApprovalConfigSection control={form.control} watch={form.watch} />
           </TabsContent>
 
           <TabsContent value="discord" className="space-y-4">
