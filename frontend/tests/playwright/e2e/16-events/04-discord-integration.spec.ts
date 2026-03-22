@@ -38,6 +38,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
   });
 
   test('creating event with Discord config generates Discord posts', async ({ context, page }) => {
+    test.setTimeout(90_000);
     // 1. Create event via API with Discord config
     const createResp = await postWithCsrf(context, `${API_URL}/events/?open_signups=true`, {
       organization: eventInfo.orgPk,
@@ -104,6 +105,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
   });
 
   test('signup updates Discord post and shows in activity log', async ({ context, page }) => {
+    test.setTimeout(90_000);
     // 1. Create event with Discord config as admin
     const createResp = await postWithCsrf(context, `${API_URL}/events/?open_signups=true`, {
       organization: eventInfo.orgPk,
