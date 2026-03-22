@@ -18,6 +18,7 @@ from events.models import (
     OrgEventDefaults,
     RepeatFrequency,
 )
+from org.models_profiles import PlayerDotaProfile
 from tests.data import (
     ADMIN_USER,
     EVENT_ADMIN_USER,
@@ -109,6 +110,66 @@ def populate_events_data(force=False):
         mmr = 2000 + (i * 200)
         org_user = ensure_org_user(user, org, mmr=mmr)
         ensure_league_user(user, org_user, league)
+
+    # 3c. Create DotaProfiles for first 4 players with varied rank data
+    dota_profiles = [
+        {
+            "rank_status": "active",
+            "rank_medal": "Legend 3",
+            "mmr": 3200,
+            "pos_1": True,
+            "pos_3": True,
+            "pos_5": True,
+            "rank_screenshot": "https://assets.kettle.sh/draftforge/discord/rank/dota2/dota2_rank.png",
+        },
+        {
+            "rank_status": "active",
+            "rank_medal": "Ancient 1",
+            "mmr": 3800,
+            "pos_2": True,
+            "pos_4": True,
+            "rank_screenshot": "https://i.imgur.com/example1.png",
+        },
+        {
+            "rank_status": "previous",
+            "rank_medal": "Divine 2",
+            "mmr": None,
+            "pos_1": True,
+            "pos_2": True,
+            "pos_5": True,
+        },
+        {
+            "rank_status": "never",
+            "battle_cup_tier": 5,
+            "mmr": None,
+            "pos_3": True,
+            "pos_4": True,
+            "pos_5": True,
+            "battlecup_screenshot": "https://assets.kettle.sh/draftforge/discord/rank/dota2/battlecup_ticket.png",
+        },
+    ]
+
+    for i, user_data in enumerate(EVENTS_USERS[:4]):
+        profile_data = dota_profiles[i]
+        user = CustomUser.objects.get(pk=user_data.pk)
+        ou = ensure_org_user(user, org, mmr=2000 + (i * 200))
+        PlayerDotaProfile.objects.update_or_create(
+            org_user=ou,
+            defaults={
+                "rank_status": profile_data.get("rank_status", "never"),
+                "rank_medal": profile_data.get("rank_medal", ""),
+                "mmr": profile_data.get("mmr"),
+                "battle_cup_tier": profile_data.get("battle_cup_tier"),
+                "rank_screenshot": profile_data.get("rank_screenshot", ""),
+                "battlecup_screenshot": profile_data.get("battlecup_screenshot", ""),
+                "pos_1": profile_data.get("pos_1", False),
+                "pos_2": profile_data.get("pos_2", False),
+                "pos_3": profile_data.get("pos_3", False),
+                "pos_4": profile_data.get("pos_4", False),
+                "pos_5": profile_data.get("pos_5", False),
+            },
+        )
+    print(f"    Created {len(dota_profiles)} Dota 2 profiles with rank data")
 
     # 4. Grant admin access
     event_admin = CustomUser.objects.filter(pk=EVENT_ADMIN_USER.pk).first()

@@ -1,7 +1,14 @@
 import nh3
 from rest_framework import serializers
 
-from events.models import Event, EventRepeater, EventSignup, EventTeam, OrgEventDefaults
+from events.models import (
+    Event,
+    EventRepeater,
+    EventSignup,
+    EventTeam,
+    OrgEventDefaults,
+    RepeaterSubscription,
+)
 
 
 class EventRepeaterSerializer(serializers.ModelSerializer):
@@ -56,6 +63,9 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "require_profile_complete",
             "roll_call_enabled",
             "roll_call_mode",
+            "allow_active_mmr",
+            "allow_previous_rank",
+            "allow_battlecup_rating",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -76,6 +86,11 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "discord_announcement_hours",
             "discord_announcement_role_ids",
             "discord_signup_role_ids",
+            "discord_subscriber_dm",
+            "discord_subscriber_dm_hours",
+            "discord_require_rank_screenshot",
+            "discord_require_battlecup_screenshot",
+            "min_mmr",
             "discord_notify_new_events",
             "subscriber_count",
             "is_subscribed",
@@ -163,6 +178,9 @@ class EventSerializer(serializers.ModelSerializer):
             "require_profile_complete",
             "roll_call_enabled",
             "roll_call_mode",
+            "allow_active_mmr",
+            "allow_previous_rank",
+            "allow_battlecup_rating",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -183,6 +201,11 @@ class EventSerializer(serializers.ModelSerializer):
             "discord_announcement_hours",
             "discord_announcement_role_ids",
             "discord_signup_role_ids",
+            "discord_subscriber_dm",
+            "discord_subscriber_dm_hours",
+            "discord_require_rank_screenshot",
+            "discord_require_battlecup_screenshot",
+            "min_mmr",
         ]
         read_only_fields = [
             "id",
@@ -234,6 +257,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.nickname", read_only=True)
     user_avatar = serializers.CharField(source="user.avatar", read_only=True)
     user_data = serializers.SerializerMethodField()
+    dota_profile = serializers.SerializerMethodField()
 
     class Meta:
         model = EventSignup
@@ -244,6 +268,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "username",
             "user_avatar",
             "user_data",
+            "dota_profile",
             "event_team",
             "signup_type",
             "status",
@@ -261,9 +286,44 @@ class EventSignupSerializer(serializers.ModelSerializer):
         ]
 
     def get_user_data(self, obj):
-        from app.serializers import TournamentUserSerializer
+        from app.models import CustomUser
+        from app.serializers import TournamentUserSerializer, _serialize_user_with_mmr
 
-        return TournamentUserSerializer(obj.user).data
+        # Resolve user — obj.user may be a SimpleLazyObject from request.user
+        # which breaks type(user).objects calls. Always fetch a real instance.
+        user = CustomUser.objects.get(pk=obj.user.pk)
+
+        if not obj.event.tournament:
+            return TournamentUserSerializer(user).data
+        return _serialize_user_with_mmr(user, obj.event.tournament)
+
+    def get_dota_profile(self, obj):
+        """Return DotaProfile data if the user has one for this event's org."""
+        from org.models import OrgUser
+        from org.models_profiles import PlayerDotaProfile
+
+        try:
+            org_user = OrgUser.objects.get(
+                user=obj.user, organization=obj.event.organization
+            )
+            profile = PlayerDotaProfile.objects.get(org_user=org_user)
+            return {
+                "positions": {
+                    "pos_1": profile.pos_1,
+                    "pos_2": profile.pos_2,
+                    "pos_3": profile.pos_3,
+                    "pos_4": profile.pos_4,
+                    "pos_5": profile.pos_5,
+                },
+                "rank_status": profile.rank_status,
+                "rank_medal": profile.rank_medal,
+                "mmr": profile.mmr,
+                "rank_screenshot": profile.rank_screenshot or None,
+                "battlecup_screenshot": profile.battlecup_screenshot or None,
+                "battle_cup_tier": profile.battle_cup_tier,
+            }
+        except (OrgUser.DoesNotExist, PlayerDotaProfile.DoesNotExist):
+            return None
 
 
 class OrgEventDefaultsSerializer(serializers.ModelSerializer):
@@ -298,6 +358,9 @@ class OrgEventDefaultsSerializer(serializers.ModelSerializer):
             "require_profile_complete",
             "roll_call_enabled",
             "roll_call_mode",
+            "allow_active_mmr",
+            "allow_previous_rank",
+            "allow_battlecup_rating",
             # DiscordEventConfigMixin
             "discord_create_event",
             "discord_sync_signups",
@@ -318,5 +381,21 @@ class OrgEventDefaultsSerializer(serializers.ModelSerializer):
             "discord_announcement_hours",
             "discord_announcement_role_ids",
             "discord_signup_role_ids",
+            "discord_subscriber_dm",
+            "discord_subscriber_dm_hours",
+            "discord_require_rank_screenshot",
+            "discord_require_battlecup_screenshot",
+            "min_mmr",
         ]
         read_only_fields = ["id", "organization"]
+
+
+class RepeaterSubscriptionSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    nickname = serializers.CharField(source="user.nickname", read_only=True)
+    discordId = serializers.CharField(source="user.discordId", read_only=True)
+    avatar = serializers.CharField(source="user.avatar", read_only=True)
+
+    class Meta:
+        model = RepeaterSubscription
+        fields = ["id", "username", "nickname", "discordId", "avatar", "created_at"]

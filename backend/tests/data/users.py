@@ -11,7 +11,7 @@ during database population and used by Playwright/Cypress tests.
 from tests.data.models import TestPositions, TestUser
 
 # =============================================================================
-# Site-Level Test Users (for login fixtures)
+# Site-Level Test Users (pk=1001-1031, for login fixtures)
 # =============================================================================
 
 # Admin user - site superuser
@@ -115,12 +115,13 @@ LEAGUE_STAFF_USER: TestUser = TestUser(
 )
 
 # =============================================================================
-# Real Tournament 38 Users (from production data)
+# Real Tournament 38 Users (pk=3000-3019, from production data)
 # These are real users with Steam IDs for testing Steam league sync
 # =============================================================================
 
 TOURNAMENT_USERS: dict[str, TestUser] = {
     "just__khang": TestUser(
+        pk=3000,
         username="just__khang",
         steam_id=237494518,
         mmr=4600,
@@ -130,6 +131,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "clarexlauda": TestUser(
+        pk=3001,
         username="clarexlauda",
         steam_id=150363706,
         mmr=2000,
@@ -139,6 +141,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "heffdawgz": TestUser(
+        pk=3002,
         username="heffdawgz",
         steam_id=84657820,
         mmr=5800,
@@ -148,6 +151,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "pushingshots": TestUser(
+        pk=3003,
         username="pushingshots",
         steam_id=104427945,
         mmr=2725,
@@ -157,6 +161,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "anil98765": TestUser(
+        pk=3004,
         username="anil98765",
         steam_id=104151469,
         mmr=2000,
@@ -166,6 +171,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "tornope": TestUser(
+        pk=3005,
         username="tornope",
         steam_id=174372053,
         mmr=3500,
@@ -175,6 +181,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "nimstria1": TestUser(
+        pk=3006,
         username="nimstria1",
         steam_id=171468462,
         mmr=500,
@@ -184,6 +191,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "creemy__": TestUser(
+        pk=3007,
         username="creemy__",
         steam_id=114010086,
         mmr=4400,
@@ -193,6 +201,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "ethan0688_": TestUser(
+        pk=3008,
         username="ethan0688_",
         steam_id=875238678,
         mmr=6600,
@@ -202,6 +211,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "hassanzulfi": TestUser(
+        pk=3009,
         username="hassanzulfi",
         steam_id=115198530,
         mmr=2700,
@@ -211,6 +221,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "sir_t_rex": TestUser(
+        pk=3010,
         username="sir_t_rex",
         steam_id=93840608,
         mmr=4500,
@@ -220,6 +231,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "abaybay1392": TestUser(
+        pk=3011,
         username="abaybay1392",
         steam_id=299870746,
         mmr=6700,
@@ -229,6 +241,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "p0styp0sty": TestUser(
+        pk=3012,
         username="p0styp0sty",
         steam_id=275837954,
         mmr=122,
@@ -238,6 +251,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "reacher_z": TestUser(
+        pk=3013,
         username="reacher_z",
         steam_id=84874902,
         mmr=400,
@@ -247,6 +261,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "vrm.mtl": TestUser(
+        pk=3014,
         username="vrm.mtl",
         steam_id=151410512,
         mmr=6500,
@@ -256,6 +271,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "gglive": TestUser(
+        pk=3015,
         username="gglive",
         steam_id=1101709346,
         mmr=9000,
@@ -265,6 +281,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "thekingauto": TestUser(
+        pk=3016,
         username="thekingauto",
         steam_id=97505772,
         mmr=2920,
@@ -274,6 +291,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "leafael.": TestUser(
+        pk=3017,
         username="leafael.",
         steam_id=1098211999,
         mmr=4268,
@@ -283,6 +301,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "benevolentgremlin": TestUser(
+        pk=3018,
         username="benevolentgremlin",
         steam_id=150218787,
         mmr=6800,
@@ -292,6 +311,7 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
         ),
     ),
     "bearthebear": TestUser(
+        pk=3019,
         username="bearthebear",
         steam_id=240083333,
         mmr=2600,
@@ -303,14 +323,14 @@ TOURNAMENT_USERS: dict[str, TestUser] = {
 }
 
 # =============================================================================
-# CSV Import Test Users
+# CSV Import Test Users (pk=2000-2004)
 # These users exist in the DB but are NOT members of any org/tournament.
 # CSV import tests use their Steam/Discord IDs to add them.
 # =============================================================================
 
 CSV_IMPORT_USERS: list[TestUser] = [
     TestUser(
-        pk=1040,
+        pk=2000,
         username="csv_steam_user",
         nickname="CSV Steam User",
         discord_id=None,
@@ -318,7 +338,7 @@ CSV_IMPORT_USERS: list[TestUser] = [
         mmr=4200,
     ),
     TestUser(
-        pk=1041,
+        pk=2001,
         username="csv_discord_user",
         nickname="CSV Discord User",
         discord_id="300000000000000001",
@@ -326,7 +346,7 @@ CSV_IMPORT_USERS: list[TestUser] = [
         mmr=3800,
     ),
     TestUser(
-        pk=1042,
+        pk=2002,
         username="csv_both_ids",
         nickname="CSV Both IDs",
         discord_id="300000000000000002",
@@ -334,7 +354,7 @@ CSV_IMPORT_USERS: list[TestUser] = [
         mmr=5100,
     ),
     TestUser(
-        pk=1043,
+        pk=2003,
         username="csv_conflict_user",
         nickname="CSV Conflict User",
         discord_id="300000000000000099",
@@ -342,7 +362,7 @@ CSV_IMPORT_USERS: list[TestUser] = [
         mmr=4700,
     ),
     TestUser(
-        pk=1044,
+        pk=2004,
         username="csv_team_user",
         nickname="CSV Team User",
         discord_id=None,
@@ -352,7 +372,7 @@ CSV_IMPORT_USERS: list[TestUser] = [
 ]
 
 # =============================================================================
-# User Edit Test Users
+# User Edit Test Users (pk=2050-2052)
 # These users are members of the User Edit Org/League/Tournament.
 # User edit E2E tests modify their fields (MMR, nickname, etc.)
 # =============================================================================
@@ -385,7 +405,7 @@ USER_EDIT_USERS: list[TestUser] = [
 ]
 
 # =============================================================================
-# Shuffle Tie Test Users
+# Shuffle Tie Test Users (pk=4000-4019)
 # 4 captains + 16 available players for shuffle draft tie resolution tests.
 # Captain 1 has 2000 MMR (picks first), Captains 2-4 have 3000 MMR (tie after pick).
 # All available players have 2000 MMR.
@@ -393,7 +413,7 @@ USER_EDIT_USERS: list[TestUser] = [
 
 SHUFFLE_TIE_CAPTAINS: list[TestUser] = [
     TestUser(
-        pk=1060,
+        pk=4000,
         username="tie_captain_alpha",
         nickname="Tie Captain Alpha",
         discord_id="500000000000000001",
@@ -401,7 +421,7 @@ SHUFFLE_TIE_CAPTAINS: list[TestUser] = [
         mmr=2000,
     ),
     TestUser(
-        pk=1061,
+        pk=4001,
         username="tie_captain_beta",
         nickname="Tie Captain Beta",
         discord_id="500000000000000002",
@@ -409,7 +429,7 @@ SHUFFLE_TIE_CAPTAINS: list[TestUser] = [
         mmr=3000,
     ),
     TestUser(
-        pk=1062,
+        pk=4002,
         username="tie_captain_gamma",
         nickname="Tie Captain Gamma",
         discord_id="500000000000000003",
@@ -417,7 +437,7 @@ SHUFFLE_TIE_CAPTAINS: list[TestUser] = [
         mmr=3000,
     ),
     TestUser(
-        pk=1063,
+        pk=4003,
         username="tie_captain_delta",
         nickname="Tie Captain Delta",
         discord_id="500000000000000004",
@@ -428,7 +448,7 @@ SHUFFLE_TIE_CAPTAINS: list[TestUser] = [
 
 SHUFFLE_TIE_PLAYERS: list[TestUser] = [
     TestUser(
-        pk=1064 + i,
+        pk=4004 + i,
         username=f"tie_player_{i + 1:02d}",
         nickname=f"Tie Player {i + 1:02d}",
         discord_id=f"50000000000000{i + 5:04d}",
@@ -441,11 +461,11 @@ SHUFFLE_TIE_PLAYERS: list[TestUser] = [
 SHUFFLE_TIE_USERS: list[TestUser] = SHUFFLE_TIE_CAPTAINS + SHUFFLE_TIE_PLAYERS
 
 # =============================================================================
-# Events E2E test users (pk=1080-1100)
+# Events E2E test users (pk=5000-5020)
 # =============================================================================
 
 EVENT_ADMIN_USER: TestUser = TestUser(
-    pk=1080,
+    pk=5000,
     username="event_org_admin",
     nickname="EventAdmin",
     discord_id="880000000000000001",
@@ -457,7 +477,7 @@ EVENT_ADMIN_USER: TestUser = TestUser(
 )
 
 EVENT_PLAYER_1: TestUser = TestUser(
-    pk=1081,
+    pk=5001,
     username="event_player_1",
     nickname="EventPlayer1",
     discord_id="880000000000000002",
@@ -467,7 +487,7 @@ EVENT_PLAYER_1: TestUser = TestUser(
 )
 
 EVENT_PLAYER_2: TestUser = TestUser(
-    pk=1082,
+    pk=5002,
     username="event_player_2",
     nickname="EventPlayer2",
     discord_id="880000000000000003",
@@ -477,7 +497,7 @@ EVENT_PLAYER_2: TestUser = TestUser(
 )
 
 EVENT_PLAYER_3: TestUser = TestUser(
-    pk=1083,
+    pk=5003,
     username="event_player_3",
     nickname="EventPlayer3",
     discord_id="880000000000000004",
@@ -487,7 +507,7 @@ EVENT_PLAYER_3: TestUser = TestUser(
 )
 
 EVENT_PLAYER_4: TestUser = TestUser(
-    pk=1084,
+    pk=5004,
     username="event_player_4",
     nickname="EventPlayer4",
     discord_id="880000000000000005",
@@ -496,7 +516,7 @@ EVENT_PLAYER_4: TestUser = TestUser(
 )
 
 EVENT_PLAYER_5: TestUser = TestUser(
-    pk=1085,
+    pk=5005,
     username="event_player_5",
     nickname="EventPlayer5",
     discord_id="880000000000000006",
@@ -505,7 +525,7 @@ EVENT_PLAYER_5: TestUser = TestUser(
 )
 
 EVENT_PLAYER_6: TestUser = TestUser(
-    pk=1086,
+    pk=5006,
     username="event_player_6",
     nickname="EventPlayer6",
     discord_id="880000000000000007",
@@ -514,7 +534,7 @@ EVENT_PLAYER_6: TestUser = TestUser(
 )
 
 EVENT_PLAYER_7: TestUser = TestUser(
-    pk=1087,
+    pk=5007,
     username="event_player_7",
     nickname="EventPlayer7",
     discord_id="880000000000000008",
@@ -523,7 +543,7 @@ EVENT_PLAYER_7: TestUser = TestUser(
 )
 
 EVENT_PLAYER_8: TestUser = TestUser(
-    pk=1088,
+    pk=5008,
     username="event_player_8",
     nickname="EventPlayer8",
     discord_id="880000000000000009",
@@ -532,7 +552,7 @@ EVENT_PLAYER_8: TestUser = TestUser(
 )
 
 EVENT_PLAYER_9: TestUser = TestUser(
-    pk=1089,
+    pk=5009,
     username="event_player_9",
     nickname="EventPlayer9",
     discord_id="880000000000000010",
@@ -541,7 +561,7 @@ EVENT_PLAYER_9: TestUser = TestUser(
 )
 
 EVENT_PLAYER_10: TestUser = TestUser(
-    pk=1090,
+    pk=5010,
     username="event_player_10",
     nickname="EventPlayer10",
     discord_id="880000000000000011",
@@ -550,7 +570,7 @@ EVENT_PLAYER_10: TestUser = TestUser(
 )
 
 EVENT_PLAYER_11: TestUser = TestUser(
-    pk=1091,
+    pk=5011,
     username="event_player_11",
     nickname="EventPlayer11",
     discord_id="880000000000000012",
@@ -559,7 +579,7 @@ EVENT_PLAYER_11: TestUser = TestUser(
 )
 
 EVENT_PLAYER_12: TestUser = TestUser(
-    pk=1092,
+    pk=5012,
     username="event_player_12",
     nickname="EventPlayer12",
     discord_id="880000000000000013",
@@ -568,7 +588,7 @@ EVENT_PLAYER_12: TestUser = TestUser(
 )
 
 EVENT_PLAYER_13: TestUser = TestUser(
-    pk=1093,
+    pk=5013,
     username="event_player_13",
     nickname="EventPlayer13",
     discord_id="880000000000000014",
@@ -577,7 +597,7 @@ EVENT_PLAYER_13: TestUser = TestUser(
 )
 
 EVENT_PLAYER_14: TestUser = TestUser(
-    pk=1094,
+    pk=5014,
     username="event_player_14",
     nickname="EventPlayer14",
     discord_id="880000000000000015",
@@ -586,7 +606,7 @@ EVENT_PLAYER_14: TestUser = TestUser(
 )
 
 EVENT_PLAYER_15: TestUser = TestUser(
-    pk=1095,
+    pk=5015,
     username="event_player_15",
     nickname="EventPlayer15",
     discord_id="880000000000000016",
@@ -595,7 +615,7 @@ EVENT_PLAYER_15: TestUser = TestUser(
 )
 
 EVENT_PLAYER_16: TestUser = TestUser(
-    pk=1096,
+    pk=5016,
     username="event_player_16",
     nickname="EventPlayer16",
     discord_id="880000000000000017",
@@ -604,7 +624,7 @@ EVENT_PLAYER_16: TestUser = TestUser(
 )
 
 EVENT_PLAYER_17: TestUser = TestUser(
-    pk=1097,
+    pk=5017,
     username="event_player_17",
     nickname="EventPlayer17",
     discord_id="880000000000000018",
@@ -613,7 +633,7 @@ EVENT_PLAYER_17: TestUser = TestUser(
 )
 
 EVENT_PLAYER_18: TestUser = TestUser(
-    pk=1098,
+    pk=5018,
     username="event_player_18",
     nickname="EventPlayer18",
     discord_id="880000000000000019",
@@ -622,7 +642,7 @@ EVENT_PLAYER_18: TestUser = TestUser(
 )
 
 EVENT_PLAYER_19: TestUser = TestUser(
-    pk=1099,
+    pk=5019,
     username="event_player_19",
     nickname="EventPlayer19",
     discord_id="880000000000000020",
@@ -631,7 +651,7 @@ EVENT_PLAYER_19: TestUser = TestUser(
 )
 
 EVENT_PLAYER_20: TestUser = TestUser(
-    pk=1100,
+    pk=5020,
     username="event_player_20",
     nickname="EventPlayer20",
     discord_id="880000000000000021",

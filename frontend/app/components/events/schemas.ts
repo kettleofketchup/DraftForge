@@ -58,6 +58,9 @@ export const eventSchema = z.object({
   require_profile_complete: z.boolean(),
   roll_call_enabled: z.boolean(),
   roll_call_mode: z.string(),
+  allow_active_mmr: z.boolean(),
+  allow_previous_rank: z.boolean(),
+  allow_battlecup_rating: z.boolean(),
   discord_create_event: z.boolean(),
   discord_sync_signups: z.boolean(),
   discord_event_title: z.string(),
@@ -77,6 +80,11 @@ export const eventSchema = z.object({
   discord_announcement_hours: z.number(),
   discord_announcement_role_ids: z.array(z.string()).default([]),
   discord_signup_role_ids: z.array(z.string()).default([]),
+  discord_subscriber_dm: z.boolean(),
+  discord_subscriber_dm_hours: z.number(),
+  discord_require_rank_screenshot: z.boolean(),
+  discord_require_battlecup_screenshot: z.boolean(),
+  min_mmr: z.number().nullable(),
   _warning: z.string().optional(),
 });
 
@@ -104,6 +112,21 @@ export const eventSignupSchema = z.object({
     }).nullable(),
     steam_account_id: z.number().nullable(),
     avatarUrl: z.string().nullable(),
+  }).nullable(),
+  dota_profile: z.object({
+    positions: z.object({
+      pos_1: z.boolean(),
+      pos_2: z.boolean(),
+      pos_3: z.boolean(),
+      pos_4: z.boolean(),
+      pos_5: z.boolean(),
+    }),
+    rank_status: z.string(),
+    rank_medal: z.string().nullable(),
+    mmr: z.number().nullable(),
+    rank_screenshot: z.string().nullable(),
+    battlecup_screenshot: z.string().nullable(),
+    battle_cup_tier: z.number().nullable(),
   }).nullable(),
   event_team: z.number().nullable(),
   signup_type: z.string(),
@@ -161,6 +184,14 @@ export const discordConfigSchema = z.object({
   discord_announcement_hours: z.number().int().min(1),
   discord_announcement_role_ids: z.array(z.string()).default([]),
   discord_signup_role_ids: z.array(z.string()).default([]),
+  discord_subscriber_dm: z.boolean(),
+  discord_subscriber_dm_hours: z.number().int().min(1),
+  discord_require_rank_screenshot: z.boolean(),
+  discord_require_battlecup_screenshot: z.boolean(),
+  min_mmr: z.number().int().min(0).nullable(),
+  allow_active_mmr: z.boolean(),
+  allow_previous_rank: z.boolean(),
+  allow_battlecup_rating: z.boolean(),
 });
 
 export const DISCORD_CONFIG_DEFAULTS = {
@@ -183,6 +214,14 @@ export const DISCORD_CONFIG_DEFAULTS = {
   discord_announcement_hours: 24,
   discord_announcement_role_ids: [] as string[],
   discord_signup_role_ids: [] as string[],
+  discord_subscriber_dm: false,
+  discord_subscriber_dm_hours: 24,
+  discord_require_rank_screenshot: false,
+  discord_require_battlecup_screenshot: false,
+  min_mmr: null as number | null,
+  allow_active_mmr: true,
+  allow_previous_rank: true,
+  allow_battlecup_rating: true,
 } as const;
 
 export const createEventInputSchema = z.object({
@@ -215,3 +254,75 @@ export const createEventInputSchema = z.object({
 }).merge(discordConfigSchema);
 
 export type CreateEventInput = z.infer<typeof createEventInputSchema>;
+
+export const discordEventMsgSchema = z.object({
+  id: z.number(),
+  channel_id: z.string(),
+  channel_type: z.string(),
+  message_id: z.string().nullable(),
+  thread_id: z.string().nullable(),
+  has_posted: z.boolean(),
+  message_last_updated: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const LogCategory = {
+  SYSTEM: 1,
+  INTERACTION: 2,
+  SIGNUP: 3,
+  NOTIFICATION: 4,
+} as const;
+
+export const LOG_CATEGORY_LABELS: Record<number, string> = {
+  [LogCategory.SYSTEM]: 'System',
+  [LogCategory.INTERACTION]: 'Interaction',
+  [LogCategory.SIGNUP]: 'Signup',
+  [LogCategory.NOTIFICATION]: 'Notification',
+};
+
+export const discordEventLogSchema = z.object({
+  id: z.number(),
+  category: z.number(),
+  category_display: z.string(),
+  action: z.string(),
+  target_type: z.string(),
+  discord_user_id: z.string(),
+  discord_username: z.string(),
+  message_id: z.string().nullable(),
+  status_code: z.number().nullable(),
+  error_message: z.string(),
+  success: z.boolean(),
+  created_at: z.string(),
+});
+
+export const discordEventDMSchema = z.object({
+  id: z.number(),
+  dm_type: z.number(),
+  dm_type_display: z.string(),
+  username: z.string().nullable(),
+  nickname: z.string().nullable(),
+  discord_user_id: z.string().nullable(),
+  can_send: z.boolean(),
+  message_id: z.string(),
+  sent_at: z.string().nullable(),
+  delivered: z.boolean(),
+  responded: z.boolean(),
+  response_text: z.string(),
+  responded_at: z.string().nullable(),
+  created_at: z.string(),
+});
+
+export const discordEventStateSchema = z.object({
+  id: z.number(),
+  guild_id: z.string(),
+  scheduled_event_id: z.string().nullable(),
+  signup_message: discordEventMsgSchema.nullable(),
+  announcement: discordEventMsgSchema.nullable(),
+  logs: z.array(discordEventLogSchema),
+  dms: z.array(discordEventDMSchema),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export type DiscordEventState = z.infer<typeof discordEventStateSchema>;

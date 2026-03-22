@@ -26,6 +26,10 @@ export const brandGlow = 'shadow-brand-glow';
 // tailwind-merge conflicts with bg-* (background-color).
 export const brandSuccessBg = '[background-image:var(--brand-success-bg)]';
 
+// Brand highlight - emerald-to-violet cyberpunk gradient for featured info (org links, stats, callouts).
+export const brandHighlight = 'bg-gradient-to-r from-emerald-900/40 to-violet-900/40 border border-emerald-500/20 hover:from-emerald-900/60 hover:to-violet-900/60';
+export const brandHighlightText = 'bg-gradient-to-r from-emerald-400 to-violet-400 bg-clip-text text-transparent';
+
 // Brand error surfaces - muted deep wine/red tones for error containers.
 // Uses raw Tailwind colors (not semantic --error/--primary) because error surfaces
 // need deep wine/muted tones, not the bright accent status colors.

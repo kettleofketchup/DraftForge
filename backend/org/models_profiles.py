@@ -4,16 +4,16 @@ from django.db import models
 class PlayerProfileMixin(models.Model):
     """Abstract mixin for game-specific player profiles.
 
-    Provides unverified_steam_id — the Steam ID entered via Discord modal.
-    This is NOT the verified steam_account_id on CustomUser. Verification
-    happens separately (Steam OAuth or admin approval).
+    Provides friend_id — the Dota 2 Friend ID (32-bit Steam account ID)
+    entered via Discord modal. This is self-reported and unverified.
+    Verification happens separately (Steam OAuth or admin approval).
     """
 
-    unverified_steam_id = models.CharField(
+    unverified_friend_id = models.CharField(
         max_length=20,
         blank=True,
         default="",
-        help_text="Steam Friend ID entered via Discord (unverified)",
+        help_text="Dota 2 Friend ID (self-reported, unverified)",
     )
 
     class Meta:
@@ -52,6 +52,23 @@ class PlayerDotaProfile(PlayerProfileMixin):
         null=True,
         blank=True,
         help_text="Max battle cup ticket tier (for 'never' ranked users)",
+    )
+    mmr = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Self-reported numeric MMR",
+    )
+    rank_screenshot = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="URL to uploaded MMR screenshot",
+    )
+    battlecup_screenshot = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="URL to uploaded battle cup ticket screenshot",
     )
     pos_1 = models.BooleanField(default=False, help_text="Carry")
     pos_2 = models.BooleanField(default=False, help_text="Mid")

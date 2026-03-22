@@ -124,7 +124,7 @@ class EventSignupModalTest(TestCase):
             from discordbot.components import EventSignupModal
 
             modal = EventSignupModal(
-                event_id=42, game_type=1, prefill={"unverified_steam_id": "12345"}
+                event_id=42, game_type=1, prefill={"unverified_friend_id": "12345"}
             )
             steam_inputs = [
                 i for i in modal.children if "steam" in getattr(i, "custom_id", "")

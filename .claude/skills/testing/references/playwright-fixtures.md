@@ -93,8 +93,8 @@ For events E2E tests on the dedicated Events Test Org.
 | `getEventsTestData(context)` | GET `/api/organizations/` + `/api/events/` | Look up Events Test Org and E2E Signup Event by name |
 | `resetEventsData(context)` | POST `/api/tests/events/reset/` | Reset events: delete signups, delete generated events, reset E2E Signup Event |
 | `triggerEventGeneration(context)` | POST `/api/tests/events/generate/` | Run `generate_upcoming_events()` synchronously (bypasses Celery beat) |
-| `loginEventAdmin(context)` | POST `/api/tests/login-as/` (pk=1080) | Login as Events Test Org admin |
-| `loginEventPlayer(context)` | POST `/api/tests/login-as/` (pk=1081) | Login as event player |
+| `loginEventAdmin(context)` | POST `/api/tests/login-as/` (pk=5000) | Login as Events Test Org admin |
+| `loginEventPlayer(context)` | POST `/api/tests/login-as/` (pk=5001) | Login as event player |
 
 ### Constants
 

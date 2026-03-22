@@ -48,7 +48,7 @@ app.conf.beat_schedule = {
     # Reconciliation: ensure Discord matches DB for all active events
     "sync-discord-events": {
         "task": "events.tasks.sync_discord_events",
-        "schedule": 300.0,  # Every 5 minutes
+        "schedule": 60.0,  # Every minute
     },
 }
 

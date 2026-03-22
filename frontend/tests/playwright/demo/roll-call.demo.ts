@@ -24,7 +24,7 @@ const VIDEO_OUTPUT_DIR = 'demo-results/videos/roll_call';
 const FINAL_VIDEO_DIR = '../docs/assets/videos';
 const DEMO_METADATA_FILE = path.join('demo-results/videos', 'roll_call.demo.yaml');
 
-const PLAYER_PKS = Array.from({ length: 20 }, (_, i) => 1081 + i);
+const PLAYER_PKS = Array.from({ length: 20 }, (_, i) => 5001 + i);
 
 // ---------------------------------------------------------------------------
 // Cursor helpers

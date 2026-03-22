@@ -5,6 +5,7 @@ from discordbot.models import DiscordMessageLog
 from events.models import Event, EventSignup, EventState, SignupStatus
 from events.tests.base import EventTestCase
 from org.models import OrgUser
+from org.models_profiles import PlayerDotaProfile
 
 
 class HandleSignupButtonTest(EventTestCase):
@@ -46,11 +47,17 @@ class HandleSignupButtonTest(EventTestCase):
         self.assertEqual(result["action"], "needs_modal")
         self.assertEqual(result["game_type"], GameType.DOTA2)
 
-    def test_unlinked_user_returns_error(self):
+    def test_unknown_discord_user_auto_creates_account(self):
+        from app.models import CustomUser
         from events.discord import handle_signup_button
 
-        result = handle_signup_button(self.event.pk, "999999999999999999")
-        self.assertEqual(result["action"], "error")
+        result = handle_signup_button(
+            self.event.pk, "999999999999999999", discord_username="newplayer"
+        )
+        # Should auto-create user and proceed to modal (not error)
+        self.assertEqual(result["action"], "needs_modal")
+        user = CustomUser.objects.get(discordId="999999999999999999")
+        self.assertEqual(user.nickname, "newplayer")
 
     def test_closed_event_returns_error(self):
         from events.discord import handle_signup_button
@@ -59,6 +66,23 @@ class HandleSignupButtonTest(EventTestCase):
         self.event.save()
         result = handle_signup_button(self.event.pk, "100000000000000001")
         self.assertEqual(result["action"], "error")
+
+    def test_signup_button_returns_screenshot_config(self):
+        """handle_signup_button includes screenshot config in needs_modal response."""
+        from events.discord import handle_signup_button
+
+        self.event.discord_require_rank_screenshot = True
+        self.event.min_mmr = 3000
+        self.event.save()
+
+        result = handle_signup_button(
+            event_id=self.event.pk,
+            discord_user_id="100000000000000001",
+        )
+        self.assertEqual(result["action"], "needs_modal")
+        self.assertTrue(result["require_rank_screenshot"])
+        self.assertFalse(result["require_battlecup_screenshot"])
+        self.assertEqual(result["min_mmr"], 3000)
 
 
 class HandleSignupModalSubmitTest(EventTestCase):
@@ -83,7 +107,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
             discord_user_id="100000000000000001",
             game_type=1,
             values={
-                "unverified_steam_id": "12345",
+                "unverified_friend_id": "12345",
                 "positions": ["1", "2", "5"],
                 "rank_status": "active",
             },
@@ -98,11 +122,32 @@ class HandleSignupModalSubmitTest(EventTestCase):
         self.assertTrue(profile.pos_2)
         self.assertTrue(profile.pos_5)
         self.assertFalse(profile.pos_3)
-        self.assertEqual(profile.unverified_steam_id, "12345")
+        self.assertEqual(profile.unverified_friend_id, "12345")
 
         # Verify CustomUser.steam_account_id was NOT modified
         self.user.refresh_from_db()
         self.assertIsNone(self.user.steam_account_id)
+
+    def test_dota_modal_saves_positions_from_selects(self):
+        """Position values from select menus are correctly saved to profile."""
+        from events.discord import handle_signup_modal_submit
+
+        result = handle_signup_modal_submit(
+            event_id=self.event.pk,
+            discord_user_id="100000000000000001",
+            game_type=1,  # Dota 2
+            values={
+                "unverified_friend_id": "12345",
+                "positions": ["1", "3", "5"],  # Select values, not comma-separated
+                "rank_status": "active",
+            },
+        )
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertTrue(profile.pos_1)
+        self.assertFalse(profile.pos_2)
+        self.assertTrue(profile.pos_3)
+        self.assertFalse(profile.pos_4)
+        self.assertTrue(profile.pos_5)
 
     def test_deadlock_modal_signs_up_directly(self):
         from events.discord import handle_signup_modal_submit
@@ -115,7 +160,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
             discord_user_id="100000000000000001",
             game_type=2,
             values={
-                "unverified_steam_id": "12345",
+                "unverified_friend_id": "12345",
                 "deadlock_rank": "Phantom IV",
                 "deadlock_date": "last week",
             },
@@ -126,7 +171,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
 
         profile = PlayerDeadlockProfile.objects.get(org_user=self.org_user)
         self.assertEqual(profile.rank, "Phantom IV")
-        self.assertEqual(profile.unverified_steam_id, "12345")
+        self.assertEqual(profile.unverified_friend_id, "12345")
 
 
 class HandleRankMedalSelectTest(EventTestCase):
@@ -163,3 +208,48 @@ class HandleRankMedalSelectTest(EventTestCase):
         self.assertTrue(
             EventSignup.objects.filter(event=self.event, user=self.user).exists()
         )
+
+
+class HandleScreenshotUploadTest(EventTestCase):
+    def setUp(self):
+        super().setUp()
+        self.event.state = EventState.SIGNUPS_OPEN
+        self.event.game_type = GameType.DOTA2
+        self.event.save()
+        self.user.discordId = "100000000000000001"
+        self.user.save()
+        self.org_user = OrgUser.objects.create(
+            user=self.user,
+            organization=self.event.organization,
+        )
+        self.profile = PlayerDotaProfile.objects.create(org_user=self.org_user)
+
+    def test_screenshot_upload_saves_url(self):
+        """Screenshot upload handler saves URL to profile."""
+        from events.discord import handle_screenshot_upload
+
+        result = handle_screenshot_upload(
+            event_id=self.event.pk,
+            discord_user_id="100000000000000001",
+            screenshot_type="rank",
+            attachment_url="https://cdn.discord.com/test/screenshot.png",
+        )
+        self.assertTrue(result["success"])
+        self.profile.refresh_from_db()
+        self.assertEqual(
+            self.profile.rank_screenshot,
+            "https://cdn.discord.com/test/screenshot.png",
+        )
+
+    def test_screenshot_upload_rejects_invalid_extension(self):
+        """Screenshot upload rejects non-image files."""
+        from events.discord import handle_screenshot_upload
+
+        result = handle_screenshot_upload(
+            event_id=self.event.pk,
+            discord_user_id="100000000000000001",
+            screenshot_type="rank",
+            attachment_url="https://cdn.discord.com/test/file.pdf",
+        )
+        self.assertFalse(result["success"])
+        self.assertIn("Invalid file type", result["message"])

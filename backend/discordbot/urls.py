@@ -28,6 +28,7 @@ urlpatterns = [
         name="organization-discord-members",
     ),
     path("interactions/", discord_interactions, name="discord-interactions"),
+    path("interactions", discord_interactions, name="discord-interactions-no-slash"),
     path(
         "search-discord-members/",
         search_discord_members,

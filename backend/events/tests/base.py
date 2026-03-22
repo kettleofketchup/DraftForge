@@ -52,7 +52,7 @@ class EventTestCase(TestCase):
             name="Test Event",
             description="A test event for unit tests.",
             scheduled_at=tz.now() + timedelta(days=7),
-            state=EventState.UPCOMING,
+            state=EventState.SIGNUPS_OPEN,
             created_by=cls.admin,
             tournament_name="Test Event Tourney",
             tournament_league=cls.league,

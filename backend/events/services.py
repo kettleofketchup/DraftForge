@@ -5,7 +5,7 @@ from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from cacheops import invalidate_obj
-from django.db import transaction
+from django.db import models, transaction
 
 from app.cache_utils import invalidate_after_commit
 from app.models import Tournament
@@ -32,12 +32,55 @@ logger = logging.getLogger(__name__)
 
 def check_requirements(event, user):
     """Check if user meets event confirmation requirements."""
+    from org.models import OrgUser
+    from org.models_profiles import PlayerDotaProfile
+
     if event.require_steam_id and not user.steamid:
         return False
-    if event.require_mmr_verified and not user.has_active_dota_mmr:
-        return False
+    if event.require_mmr_verified:
+        try:
+            org_user = OrgUser.objects.get(user=user, organization=event.organization)
+            if not org_user.has_active_dota_mmr:
+                return False
+        except OrgUser.DoesNotExist:
+            return False
+
+    # Check rank type restrictions and screenshot requirements (Dota 2 only)
+    try:
+        org_user = OrgUser.objects.get(user=user, organization=event.organization)
+        profile = PlayerDotaProfile.objects.get(org_user=org_user)
+
+        # Rank type allowed?
+        if profile.rank_status == "active" and not event.allow_active_mmr:
+            return False
+        if profile.rank_status == "previous" and not event.allow_previous_rank:
+            return False
+        if profile.rank_status == "never" and not event.allow_battlecup_rating:
+            return False
+
+        # Screenshot required but missing?
+        if event.discord_require_rank_screenshot and profile.rank_status in (
+            "active",
+            "previous",
+        ):
+            if not profile.rank_screenshot:
+                return False
+        if (
+            event.discord_require_battlecup_screenshot
+            and profile.rank_status == "never"
+        ):
+            if not profile.battlecup_screenshot:
+                return False
+
+        # Min MMR check
+        if event.min_mmr and profile.rank_status == "active":
+            if not profile.mmr or profile.mmr < event.min_mmr:
+                return False
+    except (OrgUser.DoesNotExist, PlayerDotaProfile.DoesNotExist):
+        pass  # No profile = skip Dota-specific checks
+
     if event.require_profile_complete:
-        if not user.nickname or not user.steamid or not user.discordId:
+        if not (user.nickname and user.steamid and user.discordId):
             return False
     return True
 
@@ -128,16 +171,42 @@ def process_rsvp(event, user, event_team=None):
     return signup
 
 
-APPROVABLE_STATUSES = [SignupStatus.RSVP, SignupStatus.PENDING_APPROVAL]
+APPROVABLE_STATUSES = [
+    SignupStatus.RSVP,
+    SignupStatus.PENDING_APPROVAL,
+    SignupStatus.WAITLISTED,
+]
 
 
 @transaction.atomic
-def approve_signup(signup):
-    """Approve a signup."""
+def approve_signup(signup, mmr_override=None):
+    """Approve a signup, optionally setting the user's MMR."""
+    from django.utils import timezone as tz
+
+    from org.models import OrgUser
+
     if signup.status not in APPROVABLE_STATUSES:
         raise ValueError(f"Cannot approve signup in '{signup.status}' status.")
+
+    # Apply MMR override when provided by an admin
+    if mmr_override is not None:
+        try:
+            org_user = OrgUser.objects.get(
+                user=signup.user, organization=signup.event.organization
+            )
+        except OrgUser.DoesNotExist:
+            raise ValueError("User is not a member of this organization.")
+        org_user.mmr = mmr_override
+        org_user.has_active_dota_mmr = True
+        org_user.dota_mmr_last_verified = tz.now()
+        org_user.save(
+            update_fields=["mmr", "has_active_dota_mmr", "dota_mmr_last_verified"]
+        )
+        invalidate_after_commit(org_user)
+
     signup.status = SignupStatus.APPROVED
-    signup.save(update_fields=["status", "updated_at"])
+    signup.waitlist_position = None
+    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
     # If no roll call, approved means ready for tournament
     if not signup.event.roll_call_enabled:
         add_user_to_tournament(signup.event, signup.user)
@@ -214,6 +283,72 @@ def _promote_from_waitlist(event):
         next_waitlisted.save(
             update_fields=["status", "waitlist_position", "updated_at"]
         )
+
+
+@transaction.atomic
+def unconfirm_signup(signup):
+    """Revert a confirmed signup back to approved (e.g., during roll call adjustments)."""
+    if signup.status != SignupStatus.CONFIRMED:
+        raise ValueError("Only confirmed signups can be unconfirmed.")
+    signup.status = SignupStatus.APPROVED
+    signup.save(update_fields=["status", "updated_at"])
+    remove_user_from_tournament(signup.event, signup.user)
+    invalidate_after_commit(signup.event)
+    transaction.on_commit(lambda: notify_signup_changed(signup.event))
+    return signup
+
+
+@transaction.atomic
+def demote_to_waitlist(signup):
+    """Move an active signup to the end of the waitlist."""
+    if signup.status in [
+        SignupStatus.CANCELLED,
+        SignupStatus.REJECTED,
+        SignupStatus.WAITLISTED,
+    ]:
+        raise ValueError(f"Cannot demote signup in '{signup.status}' status.")
+    max_pos = (
+        EventSignup.objects.filter(
+            event=signup.event, status=SignupStatus.WAITLISTED
+        ).aggregate(max_pos=models.Max("waitlist_position"))["max_pos"]
+        or 0
+    )
+    signup.status = SignupStatus.WAITLISTED
+    signup.waitlist_position = max_pos + 1
+    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
+    remove_user_from_tournament(signup.event, signup.user)
+    invalidate_after_commit(signup.event)
+    transaction.on_commit(lambda: notify_signup_changed(signup.event))
+    return signup
+
+
+@transaction.atomic
+def reinstate_signup(signup):
+    """Reinstate a cancelled signup back to RSVP status."""
+    if signup.status != SignupStatus.CANCELLED:
+        raise ValueError("Only cancelled signups can be reinstated.")
+    event = signup.event
+    # Check if event is still accepting signups
+    if event.state != "signups_open":
+        raise ValueError("Event is not accepting signups.")
+    # Check capacity — if full, go to waitlist
+    active_count = _get_active_signup_count(event)
+    if event.max_players and active_count >= event.max_players:
+        max_pos = (
+            EventSignup.objects.filter(
+                event=event, status=SignupStatus.WAITLISTED
+            ).aggregate(max_pos=models.Max("waitlist_position"))["max_pos"]
+            or 0
+        )
+        signup.status = SignupStatus.WAITLISTED
+        signup.waitlist_position = max_pos + 1
+    else:
+        signup.status = SignupStatus.RSVP
+        signup.waitlist_position = None
+    signup.save(update_fields=["status", "waitlist_position", "updated_at"])
+    invalidate_after_commit(event)
+    transaction.on_commit(lambda: notify_signup_changed(event))
+    return signup
 
 
 # ---------------------------------------------------------------------------

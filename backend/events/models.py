@@ -128,6 +128,19 @@ class EventConfigMixin(models.Model):
         choices=RollCallMode.choices,
         default=RollCallMode.MANUAL,
     )
+    # Approval Requirements — which rank types are allowed
+    allow_active_mmr = models.BooleanField(
+        default=True,
+        help_text="Allow players with active MMR to sign up",
+    )
+    allow_previous_rank = models.BooleanField(
+        default=True,
+        help_text="Allow players with previous (expired) rank to sign up",
+    )
+    allow_battlecup_rating = models.BooleanField(
+        default=True,
+        help_text="Allow never-ranked players (battle cup tier) to sign up",
+    )
 
     class Meta:
         abstract = True
@@ -217,6 +230,27 @@ class DiscordEventConfigMixin(models.Model):
         default=list,
         blank=True,
         help_text="List of Discord role IDs to @ mention in the signup post",
+    )
+    discord_subscriber_dm = models.BooleanField(
+        default=False,
+        help_text="Send DM to subscribers before event starts",
+    )
+    discord_subscriber_dm_hours = models.IntegerField(
+        default=24,
+        help_text="Hours before event to send subscriber DM",
+    )
+    discord_require_rank_screenshot = models.BooleanField(
+        default=False,
+        help_text="Require active ranked players to upload MMR screenshot",
+    )
+    discord_require_battlecup_screenshot = models.BooleanField(
+        default=False,
+        help_text="Require never-ranked players to upload battle cup ticket screenshot",
+    )
+    min_mmr = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Minimum MMR required for event approval (null = no minimum)",
     )
 
     class Meta:

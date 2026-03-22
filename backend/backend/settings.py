@@ -325,6 +325,11 @@ else:
         "events.eventsignup": {"ops": "all", "timeout": 60 * 60},
         "events.repeatersubscription": {"ops": "all", "timeout": 60 * 60},
         "events.orgeventdefaults": {"ops": "all", "timeout": 60 * 60},
+        # Discord Event models (read-heavy, checked on signup updates)
+        "discordbot.discordevent": {"ops": "all", "timeout": 60 * 60},
+        "discordbot.discordeventmsgsignup": {"ops": "all", "timeout": 60 * 60},
+        "discordbot.discordeventmsgannouncement": {"ops": "all", "timeout": 60 * 60},
+        # DO NOT cache DiscordEventLog or DiscordEventDM — write-heavy
     }
 
 CACHEOPS_DEGRADE_ON_FAILURE = True
@@ -410,6 +415,10 @@ ALLOWED_HOSTS = [
     "nginx",
     "backend",
 ]
+
+# Allow ngrok domains in test/dev for Discord interaction webhook verification
+if TEST or DEBUG:
+    ALLOWED_HOSTS += [".ngrok-free.dev", ".ngrok.io"]
 
 
 with contextlib.suppress(ImportError):

@@ -9,8 +9,6 @@ import {
 import {
   brandBg,
   brandDepthColors,
-  brandErrorPrimary,
-  brandGradient,
   button3DBase,
 } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
@@ -33,14 +31,14 @@ interface MobileActionsDropdownProps {
 
 const variantStyles = {
   default: 'text-foreground',
-  primary: `${brandGradient} rounded-sm`,
-  destructive: `${brandErrorPrimary} rounded-sm`,
+  primary: 'text-primary font-medium',
+  destructive: 'text-error font-medium',
 } as const;
 
 /**
  * Reusable branded dropdown that collapses action buttons on mobile.
  * Each action item supports icon, label, onClick, and variant styling.
- * Destructive actions use brandErrorPrimary, primary actions use brandGradient.
+ * Variants use text color accents (not gradient backgrounds).
  */
 export function MobileActionsDropdown({
   actions,
@@ -68,7 +66,7 @@ export function MobileActionsDropdown({
           <span className="sr-only">Actions</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className={cn(brandBg, 'border-primary/30')}>
+      <DropdownMenuContent align="end" className={cn(brandBg, 'border-primary/30 min-w-[180px] p-1.5')}>
         {actions.map((action) => (
           <DropdownMenuItem
             key={action.key}
@@ -76,7 +74,7 @@ export function MobileActionsDropdown({
             disabled={action.disabled}
             data-testid={action['data-testid']}
             className={cn(
-              'min-h-[44px] flex items-center gap-2 text-base cursor-pointer',
+              'min-h-[40px] flex items-center gap-2.5 px-3 py-2 text-sm cursor-pointer rounded-md',
               variantStyles[action.variant ?? 'default'],
             )}
           >

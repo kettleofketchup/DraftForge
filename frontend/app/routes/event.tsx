@@ -35,7 +35,6 @@ export function meta({ data }: Route.MetaArgs) {
 
 import { useState, useCallback, useMemo } from 'react';
 import {
-  CalendarDays,
   Building2,
   Loader2,
   Users,
@@ -45,17 +44,27 @@ import {
   Trash2,
   UserCheck,
   UserX,
+  Pencil,
+  ShieldAlert,
+  ArrowDownToLine,
+  Undo2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Badge } from '~/components/ui/badge';
 import { EventStateBadge } from '~/components/events';
-import { EventState } from '~/components/events/schemas';
+import { SubscriberList } from '~/components/events/SubscriberList';
+import { EventState, GameType } from '~/components/events/schemas';
+import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
+import { DiscordLogSection } from '~/components/events/DiscordLogSection';
+import { EditEventModal } from '~/components/events/EditEventModal';
 import type { EventSignupType } from '~/components/events/schemas';
-import { PrimaryButton, SecondaryButton, DestructiveButton } from '~/components/ui/buttons';
+import { PrimaryButton, SecondaryButton, DestructiveButton, HighlightButton } from '~/components/ui/buttons';
+import { BrandDropdownMenu, type BrandDropdownAction } from '~/components/ui/brand-dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
-import { UserStrip } from '~/components/user';
+import { UserEventStrip } from '~/components/user';
+import type { DotaProfileData } from '~/components/user';
 import {
   useEvent,
   useEventSignups,
@@ -66,7 +75,7 @@ import {
 } from '~/hooks/useEvent';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrganization } from '~/components/organization';
-import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
+import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 import { usePageNav } from '~/hooks/usePageNav';
 import { useUserStore } from '~/store/userStore';
 import { ConfirmDialog } from '~/components/ui/dialogs';
@@ -86,10 +95,11 @@ export default function EventPage() {
   const [showRollCallConfirm, setShowRollCallConfirm] = useState(false);
   const [showRsvpConfirm, setShowRsvpConfirm] = useState(false);
   const [showCancelRsvpConfirm, setShowCancelRsvpConfirm] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // Permission check - fetch the specific org for this event
   const { organization: eventOrg } = useOrganization(event?.organization ?? undefined);
-  const isAdmin = useIsOrganizationAdmin(eventOrg);
+  const isAdmin = useIsOrganizationStaff(eventOrg);
 
   // Mutations
   const rsvpMutation = useRsvpMutation(id ?? 0);
@@ -134,6 +144,17 @@ export default function EventPage() {
     [signups, currentUser?.pk],
   );
 
+  // Check if user has a cancelled signup they can reinstate
+  const myCancelledSignup = useMemo(
+    () => {
+      if (!signups || !currentUser?.pk) return undefined;
+      return signups.find(
+        (s) => Number(s.user) === Number(currentUser.pk) && s.status === 'cancelled'
+      );
+    },
+    [signups, currentUser?.pk],
+  );
+
   // Split signups into active and waitlisted
   const activeSignups = useMemo(
     () => (signups ?? []).filter((s) => s.status !== 'waitlisted' && s.status !== 'cancelled' && s.status !== 'rejected'),
@@ -159,11 +180,92 @@ export default function EventPage() {
       { value: 'details', label: 'Details' },
       { value: 'signups', label: `${activeSignups.length} Signups` },
       { value: 'waitlist', label: `${waitlistedSignups.length} Waitlist` },
+      { value: 'discord', label: 'Discord' },
     ],
-    [activeSignups.length, waitlistedSignups.length],
+    [activeSignups.length, waitlistedSignups.length, isAdmin],
   );
 
   usePageNav(event ? pageNavOptions : null, activeTab, handleTabChange);
+
+  // Build admin actions for mobile dropdown — must be before early returns
+  const adminActions = useMemo((): BrandDropdownAction[] => {
+    if (!isAdmin || !event) return [];
+    const items: BrandDropdownAction[] = [
+      {
+        key: 'edit',
+        icon: <Pencil className="h-4 w-4 mr-1.5" />,
+        label: 'Edit',
+        onClick: () => setShowEditModal(true),
+        variant: 'success',
+        'data-testid': 'event-edit-btn',
+      },
+    ];
+
+    if (event.state === EventState.UPCOMING) {
+      items.push({
+        key: 'open-signups',
+        icon: <Users className="h-4 w-4 mr-1.5" />,
+        label: 'Open Signups',
+        onClick: () => actions.openSignups.mutate(),
+        variant: 'primary',
+        disabled: actions.openSignups.isPending,
+        'data-testid': 'event-open-signups-btn',
+      });
+    }
+
+    if (event.state === EventState.SIGNUPS_OPEN) {
+      items.push({
+        key: 'start-rollcall',
+        icon: <Clock className="h-4 w-4 mr-1.5" />,
+        label: 'Start Roll Call',
+        onClick: () => setShowRollCallConfirm(true),
+        variant: 'primary',
+        disabled: actions.startRollCall.isPending,
+        'data-testid': 'event-start-rollcall-btn',
+      });
+    }
+
+    if (event.state === EventState.ROLL_CALL) {
+      items.push({
+        key: 'open-rollcall',
+        icon: <CheckCircle2 className="h-4 w-4 mr-1.5" />,
+        label: 'Open Roll Call',
+        onClick: () => navigate(`/rollcall/${eventId}`),
+        variant: 'primary',
+        'data-testid': 'event-start-tournament-btn',
+      });
+    }
+
+    if (event.state !== EventState.COMPLETED && event.state !== EventState.CANCELLED) {
+      items.push({
+        key: 'cancel',
+        icon: <XCircle className="h-4 w-4 mr-1.5" />,
+        label: 'Cancel',
+        onClick: () => actions.cancelEvent.mutate(),
+        variant: 'destructive',
+        disabled: actions.cancelEvent.isPending,
+        'data-testid': 'event-cancel-btn',
+      });
+    }
+
+    items.push({
+      key: 'delete',
+      icon: <Trash2 className="h-4 w-4 mr-1.5" />,
+      label: 'Delete',
+      onClick: () => {
+        if (window.confirm('Are you sure you want to permanently delete this event? This cannot be undone.')) {
+          actions.deleteEvent.mutate(undefined, {
+            onSuccess: () => navigate(`/organization/${event.organization}/events`),
+          });
+        }
+      },
+      variant: 'destructive',
+      disabled: actions.deleteEvent.isPending,
+      'data-testid': 'event-delete-btn',
+    });
+
+    return items;
+  }, [isAdmin, event?.state, event?.organization, actions, eventId, navigate]);
 
   if (isLoading) {
     return (
@@ -193,44 +295,164 @@ export default function EventPage() {
   });
 
   return (
-    <div className="container mx-auto py-6 px-4 space-y-6">
-      <div className="flex flex-col gap-6 rounded-lg border border-border bg-base-200/50 p-4 md:p-6">
-        {breadcrumbSegments.length > 1 && <EntityBreadcrumb segments={breadcrumbSegments} />}
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3">
-          <div className="space-y-2 min-w-0">
-            <div className="flex items-center gap-3">
-              <CalendarDays className="h-7 w-7 md:h-8 md:w-8 text-primary shrink-0" />
-              <h1 className="text-xl! md:text-3xl! font-bold truncate">{event.name}</h1>
-              <EventStateBadge state={event.state} />
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
-              {event.organization_name && (
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <Building2 className="h-3 w-3" />
-                  {event.organization_name}
-                </Badge>
-              )}
-              <Badge variant="secondary" className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {formattedDate}
-              </Badge>
-            </div>
-          </div>
+    <div className="max-w-7xl mx-auto py-4 md:py-8 px-4 md:px-6 space-y-5 md:space-y-8">
+      {/* Breadcrumb */}
+      {breadcrumbSegments.length > 1 && <EntityBreadcrumb segments={breadcrumbSegments} />}
 
-          {/* RSVP / Admin actions */}
-          <div className="flex flex-wrap gap-2 shrink-0 w-full sm:w-auto">
-            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && !mySignup && (
+      {/* Page Header */}
+      <div className="space-y-4">
+        {/* Row 1: Title (left) + Org (right on md+) */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <h1 className="text-xl sm:text-2xl lg:text-4xl font-bold min-w-0">
+            {event.name}
+          </h1>
+          {event.organization_name && (
+            <HighlightButton
+              size="sm"
+              onClick={() => navigate(`/organization/${event.organization}`)}
+              avatarUrl={eventOrg?.logo || undefined}
+              avatarAlt={event.organization_name}
+              className="shrink-0"
+            >
+              {!eventOrg?.logo && <Building2 className="h-4 w-4 mr-1.5" />}
+              {event.organization_name}
+            </HighlightButton>
+          )}
+        </div>
+
+        {/* Row 2: Status + Date */}
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 text-muted-foreground">
+          <EventStateBadge state={event.state} />
+          <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+            <Clock className="h-3 w-3" />
+            {formattedDate}
+          </Badge>
+        </div>
+
+        {/* Row 3: Admin button group (left) + RSVP (right) */}
+        {(isAdmin || (currentUser && event.state === EventState.SIGNUPS_OPEN && signups)) && (
+          <div className="flex items-center justify-between gap-3">
+            {/* Admin actions — left side */}
+            {isAdmin ? (
+              <>
+                {/* Desktop: button group */}
+                <div className="hidden md:inline-flex items-center rounded-lg overflow-hidden shadow-lg shadow-black/20 [&_[data-slot=button]]:rounded-none [&_[data-slot=button]]:shadow-none [&_[data-slot=button]]:border-b-0">
+                  <SecondaryButton
+                    color="emerald"
+                    size="sm"
+                    onClick={() => setShowEditModal(true)}
+                    title="Edit settings"
+                    data-testid="event-edit-btn"
+                  >
+                    <Pencil className="h-4 w-4 mr-1.5" />
+                    Edit
+                  </SecondaryButton>
+
+                  {event.state === EventState.UPCOMING && (
+                    <SecondaryButton
+                      color="green"
+                      size="sm"
+                      onClick={() => actions.openSignups.mutate()}
+                      disabled={actions.openSignups.isPending}
+                      data-testid="event-open-signups-btn"
+                    >
+                      Open Signups
+                    </SecondaryButton>
+                  )}
+
+                  {event.state === EventState.SIGNUPS_OPEN && (
+                    <SecondaryButton
+                      color="orange"
+                      size="sm"
+                      onClick={() => setShowRollCallConfirm(true)}
+                      disabled={actions.startRollCall.isPending}
+                      data-testid="event-start-rollcall-btn"
+                    >
+                      Start Roll Call
+                    </SecondaryButton>
+                  )}
+
+                  {event.state === EventState.ROLL_CALL && (
+                    <PrimaryButton
+                      size="sm"
+                      onClick={() => navigate(`/rollcall/${eventId}`)}
+                      data-testid="event-start-tournament-btn"
+                    >
+                      Open Roll Call
+                    </PrimaryButton>
+                  )}
+
+                  {event.state !== EventState.COMPLETED &&
+                    event.state !== EventState.CANCELLED && (
+                      <DestructiveButton
+                        size="sm"
+                        onClick={() => actions.cancelEvent.mutate()}
+                        loading={actions.cancelEvent.isPending}
+                        depth={false}
+                        className="bg-gradient-to-r from-red-700/80 to-violet-900/80 hover:from-red-600/80 hover:to-violet-800/80"
+                        data-testid="event-cancel-btn"
+                      >
+                        <XCircle className="h-4 w-4 mr-1.5" />
+                        Cancel
+                      </DestructiveButton>
+                    )}
+
+                  <DestructiveButton
+                    size="sm"
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to permanently delete this event? This cannot be undone.')) {
+                        actions.deleteEvent.mutate(undefined, {
+                          onSuccess: () => navigate(`/organization/${event.organization}/events`),
+                        });
+                      }
+                    }}
+                    loading={actions.deleteEvent.isPending}
+                    depth={false}
+                    className="bg-gradient-to-r from-red-700/80 to-violet-900/80 hover:from-red-600/80 hover:to-violet-800/80"
+                    data-testid="event-delete-btn"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1.5" />
+                    Delete
+                  </DestructiveButton>
+                </div>
+
+                {/* Mobile: labeled dropdown */}
+                <div className="md:hidden">
+                  <BrandDropdownMenu
+                    label="Admin"
+                    icon={<ShieldAlert className="h-4 w-4 mr-1.5" />}
+                    actions={adminActions}
+                    variant="admin"
+                    data-testid="event-admin-actions-mobile"
+                  />
+                </div>
+              </>
+            ) : (
+              <div />
+            )}
+
+            {/* RSVP — right side, always inline */}
+            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && !mySignup && !myCancelledSignup && (
               <PrimaryButton
                 size="sm"
                 onClick={() => setShowRsvpConfirm(true)}
                 disabled={rsvpMutation.isPending}
                 data-testid="event-rsvp-btn"
-                className="w-full sm:w-auto"
               >
-                <Users className="h-4 w-4 mr-2" />
+                <Users className="h-4 w-4 mr-1.5" />
                 RSVP
               </PrimaryButton>
+            )}
+            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && !mySignup && myCancelledSignup && (
+              <SecondaryButton
+                size="sm"
+                onClick={() => signupActions.reinstate.mutate(myCancelledSignup.id)}
+                disabled={signupActions.reinstate.isPending}
+                data-testid="event-reinstate-btn"
+              >
+                <Undo2 className="h-4 w-4 mr-1.5" />
+                Reinstate RSVP
+              </SecondaryButton>
             )}
             {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && mySignup && (
               <DestructiveButton
@@ -239,89 +461,17 @@ export default function EventPage() {
                 loading={signupActions.cancel.isPending}
                 depth={false}
                 data-testid="event-cancel-rsvp-btn"
-                className="bg-gradient-to-r from-red-700 to-violet-900 hover:from-red-600 hover:to-violet-800 shadow-lg active:translate-y-0.5 w-full sm:w-auto"
               >
-                <XCircle className="h-4 w-4 mr-2" />
+                <XCircle className="h-4 w-4 mr-1.5" />
                 Cancel RSVP
               </DestructiveButton>
             )}
-
-            {isAdmin && event.state === EventState.UPCOMING && (
-              <SecondaryButton
-                color="green"
-                size="sm"
-                onClick={() => actions.openSignups.mutate()}
-                disabled={actions.openSignups.isPending}
-                data-testid="event-open-signups-btn"
-                className="w-full sm:w-auto"
-              >
-                Open Signups
-              </SecondaryButton>
-            )}
-
-            {isAdmin && event.state === EventState.SIGNUPS_OPEN && (
-              <SecondaryButton
-                color="orange"
-                size="sm"
-                onClick={() => setShowRollCallConfirm(true)}
-                disabled={actions.startRollCall.isPending}
-                data-testid="event-start-rollcall-btn"
-                className="w-full sm:w-auto"
-              >
-                Start Roll Call
-              </SecondaryButton>
-            )}
-
-            {isAdmin && event.state === EventState.ROLL_CALL && (
-              <PrimaryButton
-                size="sm"
-                onClick={() => navigate(`/rollcall/${eventId}`)}
-                data-testid="event-start-tournament-btn"
-                className="w-full sm:w-auto"
-              >
-                Open Roll Call
-              </PrimaryButton>
-            )}
-
-            {isAdmin &&
-              event.state !== EventState.COMPLETED &&
-              event.state !== EventState.CANCELLED && (
-                <DestructiveButton
-                  size="sm"
-                  onClick={() => actions.cancelEvent.mutate()}
-                  loading={actions.cancelEvent.isPending}
-                  depth={false}
-                  data-testid="event-cancel-btn"
-                  className="bg-gradient-to-r from-red-700 to-violet-900 hover:from-red-600 hover:to-violet-800 shadow-lg active:translate-y-0.5 w-full sm:w-auto"
-                >
-                  <XCircle className="h-4 w-4 mr-2" />
-                  Cancel Event
-                </DestructiveButton>
-              )}
-
-            {isAdmin && (
-              <DestructiveButton
-                size="sm"
-                onClick={() => {
-                  if (window.confirm('Are you sure you want to permanently delete this event? This cannot be undone.')) {
-                    actions.deleteEvent.mutate(undefined, {
-                      onSuccess: () => navigate(`/org/${event.organization}/events`),
-                    });
-                  }
-                }}
-                loading={actions.deleteEvent.isPending}
-                depth={false}
-                data-testid="event-delete-btn"
-                className="bg-gradient-to-r from-red-800 to-red-950 hover:from-red-700 hover:to-red-900 shadow-lg active:translate-y-0.5 w-full sm:w-auto"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete Event
-              </DestructiveButton>
-            )}
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* Tabs */}
+      {/* Content Card — full width */}
+      <div className="rounded-lg border border-border bg-base-200/50 p-4 md:p-8">
         <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList>
             <TabsTrigger value="details" data-testid="event-tab-details">
@@ -332,6 +482,9 @@ export default function EventPage() {
             </TabsTrigger>
             <TabsTrigger value="waitlist" data-testid="event-tab-waitlist">
               Waitlist ({waitlistedSignups.length})
+            </TabsTrigger>
+            <TabsTrigger value="discord" data-testid="event-tab-discord">
+              Discord
             </TabsTrigger>
           </TabsList>
 
@@ -344,6 +497,7 @@ export default function EventPage() {
               signups={activeSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              gameType={event.game_type}
             />
           </TabsContent>
 
@@ -352,10 +506,21 @@ export default function EventPage() {
               signups={waitlistedSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
+              gameType={event.game_type}
             />
+          </TabsContent>
+
+          <TabsContent value="discord">
+            <DiscordLogSection eventId={event.id} />
           </TabsContent>
         </Tabs>
       </div>
+
+      <EditEventModal
+        event={event}
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+      />
 
       <ConfirmDialog
         open={showRollCallConfirm}
@@ -415,7 +580,7 @@ export default function EventPage() {
 /** Details tab showing event configuration */
 function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>['data']> }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       <Card>
         <CardHeader>
           <h3 className="font-semibold">Tournament Info</h3>
@@ -429,15 +594,19 @@ function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>[
           )}
           <div className="flex justify-between">
             <span className="text-muted-foreground">Type</span>
-            <span>{event.tournament_type}</span>
+            <span className="capitalize">{event.tournament_type.replace(/_/g, ' ')}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Draft</span>
-            <span>{event.draft_type}</span>
+            <span className="capitalize">{event.draft_type}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Teams</span>
             <span>{event.number_of_teams} x {event.people_per_team}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Game</span>
+            <span>{event.game_type === 1 ? 'Dota 2' : 'Deadlock'}</span>
           </div>
         </CardContent>
       </Card>
@@ -469,7 +638,7 @@ function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>[
       </Card>
 
       {event.description && (
-        <Card className="md:col-span-2">
+        <Card className="md:col-span-2 lg:col-span-1">
           <CardHeader>
             <h3 className="font-semibold">Description</h3>
           </CardHeader>
@@ -480,6 +649,12 @@ function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>[
           </CardContent>
         </Card>
       )}
+
+      {event.event_repeater && (
+        <div className="md:col-span-2 lg:col-span-3">
+          <SubscriberList repeaterId={event.event_repeater} />
+        </div>
+      )}
     </div>
   );
 }
@@ -489,11 +664,15 @@ function SignupsTab({
   signups,
   isAdmin,
   signupActions,
+  gameType,
 }: {
   signups: EventSignupType[];
   isAdmin: boolean;
   signupActions: ReturnType<typeof useSignupActionMutations>;
+  gameType: number;
 }) {
+  const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(null);
+
   const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
   const resolvedUsers = useResolvedUsers(userPks);
   const userMap = useMemo(
@@ -518,12 +697,17 @@ function SignupsTab({
 
         const adminActions = isAdmin ? (
           <div className="flex gap-1">
+            {/* RSVP / Pending Approval → Approve or Reject */}
             {(signup.status === 'rsvp' || signup.status === 'pending_approval') && (
               <>
                 <SecondaryButton
                   color="green"
                   size="sm"
-                  onClick={() => signupActions.approve.mutate(signup.id)}
+                  onClick={() =>
+                    gameType === GameType.DOTA2
+                      ? setApprovalSignup(signup)
+                      : signupActions.approve.mutate({ id: signup.id })
+                  }
                   disabled={signupActions.approve.isPending}
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
@@ -531,22 +715,64 @@ function SignupsTab({
                 </SecondaryButton>
                 <DestructiveButton
                   size="sm"
-                  onClick={() => signupActions.reject.mutate(signup.id)}
-                  loading={signupActions.reject.isPending}
+                  onClick={() => signupActions.demote.mutate(signup.id)}
+                  loading={signupActions.demote.isPending}
+                  depth={false}
                 >
-                  <UserX className="h-3.5 w-3.5" />
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline ml-1">Waitlist</span>
                 </DestructiveButton>
               </>
             )}
+            {/* Approved → Confirm or Demote to waitlist */}
             {signup.status === 'approved' && (
+              <>
+                <SecondaryButton
+                  color="blue"
+                  size="sm"
+                  onClick={() => signupActions.confirm.mutate(signup.id)}
+                  disabled={signupActions.confirm.isPending}
+                >
+                  <UserCheck className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline ml-1">Confirm</span>
+                </SecondaryButton>
+                <DestructiveButton
+                  size="sm"
+                  onClick={() => signupActions.demote.mutate(signup.id)}
+                  loading={signupActions.demote.isPending}
+                  depth={false}
+                >
+                  <ArrowDownToLine className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline ml-1">Waitlist</span>
+                </DestructiveButton>
+              </>
+            )}
+            {/* Confirmed → Unconfirm (back to approved) */}
+            {signup.status === 'confirmed' && (
               <SecondaryButton
-                color="blue"
+                color="orange"
                 size="sm"
-                onClick={() => signupActions.confirm.mutate(signup.id)}
-                disabled={signupActions.confirm.isPending}
+                onClick={() => signupActions.unconfirm.mutate(signup.id)}
+                disabled={signupActions.unconfirm.isPending}
               >
-                <UserCheck className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline ml-1">Confirm</span>
+                <Undo2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline ml-1">Unconfirm</span>
+              </SecondaryButton>
+            )}
+            {/* Waitlisted → Approve (promote from waitlist) */}
+            {signup.status === 'waitlisted' && (
+              <SecondaryButton
+                color="green"
+                size="sm"
+                onClick={() =>
+                  gameType === GameType.DOTA2
+                    ? setApprovalSignup(signup)
+                    : signupActions.approve.mutate({ id: signup.id })
+                }
+                disabled={signupActions.approve.isPending}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline ml-1">Approve</span>
               </SecondaryButton>
             )}
           </div>
@@ -561,11 +787,10 @@ function SignupsTab({
 
         if (user) {
           return (
-            <UserStrip
+            <UserEventStrip
               key={signup.id}
               user={user}
-              compact
-              showPositions
+              dotaProfile={signup.dota_profile as DotaProfileData | null}
               contextSlot={statusSlot}
               actionSlot={adminActions}
             />
@@ -591,6 +816,18 @@ function SignupsTab({
           </div>
         );
       })}
+
+      <MmrApprovalModal
+        signup={approvalSignup}
+        open={!!approvalSignup}
+        onOpenChange={(open) => { if (!open) setApprovalSignup(null); }}
+        onApprove={(signupId, mmr) => {
+          signupActions.approve.mutate({ id: signupId, mmr }, {
+            onSuccess: () => setApprovalSignup(null),
+          });
+        }}
+        isApproving={signupActions.approve.isPending}
+      />
     </div>
   );
 }

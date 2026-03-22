@@ -8,7 +8,7 @@ Infrastructure created:
 - User Edit Org (pk=5) - dedicated org for user edit tests
 - User Edit League (pk=5, steam_league_id=17933) - under User Edit org
 - User Edit Tournament - under User Edit league, with 3 users
-- 3 edit test users (pk=1050-1052) - members of the org/league/tournament
+- 3 edit test users (pk=2050-2052) - members of the org/league/tournament
 """
 
 from django.utils import timezone

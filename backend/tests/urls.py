@@ -24,10 +24,16 @@ from .test_auth import (
     reset_events_demo,
     reset_org_admin_team,
     reset_tournament_by_key,
+    sync_discord_events_test,
 )
 from .test_csv import reset_csv_import
 from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
 from .test_discord import seed_discord_members
+from .test_events_discord import (
+    send_test_notification,
+    simulate_discord_signup,
+    verify_discord_messages,
+)
 from .test_herodraft import (
     force_herodraft_timeout,
     get_herodraft_by_key,
@@ -182,6 +188,28 @@ urlpatterns = [
         "events/<int:event_pk>/bulk-rsvp/",
         bulk_rsvp_for_event,
         name="bulk-rsvp",
+    ),
+    # Discord events sync (synchronous trigger)
+    path(
+        "events/sync-discord/",
+        sync_discord_events_test,
+        name="sync-discord-events",
+    ),
+    # Discord event lifecycle (simulate signup, verify messages, bot reactions)
+    path(
+        "events/<int:event_pk>/discord-signup/",
+        simulate_discord_signup,
+        name="simulate-discord-signup",
+    ),
+    path(
+        "events/<int:event_pk>/discord-verify/",
+        verify_discord_messages,
+        name="verify-discord-messages",
+    ),
+    path(
+        "events/<int:event_pk>/send-notification/",
+        send_test_notification,
+        name="send-test-notification",
     ),
     # Demo tournament endpoints (for video recording)
     # More specific paths first to avoid <str:key> catching them

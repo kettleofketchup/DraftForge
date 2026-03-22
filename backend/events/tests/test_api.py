@@ -122,4 +122,5 @@ class EventAPITests(EventTestCase):
         )
         r = self.client.get("/api/events/?state=signups_open")
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(r.data), 1)
+        # Base event (signups_open) + the one created above = 2
+        self.assertEqual(len(r.data), 2)
