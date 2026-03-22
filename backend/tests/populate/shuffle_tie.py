@@ -8,7 +8,7 @@ Infrastructure created:
 - Shuffle Tie Org (pk=6) - dedicated org for shuffle tie tests
 - Shuffle Tie League (pk=6, steam_league_id=17934) - under Shuffle Tie org
 - Shuffle Tie Resolution Test tournament - 4 captain-only teams
-- 20 shuffle tie users (pk=1060-1079) - 4 captains + 16 available players
+- 20 shuffle tie users (pk=4000-4019) - 4 captains + 16 available players
 
 MMR layout (captain-only teams, no pre-assigned members):
 - Captain 1: 2000 MMR (lowest -> picks first, no tie)
@@ -118,7 +118,7 @@ def populate_shuffle_tie_data(force=False):
         user.save()
         all_users.append(user)
 
-    print(f"  Created/verified {len(all_users)} shuffle tie users (pk=1060-1079)")
+    print(f"  Created/verified {len(all_users)} shuffle tie users (pk=4000-4019)")
 
     # 5. Set OrgUser MMR values
     captain_mmrs = [2000, 3000, 3000, 3000]

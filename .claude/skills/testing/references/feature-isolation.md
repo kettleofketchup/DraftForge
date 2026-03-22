@@ -41,7 +41,7 @@ CSV_IMPORT_TOURNAMENT: TestTournament = TestTournament(
 
 # users.py (if needed)
 CSV_IMPORT_USERS: list[TestUser] = [
-    TestUser(pk=1040, ...),        # Unique PK range (check existing ranges)
+    TestUser(pk=2000, ...),        # Unique PK range (check existing ranges)
 ]
 ```
 
@@ -111,19 +111,19 @@ await visitAndWait(page, '/organizations/3/');  // Fragile!
 | Org | 3 | CSV Import |
 | Org | 4 | Demo CSV |
 | Org | 5 | User Edit |
+| Org | 6 | Shuffle Tie |
 | Org | 7 | Events |
 | League | 1 (steam=17929) | DTX |
 | League | 2 (steam=17930) | Test |
 | League | 3 (steam=17931) | CSV Import |
 | League | 4 (steam=17932) | Demo CSV |
 | League | 5 (steam=17933) | User Edit |
+| League | 6 (steam=17934) | Shuffle Tie |
 | League | 7 (steam=17935) | Events |
-| Users | 1001-1003 | Site-level (admin/staff/regular) |
-| Users | 1010-1011 | Claim profile |
-| Users | 1020-1021 | Org roles |
-| Users | 1030-1031 | League roles |
-| Users | 1040-1044 | CSV Import |
-| Users | 1050-1052 | User Edit |
-| Users | 1080-1083 | Events (admin + 3 players) |
+| Users | 1000-1099 | Site-level + roles (admin, staff, regular, claim, org roles, league roles) |
+| Users | 2000-2099 | CSV Import (2000-2004) + User Edit (2050-2052) |
+| Users | 3000-3019 | Tournament 38 real users |
+| Users | 4000-4019 | Shuffle Tie (4 captains + 16 players) |
+| Users | 5000-5020 | Events (admin + 20 players) |
 
-When adding new features, pick the next available PK range.
+When adding new features, pick the next available 1000-increment PK range.

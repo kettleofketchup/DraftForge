@@ -163,6 +163,8 @@ def test_user_to_dict(test_user):
         "mmr": test_user.mmr or 3000,
         "discord_id": test_user.discord_id,
     }
+    if test_user.pk is not None:
+        result["pk"] = test_user.pk
     if test_user.positions:
         result["positions"] = {
             "carry": test_user.positions.carry,
@@ -187,8 +189,16 @@ def get_or_create_demo_user(username, user_data, organization=None):
     steam_account_id = user_data.get("steam_id")  # 32-bit Friend ID
     pos_data = user_data.get("positions", {})
     mmr = user_data.get("mmr", 3000)
+    explicit_pk = user_data.get("pk")
 
-    user = CustomUser.objects.filter(discordId=user_data["discord_id"]).first()
+    # If explicit pk is set, use pk-based lookup first
+    if explicit_pk:
+        user = CustomUser.objects.filter(pk=explicit_pk).first()
+    else:
+        user = None
+
+    if not user:
+        user = CustomUser.objects.filter(discordId=user_data["discord_id"]).first()
     if not user:
         user = CustomUser.objects.filter(username=username).first()
     if not user and steam_account_id:
@@ -203,12 +213,15 @@ def get_or_create_demo_user(username, user_data, organization=None):
             soft_support=pos_data.get("soft_support", 3),
             hard_support=pos_data.get("hard_support", 3),
         )
-        user = CustomUser.objects.create(
-            discordId=user_data["discord_id"],
-            username=username,
-            steam_account_id=steam_account_id,
-            positions=positions,
-        )
+        create_kwargs = {
+            "discordId": user_data["discord_id"],
+            "username": username,
+            "steam_account_id": steam_account_id,
+            "positions": positions,
+        }
+        if explicit_pk:
+            create_kwargs["pk"] = explicit_pk
+        user = CustomUser.objects.create(**create_kwargs)
     else:
         # Update existing user with latest data
         if steam_account_id and user.steam_account_id != steam_account_id:

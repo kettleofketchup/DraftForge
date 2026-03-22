@@ -8,10 +8,10 @@
  * - Weekly Inhouse - EventRepeater for generation tests
  *
  * Test users:
- * - event_org_admin (pk=1080) - org admin
- * - event_player_1 (pk=1081) - regular player
- * - event_player_2 (pk=1082) - regular player
- * - event_player_3 (pk=1083) - regular player
+ * - event_org_admin (pk=5000) - org admin
+ * - event_player_1 (pk=5001) - regular player
+ * - event_player_2 (pk=5002) - regular player
+ * - event_player_3 (pk=5003) - regular player
  */
 
 import type { BrowserContext } from '@playwright/test';
@@ -100,10 +100,10 @@ export async function resetEventsData(context: BrowserContext): Promise<void> {
   }
 }
 
-/** Login as the dedicated event org admin (pk=1080). */
+/** Login as the dedicated event org admin (pk=5000). */
 export async function loginEventAdmin(context: BrowserContext) {
   const resp = await context.request.post(`${API_URL}/tests/login-as/`, {
-    data: { user_pk: 1080 },
+    data: { user_pk: 5000 },
     headers: { 'Content-Type': 'application/json' },
   });
   if (!resp.ok()) throw new Error(`Login event admin failed: ${resp.status()}`);
@@ -120,10 +120,10 @@ export async function triggerEventGeneration(context: BrowserContext): Promise<s
   return data.message;
 }
 
-/** Login as an event player (pk=1081). */
+/** Login as an event player (pk=5001). */
 export async function loginEventPlayer(context: BrowserContext) {
   const resp = await context.request.post(`${API_URL}/tests/login-as/`, {
-    data: { user_pk: 1081 },
+    data: { user_pk: 5001 },
     headers: { 'Content-Type': 'application/json' },
   });
   if (!resp.ok()) throw new Error(`Login event player failed: ${resp.status()}`);

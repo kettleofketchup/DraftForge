@@ -9,7 +9,7 @@ Infrastructure created:
 - CSV Import Org (pk=3) - dedicated org for CSV tests
 - CSV Import League (pk=3, steam_league_id=17931) - under CSV org
 - CSV Import Tournament - empty tournament under CSV league
-- 5 CSV test users (pk=1040-1044) - NOT in any org, added via CSV import
+- 5 CSV test users (pk=2000-2004) - NOT in any org, added via CSV import
 
 The site admin user (pk=1001) is added as admin of the CSV org so E2E tests
 can log in and perform imports.

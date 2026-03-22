@@ -130,9 +130,9 @@ test.describe('MMR Approval Demo', () => {
       (window as Window & { playwright?: boolean }).playwright = true;
     });
 
-    // Login as admin (pk=1080)
+    // Login as admin (pk=5000)
     await context.request.post(`${API_URL}/tests/login-as/`, {
-      data: { user_pk: 1080 },
+      data: { user_pk: 5000 },
       headers: { 'Content-Type': 'application/json' },
     });
 
@@ -168,9 +168,9 @@ test.describe('MMR Approval Demo', () => {
     const event = await createResp.json();
     const eventId = event.id;
 
-    // RSVP as player 1 (pk=1081, has DotaProfile with Legend 3, screenshot)
+    // RSVP as player 1 (pk=5001, has DotaProfile with Legend 3, screenshot)
     await context.request.post(`${API_URL}/tests/login-as/`, {
-      data: { user_pk: 1081 },
+      data: { user_pk: 5001 },
       headers: { 'Content-Type': 'application/json' },
     });
     const csrf2 = (await context.cookies()).find(c => c.name === 'csrftoken')?.value || '';
@@ -178,9 +178,9 @@ test.describe('MMR Approval Demo', () => {
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf2 },
     });
 
-    // RSVP as player 2 (pk=1082, has DotaProfile with Ancient 1)
+    // RSVP as player 2 (pk=5002, has DotaProfile with Ancient 1)
     await context.request.post(`${API_URL}/tests/login-as/`, {
-      data: { user_pk: 1082 },
+      data: { user_pk: 5002 },
       headers: { 'Content-Type': 'application/json' },
     });
     const csrf3 = (await context.cookies()).find(c => c.name === 'csrftoken')?.value || '';
@@ -190,7 +190,7 @@ test.describe('MMR Approval Demo', () => {
 
     // Switch back to admin
     await context.request.post(`${API_URL}/tests/login-as/`, {
-      data: { user_pk: 1080 },
+      data: { user_pk: 5000 },
       headers: { 'Content-Type': 'application/json' },
     });
 

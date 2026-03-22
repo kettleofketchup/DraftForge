@@ -282,12 +282,19 @@ def populate_real_tournament_38(force=False):
         mmr = test_user.mmr or 3000
         discord_id = test_user.discord_id
         pos_data = test_user.positions
+        explicit_pk = test_user.pk
 
         # Get 32-bit Friend ID (Dotabuff)
         steam_account_id = test_user.get_steam_account_id()
 
-        # First, try to find existing user by discord_id
-        user = CustomUser.objects.filter(discordId=discord_id).first()
+        # If explicit pk is set, use pk-based lookup first
+        user = None
+        if explicit_pk:
+            user = CustomUser.objects.filter(pk=explicit_pk).first()
+
+        # Fall back to discord_id lookup
+        if not user:
+            user = CustomUser.objects.filter(discordId=discord_id).first()
 
         if not user and steam_account_id:
             # Try to find by steam_account_id (in case discord changed but steam is same)
@@ -318,12 +325,15 @@ def populate_real_tournament_38(force=False):
                 soft_support=pos_data.soft_support if pos_data else 3,
                 hard_support=pos_data.hard_support if pos_data else 3,
             )
-            user = CustomUser.objects.create(
-                discordId=discord_id,
-                username=username,
-                steam_account_id=steam_account_id,
-                positions=positions,
-            )
+            create_kwargs = {
+                "discordId": discord_id,
+                "username": username,
+                "steam_account_id": steam_account_id,
+                "positions": positions,
+            }
+            if explicit_pk:
+                create_kwargs["pk"] = explicit_pk
+            user = CustomUser.objects.create(**create_kwargs)
             print(
                 f"    Created user: {username} (mmr: {mmr}, steam: {steam_id or 'N/A'})"
             )

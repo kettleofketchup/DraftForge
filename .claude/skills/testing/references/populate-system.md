@@ -58,7 +58,7 @@ Execution order in `populate_all(force=False)`:
 | `populate_test_auth_users` | users.py | Creates 9 users with specific PKs, assigns org/league roles |
 | `populate_tournaments` | tournaments.py | Auto-discovers DynamicTournamentConfig objects, creates them |
 | `populate_csv_import_data` | csv_import.py | Creates CSV org/league/tournament, 5 users, generates fixture CSVs |
-| `populate_events_data` | events.py | Creates Events Test Org (pk=7), league (pk=7), 4 users (pk=1080-1083), "Weekly Inhouse" repeater, "E2E Signup Event" |
+| `populate_events_data` | events.py | Creates Events Test Org (pk=7), league (pk=7), 21 users (pk=5000-5020), "Weekly Inhouse" repeater, "E2E Signup Event" |
 
 ### Shared Utilities (`backend/tests/populate/utils.py`)
 

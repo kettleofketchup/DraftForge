@@ -11,8 +11,8 @@
  * - Weekly Inhouse - EventRepeater
  *
  * Test users:
- * - event_org_admin (pk=1080) - org admin
- * - event_player_1-3 (pk=1081-1083) - regular players
+ * - event_org_admin (pk=5000) - org admin
+ * - event_player_1-3 (pk=5001-5003) - regular players
  */
 
 import {

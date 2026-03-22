@@ -14,8 +14,8 @@
  * - "Weekly Inhouse" — pre-populated EventRepeater (weekly, Wednesday, 20:00)
  *
  * Test users:
- * - event_org_admin (pk=1080) — org admin
- * - event_player_1 (pk=1081) — regular player
+ * - event_org_admin (pk=5000) — org admin
+ * - event_player_1 (pk=5001) — regular player
  */
 
 import {

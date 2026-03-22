@@ -10,11 +10,11 @@
  * - CSV Import Tournament - empty, for tournament CSV import
  *
  * Test users (exist in DB, NOT in any org):
- * - csv_steam_user (pk=1040, steam=76561198800000001)
- * - csv_discord_user (pk=1041, discord=300000000000000001)
- * - csv_both_ids (pk=1042, steam+discord)
- * - csv_conflict_user (pk=1043, steam+discord mismatch)
- * - csv_team_user (pk=1044, steam=76561198800000005)
+ * - csv_steam_user (pk=2000, steam=76561198800000001)
+ * - csv_discord_user (pk=2001, discord=300000000000000001)
+ * - csv_both_ids (pk=2002, steam+discord)
+ * - csv_conflict_user (pk=2003, steam+discord mismatch)
+ * - csv_team_user (pk=2004, steam=76561198800000005)
  */
 
 import { test, expect, visitAndWaitForHydration } from '../../fixtures';

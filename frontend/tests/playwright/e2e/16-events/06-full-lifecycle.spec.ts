@@ -10,7 +10,7 @@
  *   6. Start tournament
  *   7. Verify UI state + Discord activity logs
  *
- * Uses Events Test Org (pk=7) with 12 event players (pk=1081-1092).
+ * Uses Events Test Org (pk=7) with 12 event players (pk=5001-5012).
  * Requires Discord bot tokens for announcement posting.
  */
 
@@ -175,7 +175,7 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
     // =========================================================================
     // 7. Bulk RSVP remaining 10 players
     // =========================================================================
-    const playerPks = [1081, 1082, 1083, 1084, 1085, 1086, 1087, 1088, 1089, 1090];
+    const playerPks = [5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009, 5010];
     const bulkResp = await context.request.post(
       `${API_URL}/tests/events/${eventId}/bulk-rsvp/`,
       {

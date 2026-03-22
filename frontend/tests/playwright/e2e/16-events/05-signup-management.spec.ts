@@ -9,7 +9,7 @@
  *   - Promoting from waitlist
  *   - Final state verification on the event page UI
  *
- * Uses the dedicated Events Test Org (pk=7) with 12 event players (pk=1081-1092).
+ * Uses the dedicated Events Test Org (pk=7) with 12 event players (pk=5001-5012).
  */
 
 import {
@@ -70,7 +70,7 @@ test.describe('Event Signup Management (@cicd)', () => {
     // =========================================================================
     // 2. Bulk RSVP 12 players (10 active + 2 waitlisted)
     // =========================================================================
-    const playerPks = [1081, 1082, 1083, 1084, 1085, 1086, 1087, 1088, 1089, 1090, 1091, 1092];
+    const playerPks = [5001, 5002, 5003, 5004, 5005, 5006, 5007, 5008, 5009, 5010, 5011, 5012];
     const bulkResp = await context.request.post(`${API_URL}/tests/events/${eventId}/bulk-rsvp/`, {
       data: { user_pks: playerPks },
       headers: { 'Content-Type': 'application/json' },
