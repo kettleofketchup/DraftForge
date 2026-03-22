@@ -23,7 +23,9 @@ import {
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ShieldCheck } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
 import { createEventInputSchema, GameType, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, type CreateEventInput } from './schemas';
@@ -205,6 +207,10 @@ export function CreateEventModal({
         <Tabs defaultValue="event">
           <TabsList className="w-full">
             <TabsTrigger value="event" data-testid="event-modal-tab-event">Event</TabsTrigger>
+            <TabsTrigger value="approval" data-testid="event-modal-tab-approval">
+              <ShieldCheck className="h-4 w-4" />
+              Approval
+            </TabsTrigger>
             <TabsTrigger value="discord" data-testid="event-modal-tab-discord">
               <DiscordIcon className="h-4 w-4" />
               Discord
@@ -668,6 +674,10 @@ export function CreateEventModal({
           />
         )}
 
+          </TabsContent>
+
+          <TabsContent value="approval" className="space-y-4">
+            <ApprovalConfigSection control={form.control} watch={form.watch} />
           </TabsContent>
 
           <TabsContent value="discord" className="space-y-4">

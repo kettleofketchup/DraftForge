@@ -1,7 +1,7 @@
 import { generateMeta } from '~/lib/seo';
 import { fetchOrganization } from '~/components/api/api';
 import { queryClient } from '~/root';
-import { Building2, Calendar, ClipboardList, ExternalLink, Mail, MailCheck, Pencil, Plus, Settings, Upload, Users } from 'lucide-react';
+import { Building2, Calendar, ClipboardList, ExternalLink, Mail, MailCheck, Pencil, Plus, Settings, Trash2, Upload, Users } from 'lucide-react';
 import type { Route } from './+types/organization';
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
@@ -109,7 +109,7 @@ function EventsList({ events, loading, onEdit, onEditSeries }: { events: EventTy
   );
 }
 
-function RepeatersList({ repeaters, loading, onEdit }: { repeaters: EventRepeaterType[]; loading: boolean; onEdit?: (repeater: EventRepeaterType) => void }) {
+function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: EventRepeaterType[]; loading: boolean; onEdit?: (repeater: EventRepeaterType) => void; onDelete?: (repeater: EventRepeaterType) => void }) {
   const currentUser = useUserStore((state) => state.currentUser);
   const { subscribe, unsubscribe } = useRepeaterSubscriptionMutation();
   const isPending = subscribe.isPending || unsubscribe.isPending;
@@ -187,6 +187,25 @@ function RepeatersList({ repeaters, loading, onEdit }: { repeaters: EventRepeate
                     <TooltipContent>Edit repeating event</TooltipContent>
                   </Tooltip>
                 )}
+                {onDelete && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-error hover:text-error"
+                        onClick={() => {
+                          if (window.confirm(`Delete "${r.name}"? This will not delete existing events.`)) {
+                            onDelete(r);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Delete repeating event</TooltipContent>
+                  </Tooltip>
+                )}
                 <Badge variant={r.is_active ? 'default' : 'secondary'}>
                   {r.is_active ? 'Active' : 'Paused'}
                 </Badge>
@@ -240,7 +259,11 @@ export default function OrganizationDetailPage() {
     organization?.owner?.pk === currentUser?.pk ||
     organization?.admins?.some((a) => a.pk === currentUser?.pk);
 
-  const canEditEvents = isOrgAdmin || currentUser?.is_staff;
+  const isOrgStaff =
+    isOrgAdmin ||
+    organization?.staff?.some((s) => s.pk === currentUser?.pk);
+
+  const canEditEvents = isOrgStaff || currentUser?.is_staff;
 
   // Staff can add members but not edit org settings
   const canAddMembers =
