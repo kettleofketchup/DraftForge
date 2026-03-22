@@ -159,6 +159,11 @@ class SignupButton(ui.Button):
                         "require_battlecup_screenshot", False
                     ),
                     "min_mmr": result.get("min_mmr"),
+                    "allow_active_mmr": result.get("allow_active_mmr", True),
+                    "allow_previous_rank": result.get("allow_previous_rank", True),
+                    "allow_battlecup_rating": result.get(
+                        "allow_battlecup_rating", True
+                    ),
                 },
             )
             await send_modal_v2(interaction, modal)
@@ -320,32 +325,52 @@ class EventSignupModal(ui.Modal):
         self.pos_2_select = None
         self.pos_3_select = None
 
-        # String Select in modals requires Label wrapper + IS_COMPONENTS_V2 flag
-        self.rank_status_input = ui.Select(
-            placeholder="Select your ranked status",
-            custom_id=f"signup_rank_status:{event_id}",
-            min_values=1,
-            max_values=1,
-            options=[
+        # Build rank options based on event config flags
+        all_rank_options = [
+            (
+                "allow_active_mmr",
                 discord.SelectOption(
                     label="I have an active MMR",
                     value="active",
                     description="Currently ranked in Dota 2",
                     emoji="\U0001f3af",
                 ),
+            ),
+            (
+                "allow_previous_rank",
                 discord.SelectOption(
                     label="I had an MMR",
                     value="previous",
                     description="Previously ranked but not currently",
                     emoji="\u23f0",
                 ),
+            ),
+            (
+                "allow_battlecup_rating",
                 discord.SelectOption(
                     label="I've never had an MMR",
                     value="never",
                     description="Never played ranked Dota 2",
                     emoji="\U0001f195",
                 ),
-            ],
+            ),
+        ]
+
+        rank_options = [
+            opt for key, opt in all_rank_options if self.event_config.get(key, True)
+        ]
+
+        # Fallback: show all if none allowed (shouldn't happen)
+        if not rank_options:
+            rank_options = [opt for _, opt in all_rank_options]
+
+        # String Select in modals requires Label wrapper + IS_COMPONENTS_V2 flag
+        self.rank_status_input = ui.Select(
+            placeholder="Select your ranked status",
+            custom_id=f"signup_rank_status:{event_id}",
+            min_values=1,
+            max_values=1,
+            options=rank_options,
         )
         self.add_item(
             ui.Label(
@@ -425,7 +450,8 @@ class EventSignupModal(ui.Modal):
                 min_mmr=self.event_config.get("min_mmr"),
             )
             await interaction.response.send_message(
-                "\U0001f3ae **Select your preferred positions:**",
+                "\U0001f3ae **Select your preferred positions:**\n"
+                "Choose your 1st, 2nd, and 3rd choice, then press Confirm",
                 view=view,
                 ephemeral=True,
             )
@@ -639,9 +665,9 @@ class PositionConfirmButton(ui.Button):
             min_mmr=self.min_mmr,
         )
         labels = {
-            "active": "\U0001f3c5 **Now select your rank:**",
-            "previous": "\U0001f4dd **Now select your previous rank:**",
-            "never": "\U0001f4dd **Now select your Battle Cup tier:**",
+            "active": "\U0001f3c5 **Now select your rank:**\nChoose your medal and star",
+            "previous": "\U0001f3c5 **Now select your previous rank:**\nChoose your medal and star",
+            "never": "\U0001f3c6 **Select your Battle Cup tier:**",
         }
         await interaction.response.edit_message(
             content=labels.get(self.rank_status, labels["never"]),
@@ -729,14 +755,21 @@ class StarSelect(ui.Select):
         )
 
         label = "Rank" if self.rank_status == "active" else "Previous rank"
-        if self.require_screenshot:
-            view = ScreenshotUploadPromptView(self.event_id, "rank")
+
+        if result.get("action") == "needs_screenshot":
+            view = ScreenshotUploadPromptView(self.event_id, result["screenshot_type"])
             await interaction.response.edit_message(
                 content=(
-                    f"\u2705 {label} set to **{medal_with_star}**. Status: **{result['status']}**\n\n"
-                    "\U0001f4f7 **Please upload your MMR screenshot to complete verification:**"
+                    f"\U0001f3c5 {label} set to **{medal_with_star}**\n\n"
+                    "\U0001f4f7 **Upload your screenshot to complete your signup.**\n"
+                    "Press the button below to upload \u2192"
                 ),
                 view=view,
+            )
+        elif result.get("action") == "error":
+            await interaction.response.edit_message(
+                content=f"\u274c {result['message']}",
+                view=None,
             )
         else:
             await interaction.response.edit_message(
@@ -775,14 +808,20 @@ class BattleCupTierSelect(ui.Select):
             tier=tier,
         )
 
-        if self.require_screenshot:
-            view = ScreenshotUploadPromptView(self.event_id, "battlecup")
+        if result.get("action") == "needs_screenshot":
+            view = ScreenshotUploadPromptView(self.event_id, result["screenshot_type"])
             await interaction.response.edit_message(
                 content=(
-                    f"\u2705 Battle Cup tier {tier} saved. Status: **{result['status']}**\n\n"
-                    "\U0001f4f7 **Please upload your Battle Cup screenshot to complete verification:**"
+                    f"\U0001f3c6 Battle Cup tier {tier} saved\n\n"
+                    "\U0001f4f7 **Upload your ticket screenshot to complete your signup.**\n"
+                    "Press the button below to upload \u2192"
                 ),
                 view=view,
+            )
+        elif result.get("action") == "error":
+            await interaction.response.edit_message(
+                content=f"\u274c {result['message']}",
+                view=None,
             )
         else:
             await interaction.response.edit_message(
@@ -905,10 +944,16 @@ class ScreenshotUploadModal(ui.Modal):
         )
 
         if result.get("success"):
-            await interaction.response.send_message(
-                "\u2705 Screenshot uploaded successfully! You're all set.",
-                ephemeral=True,
-            )
+            if result.get("signed_up"):
+                await interaction.response.send_message(
+                    f"\u2705 {result.get('message', 'Screenshot uploaded! You are signed up.')}",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.response.send_message(
+                    f"\u2705 {result.get('message', 'Screenshot saved.')}",
+                    ephemeral=True,
+                )
         else:
             await interaction.response.send_message(
                 f"\u274c {result.get('message', 'Upload failed.')}",

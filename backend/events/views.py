@@ -369,12 +369,10 @@ class EventViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"])
     def discord(self, request, pk=None):
-        """Get Discord state for this event (org staff only).
+        """Get Discord state for this event.
         GET /api/events/<pk>/discord/
         """
         event = self.get_object()
-        if not has_org_staff_access(request.user, event.organization):
-            return Response(status=status.HTTP_403_FORBIDDEN)
 
         from discordbot.models import DiscordEvent
 

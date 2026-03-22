@@ -35,12 +35,20 @@ class DiscordEventMsgAnnouncementSerializer(DiscordEventMsgSerializer):
 
 
 class DiscordEventLogSerializer(serializers.ModelSerializer):
+    category_display = serializers.CharField(
+        source="get_category_display", read_only=True
+    )
+
     class Meta:
         model = DiscordEventLog
         fields = [
             "id",
+            "category",
+            "category_display",
             "action",
             "target_type",
+            "discord_user_id",
+            "discord_username",
             "message_id",
             "status_code",
             "error_message",

@@ -256,6 +256,13 @@ class DiscordEventDM(models.Model):
         return bool(self.org_user.user.discordId)
 
 
+class LogCategory(models.IntegerChoices):
+    SYSTEM = 1, "System"  # Bot-initiated: announcements, scheduled events
+    INTERACTION = 2, "Interaction"  # User button clicks, selects
+    SIGNUP = 3, "Signup"  # RSVP, approve, reject, confirm
+    NOTIFICATION = 4, "Notification"  # Reminders, DMs
+
+
 class DiscordEventLog(models.Model):
     """Audit log for Discord event API interactions."""
 
@@ -271,8 +278,15 @@ class DiscordEventLog(models.Model):
         blank=True,
         related_name="logs",
     )
+    category = models.IntegerField(
+        choices=LogCategory.choices,
+        default=LogCategory.SYSTEM,
+    )
     action = models.CharField(max_length=64)
     target_type = models.CharField(max_length=64, blank=True, default="")
+    # Discord user who triggered the action (for interaction/signup logs)
+    discord_user_id = models.CharField(max_length=64, blank=True, default="")
+    discord_username = models.CharField(max_length=64, blank=True, default="")
     message_id = models.CharField(max_length=64, null=True, blank=True)
     status_code = models.IntegerField(null=True, blank=True)
     response_data = models.JSONField(null=True, blank=True)
@@ -287,3 +301,53 @@ class DiscordEventLog(models.Model):
 
     def __str__(self):
         return f"{self.action} ({'ok' if self.success else 'fail'}) for event {self.discord_event_id}"
+
+    @classmethod
+    def log_interaction(
+        cls,
+        event_id,
+        action,
+        discord_user_id="",
+        discord_username="",
+        success=True,
+        error_message="",
+    ):
+        """Log a user interaction (button click, select, modal submit)."""
+        try:
+            discord_event = DiscordEvent.objects.get(event_id=event_id)
+        except DiscordEvent.DoesNotExist:
+            return None
+        return cls.objects.create(
+            discord_event=discord_event,
+            category=LogCategory.INTERACTION,
+            action=action,
+            discord_user_id=str(discord_user_id),
+            discord_username=str(discord_username),
+            success=success,
+            error_message=error_message,
+        )
+
+    @classmethod
+    def log_signup(
+        cls,
+        event_id,
+        action,
+        discord_user_id="",
+        discord_username="",
+        success=True,
+        error_message="",
+    ):
+        """Log a signup action (rsvp, approve, reject, confirm, etc.)."""
+        try:
+            discord_event = DiscordEvent.objects.get(event_id=event_id)
+        except DiscordEvent.DoesNotExist:
+            return None
+        return cls.objects.create(
+            discord_event=discord_event,
+            category=LogCategory.SIGNUP,
+            action=action,
+            discord_user_id=str(discord_user_id),
+            discord_username=str(discord_username),
+            success=success,
+            error_message=error_message,
+        )

@@ -118,13 +118,16 @@ interface DiscordConfigSectionProps {
 }
 
 export function DiscordConfigSection({ control, watch, isRepeater, organizationId }: DiscordConfigSectionProps) {
-  const [createEvent, signupReminder, profileReminder, confirmAttendance, postSignups, announcement] = watch([
+  const [createEvent, signupReminder, profileReminder, confirmAttendance, postSignups, announcement, allowActiveMmr, allowPreviousRank, allowBattlecupRating] = watch([
     'discord_create_event',
     'discord_signup_reminder',
     'discord_profile_reminder',
     'discord_confirm_attendance',
     'discord_post_signups',
     'discord_announcement',
+    'allow_active_mmr',
+    'allow_previous_rank',
+    'allow_battlecup_rating',
   ]);
 
   return (
@@ -311,38 +314,78 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
         )}
       </div>
 
-      {/* Signup Requirements */}
-      <div className="rounded-md border border-border p-3 space-y-3">
-        <h4 className="text-sm font-medium">Signup Requirements</h4>
-        <CheckboxField control={control} name="discord_require_rank_screenshot"
-          label="Require MMR screenshot (active rank)"
-          description="Players must upload a screenshot showing their current rank medal and MMR"
-        />
-        <CheckboxField control={control} name="discord_require_battlecup_screenshot"
-          label="Require Battle Cup screenshot (never ranked)"
-          description="Players without a rank must upload a Battle Cup screenshot to verify MMR"
-        />
-        <FormField control={control} name="min_mmr"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Minimum MMR</FormLabel>
-              <FormControl>
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="No minimum"
-                  value={field.value ?? ''}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value, 10);
-                    field.onChange(Number.isNaN(v) ? null : Math.max(0, v));
-                  }}
-                />
-              </FormControl>
-              <FormDescription>Minimum MMR required to sign up. Leave empty for no minimum.</FormDescription>
-              <FormMessage />
-            </FormItem>
+      {/* Approval Requirements */}
+      <div className="space-y-3 rounded-lg border border-border p-4">
+        <h4 className="text-sm font-semibold text-foreground">Approval Requirements</h4>
+
+        {/* Allow active MMR players */}
+        <div className="space-y-2">
+          <CheckboxField control={control} name="allow_active_mmr"
+            label="Allow active MMR players"
+            description="Players with a current ranked MMR can sign up"
+          />
+          {allowActiveMmr && (
+            <div className="ml-6 space-y-2">
+              <CheckboxField control={control} name="discord_require_rank_screenshot"
+                label="Require MMR screenshot"
+                description="Players must upload a screenshot showing their current rank medal and MMR"
+              />
+              <FormField control={control} name="min_mmr"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm">Minimum MMR</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder="No minimum"
+                        value={field.value ?? ''}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          field.onChange(Number.isNaN(v) ? null : Math.max(0, v));
+                        }}
+                      />
+                    </FormControl>
+                    <FormDescription className="text-muted-foreground text-xs">Minimum MMR required to sign up. Leave empty for no minimum.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           )}
-        />
+        </div>
+
+        {/* Allow previously ranked players */}
+        <div className="space-y-2">
+          <CheckboxField control={control} name="allow_previous_rank"
+            label="Allow previously ranked players"
+            description="Players with an expired rank (no longer active) can sign up"
+          />
+          {allowPreviousRank && (
+            <div className="ml-6">
+              <CheckboxField control={control} name="discord_require_rank_screenshot"
+                label="Require rank screenshot"
+                description="Players must upload a screenshot of their previous rank medal"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Allow battle cup players (never ranked) */}
+        <div className="space-y-2">
+          <CheckboxField control={control} name="allow_battlecup_rating"
+            label="Allow battle cup players (never ranked)"
+            description="Players who have never been ranked but have a Battle Cup tier can sign up"
+          />
+          {allowBattlecupRating && (
+            <div className="ml-6">
+              <CheckboxField control={control} name="discord_require_battlecup_screenshot"
+                label="Require battle cup screenshot"
+                description="Players must upload a Battle Cup screenshot to verify their tier"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Notify new events — repeater only */}

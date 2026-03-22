@@ -183,6 +183,73 @@ class SignupProcessingTests(EventTestCase):
         org_user.save()
         self.assertTrue(check_requirements(self.event, self.user))
 
+    def test_check_requirements_screenshot_missing_blocks_approval(self):
+        """Screenshot required + missing -> check_requirements returns False."""
+        from events.services import check_requirements
+        from org.models import OrgUser
+        from org.models_profiles import PlayerDotaProfile
+
+        self.event.discord_require_rank_screenshot = True
+        self.event.auto_approve = True
+        self.event.save()
+
+        org_user, _ = OrgUser.objects.get_or_create(
+            user=self.user, organization=self.event.organization
+        )
+        PlayerDotaProfile.objects.create(
+            org_user=org_user,
+            rank_status="active",
+            rank_medal="Legend 3",
+            pos_1=True,
+        )
+        self.assertFalse(check_requirements(self.event, self.user))
+
+    def test_check_requirements_screenshot_present_allows_approval(self):
+        """Screenshot required + present -> check_requirements returns True."""
+        from events.services import check_requirements
+        from org.models import OrgUser
+        from org.models_profiles import PlayerDotaProfile
+
+        self.event.discord_require_rank_screenshot = True
+        self.event.auto_approve = True
+        self.event.require_steam_id = False
+        self.event.require_mmr_verified = False
+        self.event.require_profile_complete = False
+        self.event.save()
+
+        org_user, _ = OrgUser.objects.get_or_create(
+            user=self.user, organization=self.event.organization
+        )
+        PlayerDotaProfile.objects.create(
+            org_user=org_user,
+            rank_status="active",
+            rank_medal="Legend 3",
+            rank_screenshot="https://i.imgur.com/example.png",
+            pos_1=True,
+        )
+        self.assertTrue(check_requirements(self.event, self.user))
+
+    def test_check_requirements_disallowed_rank_type(self):
+        """Disallowed rank type -> check_requirements returns False."""
+        from events.services import check_requirements
+        from org.models import OrgUser
+        from org.models_profiles import PlayerDotaProfile
+
+        self.event.allow_active_mmr = False
+        self.event.auto_approve = True
+        self.event.save()
+
+        org_user, _ = OrgUser.objects.get_or_create(
+            user=self.user, organization=self.event.organization
+        )
+        PlayerDotaProfile.objects.create(
+            org_user=org_user,
+            rank_status="active",
+            rank_medal="Legend 3",
+            pos_1=True,
+        )
+        self.assertFalse(check_requirements(self.event, self.user))
+
 
 class WaitlistPromotionTests(EventTestCase):
     def setUp(self):

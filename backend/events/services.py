@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 def check_requirements(event, user):
     """Check if user meets event confirmation requirements."""
     from org.models import OrgUser
+    from org.models_profiles import PlayerDotaProfile
 
     if event.require_steam_id and not user.steamid:
         return False
@@ -43,6 +44,41 @@ def check_requirements(event, user):
                 return False
         except OrgUser.DoesNotExist:
             return False
+
+    # Check rank type restrictions and screenshot requirements (Dota 2 only)
+    try:
+        org_user = OrgUser.objects.get(user=user, organization=event.organization)
+        profile = PlayerDotaProfile.objects.get(org_user=org_user)
+
+        # Rank type allowed?
+        if profile.rank_status == "active" and not event.allow_active_mmr:
+            return False
+        if profile.rank_status == "previous" and not event.allow_previous_rank:
+            return False
+        if profile.rank_status == "never" and not event.allow_battlecup_rating:
+            return False
+
+        # Screenshot required but missing?
+        if event.discord_require_rank_screenshot and profile.rank_status in (
+            "active",
+            "previous",
+        ):
+            if not profile.rank_screenshot:
+                return False
+        if (
+            event.discord_require_battlecup_screenshot
+            and profile.rank_status == "never"
+        ):
+            if not profile.battlecup_screenshot:
+                return False
+
+        # Min MMR check
+        if event.min_mmr and profile.rank_status == "active":
+            if not profile.mmr or profile.mmr < event.min_mmr:
+                return False
+    except (OrgUser.DoesNotExist, PlayerDotaProfile.DoesNotExist):
+        pass  # No profile = skip Dota-specific checks
+
     if event.require_profile_complete:
         if not (user.nickname and user.steamid and user.discordId):
             return False

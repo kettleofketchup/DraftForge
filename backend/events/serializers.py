@@ -56,6 +56,9 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "require_profile_complete",
             "roll_call_enabled",
             "roll_call_mode",
+            "allow_active_mmr",
+            "allow_previous_rank",
+            "allow_battlecup_rating",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -166,6 +169,9 @@ class EventSerializer(serializers.ModelSerializer):
             "require_profile_complete",
             "roll_call_enabled",
             "roll_call_mode",
+            "allow_active_mmr",
+            "allow_previous_rank",
+            "allow_battlecup_rating",
             # DiscordConfig
             "discord_create_event",
             "discord_sync_signups",
@@ -341,6 +347,9 @@ class OrgEventDefaultsSerializer(serializers.ModelSerializer):
             "require_profile_complete",
             "roll_call_enabled",
             "roll_call_mode",
+            "allow_active_mmr",
+            "allow_previous_rank",
+            "allow_battlecup_rating",
             # DiscordEventConfigMixin
             "discord_create_event",
             "discord_sync_signups",

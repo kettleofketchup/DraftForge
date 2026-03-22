@@ -8,9 +8,44 @@ Return dicts with 'action' key so the caller knows how to respond.
 
 import logging
 
+from discordbot.models import DiscordEventLog
 from events.models import Event, EventSignup, EventState, SignupStatus
 
 logger = logging.getLogger(__name__)
+
+
+def _log_interaction(
+    event_id,
+    action,
+    discord_user_id="",
+    discord_username="",
+    success=True,
+    error_message="",
+):
+    """Log a Discord interaction (best-effort, never raises)."""
+    try:
+        DiscordEventLog.log_interaction(
+            event_id, action, discord_user_id, discord_username, success, error_message
+        )
+    except Exception:
+        pass
+
+
+def _log_signup(
+    event_id,
+    action,
+    discord_user_id="",
+    discord_username="",
+    success=True,
+    error_message="",
+):
+    """Log a signup action (best-effort, never raises)."""
+    try:
+        DiscordEventLog.log_signup(
+            event_id, action, discord_user_id, discord_username, success, error_message
+        )
+    except Exception:
+        pass
 
 
 def _check_dota_profile_complete(org_user, event=None):
@@ -129,10 +164,20 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
 
         try:
             signup = process_rsvp(event, user)
+            _log_signup(event_id, "signup_direct", discord_user_id, discord_username)
             return {"action": "signed_up", "status": signup.status}
         except ValueError as e:
+            _log_signup(
+                event_id,
+                "signup_failed",
+                discord_user_id,
+                discord_username,
+                success=False,
+                error_message=str(e),
+            )
             return {"action": "error", "message": str(e)}
 
+    _log_interaction(event_id, "signup_modal_opened", discord_user_id, discord_username)
     # Needs modal — return prefill data + event config flags
     return {
         "action": "needs_modal",
@@ -150,6 +195,9 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
         "require_rank_screenshot": event.discord_require_rank_screenshot,
         "require_battlecup_screenshot": event.discord_require_battlecup_screenshot,
         "min_mmr": event.min_mmr,
+        "allow_active_mmr": event.allow_active_mmr,
+        "allow_previous_rank": event.allow_previous_rank,
+        "allow_battlecup_rating": event.allow_battlecup_rating,
     }
 
 
@@ -204,6 +252,23 @@ def handle_signup_modal_submit(event_id, discord_user_id, game_type, values):
 
         rank_status = values.get("rank_status")
         if rank_status:
+            # Validate rank type is allowed by event config
+            if rank_status == "active" and not event.allow_active_mmr:
+                return {
+                    "action": "error",
+                    "message": "This event does not accept active MMR signups.",
+                }
+            if rank_status == "previous" and not event.allow_previous_rank:
+                return {
+                    "action": "error",
+                    "message": "This event does not accept previously ranked signups.",
+                }
+            if rank_status == "never" and not event.allow_battlecup_rating:
+                return {
+                    "action": "error",
+                    "message": "This event does not accept battle cup signups.",
+                }
+
             # Rank status provided (e.g. from legacy text input)
             if rank_status not in ("active", "previous", "never"):
                 rank_status = "never"
@@ -295,10 +360,27 @@ def handle_rank_medal_select(event_id, discord_user_id, medal):
     profile.save(update_fields=["rank_medal"])
     invalidate_obj(profile)
 
+    # Check if screenshot required before completing signup
+    if event.discord_require_rank_screenshot and not profile.rank_screenshot:
+        _log_interaction(event_id, "awaiting_rank_screenshot", discord_user_id)
+        return {
+            "action": "needs_screenshot",
+            "screenshot_type": "rank",
+            "medal": medal,
+        }
+
     try:
         signup = process_rsvp(event, user)
+        _log_signup(event_id, f"signup_ranked:{medal}", discord_user_id)
         return {"action": "signed_up", "status": signup.status}
     except ValueError as e:
+        _log_signup(
+            event_id,
+            "signup_failed",
+            discord_user_id,
+            success=False,
+            error_message=str(e),
+        )
         return {"action": "error", "message": str(e)}
 
 
@@ -322,6 +404,15 @@ def handle_previous_rank_submit(event_id, discord_user_id, medal, date_text):
     profile.rank_medal = medal
     profile.save(update_fields=["rank_medal"])
     invalidate_obj(profile)
+
+    # Check if screenshot required before completing signup
+    if event.discord_require_rank_screenshot and not profile.rank_screenshot:
+        _log_interaction(event_id, "awaiting_rank_screenshot", discord_user_id)
+        return {
+            "action": "needs_screenshot",
+            "screenshot_type": "rank",
+            "medal": medal,
+        }
 
     try:
         signup = process_rsvp(event, user)
@@ -354,10 +445,27 @@ def handle_battle_cup_submit(event_id, discord_user_id, tier):
     profile.save(update_fields=["battle_cup_tier"])
     invalidate_obj(profile)
 
+    # Check if screenshot required before completing signup
+    if event.discord_require_battlecup_screenshot and not profile.battlecup_screenshot:
+        _log_interaction(event_id, "awaiting_battlecup_screenshot", discord_user_id)
+        return {
+            "action": "needs_screenshot",
+            "screenshot_type": "battlecup",
+            "tier": tier,
+        }
+
     try:
         signup = process_rsvp(event, user)
+        _log_signup(event_id, f"signup_battlecup:T{tier}", discord_user_id)
         return {"action": "signed_up", "status": signup.status}
     except ValueError as e:
+        _log_signup(
+            event_id,
+            "signup_failed",
+            discord_user_id,
+            success=False,
+            error_message=str(e),
+        )
         return {"action": "error", "message": str(e)}
 
 
@@ -405,7 +513,33 @@ def handle_screenshot_upload(
 
     profile.save()
     invalidate_obj(profile)
-    return {"success": True, "message": "Screenshot saved successfully."}
+    _log_interaction(
+        event_id, f"screenshot_uploaded:{screenshot_type}", discord_user_id
+    )
+
+    # Complete the signup now that screenshot is provided
+    from events.services import process_rsvp
+
+    _, user = _get_org_user(event, discord_user_id)
+    if not user:
+        return {"success": True, "signed_up": False, "message": "Screenshot saved."}
+
+    try:
+        signup = process_rsvp(event, user)
+        _log_signup(
+            event_id, f"signup_after_screenshot:{screenshot_type}", discord_user_id
+        )
+        return {
+            "success": True,
+            "signed_up": True,
+            "message": f"Screenshot saved! You're signed up. Status: **{signup.status}**",
+        }
+    except ValueError as e:
+        return {
+            "success": True,
+            "signed_up": False,
+            "message": f"Screenshot saved. {str(e)}",
+        }
 
 
 def handle_notify_button(event_id, discord_user_id):
@@ -456,6 +590,7 @@ def handle_decline_button(event_id, discord_user_id):
         if signup.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
             return {"action": "already_declined", "message": "You've already declined."}
         cancel_signup(signup)
+        _log_signup(event_id, "declined", discord_user_id)
         return {"action": "declined", "message": "You've declined the event."}
     except EventSignup.DoesNotExist:
         return {"action": "not_signed_up", "message": "You weren't signed up."}
@@ -496,6 +631,7 @@ def handle_tentative_button(event_id, discord_user_id, discord_username=None):
         user=user,
         status=SignupStatus.TENTATIVE,
     )
+    _log_signup(event_id, "tentative", discord_user_id, discord_username)
     # Trigger embed update
     from events.discord.dispatch import notify_signup_changed
 

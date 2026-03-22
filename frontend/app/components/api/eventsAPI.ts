@@ -146,6 +146,9 @@ export interface EventRepeaterType {
   require_profile_complete: boolean;
   roll_call_enabled: boolean;
   roll_call_mode: string;
+  allow_active_mmr: boolean;
+  allow_previous_rank: boolean;
+  allow_battlecup_rating: boolean;
   discord_create_event: boolean;
   discord_sync_signups: boolean;
   discord_event_title: string;
@@ -219,6 +222,9 @@ export interface OrgEventDefaultsType {
   require_profile_complete: boolean;
   roll_call_enabled: boolean;
   roll_call_mode: string;
+  allow_active_mmr: boolean;
+  allow_previous_rank: boolean;
+  allow_battlecup_rating: boolean;
   discord_create_event: boolean;
   discord_sync_signups: boolean;
   discord_event_title: string;

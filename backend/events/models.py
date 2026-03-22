@@ -128,6 +128,19 @@ class EventConfigMixin(models.Model):
         choices=RollCallMode.choices,
         default=RollCallMode.MANUAL,
     )
+    # Approval Requirements — which rank types are allowed
+    allow_active_mmr = models.BooleanField(
+        default=True,
+        help_text="Allow players with active MMR to sign up",
+    )
+    allow_previous_rank = models.BooleanField(
+        default=True,
+        help_text="Allow players with previous (expired) rank to sign up",
+    )
+    allow_battlecup_rating = models.BooleanField(
+        default=True,
+        help_text="Allow never-ranked players (battle cup tier) to sign up",
+    )
 
     class Meta:
         abstract = True

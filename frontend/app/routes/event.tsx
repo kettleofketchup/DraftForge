@@ -179,7 +179,7 @@ export default function EventPage() {
       { value: 'details', label: 'Details' },
       { value: 'signups', label: `${activeSignups.length} Signups` },
       { value: 'waitlist', label: `${waitlistedSignups.length} Waitlist` },
-      ...(isAdmin ? [{ value: 'discord', label: 'Discord' }] : []),
+      { value: 'discord', label: 'Discord' },
     ],
     [activeSignups.length, waitlistedSignups.length, isAdmin],
   );
@@ -302,7 +302,7 @@ export default function EventPage() {
       <div className="space-y-4">
         {/* Row 1: Title (left) + Org (right on md+) */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <h1 className="text-xl sm:text-2xl lg:text-4xl font-bold truncate leading-normal max-w-[16ch] sm:max-w-[18ch] md:max-w-[20ch] lg:max-w-[22ch] xl:max-w-[24ch] 2xl:max-w-none">
+          <h1 className="text-xl sm:text-2xl lg:text-4xl font-bold min-w-0">
             {event.name}
           </h1>
           {event.organization_name && (
@@ -482,11 +482,9 @@ export default function EventPage() {
             <TabsTrigger value="waitlist" data-testid="event-tab-waitlist">
               Waitlist ({waitlistedSignups.length})
             </TabsTrigger>
-            {isAdmin && (
-              <TabsTrigger value="discord" data-testid="event-tab-discord">
-                Discord
-              </TabsTrigger>
-            )}
+            <TabsTrigger value="discord" data-testid="event-tab-discord">
+              Discord
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="details">
@@ -511,11 +509,9 @@ export default function EventPage() {
             />
           </TabsContent>
 
-          {isAdmin && (
-            <TabsContent value="discord">
-              <DiscordLogSection eventId={event.id} />
-            </TabsContent>
-          )}
+          <TabsContent value="discord">
+            <DiscordLogSection eventId={event.id} />
+          </TabsContent>
         </Tabs>
       </div>
 

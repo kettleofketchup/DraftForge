@@ -120,6 +120,9 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
         discord_require_rank_screenshot: event.discord_require_rank_screenshot,
         discord_require_battlecup_screenshot: event.discord_require_battlecup_screenshot,
         min_mmr: event.min_mmr ?? null,
+        allow_active_mmr: event.allow_active_mmr,
+        allow_previous_rank: event.allow_previous_rank,
+        allow_battlecup_rating: event.allow_battlecup_rating,
       });
     }
   }, [event, open]);

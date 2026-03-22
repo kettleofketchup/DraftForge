@@ -58,6 +58,9 @@ export const eventSchema = z.object({
   require_profile_complete: z.boolean(),
   roll_call_enabled: z.boolean(),
   roll_call_mode: z.string(),
+  allow_active_mmr: z.boolean(),
+  allow_previous_rank: z.boolean(),
+  allow_battlecup_rating: z.boolean(),
   discord_create_event: z.boolean(),
   discord_sync_signups: z.boolean(),
   discord_event_title: z.string(),
@@ -182,6 +185,9 @@ export const discordConfigSchema = z.object({
   discord_require_rank_screenshot: z.boolean(),
   discord_require_battlecup_screenshot: z.boolean(),
   min_mmr: z.number().int().min(0).nullable(),
+  allow_active_mmr: z.boolean(),
+  allow_previous_rank: z.boolean(),
+  allow_battlecup_rating: z.boolean(),
 });
 
 export const DISCORD_CONFIG_DEFAULTS = {
@@ -207,6 +213,9 @@ export const DISCORD_CONFIG_DEFAULTS = {
   discord_require_rank_screenshot: false,
   discord_require_battlecup_screenshot: false,
   min_mmr: null as number | null,
+  allow_active_mmr: true,
+  allow_previous_rank: true,
+  allow_battlecup_rating: true,
 } as const;
 
 export const createEventInputSchema = z.object({
@@ -252,11 +261,29 @@ export const discordEventMsgSchema = z.object({
   updated_at: z.string(),
 });
 
+export const LogCategory = {
+  SYSTEM: 1,
+  INTERACTION: 2,
+  SIGNUP: 3,
+  NOTIFICATION: 4,
+} as const;
+
+export const LOG_CATEGORY_LABELS: Record<number, string> = {
+  [LogCategory.SYSTEM]: 'System',
+  [LogCategory.INTERACTION]: 'Interaction',
+  [LogCategory.SIGNUP]: 'Signup',
+  [LogCategory.NOTIFICATION]: 'Notification',
+};
+
 export const discordEventLogSchema = z.object({
   id: z.number(),
+  category: z.number(),
+  category_display: z.string(),
   action: z.string(),
   target_type: z.string(),
-  message_id: z.string(),
+  discord_user_id: z.string(),
+  discord_username: z.string(),
+  message_id: z.string().nullable(),
   status_code: z.number().nullable(),
   error_message: z.string(),
   success: z.boolean(),

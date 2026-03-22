@@ -308,30 +308,28 @@ class KettleBot(discord.Client):
                     medal=medal_with_star,
                 )
 
-                if result.get("action") == "error":
+                if result.get("action") == "needs_screenshot":
+                    from discordbot.components import ScreenshotUploadPromptView
+
+                    view = ScreenshotUploadPromptView(
+                        event_id, result["screenshot_type"]
+                    )
+                    await interaction.response.edit_message(
+                        content=(
+                            f"\U0001f3c5 Rank set to **{medal_with_star}**\n\n"
+                            "\U0001f4f7 **Upload your screenshot to complete your signup.**\n"
+                            "Press the button below to upload \u2192"
+                        ),
+                        view=view,
+                    )
+                elif result.get("action") == "error":
                     await interaction.response.edit_message(
                         content=f"\u274c {result['message']}",
                         view=None,
                     )
-                    return
-
-                status = result.get("status", "pending")
-
-                # Check if screenshot is required
-                from events.models import Event
-
-                event = await sync_to_async(Event.objects.get)(pk=event_id)
-                if event.discord_require_rank_screenshot:
-                    from discordbot.components import ScreenshotUploadPromptView
-
-                    view = ScreenshotUploadPromptView(event_id, "rank")
-                    await interaction.response.edit_message(
-                        content=f"\u2705 Rank set to **{medal_with_star}**. Status: **{status}**\n\n\U0001f4f7 **Please upload your MMR screenshot:**",
-                        view=view,
-                    )
                 else:
                     await interaction.response.edit_message(
-                        content=f"\u2705 Rank set to **{medal_with_star}**. You're signed up! Status: **{status}**",
+                        content=f"\u2705 Rank set to **{medal_with_star}**. You're signed up! Status: **{result.get('status', 'pending')}**",
                         view=None,
                     )
             elif custom_id.startswith("rank_status:"):
