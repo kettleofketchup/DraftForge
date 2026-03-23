@@ -152,15 +152,9 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
     except Exception as e:
         _log.warning(f"Failed to instrument requests: {e}")
 
-    # Instrument system metrics
-    try:
-        from opentelemetry.instrumentation.system_metrics import (
-            SystemMetricsInstrumentor,
-        )
-
-        SystemMetricsInstrumentor().instrument()
-    except Exception as e:
-        _log.warning(f"Failed to instrument system metrics: {e}")
+    # System metrics (cpu, disk, network) intentionally NOT instrumented:
+    # Grafana Cloud Mimir rejects the temporality/type combos they produce,
+    # and host-level metrics from inside a container aren't useful anyway.
 
     # Instrument database (SQLite via dbapi)
     try:
