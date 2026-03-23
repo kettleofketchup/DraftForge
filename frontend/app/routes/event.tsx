@@ -255,7 +255,7 @@ export default function EventPage() {
       onClick: () => {
         if (window.confirm('Are you sure you want to permanently delete this event? This cannot be undone.')) {
           actions.deleteEvent.mutate(undefined, {
-            onSuccess: () => navigate(`/organization/${event.organization}/events`),
+            onSuccess: () => navigate(`/organizations/${event.organization}/events`),
           });
         }
       },
@@ -309,7 +309,7 @@ export default function EventPage() {
           {event.organization_name && (
             <HighlightButton
               size="sm"
-              onClick={() => navigate(`/organization/${event.organization}`)}
+              onClick={() => navigate(`/organizations/${event.organization}`)}
               avatarUrl={eventOrg?.logo || undefined}
               avatarAlt={event.organization_name}
               className="shrink-0"
@@ -402,7 +402,7 @@ export default function EventPage() {
                     onClick={() => {
                       if (window.confirm('Are you sure you want to permanently delete this event? This cannot be undone.')) {
                         actions.deleteEvent.mutate(undefined, {
-                          onSuccess: () => navigate(`/organization/${event.organization}/events`),
+                          onSuccess: () => navigate(`/organizations/${event.organization}/events`),
                         });
                       }
                     }}

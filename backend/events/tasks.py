@@ -116,6 +116,14 @@ def sync_discord_events():
         .values_list("event_id", flat=True)
     )
 
+    # Avoid retrying create_scheduled_event that failed recently (within 1 hour)
+    events_with_recent_scheduled_attempt = set(
+        DiscordEventLog.objects.filter(
+            action="create_scheduled_event",
+            created_at__gte=timezone.now() - timedelta(hours=1),
+        ).values_list("discord_event__event_id", flat=True)
+    )
+
     signup_posts_created = 0
     notices_created = 0
     discord_events_created = 0
@@ -143,6 +151,7 @@ def sync_discord_events():
         has_scheduled = (
             event.pk in events_with_scheduled
             or ("create_discord_event", event.pk) in existing_logs
+            or event.pk in events_with_recent_scheduled_attempt
         )
         if (
             event.discord_create_event
