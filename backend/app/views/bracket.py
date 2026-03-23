@@ -91,38 +91,73 @@ def save_bracket(request, tournament_id):
 
     matches = serializer.validated_data["matches"]
 
-    # Delete existing bracket games for this tournament
-    Game.objects.filter(tournament=tournament).delete()
+    # Build lookup of existing games by (bracket_type, round, position)
+    existing_games = {
+        (g.bracket_type, g.round, g.position): g
+        for g in Game.objects.filter(tournament=tournament)
+    }
 
-    # Pass 1: Create all games without FK relationships
-    # Map frontend ID -> database PK
+    # Track which existing games are still in the new bracket
+    seen_keys = set()
+
+    # Pass 1: Create or update games (without FK relationships)
+    # Map frontend ID -> database Game
     id_to_game = {}
 
     for match in matches:
-        game = Game.objects.create(
-            tournament=tournament,
-            round=match.get("round", 1),
-            position=match.get("position", 0),
-            bracket_type=match.get("bracketType", "winners"),
-            elimination_type=match.get("eliminationType", "double"),
-            status=match.get("status", "pending"),
-            next_game_slot=match.get("nextMatchSlot"),
-            loser_next_game_slot=match.get("loserNextMatchSlot"),
-            swiss_record_wins=match.get("swissRecordWins", 0),
-            swiss_record_losses=match.get("swissRecordLosses", 0),
+        key = (
+            match.get("bracketType", "winners"),
+            match.get("round", 1),
+            match.get("position", 0),
         )
+        seen_keys.add(key)
+
+        existing = existing_games.get(key)
+        if existing:
+            # Update existing game (preserves PK and related HeroDraft)
+            game = existing
+            game.elimination_type = match.get("eliminationType", "double")
+            game.status = match.get("status", game.status)
+            game.next_game_slot = match.get("nextMatchSlot")
+            game.loser_next_game_slot = match.get("loserNextMatchSlot")
+            game.swiss_record_wins = match.get("swissRecordWins", 0)
+            game.swiss_record_losses = match.get("swissRecordLosses", 0)
+        else:
+            # Create new game
+            game = Game(
+                tournament=tournament,
+                round=match.get("round", 1),
+                position=match.get("position", 0),
+                bracket_type=match.get("bracketType", "winners"),
+                elimination_type=match.get("eliminationType", "double"),
+                status=match.get("status", "pending"),
+                next_game_slot=match.get("nextMatchSlot"),
+                loser_next_game_slot=match.get("loserNextMatchSlot"),
+                swiss_record_wins=match.get("swissRecordWins", 0),
+                swiss_record_losses=match.get("swissRecordLosses", 0),
+            )
 
         # Set teams if provided
         radiant_team = match.get("radiantTeam")
-        if radiant_team and radiant_team.get("pk"):
-            game.radiant_team_id = radiant_team["pk"]
+        game.radiant_team_id = (
+            radiant_team["pk"] if radiant_team and radiant_team.get("pk") else None
+        )
 
         dire_team = match.get("direTeam")
-        if dire_team and dire_team.get("pk"):
-            game.dire_team_id = dire_team["pk"]
+        game.dire_team_id = (
+            dire_team["pk"] if dire_team and dire_team.get("pk") else None
+        )
 
+        # Clear next_game/loser_next_game before pass 2 rewires them
+        game.next_game = None
+        game.loser_next_game = None
         game.save()
         id_to_game[match["id"]] = game
+
+    # Delete games that are no longer in the bracket
+    for key, game in existing_games.items():
+        if key not in seen_keys:
+            game.delete()
 
     # Pass 2: Wire up FK relationships
     for match in matches:
