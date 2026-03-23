@@ -554,7 +554,7 @@ const NavLinks = ({ className }: { className?: string }) => {
       />
       {currentUser?.is_staff && (
         <NavItem
-          to="/admin"
+          href="/admin/"
           icon={<AdminIcon />}
           title="Admin"
           subtitle="Manage site"

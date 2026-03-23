@@ -105,7 +105,7 @@ function matchesToNodes(matches: BracketMatch[], badgeMapping: BadgeMapping): Ma
 }
 
 /**
- * Create structural edges for ELK layout calculation
+ * Create structural edges between matches for layout and baseline connectors.
  */
 function createStructuralEdges(matches: BracketMatch[]): Edge[] {
   return matches
@@ -115,7 +115,6 @@ function createStructuralEdges(matches: BracketMatch[]): Edge[] {
       source: match.id,
       target: match.nextMatchId!,
       type: 'bracket',
-      hidden: true,
     }));
 }
 
@@ -394,11 +393,18 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
         ...grandFinalsNodes,
       ];
 
-      // Create visible edges (only for completed matches with winners)
-      const visibleEdges = createAdvancementEdges(matches);
+      // Structural edges (baseline connectors) + advancement edges (colored winner paths)
+      const structuralEdges = createStructuralEdges(matches);
+      const advancementEdges = createAdvancementEdges(matches);
+      // Advancement edges override structural edges for the same source→target pair
+      const advancementIds = new Set(advancementEdges.map(e => `${e.source}-${e.target}`));
+      const combinedEdges = [
+        ...structuralEdges.filter(e => !advancementIds.has(`${e.source}-${e.target}`)),
+        ...advancementEdges,
+      ];
 
       setNodes(allNodes as MatchNodeType[]);
-      setEdges(visibleEdges);
+      setEdges(combinedEdges);
       layoutCompleteRef.current = true;
     };
 

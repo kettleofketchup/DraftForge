@@ -262,7 +262,7 @@ export function MobileNav() {
           />
           {currentUser?.is_staff && (
             <MobileNavLink
-              to="/admin"
+              href="/admin/"
               icon={<AdminIcon />}
               title="Admin"
               subtitle="Manage site"
