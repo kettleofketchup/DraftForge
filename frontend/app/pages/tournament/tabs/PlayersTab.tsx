@@ -13,6 +13,8 @@ import { CSVImportModal } from '~/components/user/CSVImportModal';
 import { hydrateTournament } from '~/lib/hydrateTournament';
 import { useUserStore } from '~/store/userStore';
 import { useOrgStore } from '~/store/orgStore';
+import { useLeagueStore } from '~/store/leagueStore';
+import { useIsLeagueStaff } from '~/hooks/usePermissions';
 import { hasErrors } from '../hasErrors';
 
 export const PlayersTab: React.FC = memo(() => {
@@ -59,8 +61,10 @@ export const PlayersTab: React.FC = memo(() => {
     [addedPkSet]
   );
 
+  const currentLeague = useLeagueStore((s) => s.currentLeague);
+  const isLeagueStaff = useIsLeagueStaff(currentLeague);
   const hasDiscordServer = Boolean(currentOrg?.discord_server_id);
-  const canEdit = isStaff();
+  const canEdit = isStaff() || isLeagueStaff;
 
   // Grid columns for tournament players
   const gridCols = 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';

@@ -41,7 +41,7 @@ import {
 } from '~/hooks/useEvent';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrganization } from '~/components/organization';
-import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
+import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 
 export default function RollCallPage() {
@@ -56,7 +56,7 @@ export default function RollCallPage() {
   const signupActions = useSignupActionMutations(id ?? 0);
 
   const { organization: eventOrg } = useOrganization(event?.organization ?? undefined);
-  const isAdmin = useIsOrganizationAdmin(eventOrg);
+  const isAdmin = useIsOrganizationStaff(eventOrg);
 
   const [showStartConfirm, setShowStartConfirm] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);

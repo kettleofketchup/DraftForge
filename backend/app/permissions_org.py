@@ -120,6 +120,17 @@ class IsOrgAdmin(permissions.BasePermission):
         return has_org_admin_access(request.user, obj)
 
 
+class IsOrgStaff(permissions.BasePermission):
+    """Permission check for organization staff access (includes admins)."""
+
+    def has_permission(self, request, view):
+        """Allow authenticated users to proceed to object-level check."""
+        return request.user and request.user.is_authenticated
+
+    def has_object_permission(self, request, view, obj):
+        return has_org_staff_access(request.user, obj)
+
+
 class IsLeagueAdmin(permissions.BasePermission):
     """Permission check for league admin access."""
 

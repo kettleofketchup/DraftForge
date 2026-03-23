@@ -400,10 +400,12 @@ def import_csv_tournament(request, tournament_id):
         Tournament.objects.select_related("league__organization"), pk=tournament_id
     )
 
-    # Check access via league's org
+    # Check access via league staff (includes org staff + league-specific staff)
     has_access = False
-    if tournament.league and tournament.league.organization:
-        has_access = has_org_staff_access(request.user, tournament.league.organization)
+    if tournament.league:
+        from app.permissions_org import has_league_staff_access
+
+        has_access = has_league_staff_access(request.user, tournament.league)
     if not has_access and not request.user.is_superuser and not request.user.is_staff:
         return Response(
             {"error": "You do not have permission"},

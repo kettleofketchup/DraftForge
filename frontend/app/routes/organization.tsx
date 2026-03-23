@@ -434,7 +434,7 @@ export default function OrganizationDetailPage() {
               <Users className="w-4 h-4 mr-2" />
               Users ({orgUsersLoading || orgUsersOrgId !== pk ? '...' : orgUserPks.length})
             </TabsTrigger>
-            {isOrgAdmin && (
+            {isOrgStaff && (
               <TabsTrigger value="claims" data-testid="org-tab-claims">
                 <ClipboardList className="w-4 h-4 mr-2" />
                 Claims
@@ -446,7 +446,7 @@ export default function OrganizationDetailPage() {
           <TabsContent value="leagues">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Leagues</h2>
-              {isOrgAdmin && (
+              {isOrgStaff && (
                 <PrimaryButton onClick={() => setCreateLeagueOpen(true)}>
                   <Plus className="w-4 h-4 mr-2" />
                   Create League
@@ -491,7 +491,7 @@ export default function OrganizationDetailPage() {
                     <TooltipContent>Edit event defaults</TooltipContent>
                   </Tooltip>
                 )}
-                {isOrgAdmin && (
+                {isOrgStaff && (
                   <PrimaryButton data-testid="create-event-btn" onClick={() => setCreateEventOpen(true)}>
                     <Plus className="w-4 h-4 mr-2" />
                     Create Event
@@ -570,8 +570,8 @@ export default function OrganizationDetailPage() {
             />
           </TabsContent>
 
-          {/* Claims Tab (Admin only) */}
-          {isOrgAdmin && pk && (
+          {/* Claims Tab (Staff+) */}
+          {isOrgStaff && pk && (
             <TabsContent value="claims">
               <ClaimsTab organizationId={pk} />
             </TabsContent>
@@ -587,7 +587,7 @@ export default function OrganizationDetailPage() {
           />
         )}
 
-        {isOrgAdmin && pk && (
+        {isOrgStaff && pk && (
           <CreateEventModal
             open={createEventOpen}
             onOpenChange={setCreateEventOpen}

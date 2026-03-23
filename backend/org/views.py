@@ -24,7 +24,7 @@ from app.models import (
     ProfileClaimRequest,
     Team,
 )
-from app.permissions_org import IsOrgAdmin
+from app.permissions_org import IsOrgStaff
 from league.models import LeagueUser
 from org.models import OrgUser
 from org.serializers import ProfileClaimRequestSerializer
@@ -37,24 +37,25 @@ class ClaimRequestViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing profile claim requests.
 
-    Org admins can list, approve, or reject claim requests for their organization.
+    Org staff can list, approve, or reject claim requests for their organization.
     """
 
     serializer_class = ProfileClaimRequestSerializer
-    permission_classes = [IsAuthenticated, IsOrgAdmin]
+    permission_classes = [IsAuthenticated, IsOrgStaff]
 
     def get_queryset(self):
-        """Filter to requests for organizations the user is admin of."""
+        """Filter to requests for organizations the user is staff of."""
         user = self.request.user
 
         # Site admins can see all
         if user.is_superuser:
             return ProfileClaimRequest.objects.all()
 
-        # Org admins see requests for their organizations
-        # related_name is "admin_organizations" from Organization.admins field
-        admin_org_ids = user.admin_organizations.values_list("pk", flat=True)
-        return ProfileClaimRequest.objects.filter(organization_id__in=admin_org_ids)
+        # Org admins + staff see requests for their organizations
+        admin_org_ids = set(user.admin_organizations.values_list("pk", flat=True))
+        staff_org_ids = set(user.staff_organizations.values_list("pk", flat=True))
+        org_ids = admin_org_ids | staff_org_ids
+        return ProfileClaimRequest.objects.filter(organization_id__in=org_ids)
 
     def list(self, request, *args, **kwargs):
         """List claim requests, optionally filtered by status."""

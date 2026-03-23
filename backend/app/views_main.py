@@ -19,12 +19,12 @@ from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from social_core.backends.oauth import BaseOAuth1, BaseOAuth2
-
-# Create your views here.
 from social_django.models import USER_MODEL  # fix: skip
 from social_django.models import AbstractUserSocialAuth, DjangoStorage
 from social_django.utils import load_strategy, psa
 
+# Create your views here.
+from app.permissions_org import has_org_staff_access
 from backend import settings
 
 from .decorators import render_to
@@ -1124,9 +1124,9 @@ class LeagueView(viewsets.ModelViewSet):
         if org_id:
             try:
                 org = Organization.objects.get(pk=org_id)
-                if not has_org_admin_access(request.user, org):
+                if not has_org_staff_access(request.user, org):
                     return Response(
-                        {"detail": "Must be organization admin to create league"},
+                        {"detail": "Must be organization staff to create league"},
                         status=status.HTTP_403_FORBIDDEN,
                     )
             except Organization.DoesNotExist:
@@ -1140,9 +1140,9 @@ class LeagueView(viewsets.ModelViewSet):
         for org_id in org_ids:
             try:
                 org = Organization.objects.get(pk=org_id)
-                if not has_org_admin_access(request.user, org):
+                if not has_org_staff_access(request.user, org):
                     return Response(
-                        {"detail": "Must be organization admin to create league"},
+                        {"detail": "Must be organization staff to create league"},
                         status=status.HTTP_403_FORBIDDEN,
                     )
             except Organization.DoesNotExist:
