@@ -255,7 +255,7 @@ export default function EventPage() {
       onClick: () => {
         if (window.confirm('Are you sure you want to permanently delete this event? This cannot be undone.')) {
           actions.deleteEvent.mutate(undefined, {
-            onSuccess: () => navigate(`/organizations/${event.organization}/events`),
+            onSuccess: () => navigate('/events'),
           });
         }
       },
@@ -402,7 +402,7 @@ export default function EventPage() {
                     onClick={() => {
                       if (window.confirm('Are you sure you want to permanently delete this event? This cannot be undone.')) {
                         actions.deleteEvent.mutate(undefined, {
-                          onSuccess: () => navigate(`/organizations/${event.organization}/events`),
+                          onSuccess: () => navigate('/events'),
                         });
                       }
                     }}
