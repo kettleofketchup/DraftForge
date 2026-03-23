@@ -116,11 +116,11 @@ def sync_discord_events():
         .values_list("event_id", flat=True)
     )
 
-    # Avoid retrying create_scheduled_event that failed recently (within 1 hour)
+    # Avoid retrying create_scheduled_event that was attempted recently (5 min backoff)
     events_with_recent_scheduled_attempt = set(
         DiscordEventLog.objects.filter(
             action="create_scheduled_event",
-            created_at__gte=timezone.now() - timedelta(hours=1),
+            created_at__gte=timezone.now() - timedelta(minutes=5),
         ).values_list("discord_event__event_id", flat=True)
     )
 
