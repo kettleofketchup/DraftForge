@@ -134,8 +134,8 @@ test.describe('League Page - Edit Modal (e2e)', () => {
     // Modal should close
     await leaguePage.assertEditModalNotVisible();
 
-    // Page should show updated name
-    await expect(page.locator(`text=${EDITED_LEAGUE_NAME}`)).toBeVisible({ timeout: 5000 });
+    // Page should show updated name (use .first() — name appears in heading and possibly breadcrumb)
+    await expect(page.getByText(EDITED_LEAGUE_NAME).first()).toBeVisible({ timeout: 5000 });
   });
 
   test('should not show edit button for non-admin users', async ({ page, loginUser }) => {

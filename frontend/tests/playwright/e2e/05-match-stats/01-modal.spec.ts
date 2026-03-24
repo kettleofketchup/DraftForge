@@ -125,8 +125,8 @@ test.describe('Match Stats Modal - UI Integration', () => {
     await visitAndWaitForHydration(page, '/tournament/1');
 
     await expect(page.locator('body')).toBeVisible();
-    // The tournament detail page should load
-    await expect(page.getByText('Completed Bracket Test')).toBeVisible();
+    // The tournament detail page should load — use .first() since name may appear in multiple places
+    await expect(page.getByText('Completed Bracket Test').first()).toBeVisible();
   });
 
   test('should display Games tab in tournament detail', async ({ page }) => {

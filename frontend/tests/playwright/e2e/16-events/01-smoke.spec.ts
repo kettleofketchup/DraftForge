@@ -67,8 +67,8 @@ test.describe('Events - List Page (@cicd)', () => {
   test('event card shows state badge', async ({ page }) => {
     await visitAndWaitForHydration(page, `/events?organization=${eventInfo.orgPk}`);
 
-    // Event card should show a status badge (not raw text)
-    await expect(page.getByText('Signups Open')).toBeVisible({ timeout: 10000 });
+    // Event card should show a status badge — multiple events may show this state
+    await expect(page.getByText('Signups Open').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('navigates to event detail from card', async ({ page }) => {
@@ -98,10 +98,10 @@ test.describe('Events - Detail Page', () => {
     await loginEventAdmin(context);
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
 
-    // Header elements
+    // Header — heading is unique, org/state badges may appear in multiple places
     await expect(page.getByRole('heading', { name: 'E2E Signup Event' })).toBeVisible();
-    await expect(page.getByText('Events Test Org')).toBeVisible(); // org badge
-    await expect(page.getByText('Signups Open')).toBeVisible(); // state badge
+    await expect(page.getByText('Events Test Org').first()).toBeVisible();
+    await expect(page.getByText('Signups Open').first()).toBeVisible();
 
     // Tabs visible on desktop
     await expect(page.getByTestId('event-tab-details')).toBeVisible();
@@ -133,13 +133,13 @@ test.describe('Events - Detail Page', () => {
     await loginEventAdmin(context);
     await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
 
-    // Tournament info card
-    await expect(page.getByText('Tournament Info')).toBeVisible();
-    await expect(page.getByText('shuffle')).toBeVisible();
-    await expect(page.getByText('single_elimination')).toBeVisible();
+    // Tournament info card — use .first() since text may appear in multiple sections
+    await expect(page.getByText('Tournament Info').first()).toBeVisible();
+    await expect(page.getByText('shuffle').first()).toBeVisible();
+    await expect(page.getByText('single elimination').first()).toBeVisible();
 
     // Signup rules card
-    await expect(page.getByText('Signup Rules')).toBeVisible();
+    await expect(page.getByText('Signup Rules').first()).toBeVisible();
   });
 
   test('tab navigation via URL', async ({ context, page }) => {

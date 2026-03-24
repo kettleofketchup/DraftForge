@@ -1081,11 +1081,17 @@ def reset_events_data(request):
 
     from cacheops import invalidate_obj
 
-    from events.models import Event, EventSignup, EventState
+    from events.models import Event, EventRepeater, EventSignup, EventState
 
     EVENTS_ORG_NAME = "Events Test Org"
 
     from discordbot.models import DiscordEvent, DiscordEventLog
+
+    # Delete repeaters created by tests (keep only the seeded "Weekly Inhouse")
+    test_repeaters = EventRepeater.objects.filter(
+        organization__name=EVENTS_ORG_NAME,
+    ).exclude(name="Weekly Inhouse")
+    test_repeaters.delete()
 
     # Reset all events in Events Test Org
     events = Event.objects.filter(organization__name=EVENTS_ORG_NAME)
