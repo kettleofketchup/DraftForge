@@ -1,5 +1,6 @@
 # Lightweight compose for CI - only essential services for Playwright tests
 # Excludes: discord-bot
+name: df
 services:
   frontend:
     container_name: frontend
