@@ -66,13 +66,14 @@ export async function saveEditModal(page: Page): Promise<void> {
   const response = await patchResponse;
   expect(response.status()).toBe(200);
 
-  // Wait for isSubmitting to reset (button returns from "Saving..." to "Save Changes")
-  // so the next modal open doesn't inherit stale submitting state.
-  await expect(saveBtn).toBeVisible({ timeout: 5000 });
-
-  // Dialog stays open due to e.preventDefault() in DialogClose — close via Escape
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(300); // Let close animation finish
+  // Dialog may auto-close on success, or stay open. Handle both:
+  // If still open, close via Escape. If already closed, move on.
+  const dialog = page.locator('[role="dialog"]');
+  const stillOpen = await dialog.isVisible({ timeout: 1000 }).catch(() => false);
+  if (stillOpen) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+  }
 }
 
 /**
