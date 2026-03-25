@@ -291,6 +291,31 @@ urlpatterns = [
     ),
 ]
 
+# Internal API — celery workers and Discord bot (token auth via X-Internal-Token)
+from app.views.internal import (
+    create_discord_event_log,
+    create_discord_message_log,
+    create_event_dm,
+    create_or_update_announcement,
+    create_or_update_signup_message,
+    get_or_create_discord_event,
+    transition_event_state,
+    update_discord_event,
+    update_event_dm,
+)
+
+urlpatterns += [
+    path("api/internal/discord/message-log/", create_discord_message_log),
+    path("api/internal/discord/event-log/", create_discord_event_log),
+    path("api/internal/discord/events/get-or-create/", get_or_create_discord_event),
+    path("api/internal/discord/events/<int:pk>/", update_discord_event),
+    path("api/internal/discord/signup-message/", create_or_update_signup_message),
+    path("api/internal/discord/announcement/", create_or_update_announcement),
+    path("api/internal/discord/event-dm/", create_event_dm),
+    path("api/internal/discord/event-dm/<int:pk>/", update_event_dm),
+    path("api/internal/events/<int:pk>/transition/", transition_event_state),
+]
+
 log.debug(f"Test Environ:  {isTestEnvironment()}")
 if isTestEnvironment():
     log.debug("Adding test environment URLs")
