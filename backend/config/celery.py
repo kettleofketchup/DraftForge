@@ -9,8 +9,6 @@ app = Celery("dtx")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
-IS_TEST = os.environ.get("TEST", "").lower() in ("true", "1", "yes")
-
 # Beat schedule for periodic tasks
 _beat_schedule = {
     "sync-league-matches-every-minute": {
@@ -54,12 +52,9 @@ _event_tasks = {
     },
 }
 
-if not IS_TEST:
-    _beat_schedule.update(_event_tasks)
-else:
-    # In test, disable all periodic tasks to prevent SQLite lock contention.
-    # Celery worker still runs for on-demand tasks triggered by tests.
-    _beat_schedule = {}
+# Event tasks now write via internal HTTP API (no direct DB access),
+# so they're safe to run alongside tests. Re-enable in all environments.
+_beat_schedule.update(_event_tasks)
 
 app.conf.beat_schedule = _beat_schedule
 
