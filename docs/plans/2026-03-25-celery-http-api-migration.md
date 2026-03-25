@@ -29,6 +29,13 @@ Issues identified by 4-agent review and their resolutions:
 | No input validation on endpoints | **Fixed:** Required field validation before DB write |
 | No regression test for future direct DB writes | **Fixed:** Added AST-based import check in Task 10 |
 | Same token across environments | **Fixed:** Different defaults per env file, startup validation |
+| Integration test uses `requests.post("http://testserver/")` — can't reach in-process Django | **Fixed:** Use `LiveServerTestCase` for real HTTP integration test |
+| `embed_data` JSONField not validated/included in test | **Fixed:** Added to required fields + test payloads |
+| Race condition in `check_event_reminders` idempotency after HTTP write | **Fixed:** Explicit response check before continuing; log warning on failure |
+| AST regression test misses transitive imports via helpers | **Fixed:** Documented limitation; also scan `discordbot/utils.py` |
+| E2E lifecycle test has `discord_announcement: false` | **Fixed:** Re-enable in Task 10 after migration complete |
+| Ad-hoc test org creation without explicit PKs | **Fixed:** Use dedicated pk=8 `INTERNAL_API_ORG` in test data |
+| `invalidate_after_commit()` outside transaction fires immediately — undocumented | **Fixed:** Added comment documenting Django autocommit behavior |
 
 ---
 
@@ -57,16 +64,24 @@ All internal endpoints use `invalidate_after_commit()` (never `invalidate_obj()`
 - Run: `docker compose -f docker/docker-compose.test.yaml run --rm --entrypoint "" backend python manage.py test app.tests.test_internal_auth app.tests.test_internal_endpoints -v 2`
 
 **Integration tests** (`backend/app/tests/test_internal_client.py`):
-- Unmocked test: `internal_client.create_message_log()` → real HTTP → real endpoint → verify DB record
-- Error handling: timeout, 500, connection refused
+- Mocked unit tests: verify URL construction, headers, error handling
+- Real HTTP test: use `LiveServerTestCase` — `internal_client` → actual HTTP → endpoint → DB record
+- Error handling: timeout returns None, 400/500 returns response object
 
 **Regression test** (Task 10):
-- AST scan of celery task files to verify no direct ORM imports (`from discordbot.models import`, `Model.objects.create`)
+- AST scan of celery task files AND `discordbot/utils.py` for forbidden model imports
+- Documents limitation: only catches direct imports, not deeply transitive ones
+- Verify Task 4 (helper refactor) is complete before re-enabling beat
 
 **E2E verification** (Task 10):
+- Re-enable `discord_announcement: true` in lifecycle test
 - Re-enable all celery beat tasks in test
 - Run lifecycle test 5x — must be 5/5 passes
 - Run full Playwright suite
+
+**Test data** (Task 3):
+- Dedicated test org: `INTERNAL_API_ORG` at pk=8 in `backend/tests/data/organizations.py`
+- All endpoint tests use this org, not ad-hoc creation
 
 ---
 
@@ -473,7 +488,7 @@ All endpoints use:
 
 ```python
 # backend/app/tests/test_internal_endpoints.py
-from django.test import TestCase, override_settings
+from django.test import LiveServerTestCase, TestCase, override_settings
 from rest_framework.test import APIClient
 
 from app.models import Organization
@@ -505,7 +520,8 @@ class DiscordMessageLogEndpointTest(TestCase):
         c = APIClient()
         resp = c.post("/api/internal/discord/message-log/", {
             "channel_id": "123", "source": "event_announcement",
-            "source_id": 1, "discord_message_id": "789",
+            "source_id": 1, "embed_data": {"title": "Test"},
+            "discord_message_id": "789",
             "status_code": 200, "success": True,
         }, format="json", **HEADERS)
         self.assertEqual(resp.status_code, 201)
@@ -575,21 +591,26 @@ class DiscordEventEndpointTest(TestCase):
 
 
 @override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
-class InternalClientIntegrationTest(TestCase):
-    """Unmocked integration: internal_client → real endpoint → real DB."""
+class InternalClientIntegrationTest(LiveServerTestCase):
+    """Real HTTP integration: internal_client → actual HTTP → endpoint → DB.
+
+    Uses LiveServerTestCase which starts a real HTTP server on a random port.
+    This verifies the full chain works end-to-end without mocks.
+    """
 
     def test_create_message_log_full_chain(self):
         from discordbot.models import DiscordMessageLog
 
-        # Override INTERNAL_API_URL to point to Django test server
         import app.internal_client as client
         old_url = client.INTERNAL_API_URL
-        client.INTERNAL_API_URL = "http://testserver/api/internal"
+        # LiveServerTestCase provides self.live_server_url (e.g. http://localhost:12345)
+        client.INTERNAL_API_URL = f"{self.live_server_url}/api/internal"
         try:
             resp = client.create_message_log(
                 channel_id="integration-test",
                 source="test_integration",
                 source_id=1,
+                embed_data={"test": True},
                 status_code=200,
                 success=True,
             )
@@ -651,7 +672,7 @@ def _validate_required(data, fields):
 def create_discord_message_log(request):
     from discordbot.models import DiscordMessageLog
 
-    err = _validate_required(request.data, ["channel_id", "source", "source_id"])
+    err = _validate_required(request.data, ["channel_id", "source", "source_id", "embed_data"])
     if err:
         return err
     entry = DiscordMessageLog.objects.create(**request.data)
