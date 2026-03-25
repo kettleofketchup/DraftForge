@@ -143,14 +143,17 @@ test.describe('Claim Profile Feature', () => {
     await goToUsersPage(page);
     await searchForUser(page, 'Claimable Profile');
 
-    // Wait for claim button, dismiss any overlays, then click
+    // Wait for claim button and click to open PlayerModal
     const claimBtn = page.getByTestId(`claim-profile-btn-${claimable.pk}`);
     await expect(claimBtn).toBeVisible({ timeout: 10000 });
-    await page.keyboard.press('Escape'); // close any tooltip/popover overlays
-    await claimBtn.click({ force: true });
 
-    // Verify the PlayerModal opens with the claim action button
+    // Click and wait for modal — retry if click doesn't register
     const modal = page.locator('[role="dialog"]');
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await page.keyboard.press('Escape');
+      await claimBtn.click({ force: true });
+      if (await modal.isVisible({ timeout: 3000 }).catch(() => false)) break;
+    }
     await expect(modal).toBeVisible({ timeout: 5000 });
 
     const claimBtnInModal = page.getByTestId(`claim-profile-modal-btn-${claimable.pk}`);

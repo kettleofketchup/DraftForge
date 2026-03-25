@@ -210,7 +210,10 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
         `${API_URL}/events/signups/${active[i].id}/approve/`,
         { mmr: 3000 + i * 200 },
       );
-      expect(approveResp.ok()).toBeTruthy();
+      if (!approveResp.ok()) {
+        const body = await approveResp.text();
+        throw new Error(`Approve signup ${active[i].id} failed (${approveResp.status()}): ${body.slice(0, 500)}`);
+      }
     }
 
     // =========================================================================
@@ -241,7 +244,10 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
         context,
         `${API_URL}/events/signups/${approved[i].id}/confirm/`,
       );
-      expect(confirmResp.ok()).toBeTruthy();
+      if (!confirmResp.ok()) {
+        const body = await confirmResp.text();
+        throw new Error(`Confirm signup ${approved[i].id} (status=${approved[i].status}) failed (${confirmResp.status()}): ${body.slice(0, 500)}`);
+      }
     }
 
     // =========================================================================

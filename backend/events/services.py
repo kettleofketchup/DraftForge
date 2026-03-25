@@ -210,7 +210,7 @@ def approve_signup(signup, mmr_override=None):
     # If no roll call, approved means ready for tournament
     if not signup.event.roll_call_enabled:
         add_user_to_tournament(signup.event, signup.user)
-    invalidate_after_commit(signup.event)
+    invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
@@ -224,7 +224,7 @@ def reject_signup(signup):
     signup.save(update_fields=["status", "updated_at"])
     remove_user_from_tournament(signup.event, signup.user)
     _promote_from_waitlist(signup.event)
-    invalidate_after_commit(signup.event)
+    invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
@@ -237,7 +237,7 @@ def confirm_signup(signup):
     signup.status = SignupStatus.CONFIRMED
     signup.save(update_fields=["status", "updated_at"])
     add_user_to_tournament(signup.event, signup.user)
-    invalidate_after_commit(signup.event)
+    invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
@@ -251,7 +251,7 @@ def cancel_signup(signup):
     signup.save(update_fields=["status", "updated_at"])
     remove_user_from_tournament(signup.event, signup.user)
     _promote_from_waitlist(signup.event)
-    invalidate_after_commit(signup.event)
+    invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
@@ -283,6 +283,7 @@ def _promote_from_waitlist(event):
         next_waitlisted.save(
             update_fields=["status", "waitlist_position", "updated_at"]
         )
+        invalidate_after_commit(next_waitlisted)
 
 
 @transaction.atomic
@@ -293,7 +294,7 @@ def unconfirm_signup(signup):
     signup.status = SignupStatus.APPROVED
     signup.save(update_fields=["status", "updated_at"])
     remove_user_from_tournament(signup.event, signup.user)
-    invalidate_after_commit(signup.event)
+    invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
@@ -317,7 +318,7 @@ def demote_to_waitlist(signup):
     signup.waitlist_position = max_pos + 1
     signup.save(update_fields=["status", "waitlist_position", "updated_at"])
     remove_user_from_tournament(signup.event, signup.user)
-    invalidate_after_commit(signup.event)
+    invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
     return signup
 
@@ -346,7 +347,7 @@ def reinstate_signup(signup):
         signup.status = SignupStatus.RSVP
         signup.waitlist_position = None
     signup.save(update_fields=["status", "waitlist_position", "updated_at"])
-    invalidate_after_commit(event)
+    invalidate_after_commit(signup, event)
     transaction.on_commit(lambda: notify_signup_changed(event))
     return signup
 

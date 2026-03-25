@@ -1079,13 +1079,16 @@ def reset_events_data(request):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from cacheops import invalidate_obj
+    from cacheops import invalidate_model, invalidate_obj
 
     from events.models import Event, EventRepeater, EventSignup, EventState
 
     EVENTS_ORG_NAME = "Events Test Org"
 
     from discordbot.models import DiscordEvent, DiscordEventLog
+
+    # Invalidate EventSignup cache — bulk deletes don't auto-invalidate cacheops
+    invalidate_model(EventSignup)
 
     # Delete repeaters created by tests (keep only the seeded "Weekly Inhouse")
     test_repeaters = EventRepeater.objects.filter(
