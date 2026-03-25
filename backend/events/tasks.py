@@ -482,10 +482,20 @@ def send_new_event_notification(event_id):
 def create_discord_scheduled_event(event_id):
     """Create a Discord scheduled event via the API.
 
-    Also stores the scheduled_event_id on the DiscordEvent model and creates
-    a DiscordEventLog entry.
+    Stores the scheduled_event_id on the DiscordEvent model and creates
+    audit log entries — all via internal HTTP API (no direct DB writes).
     """
-    from cacheops import invalidate_obj
+    from datetime import timedelta
+
+    import requests as req
+
+    from app.internal_client import (
+        create_event_log,
+        create_message_log,
+        get_or_create_discord_event,
+        update_discord_event,
+    )
+    from discordbot.utils import DISCORD_API_BASE, _get_headers
 
     event = Event.objects.select_related("organization").get(pk=event_id)
     if not event.discord_create_event:
@@ -493,11 +503,6 @@ def create_discord_scheduled_event(event_id):
     guild_id = event.organization.discord_server_id
     if not guild_id:
         return "Skipped: no discord_server_id on organization"
-    from datetime import timedelta
-
-    import requests as req
-
-    from discordbot.utils import DISCORD_API_BASE, _get_headers
 
     title = event.discord_event_title or event.name
     description = event.discord_event_description or event.description or ""
@@ -511,15 +516,21 @@ def create_discord_scheduled_event(event_id):
         "entity_metadata": {"location": "DraftForge"},
     }
     url = f"{DISCORD_API_BASE}/guilds/{guild_id}/scheduled-events"
-    discord_event = _get_or_create_discord_event(event)
+
+    # Get or create DiscordEvent via internal API
+    de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
+    if not de_resp or not de_resp.ok:
+        logger.error("Failed to get/create DiscordEvent for event %s", event.pk)
+        return "Failed: could not get/create DiscordEvent"
+    discord_event_pk = de_resp.json()["id"]
 
     try:
         response = req.post(url, json=payload, headers=_get_headers())
         data = response.json()
         success = response.status_code in (200, 201)
 
-        # Legacy log
-        DiscordMessageLog.objects.create(
+        # Legacy log via internal API
+        create_message_log(
             channel_id=guild_id,
             embed_data=payload,
             source="create_discord_event",
@@ -530,15 +541,13 @@ def create_discord_scheduled_event(event_id):
             success=success,
         )
 
-        # New model: store scheduled event ID
+        # Store scheduled event ID via internal API
         if success and data.get("id"):
-            discord_event.scheduled_event_id = data["id"]
-            discord_event.save(update_fields=["scheduled_event_id", "updated_at"])
-            invalidate_obj(discord_event)
+            update_discord_event(discord_event_pk, scheduled_event_id=data["id"])
 
-        # Audit log
-        DiscordEventLog.objects.create(
-            discord_event=discord_event,
+        # Audit log via internal API
+        create_event_log(
+            discord_event_id=discord_event_pk,
             action="create_scheduled_event",
             target_type="DiscordEvent",
             status_code=response.status_code,
@@ -548,15 +557,15 @@ def create_discord_scheduled_event(event_id):
 
         return f"Created Discord event for event {event.pk}"
     except Exception as e:
-        DiscordMessageLog.objects.create(
+        create_message_log(
             channel_id=guild_id,
             embed_data=payload,
             source="create_discord_event",
             source_id=event.pk,
             success=False,
         )
-        DiscordEventLog.objects.create(
-            discord_event=discord_event,
+        create_event_log(
+            discord_event_id=discord_event_pk,
             action="create_scheduled_event",
             target_type="DiscordEvent",
             success=False,
