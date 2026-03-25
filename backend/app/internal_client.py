@@ -1,0 +1,161 @@
+"""HTTP client for internal API calls from celery workers and Discord bot.
+
+All external processes MUST use this client instead of importing Django models.
+Django/Daphne is the sole DB reader/writer.
+
+Config:
+    INTERNAL_API_URL: defaults to http://backend:8000/api/internal (Docker).
+                      Set to https://dota.kettle.sh/api/internal for remote.
+    INTERNAL_SERVICE_TOKEN: shared secret for X-Internal-Token header.
+"""
+
+import logging
+import os
+
+import requests
+from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
+INTERNAL_API_URL = os.environ.get(
+    "INTERNAL_API_URL",
+    "http://backend:8000/api/internal",
+)
+TIMEOUT = 30
+
+
+def _headers():
+    return {
+        "X-Internal-Token": getattr(settings, "INTERNAL_SERVICE_TOKEN", ""),
+        "Content-Type": "application/json",
+    }
+
+
+def _post(path, data):
+    """POST to an internal endpoint. Returns response or None on network error."""
+    url = f"{INTERNAL_API_URL}{path}"
+    try:
+        resp = requests.post(url, json=data, headers=_headers(), timeout=TIMEOUT)
+        if not resp.ok:
+            logger.error(
+                "Internal POST %s: %s %s", path, resp.status_code, resp.text[:200]
+            )
+        return resp
+    except requests.RequestException:
+        logger.exception("Internal POST %s failed", path)
+        return None
+
+
+def _patch(path, data):
+    """PATCH an internal endpoint. Returns response or None on network error."""
+    url = f"{INTERNAL_API_URL}{path}"
+    try:
+        resp = requests.patch(url, json=data, headers=_headers(), timeout=TIMEOUT)
+        if not resp.ok:
+            logger.error(
+                "Internal PATCH %s: %s %s", path, resp.status_code, resp.text[:200]
+            )
+        return resp
+    except requests.RequestException:
+        logger.exception("Internal PATCH %s failed", path)
+        return None
+
+
+def _get(path, params=None):
+    """GET from an internal endpoint. Returns response or None on network error."""
+    url = f"{INTERNAL_API_URL}{path}"
+    try:
+        resp = requests.get(url, params=params, headers=_headers(), timeout=TIMEOUT)
+        if not resp.ok:
+            logger.error(
+                "Internal GET %s: %s %s", path, resp.status_code, resp.text[:200]
+            )
+        return resp
+    except requests.RequestException:
+        logger.exception("Internal GET %s failed", path)
+        return None
+
+
+# ---- Discord writes ----
+
+
+def create_message_log(**data):
+    """Create DiscordMessageLog entry."""
+    return _post("/discord/message-log/", data)
+
+
+def create_event_log(**data):
+    """Create DiscordEventLog audit entry."""
+    return _post("/discord/event-log/", data)
+
+
+def get_or_create_discord_event(**data):
+    """Get or create DiscordEvent for an event."""
+    return _post("/discord/events/get-or-create/", data)
+
+
+def update_discord_event(pk, **data):
+    """Update DiscordEvent fields (scheduled_event_id, etc.)."""
+    return _patch(f"/discord/events/{pk}/", data)
+
+
+def create_or_update_signup_message(**data):
+    """Create/update DiscordEventMsgSignup record."""
+    return _post("/discord/signup-message/", data)
+
+
+def create_or_update_announcement(**data):
+    """Create/update DiscordEventMsgAnnouncement record."""
+    return _post("/discord/announcement/", data)
+
+
+def create_event_dm(**data):
+    """Create DiscordEventDM record (crash-safe: create before send)."""
+    return _post("/discord/event-dm/", data)
+
+
+def update_event_dm(pk, **data):
+    """Update DiscordEventDM delivery status after DM sent."""
+    return _patch(f"/discord/event-dm/{pk}/", data)
+
+
+# ---- Event writes ----
+
+
+def transition_event_state(event_pk, new_state):
+    """Transition event to a new state."""
+    return _post(f"/events/{event_pk}/transition/", {"state": new_state})
+
+
+# ---- Event reads ----
+
+
+def get_event(pk):
+    """Get event data by PK."""
+    return _get(f"/events/{pk}/")
+
+
+def get_event_signups(event_pk):
+    """Get signups for an event."""
+    return _get(f"/events/{event_pk}/signups/")
+
+
+# ---- Steam writes ----
+
+
+def batch_upsert_matches(data):
+    """Batch create/update Match + PlayerMatchStats records."""
+    return _post("/steam/matches/", data)
+
+
+def update_sync_state(pk, **data):
+    """Update LeagueSyncState after sync."""
+    return _patch(f"/steam/sync-state/{pk}/", data)
+
+
+# ---- User writes ----
+
+
+def update_user_avatar(pk, avatar_url):
+    """Update CustomUser avatar field."""
+    return _patch(f"/users/{pk}/avatar/", {"avatar": avatar_url})
