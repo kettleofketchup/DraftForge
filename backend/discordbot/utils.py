@@ -21,6 +21,55 @@ def _get_headers():
     }
 
 
+def _log_discord_message(
+    channel_id,
+    embed_data,
+    source,
+    source_id,
+    status_code=None,
+    response_data=None,
+    discord_message_id=None,
+    success=False,
+):
+    """Log a Discord message send via the internal API (HTTP, not direct DB).
+
+    Falls back to direct DB write if internal API is unavailable (e.g., during
+    management commands or when called from within the Django process itself).
+    """
+    from app.internal_client import create_message_log
+
+    resp = create_message_log(
+        channel_id=str(channel_id),
+        embed_data=embed_data,
+        source=source or "unknown",
+        source_id=source_id,
+        status_code=status_code,
+        response_data=response_data,
+        discord_message_id=discord_message_id,
+        success=success,
+    )
+    if resp and resp.ok:
+        return resp.json().get("id")
+
+    # Fallback: direct DB write (same process, no lock contention)
+    log.warning(
+        "Internal API unavailable, falling back to direct DB write for %s", source
+    )
+    from .models import DiscordMessageLog
+
+    entry = DiscordMessageLog.objects.create(
+        channel_id=channel_id,
+        embed_data=embed_data,
+        source=source or "unknown",
+        source_id=source_id,
+        status_code=status_code,
+        response_data=response_data,
+        discord_message_id=discord_message_id,
+        success=success,
+    )
+    return entry.pk
+
+
 def sync_send_embed(
     channel_id,
     title,
@@ -32,7 +81,7 @@ def sync_send_embed(
     source_id=None,
 ):
     """
-    Send a rich embed to a Discord channel.
+    Send a rich embed to a Discord channel and log via internal API.
 
     Args:
         channel_id: Discord channel ID
@@ -47,8 +96,6 @@ def sync_send_embed(
     Returns:
         dict: API response or None on error
     """
-    from .models import DiscordMessageLog
-
     url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages"
 
     embed = {
@@ -65,22 +112,20 @@ def sync_send_embed(
 
     payload = {"embeds": [embed]}
 
-    log_entry = DiscordMessageLog.objects.create(
-        channel_id=channel_id,
-        embed_data=embed,
-        source=source or "unknown",
-        source_id=source_id,
-    )
-
     try:
         response = requests.post(url, json=payload, headers=_get_headers())
         response_data = response.json()
-        log_entry.status_code = response.status_code
-        log_entry.response_data = response_data
         response.raise_for_status()
-        log_entry.discord_message_id = response_data.get("id")
-        log_entry.success = True
-        log_entry.save()
+        _log_discord_message(
+            channel_id=channel_id,
+            embed_data=embed,
+            source=source,
+            source_id=source_id,
+            status_code=response.status_code,
+            response_data=response_data,
+            discord_message_id=response_data.get("id"),
+            success=True,
+        )
         log.info(
             "Sent embed to channel %s: %s (source=%s, source_id=%s)",
             channel_id,
@@ -90,18 +135,27 @@ def sync_send_embed(
         )
         return response_data
     except requests.RequestException as e:
-        log_entry.status_code = (
+        status_code = (
             getattr(e.response, "status_code", None)
             if hasattr(e, "response") and e.response
-            else log_entry.status_code
+            else None
         )
+        resp_data = None
         try:
-            log_entry.response_data = log_entry.response_data or (
+            resp_data = (
                 e.response.json() if hasattr(e, "response") and e.response else None
             )
         except Exception:
             pass
-        log_entry.save()
+        _log_discord_message(
+            channel_id=channel_id,
+            embed_data=embed,
+            source=source,
+            source_id=source_id,
+            status_code=status_code,
+            response_data=resp_data,
+            success=False,
+        )
         log.error(
             "Failed to send embed to channel %s: %s (source=%s, source_id=%s)",
             channel_id,
@@ -230,8 +284,6 @@ def sync_send_embed_with_components(
     Returns:
         dict: API response or None on error
     """
-    from .models import DiscordMessageLog
-
     embeds = embed if isinstance(embed, list) else [embed]
     message_content = {"embeds": embeds}
     if components:
@@ -252,23 +304,15 @@ def sync_send_embed_with_components(
         url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages"
         payload = message_content
 
-    log_entry = DiscordMessageLog.objects.create(
-        channel_id=channel_id,
-        embed_data=embeds[0] if embeds else {},
-        source=source or "unknown",
-        source_id=source_id,
-    )
+    embed_data = embeds[0] if embeds else {}
 
     try:
         response = requests.post(url, json=payload, headers=_get_headers())
         response_data = response.json()
-        log_entry.status_code = response.status_code
-        log_entry.response_data = response_data
         response.raise_for_status()
 
         if forum_thread_name and response_data.get("message"):
-            # Forum thread — store initial message ID for edits
-            log_entry.discord_message_id = response_data["message"].get("id")
+            msg_id = response_data["message"].get("id")
             log.info(
                 "Created forum thread '%s' in channel %s (source=%s, thread_id=%s)",
                 forum_thread_name,
@@ -277,8 +321,7 @@ def sync_send_embed_with_components(
                 response_data.get("id"),
             )
         else:
-            # Regular message
-            log_entry.discord_message_id = response_data.get("id")
+            msg_id = response_data.get("id")
             log.info(
                 "Sent embed to channel %s (source=%s, source_id=%s)",
                 channel_id,
@@ -286,22 +329,39 @@ def sync_send_embed_with_components(
                 source_id,
             )
 
-        log_entry.success = True
-        log_entry.save()
+        _log_discord_message(
+            channel_id=channel_id,
+            embed_data=embed_data,
+            source=source,
+            source_id=source_id,
+            status_code=response.status_code,
+            response_data=response_data,
+            discord_message_id=msg_id,
+            success=True,
+        )
         return response_data
     except requests.RequestException as e:
-        log_entry.status_code = (
+        status_code = (
             getattr(e.response, "status_code", None)
             if hasattr(e, "response") and e.response
-            else log_entry.status_code
+            else None
         )
+        resp_data = None
         try:
-            log_entry.response_data = (
+            resp_data = (
                 e.response.json() if hasattr(e, "response") and e.response else None
             )
         except Exception:
             pass
-        log_entry.save()
+        _log_discord_message(
+            channel_id=channel_id,
+            embed_data=embed_data,
+            source=source,
+            source_id=source_id,
+            status_code=status_code,
+            response_data=resp_data,
+            success=False,
+        )
         log.error("Failed to send to channel %s: %s", channel_id, e)
         return None
 
@@ -321,8 +381,6 @@ def sync_send_v2_message(
     Returns:
         dict: API response or None on error
     """
-    from .models import DiscordMessageLog
-
     if forum_thread_name:
         url = f"{DISCORD_API_BASE}/channels/{channel_id}/threads"
         payload = {
@@ -333,25 +391,18 @@ def sync_send_v2_message(
         url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages"
         payload = v2_payload
 
-    log_entry = DiscordMessageLog.objects.create(
-        channel_id=channel_id,
-        embed_data={
-            "v2": True,
-            "component_count": len(v2_payload.get("components", [])),
-        },
-        source=source or "unknown",
-        source_id=source_id,
-    )
+    embed_data = {
+        "v2": True,
+        "component_count": len(v2_payload.get("components", [])),
+    }
 
     try:
         response = requests.post(url, json=payload, headers=_get_headers())
         response_data = response.json()
-        log_entry.status_code = response.status_code
-        log_entry.response_data = response_data
         response.raise_for_status()
 
         if forum_thread_name and response_data.get("message"):
-            log_entry.discord_message_id = response_data["message"].get("id")
+            msg_id = response_data["message"].get("id")
             log.info(
                 "Created V2 forum thread '%s' in %s (thread=%s)",
                 forum_thread_name,
@@ -359,25 +410,42 @@ def sync_send_v2_message(
                 response_data.get("id"),
             )
         else:
-            log_entry.discord_message_id = response_data.get("id")
+            msg_id = response_data.get("id")
             log.info("Sent V2 message to %s", channel_id)
 
-        log_entry.success = True
-        log_entry.save()
+        _log_discord_message(
+            channel_id=channel_id,
+            embed_data=embed_data,
+            source=source,
+            source_id=source_id,
+            status_code=response.status_code,
+            response_data=response_data,
+            discord_message_id=msg_id,
+            success=True,
+        )
         return response_data
     except requests.RequestException as e:
-        log_entry.status_code = (
+        status_code = (
             getattr(e.response, "status_code", None)
             if hasattr(e, "response") and e.response
-            else log_entry.status_code
+            else None
         )
+        resp_data = None
         try:
-            log_entry.response_data = (
+            resp_data = (
                 e.response.json() if hasattr(e, "response") and e.response else None
             )
         except Exception:
             pass
-        log_entry.save()
+        _log_discord_message(
+            channel_id=channel_id,
+            embed_data=embed_data,
+            source=source,
+            source_id=source_id,
+            status_code=status_code,
+            response_data=resp_data,
+            success=False,
+        )
         log.error("Failed to send V2 message to %s: %s", channel_id, e)
         return None
 
