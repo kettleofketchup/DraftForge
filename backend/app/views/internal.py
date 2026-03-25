@@ -254,6 +254,28 @@ def update_event_dm(request, pk):
 
 
 # ---------------------------------------------------------------------------
+# ScheduledEvent (NOT cached — no invalidation needed)
+# ---------------------------------------------------------------------------
+
+SCHEDULED_EVENT_UPDATE_FIELDS = {"discord_message_id", "next_post_at"}
+
+
+@api_view(["PATCH"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def update_scheduled_event(request, pk):
+    """Update ScheduledEvent fields (whitelisted only)."""
+    from discordbot.models import ScheduledEvent
+
+    se = ScheduledEvent.objects.get(pk=pk)
+    for field in SCHEDULED_EVENT_UPDATE_FIELDS:
+        if field in request.data:
+            setattr(se, field, request.data[field])
+    se.save()
+    return Response({"id": se.pk})
+
+
+# ---------------------------------------------------------------------------
 # Event state transition (CACHED — invalidate after writes)
 # ---------------------------------------------------------------------------
 

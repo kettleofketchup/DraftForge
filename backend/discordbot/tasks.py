@@ -18,7 +18,11 @@ def check_scheduled_events():
     """
     Check for and post scheduled events that are due.
     Runs every 60 seconds via Celery beat.
+
+    DB writes go through internal HTTP API — no direct ORM writes.
     """
+    from app.internal_client import update_scheduled_event
+
     now = timezone.now()
 
     due_events = ScheduledEvent.objects.filter(
@@ -32,12 +36,11 @@ def check_scheduled_events():
 
         log.info(f"Posting scheduled event: {template.name}")
 
-        # Send the announcement message
+        # Send the announcement message (DiscordMessageLog written via HTTP in helper)
         response = sync_send_templated_embed(template)
 
         if response and "id" in response:
             message_id = response["id"]
-            scheduled_event.discord_message_id = message_id
 
             # Add RSVP reactions if enabled
             if template.include_rsvp:
@@ -48,17 +51,19 @@ def check_scheduled_events():
             log.error(f"Failed to post event {template.name}")
             continue
 
-        # Handle recurring events
+        # Update via internal API
         if scheduled_event.is_recurring:
-            # Schedule next occurrence (7 days later)
-            scheduled_event.next_post_at = scheduled_event.next_post_at + timedelta(
-                days=7
+            next_post = (scheduled_event.next_post_at + timedelta(days=7)).isoformat()
+            update_scheduled_event(
+                scheduled_event.pk,
+                discord_message_id=None,  # Reset for next posting
+                next_post_at=next_post,
             )
-            scheduled_event.discord_message_id = None  # Reset for next posting
-            log.info(
-                f"Rescheduled recurring event {template.name} to {scheduled_event.next_post_at}"
+            log.info(f"Rescheduled recurring event {template.name} to {next_post}")
+        else:
+            update_scheduled_event(
+                scheduled_event.pk,
+                discord_message_id=message_id,
             )
-
-        scheduled_event.save()
 
     return f"Processed {due_events.count()} scheduled events"

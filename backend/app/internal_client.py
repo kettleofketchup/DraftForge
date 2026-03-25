@@ -109,6 +109,11 @@ def create_or_update_announcement(**data):
     return _post("/discord/announcement/", data)
 
 
+def update_scheduled_event(pk, **data):
+    """Update ScheduledEvent fields (discord_message_id, next_post_at)."""
+    return _patch(f"/discord/scheduled-events/{pk}/", data)
+
+
 def create_event_dm(**data):
     """Create DiscordEventDM record (crash-safe: create before send)."""
     return _post("/discord/event-dm/", data)

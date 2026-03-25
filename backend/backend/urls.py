@@ -302,6 +302,7 @@ from app.views.internal import (
     transition_event_state,
     update_discord_event,
     update_event_dm,
+    update_scheduled_event,
 )
 
 urlpatterns += [
@@ -313,6 +314,7 @@ urlpatterns += [
     path("api/internal/discord/announcement/", create_or_update_announcement),
     path("api/internal/discord/event-dm/", create_event_dm),
     path("api/internal/discord/event-dm/<int:pk>/", update_event_dm),
+    path("api/internal/discord/scheduled-events/<int:pk>/", update_scheduled_event),
     path("api/internal/events/<int:pk>/transition/", transition_event_state),
 ]
 
