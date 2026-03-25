@@ -17,16 +17,6 @@ from events.services import generate_events_for_repeater
 logger = logging.getLogger(__name__)
 
 
-def _get_or_create_discord_event(event):
-    """Get or create a DiscordEvent for the given Event."""
-    guild_id = event.organization.discord_server_id or ""
-    discord_event, _ = DiscordEvent.objects.get_or_create(
-        event=event,
-        defaults={"guild_id": guild_id},
-    )
-    return discord_event
-
-
 @shared_task
 def generate_upcoming_events():
     """Generate upcoming events for all active repeaters. Runs hourly."""
@@ -196,13 +186,16 @@ def send_event_announcement(event_id):
     If no signups channel is configured, the signup post goes to the
     announcement channel instead (no separate announcement needed).
 
-    Also creates DiscordEvent/DiscordEventMsg* records alongside the existing
-    DiscordMessageLog entries (coexistence during migration).
+    All DB writes go through the internal HTTP API — no direct ORM access.
     """
-    from cacheops import invalidate_obj
-
-    from discordbot.models import ChannelType
-    from discordbot.utils import sync_send_embed, sync_send_embed_with_components
+    from app.internal_client import (
+        create_event_log,
+        create_or_update_announcement,
+        create_or_update_signup_message,
+        get_or_create_discord_event,
+        update_discord_event,
+    )
+    from discordbot.utils import sync_send_embed_with_components
     from events.discord.embeds import build_announcement_v2
 
     event = Event.objects.select_related("organization", "event_repeater").get(
@@ -221,22 +214,49 @@ def send_event_announcement(event_id):
     thread_name = event.discord_event_title or event.name
     guild_id = event.organization.discord_server_id
 
-    # Get or create DiscordEvent for this event
-    discord_event = _get_or_create_discord_event(event)
+    # Get or create DiscordEvent via internal API
+    de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id or "")
+    if not de_resp or not de_resp.ok:
+        logger.error("Failed to get/create DiscordEvent for event %s", event.pk)
+        return "Failed: could not get/create DiscordEvent"
+    discord_event_pk = de_resp.json()["id"]
 
     # Step 1: Create the signup post
     signup_post_result = None
     signup_message_link = None
 
-    if event.discord_post_signups and event.discord_post_signups_channel_id:
-        # Create DiscordEventMsgSignup record before sending
-        signup_msg, _ = DiscordEventMsgSignup.objects.get_or_create(
-            event=event,
-            channel_id=event.discord_post_signups_channel_id,
-            defaults={"channel_type": ChannelType.TEXT},
-        )
+    def _update_signup_msg(channel_id, post_result):
+        """Update signup message record via internal API after Discord post."""
+        update_data = {
+            "event_id": event.pk,
+            "channel_id": channel_id,
+            "has_posted": True,
+            "message_last_updated": timezone.now().isoformat(),
+        }
+        if post_result.get("message"):
+            update_data["thread_id"] = post_result["id"]
+            update_data["message_id"] = post_result["message"]["id"]
+            update_data["channel_type"] = "forum"
+        else:
+            update_data["message_id"] = post_result.get("id")
 
+        msg_resp = create_or_update_signup_message(**update_data)
+        signup_msg_pk = msg_resp.json()["id"] if msg_resp and msg_resp.ok else None
+
+        if signup_msg_pk:
+            update_discord_event(discord_event_pk, signup_message_id=signup_msg_pk)
+            create_event_log(
+                discord_event_id=discord_event_pk,
+                action="send_signup_post",
+                target_type="DiscordEventMsgSignup",
+                message_id=update_data.get("message_id"),
+                success=True,
+            )
+        return update_data.get("message_id")
+
+    if event.discord_post_signups and event.discord_post_signups_channel_id:
         # Signups channel configured — post there (forum thread or regular)
+        # DiscordMessageLog is written by sync_send_embed_with_components via HTTP
         signup_post_result = sync_send_embed_with_components(
             channel_id=event.discord_post_signups_channel_id,
             embed=embeds,
@@ -249,35 +269,11 @@ def send_event_announcement(event_id):
         )
 
         if signup_post_result:
-            # Update the signup message record with Discord IDs
-            if signup_post_result.get("message"):
-                # Forum thread
-                signup_msg.thread_id = signup_post_result["id"]
-                signup_msg.message_id = signup_post_result["message"]["id"]
-                signup_msg.channel_type = ChannelType.FORUM
-            else:
-                # Regular message
-                signup_msg.message_id = signup_post_result["id"]
-            signup_msg.has_posted = True
-            signup_msg.message_last_updated = timezone.now()
-            signup_msg.save()
-
-            # Link signup_message to discord_event
-            discord_event.signup_message = signup_msg
-            discord_event.save(update_fields=["signup_message", "updated_at"])
-            invalidate_obj(discord_event)
-
-            # Create audit log entry
-            DiscordEventLog.objects.create(
-                discord_event=discord_event,
-                action="send_signup_post",
-                target_type="DiscordEventMsgSignup",
-                message_id=signup_msg.message_id,
-                success=True,
+            _update_signup_msg(
+                event.discord_post_signups_channel_id, signup_post_result
             )
 
             if guild_id:
-                # Build Discord message link
                 if signup_post_result.get("message"):
                     thread_id = signup_post_result["id"]
                     msg_id = signup_post_result["message"]["id"]
@@ -285,21 +281,11 @@ def send_event_announcement(event_id):
                         f"https://discord.com/channels/{guild_id}/{thread_id}/{msg_id}"
                     )
                 else:
-                    channel_id = event.discord_post_signups_channel_id
                     msg_id = signup_post_result["id"]
-                    signup_message_link = (
-                        f"https://discord.com/channels/{guild_id}/{channel_id}/{msg_id}"
-                    )
+                    signup_message_link = f"https://discord.com/channels/{guild_id}/{event.discord_post_signups_channel_id}/{msg_id}"
 
     if not signup_post_result:
-        # No signups channel or it failed — post to announcement channel directly
-        # Create signup msg record for the announcement channel fallback
-        signup_msg, _ = DiscordEventMsgSignup.objects.get_or_create(
-            event=event,
-            channel_id=event.discord_announcement_channel_id,
-            defaults={"channel_type": ChannelType.TEXT},
-        )
-
+        # No signups channel or it failed — post to announcement channel
         fallback_result = sync_send_embed_with_components(
             channel_id=event.discord_announcement_channel_id,
             embed=embeds,
@@ -309,34 +295,12 @@ def send_event_announcement(event_id):
         )
 
         if fallback_result:
-            signup_msg.message_id = fallback_result.get("id")
-            signup_msg.has_posted = True
-            signup_msg.message_last_updated = timezone.now()
-            signup_msg.save()
-
-            discord_event.signup_message = signup_msg
-            discord_event.save(update_fields=["signup_message", "updated_at"])
-            invalidate_obj(discord_event)
-
-            DiscordEventLog.objects.create(
-                discord_event=discord_event,
-                action="send_signup_post",
-                target_type="DiscordEventMsgSignup",
-                message_id=signup_msg.message_id,
-                success=True,
-            )
+            _update_signup_msg(event.discord_announcement_channel_id, fallback_result)
 
         return f"Announced event {event.pk}"
 
     # Step 2: Post lightweight announcement linking to the signup post
     from events.discord.embeds import build_announcement_notice
-
-    # Create DiscordEventMsgAnnouncement record
-    announcement_msg, _ = DiscordEventMsgAnnouncement.objects.get_or_create(
-        event=event,
-        channel_id=event.discord_announcement_channel_id,
-        defaults={"channel_type": ChannelType.TEXT},
-    )
 
     notice_result = build_announcement_notice(event, signup_message_link)
     notice_api_result = sync_send_embed_with_components(
@@ -349,22 +313,23 @@ def send_event_announcement(event_id):
     )
 
     if notice_api_result:
-        announcement_msg.message_id = notice_api_result.get("id")
-        announcement_msg.has_posted = True
-        announcement_msg.message_last_updated = timezone.now()
-        announcement_msg.save()
-
-        discord_event.announcement = announcement_msg
-        discord_event.save(update_fields=["announcement", "updated_at"])
-        invalidate_obj(discord_event)
-
-        DiscordEventLog.objects.create(
-            discord_event=discord_event,
-            action="send_announcement_notice",
-            target_type="DiscordEventMsgAnnouncement",
-            message_id=announcement_msg.message_id,
-            success=True,
+        ann_resp = create_or_update_announcement(
+            event_id=event.pk,
+            channel_id=event.discord_announcement_channel_id,
+            has_posted=True,
+            message_id=notice_api_result.get("id"),
+            message_last_updated=timezone.now().isoformat(),
         )
+        ann_pk = ann_resp.json()["id"] if ann_resp and ann_resp.ok else None
+        if ann_pk:
+            update_discord_event(discord_event_pk, announcement_id=ann_pk)
+            create_event_log(
+                discord_event_id=discord_event_pk,
+                action="send_announcement_notice",
+                target_type="DiscordEventMsgAnnouncement",
+                message_id=notice_api_result.get("id"),
+                success=True,
+            )
 
     return f"Announced event {event.pk} (signup: {signup_message_link})"
 

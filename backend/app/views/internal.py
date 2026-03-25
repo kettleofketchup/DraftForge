@@ -86,7 +86,11 @@ def create_discord_event_log(request):
 # DiscordEvent (CACHED — invalidate after writes)
 # ---------------------------------------------------------------------------
 
-DISCORD_EVENT_UPDATE_FIELDS = {"scheduled_event_id"}
+DISCORD_EVENT_UPDATE_FIELDS = {
+    "scheduled_event_id",
+    "signup_message_id",
+    "announcement_id",
+}
 
 
 @api_view(["POST"])
