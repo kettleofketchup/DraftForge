@@ -39,6 +39,9 @@ DISCORD_GUILD_ID = 734185035623825559
 DISCORD_ADMIN_CHANNEL_ID = os.environ.get("DISCORD_ADMIN_CHANNEL_ID")
 DISCORD_PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY")
 
+# Internal service auth — celery workers and Discord bot call Django via HTTP
+INTERNAL_SERVICE_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
+
 # Test bot tokens for multi-user Discord integration tests.
 # Create additional bot applications at https://discord.com/developers/applications
 # and invite them to the test server. Each simulates a different "player" reacting.
