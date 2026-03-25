@@ -341,8 +341,7 @@ def send_signup_update(event_id):
     Tries the new DiscordEvent.signup_message first, falls back to
     DiscordMessageLog for pre-migration events.
     """
-    from cacheops import invalidate_obj
-
+    from app.internal_client import create_event_log, create_or_update_signup_message
     from discordbot.utils import sync_edit_message
     from events.discord.embeds import build_announcement_v2
 
@@ -404,15 +403,17 @@ def send_signup_update(event_id):
         components=result["components"],
     )
 
-    # Update tracking on the new model if available
+    # Update tracking via internal API
     if signup_msg:
-        signup_msg.message_last_updated = timezone.now()
-        signup_msg.save(update_fields=["message_last_updated", "updated_at"])
-        invalidate_obj(signup_msg)
+        create_or_update_signup_message(
+            event_id=event.pk,
+            channel_id=signup_msg.channel_id,
+            message_last_updated=timezone.now().isoformat(),
+        )
 
         if discord_event:
-            DiscordEventLog.objects.create(
-                discord_event=discord_event,
+            create_event_log(
+                discord_event_id=discord_event.pk,
                 action="edit_signup_post",
                 target_type="DiscordEventMsgSignup",
                 message_id=message_id,
@@ -576,7 +577,9 @@ def sync_discord_event_signups(event_id):
     url = f"{DISCORD_API_BASE}/guilds/{guild_id}/scheduled-events/{discord_event_id}"
     try:
         response = req.patch(url, json=payload, headers=_get_headers())
-        DiscordMessageLog.objects.create(
+        from app.internal_client import create_message_log
+
+        create_message_log(
             channel_id=guild_id,
             embed_data=payload,
             source="sync_discord_signups",
@@ -817,23 +820,28 @@ def send_subscriber_notifications(event_id):
             skipped += 1
             continue
 
-        # Create record FIRST (crash safety + idempotency)
-        dm_record = DiscordEventDM.objects.create(
-            discord_event=discord_event,
-            org_user=org_user,
+        # Create record FIRST via internal API (crash safety + idempotency)
+        from app.internal_client import create_event_dm, update_event_dm
+
+        dm_resp = create_event_dm(
+            discord_event=discord_event.pk,
+            org_user=org_user.pk,
             dm_type=DMType.SIGNUP_REMINDER,
             delivered=False,
         )
+        dm_pk = dm_resp.json()["id"] if dm_resp and dm_resp.ok else None
 
         # Send DM
         result = sync_send_dm(sub.user.discordId, embed=embed)
 
-        # Update delivery status
-        if result:
-            dm_record.message_id = result.get("id", "")
-            dm_record.sent_at = timezone.now()
-            dm_record.delivered = True
-            dm_record.save(update_fields=["message_id", "sent_at", "delivered"])
+        # Update delivery status via internal API
+        if result and dm_pk:
+            update_event_dm(
+                dm_pk,
+                message_id=result.get("id", ""),
+                sent_at=timezone.now().isoformat(),
+                delivered=True,
+            )
             sent += 1
         else:
             failed += 1
