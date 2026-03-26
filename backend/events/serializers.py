@@ -17,6 +17,7 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
     )
     subscriber_count = serializers.IntegerField(read_only=True, default=0)
     is_subscribed = serializers.BooleanField(read_only=True, default=False)
+    next_event_date = serializers.DateTimeField(read_only=True, default=None)
 
     class Meta:
         model = EventRepeater
@@ -94,6 +95,7 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "discord_notify_new_events",
             "subscriber_count",
             "is_subscribed",
+            "next_event_date",
         ]
         read_only_fields = [
             "id",
@@ -102,6 +104,7 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "updated_at",
             "subscriber_count",
             "is_subscribed",
+            "next_event_date",
         ]
 
     def validate_description(self, value):

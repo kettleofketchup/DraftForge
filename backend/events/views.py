@@ -84,10 +84,18 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
                 self.permission_denied(request)
 
     def get_queryset(self):
+        from django.db.models import Min
+
         qs = EventRepeater.objects.select_related(
             "organization", "tournament_league", "created_by"
         ).annotate(
             subscriber_count=Count("subscriptions"),
+            next_event_date=Min(
+                "events__scheduled_at",
+                filter=Q(
+                    events__state__in=[EventState.UPCOMING, EventState.SIGNUPS_OPEN]
+                ),
+            ),
         )
         if self.request.user.is_authenticated:
             qs = qs.annotate(

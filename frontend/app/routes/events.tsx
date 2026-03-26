@@ -11,8 +11,10 @@ export function meta() {
 
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { useQuery } from '@tanstack/react-query';
 import { EventStateBadge } from '~/components/events';
 import type { EventType } from '~/components/events/schemas';
+import { RepeaterCard } from '~/components/events/RepeaterCard';
 import { useOrganizations } from '~/components/organization';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
@@ -23,27 +25,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { useEvents } from '~/hooks/useEvent';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
+import api from '~/components/api/axios';
 
 /** Skeleton loader for event cards */
 const EventCardSkeleton = () => (
-  <Card className="animate-pulse">
-    <CardHeader>
-      <div className="flex items-center justify-between">
-        <div className="h-5 w-40 bg-base-300 rounded" />
-        <div className="h-5 w-20 bg-base-300 rounded" />
-      </div>
-      <div className="h-4 w-24 bg-base-300 rounded mt-2" />
-    </CardHeader>
-    <CardContent>
-      <div className="h-4 w-3/4 bg-base-300 rounded mb-2" />
-      <div className="h-4 w-1/2 bg-base-300 rounded" />
-    </CardContent>
-  </Card>
+  <div className="animate-pulse bg-base-300 rounded-lg p-6 h-40" />
 );
 
-/** Grid of skeleton cards for initial loading */
+/** Grid of skeleton cards */
 const EventGridSkeleton = ({ count = 6 }: { count?: number }) => (
   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
     {Array.from({ length: count }).map((_, index) => (
@@ -103,6 +95,14 @@ function EventCard({ event }: { event: EventType }) {
   );
 }
 
+function useRepeaters(orgId?: number) {
+  return useQuery({
+    queryKey: ['repeaters', orgId],
+    queryFn: () =>
+      api.get('/events/repeaters/', { params: orgId ? { organization: orgId } : {} }).then((r) => r.data),
+  });
+}
+
 export default function EventsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedOrgId = searchParams.get('organization');
@@ -111,6 +111,7 @@ export default function EventsPage() {
   const { data: events, isLoading } = useEvents(
     selectedOrgIdNum ? { organization: selectedOrgIdNum } : undefined,
   );
+  const { data: repeaters } = useRepeaters(selectedOrgIdNum);
   const { organizations } = useOrganizations();
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
@@ -150,6 +151,28 @@ export default function EventsPage() {
     }
 
     return <EmptyEvents hasOrgFilter={!!selectedOrgId} />;
+  };
+
+  const renderRepeaterGrid = () => {
+    if (repeaters && repeaters.length > 0) {
+      return (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {repeaters.map((repeater: { id: number; name: string; organization: number; organization_name?: string; frequency: string; is_active: boolean; subscriber_count: number; next_event_date: string | null }) => (
+            <RepeaterCard key={repeater.id} repeater={repeater} />
+          ))}
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-base-content/60">
+        <CalendarDays className="w-16 h-16 mb-4 opacity-50" />
+        <h3 className="text-xl font-semibold mb-2">No Repeating Series</h3>
+        <p className="text-sm text-muted-foreground">
+          Create a repeating event series from an organization page.
+        </p>
+      </div>
+    );
   };
 
   return (
@@ -197,7 +220,25 @@ export default function EventsPage() {
         </div>
       </div>
 
-      {renderEventGrid()}
+      {/* Tabs: Events / Series */}
+      <Tabs defaultValue="events">
+        <TabsList className="mb-4">
+          <TabsTrigger value="events" data-testid="events-tab-events">
+            Events {events ? `(${events.length})` : ''}
+          </TabsTrigger>
+          <TabsTrigger value="series" data-testid="events-tab-series">
+            Series {repeaters ? `(${repeaters.length})` : ''}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="events">
+          {renderEventGrid()}
+        </TabsContent>
+
+        <TabsContent value="series">
+          {renderRepeaterGrid()}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
