@@ -6,14 +6,26 @@ import { generateMeta } from '~/lib/seo';
 import { EventStateBadge } from '~/components/events';
 import type { EventType } from '~/components/events/schemas';
 import { Badge } from '~/components/ui/badge';
-import { SecondaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import api from '~/components/api/axios';
+import type { Route } from './+types/series';
 
-export function meta() {
+export async function clientLoader({ params }: Route.ClientLoaderArgs) {
+  const id = params.repeaterId ? parseInt(params.repeaterId, 10) : null;
+  if (!id) return { repeater: null };
+  try {
+    const resp = await api.get(`/events/repeaters/${id}/`);
+    return { repeater: resp.data };
+  } catch {
+    return { repeater: null };
+  }
+}
+
+export function meta({ data }: Route.MetaArgs) {
+  const repeater = data?.repeater;
   return generateMeta({
-    title: 'Event Series',
-    description: 'Repeating event series details',
+    title: repeater?.name ? `${repeater.name} — Event Series` : 'Event Series',
+    description: repeater?.description || 'Repeating event series details',
   });
 }
 

@@ -10,7 +10,7 @@ export default [
   route('leagues/:leagueId/:tab?', 'routes/league.tsx'),
   route('events', 'routes/events.tsx'),
   route('events/:eventId/:tab?', 'routes/event.tsx'),
-  route('series/:repeaterId', 'routes/series.tsx'),
+  route('event-series/:repeaterId', 'routes/series.tsx'),
   route('leaderboard', 'routes/leaderboard.tsx'),
   route('about', 'routes/about.tsx'),
   route('blog', 'routes/blog.tsx'),
