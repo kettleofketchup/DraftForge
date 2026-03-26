@@ -1,12 +1,16 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { useQuery } from '@tanstack/react-query';
-import { CalendarDays, Repeat, Users, ArrowLeft } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { CalendarDays, Pencil, Repeat, Users, ArrowLeft } from 'lucide-react';
 import { generateMeta } from '~/lib/seo';
 import { EventStateBadge } from '~/components/events';
+import { EditRepeaterModal } from '~/components/events/EditRepeaterModal';
 import type { EventType } from '~/components/events/schemas';
 import { Badge } from '~/components/ui/badge';
+import { SecondaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
+import { useOrganization } from '~/components/organization';
+import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 import api from '~/components/api/axios';
 import type { Route } from './+types/series';
 
@@ -74,19 +78,64 @@ function useRepeaterEvents(repeaterId: number | null) {
   });
 }
 
+function EventGrid({ events, opacity }: { events: EventType[]; opacity?: boolean }) {
+  if (events.length === 0) return null;
+  return (
+    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+      {events.map((event) => (
+        <Link key={event.id} to={`/events/${event.id}`}>
+          <Card className={`hover:border-primary/50 transition-colors cursor-pointer ${opacity ? 'opacity-60' : ''}`}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium text-sm truncate">{event.name}</span>
+                <EventStateBadge state={event.state} />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-xs text-muted-foreground">
+                {new Date(event.scheduled_at).toLocaleDateString(undefined, {
+                  weekday: 'short', month: 'short', day: 'numeric',
+                  hour: 'numeric', minute: '2-digit',
+                })}
+                <span className="ml-2">
+                  {event.signup_count} signup{event.signup_count !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 export default function SeriesPage() {
   const { repeaterId } = useParams<{ repeaterId: string }>();
   const id = repeaterId ? parseInt(repeaterId, 10) : null;
+  const queryClient = useQueryClient();
 
   const { data: repeater, isLoading } = useRepeater(id);
   const { data: events } = useRepeaterEvents(id);
+  const [editOpen, setEditOpen] = useState(false);
 
-  const upcomingEvents = useMemo(
-    () => events?.filter((e) => ['upcoming', 'signups_open', 'roll_call'].includes(e.state)) || [],
+  const { organization } = useOrganization(repeater?.organization);
+  const isStaff = useIsOrganizationStaff(organization);
+
+  // Current: signups_open, roll_call, in_progress
+  const currentEvents = useMemo(
+    () => events?.filter((e) => ['signups_open', 'roll_call', 'in_progress'].includes(e.state)) || [],
     [events],
   );
+
+  // Upcoming: upcoming (signups not yet open)
+  const upcomingEvents = useMemo(
+    () => events?.filter((e) => e.state === 'upcoming') || [],
+    [events],
+  );
+
+  // Past: completed, cancelled
   const pastEvents = useMemo(
-    () => events?.filter((e) => ['in_progress', 'completed', 'cancelled'].includes(e.state)) || [],
+    () => events?.filter((e) => ['completed', 'cancelled'].includes(e.state)) || [],
     [events],
   );
 
@@ -113,22 +162,37 @@ export default function SeriesPage() {
 
   return (
     <div className="container mx-auto p-4">
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-1.5 text-sm text-muted-foreground mb-4">
+        <Link to="/events" className="hover:text-foreground">Events</Link>
+        <span>/</span>
+        <Link to="/events" className="hover:text-foreground">Series</Link>
+        <span>/</span>
+        <span className="text-foreground">{repeater.name}</span>
+      </nav>
+
       {/* Header */}
-      <div className="mb-6">
-        <Link to="/events" className="text-sm text-muted-foreground hover:text-foreground mb-2 inline-flex items-center gap-1">
-          <ArrowLeft className="h-3 w-3" />
-          Back to Events
-        </Link>
-        <div className="flex items-start justify-between mt-2">
-          <div>
-            <h1 className="text-2xl font-bold">{repeater.name}</h1>
-            <Link
-              to={`/organizations/${repeater.organization}`}
-              className="text-sm text-muted-foreground hover:text-primary"
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">{repeater.name}</h1>
+          <Link
+            to={`/organizations/${repeater.organization}`}
+            className="text-sm text-muted-foreground hover:text-primary"
+          >
+            {repeater.organization_name}
+          </Link>
+        </div>
+        <div className="flex items-center gap-2">
+          {isStaff && (
+            <SecondaryButton
+              size="sm"
+              onClick={() => setEditOpen(true)}
+              data-testid="edit-series-btn"
             >
-              {repeater.organization_name}
-            </Link>
-          </div>
+              <Pencil className="h-4 w-4 mr-1" />
+              Edit
+            </SecondaryButton>
+          )}
           <Badge
             className={
               repeater.is_active
@@ -192,64 +256,60 @@ export default function SeriesPage() {
         </div>
       )}
 
+      {/* Current Events (active right now) */}
+      {currentEvents.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold mb-3">
+            Current Events
+            <span className="text-sm text-muted-foreground font-normal ml-2">({currentEvents.length})</span>
+          </h2>
+          <EventGrid events={currentEvents} />
+        </div>
+      )}
+
       {/* Upcoming Events */}
       {upcomingEvents.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-lg font-semibold mb-3">Upcoming Events</h2>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {upcomingEvents.map((event) => (
-              <Link key={event.id} to={`/events/${event.id}`}>
-                <Card className="hover:border-primary/50 transition-colors cursor-pointer">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-sm truncate">{event.name}</span>
-                      <EventStateBadge state={event.state} />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(event.scheduled_at).toLocaleDateString(undefined, {
-                        weekday: 'short', month: 'short', day: 'numeric',
-                        hour: 'numeric', minute: '2-digit',
-                      })}
-                      <span className="ml-2">
-                        {event.signup_count} signup{event.signup_count !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
+          <h2 className="text-lg font-semibold mb-3">
+            Upcoming
+            <span className="text-sm text-muted-foreground font-normal ml-2">({upcomingEvents.length})</span>
+          </h2>
+          <EventGrid events={upcomingEvents} />
         </div>
       )}
 
       {/* Past Events */}
       {pastEvents.length > 0 && (
-        <div>
-          <h2 className="text-lg font-semibold mb-3 text-muted-foreground">Past Events</h2>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {pastEvents.map((event) => (
-              <Link key={event.id} to={`/events/${event.id}`}>
-                <Card className="hover:border-primary/50 transition-colors cursor-pointer opacity-70">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-sm truncate">{event.name}</span>
-                      <EventStateBadge state={event.state} />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-xs text-muted-foreground">
-                      {new Date(event.scheduled_at).toLocaleDateString(undefined, {
-                        weekday: 'short', month: 'short', day: 'numeric',
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-muted-foreground mb-3">
+            Past Events
+            <span className="text-sm font-normal ml-2">({pastEvents.length})</span>
+          </h2>
+          <EventGrid events={pastEvents} opacity />
         </div>
+      )}
+
+      {/* No events at all */}
+      {events?.length === 0 && (
+        <div className="text-center py-12 text-muted-foreground">
+          <CalendarDays className="h-12 w-12 mx-auto mb-3 opacity-50" />
+          <p>No events generated yet for this series.</p>
+        </div>
+      )}
+
+      {/* Edit Repeater Modal */}
+      {isStaff && (
+        <EditRepeaterModal
+          repeater={repeater as any}
+          open={editOpen}
+          onOpenChange={(open) => {
+            setEditOpen(open);
+            if (!open) {
+              queryClient.invalidateQueries({ queryKey: ['repeater', id] });
+              queryClient.invalidateQueries({ queryKey: ['repeater-events', id] });
+            }
+          }}
+        />
       )}
     </div>
   );
