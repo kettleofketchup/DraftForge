@@ -251,7 +251,9 @@ DATABASES = {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR_PATH / db_name,
         "OPTIONS": {
-            "timeout": 30,  # seconds
+            "timeout": 30,  # seconds — busy_timeout for lock waiting
+            "transaction_mode": "IMMEDIATE",  # acquire RESERVED lock upfront, prevents deadlocks
+            "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL",
         },
     }
 }

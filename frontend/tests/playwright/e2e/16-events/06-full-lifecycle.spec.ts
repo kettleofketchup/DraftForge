@@ -150,14 +150,6 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
       expect(discord.signup_message.embeds).toBeGreaterThan(0);
     }
 
-    // Disable Discord notifications before bulk operations to prevent SQLite
-    // write contention (each approve/confirm dispatches a celery task that
-    // calls back to Django via HTTP, creating concurrent DB writes).
-    await patchWithCsrf(context, `${API_URL}/events/${eventId}/`, {
-      discord_announcement: false,
-      discord_post_signups: false,
-    });
-
     // =========================================================================
     // 6. Simulate 2 Discord signups via handler chain
     // =========================================================================
@@ -301,7 +293,8 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
     const firstLogEntry = page.locator('[data-testid^="discord-log-entry-"]').first();
     if (await firstLogEntry.isVisible({ timeout: 3000 }).catch(() => false)) {
       await firstLogEntry.click();
-      await expect(page.getByTestId('discord-log-detail-modal')).toBeVisible({ timeout: 3000 });
+      // InfoDialog renders as role="dialog"
+      await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 3000 });
       await page.keyboard.press('Escape');
     }
   });
