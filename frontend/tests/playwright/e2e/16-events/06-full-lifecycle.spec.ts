@@ -270,10 +270,30 @@ test.describe('Full Event Lifecycle (@cicd)', () => {
     // Signups tab should show players
     await expect(page.getByTestId('event-tab-signups')).toBeVisible({ timeout: 10000 });
 
-    // Discord tab should show activity logs (if Discord was available)
-    if (discordReady) {
-      await page.getByTestId('event-tab-discord').click();
-      await expect(page.getByText('Activity Log')).toBeVisible({ timeout: 5000 });
+    // =========================================================================
+    // 14. Verify Task Schedule on Discord tab
+    // =========================================================================
+    await page.getByTestId('event-tab-discord').click();
+
+    // Task Schedule is the default sub-tab
+    const scheduleTab = page.getByTestId('discord-subtab-schedule');
+    await expect(scheduleTab).toBeVisible({ timeout: 5000 });
+
+    // Should show task schedule entries
+    await expect(page.getByTestId('task-schedule-section')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('task-schedule-entry-announcement')).toBeVisible();
+
+    // =========================================================================
+    // 15. Verify Activity Log and log detail modal
+    // =========================================================================
+    await page.getByTestId('discord-subtab-activity').click();
+
+    // Click first log entry to open detail modal (if any logs exist)
+    const firstLogEntry = page.locator('[data-testid^="discord-log-entry-"]').first();
+    if (await firstLogEntry.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await firstLogEntry.click();
+      await expect(page.getByTestId('discord-log-detail-modal')).toBeVisible({ timeout: 3000 });
+      await page.keyboard.press('Escape');
     }
   });
 });
