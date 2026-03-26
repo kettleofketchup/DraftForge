@@ -610,3 +610,204 @@ class OrgEventDefaultsViewSet(viewsets.GenericViewSet):
         serializer.save()
         invalidate_obj(defaults)
         return Response(serializer.data)
+
+
+# ---------------------------------------------------------------------------
+# Task Schedule — per-event projected timeline
+# ---------------------------------------------------------------------------
+
+from datetime import timedelta
+
+from django.utils import timezone as tz
+from rest_framework.decorators import api_view, permission_classes
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def get_event_task_schedule(request, event_id):
+    """Return projected task timeline for an event.
+
+    Calculates when each notification/task will fire based on the event's
+    Discord config, scheduled_at, and signups_open_at times. Checks
+    DiscordMessageLog and DiscordEventLog to determine fired status.
+    """
+    from discordbot.models import DiscordEventLog, DiscordMessageLog
+
+    try:
+        event = Event.objects.select_related("organization", "event_repeater").get(
+            pk=event_id
+        )
+    except Event.DoesNotExist:
+        return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    now = tz.now()
+
+    # Check which log sources have already fired
+    fired_sources = set(
+        DiscordMessageLog.objects.filter(
+            source_id=event.pk,
+            success=True,
+        ).values_list("source", flat=True)
+    )
+
+    fired_actions = set()
+    try:
+        discord_event = event.discord_event
+        fired_actions = set(
+            DiscordEventLog.objects.filter(
+                discord_event=discord_event,
+                success=True,
+            ).values_list("action", flat=True)
+        )
+    except Exception:
+        pass
+
+    # Check subscriber DMs
+    has_dms = False
+    try:
+        from discordbot.models import DiscordEventDM, DMType
+
+        has_dms = DiscordEventDM.objects.filter(
+            discord_event__event=event,
+            dm_type=DMType.SIGNUP_REMINDER,
+        ).exists()
+    except Exception:
+        pass
+
+    def _task(
+        task, label, enabled, fires_at=None, log_source=None, misconfigured=False
+    ):
+        """Build a task entry with status."""
+        if misconfigured:
+            return {
+                "task": task,
+                "label": label,
+                "fires_at": None,
+                "status": "misconfigured",
+            }
+        if not enabled:
+            return {
+                "task": task,
+                "label": label,
+                "fires_at": None,
+                "status": "disabled",
+            }
+
+        # Determine status
+        if task == "subscriber_dm":
+            s = (
+                "fired"
+                if has_dms
+                else ("pending" if fires_at and now < fires_at else "ready")
+            )
+        elif log_source and log_source in fired_sources:
+            s = "fired"
+        elif task == "scheduled_event" and "create_scheduled_event" in fired_actions:
+            s = "fired"
+        elif task == "signup_post" and "send_signup_post" in fired_actions:
+            s = "fired"
+        elif task == "announcement" and "event_announcement" in fired_sources:
+            s = "fired"
+        elif fires_at and now < fires_at:
+            s = "pending"
+        else:
+            s = "ready"
+
+        return {
+            "task": task,
+            "label": label,
+            "fires_at": fires_at.isoformat() if fires_at else None,
+            "status": s,
+        }
+
+    has_channel = bool(event.discord_announcement_channel_id)
+
+    tasks = [
+        _task(
+            "announcement",
+            "Discord Announcement",
+            enabled=event.discord_announcement and has_channel,
+            log_source="event_announcement",
+            misconfigured=event.discord_announcement and not has_channel,
+        ),
+        _task(
+            "signup_post",
+            "Signup Post",
+            enabled=event.discord_post_signups
+            and bool(event.discord_post_signups_channel_id),
+            misconfigured=event.discord_post_signups
+            and not event.discord_post_signups_channel_id,
+        ),
+        _task(
+            "scheduled_event",
+            "Discord Scheduled Event",
+            enabled=event.discord_create_event
+            and bool(event.organization.discord_server_id),
+            misconfigured=event.discord_create_event
+            and not event.organization.discord_server_id,
+        ),
+        _task(
+            "signup_reminder",
+            "Signup Reminder",
+            enabled=event.discord_signup_reminder and has_channel,
+            fires_at=(
+                event.scheduled_at
+                - timedelta(hours=event.discord_signup_reminder_hours)
+                if event.discord_signup_reminder
+                else None
+            ),
+            log_source="signup_reminder",
+        ),
+        _task(
+            "confirm_attendance",
+            "Attendance Reminder",
+            enabled=event.discord_confirm_attendance and has_channel,
+            fires_at=(
+                event.scheduled_at
+                - timedelta(hours=event.discord_confirm_attendance_hours)
+                if event.discord_confirm_attendance
+                else None
+            ),
+            log_source="attendance_reminder",
+        ),
+        _task(
+            "profile_reminder",
+            "Profile Reminder",
+            enabled=event.discord_profile_reminder and has_channel,
+            fires_at=(
+                event.scheduled_at
+                - timedelta(hours=event.discord_profile_reminder_hours)
+                if event.discord_profile_reminder
+                else None
+            ),
+            log_source="profile_reminder",
+        ),
+        _task(
+            "subscriber_dm",
+            "Subscriber DM",
+            enabled=event.discord_subscriber_dm and event.event_repeater_id is not None,
+            fires_at=(
+                event.scheduled_at - timedelta(hours=event.discord_subscriber_dm_hours)
+                if event.discord_subscriber_dm
+                else None
+            ),
+        ),
+        _task(
+            "signup_update",
+            "Signup Update",
+            enabled=event.discord_announcement and has_channel,
+            log_source=None,  # event-triggered, not time-based
+        ),
+        _task(
+            "open_signups",
+            "Auto-Open Signups",
+            enabled=bool(getattr(event, "signups_open_at", None)),
+            fires_at=(
+                event.signups_open_at
+                if hasattr(event, "signups_open_at") and event.signups_open_at
+                else None
+            ),
+        ),
+    ]
+
+    return Response(tasks)

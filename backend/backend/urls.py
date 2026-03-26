@@ -291,6 +291,17 @@ urlpatterns = [
     ),
 ]
 
+# Event task schedule
+from events.views import get_event_task_schedule
+
+urlpatterns += [
+    path(
+        "api/events/<int:event_id>/task-schedule/",
+        get_event_task_schedule,
+        name="event_task_schedule",
+    ),
+]
+
 # Internal API — celery workers and Discord bot (token auth via X-Internal-Token)
 from app.views.internal import (
     create_discord_event_log,
