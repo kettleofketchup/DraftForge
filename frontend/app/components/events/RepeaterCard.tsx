@@ -29,7 +29,7 @@ export function RepeaterCard({ repeater }: RepeaterCardProps) {
     <div
       data-testid={`repeater-card-${repeater.id}`}
       className="bg-base-300 border border-border rounded-lg p-4 hover:bg-base-400/30 transition-colors cursor-pointer"
-      onClick={() => navigate(`/organizations/${repeater.organization}`)}
+      onClick={() => navigate(`/series/${repeater.id}`)}
     >
       <div className="flex items-start justify-between mb-2">
         <h3 className="text-foreground font-semibold text-sm truncate">{repeater.name}</h3>
