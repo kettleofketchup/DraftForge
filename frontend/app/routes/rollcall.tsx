@@ -43,6 +43,7 @@ import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrganization } from '~/components/organization';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 import { ConfirmDialog } from '~/components/ui/dialogs';
+import { EntityBreadcrumb } from '~/components/ui/entity-breadcrumb';
 
 export default function RollCallPage() {
   const { eventId } = useParams<{ eventId: string }>();
@@ -111,6 +112,10 @@ export default function RollCallPage() {
 
   return (
     <div className="container mx-auto py-6 px-4 space-y-6">
+      <EntityBreadcrumb segments={[
+        ...(eventOrg ? [{ type: 'organization' as const, label: eventOrg.name, href: `/organizations/${eventOrg.pk}` }] : []),
+        { type: 'event' as const, label: event.name, href: `/events/${eventId}` },
+      ]} />
       <div className="flex flex-col gap-6 rounded-lg border border-border bg-base-200/50 p-4 md:p-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3">

@@ -9,6 +9,7 @@ import type { EventType } from '~/components/events/schemas';
 import { Badge } from '~/components/ui/badge';
 import { SecondaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
+import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import { useOrganization } from '~/components/organization';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 import api from '~/components/api/axios';
@@ -163,13 +164,10 @@ export default function SeriesPage() {
   return (
     <div className="container mx-auto p-4">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-sm text-muted-foreground mb-4">
-        <Link to="/events" className="hover:text-foreground">Events</Link>
-        <span>/</span>
-        <Link to="/events" className="hover:text-foreground">Series</Link>
-        <span>/</span>
-        <span className="text-foreground">{repeater.name}</span>
-      </nav>
+      <EntityBreadcrumb segments={[
+        { type: 'organization', label: repeater.organization_name, href: `/organizations/${repeater.organization}` },
+        { type: 'event-series', label: repeater.name },
+      ]} />
 
       {/* Header */}
       <div className="flex items-start justify-between mb-6">

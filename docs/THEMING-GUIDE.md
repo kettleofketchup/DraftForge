@@ -248,6 +248,33 @@ Do **not** use `<Button>` directly for user-facing actions. Reserve `<Button>` f
 
 ## Component Patterns
 
+### Breadcrumbs
+
+**ALWAYS use `<EntityBreadcrumb>` on detail pages** (organization, league, event, series, tournament). Never build manual breadcrumb nav elements.
+
+```tsx
+import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
+
+// Entity types: 'organization' | 'league' | 'event-series' | 'event' | 'tournament'
+// Each segment shows a small type label above the name
+
+<EntityBreadcrumb segments={[
+  { type: 'organization', label: 'DTX', href: '/organizations/1' },
+  { type: 'league', label: 'DTX League', href: '/leagues/1' },
+  { type: 'tournament', label: 'Weekly Inhouse #12' },
+]} />
+```
+
+Renders as a hierarchical breadcrumb with type labels (e.g., "ORGANIZATION" above "DTX"). The last segment is non-clickable (current page). Uses the shadcn Breadcrumb primitives internally.
+
+**Pages that must have breadcrumbs:**
+- `/organizations/:id` — Organization
+- `/leagues/:id` — Organization → League
+- `/events/:id` — Organization → Event
+- `/event-series/:id` — Organization → Event Series
+- `/tournament/:pk` — Organization → League → Tournament
+- `/rollcall/:eventId` — Organization → Event → Roll Call
+
 ### Cards with Depth
 
 ```tsx
