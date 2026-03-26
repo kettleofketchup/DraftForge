@@ -10,22 +10,75 @@
 
 ---
 
+## Review Fixes Applied
+
+| Issue | Resolution |
+|-------|-----------|
+| Missing tasks in schedule (only 6 of 11+) | Added all task types: reconciliation, signup update, new event notification, open signups, generate events |
+| ROLL_CALL state missing for attendance/subscriber tasks | Fixed `fires_at` to account for both SIGNUPS_OPEN and ROLL_CALL states |
+| Missing `data-testid` on sub-tabs, task rows, modal | Added testids for every interactive element |
+| Lifecycle test clicks Discord tab twice | Removed redundant click, use `data-testid` selectors |
+| `embed_data` doesn't exist on DiscordEventLog | Modal shows `response_data` + `error_message` only (available fields) |
+| Sub-tabs hide status cards | Keep status cards above sub-tabs (always visible) |
+| `useEventTaskSchedule` uses raw axios | Import API function from `~/components/api/api` |
+| `next_event_date` not in repeater serializer | Add annotation to viewset |
+| Timezone missing from EditOrganizationSchema | Add `timezone: z.string().optional()` |
+| Status badge colors don't match theme | Use `bg-{color}/20 text-{color}` pattern from EventStateBadge |
+| Reuse COMMON_TIMEZONES | Import from tournament/schemas |
+| Icons not specified | Lucide: CheckCircle/Clock/AlertCircle/Circle |
+
+---
+
+## Theming Reference
+
+Status badges use the `bg-{color}/20 text-{color} border-{color}/30` pattern:
+- **Fired**: `bg-success/20 text-success border-success/30` + CheckCircle icon
+- **Pending**: `bg-warning/20 text-warning border-warning/30` + Clock icon
+- **Ready**: `bg-info/20 text-info border-info/30` + AlertCircle icon
+- **Disabled**: `bg-muted text-muted-foreground border-border` + Circle icon
+
+Buttons: PrimaryButton for CTAs, SecondaryButton for context actions. Never raw `<Button>`.
+
+---
+
 ## Task 1: Org Default Timezone in Edit Modal
 
 **Files:**
-- Modify: `frontend/app/components/organization/forms/EditOrganizationModal.tsx`
-- Modify: `frontend/app/components/organization/schemas.ts` (if timezone not in schema)
+- Modify: `frontend/app/components/organization/schemas.ts` (add timezone to EditOrganizationSchema)
+- Modify: `frontend/app/components/organization/forms/EditOrganizationModal.tsx` (add Select)
 
-**What:** Add a timezone Select dropdown to the EditOrganizationModal. The `Organization.timezone` field and serializer already exist — this is frontend-only.
+**Step 1:** Add `timezone` to `EditOrganizationSchema`:
+```typescript
+timezone: z.string().optional().default('America/New_York'),
+```
 
-**Step 1:** Check if `timezone` is in the EditOrganizationSchema. If not, add it.
+**Step 2:** Import `COMMON_TIMEZONES` from `~/components/tournament/schemas`.
 
-**Step 2:** Add timezone Select to the form, using the same timezone options as CreateEventModal (reuse `TIMEZONE_OPTIONS` if it exists, or create a shared constant).
+**Step 3:** Add timezone Select field to the form (between description and discord_link):
+```tsx
+<FormField control={form.control} name="timezone" render={({ field }) => (
+  <FormItem>
+    <FormLabel>Default Timezone</FormLabel>
+    <Select onValueChange={field.onChange} value={field.value}>
+      <FormControl>
+        <SelectTrigger className="w-full" data-testid="org-timezone-select">
+          <SelectValue placeholder="Select timezone" />
+        </SelectTrigger>
+      </FormControl>
+      <SelectContent>
+        {COMMON_TIMEZONES.map((tz) => (
+          <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+    <FormMessage />
+  </FormItem>
+)} />
+```
 
-**Step 3:** Verify the PATCH request includes timezone. Test manually via UI.
+**Step 4:** Add timezone to form `defaultValues` and `reset()` call.
 
-**Step 4:** Commit.
-
+**Step 5:** Commit.
 ```
 git commit -m "feat: add timezone select to EditOrganizationModal"
 ```
@@ -37,25 +90,56 @@ git commit -m "feat: add timezone select to EditOrganizationModal"
 **Files:**
 - Modify: `frontend/app/routes/events.tsx`
 - Create: `frontend/app/components/events/RepeaterCard.tsx`
+- Modify: `frontend/app/hooks/useEvent.ts` (add useRepeaters query)
+- Modify: `backend/events/views.py` (annotate next_event_date on repeater queryset)
 
-**What:** Add two tabs to the events list page: "Events" (existing) and "Series" (repeaters).
+**Step 1:** Backend — annotate `next_event_date` on EventRepeaterViewSet:
+```python
+from django.db.models import Min, Q
+from events.models import Event, EventState
 
-**Step 1:** Wrap existing events list content in a `<Tabs>` component with "events" and "series" values.
+qs = qs.annotate(
+    next_event_date=Min(
+        "events__scheduled_at",
+        filter=Q(events__state__in=[EventState.UPCOMING, EventState.SIGNUPS_OPEN]),
+    ),
+)
+```
+Add `next_event_date` to EventRepeaterSerializer as `serializers.DateTimeField(read_only=True, default=None)`.
 
-**Step 2:** Create `RepeaterCard` component showing:
-- Repeater name (heading)
-- Organization name + logo (HighlightButton or badge)
-- Frequency badge ("Weekly", "Daily", "Biweekly")
-- Subscriber count
-- Active/inactive badge
-- Click navigates to `/organizations/{orgId}` events tab
+**Step 2:** Frontend — add `useRepeaters` hook:
+```typescript
+export function useRepeaters(orgId?: number) {
+  return useQuery({
+    queryKey: ['repeaters', orgId],
+    queryFn: () => api.get('/events/repeaters/', { params: orgId ? { organization: orgId } : {} }).then(r => r.data),
+    enabled: true,
+  });
+}
+```
 
-**Step 3:** In the "Series" tab content, fetch repeaters via `GET /api/events/repeaters/` (with org filter if selected). Render as a grid of RepeaterCards.
+**Step 3:** Create `RepeaterCard.tsx`:
+```tsx
+// Frequency badge: bg-primary/20 text-primary
+// Active: bg-success/20 text-success | Inactive: bg-muted text-muted-foreground
+// Subscriber count + next event date
+// Click → navigate to /organizations/{orgId}
+// data-testid="repeater-card-{id}"
+```
 
-**Step 4:** Test: verify both tabs render, org filter works on both tabs.
+**Step 4:** Wrap events page in Tabs:
+```tsx
+<Tabs defaultValue="events">
+  <TabsList>
+    <TabsTrigger value="events" data-testid="events-tab-events">Events</TabsTrigger>
+    <TabsTrigger value="series" data-testid="events-tab-series">Series</TabsTrigger>
+  </TabsList>
+  <TabsContent value="events">{/* existing event list */}</TabsContent>
+  <TabsContent value="series">{/* RepeaterCard grid */}</TabsContent>
+</Tabs>
+```
 
 **Step 5:** Commit.
-
 ```
 git commit -m "feat: add Series tab to events page with RepeaterCard"
 ```
@@ -69,265 +153,112 @@ git commit -m "feat: add Series tab to events page with RepeaterCard"
 - Modify: `backend/backend/urls.py`
 - Test: `backend/app/tests/test_task_schedule.py`
 
-**What:** `GET /api/events/{id}/task-schedule/` — returns projected task timeline for an event.
+**What:** `GET /api/events/{id}/task-schedule/` — returns ALL projected tasks for an event, including periodic reconciliation tasks and on-demand triggers.
 
-**Step 1: Write the failing test**
+**Full task list (11 types):**
 
-```python
-# backend/app/tests/test_task_schedule.py
-from django.test import TestCase, override_settings
-from rest_framework.test import APIClient
-from django.utils import timezone
-from datetime import timedelta
-from app.models import Organization
-from events.models import Event
+| Task | Label | Trigger | fires_at calculation |
+|------|-------|---------|---------------------|
+| announcement | Discord Announcement | State → SIGNUPS_OPEN | None (state-triggered) |
+| signup_post | Signup Post | State → SIGNUPS_OPEN | None (state-triggered) |
+| scheduled_event | Discord Scheduled Event | sync_discord_events (every 5m) | None (sync-triggered) |
+| signup_reminder | Signup Reminder | check_event_reminders (30s) | scheduled_at - signup_reminder_hours |
+| confirm_attendance | Attendance Reminder | check_event_reminders (30s) | scheduled_at - confirm_attendance_hours |
+| profile_reminder | Profile Reminder | check_event_reminders (30s) | scheduled_at - profile_reminder_hours |
+| subscriber_dm | Subscriber DM | check_event_reminders (30s) | scheduled_at - subscriber_dm_hours |
+| signup_update | Signup Update | On each signup change | N/A (event-triggered) |
+| new_event_notification | New Event Notice | On repeater generation | N/A (generation-triggered) |
+| sync_reconciliation | Discord Sync | sync_discord_events (every 5m) | Recurring |
+| open_signups | Auto-Open Signups | open_scheduled_signups (1m) | signups_open_at |
 
-class TaskScheduleEndpointTest(TestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.org = Organization.objects.create(name="Schedule Test Org")
-        self.event = Event.objects.create(
-            organization=self.org,
-            name="Schedule Test Event",
-            state="signups_open",
-            scheduled_at=timezone.now() + timedelta(hours=24),
-            discord_signup_reminder=True,
-            discord_signup_reminder_hours=6,
-            discord_confirm_attendance=True,
-            discord_confirm_attendance_hours=3,
-            discord_announcement=True,
-            discord_announcement_channel_id="123",
-            discord_subscriber_dm=True,
-            discord_subscriber_dm_hours=12,
-        )
-        # Login as admin
-        from tests.test_auth import createAdminTestUser
-        user, _ = createAdminTestUser()
-        self.client.force_authenticate(user=user)
+**Status determination:**
+- Check `DiscordMessageLog` for `source` matching the task's `log_source`
+- Check `DiscordEventLog` for matching `action`
+- Check `DiscordEventDM` for subscriber DMs
+- Account for BOTH `signups_open` AND `roll_call` states for attendance/subscriber tasks
+- Empty `announcement_channel_id` with `discord_announcement=True` → show as "misconfigured"
 
-    def test_returns_projected_tasks(self):
-        resp = self.client.get(f"/api/events/{self.event.pk}/task-schedule/")
-        self.assertEqual(resp.status_code, 200)
-        tasks = resp.json()
-        self.assertIsInstance(tasks, list)
-        # Should have entries for each enabled notification
-        task_names = [t["task"] for t in tasks]
-        self.assertIn("signup_reminder", task_names)
-        self.assertIn("confirm_attendance", task_names)
-        self.assertIn("announcement", task_names)
-        self.assertIn("subscriber_dm", task_names)
+**Step 1: Write failing test** (see original plan — updated to test 11 task types)
 
-    def test_includes_fires_at(self):
-        resp = self.client.get(f"/api/events/{self.event.pk}/task-schedule/")
-        tasks = resp.json()
-        reminder = next(t for t in tasks if t["task"] == "signup_reminder")
-        self.assertIn("fires_at", reminder)
-        self.assertIsNotNone(reminder["fires_at"])
+**Step 2: Implement endpoint** with full task list and correct state checks
 
-    def test_disabled_tasks_show_disabled_status(self):
-        self.event.discord_profile_reminder = False
-        self.event.save()
-        resp = self.client.get(f"/api/events/{self.event.pk}/task-schedule/")
-        tasks = resp.json()
-        profile = next((t for t in tasks if t["task"] == "profile_reminder"), None)
-        # Disabled tasks either don't appear or show status=disabled
-        if profile:
-            self.assertEqual(profile["status"], "disabled")
-```
-
-**Step 2: Run test to verify it fails**
-
-```bash
-docker compose -f docker/docker-compose.test.yaml run --rm --entrypoint "" backend \
-  python manage.py test app.tests.test_task_schedule -v 2
-```
-
-**Step 3: Implement endpoint**
-
-```python
-# In backend/events/views.py — add new endpoint
-
-@api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
-def get_event_task_schedule(request, event_id):
-    """Return projected task timeline for an event.
-
-    Calculates when each notification/reminder will fire based on the
-    event's Discord config and scheduled_at time. Checks DiscordMessageLog
-    and DiscordEventLog to determine if tasks have already fired.
-    """
-    from discordbot.models import DiscordEventLog, DiscordMessageLog
-
-    event = Event.objects.get(pk=event_id)
-    now = timezone.now()
-    tasks = []
-
-    # Define task projections based on event config
-    TASK_DEFS = [
-        {
-            "task": "announcement",
-            "label": "Discord Announcement",
-            "enabled": event.discord_announcement and bool(event.discord_announcement_channel_id),
-            "fires_at": None,  # fires on state transition to signups_open
-            "log_source": "event_announcement",
-        },
-        {
-            "task": "signup_reminder",
-            "label": "Signup Reminder",
-            "enabled": event.discord_signup_reminder,
-            "fires_at": event.scheduled_at - timedelta(hours=event.discord_signup_reminder_hours) if event.discord_signup_reminder else None,
-            "log_source": "signup_reminder",
-        },
-        {
-            "task": "confirm_attendance",
-            "label": "Attendance Reminder",
-            "enabled": event.discord_confirm_attendance,
-            "fires_at": event.scheduled_at - timedelta(hours=event.discord_confirm_attendance_hours) if event.discord_confirm_attendance else None,
-            "log_source": "attendance_reminder",
-        },
-        {
-            "task": "profile_reminder",
-            "label": "Profile Reminder",
-            "enabled": event.discord_profile_reminder,
-            "fires_at": event.scheduled_at - timedelta(hours=event.discord_profile_reminder_hours) if event.discord_profile_reminder else None,
-            "log_source": "profile_reminder",
-        },
-        {
-            "task": "subscriber_dm",
-            "label": "Subscriber DM",
-            "enabled": event.discord_subscriber_dm,
-            "fires_at": event.scheduled_at - timedelta(hours=event.discord_subscriber_dm_hours) if event.discord_subscriber_dm else None,
-            "log_source": None,  # uses DiscordEventDM model
-        },
-        {
-            "task": "scheduled_event",
-            "label": "Discord Scheduled Event",
-            "enabled": event.discord_create_event,
-            "fires_at": None,  # fires on signups_open via sync
-            "log_source": "create_discord_event",
-        },
-    ]
-
-    # Check which tasks have already fired
-    fired_sources = set(
-        DiscordMessageLog.objects.filter(
-            source_id=event.pk,
-            success=True,
-        ).values_list("source", flat=True)
-    )
-
-    # Check DiscordEventLog too
-    try:
-        discord_event = event.discord_event
-        fired_actions = set(
-            DiscordEventLog.objects.filter(
-                discord_event=discord_event,
-                success=True,
-            ).values_list("action", flat=True)
-        )
-    except Exception:
-        fired_actions = set()
-
-    # Check subscriber DMs
-    from discordbot.models import DiscordEventDM, DMType
-    has_dms = DiscordEventDM.objects.filter(
-        discord_event__event=event,
-        dm_type=DMType.SIGNUP_REMINDER,
-    ).exists()
-
-    for td in TASK_DEFS:
-        if not td["enabled"]:
-            tasks.append({
-                "task": td["task"],
-                "label": td["label"],
-                "fires_at": None,
-                "status": "disabled",
-            })
-            continue
-
-        # Determine status
-        if td["task"] == "subscriber_dm":
-            status = "fired" if has_dms else ("pending" if td["fires_at"] and now < td["fires_at"] else "ready")
-        elif td["log_source"] in fired_sources:
-            status = "fired"
-        elif td["task"] == "scheduled_event" and "create_scheduled_event" in fired_actions:
-            status = "fired"
-        elif td["fires_at"] and now < td["fires_at"]:
-            status = "pending"
-        else:
-            status = "ready"  # should fire soon
-
-        tasks.append({
-            "task": td["task"],
-            "label": td["label"],
-            "fires_at": td["fires_at"].isoformat() if td["fires_at"] else None,
-            "status": status,
-        })
-
-    return Response(tasks)
-```
-
-Wire URL:
+**Step 3: Wire URL:**
 ```python
 path("api/events/<int:event_id>/task-schedule/", get_event_task_schedule),
 ```
 
-**Step 4: Run test to verify it passes**
-
-**Step 5: Commit**
-
+**Step 4: Commit.**
 ```
-git commit -m "feat: add GET /api/events/{id}/task-schedule/ endpoint"
+git commit -m "feat: add GET /api/events/{id}/task-schedule/ with 11 task projections"
 ```
 
 ---
 
-## Task 4: Frontend — Task Schedule Timeline Component
+## Task 4: Frontend — Task Schedule Timeline
 
 **Files:**
 - Create: `frontend/app/components/events/TaskScheduleSection.tsx`
-- Modify: `frontend/app/components/events/DiscordLogSection.tsx` (add sub-tabs)
-- Modify: `frontend/app/hooks/useEvent.ts` (add useEventTaskSchedule query)
+- Modify: `frontend/app/components/events/DiscordLogSection.tsx` (add sub-tabs BELOW status cards)
+- Modify: `frontend/app/hooks/useEvent.ts` (add useEventTaskSchedule)
+- Modify: `frontend/app/components/api/api.tsx` (add getEventTaskSchedule)
 
-**What:** New sub-tab within the Discord tab showing the task timeline.
+**Step 1:** Add API function:
+```typescript
+// In api.tsx
+export async function getEventTaskSchedule(eventId: number) {
+  const resp = await api.get(`/events/${eventId}/task-schedule/`);
+  return resp.data;
+}
+```
 
-**Step 1:** Add TanStack Query hook:
+**Step 2:** Add TanStack Query hook:
 ```typescript
 export function useEventTaskSchedule(eventId: number | null) {
   return useQuery({
     queryKey: ['event-task-schedule', eventId],
-    queryFn: () => axios.get(`/events/${eventId}/task-schedule/`).then(r => r.data),
+    queryFn: () => getEventTaskSchedule(eventId!),
     enabled: !!eventId,
   });
 }
 ```
 
-**Step 2:** Create `TaskScheduleSection` component:
-- Fetch via `useEventTaskSchedule(eventId)`
-- Render each task as a row: icon + label + fires_at (relative time) + status badge
-- Status badges: "Fired" (green), "Pending" (yellow), "Ready" (blue), "Disabled" (gray)
-- Sort by fires_at (earliest first), disabled at bottom
+**Step 3:** Create `TaskScheduleSection.tsx`:
+- Each task row: icon + label + fires_at (relative time via `formatDistanceToNow`) + status badge
+- Icons: CheckCircle (fired), Clock (pending), AlertCircle (ready), Circle (disabled)
+- Status badges use theme tokens (see Theming Reference above)
+- Sort: fired first, then by fires_at (soonest), disabled last
+- `data-testid="task-schedule-entry-{task}"` on each row
+- `data-testid="task-schedule-section"` on container
 
-**Step 3:** Add sub-tabs to DiscordLogSection:
+**Step 4:** Restructure DiscordLogSection with sub-tabs:
 ```tsx
+{/* Status cards — ALWAYS VISIBLE (above tabs) */}
+<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+  {/* Signup Post card, Announcement card, Scheduled Event card */}
+</div>
+
+{/* Sub-tabs for different views */}
 <Tabs defaultValue="schedule">
   <TabsList>
-    <TabsTrigger value="schedule">Task Schedule</TabsTrigger>
-    <TabsTrigger value="activity">Activity Log</TabsTrigger>
-    <TabsTrigger value="dms">DM History</TabsTrigger>
+    <TabsTrigger value="schedule" data-testid="discord-subtab-schedule">
+      Task Schedule
+    </TabsTrigger>
+    <TabsTrigger value="activity" data-testid="discord-subtab-activity">
+      Activity Log
+    </TabsTrigger>
+    <TabsTrigger value="dms" data-testid="discord-subtab-dms">
+      DM History
+    </TabsTrigger>
   </TabsList>
   <TabsContent value="schedule"><TaskScheduleSection eventId={eventId} /></TabsContent>
-  <TabsContent value="activity">{/* existing activity log */}</TabsContent>
+  <TabsContent value="activity">{/* existing activity log with category filters */}</TabsContent>
   <TabsContent value="dms">{/* existing DM history */}</TabsContent>
 </Tabs>
 ```
 
-**Step 4:** Test manually: navigate to event with Discord config, verify schedule appears.
-
 **Step 5:** Commit.
-
 ```
-git commit -m "feat: add Task Schedule sub-tab to Discord section"
+git commit -m "feat: add Task Schedule sub-tab to Discord section with 11 task types"
 ```
 
 ---
@@ -338,11 +269,18 @@ git commit -m "feat: add Task Schedule sub-tab to Discord section"
 - Create: `frontend/app/components/events/DiscordLogDetailModal.tsx`
 - Modify: `frontend/app/components/events/DiscordLogSection.tsx` (make rows clickable)
 
-**What:** Click an activity log entry to see full details in a modal.
+**Available fields on DiscordEventLog** (NOT DiscordMessageLog):
+- `action`, `target_type`, `success`, `status_code`
+- `response_data` (JSON — Discord API response)
+- `error_message` (text)
+- `discord_user_id`, `discord_username`
+- `message_id`, `created_at`, `category`
 
-**Step 1:** Create `DiscordLogDetailModal` component:
+**Does NOT have**: `embed_data` (that's on DiscordMessageLog only)
+
+**Step 1:** Create `DiscordLogDetailModal`:
 ```tsx
-interface DiscordLogDetailModalProps {
+interface Props {
   log: DiscordLogEntry | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -351,26 +289,46 @@ interface DiscordLogDetailModalProps {
 ```
 
 **Compact section (always visible):**
-- Status badge (Success/Failed)
+- Status: `<Badge>` with success/error theming
 - Action + target type
 - Timestamp (absolute + relative)
-- Discord message ID (link)
-- Repeater name if event has event_repeater
+- Discord message ID (if present — clickable link)
+- Repeater name (if event has `event_repeater`)
 - HTTP status code
+- Discord user (if `discord_username` present)
 
-**Expandable raw data (Collapsible):**
-- `response_data` JSON block
+**Expandable "Raw Response" (Collapsible, `data-testid="discord-log-raw-data"`)**:
+- `response_data` JSON in `<pre>` block (NOT embed_data — doesn't exist on this model)
 - `error_message` if present
-- Log entry PK
+- Log PK for reference
 
-**Step 2:** The backend already returns `response_data`, `status_code`, `error_message` in the discord state endpoint. Verify these fields are included. If not, add them to the serializer response.
+**Step 2:** Make activity log entries clickable:
+```tsx
+<div
+  data-testid={`discord-log-entry-${entry.id}`}
+  className="cursor-pointer hover:bg-base-400/30 rounded p-2 transition-colors"
+  onClick={() => setSelectedLog(entry)}
+>
+  {/* existing entry content */}
+</div>
+```
 
-**Step 3:** Make activity log entries clickable — `onClick={() => setSelectedLog(entry)}`. Open modal.
+**Step 3:** Add modal state + render:
+```tsx
+const [selectedLog, setSelectedLog] = useState<DiscordLogEntry | null>(null);
+// ...
+<DiscordLogDetailModal
+  log={selectedLog}
+  open={!!selectedLog}
+  onOpenChange={(open) => !open && setSelectedLog(null)}
+  repeaterName={discordState?.event_repeater_name}
+  data-testid="discord-log-detail-modal"
+/>
+```
 
 **Step 4:** Commit.
-
 ```
-git commit -m "feat: add Discord log detail modal with raw data view"
+git commit -m "feat: add Discord log detail modal with raw response data"
 ```
 
 ---
@@ -380,41 +338,45 @@ git commit -m "feat: add Discord log detail modal with raw data view"
 **Files:**
 - Modify: `frontend/tests/playwright/e2e/16-events/06-full-lifecycle.spec.ts`
 
-**What:** After the lifecycle test creates events, verify the task schedule UI.
-
-**Step 1:** After step 13 (navigate to event page), add:
+**Step 1:** After the existing step 13 (which already clicks Discord tab at line 275), add task schedule verification. Do NOT click Discord tab again — it's already active:
 
 ```typescript
-// 14. Verify Task Schedule on Discord tab
-await page.getByTestId('event-tab-discord').click();
-await expect(page.getByText('Task Schedule')).toBeVisible({ timeout: 5000 });
-await page.getByText('Task Schedule').click();
+// 14. Verify Task Schedule on Discord tab (already active from step 13)
+const scheduleTab = page.getByTestId('discord-subtab-schedule');
+await expect(scheduleTab).toBeVisible({ timeout: 5000 });
+await scheduleTab.click();
 
-// Should show task entries
-await expect(page.getByText('Discord Announcement').first()).toBeVisible({ timeout: 5000 });
-await expect(page.getByText('Signup Reminder').first()).toBeVisible({ timeout: 5000 });
+// Should show task entries for configured notifications
+await expect(page.getByTestId('task-schedule-section')).toBeVisible({ timeout: 5000 });
+await expect(page.getByTestId('task-schedule-entry-announcement')).toBeVisible();
+
+// 15. Click a log entry to verify detail modal
+await page.getByTestId('discord-subtab-activity').click();
+const firstLogEntry = page.locator('[data-testid^="discord-log-entry-"]').first();
+if (await firstLogEntry.isVisible({ timeout: 3000 }).catch(() => false)) {
+  await firstLogEntry.click();
+  await expect(page.getByTestId('discord-log-detail-modal')).toBeVisible({ timeout: 3000 });
+  await page.keyboard.press('Escape');
+}
 ```
 
-**Step 2:** Run lifecycle test to verify.
-
-**Step 3:** Commit.
-
+**Step 2:** Commit.
 ```
-git commit -m "test: verify task schedule UI in lifecycle E2E test"
+git commit -m "test: verify task schedule and log detail modal in lifecycle E2E test"
 ```
 
 ---
 
 ## Task Order
 
-| Task | Depends On | Effort |
-|------|-----------|--------|
-| 1. Org timezone edit | None | Small |
-| 2. Events page repeater tab | None | Medium |
-| 3. Task schedule endpoint | None | Medium |
-| 4. Task schedule UI | Task 3 | Medium |
-| 5. Discord log detail modal | None | Medium |
-| 6. Lifecycle test | Tasks 3, 4 | Small |
+| Task | Depends On | Effort | Parallel? |
+|------|-----------|--------|-----------|
+| 1. Org timezone edit | None | Small | Yes |
+| 2. Events page repeater tab | None | Medium | Yes |
+| 3. Task schedule endpoint | None | Medium | Yes |
+| 4. Task schedule UI | Task 3 | Medium | No |
+| 5. Discord log detail modal | None | Medium | Yes |
+| 6. Lifecycle test | Tasks 3, 4, 5 | Small | No |
 
-Tasks 1, 2, 3, 5 are independent — can be done in parallel or any order.
-Task 4 requires Task 3. Task 6 requires Tasks 3+4.
+Tasks 1, 2, 3, 5 are independent — can run in parallel.
+Task 4 requires Task 3. Task 6 requires Tasks 3+4+5.
