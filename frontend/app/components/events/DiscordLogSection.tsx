@@ -6,6 +6,9 @@ import { LogCategory, LOG_CATEGORY_LABELS } from '~/components/events/schemas';
 import { Badge } from '~/components/ui/badge';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { ScrollArea } from '~/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { TaskScheduleSection } from './TaskScheduleSection';
+import { DiscordLogDetailModal } from './DiscordLogDetailModal';
 
 interface DiscordLogSectionProps {
   eventId: number;
@@ -31,6 +34,7 @@ export function DiscordLogSection({ eventId }: DiscordLogSectionProps) {
     queryFn: () => getEventDiscordState(eventId),
   });
   const [activeFilter, setActiveFilter] = useState<number | null>(null);
+  const [selectedLog, setSelectedLog] = useState<DiscordEventState['logs'][number] | null>(null);
 
   if (isLoading) {
     return <div className="text-muted-foreground p-4">Loading Discord state...</div>;
@@ -51,7 +55,7 @@ export function DiscordLogSection({ eventId }: DiscordLogSectionProps) {
 
   return (
     <div className="space-y-6">
-      {/* Status Cards */}
+      {/* Status Cards — ALWAYS VISIBLE (above tabs) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MessageStatusCard
           title="Signup Post"
@@ -73,96 +77,112 @@ export function DiscordLogSection({ eventId }: DiscordLogSectionProps) {
         </div>
       </div>
 
-      {/* Activity Log */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-foreground font-semibold">Activity Log</h3>
-          <span className="text-muted-foreground text-xs">{discordState.logs.length} entries</span>
-        </div>
+      {/* Sub-tabs for different views */}
+      <Tabs defaultValue="schedule">
+        <TabsList>
+          <TabsTrigger value="schedule" data-testid="discord-subtab-schedule">
+            Task Schedule
+          </TabsTrigger>
+          <TabsTrigger value="activity" data-testid="discord-subtab-activity">
+            Activity Log ({discordState.logs.length})
+          </TabsTrigger>
+          {discordState.dms.length > 0 && (
+            <TabsTrigger value="dms" data-testid="discord-subtab-dms">
+              DM History ({discordState.dms.length})
+            </TabsTrigger>
+          )}
+        </TabsList>
 
-        {/* Category filter tabs */}
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          <button
-            onClick={() => setActiveFilter(null)}
-            className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
-              activeFilter === null
-                ? 'bg-primary/20 text-primary font-medium'
-                : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
-            }`}
-          >
-            All ({discordState.logs.length})
-          </button>
-          {Object.entries(LOG_CATEGORY_LABELS).map(([id, label]) => {
-            const count = categoryCounts[Number(id)] || 0;
-            if (count === 0) return null;
-            return (
-              <button
-                key={id}
-                onClick={() => setActiveFilter(Number(id) === activeFilter ? null : Number(id))}
-                className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
-                  activeFilter === Number(id)
-                    ? CATEGORY_COLORS[Number(id)]
-                    : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
-                }`}
-              >
-                {label} ({count})
-              </button>
-            );
-          })}
-        </div>
+        {/* Task Schedule */}
+        <TabsContent value="schedule">
+          <TaskScheduleSection eventId={eventId} />
+        </TabsContent>
 
-        {/* Scrollable log list */}
-        <ScrollArea className="h-[400px] rounded-lg border border-border bg-base-300/50 p-3">
-          <div className="space-y-2">
-            {filteredLogs.length === 0 && (
-              <p className="text-muted-foreground text-sm py-4 text-center">No activity yet.</p>
-            )}
-            {filteredLogs.map((log: DiscordEventState['logs'][number]) => (
-              <div
-                key={log.id}
-                className={`border-l-2 pl-3 py-1.5 ${
-                  CATEGORY_BORDER[log.category] || (log.success ? 'border-success' : 'border-error')
-                }`}
-              >
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] px-1.5 py-0 ${CATEGORY_COLORS[log.category] || ''}`}
-                  >
-                    {log.category_display}
-                  </Badge>
-                  <span className="text-foreground text-sm font-medium">{log.action}</span>
-                  {log.target_type && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
-                      {log.target_type}
-                    </Badge>
-                  )}
-                </div>
-                {log.discord_username && (
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <UserAvatar
-                      user={{ nickname: log.discord_username, discordId: log.discord_user_id }}
-                      size="tiny"
-                    />
-                    <span className="text-muted-foreground text-xs">{log.discord_username}</span>
-                  </div>
-                )}
-                {log.error_message && (
-                  <p className="text-error text-xs mt-0.5">{log.error_message}</p>
-                )}
-                <span className="text-muted-foreground text-[10px]">
-                  {new Date(log.created_at).toLocaleString()}
-                </span>
-              </div>
-            ))}
+        {/* Activity Log */}
+        <TabsContent value="activity">
+          {/* Category filter tabs */}
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            <button
+              onClick={() => setActiveFilter(null)}
+              className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
+                activeFilter === null
+                  ? 'bg-primary/20 text-primary font-medium'
+                  : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
+              }`}
+            >
+              All ({discordState.logs.length})
+            </button>
+            {Object.entries(LOG_CATEGORY_LABELS).map(([id, label]) => {
+              const count = categoryCounts[Number(id)] || 0;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setActiveFilter(Number(id) === activeFilter ? null : Number(id))}
+                  className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
+                    activeFilter === Number(id)
+                      ? CATEGORY_COLORS[Number(id)]
+                      : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  {label} ({count})
+                </button>
+              );
+            })}
           </div>
-        </ScrollArea>
-      </div>
 
-      {/* DM History */}
-      {discordState.dms.length > 0 && (
-        <div>
-          <h3 className="text-foreground font-semibold mb-3">DM History</h3>
+          {/* Scrollable log list — clickable entries */}
+          <ScrollArea className="h-[400px] rounded-lg border border-border bg-base-300/50 p-3">
+            <div className="space-y-2">
+              {filteredLogs.length === 0 && (
+                <p className="text-muted-foreground text-sm py-4 text-center">No activity yet.</p>
+              )}
+              {filteredLogs.map((log: DiscordEventState['logs'][number]) => (
+                <div
+                  key={log.id}
+                  data-testid={`discord-log-entry-${log.id}`}
+                  className={`border-l-2 pl-3 py-1.5 cursor-pointer hover:bg-base-400/30 rounded-r transition-colors ${
+                    CATEGORY_BORDER[log.category] || (log.success ? 'border-success' : 'border-error')
+                  }`}
+                  onClick={() => setSelectedLog(log)}
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] px-1.5 py-0 ${CATEGORY_COLORS[log.category] || ''}`}
+                    >
+                      {log.category_display}
+                    </Badge>
+                    <span className="text-foreground text-sm font-medium">{log.action}</span>
+                    {log.target_type && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                        {log.target_type}
+                      </Badge>
+                    )}
+                  </div>
+                  {log.discord_username && (
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <UserAvatar
+                        user={{ nickname: log.discord_username, discordId: log.discord_user_id }}
+                        size="tiny"
+                      />
+                      <span className="text-muted-foreground text-xs">{log.discord_username}</span>
+                    </div>
+                  )}
+                  {log.error_message && (
+                    <p className="text-error text-xs mt-0.5">{log.error_message}</p>
+                  )}
+                  <span className="text-muted-foreground text-[10px]">
+                    {new Date(log.created_at).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </TabsContent>
+
+        {/* DM History */}
+        <TabsContent value="dms">
           <div className="space-y-2">
             {discordState.dms.map((dm: DiscordEventState['dms'][number]) => (
               <div key={dm.id} className="bg-base-300 rounded p-3 flex items-center gap-3">
@@ -189,8 +209,16 @@ export function DiscordLogSection({ eventId }: DiscordLogSectionProps) {
               </div>
             ))}
           </div>
-        </div>
-      )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Log Detail Modal */}
+      <DiscordLogDetailModal
+        log={selectedLog}
+        open={!!selectedLog}
+        onOpenChange={(open) => !open && setSelectedLog(null)}
+        repeaterName={discordState.event_repeater_name}
+      />
     </div>
   );
 }
