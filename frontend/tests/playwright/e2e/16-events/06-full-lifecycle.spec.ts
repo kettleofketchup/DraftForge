@@ -27,6 +27,7 @@ import {
 
 import {
   postWithCsrf,
+  patchWithCsrf,
   syncDiscordEvents,
   simulateDiscordSignup,
   verifyDiscordMessages,
