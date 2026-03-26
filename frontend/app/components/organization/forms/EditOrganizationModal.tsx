@@ -16,7 +16,15 @@ import {
   FormMessage,
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
+import { COMMON_TIMEZONES } from '~/components/tournament/schemas';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import {
   EditOrganizationSchema,
@@ -49,6 +57,7 @@ export function EditOrganizationModal({
       discord_link: organization.discord_link || '',
       discord_server_id: organization.discord_server_id || '',
       rules_template: organization.rules_template || '',
+      timezone: organization.timezone || 'America/New_York',
     },
   });
 
@@ -62,6 +71,7 @@ export function EditOrganizationModal({
         discord_link: organization.discord_link || '',
         discord_server_id: organization.discord_server_id || '',
         rules_template: organization.rules_template || '',
+        timezone: organization.timezone || 'America/New_York',
       });
     }
   }, [open, organization, form]);
@@ -172,6 +182,32 @@ export function EditOrganizationModal({
               </FormControl>
               <FormDescription>
                 Discord server (guild) ID for fetching members
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="timezone"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Default Timezone</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger className="w-full" data-testid="org-timezone-select">
+                    <SelectValue placeholder="Select timezone" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {COMMON_TIMEZONES.map((tz) => (
+                    <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Default timezone for events and tournaments
               </FormDescription>
               <FormMessage />
             </FormItem>

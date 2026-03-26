@@ -36,6 +36,7 @@ export const EditOrganizationSchema = z.object({
   discord_link: z.union([z.string().url(), z.literal('')]),
   discord_server_id: z.string().max(20).nullable().optional(),
   rules_template: z.string(),
+  timezone: z.string().optional().default('America/New_York'),
 });
 
 // Inferred types from Zod schemas
