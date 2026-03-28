@@ -115,6 +115,13 @@ const DATE_FILTERS = [
   { value: 'week', label: 'This Week' },
 ] as const;
 
+const SORT_OPTIONS = [
+  { value: 'date-desc', label: 'Newest First' },
+  { value: 'date-asc', label: 'Oldest First' },
+  { value: 'signups', label: 'Most Signups' },
+  { value: 'name', label: 'Name A-Z' },
+] as const;
+
 function useRepeaters(orgId?: number) {
   return useQuery({
     queryKey: ['repeaters', orgId],
@@ -135,11 +142,12 @@ export default function EventsPage() {
   const { organizations } = useOrganizations();
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
-  // Filters
+  // Filters + sort
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const [stateFilter, setStateFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
+  const [sortBy, setSortBy] = useState<string>('date-desc');
 
   // Get selected organization for permission checks
   const selectedOrg = useMemo(
@@ -198,8 +206,23 @@ export default function EventsPage() {
       });
     }
 
+    // Sort
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'date-asc':
+          return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+        case 'signups':
+          return (b.signup_count || 0) - (a.signup_count || 0);
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'date-desc':
+        default:
+          return new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime();
+      }
+    });
+
     return filtered;
-  }, [events, debouncedSearch, stateFilter, dateFilter]);
+  }, [events, debouncedSearch, stateFilter, dateFilter, sortBy]);
 
   const hasActiveFilter = debouncedSearch || stateFilter !== 'all' || dateFilter !== 'all' || !!selectedOrgId;
 
@@ -320,6 +343,18 @@ export default function EventsPage() {
           <SelectContent>
             {DATE_FILTERS.map((d) => (
               <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Sort */}
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="w-40" data-testid="events-sort">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SORT_OPTIONS.map((s) => (
+              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
             ))}
           </SelectContent>
         </Select>
