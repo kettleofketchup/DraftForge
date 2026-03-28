@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { Toggle } from '~/components/ui/toggle';
 import {
   Sheet,
   SheetContent,
@@ -175,49 +176,27 @@ function FilterControls({
         </Select>
       </div>
 
-      {/* State — multi-select checkboxes in a popover-style dropdown */}
+      {/* State — toggle buttons for multi-select */}
       <div>
         <label className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-0.5">
           <ListFilter className="h-3 w-3" />
           State
         </label>
-        <Select
-          value={selectedStates.size === EVENT_STATES.length ? '__all' : selectedStates.size === 0 ? '__none' : '__custom'}
-          onValueChange={(v) => {
-            if (v === '__all') {
-              EVENT_STATES.forEach((s) => {
-                if (!selectedStates.has(s.value)) toggleState(s.value);
-              });
-            } else if (v === '__none') {
-              EVENT_STATES.forEach((s) => {
-                if (selectedStates.has(s.value)) toggleState(s.value);
-              });
-            } else {
-              toggleState(v);
-            }
-          }}
-        >
-          <SelectTrigger className={vertical ? 'w-full' : 'w-36'} data-testid="events-state-filter">
-            <span className="truncate">
-              {selectedStates.size === EVENT_STATES.length
-                ? 'All'
-                : selectedStates.size === 0
-                  ? 'None'
-                  : `${selectedStates.size} selected`}
-            </span>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all">All States</SelectItem>
-            {EVENT_STATES.map((s) => (
-              <SelectItem key={s.value} value={s.value}>
-                <span className="flex items-center gap-2">
-                  <span className={`h-2 w-2 rounded-full ${selectedStates.has(s.value) ? 'bg-primary' : 'bg-muted'}`} />
-                  {s.label}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className={`flex ${vertical ? 'flex-wrap' : ''} gap-1`} data-testid="events-state-filter">
+          {EVENT_STATES.map((s) => (
+            <Toggle
+              key={s.value}
+              variant="outline"
+              size="sm"
+              pressed={selectedStates.has(s.value)}
+              onPressedChange={() => toggleState(s.value)}
+              data-testid={`state-toggle-${s.value}`}
+              className="text-xs px-2 h-7"
+            >
+              {s.label}
+            </Toggle>
+          ))}
+        </div>
       </div>
 
       {/* Sort */}
