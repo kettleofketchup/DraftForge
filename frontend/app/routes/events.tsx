@@ -364,7 +364,7 @@ export default function EventsPage() {
       </div>
 
       {/* Search + Filter bar */}
-      <div className="flex gap-3 mb-6">
+      <div className="flex items-end gap-3 mb-6">
         {/* Search — always visible */}
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
