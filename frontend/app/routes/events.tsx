@@ -107,7 +107,6 @@ function EventCard({ event }: { event: EventType }) {
 }
 
 const EVENT_STATES = [
-  { value: 'all', label: 'All States' },
   { value: 'upcoming', label: 'Upcoming' },
   { value: 'signups_open', label: 'Signups Open' },
   { value: 'roll_call', label: 'Roll Call' },
@@ -116,7 +115,11 @@ const EVENT_STATES = [
   { value: 'cancelled', label: 'Cancelled' },
 ] as const;
 
+// Default: show active events only (hide completed/cancelled)
+const DEFAULT_STATES = new Set(['upcoming', 'signups_open', 'roll_call', 'in_progress']);
+
 const SORT_OPTIONS = [
+  { value: 'closest', label: 'Closest' },
   { value: 'date-desc', label: 'Newest' },
   { value: 'date-asc', label: 'Oldest' },
   { value: 'signups', label: 'Signups' },
@@ -128,8 +131,8 @@ function FilterControls({
   selectedOrgId,
   setOrgFilter,
   organizations,
-  stateFilter,
-  setStateFilter,
+  selectedStates,
+  toggleState,
   sortBy,
   setSortBy,
   vertical,
@@ -137,8 +140,8 @@ function FilterControls({
   selectedOrgId: string | null;
   setOrgFilter: (v: string | null) => void;
   organizations: { pk?: number; name: string }[];
-  stateFilter: string;
-  setStateFilter: (v: string) => void;
+  selectedStates: Set<string>;
+  toggleState: (v: string) => void;
   sortBy: string;
   setSortBy: (v: string) => void;
   vertical?: boolean;
@@ -172,19 +175,46 @@ function FilterControls({
         </Select>
       </div>
 
-      {/* State */}
+      {/* State — multi-select checkboxes in a popover-style dropdown */}
       <div>
         <label className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-0.5">
           <ListFilter className="h-3 w-3" />
           State
         </label>
-        <Select value={stateFilter} onValueChange={setStateFilter}>
+        <Select
+          value={selectedStates.size === EVENT_STATES.length ? '__all' : selectedStates.size === 0 ? '__none' : '__custom'}
+          onValueChange={(v) => {
+            if (v === '__all') {
+              EVENT_STATES.forEach((s) => {
+                if (!selectedStates.has(s.value)) toggleState(s.value);
+              });
+            } else if (v === '__none') {
+              EVENT_STATES.forEach((s) => {
+                if (selectedStates.has(s.value)) toggleState(s.value);
+              });
+            } else {
+              toggleState(v);
+            }
+          }}
+        >
           <SelectTrigger className={vertical ? 'w-full' : 'w-36'} data-testid="events-state-filter">
-            <SelectValue />
+            <span className="truncate">
+              {selectedStates.size === EVENT_STATES.length
+                ? 'All'
+                : selectedStates.size === 0
+                  ? 'None'
+                  : `${selectedStates.size} selected`}
+            </span>
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="__all">All States</SelectItem>
             {EVENT_STATES.map((s) => (
-              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+              <SelectItem key={s.value} value={s.value}>
+                <span className="flex items-center gap-2">
+                  <span className={`h-2 w-2 rounded-full ${selectedStates.has(s.value) ? 'bg-primary' : 'bg-muted'}`} />
+                  {s.label}
+                </span>
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -234,8 +264,8 @@ export default function EventsPage() {
   // Filters + sort
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
-  const [stateFilter, setStateFilter] = useState('all');
-  const [sortBy, setSortBy] = useState<string>('date-desc');
+  const [selectedStates, setSelectedStates] = useState<Set<string>>(new Set(DEFAULT_STATES));
+  const [sortBy, setSortBy] = useState<string>('closest');
 
   // Get selected organization for permission checks
   const selectedOrg = useMemo(
@@ -270,14 +300,21 @@ export default function EventsPage() {
       );
     }
 
-    // State filter
-    if (stateFilter !== 'all') {
-      filtered = filtered.filter((e) => e.state === stateFilter);
+    // State filter (multi-select)
+    if (selectedStates.size < EVENT_STATES.length) {
+      filtered = filtered.filter((e) => selectedStates.has(e.state));
     }
 
     // Sort
+    const now = Date.now();
     filtered.sort((a, b) => {
       switch (sortBy) {
+        case 'closest': {
+          // Sort by absolute distance from now (closest events first)
+          const distA = Math.abs(new Date(a.scheduled_at).getTime() - now);
+          const distB = Math.abs(new Date(b.scheduled_at).getTime() - now);
+          return distA - distB;
+        }
         case 'date-asc':
           return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
         case 'signups':
@@ -291,13 +328,15 @@ export default function EventsPage() {
     });
 
     return filtered;
-  }, [events, debouncedSearch, stateFilter, sortBy]);
+  }, [events, debouncedSearch, selectedStates, sortBy]);
 
-  const hasActiveFilter = debouncedSearch || stateFilter !== 'all' || !!selectedOrgId;
+  const statesChanged = selectedStates.size !== DEFAULT_STATES.size ||
+    [...DEFAULT_STATES].some((s) => !selectedStates.has(s));
+  const hasActiveFilter = debouncedSearch || statesChanged || !!selectedOrgId;
   const activeFilterCount = [
     selectedOrgId ? 1 : 0,
-    stateFilter !== 'all' ? 1 : 0,
-    sortBy !== 'date-desc' ? 1 : 0,
+    statesChanged ? 1 : 0,
+    sortBy !== 'closest' ? 1 : 0,
   ].reduce((a, b) => a + b, 0);
 
   const renderEventGrid = () => {
@@ -383,8 +422,12 @@ export default function EventsPage() {
             selectedOrgId={selectedOrgId}
             setOrgFilter={setOrgFilter}
             organizations={organizations}
-            stateFilter={stateFilter}
-            setStateFilter={setStateFilter}
+            selectedStates={selectedStates}
+            toggleState={(v) => setSelectedStates((prev) => {
+              const next = new Set(prev);
+              if (next.has(v)) next.delete(v); else next.add(v);
+              return next;
+            })}
             sortBy={sortBy}
             setSortBy={setSortBy}
           />
@@ -412,8 +455,12 @@ export default function EventsPage() {
                   selectedOrgId={selectedOrgId}
                   setOrgFilter={setOrgFilter}
                   organizations={organizations}
-                  stateFilter={stateFilter}
-                  setStateFilter={setStateFilter}
+                  selectedStates={selectedStates}
+                  toggleState={(v) => setSelectedStates((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(v)) next.delete(v); else next.add(v);
+                    return next;
+                  })}
                   sortBy={sortBy}
                   setSortBy={setSortBy}
                   vertical
