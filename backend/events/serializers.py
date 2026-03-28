@@ -11,6 +11,29 @@ from events.models import (
 )
 
 
+class EventRepeaterSlimSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for repeater list views (events page Series tab)."""
+
+    organization_name = serializers.CharField(
+        source="organization.name", read_only=True
+    )
+    subscriber_count = serializers.IntegerField(read_only=True, default=0)
+    next_event_date = serializers.DateTimeField(read_only=True, default=None)
+
+    class Meta:
+        model = EventRepeater
+        fields = [
+            "id",
+            "organization",
+            "organization_name",
+            "name",
+            "frequency",
+            "is_active",
+            "subscriber_count",
+            "next_event_date",
+        ]
+
+
 class EventRepeaterSerializer(serializers.ModelSerializer):
     organization_name = serializers.CharField(
         source="organization.name", read_only=True

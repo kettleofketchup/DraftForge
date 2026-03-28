@@ -24,6 +24,7 @@ from events.models import (
 )
 from events.serializers import (
     EventRepeaterSerializer,
+    EventRepeaterSlimSerializer,
     EventSerializer,
     EventSignupSerializer,
     EventSlimSerializer,
@@ -77,6 +78,11 @@ def _annotate_event_qs(qs):
 class EventRepeaterViewSet(viewsets.ModelViewSet):
     serializer_class = EventRepeaterSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return EventRepeaterSlimSerializer
+        return EventRepeaterSerializer
 
     def check_object_permissions(self, request, obj):
         super().check_object_permissions(request, obj)
