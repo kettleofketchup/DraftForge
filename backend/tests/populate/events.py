@@ -14,9 +14,11 @@ from app.models import CustomUser, GameType, League, Organization, PositionsMode
 from events.models import (
     Event,
     EventRepeater,
+    EventSignup,
     EventState,
     OrgEventDefaults,
     RepeatFrequency,
+    SignupStatus,
 )
 from org.models_profiles import PlayerDotaProfile
 from tests.data import (
@@ -234,6 +236,100 @@ def populate_events_data(force=False):
             "max_players": 10,
         },
     )
+
+    # 5b. Demo events with signups (persist across test::setup for UI testing)
+    demo_signup_event, _ = Event.objects.update_or_create(
+        organization=org,
+        name="Demo Signup Event",
+        defaults={
+            "description": "Event with active signups for UI viewing.",
+            "scheduled_at": tz.now() + timedelta(days=2),
+            "state": EventState.SIGNUPS_OPEN,
+            "created_by": event_admin or site_admin,
+            "tournament_name": "Demo Signup Tournament",
+            "tournament_league": league,
+            "tournament_type": "single_elimination",
+            "game_type": GameType.DOTA2,
+            "draft_type": "shuffle",
+            "people_per_team": 5,
+            "number_of_teams": 2,
+            "timezone": EVENTS_ORG.timezone,
+            "auto_approve": True,
+            "max_players": 10,
+            "discord_announcement": True,
+            "discord_announcement_channel_id": "1482767177063858216",
+        },
+    )
+    # Add signups from first 6 players
+    for user_data in EVENTS_USERS[:6]:
+        user = CustomUser.objects.get(pk=user_data.pk)
+        EventSignup.objects.update_or_create(
+            event=demo_signup_event,
+            user=user,
+            defaults={"status": SignupStatus.APPROVED},
+        )
+
+    demo_rollcall_event, _ = Event.objects.update_or_create(
+        organization=org,
+        name="Demo Roll Call Event",
+        defaults={
+            "description": "Event in roll call for UI viewing.",
+            "scheduled_at": tz.now() + timedelta(hours=4),
+            "state": EventState.ROLL_CALL,
+            "created_by": event_admin or site_admin,
+            "tournament_name": "Demo Rollcall Tournament",
+            "tournament_league": league,
+            "tournament_type": "single_elimination",
+            "game_type": GameType.DOTA2,
+            "draft_type": "shuffle",
+            "people_per_team": 5,
+            "number_of_teams": 2,
+            "timezone": EVENTS_ORG.timezone,
+            "roll_call_enabled": True,
+            "max_players": 10,
+            "discord_announcement": True,
+            "discord_announcement_channel_id": "1482767177063858216",
+        },
+    )
+    # Add signups — 6 confirmed, 4 approved (waiting)
+    for i, user_data in enumerate(EVENTS_USERS[:10]):
+        user = CustomUser.objects.get(pk=user_data.pk)
+        status = SignupStatus.CONFIRMED if i < 6 else SignupStatus.APPROVED
+        EventSignup.objects.update_or_create(
+            event=demo_rollcall_event,
+            user=user,
+            defaults={"status": status},
+        )
+
+    demo_past_event, _ = Event.objects.update_or_create(
+        organization=org,
+        name="Demo Completed Event",
+        defaults={
+            "description": "Past event that completed successfully.",
+            "scheduled_at": tz.now() - timedelta(days=3),
+            "state": EventState.COMPLETED,
+            "created_by": event_admin or site_admin,
+            "tournament_name": "Demo Completed Tournament",
+            "tournament_league": league,
+            "tournament_type": "single_elimination",
+            "game_type": GameType.DOTA2,
+            "draft_type": "shuffle",
+            "people_per_team": 5,
+            "number_of_teams": 2,
+            "timezone": EVENTS_ORG.timezone,
+            "max_players": 10,
+        },
+    )
+    # Add past signups — all confirmed
+    for user_data in EVENTS_USERS[:8]:
+        user = CustomUser.objects.get(pk=user_data.pk)
+        EventSignup.objects.update_or_create(
+            event=demo_past_event,
+            user=user,
+            defaults={"status": SignupStatus.CONFIRMED},
+        )
+
+    print(f"    Created 3 demo events with signups")
 
     # 6. Create org event defaults
     OrgEventDefaults.objects.update_or_create(
