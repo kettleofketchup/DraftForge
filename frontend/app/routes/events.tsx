@@ -1,5 +1,5 @@
 import { generateMeta } from '~/lib/seo';
-import { ArrowDownUp, Building2, CalendarDays, Filter, ListFilter, Plus, Search } from 'lucide-react';
+import { ArrowDownUp, Building2, CalendarDays, ChevronDown, Filter, ListFilter, Plus, Search } from 'lucide-react';
 
 export function meta() {
   return generateMeta({
@@ -27,7 +27,6 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { Toggle } from '~/components/ui/toggle';
 import {
   Sheet,
   SheetContent,
@@ -37,6 +36,8 @@ import {
 } from '~/components/ui/sheet';
 import { Button } from '~/components/ui/button';
 import { Badge } from '~/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
+import { Switch } from '~/components/ui/switch';
 import { useEvents } from '~/hooks/useEvent';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import api from '~/components/api/axios';
@@ -176,27 +177,47 @@ function FilterControls({
         </Select>
       </div>
 
-      {/* State — toggle buttons for multi-select */}
+      {/* State — multi-select with switches */}
       <div>
         <label className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-0.5">
           <ListFilter className="h-3 w-3" />
           State
         </label>
-        <div className={`flex ${vertical ? 'flex-wrap' : ''} gap-1`} data-testid="events-state-filter">
-          {EVENT_STATES.map((s) => (
-            <Toggle
-              key={s.value}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
               variant="outline"
-              size="sm"
-              pressed={selectedStates.has(s.value)}
-              onPressedChange={() => toggleState(s.value)}
-              data-testid={`state-toggle-${s.value}`}
-              className="text-xs px-2 h-7"
+              className={`${vertical ? 'w-full' : 'w-36'} justify-between font-normal`}
+              data-testid="events-state-filter"
             >
-              {s.label}
-            </Toggle>
-          ))}
-        </div>
+              <span className="truncate">
+                {selectedStates.size === EVENT_STATES.length
+                  ? 'All'
+                  : selectedStates.size === 0
+                    ? 'None'
+                    : `${selectedStates.size} selected`}
+              </span>
+              <ChevronDown className="h-4 w-4 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-2" align="start">
+            <div className="space-y-2">
+              {EVENT_STATES.map((s) => (
+                <label
+                  key={s.value}
+                  className="flex items-center justify-between gap-2 px-1 py-0.5 rounded hover:bg-base-400/30 cursor-pointer"
+                >
+                  <span className="text-sm">{s.label}</span>
+                  <Switch
+                    checked={selectedStates.has(s.value)}
+                    onCheckedChange={() => toggleState(s.value)}
+                    data-testid={`events-state-${s.value}`}
+                  />
+                </label>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Sort */}
