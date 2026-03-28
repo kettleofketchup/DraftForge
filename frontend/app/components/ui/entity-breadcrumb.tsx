@@ -42,13 +42,15 @@ export function EntityBreadcrumb({ segments, className }: EntityBreadcrumbProps)
           return (
             <span key={`${segment.type}-${index}`} className="contents">
               <BreadcrumbItem className="flex flex-col items-start gap-0">
-                <Link
-                  to={TYPE_CONFIG[segment.type].listHref}
-                  className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium leading-none hover:text-muted-foreground transition-colors"
-                >
-                  <EntityIcon type={segment.type} size="xs" />
-                  {TYPE_CONFIG[segment.type].label}
-                </Link>
+                <BreadcrumbLink asChild>
+                  <Link
+                    to={TYPE_CONFIG[segment.type].listHref}
+                    className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-medium leading-none"
+                  >
+                    <EntityIcon type={segment.type} size="xs" />
+                    {TYPE_CONFIG[segment.type].label}
+                  </Link>
+                </BreadcrumbLink>
                 {isLast || !segment.href ? (
                   <BreadcrumbPage className="text-sm font-medium">
                     {segment.label}
