@@ -50,6 +50,10 @@ _event_tasks = {
         "task": "events.tasks.sync_discord_events",
         "schedule": 60.0,
     },
+    "cleanup-stale-events-hourly": {
+        "task": "events.tasks.cleanup_stale_events",
+        "schedule": 3600.0,
+    },
 }
 
 # Event tasks now write via internal HTTP API (no direct DB access),

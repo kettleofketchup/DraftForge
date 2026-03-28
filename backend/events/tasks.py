@@ -36,6 +36,62 @@ def generate_upcoming_events():
 
 
 @shared_task
+def cleanup_stale_events():
+    """Auto-close events whose scheduled_at + 1 day has passed. Runs hourly.
+
+    - upcoming / signups_open → cancelled (event never started)
+    - roll_call / in_progress → completed (event ran but wasn't formally closed)
+
+    State transitions go through internal HTTP API (no direct DB writes).
+    """
+    from datetime import timedelta
+
+    from app.internal_client import transition_event_state
+
+    cutoff = timezone.now() - timedelta(days=1)
+
+    # Never-started events → cancelled
+    never_started = Event.objects.filter(
+        state__in=[EventState.UPCOMING, EventState.SIGNUPS_OPEN],
+        scheduled_at__lt=cutoff,
+    )
+    cancelled_count = 0
+    for event in never_started:
+        try:
+            resp = transition_event_state(event.pk, "cancelled")
+            if resp and resp.ok:
+                cancelled_count += 1
+                logger.info(
+                    "Auto-cancelled stale event %s (pk=%s)", event.name, event.pk
+                )
+            else:
+                logger.warning("Failed to auto-cancel event %s: %s", event.pk, resp)
+        except Exception:
+            logger.exception("Failed to auto-cancel event %s", event.pk)
+
+    # Started but not closed → completed
+    started = Event.objects.filter(
+        state__in=[EventState.ROLL_CALL, EventState.IN_PROGRESS],
+        scheduled_at__lt=cutoff,
+    )
+    completed_count = 0
+    for event in started:
+        try:
+            resp = transition_event_state(event.pk, "completed")
+            if resp and resp.ok:
+                completed_count += 1
+                logger.info(
+                    "Auto-completed stale event %s (pk=%s)", event.name, event.pk
+                )
+            else:
+                logger.warning("Failed to auto-complete event %s: %s", event.pk, resp)
+        except Exception:
+            logger.exception("Failed to auto-complete event %s", event.pk)
+
+    return f"Cleaned up {cancelled_count} cancelled, {completed_count} completed"
+
+
+@shared_task
 def open_scheduled_signups():
     """Open signups for events where signups_open_at has passed. Runs every minute."""
     now = timezone.now()

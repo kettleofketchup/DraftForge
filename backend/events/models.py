@@ -26,7 +26,11 @@ EVENT_STATE_TRANSITIONS = {
         EventState.IN_PROGRESS,
         EventState.CANCELLED,
     ],
-    EventState.ROLL_CALL: [EventState.IN_PROGRESS, EventState.CANCELLED],
+    EventState.ROLL_CALL: [
+        EventState.IN_PROGRESS,
+        EventState.COMPLETED,
+        EventState.CANCELLED,
+    ],
     EventState.IN_PROGRESS: [EventState.COMPLETED],
     EventState.COMPLETED: [],
     EventState.CANCELLED: [],
