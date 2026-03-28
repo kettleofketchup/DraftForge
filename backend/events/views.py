@@ -2,7 +2,7 @@ import logging
 
 from cacheops import invalidate_obj
 from django.db import transaction
-from django.db.models import BooleanField, Count, Exists, OuterRef, Q, Value
+from django.db.models import BooleanField, Count, Exists, F, OuterRef, Q, Value
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -212,7 +212,7 @@ class EventViewSet(viewsets.ModelViewSet):
         # Ordering
         ordering = params.get("ordering", "-scheduled_at")
         if ordering == "closest":
-            qs = qs.annotate(distance=Abs(models.F("scheduled_at") - Now())).order_by(
+            qs = qs.annotate(distance=Abs(F("scheduled_at") - Now())).order_by(
                 "distance"
             )
         elif ordering in (
