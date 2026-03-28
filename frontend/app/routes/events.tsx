@@ -1,5 +1,5 @@
 import { generateMeta } from '~/lib/seo';
-import { CalendarDays, Plus } from 'lucide-react';
+import { CalendarDays, Plus, Search } from 'lucide-react';
 
 export function meta() {
   return generateMeta({
@@ -18,6 +18,7 @@ import { RepeaterCard } from '~/components/events/RepeaterCard';
 import { useOrganizations } from '~/components/organization';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
+import { Input } from '~/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -29,6 +30,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { useEvents } from '~/hooks/useEvent';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import api from '~/components/api/axios';
+import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 
 /** Skeleton loader for event cards */
 const EventCardSkeleton = () => (
@@ -45,13 +47,13 @@ const EventGridSkeleton = ({ count = 6 }: { count?: number }) => (
 );
 
 /** Empty state when no events found */
-const EmptyEvents = ({ hasOrgFilter }: { hasOrgFilter: boolean }) => (
+const EmptyEvents = ({ hasFilter }: { hasFilter: boolean }) => (
   <div className="flex flex-col items-center justify-center py-16 text-base-content/60">
     <CalendarDays className="w-16 h-16 mb-4 opacity-50" />
     <h3 className="text-xl font-semibold mb-2">No Events Found</h3>
     <p className="text-sm text-muted-foreground">
-      {hasOrgFilter
-        ? 'No events found for this organization'
+      {hasFilter
+        ? 'No events match your filters. Try adjusting your search.'
         : 'Create a new event to get started!'}
     </p>
   </div>
@@ -95,6 +97,24 @@ function EventCard({ event }: { event: EventType }) {
   );
 }
 
+const EVENT_STATES = [
+  { value: 'all', label: 'All States' },
+  { value: 'upcoming', label: 'Upcoming' },
+  { value: 'signups_open', label: 'Signups Open' },
+  { value: 'roll_call', label: 'Roll Call' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+] as const;
+
+const DATE_FILTERS = [
+  { value: 'all', label: 'All Dates' },
+  { value: 'upcoming', label: 'Upcoming' },
+  { value: 'past', label: 'Past' },
+  { value: 'today', label: 'Today' },
+  { value: 'week', label: 'This Week' },
+] as const;
+
 function useRepeaters(orgId?: number) {
   return useQuery({
     queryKey: ['repeaters', orgId],
@@ -115,14 +135,18 @@ export default function EventsPage() {
   const { organizations } = useOrganizations();
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
+  const [stateFilter, setStateFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all');
+
   // Get selected organization for permission checks
   const selectedOrg = useMemo(
     () => organizations.find((o) => o.pk === selectedOrgIdNum) || null,
     [organizations, selectedOrgIdNum],
   );
   const isOrgAdmin = useIsOrganizationAdmin(selectedOrg);
-
-  // Can create events when org is selected AND user is org admin
   const canCreate = isOrgAdmin && selectedOrgIdNum;
 
   function setOrgFilter(value: string | null) {
@@ -135,11 +159,55 @@ export default function EventsPage() {
     setSearchParams(newParams);
   }
 
+  // Apply client-side filters
+  const filteredEvents = useMemo(() => {
+    if (!events) return [];
+    let filtered = events;
+
+    // Search by name or org name
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
+      filtered = filtered.filter(
+        (e) =>
+          e.name.toLowerCase().includes(q) ||
+          e.organization_name?.toLowerCase().includes(q),
+      );
+    }
+
+    // State filter
+    if (stateFilter !== 'all') {
+      filtered = filtered.filter((e) => e.state === stateFilter);
+    }
+
+    // Date filter
+    if (dateFilter !== 'all') {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfDay = new Date(startOfDay.getTime() + 86400000);
+      const endOfWeek = new Date(startOfDay.getTime() + 7 * 86400000);
+
+      filtered = filtered.filter((e) => {
+        const d = new Date(e.scheduled_at);
+        switch (dateFilter) {
+          case 'upcoming': return d > now;
+          case 'past': return d < now;
+          case 'today': return d >= startOfDay && d < endOfDay;
+          case 'week': return d >= startOfDay && d < endOfWeek;
+          default: return true;
+        }
+      });
+    }
+
+    return filtered;
+  }, [events, debouncedSearch, stateFilter, dateFilter]);
+
+  const hasActiveFilter = debouncedSearch || stateFilter !== 'all' || dateFilter !== 'all' || !!selectedOrgId;
+
   const renderEventGrid = () => {
-    if (events && events.length > 0) {
+    if (filteredEvents.length > 0) {
       return (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {events.map((event) => (
+          {filteredEvents.map((event) => (
             <EventCard key={event.id} event={event} />
           ))}
         </div>
@@ -150,7 +218,7 @@ export default function EventsPage() {
       return <EventGridSkeleton count={6} />;
     }
 
-    return <EmptyEvents hasOrgFilter={!!selectedOrgId} />;
+    return <EmptyEvents hasFilter={hasActiveFilter} />;
   };
 
   const renderRepeaterGrid = () => {
@@ -181,6 +249,11 @@ export default function EventsPage() {
         <div className="flex items-center gap-3">
           <CalendarDays className="h-8 w-8 text-primary" />
           <h1 className="text-2xl font-bold">Events</h1>
+          {events && (
+            <span className="text-sm text-muted-foreground">
+              {hasActiveFilter ? `${filteredEvents.length} of ${events.length}` : `${events.length} total`}
+            </span>
+          )}
         </div>
         {canCreate && (
           <PrimaryButton
@@ -193,38 +266,70 @@ export default function EventsPage() {
         )}
       </div>
 
-      {/* Organization Filter */}
-      <div className="mb-6">
-        <div className="w-64">
-          <label className="text-sm font-medium mb-1 block">
-            Filter by Organization
-          </label>
-          <Select
-            value={selectedOrgId || 'all'}
-            onValueChange={(v) => setOrgFilter(v === 'all' ? null : v)}
-          >
-            <SelectTrigger data-testid="events-org-filter">
-              <SelectValue placeholder="All organizations" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All organizations</SelectItem>
-              {organizations
-                .filter((org) => org.pk != null)
-                .map((org) => (
-                  <SelectItem key={org.pk} value={org.pk!.toString()}>
-                    {org.name}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
+      {/* Search + Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        {/* Search */}
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search events..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+            data-testid="events-search-input"
+          />
         </div>
+
+        {/* Organization Filter */}
+        <Select
+          value={selectedOrgId || 'all'}
+          onValueChange={(v) => setOrgFilter(v === 'all' ? null : v)}
+        >
+          <SelectTrigger className="w-48" data-testid="events-org-filter">
+            <SelectValue placeholder="All organizations" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All organizations</SelectItem>
+            {organizations
+              .filter((org) => org.pk != null)
+              .map((org) => (
+                <SelectItem key={org.pk} value={org.pk!.toString()}>
+                  {org.name}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+
+        {/* State Filter */}
+        <Select value={stateFilter} onValueChange={setStateFilter}>
+          <SelectTrigger className="w-40" data-testid="events-state-filter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {EVENT_STATES.map((s) => (
+              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Date Filter */}
+        <Select value={dateFilter} onValueChange={setDateFilter}>
+          <SelectTrigger className="w-36" data-testid="events-date-filter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DATE_FILTERS.map((d) => (
+              <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Tabs: Events / Series */}
       <Tabs defaultValue="events">
         <TabsList className="mb-4">
           <TabsTrigger value="events" data-testid="events-tab-events">
-            Events {events ? `(${events.length})` : ''}
+            Events {filteredEvents.length > 0 ? `(${filteredEvents.length})` : ''}
           </TabsTrigger>
           <TabsTrigger value="series" data-testid="events-tab-series">
             Series {repeaters ? `(${repeaters.length})` : ''}
