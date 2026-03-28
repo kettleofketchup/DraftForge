@@ -1,6 +1,6 @@
 import logging
 
-from cacheops import invalidate_obj
+from cacheops import cached_as, invalidate_obj
 from django.db import transaction
 from django.db.models import BooleanField, Count, Exists, F, OuterRef, Q, Value
 from rest_framework import permissions, status, viewsets
@@ -114,6 +114,33 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
             qs = qs.filter(organization_id=org_id)
         return qs
 
+    def list(self, request, *args, **kwargs):
+        cache_key = f"repeater_list:{request.get_full_path()}"
+
+        @cached_as(EventRepeater, Event, extra=cache_key, timeout=60 * 60)
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        return Response(get_data())
+
+    def retrieve(self, request, *args, **kwargs):
+        pk = kwargs.get("pk")
+        cache_key = f"repeater_detail:{pk}"
+
+        @cached_as(
+            EventRepeater.objects.filter(pk=pk),
+            keep_fresh=True,
+            extra=cache_key,
+            timeout=60 * 60,
+        )
+        def get_data():
+            instance = self.get_object()
+            return self.get_serializer(instance).data
+
+        return Response(get_data())
+
     def perform_create(self, serializer):
         org = serializer.validated_data.get("organization")
         if not has_org_staff_access(self.request.user, org):
@@ -224,6 +251,33 @@ class EventViewSet(viewsets.ModelViewSet):
             qs = qs.order_by(ordering)
 
         return qs
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f"event_list:{request.get_full_path()}"
+
+        @cached_as(Event, extra=cache_key, timeout=60 * 60)
+        def get_data():
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        return Response(get_data())
+
+    def retrieve(self, request, *args, **kwargs):
+        pk = kwargs.get("pk")
+        cache_key = f"event_detail:{pk}"
+
+        @cached_as(
+            Event.objects.filter(pk=pk),
+            keep_fresh=True,
+            extra=cache_key,
+            timeout=60 * 60,
+        )
+        def get_data():
+            instance = self.get_object()
+            return self.get_serializer(instance).data
+
+        return Response(get_data())
 
     def perform_create(self, serializer):
         org = serializer.validated_data.get("organization")
