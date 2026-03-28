@@ -7,6 +7,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '~/components/ui/breadcrumb';
+import { EntityIcon } from '~/components/ui/entity-icons';
 import { cn } from '~/lib/utils';
 
 const TYPE_CONFIG: Record<EntityType, { label: string; listHref: string }> = {
@@ -43,8 +44,9 @@ export function EntityBreadcrumb({ segments, className }: EntityBreadcrumbProps)
               <BreadcrumbItem className="flex flex-col items-start gap-0">
                 <Link
                   to={TYPE_CONFIG[segment.type].listHref}
-                  className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium leading-none hover:text-muted-foreground transition-colors"
+                  className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium leading-none hover:text-muted-foreground transition-colors"
                 >
+                  <EntityIcon type={segment.type} size="xs" />
                   {TYPE_CONFIG[segment.type].label}
                 </Link>
                 {isLast || !segment.href ? (
