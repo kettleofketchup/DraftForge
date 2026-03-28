@@ -26,6 +26,7 @@ from events.serializers import (
     EventRepeaterSerializer,
     EventSerializer,
     EventSignupSerializer,
+    EventSlimSerializer,
     EventTeamSerializer,
     OrgEventDefaultsSerializer,
 )
@@ -168,18 +169,60 @@ class EventViewSet(viewsets.ModelViewSet):
     serializer_class = EventSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
+    def get_serializer_class(self):
+        if self.action == "list":
+            return EventSlimSerializer
+        return EventSerializer
+
     def get_queryset(self):
+        from django.db.models.functions import Abs, Now
+
         qs = _annotate_event_qs(
             Event.objects.select_related(
                 "organization", "tournament_league", "created_by", "tournament"
             )
         )
-        org_id = self.request.query_params.get("organization")
+        params = self.request.query_params
+
+        # Filter by organization
+        org_id = params.get("organization")
         if org_id:
             qs = qs.filter(organization_id=org_id)
-        state = self.request.query_params.get("state")
-        if state:
+
+        # Filter by state (single or comma-separated)
+        state = params.get("state")
+        states = params.get("states")
+        if states:
+            qs = qs.filter(state__in=states.split(","))
+        elif state:
             qs = qs.filter(state=state)
+
+        # Search by name or organization name
+        search = params.get("search")
+        if search:
+            qs = qs.filter(
+                Q(name__icontains=search) | Q(organization__name__icontains=search)
+            )
+
+        # Filter by event repeater
+        repeater_id = params.get("event_repeater")
+        if repeater_id:
+            qs = qs.filter(event_repeater_id=repeater_id)
+
+        # Ordering
+        ordering = params.get("ordering", "-scheduled_at")
+        if ordering == "closest":
+            qs = qs.annotate(distance=Abs(models.F("scheduled_at") - Now())).order_by(
+                "distance"
+            )
+        elif ordering in (
+            "scheduled_at",
+            "-scheduled_at",
+            "name",
+            "-signup_count",
+        ):
+            qs = qs.order_by(ordering)
+
         return qs
 
     def perform_create(self, serializer):

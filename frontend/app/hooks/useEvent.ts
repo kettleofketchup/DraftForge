@@ -33,7 +33,14 @@ import type { EventSignupType, EventType } from '~/components/events/schemas';
 import type { UserType } from '~/components/user/types';
 import { useUserCacheStore } from '~/store/userCacheStore';
 
-export function useEvents(params?: { organization?: number; state?: string }) {
+export function useEvents(params?: {
+  organization?: number;
+  state?: string;
+  states?: string[];
+  search?: string;
+  ordering?: string;
+  event_repeater?: number;
+}) {
   return useQuery<EventType[]>({
     queryKey: ['events', params],
     queryFn: () => getEvents(params),

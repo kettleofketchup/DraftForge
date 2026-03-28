@@ -277,9 +277,6 @@ export default function EventsPage() {
   const selectedOrgId = searchParams.get('organization');
   const selectedOrgIdNum = selectedOrgId ? parseInt(selectedOrgId, 10) : undefined;
 
-  const { data: events, isLoading } = useEvents(
-    selectedOrgIdNum ? { organization: selectedOrgIdNum } : undefined,
-  );
   const { data: repeaters } = useRepeaters(selectedOrgIdNum);
   const { organizations } = useOrganizations();
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -289,6 +286,23 @@ export default function EventsPage() {
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const [selectedStates, setSelectedStates] = useState<Set<string>>(new Set(DEFAULT_STATES));
   const [sortBy, setSortBy] = useState<string>('closest');
+
+  // Map sort UI values to backend ordering params
+  const SORT_TO_ORDERING: Record<string, string> = {
+    closest: 'closest',
+    'date-desc': '-scheduled_at',
+    'date-asc': 'scheduled_at',
+    signups: '-signup_count',
+    name: 'name',
+  };
+
+  // Fetch events with all filters as backend query params
+  const { data: events, isLoading } = useEvents({
+    ...(selectedOrgIdNum ? { organization: selectedOrgIdNum } : {}),
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    ...(selectedStates.size < EVENT_STATES.length ? { states: [...selectedStates] } : {}),
+    ordering: SORT_TO_ORDERING[sortBy] || 'closest',
+  });
 
   // Get selected organization for permission checks
   const selectedOrg = useMemo(
@@ -308,50 +322,8 @@ export default function EventsPage() {
     setSearchParams(newParams);
   }
 
-  // Apply client-side filters
-  const filteredEvents = useMemo(() => {
-    if (!events) return [];
-    let filtered = events;
-
-    // Search by name or org name
-    if (debouncedSearch) {
-      const q = debouncedSearch.toLowerCase();
-      filtered = filtered.filter(
-        (e) =>
-          e.name.toLowerCase().includes(q) ||
-          e.organization_name?.toLowerCase().includes(q),
-      );
-    }
-
-    // State filter (multi-select)
-    if (selectedStates.size < EVENT_STATES.length) {
-      filtered = filtered.filter((e) => selectedStates.has(e.state));
-    }
-
-    // Sort
-    const now = Date.now();
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'closest': {
-          // Sort by absolute distance from now (closest events first)
-          const distA = Math.abs(new Date(a.scheduled_at).getTime() - now);
-          const distB = Math.abs(new Date(b.scheduled_at).getTime() - now);
-          return distA - distB;
-        }
-        case 'date-asc':
-          return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
-        case 'signups':
-          return (b.signup_count || 0) - (a.signup_count || 0);
-        case 'name':
-          return a.name.localeCompare(b.name);
-        case 'date-desc':
-        default:
-          return new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime();
-      }
-    });
-
-    return filtered;
-  }, [events, debouncedSearch, selectedStates, sortBy]);
+  // Events come pre-filtered/sorted from backend — no client-side filtering needed
+  const filteredEvents = events || [];
 
   const statesChanged = selectedStates.size !== DEFAULT_STATES.size ||
     [...DEFAULT_STATES].some((s) => !selectedStates.has(s));

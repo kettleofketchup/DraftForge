@@ -1,10 +1,21 @@
 import type { EventSignupType, EventType } from '~/components/events/schemas';
 import axios from './axios';
 
-export async function getEvents(params?: { organization?: number; state?: string }): Promise<EventType[]> {
+export async function getEvents(params?: {
+  organization?: number;
+  state?: string;
+  states?: string[];
+  search?: string;
+  ordering?: string;
+  event_repeater?: number;
+}): Promise<EventType[]> {
   const sp = new URLSearchParams();
   if (params?.organization) sp.set('organization', String(params.organization));
   if (params?.state) sp.set('state', params.state);
+  if (params?.states?.length) sp.set('states', params.states.join(','));
+  if (params?.search) sp.set('search', params.search);
+  if (params?.ordering) sp.set('ordering', params.ordering);
+  if (params?.event_repeater) sp.set('event_repeater', String(params.event_repeater));
   const q = sp.toString();
   const { data } = await axios.get<EventType[]>(`/events/${q ? `?${q}` : ''}`);
   return data;

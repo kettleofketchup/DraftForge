@@ -124,6 +124,30 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
         return data
 
 
+class EventSlimSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for event list views — only fields needed for cards."""
+
+    organization_name = serializers.CharField(
+        source="organization.name", read_only=True
+    )
+    signup_count = serializers.IntegerField(read_only=True, default=0)
+    confirmed_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = Event
+        fields = [
+            "id",
+            "organization",
+            "organization_name",
+            "name",
+            "scheduled_at",
+            "state",
+            "signup_count",
+            "confirmed_count",
+            "event_repeater",
+        ]
+
+
 class EventSerializer(serializers.ModelSerializer):
     organization_name = serializers.CharField(
         source="organization.name", read_only=True
