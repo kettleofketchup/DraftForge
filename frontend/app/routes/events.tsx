@@ -130,8 +130,6 @@ function FilterControls({
   organizations,
   stateFilter,
   setStateFilter,
-  dateFilter,
-  setDateFilter,
   sortBy,
   setSortBy,
   vertical,
@@ -416,8 +414,6 @@ export default function EventsPage() {
                   organizations={organizations}
                   stateFilter={stateFilter}
                   setStateFilter={setStateFilter}
-                  dateFilter={dateFilter}
-                  setDateFilter={setDateFilter}
                   sortBy={sortBy}
                   setSortBy={setSortBy}
                   vertical
