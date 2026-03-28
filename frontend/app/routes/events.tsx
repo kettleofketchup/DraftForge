@@ -19,13 +19,6 @@ import { useOrganizations } from '~/components/organization';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '~/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import {
   Sheet,
@@ -152,29 +145,44 @@ function FilterControls({
   return (
     <div className={wrapper}>
       {/* Organization */}
-      <div className={vertical ? '' : undefined}>
+      <div>
         <label className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-0.5">
           <Building2 className="h-3 w-3" />
           Organization
         </label>
-        <Select
-          value={selectedOrgId || 'all'}
-          onValueChange={(v) => setOrgFilter(v === 'all' ? null : v)}
-        >
-          <SelectTrigger className={vertical ? 'w-full' : 'w-40'} data-testid="events-org-filter">
-            <SelectValue placeholder="All" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All</SelectItem>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={`${vertical ? 'w-full' : 'w-40'} justify-between font-normal`}
+              data-testid="events-org-filter"
+            >
+              <span className="truncate">
+                {selectedOrgId ? organizations.find((o) => o.pk?.toString() === selectedOrgId)?.name || 'Org' : 'All'}
+              </span>
+              <ChevronDown className="h-4 w-4 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-48 p-1" align="start">
+            <button
+              className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-base-400/30 ${!selectedOrgId ? 'text-primary font-medium' : ''}`}
+              onClick={() => setOrgFilter(null)}
+            >
+              All
+            </button>
             {organizations
               .filter((org) => org.pk != null)
               .map((org) => (
-                <SelectItem key={org.pk} value={org.pk!.toString()}>
+                <button
+                  key={org.pk}
+                  className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-base-400/30 truncate ${selectedOrgId === org.pk?.toString() ? 'text-primary font-medium' : ''}`}
+                  onClick={() => setOrgFilter(org.pk!.toString())}
+                >
                   {org.name}
-                </SelectItem>
+                </button>
               ))}
-          </SelectContent>
-        </Select>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* State — multi-select with switches */}
@@ -226,16 +234,31 @@ function FilterControls({
           <ArrowDownUp className="h-3 w-3" />
           Sort
         </label>
-        <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className={vertical ? 'w-full' : 'w-36'} data-testid="events-sort">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={`${vertical ? 'w-full' : 'w-36'} justify-between font-normal`}
+              data-testid="events-sort"
+            >
+              <span className="truncate">
+                {SORT_OPTIONS.find((s) => s.value === sortBy)?.label || 'Closest'}
+              </span>
+              <ChevronDown className="h-4 w-4 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-40 p-1" align="start">
             {SORT_OPTIONS.map((s) => (
-              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+              <button
+                key={s.value}
+                className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-base-400/30 ${sortBy === s.value ? 'text-primary font-medium' : ''}`}
+                onClick={() => setSortBy(s.value)}
+              >
+                {s.label}
+              </button>
             ))}
-          </SelectContent>
-        </Select>
+          </PopoverContent>
+        </Popover>
       </div>
     </div>
   );
