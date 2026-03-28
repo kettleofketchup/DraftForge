@@ -116,19 +116,11 @@ const EVENT_STATES = [
   { value: 'cancelled', label: 'Cancelled' },
 ] as const;
 
-const DATE_FILTERS = [
-  { value: 'all', label: 'All Dates' },
-  { value: 'upcoming', label: 'Upcoming' },
-  { value: 'past', label: 'Past' },
-  { value: 'today', label: 'Today' },
-  { value: 'week', label: 'This Week' },
-] as const;
-
 const SORT_OPTIONS = [
-  { value: 'date-desc', label: 'Newest First' },
-  { value: 'date-asc', label: 'Oldest First' },
-  { value: 'signups', label: 'Most Signups' },
-  { value: 'name', label: 'Name A-Z' },
+  { value: 'date-desc', label: 'Newest' },
+  { value: 'date-asc', label: 'Oldest' },
+  { value: 'signups', label: 'Signups' },
+  { value: 'name', label: 'Name' },
 ] as const;
 
 /** Shared filter controls — rendered inline on desktop, in Sheet on mobile */
@@ -149,8 +141,6 @@ function FilterControls({
   organizations: { pk?: number; name: string }[];
   stateFilter: string;
   setStateFilter: (v: string) => void;
-  dateFilter: string;
-  setDateFilter: (v: string) => void;
   sortBy: string;
   setSortBy: (v: string) => void;
   vertical?: boolean;
@@ -160,7 +150,7 @@ function FilterControls({
     <div className={wrapper}>
       {/* Organization */}
       <div className={vertical ? '' : undefined}>
-        <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+        <label className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-0.5">
           <Building2 className="h-3 w-3" />
           Organization
         </label>
@@ -186,7 +176,7 @@ function FilterControls({
 
       {/* State */}
       <div>
-        <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+        <label className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-0.5">
           <ListFilter className="h-3 w-3" />
           State
         </label>
@@ -202,27 +192,9 @@ function FilterControls({
         </Select>
       </div>
 
-      {/* Date */}
-      <div>
-        <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-          <CalendarDays className="h-3 w-3" />
-          Date
-        </label>
-        <Select value={dateFilter} onValueChange={setDateFilter}>
-          <SelectTrigger className={vertical ? 'w-full' : 'w-32'} data-testid="events-date-filter">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {DATE_FILTERS.map((d) => (
-              <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       {/* Sort */}
       <div>
-        <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+        <label className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-0.5">
           <ArrowDownUp className="h-3 w-3" />
           Sort
         </label>
@@ -265,7 +237,6 @@ export default function EventsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const [stateFilter, setStateFilter] = useState('all');
-  const [dateFilter, setDateFilter] = useState('all');
   const [sortBy, setSortBy] = useState<string>('date-desc');
 
   // Get selected organization for permission checks
@@ -306,25 +277,6 @@ export default function EventsPage() {
       filtered = filtered.filter((e) => e.state === stateFilter);
     }
 
-    // Date filter
-    if (dateFilter !== 'all') {
-      const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const endOfDay = new Date(startOfDay.getTime() + 86400000);
-      const endOfWeek = new Date(startOfDay.getTime() + 7 * 86400000);
-
-      filtered = filtered.filter((e) => {
-        const d = new Date(e.scheduled_at);
-        switch (dateFilter) {
-          case 'upcoming': return d > now;
-          case 'past': return d < now;
-          case 'today': return d >= startOfDay && d < endOfDay;
-          case 'week': return d >= startOfDay && d < endOfWeek;
-          default: return true;
-        }
-      });
-    }
-
     // Sort
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -341,13 +293,12 @@ export default function EventsPage() {
     });
 
     return filtered;
-  }, [events, debouncedSearch, stateFilter, dateFilter, sortBy]);
+  }, [events, debouncedSearch, stateFilter, sortBy]);
 
-  const hasActiveFilter = debouncedSearch || stateFilter !== 'all' || dateFilter !== 'all' || !!selectedOrgId;
+  const hasActiveFilter = debouncedSearch || stateFilter !== 'all' || !!selectedOrgId;
   const activeFilterCount = [
     selectedOrgId ? 1 : 0,
     stateFilter !== 'all' ? 1 : 0,
-    dateFilter !== 'all' ? 1 : 0,
     sortBy !== 'date-desc' ? 1 : 0,
   ].reduce((a, b) => a + b, 0);
 
@@ -436,8 +387,6 @@ export default function EventsPage() {
             organizations={organizations}
             stateFilter={stateFilter}
             setStateFilter={setStateFilter}
-            dateFilter={dateFilter}
-            setDateFilter={setDateFilter}
             sortBy={sortBy}
             setSortBy={setSortBy}
           />
