@@ -142,13 +142,19 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         return Response(get_data())
 
     def perform_create(self, serializer):
+        from app.cache_utils import invalidate_after_commit
+
         org = serializer.validated_data.get("organization")
         if not has_org_staff_access(self.request.user, org):
             raise PermissionDenied("You do not have staff access to this organization.")
-        serializer.save(created_by=self.request.user)
+        repeater = serializer.save(created_by=self.request.user)
+        invalidate_after_commit(repeater)
 
     def perform_update(self, serializer):
+        from app.cache_utils import invalidate_after_commit
+
         repeater = serializer.save()
+        invalidate_after_commit(repeater)
         sync_future_events(repeater)
 
     @action(
@@ -253,9 +259,17 @@ class EventViewSet(viewsets.ModelViewSet):
         return qs
 
     def list(self, request, *args, **kwargs):
+        ordering = request.query_params.get("ordering", "-scheduled_at")
+
+        # Skip caching for time-dependent ordering (closest uses Now())
+        if ordering == "closest":
+            queryset = self.filter_queryset(self.get_queryset())
+            serializer = self.get_serializer(queryset, many=True)
+            return Response(serializer.data)
+
         cache_key = f"event_list:{request.get_full_path()}"
 
-        @cached_as(Event, extra=cache_key, timeout=60 * 60)
+        @cached_as(Event, EventSignup, extra=cache_key, timeout=60 * 60)
         def get_data():
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)
@@ -269,6 +283,7 @@ class EventViewSet(viewsets.ModelViewSet):
 
         @cached_as(
             Event.objects.filter(pk=pk),
+            EventSignup,
             keep_fresh=True,
             extra=cache_key,
             timeout=60 * 60,
@@ -285,6 +300,8 @@ class EventViewSet(viewsets.ModelViewSet):
             raise PermissionDenied(
                 "You do not have permission to create events for this organization."
             )
+        from app.cache_utils import invalidate_after_commit
+
         event = serializer.save(created_by=self.request.user)
         create_tournament_for_event(event)
         # Auto-open signups if requested via query param
@@ -293,13 +310,17 @@ class EventViewSet(viewsets.ModelViewSet):
                 event.transition_state(EventState.SIGNUPS_OPEN)
             except ValueError:
                 pass  # Event already in a non-upcoming state
+        invalidate_after_commit(event)
         from events.discord import notify_create_discord_event, notify_event_announced
 
         notify_event_announced(event)
         notify_create_discord_event(event)
 
     def perform_update(self, serializer):
+        from app.cache_utils import invalidate_after_commit
+
         event = serializer.save()
+        invalidate_after_commit(event)
         result = sync_tournament_from_event(event)
         self._cascade_warning = result.get("warning")
 
@@ -437,7 +458,10 @@ class EventViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         """Clean up tournament and Discord messages before deleting event."""
+        from app.cache_utils import invalidate_after_commit
+
         with transaction.atomic():
+            invalidate_after_commit(instance)
             # Delete linked tournament
             if instance.tournament:
                 tournament = instance.tournament

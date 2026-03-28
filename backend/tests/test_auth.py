@@ -1089,6 +1089,7 @@ def reset_events_data(request):
 
     # Invalidate EventSignup cache — bulk deletes don't auto-invalidate cacheops
     invalidate_model(EventSignup)
+    invalidate_model(Event)
 
     # Delete repeaters created by tests (keep only the seeded "Weekly Inhouse")
     test_repeaters = EventRepeater.objects.filter(
