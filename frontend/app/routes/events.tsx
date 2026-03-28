@@ -1,5 +1,5 @@
 import { generateMeta } from '~/lib/seo';
-import { CalendarDays, Plus, Search } from 'lucide-react';
+import { ArrowDownUp, Building2, CalendarDays, Filter, ListFilter, Plus, Search } from 'lucide-react';
 
 export function meta() {
   return generateMeta({
@@ -27,6 +27,15 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '~/components/ui/sheet';
+import { Button } from '~/components/ui/button';
+import { Badge } from '~/components/ui/badge';
 import { useEvents } from '~/hooks/useEvent';
 import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import api from '~/components/api/axios';
@@ -121,6 +130,116 @@ const SORT_OPTIONS = [
   { value: 'signups', label: 'Most Signups' },
   { value: 'name', label: 'Name A-Z' },
 ] as const;
+
+/** Shared filter controls — rendered inline on desktop, in Sheet on mobile */
+function FilterControls({
+  selectedOrgId,
+  setOrgFilter,
+  organizations,
+  stateFilter,
+  setStateFilter,
+  dateFilter,
+  setDateFilter,
+  sortBy,
+  setSortBy,
+  vertical,
+}: {
+  selectedOrgId: string | null;
+  setOrgFilter: (v: string | null) => void;
+  organizations: { pk?: number; name: string }[];
+  stateFilter: string;
+  setStateFilter: (v: string) => void;
+  dateFilter: string;
+  setDateFilter: (v: string) => void;
+  sortBy: string;
+  setSortBy: (v: string) => void;
+  vertical?: boolean;
+}) {
+  const wrapper = vertical ? 'flex flex-col gap-4' : 'contents';
+  return (
+    <div className={wrapper}>
+      {/* Organization */}
+      <div className={vertical ? '' : undefined}>
+        <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+          <Building2 className="h-3 w-3" />
+          Organization
+        </label>
+        <Select
+          value={selectedOrgId || 'all'}
+          onValueChange={(v) => setOrgFilter(v === 'all' ? null : v)}
+        >
+          <SelectTrigger className={vertical ? 'w-full' : 'w-40'} data-testid="events-org-filter">
+            <SelectValue placeholder="All" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            {organizations
+              .filter((org) => org.pk != null)
+              .map((org) => (
+                <SelectItem key={org.pk} value={org.pk!.toString()}>
+                  {org.name}
+                </SelectItem>
+              ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* State */}
+      <div>
+        <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+          <ListFilter className="h-3 w-3" />
+          State
+        </label>
+        <Select value={stateFilter} onValueChange={setStateFilter}>
+          <SelectTrigger className={vertical ? 'w-full' : 'w-36'} data-testid="events-state-filter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {EVENT_STATES.map((s) => (
+              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Date */}
+      <div>
+        <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+          <CalendarDays className="h-3 w-3" />
+          Date
+        </label>
+        <Select value={dateFilter} onValueChange={setDateFilter}>
+          <SelectTrigger className={vertical ? 'w-full' : 'w-32'} data-testid="events-date-filter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DATE_FILTERS.map((d) => (
+              <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Sort */}
+      <div>
+        <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+          <ArrowDownUp className="h-3 w-3" />
+          Sort
+        </label>
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className={vertical ? 'w-full' : 'w-36'} data-testid="events-sort">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SORT_OPTIONS.map((s) => (
+              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+  );
+}
 
 function useRepeaters(orgId?: number) {
   return useQuery({
@@ -225,6 +344,12 @@ export default function EventsPage() {
   }, [events, debouncedSearch, stateFilter, dateFilter, sortBy]);
 
   const hasActiveFilter = debouncedSearch || stateFilter !== 'all' || dateFilter !== 'all' || !!selectedOrgId;
+  const activeFilterCount = [
+    selectedOrgId ? 1 : 0,
+    stateFilter !== 'all' ? 1 : 0,
+    dateFilter !== 'all' ? 1 : 0,
+    sortBy !== 'date-desc' ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
 
   const renderEventGrid = () => {
     if (filteredEvents.length > 0) {
@@ -289,9 +414,9 @@ export default function EventsPage() {
         )}
       </div>
 
-      {/* Search + Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        {/* Search */}
+      {/* Search + Filter bar */}
+      <div className="flex gap-3 mb-6">
+        {/* Search — always visible */}
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -303,61 +428,55 @@ export default function EventsPage() {
           />
         </div>
 
-        {/* Organization Filter */}
-        <Select
-          value={selectedOrgId || 'all'}
-          onValueChange={(v) => setOrgFilter(v === 'all' ? null : v)}
-        >
-          <SelectTrigger className="w-48" data-testid="events-org-filter">
-            <SelectValue placeholder="All organizations" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All organizations</SelectItem>
-            {organizations
-              .filter((org) => org.pk != null)
-              .map((org) => (
-                <SelectItem key={org.pk} value={org.pk!.toString()}>
-                  {org.name}
-                </SelectItem>
-              ))}
-          </SelectContent>
-        </Select>
+        {/* Desktop filters — hidden on mobile */}
+        <div className="hidden md:flex gap-3">
+          <FilterControls
+            selectedOrgId={selectedOrgId}
+            setOrgFilter={setOrgFilter}
+            organizations={organizations}
+            stateFilter={stateFilter}
+            setStateFilter={setStateFilter}
+            dateFilter={dateFilter}
+            setDateFilter={setDateFilter}
+            sortBy={sortBy}
+            setSortBy={setSortBy}
+          />
+        </div>
 
-        {/* State Filter */}
-        <Select value={stateFilter} onValueChange={setStateFilter}>
-          <SelectTrigger className="w-40" data-testid="events-state-filter">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {EVENT_STATES.map((s) => (
-              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Date Filter */}
-        <Select value={dateFilter} onValueChange={setDateFilter}>
-          <SelectTrigger className="w-36" data-testid="events-date-filter">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {DATE_FILTERS.map((d) => (
-              <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Sort */}
-        <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-40" data-testid="events-sort">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SORT_OPTIONS.map((s) => (
-              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Mobile filter button — shown on mobile only */}
+        <div className="md:hidden">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="outline" size="icon" className="relative" data-testid="events-filter-btn">
+                <Filter className="h-4 w-4" />
+                {activeFilterCount > 0 && (
+                  <Badge className="absolute -top-1.5 -right-1.5 h-4 w-4 p-0 flex items-center justify-center text-[10px] bg-primary">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-80">
+              <SheetHeader>
+                <SheetTitle>Filters</SheetTitle>
+              </SheetHeader>
+              <div className="flex flex-col gap-5 mt-6">
+                <FilterControls
+                  selectedOrgId={selectedOrgId}
+                  setOrgFilter={setOrgFilter}
+                  organizations={organizations}
+                  stateFilter={stateFilter}
+                  setStateFilter={setStateFilter}
+                  dateFilter={dateFilter}
+                  setDateFilter={setDateFilter}
+                  sortBy={sortBy}
+                  setSortBy={setSortBy}
+                  vertical
+                />
+              </div>
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
 
       {/* Tabs: Events / Series */}
