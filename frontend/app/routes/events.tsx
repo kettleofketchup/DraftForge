@@ -434,7 +434,7 @@ export default function EventsPage() {
             placeholder="Search events..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="pl-9 shadow-md hover:shadow-lg hover:bg-accent dark:hover:bg-input/95 transition-all"
             data-testid="events-search-input"
           />
         </div>
