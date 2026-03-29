@@ -42,17 +42,12 @@ export function DiscordLogSection({ eventId, isAdmin, eventTimezone }: DiscordLo
   const [activeFilter, setActiveFilter] = useState<number | null>(null);
   const [selectedLog, setSelectedLog] = useState<DiscordEventState['logs'][number] | null>(null);
 
-  if (isLoading) {
-    return <div className="text-muted-foreground p-4">Loading Discord state...</div>;
-  }
-  if (!discordState) {
-    return <div className="text-muted-foreground p-4">No Discord integration configured for this event.</div>;
-  }
-
   // Merge DMs into activity log as synthetic NOTIFICATION entries
+  // (must be before early returns to keep hook order stable)
   const allLogs = useMemo(() => {
+    if (!discordState) return [];
     const dmLogs: DiscordEventState['logs'] = discordState.dms.map((dm) => ({
-      id: -dm.id, // negative to avoid collisions
+      id: -dm.id,
       category: LogCategory.NOTIFICATION,
       category_display: 'Notification',
       action: `DM: ${dm.dm_type_display}`,
@@ -68,7 +63,14 @@ export function DiscordLogSection({ eventId, isAdmin, eventTimezone }: DiscordLo
     return [...discordState.logs, ...dmLogs].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
-  }, [discordState.logs, discordState.dms]);
+  }, [discordState?.logs, discordState?.dms]);
+
+  if (isLoading) {
+    return <div className="text-muted-foreground p-4">Loading Discord state...</div>;
+  }
+  if (!discordState) {
+    return <div className="text-muted-foreground p-4">No Discord integration configured for this event.</div>;
+  }
 
   const filteredLogs = activeFilter
     ? allLogs.filter((log) => log.category === activeFilter)
