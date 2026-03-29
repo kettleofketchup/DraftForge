@@ -785,15 +785,17 @@ function SignupsTab({
             <UserPlus className="h-4 w-4 mr-1" />
             Add User
           </SecondaryButton>
-          <AddUserModal
-            open={addUserOpen}
-            onOpenChange={setAddUserOpen}
-            title="Add User to Event"
-            entityContext={entityContext}
-            onAdd={handleAddUser}
-            isAdded={checkIsAdded}
-            hasDiscordServer={!!hasDiscordServer}
-          />
+          {addUserOpen && (
+            <AddUserModal
+              open={addUserOpen}
+              onOpenChange={setAddUserOpen}
+              title="Add User to Event"
+              entityContext={entityContext}
+              onAdd={handleAddUser}
+              isAdded={checkIsAdded}
+              hasDiscordServer={!!hasDiscordServer}
+            />
+          )}
         </div>
       )}
       {signups.length === 0 && (
