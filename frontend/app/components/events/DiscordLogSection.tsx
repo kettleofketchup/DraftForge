@@ -12,6 +12,7 @@ import { DiscordLogDetailModal } from './DiscordLogDetailModal';
 
 interface DiscordLogSectionProps {
   eventId: number;
+  isAdmin?: boolean;
 }
 
 const CATEGORY_COLORS: Record<number, string> = {
@@ -28,7 +29,7 @@ const CATEGORY_BORDER: Record<number, string> = {
   [LogCategory.NOTIFICATION]: 'border-amber-500',
 };
 
-export function DiscordLogSection({ eventId }: DiscordLogSectionProps) {
+export function DiscordLogSection({ eventId, isAdmin }: DiscordLogSectionProps) {
   const { data: discordState, isLoading } = useQuery({
     queryKey: ['event-discord', eventId],
     queryFn: () => getEventDiscordState(eventId),
@@ -95,7 +96,7 @@ export function DiscordLogSection({ eventId }: DiscordLogSectionProps) {
 
         {/* Task Schedule */}
         <TabsContent value="schedule">
-          <TaskScheduleSection eventId={eventId} />
+          <TaskScheduleSection eventId={eventId} isAdmin={isAdmin} />
         </TabsContent>
 
         {/* Activity Log */}

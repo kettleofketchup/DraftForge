@@ -292,13 +292,18 @@ urlpatterns = [
 ]
 
 # Event task schedule
-from events.views import get_event_task_schedule
+from events.views import fire_event_task, get_event_task_schedule
 
 urlpatterns += [
     path(
         "api/events/<int:event_id>/task-schedule/",
         get_event_task_schedule,
         name="event_task_schedule",
+    ),
+    path(
+        "api/events/<int:event_id>/task-schedule/<str:task_name>/fire/",
+        fire_event_task,
+        name="fire_event_task",
     ),
 ]
 

@@ -809,24 +809,46 @@ def get_event_task_schedule(request, event_id):
     except Exception:
         pass
 
-    def _task(
-        task, label, enabled, fires_at=None, log_source=None, misconfigured=False
+    # Last fired timestamps from logs
+    last_fired_map = {}
+    for source, created_at in (
+        DiscordMessageLog.objects.filter(source_id=event.pk, success=True)
+        .values_list("source", "created_at")
+        .order_by("-created_at")
     ):
-        """Build a task entry with status."""
+        if source not in last_fired_map:
+            last_fired_map[source] = created_at
+
+    def _task(
+        task,
+        label,
+        enabled,
+        fires_at=None,
+        log_source=None,
+        misconfigured=False,
+        check_interval=None,
+        description="",
+    ):
+        """Build a task entry with status and timing details."""
+        entry = {
+            "task": task,
+            "label": label,
+            "fires_at": fires_at.isoformat() if fires_at else None,
+            "description": description,
+            "check_interval": check_interval,
+            "last_fired_at": None,
+            "can_fire": False,
+        }
+
         if misconfigured:
-            return {
-                "task": task,
-                "label": label,
-                "fires_at": None,
-                "status": "misconfigured",
-            }
+            entry["status"] = "misconfigured"
+            entry["description"] = (
+                description or "Enabled but missing channel/server config"
+            )
+            return entry
         if not enabled:
-            return {
-                "task": task,
-                "label": label,
-                "fires_at": None,
-                "status": "disabled",
-            }
+            entry["status"] = "disabled"
+            return entry
 
         # Determine status
         if task == "subscriber_dm":
@@ -848,12 +870,12 @@ def get_event_task_schedule(request, event_id):
         else:
             s = "ready"
 
-        return {
-            "task": task,
-            "label": label,
-            "fires_at": fires_at.isoformat() if fires_at else None,
-            "status": s,
-        }
+        entry["status"] = s
+        entry["can_fire"] = s in ("ready", "pending")
+        if log_source and log_source in last_fired_map:
+            entry["last_fired_at"] = last_fired_map[log_source].isoformat()
+
+        return entry
 
     has_channel = bool(event.discord_announcement_channel_id)
 
@@ -864,6 +886,8 @@ def get_event_task_schedule(request, event_id):
             enabled=event.discord_announcement and has_channel,
             log_source="event_announcement",
             misconfigured=event.discord_announcement and not has_channel,
+            check_interval="On signups open",
+            description="Posts signup embed + buttons when signups open",
         ),
         _task(
             "signup_post",
@@ -872,6 +896,8 @@ def get_event_task_schedule(request, event_id):
             and bool(event.discord_post_signups_channel_id),
             misconfigured=event.discord_post_signups
             and not event.discord_post_signups_channel_id,
+            check_interval="On signups open",
+            description="Creates forum thread or message for signups",
         ),
         _task(
             "scheduled_event",
@@ -880,6 +906,8 @@ def get_event_task_schedule(request, event_id):
             and bool(event.organization.discord_server_id),
             misconfigured=event.discord_create_event
             and not event.organization.discord_server_id,
+            check_interval="Every 60s (sync)",
+            description="Creates a Discord guild scheduled event",
         ),
         _task(
             "signup_reminder",
@@ -892,6 +920,8 @@ def get_event_task_schedule(request, event_id):
                 else None
             ),
             log_source="signup_reminder",
+            check_interval="Every 30s",
+            description=f"Posts {event.discord_signup_reminder_hours}h before event",
         ),
         _task(
             "confirm_attendance",
@@ -904,6 +934,8 @@ def get_event_task_schedule(request, event_id):
                 else None
             ),
             log_source="attendance_reminder",
+            check_interval="Every 30s",
+            description=f"Posts {event.discord_confirm_attendance_hours}h before event",
         ),
         _task(
             "profile_reminder",
@@ -916,6 +948,8 @@ def get_event_task_schedule(request, event_id):
                 else None
             ),
             log_source="profile_reminder",
+            check_interval="Every 30s",
+            description=f"Posts {event.discord_profile_reminder_hours}h before event",
         ),
         _task(
             "subscriber_dm",
@@ -926,12 +960,16 @@ def get_event_task_schedule(request, event_id):
                 if event.discord_subscriber_dm
                 else None
             ),
+            check_interval="Every 30s",
+            description=f"DMs subscribers {event.discord_subscriber_dm_hours}h before event",
         ),
         _task(
             "signup_update",
             "Signup Update",
             enabled=event.discord_announcement and has_channel,
-            log_source=None,  # event-triggered, not time-based
+            log_source=None,
+            check_interval="On signup change",
+            description="Edits announcement embed with updated signup counts",
         ),
         _task(
             "open_signups",
@@ -942,7 +980,67 @@ def get_event_task_schedule(request, event_id):
                 if hasattr(event, "signups_open_at") and event.signups_open_at
                 else None
             ),
+            check_interval="Every 60s",
+            description="Transitions event from upcoming to signups_open",
         ),
     ]
 
     return Response(tasks)
+
+
+FIREABLE_TASKS = {
+    "announcement": "events.tasks.send_event_announcement",
+    "signup_post": "events.tasks.send_event_announcement",
+    "scheduled_event": "events.tasks.create_discord_scheduled_event",
+    "signup_reminder": "events.tasks.check_event_reminders",
+    "confirm_attendance": "events.tasks.check_event_reminders",
+    "profile_reminder": "events.tasks.check_event_reminders",
+    "subscriber_dm": "events.tasks.send_subscriber_notifications",
+    "signup_update": "events.tasks.send_signup_update",
+    "open_signups": "events.tasks.open_scheduled_signups",
+}
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def fire_event_task(request, event_id, task_name):
+    """Manually fire a scheduled task for an event. Requires org staff access."""
+    try:
+        event = Event.objects.select_related("organization").get(pk=event_id)
+    except Event.DoesNotExist:
+        return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if not has_org_staff_access(request.user, event.organization):
+        return Response(
+            {"error": "Staff access required"}, status=status.HTTP_403_FORBIDDEN
+        )
+
+    if task_name not in FIREABLE_TASKS:
+        return Response(
+            {"error": f"Unknown task: {task_name}"}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    from celery import current_app
+
+    celery_task = FIREABLE_TASKS[task_name]
+
+    # Tasks that take event_id as argument
+    if task_name in (
+        "announcement",
+        "signup_post",
+        "scheduled_event",
+        "signup_update",
+        "subscriber_dm",
+    ):
+        current_app.send_task(celery_task, args=[event_id])
+    else:
+        # Reminders and open_signups operate globally, not per-event
+        current_app.send_task(celery_task)
+
+    logger.info(
+        "Manual fire: task=%s event=%s by user=%s",
+        task_name,
+        event_id,
+        request.user.pk,
+    )
+    return Response({"fired": task_name, "event_id": event_id})

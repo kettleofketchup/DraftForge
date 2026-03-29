@@ -1,6 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, CheckCircle, Circle, Clock, XCircle } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Play } from 'lucide-react';
+import { toast } from 'sonner';
 import { Badge } from '~/components/ui/badge';
+import { Button } from '~/components/ui/button';
 import api from '~/components/api/axios';
 
 interface TaskEntry {
@@ -8,6 +10,10 @@ interface TaskEntry {
   label: string;
   fires_at: string | null;
   status: 'fired' | 'pending' | 'ready' | 'disabled' | 'misconfigured';
+  description: string;
+  check_interval: string | null;
+  last_fired_at: string | null;
+  can_fire: boolean;
 }
 
 function useEventTaskSchedule(eventId: number | null) {
@@ -18,33 +24,21 @@ function useEventTaskSchedule(eventId: number | null) {
   });
 }
 
-const STATUS_CONFIG = {
-  fired: {
-    icon: CheckCircle,
-    badge: 'bg-success/20 text-success border-success/30',
-    label: 'Fired',
-  },
-  pending: {
-    icon: Clock,
-    badge: 'bg-warning/20 text-warning border-warning/30',
-    label: 'Pending',
-  },
-  ready: {
-    icon: AlertCircle,
-    badge: 'bg-info/20 text-info border-info/30',
-    label: 'Ready',
-  },
-  disabled: {
-    icon: Circle,
-    badge: 'bg-muted text-muted-foreground border-border',
-    label: 'Disabled',
-  },
-  misconfigured: {
-    icon: XCircle,
-    badge: 'bg-destructive/20 text-error border-destructive/30',
-    label: 'Misconfigured',
-  },
-} as const;
+const STATUS_EMOJI: Record<string, string> = {
+  fired: '✅',
+  pending: '⏳',
+  ready: '🔵',
+  disabled: '⚫',
+  misconfigured: '⚠️',
+};
+
+const STATUS_BADGE: Record<string, string> = {
+  fired: 'bg-success/20 text-success border-success/30',
+  pending: 'bg-warning/20 text-warning border-warning/30',
+  ready: 'bg-info/20 text-info border-info/30',
+  disabled: 'bg-muted text-muted-foreground border-border',
+  misconfigured: 'bg-destructive/20 text-error border-destructive/30',
+};
 
 function formatRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -55,21 +49,36 @@ function formatRelativeTime(dateStr: string): string {
   const hours = Math.floor(mins / 60);
   const days = Math.floor(hours / 24);
 
-  const suffix = diff > 0 ? '' : ' ago';
   const prefix = diff > 0 ? 'in ' : '';
+  const suffix = diff > 0 ? '' : ' ago';
 
   if (mins < 1) return 'now';
   if (mins < 60) return `${prefix}${mins}m${suffix}`;
-  if (hours < 24) return `${prefix}${hours}h${suffix}`;
-  return `${prefix}${days}d${suffix}`;
+  if (hours < 24) return `${prefix}${hours}h ${mins % 60}m${suffix}`;
+  return `${prefix}${days}d ${hours % 24}h${suffix}`;
 }
 
 interface TaskScheduleSectionProps {
   eventId: number;
+  isAdmin?: boolean;
 }
 
-export function TaskScheduleSection({ eventId }: TaskScheduleSectionProps) {
+export function TaskScheduleSection({ eventId, isAdmin }: TaskScheduleSectionProps) {
   const { data: tasks, isLoading } = useEventTaskSchedule(eventId);
+  const queryClient = useQueryClient();
+
+  const fireMutation = useMutation({
+    mutationFn: (taskName: string) =>
+      api.post(`/events/${eventId}/task-schedule/${taskName}/fire/`),
+    onSuccess: (_data, taskName) => {
+      toast.success(`Task "${taskName}" fired`);
+      queryClient.invalidateQueries({ queryKey: ['event-task-schedule', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['event-discord', eventId] });
+    },
+    onError: (err: any, taskName) => {
+      toast.error(`Failed to fire "${taskName}": ${err?.response?.data?.error || err.message}`);
+    },
+  });
 
   if (isLoading) {
     return (
@@ -87,58 +96,111 @@ export function TaskScheduleSection({ eventId }: TaskScheduleSectionProps) {
     );
   }
 
-  // Sort: fired first, then by fires_at (soonest first), disabled last
+  // Sort: fired first, then ready/pending, disabled last
   const sorted = [...tasks].sort((a, b) => {
     const order = { fired: 0, ready: 1, pending: 2, misconfigured: 3, disabled: 4 };
     const aOrder = order[a.status] ?? 5;
     const bOrder = order[b.status] ?? 5;
     if (aOrder !== bOrder) return aOrder - bOrder;
     if (a.fires_at && b.fires_at) return new Date(a.fires_at).getTime() - new Date(b.fires_at).getTime();
-    if (a.fires_at) return -1;
-    if (b.fires_at) return 1;
     return 0;
   });
 
   return (
-    <div className="space-y-1" data-testid="task-schedule-section">
-      {sorted.map((task) => {
-        const config = STATUS_CONFIG[task.status];
-        const Icon = config.icon;
+    <div data-testid="task-schedule-section">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-xs text-muted-foreground border-b border-border/50">
+            <th className="text-left py-2 pl-1 w-8"></th>
+            <th className="text-left py-2">Task</th>
+            <th className="text-left py-2 hidden sm:table-cell">Timing</th>
+            <th className="text-left py-2 hidden md:table-cell">Check</th>
+            <th className="text-left py-2">Status</th>
+            {isAdmin && <th className="text-right py-2 pr-1 w-16"></th>}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((task) => (
+            <tr
+              key={task.task}
+              data-testid={`task-schedule-entry-${task.task}`}
+              className={`border-b border-border/20 hover:bg-base-400/10 transition-colors ${
+                task.status === 'disabled' ? 'opacity-50' : ''
+              }`}
+            >
+              {/* Status emoji */}
+              <td className="py-2.5 pl-1 text-center">
+                <span title={task.status}>{STATUS_EMOJI[task.status] || '❓'}</span>
+              </td>
 
-        return (
-          <div
-            key={task.task}
-            data-testid={`task-schedule-entry-${task.task}`}
-            className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-base-400/20 transition-colors"
-          >
-            <Icon className={`h-4 w-4 shrink-0 ${
-              task.status === 'fired' ? 'text-success' :
-              task.status === 'pending' ? 'text-warning' :
-              task.status === 'ready' ? 'text-info' :
-              task.status === 'misconfigured' ? 'text-error' :
-              'text-muted-foreground'
-            }`} />
+              {/* Task name + description */}
+              <td className="py-2.5">
+                <div className="font-medium text-foreground">{task.label}</div>
+                {task.description && (
+                  <div className="text-xs text-muted-foreground mt-0.5">{task.description}</div>
+                )}
+              </td>
 
-            <div className="flex-1 min-w-0">
-              <span className={`text-sm font-medium ${
-                task.status === 'disabled' ? 'text-muted-foreground' : 'text-foreground'
-              }`}>
-                {task.label}
-              </span>
-            </div>
+              {/* Timing — fires_at or last_fired_at */}
+              <td className="py-2.5 hidden sm:table-cell">
+                {task.fires_at ? (
+                  <div>
+                    <div className="text-foreground">{formatRelativeTime(task.fires_at)}</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {new Date(task.fires_at).toLocaleString(undefined, {
+                        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                      })}
+                    </div>
+                  </div>
+                ) : task.last_fired_at ? (
+                  <div className="text-xs text-muted-foreground">
+                    Last: {formatRelativeTime(task.last_fired_at)}
+                  </div>
+                ) : task.status === 'disabled' ? (
+                  <span className="text-muted-foreground">—</span>
+                ) : (
+                  <span className="text-muted-foreground text-xs">On trigger</span>
+                )}
+              </td>
 
-            {task.fires_at && task.status !== 'disabled' && (
-              <span className="text-xs text-muted-foreground shrink-0">
-                {formatRelativeTime(task.fires_at)}
-              </span>
-            )}
+              {/* Check interval */}
+              <td className="py-2.5 hidden md:table-cell">
+                {task.check_interval ? (
+                  <span className="text-xs text-muted-foreground">{task.check_interval}</span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </td>
 
-            <Badge className={`text-xs shrink-0 ${config.badge}`}>
-              {config.label}
-            </Badge>
-          </div>
-        );
-      })}
+              {/* Status badge */}
+              <td className="py-2.5">
+                <Badge className={`text-xs ${STATUS_BADGE[task.status] || ''}`}>
+                  {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                </Badge>
+              </td>
+
+              {/* Fire button (admin only) */}
+              {isAdmin && (
+                <td className="py-2.5 text-right pr-1">
+                  {task.can_fire && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => fireMutation.mutate(task.task)}
+                      disabled={fireMutation.isPending}
+                      title={`Fire ${task.label} now`}
+                      data-testid={`fire-task-${task.task}`}
+                    >
+                      <Play className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

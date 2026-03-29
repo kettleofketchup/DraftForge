@@ -511,7 +511,7 @@ export default function EventPage() {
           </TabsContent>
 
           <TabsContent value="discord">
-            <DiscordLogSection eventId={event.id} />
+            <DiscordLogSection eventId={event.id} isAdmin={isAdmin} />
           </TabsContent>
         </Tabs>
       </div>
