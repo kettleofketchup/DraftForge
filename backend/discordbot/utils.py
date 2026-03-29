@@ -2,7 +2,9 @@
 """Admin utility functions for sending Discord messages."""
 
 import logging
+import time as _time
 
+import redis as _redis
 import requests
 from django.conf import settings
 
@@ -11,6 +13,81 @@ from .embeds import event_announcement_embed
 log = logging.getLogger(__name__)
 
 DISCORD_API_BASE = "https://discord.com/api/v10"
+
+_REDIS_HOST = getattr(settings, "REDIS_HOST", "redis")
+redis_client = _redis.Redis(host=_REDIS_HOST, port=6379, db=2, socket_timeout=2)
+
+_TOKEN_BUCKET_LUA = """
+local key = KEYS[1]
+local rate = tonumber(ARGV[1])
+local burst = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+local bucket = redis.call('hmget', key, 'tokens', 'last_refill')
+local tokens = tonumber(bucket[1])
+local last_refill = tonumber(bucket[2])
+if tokens == nil then
+    tokens = burst
+    last_refill = now
+end
+local elapsed = now - last_refill
+tokens = math.min(burst, tokens + elapsed * rate)
+if tokens >= 1 then
+    tokens = tokens - 1
+    redis.call('hmset', key, 'tokens', tokens, 'last_refill', now)
+    redis.call('expire', key, 10)
+    return 1
+else
+    redis.call('hmset', key, 'tokens', tokens, 'last_refill', now)
+    redis.call('expire', key, 10)
+    return 0
+end
+"""
+_RATE_LIMIT_KEY = "discord:rate_limit:global"
+
+
+def _acquire_rate_limit_token(max_wait=10.0):
+    """Acquire a token from the Redis rate limit bucket.
+
+    Blocks up to max_wait seconds waiting for a token. Falls back to allowing
+    the request if Redis is unavailable.
+
+    Raises RuntimeError if no token is acquired within max_wait.
+    """
+    rate = getattr(settings, "DISCORD_RATE_LIMIT", 40)
+    burst = getattr(settings, "DISCORD_RATE_LIMIT_BURST", 40)
+    deadline = _time.monotonic() + max_wait
+    while True:
+        try:
+            result = redis_client.eval(
+                _TOKEN_BUCKET_LUA, 1, _RATE_LIMIT_KEY, rate, burst, _time.time()
+            )
+            if result == 1:
+                return True
+        except _redis.RedisError:
+            log.warning("Rate limiter Redis unavailable, allowing request")
+            return True
+        if _time.monotonic() >= deadline:
+            raise RuntimeError(f"Discord rate limit: no token within {max_wait}s")
+        _time.sleep(0.05)
+
+
+def _rate_limited_request(method, url, max_retries=3, **kwargs):
+    """Make a rate-limited HTTP request to the Discord API.
+
+    Acquires a token before each attempt and retries on 429 responses.
+    """
+    for attempt in range(max_retries):
+        _acquire_rate_limit_token()
+        response = requests.request(method, url, **kwargs)
+        if response.status_code == 429:
+            retry_after = response.json().get("retry_after", 1.0)
+            log.warning(
+                "Discord 429 on %s %s, retry_after=%.1fs", method, url, retry_after
+            )
+            _time.sleep(retry_after)
+            continue
+        return response
+    return response
 
 
 def _get_headers():
@@ -107,7 +184,9 @@ def sync_send_embed(
     payload = {"embeds": [embed]}
 
     try:
-        response = requests.post(url, json=payload, headers=_get_headers())
+        response = _rate_limited_request(
+            "POST", url, json=payload, headers=_get_headers()
+        )
         response_data = response.json()
         response.raise_for_status()
         _log_discord_message(
@@ -301,7 +380,9 @@ def sync_send_embed_with_components(
     embed_data = embeds[0] if embeds else {}
 
     try:
-        response = requests.post(url, json=payload, headers=_get_headers())
+        response = _rate_limited_request(
+            "POST", url, json=payload, headers=_get_headers()
+        )
         response_data = response.json()
         response.raise_for_status()
 
@@ -391,7 +472,9 @@ def sync_send_v2_message(
     }
 
     try:
-        response = requests.post(url, json=payload, headers=_get_headers())
+        response = _rate_limited_request(
+            "POST", url, json=payload, headers=_get_headers()
+        )
         response_data = response.json()
         response.raise_for_status()
 
@@ -454,7 +537,9 @@ def sync_edit_v2_message(channel_id, message_id, v2_payload):
     """
     url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}"
     try:
-        response = requests.patch(url, json=v2_payload, headers=_get_headers())
+        response = _rate_limited_request(
+            "PATCH", url, json=v2_payload, headers=_get_headers()
+        )
         response.raise_for_status()
         log.info("Edited V2 message %s in %s", message_id, channel_id)
         return response.json()
@@ -484,7 +569,9 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
         payload["components"] = components
 
     try:
-        response = requests.patch(url, json=payload, headers=_get_headers())
+        response = _rate_limited_request(
+            "PATCH", url, json=payload, headers=_get_headers()
+        )
         response.raise_for_status()
         log.info(f"Edited message {message_id} in channel {channel_id}")
         return response.json()
@@ -506,7 +593,9 @@ def sync_create_dm_channel(user_id):
     payload = {"recipient_id": str(user_id)}
 
     try:
-        response = requests.post(url, json=payload, headers=_get_headers())
+        response = _rate_limited_request(
+            "POST", url, json=payload, headers=_get_headers()
+        )
         response.raise_for_status()
         data = response.json()
         return data.get("id")
@@ -515,7 +604,7 @@ def sync_create_dm_channel(user_id):
         return None
 
 
-def sync_send_dm(user_id, embed=None, content=None):
+def sync_send_dm(user_id, embed=None, content=None, components=None):
     """Send a DM to a Discord user.
 
     Creates a DM channel then sends a message with optional embed.
@@ -524,6 +613,7 @@ def sync_send_dm(user_id, embed=None, content=None):
         user_id: Discord user ID
         embed: Optional embed dict
         content: Optional text content
+        components: Optional components list (action rows)
 
     Returns:
         dict: API response with message data, or None on error
@@ -538,13 +628,17 @@ def sync_send_dm(user_id, embed=None, content=None):
         payload["content"] = content
     if embed:
         payload["embeds"] = [embed]
+    if components:
+        payload["components"] = components
 
     if not payload:
         log.warning("sync_send_dm called with no content or embed")
         return None
 
     try:
-        response = requests.post(url, json=payload, headers=_get_headers())
+        response = _rate_limited_request(
+            "POST", url, json=payload, headers=_get_headers()
+        )
         response.raise_for_status()
         data = response.json()
         log.info("Sent DM to user %s (message_id=%s)", user_id, data.get("id"))
@@ -563,17 +657,13 @@ def sync_add_reactions(channel_id, message_id, emojis=None):
         message_id: Discord message ID
         emojis: List of emoji strings (defaults to RSVP emojis)
     """
-    import time
-
     if emojis is None:
         emojis = ["\u2705", "\u2753", "\u274c"]  # checkmark, question, x
 
-    for i, emoji in enumerate(emojis):
-        if i > 0:
-            time.sleep(0.3)  # Discord rate limits reactions at ~1/s
+    for emoji in emojis:
         url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}/reactions/{emoji}/@me"
         try:
-            response = requests.put(url, headers=_get_headers())
+            response = _rate_limited_request("PUT", url, headers=_get_headers())
             response.raise_for_status()
         except requests.RequestException as e:
             log.error(f"Failed to add reaction {emoji}: {e}")

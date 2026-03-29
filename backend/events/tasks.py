@@ -863,8 +863,6 @@ def send_subscriber_notifications(event_id):
         else:
             failed += 1
 
-        time.sleep(1.0)  # Respect Discord DM rate limits
-
     logger.info(
         "Subscriber DMs for event %s: sent=%d, skipped=%d, failed=%d",
         event_id,
