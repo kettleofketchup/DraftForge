@@ -144,6 +144,17 @@ def send_tournament_herodraft_links(
     )
     if failed_users:
         message += f". Failed: {', '.join(failed_users[:10])}"
+
+    if tournament_log_id:
+        from app.internal_client import update_tournament_log
+
+        update_tournament_log(
+            tournament_log_id,
+            recipient_count=sent,
+            message=message,
+            success=sent > 0,
+        )
+
     logger.info("Tournament %d herodraft links: %s", tournament_id, message)
     return message
 
