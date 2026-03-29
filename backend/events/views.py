@@ -267,16 +267,12 @@ class EventViewSet(viewsets.ModelViewSet):
 
     def list(self, request, *args, **kwargs):
         ordering = request.query_params.get("ordering", "-scheduled_at")
-
-        # Skip caching for time-dependent ordering (closest uses Now())
-        if ordering == "closest":
-            queryset = self.filter_queryset(self.get_queryset())
-            serializer = self.get_serializer(queryset, many=True)
-            return Response(serializer.data)
-
         cache_key = f"event_list:{request.get_full_path()}"
 
-        @cached_as(Event, EventSignup, extra=cache_key, timeout=60 * 60)
+        # Closest ordering uses Now() — short cache (30s) since results shift over time
+        cache_timeout = 30 if ordering == "closest" else 60 * 60
+
+        @cached_as(Event, EventSignup, extra=cache_key, timeout=cache_timeout)
         def get_data():
             queryset = self.filter_queryset(self.get_queryset())
             serializer = self.get_serializer(queryset, many=True)

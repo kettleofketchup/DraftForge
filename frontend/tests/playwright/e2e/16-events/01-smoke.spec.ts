@@ -47,10 +47,10 @@ test.describe('Events - List Page (@cicd)', () => {
     await visitAndWaitForHydration(page, '/events');
 
     // Header with icon and title
-    await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('heading', { name: 'Events' })).toBeVisible({ timeout: 10000 });
 
     // Org filter dropdown
-    await expect(page.getByTestId('events-org-filter')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('events-org-filter')).toBeVisible();
   });
 
   test('filters events by organization', async ({ page }) => {
