@@ -2,10 +2,10 @@ import { generateMeta } from '~/lib/seo';
 import { getEvent } from '~/components/api/api';
 import { useParams, useNavigate } from 'react-router';
 import type { Route } from './+types/event';
-import { fetchSSR } from '~/lib/ssr.server';
 import type { EventSSR } from '~/lib/ssr-types';
 
 export async function loader({ params }: Route.LoaderArgs) {
+  const { fetchSSR } = await import('~/lib/ssr.server');
   const event = await fetchSSR<EventSSR>(`/events/${params.eventId}/ssr/`);
   return { event };
 }

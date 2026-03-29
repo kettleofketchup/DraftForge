@@ -1,10 +1,10 @@
 import HeroDraftPage from '~/pages/herodraft/HeroDraftPage';
 import { generateMeta } from '~/lib/seo';
-import { fetchSSR } from '~/lib/ssr.server';
 import type { HeroDraftSSR } from '~/lib/ssr-types';
 import type { Route } from './+types/herodraft';
 
 export async function loader({ params }: Route.LoaderArgs) {
+  const { fetchSSR } = await import('~/lib/ssr.server');
   const draft = await fetchSSR<HeroDraftSSR>(`/herodraft/${params.id}/ssr/`);
   return { draft };
 }

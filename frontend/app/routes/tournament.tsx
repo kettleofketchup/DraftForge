@@ -3,10 +3,10 @@ import { generateMeta } from '~/lib/seo';
 import { fetchTournament } from '~/components/api/api';
 import { queryClient } from '~/root';
 import type { Route } from './+types/tournament';
-import { fetchSSR } from '~/lib/ssr.server';
 import type { TournamentSSR } from '~/lib/ssr-types';
 
 export async function loader({ params }: Route.LoaderArgs) {
+  const { fetchSSR } = await import('~/lib/ssr.server');
   const tournament = await fetchSSR<TournamentSSR>(`/tournaments/${params.pk}/ssr/`);
   return { tournament };
 }

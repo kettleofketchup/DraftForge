@@ -2,10 +2,10 @@ import { generateMeta } from '~/lib/seo';
 import { fetchLeague } from '~/components/api/api';
 import { useParams, useNavigate } from 'react-router';
 import type { Route } from './+types/league';
-import { fetchSSR } from '~/lib/ssr.server';
 import type { LeagueSSR } from '~/lib/ssr-types';
 
 export async function loader({ params }: Route.LoaderArgs) {
+  const { fetchSSR } = await import('~/lib/ssr.server');
   const league = await fetchSSR<LeagueSSR>(`/leagues/${params.leagueId}/ssr/`);
   return { league };
 }

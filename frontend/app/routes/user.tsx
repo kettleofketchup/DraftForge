@@ -2,10 +2,10 @@ import { UserProfilePage } from '~/pages/user/UserProfilePage';
 import { generateMeta } from '~/lib/seo';
 import { fetchUser } from '~/components/api/api';
 import type { Route } from './+types/user';
-import { fetchSSR } from '~/lib/ssr.server';
 import type { UserSSR } from '~/lib/ssr-types';
 
 export async function loader({ params }: Route.LoaderArgs) {
+  const { fetchSSR } = await import('~/lib/ssr.server');
   const user = await fetchSSR<UserSSR>(`/users/${params.pk}/ssr/`);
   return { user };
 }

@@ -3,10 +3,10 @@ import { fetchOrganization } from '~/components/api/api';
 import { queryClient } from '~/root';
 import { Building2, Calendar, ClipboardList, ExternalLink, Mail, MailCheck, Pencil, Plus, Settings, Trash2, Upload, Users } from 'lucide-react';
 import type { Route } from './+types/organization';
-import { fetchSSR } from '~/lib/ssr.server';
 import type { OrganizationSSR } from '~/lib/ssr-types';
 
 export async function loader({ params }: Route.LoaderArgs) {
+  const { fetchSSR } = await import('~/lib/ssr.server');
   const organization = await fetchSSR<OrganizationSSR>(`/organizations/${params.organizationId}/ssr/`);
   return { organization };
 }
