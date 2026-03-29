@@ -336,7 +336,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
 
     await visitAndWaitForHydration(page, `/events/${event.id}`);
     await page.getByTestId('event-tab-discord').click();
-    // Discord tab should load with empty activity (no "not configured" since DiscordEvent auto-created)
-    await expect(page.getByText('Task Schedule')).toBeVisible({ timeout: 5000 });
+    // Discord tab should load with task schedule (DiscordEvent auto-created since org has discord_server_id)
+    await expect(page.getByTestId('discord-subtab-schedule')).toBeVisible({ timeout: 5000 });
   });
 });
