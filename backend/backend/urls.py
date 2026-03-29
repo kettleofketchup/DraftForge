@@ -67,6 +67,14 @@ from app.views.admin_team import (
     update_org_user,
 )
 from app.views.csv_import import import_csv_org, import_csv_tournament
+from app.views.ssr import (
+    EventSSRView,
+    HeroDraftSSRView,
+    LeagueSSRView,
+    OrganizationSSRView,
+    TournamentSSRView,
+    UserSSRView,
+)
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from org.views import ClaimRequestViewSet
@@ -322,6 +330,23 @@ urlpatterns = [
         add_tournament_member,
         name="add_tournament_member",
     ),
+    # SSR endpoints — lightweight public data for meta tags and skeletons
+    path(
+        "api/tournaments/<int:pk>/ssr/",
+        TournamentSSRView.as_view(),
+        name="tournament_ssr",
+    ),
+    path(
+        "api/organizations/<int:pk>/ssr/",
+        OrganizationSSRView.as_view(),
+        name="organization_ssr",
+    ),
+    path("api/leagues/<int:pk>/ssr/", LeagueSSRView.as_view(), name="league_ssr"),
+    path("api/events/<int:pk>/ssr/", EventSSRView.as_view(), name="event_ssr"),
+    path(
+        "api/herodraft/<int:pk>/ssr/", HeroDraftSSRView.as_view(), name="herodraft_ssr"
+    ),
+    path("api/users/<int:pk>/ssr/", UserSSRView.as_view(), name="user_ssr"),
 ]
 
 # Event task schedule
