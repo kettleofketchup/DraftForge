@@ -165,6 +165,9 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
         try:
             signup = process_rsvp(event, user)
             _log_signup(event_id, "signup_direct", discord_user_id, discord_username)
+            from events.discord.dispatch import notify_signup_changed
+
+            notify_signup_changed(event)
             return {"action": "signed_up", "status": signup.status}
         except ValueError as e:
             _log_signup(
@@ -591,6 +594,9 @@ def handle_decline_button(event_id, discord_user_id):
             return {"action": "already_declined", "message": "You've already declined."}
         cancel_signup(signup)
         _log_signup(event_id, "declined", discord_user_id)
+        from events.discord.dispatch import notify_signup_changed
+
+        notify_signup_changed(event)
         return {"action": "declined", "message": "You've declined the event."}
     except EventSignup.DoesNotExist:
         return {"action": "not_signed_up", "message": "You weren't signed up."}
