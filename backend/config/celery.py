@@ -2,6 +2,7 @@ import os
 
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_process_init
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 
@@ -9,6 +10,25 @@ app = Celery("dtx")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 app.autodiscover_tasks(["events"], related_name="tournament_tasks")
+
+
+@worker_process_init.connect
+def init_worker_telemetry(**kwargs):
+    """Re-initialize telemetry in each forked celery worker process.
+
+    The main celery process loads Django settings (which calls init_telemetry),
+    but forked worker processes don't inherit the OTel providers properly.
+    This signal fires after fork, ensuring each worker has its own exporters.
+    """
+    # Reset the guard so init_tracing runs again in this process
+    import telemetry.tracing
+    from telemetry.config import init_telemetry
+    from telemetry.tracing import _tracing_initialized
+
+    telemetry.tracing._tracing_initialized = False
+
+    init_telemetry()
+
 
 # Beat schedule for periodic tasks
 _beat_schedule = {
