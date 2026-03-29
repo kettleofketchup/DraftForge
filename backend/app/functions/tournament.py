@@ -196,7 +196,9 @@ def create_team_from_captain(request):
         return Response(serializer.errors, status=400)
 
     try:
-        tournament = Tournament.objects.select_related("league").get(pk=tournament_pk)
+        tournament = Tournament.objects.select_related(
+            "league", "league__organization"
+        ).get(pk=tournament_pk)
         user = CustomUser.objects.get(pk=user_pk)
 
     except Tournament.DoesNotExist:
@@ -275,7 +277,9 @@ def generate_draft_rounds(request):
         return Response(serializer.errors, status=400)
 
     try:
-        tournament = Tournament.objects.select_related("league").get(pk=tournament_pk)
+        tournament = Tournament.objects.select_related(
+            "league", "league__organization"
+        ).get(pk=tournament_pk)
 
     except Tournament.DoesNotExist:
         return Response({"error": "Tournament not found"}, status=404)
@@ -360,7 +364,9 @@ def rebuild_team(request):
         return Response(serializer.errors, status=400)
 
     try:
-        tournament = Tournament.objects.select_related("league").get(pk=tournament_pk)
+        tournament = Tournament.objects.select_related(
+            "league", "league__organization"
+        ).get(pk=tournament_pk)
 
     except Tournament.DoesNotExist:
         return Response({"error": "Tournament not found"}, status=404)
