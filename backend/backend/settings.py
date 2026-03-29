@@ -41,6 +41,11 @@ DISCORD_PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY")
 
 # Internal service auth — celery workers and Discord bot call Django via HTTP
 INTERNAL_SERVICE_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
+# Comma-separated IP/CIDR allowlist for internal API (empty = use defaults: localhost + Docker networks)
+_raw_ips = os.environ.get("INTERNAL_SERVICE_ALLOWED_IPS", "")
+INTERNAL_SERVICE_ALLOWED_IPS = [
+    ip.strip() for ip in _raw_ips.split(",") if ip.strip()
+] or None
 
 # Test bot tokens for multi-user Discord integration tests.
 # Create additional bot applications at https://discord.com/developers/applications

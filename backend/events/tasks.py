@@ -93,7 +93,12 @@ def cleanup_stale_events():
 
 @shared_task
 def open_scheduled_signups():
-    """Open signups for events where signups_open_at has passed. Runs every minute."""
+    """Open signups for events where signups_open_at has passed. Runs every minute.
+
+    State transition via internal HTTP API (no direct DB writes).
+    """
+    from app.internal_client import transition_event_state
+
     now = timezone.now()
     events = Event.objects.filter(
         state=EventState.UPCOMING,
@@ -103,11 +108,16 @@ def open_scheduled_signups():
     opened = 0
     for event in events:
         try:
-            event.transition_state(EventState.SIGNUPS_OPEN)
-            opened += 1
-            logger.info(
-                "Auto-opened signups for event %s (pk=%s)", event.name, event.pk
-            )
+            resp = transition_event_state(event.pk, "signups_open")
+            if resp and resp.ok:
+                opened += 1
+                logger.info(
+                    "Auto-opened signups for event %s (pk=%s)", event.name, event.pk
+                )
+            else:
+                logger.warning(
+                    "Failed to auto-open signups for event %s: %s", event.pk, resp
+                )
         except Exception:
             logger.exception("Failed to auto-open signups for event %s", event.pk)
     return f"Opened signups for {opened} events"
@@ -275,7 +285,7 @@ def send_event_announcement(event_id):
     if not de_resp or not de_resp.ok:
         logger.error("Failed to get/create DiscordEvent for event %s", event.pk)
         return "Failed: could not get/create DiscordEvent"
-    discord_event_pk = de_resp.json()["id"]
+    discord_event_pk = de_resp.json().get("id")
 
     # Step 1: Create the signup post
     signup_post_result = None
@@ -297,7 +307,7 @@ def send_event_announcement(event_id):
             update_data["message_id"] = post_result.get("id")
 
         msg_resp = create_or_update_signup_message(**update_data)
-        signup_msg_pk = msg_resp.json()["id"] if msg_resp and msg_resp.ok else None
+        signup_msg_pk = msg_resp.json().get("id") if msg_resp and msg_resp.ok else None
 
         if signup_msg_pk:
             update_discord_event(discord_event_pk, signup_message_id=signup_msg_pk)
@@ -376,7 +386,7 @@ def send_event_announcement(event_id):
             message_id=notice_api_result.get("id"),
             message_last_updated=timezone.now().isoformat(),
         )
-        ann_pk = ann_resp.json()["id"] if ann_resp and ann_resp.ok else None
+        ann_pk = ann_resp.json().get("id") if ann_resp and ann_resp.ok else None
         if ann_pk:
             update_discord_event(discord_event_pk, announcement_id=ann_pk)
             create_event_log(
@@ -544,7 +554,7 @@ def create_discord_scheduled_event(event_id):
     if not de_resp or not de_resp.ok:
         logger.error("Failed to get/create DiscordEvent for event %s", event.pk)
         return "Failed: could not get/create DiscordEvent"
-    discord_event_pk = de_resp.json()["id"]
+    discord_event_pk = de_resp.json().get("id")
 
     try:
         response = req.post(url, json=payload, headers=_get_headers())
@@ -885,7 +895,7 @@ def send_subscriber_notifications(event_id):
             dm_type=DMType.SIGNUP_REMINDER,
             delivered=False,
         )
-        dm_pk = dm_resp.json()["id"] if dm_resp and dm_resp.ok else None
+        dm_pk = dm_resp.json().get("id") if dm_resp and dm_resp.ok else None
 
         # Send DM
         result = sync_send_dm(sub.user.discordId, embed=embed)

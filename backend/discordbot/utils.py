@@ -33,41 +33,35 @@ def _log_discord_message(
 ):
     """Log a Discord message send via the internal API (HTTP, not direct DB).
 
-    Falls back to direct DB write if internal API is unavailable (e.g., during
-    management commands or when called from within the Django process itself).
+    Retries once on failure. No direct DB fallback — all writes must go through
+    the internal API to prevent SQLite lock contention.
     """
+    import time
+
     from app.internal_client import create_message_log
 
-    resp = create_message_log(
-        channel_id=str(channel_id),
-        embed_data=embed_data,
-        source=source or "unknown",
-        source_id=source_id,
-        status_code=status_code,
-        response_data=response_data,
-        discord_message_id=discord_message_id,
-        success=success,
-    )
-    if resp and resp.ok:
-        return resp.json().get("id")
+    for attempt in range(2):
+        resp = create_message_log(
+            channel_id=str(channel_id),
+            embed_data=embed_data,
+            source=source or "unknown",
+            source_id=source_id,
+            status_code=status_code,
+            response_data=response_data,
+            discord_message_id=discord_message_id,
+            success=success,
+        )
+        if resp and resp.ok:
+            return resp.json().get("id")
+        if attempt == 0:
+            time.sleep(1)  # Brief retry delay
 
-    # Fallback: direct DB write (same process, no lock contention)
-    log.warning(
-        "Internal API unavailable, falling back to direct DB write for %s", source
+    log.error(
+        "Failed to log Discord message via internal API after 2 attempts (source=%s, source_id=%s)",
+        source,
+        source_id,
     )
-    from .models import DiscordMessageLog
-
-    entry = DiscordMessageLog.objects.create(
-        channel_id=channel_id,
-        embed_data=embed_data,
-        source=source or "unknown",
-        source_id=source_id,
-        status_code=status_code,
-        response_data=response_data,
-        discord_message_id=discord_message_id,
-        success=success,
-    )
-    return entry.pk
+    return None
 
 
 def sync_send_embed(

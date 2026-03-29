@@ -50,12 +50,23 @@ def create_discord_message_log(request):
     """Create a DiscordMessageLog entry."""
     from discordbot.models import DiscordMessageLog
 
+    ALLOWED_FIELDS = {
+        "channel_id",
+        "embed_data",
+        "source",
+        "source_id",
+        "discord_message_id",
+        "status_code",
+        "response_data",
+        "success",
+    }
     err = _validate_required(
         request.data, ["channel_id", "source", "source_id", "embed_data"]
     )
     if err:
         return err
-    entry = DiscordMessageLog.objects.create(**request.data)
+    data = {k: v for k, v in request.data.items() if k in ALLOWED_FIELDS}
+    entry = DiscordMessageLog.objects.create(**data)
     return Response({"id": entry.pk}, status=status.HTTP_201_CREATED)
 
 
@@ -76,8 +87,17 @@ def create_discord_event_log(request):
     )
     if err:
         return err
-    data = dict(request.data)
-    discord_event = DiscordEvent.objects.get(pk=data.pop("discord_event_id"))
+    EVENT_LOG_FIELDS = {
+        "action",
+        "target_type",
+        "message_id",
+        "status_code",
+        "response_data",
+        "success",
+        "error_message",
+    }
+    data = {k: v for k, v in request.data.items() if k in EVENT_LOG_FIELDS}
+    discord_event = DiscordEvent.objects.get(pk=request.data["discord_event_id"])
     entry = DiscordEventLog.objects.create(discord_event=discord_event, **data)
     return Response({"id": entry.pk}, status=status.HTTP_201_CREATED)
 
@@ -231,7 +251,12 @@ def create_event_dm(request):
     """Create DiscordEventDM record (crash-safe: create before send)."""
     from discordbot.models import DiscordEventDM
 
-    dm = DiscordEventDM.objects.create(**request.data)
+    DM_CREATE_FIELDS = {"discord_event", "org_user", "dm_type", "delivered"}
+    err = _validate_required(request.data, ["discord_event", "org_user", "dm_type"])
+    if err:
+        return err
+    data = {k: v for k, v in request.data.items() if k in DM_CREATE_FIELDS}
+    dm = DiscordEventDM.objects.create(**data)
     return Response({"id": dm.pk}, status=status.HTTP_201_CREATED)
 
 
