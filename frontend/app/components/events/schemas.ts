@@ -9,7 +9,8 @@ export const EventState = {
 
 export const SignupStatus = {
   RSVP: 'rsvp', PENDING_APPROVAL: 'pending_approval', APPROVED: 'approved',
-  CONFIRMED: 'confirmed', WAITLISTED: 'waitlisted', REJECTED: 'rejected', CANCELLED: 'cancelled',
+  CONFIRMED: 'confirmed', WAITLISTED: 'waitlisted', TENTATIVE: 'tentative',
+  REJECTED: 'rejected', CANCELLED: 'cancelled',
 } as const;
 
 export const GameMode = {

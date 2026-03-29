@@ -332,12 +332,14 @@ from app.views.internal import (
     update_discord_event,
     update_event_dm,
     update_scheduled_event,
+    update_tournament_log,
 )
 
 urlpatterns += [
     path("api/internal/discord/message-log/", create_discord_message_log),
     path("api/internal/discord/event-log/", create_discord_event_log),
     path("api/internal/discord/tournament-log/", create_tournament_log),
+    path("api/internal/discord/tournament-log/<int:pk>/", update_tournament_log),
     path("api/internal/discord/events/get-or-create/", get_or_create_discord_event),
     path("api/internal/discord/events/<int:pk>/", update_discord_event),
     path("api/internal/discord/signup-message/", create_or_update_signup_message),

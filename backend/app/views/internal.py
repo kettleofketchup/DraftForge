@@ -455,6 +455,24 @@ def create_tournament_log(request):
     return Response({"id": entry.pk}, status=status.HTTP_201_CREATED)
 
 
+TOURNAMENT_LOG_UPDATE_FIELDS = {"recipient_count", "message", "success"}
+
+
+@api_view(["PATCH"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def update_tournament_log(request, pk):
+    """Update DiscordTournamentLog entry (recipient_count, message, success)."""
+    from discordbot.models import DiscordTournamentLog
+
+    log = DiscordTournamentLog.objects.get(pk=pk)
+    for field in TOURNAMENT_LOG_UPDATE_FIELDS:
+        if field in request.data:
+            setattr(log, field, request.data[field])
+    log.save()
+    return Response({"id": log.pk})
+
+
 # ---------------------------------------------------------------------------
 # DiscordEvent (CACHED — invalidate after writes)
 # ---------------------------------------------------------------------------

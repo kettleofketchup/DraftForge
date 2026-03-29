@@ -99,6 +99,11 @@ def create_tournament_log(**data):
     return _post("/discord/tournament-log/", data)
 
 
+def update_tournament_log(pk, **data):
+    """Update DiscordTournamentLog entry (recipient_count, message, success)."""
+    return _patch(f"/discord/tournament-log/{pk}/", data)
+
+
 def get_or_create_discord_event(**data):
     """Get or create DiscordEvent for an event."""
     return _post("/discord/events/get-or-create/", data)

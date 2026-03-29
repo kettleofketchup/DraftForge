@@ -69,6 +69,18 @@ def send_tournament_draft_links(tournament_id, draft_id):
     message = f"Sent draft link to {sent}/{len(participants)} participants"
     if failed_users:
         message += f". Failed: {', '.join(failed_users[:10])}"
+
+    # Update tournament log with final count
+    if tournament_log_id:
+        from app.internal_client import update_tournament_log
+
+        update_tournament_log(
+            tournament_log_id,
+            recipient_count=sent,
+            message=message,
+            success=sent > 0,
+        )
+
     logger.info("Tournament %d draft links: %s", tournament_id, message)
     return message
 
