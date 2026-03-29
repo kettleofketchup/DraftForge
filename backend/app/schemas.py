@@ -23,8 +23,31 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+class OrgProxy:
+    """Proxy for event.organization attribute access in embed builders.
+
+    Allows event.organization.name, .discord_server_id, .logo to work
+    on both Django model instances and Pydantic EventTaskData.
+    Also truthful (bool(proxy) == True) so `if event.organization:` works.
+    """
+
+    def __init__(self, pk: int, name: str, discord_server_id: str, logo: str):
+        self.pk = pk
+        self.name = name
+        self.discord_server_id = discord_server_id
+        self.logo = logo
+
+    def __bool__(self):
+        return True
+
+
 class EventTaskData(BaseModel):
-    """Event data needed by celery tasks. Matches EventSerializer + org extras."""
+    """Event data needed by celery tasks. Matches EventSerializer + org extras.
+
+    Provides attribute access compatible with Django model instances so
+    embed builders (build_announcement_v2, etc.) work unchanged:
+      event.pk, event.name, event.organization.name, event.organization.logo
+    """
 
     id: int
     name: str
@@ -32,15 +55,30 @@ class EventTaskData(BaseModel):
     state: str
     scheduled_at: datetime
     signups_open_at: Optional[datetime] = None
-    organization: int
+    organization_id: int = 0  # the raw PK
     organization_name: str = ""
     organization_discord_server_id: str = ""
+    organization_logo: str = ""
     event_repeater: Optional[int] = None
     event_repeater_id: Optional[int] = None
     event_repeater_name: Optional[str] = None
     tournament: Optional[int] = None
     tournament_name: str = ""
     tournament_league: Optional[int] = None
+
+    @property
+    def pk(self) -> int:
+        return self.id
+
+    @property
+    def organization(self) -> OrgProxy:
+        """Returns OrgProxy so event.organization.name works like Django."""
+        return OrgProxy(
+            pk=self.organization_id,
+            name=self.organization_name,
+            discord_server_id=self.organization_discord_server_id,
+            logo=self.organization_logo,
+        )
 
     # Counts
     signup_count: int = 0
@@ -136,12 +174,26 @@ class RepeaterSubscriber(BaseModel):
     model_config = {"extra": "ignore"}
 
 
+class EventTemplateData(BaseModel):
+    """EventTemplate data for building Discord embeds."""
+
+    name: str = ""
+    template_type: str = ""
+    title: str = ""
+    description: str = ""
+    color: str = "#7289DA"
+    channel_id: str = ""
+    include_rsvp: bool = True
+
+    model_config = {"extra": "ignore"}
+
+
 class ScheduledEventDue(BaseModel):
     """ScheduledEvent due for posting."""
 
     pk: int
     is_recurring: bool = False
     next_post_at: Optional[str] = None
-    template: dict = {}
+    template: EventTemplateData = EventTemplateData()
 
     model_config = {"extra": "ignore"}

@@ -134,7 +134,17 @@ class ScheduledEventDueDriftTest(TestCase):
             "pk": 1,
             "is_recurring": True,
             "next_post_at": "2026-01-01T00:00:00Z",
-            "template": {"name": "Test", "channel_id": "123", "include_rsvp": True},
+            "template": {
+                "name": "Weekly Inhouse",
+                "template_type": "event",
+                "title": "Weekly Inhouse Night",
+                "description": "Join us for the weekly inhouse!",
+                "color": "#7289DA",
+                "channel_id": "123456",
+                "include_rsvp": True,
+            },
         }
         parsed = ScheduledEventDue.model_validate(data)
         self.assertTrue(parsed.is_recurring)
+        self.assertEqual(parsed.template.title, "Weekly Inhouse Night")
+        self.assertEqual(parsed.template.color, "#7289DA")

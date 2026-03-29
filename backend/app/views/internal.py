@@ -345,6 +345,10 @@ def get_due_scheduled_events(request):
             "next_post_at": se.next_post_at.isoformat() if se.next_post_at else None,
             "template": {
                 "name": se.template.name,
+                "template_type": se.template.template_type,
+                "title": se.template.title,
+                "description": se.template.description,
+                "color": se.template.color,
                 "channel_id": se.template.channel_id,
                 "include_rsvp": se.template.include_rsvp,
             },
@@ -371,7 +375,9 @@ def get_event_for_task(request, event_id):
     from events.serializers import EventSerializer
 
     data = EventSerializer(event).data
+    data["organization_id"] = event.organization_id
     data["organization_discord_server_id"] = event.organization.discord_server_id or ""
+    data["organization_logo"] = event.organization.logo or ""
     data["event_repeater_id"] = event.event_repeater_id
     return Response(data)
 

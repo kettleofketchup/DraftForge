@@ -218,16 +218,17 @@ def send_event_announcement(event_id):
         create_event_log,
         create_or_update_announcement,
         create_or_update_signup_message,
+        get_event_for_task,
         get_or_create_discord_event,
         update_discord_event,
     )
     from discordbot.utils import sync_send_embed_with_components
     from events.discord.embeds import build_announcement_v2
 
-    event = Event.objects.select_related("organization", "event_repeater").get(
-        pk=event_id
-    )
-    if event.state != EventState.SIGNUPS_OPEN:
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Failed: event {event_id} not found"
+    if event.state != "signups_open":
         return f"Skipped: event state is {event.state}, not signups_open"
     if not event.discord_announcement or not event.discord_announcement_channel_id:
         return "Skipped: announcement disabled"
@@ -367,13 +368,17 @@ def send_signup_update(event_id):
     Tries the new DiscordEvent.signup_message first, falls back to
     DiscordMessageLog for pre-migration events.
     """
-    from app.internal_client import create_event_log, create_or_update_signup_message
+    from app.internal_client import (
+        create_event_log,
+        create_or_update_signup_message,
+        get_event_for_task,
+    )
     from discordbot.utils import sync_edit_message
     from events.discord.embeds import build_announcement_v2
 
-    event = Event.objects.select_related("organization", "event_repeater").get(
-        pk=event_id
-    )
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Failed: event {event_id} not found"
 
     # Try new model first
     edit_channel_id = None
@@ -452,9 +457,12 @@ def send_signup_update(event_id):
 @shared_task
 def send_new_event_notification(event_id):
     """Notify Discord channel about a new event from a repeater."""
+    from app.internal_client import get_event_for_task
     from events.discord import build_new_event_embed
 
-    event = Event.objects.select_related("organization").get(pk=event_id)
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Failed: event {event_id} not found"
     if not event.discord_announcement or not event.discord_announcement_channel_id:
         return "Skipped: announcements disabled"
     embed = build_new_event_embed(event)
@@ -484,12 +492,15 @@ def create_discord_scheduled_event(event_id):
     from app.internal_client import (
         create_event_log,
         create_message_log,
+        get_event_for_task,
         get_or_create_discord_event,
         update_discord_event,
     )
     from discordbot.utils import DISCORD_API_BASE, _get_headers
 
-    event = Event.objects.select_related("organization").get(pk=event_id)
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Failed: event {event_id} not found"
     if not event.discord_create_event:
         return "Skipped: discord_create_event disabled"
     guild_id = event.organization.discord_server_id
@@ -572,18 +583,14 @@ def create_discord_scheduled_event(event_id):
 @shared_task
 def sync_discord_event_signups(event_id):
     """Sync signup count to Discord scheduled event description."""
-    event = Event.objects.select_related("organization").get(pk=event_id)
+    from app.internal_client import get_event_for_task, get_first_message_log
+
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Failed: event {event_id} not found"
     if not event.discord_sync_signups:
         return "Skipped: sync disabled"
-    creation_log = (
-        DiscordMessageLog.objects.filter(
-            source="create_discord_event",
-            source_id=event.pk,
-            success=True,
-        )
-        .order_by("-created_at")
-        .first()
-    )
+    creation_log = get_first_message_log("create_discord_event", event.pk)
     if not creation_log or not creation_log.discord_message_id:
         return "Skipped: no Discord event found"
     import requests as req
@@ -593,7 +600,7 @@ def sync_discord_event_signups(event_id):
 
     guild_id = event.organization.discord_server_id
     discord_event_id = creation_log.discord_message_id
-    active, confirmed = _signup_counts(event)
+    active, confirmed = event.signup_count, event.confirmed_count
     payload = {
         "description": (
             f"{event.description or ''}\n\n"
@@ -623,23 +630,26 @@ def sync_discord_event_signups(event_id):
 @shared_task
 def mark_interested_discord_event(event_id, user_id):
     """Mark a user as 'interested' on the Discord scheduled event."""
-    event = Event.objects.select_related("organization").get(pk=event_id)
+    from app.internal_client import get_event_for_task, get_first_message_log
+
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Failed: event {event_id} not found"
     if not event.discord_mark_interested:
         return "Skipped: mark_interested disabled"
-    from app.models import CustomUser
 
-    user = CustomUser.objects.get(pk=user_id)
-    if not user.discordId:
+    # Get user's Discord ID via public API
+    from app.internal_client import _api_get
+
+    user_resp = _api_get(f"/users/{user_id}/")
+    if not user_resp or not user_resp.ok:
+        return f"Skipped: user {user_id} not found"
+    user_data = user_resp.json()
+    discord_id = user_data.get("discordId")
+    if not discord_id:
         return "Skipped: user has no discordId"
-    creation_log = (
-        DiscordMessageLog.objects.filter(
-            source="create_discord_event",
-            source_id=event.pk,
-            success=True,
-        )
-        .order_by("-created_at")
-        .first()
-    )
+
+    creation_log = get_first_message_log("create_discord_event", event.pk)
     if not creation_log or not creation_log.discord_message_id:
         return "Skipped: no Discord event found"
     import requests as req
@@ -650,14 +660,14 @@ def mark_interested_discord_event(event_id, user_id):
     discord_event_id = creation_log.discord_message_id
     url = (
         f"{DISCORD_API_BASE}/guilds/{guild_id}/scheduled-events"
-        f"/{discord_event_id}/users/{user.discordId}"
+        f"/{discord_event_id}/users/{discord_id}"
     )
     try:
         response = req.put(url, headers=_get_headers())
-        return f"Marked user {user.pk} interested: {response.status_code}"
+        return f"Marked user {user_id} interested: {response.status_code}"
     except Exception as e:
         logger.exception(
-            "Failed to mark interested for event %s user %s", event.pk, user.pk
+            "Failed to mark interested for event %s user %s", event.pk, user_id
         )
         return f"Failed: {e}"
 
@@ -792,69 +802,52 @@ def send_subscriber_notifications(event_id):
     """
     import time
 
-    from discordbot.models import DiscordEventDM, DMType
+    from app.internal_client import (
+        create_event_dm,
+        get_discord_event_state,
+        get_event_for_task,
+        get_repeater_subscribers,
+        update_event_dm,
+    )
     from discordbot.utils import sync_send_dm
     from events.discord.embeds import build_subscriber_dm_embed
-    from events.models import RepeaterSubscription
-    from org.models import OrgUser
 
-    try:
-        event = Event.objects.select_related("event_repeater", "organization").get(
-            pk=event_id
-        )
-    except Event.DoesNotExist:
+    event = get_event_for_task(event_id)
+    if not event:
         return f"Event {event_id} not found"
 
-    if not event.event_repeater:
+    if not event.event_repeater_id:
         return "No repeater"
 
-    try:
-        discord_event = event.discord_event
-    except DiscordEvent.DoesNotExist:
+    # Check Discord event exists
+    discord_state = get_discord_event_state(event_id)
+    if not discord_state or not discord_state.has_discord_event:
         return "No Discord event"
+    discord_event_pk = discord_state.discord_event_pk
 
     embed = build_subscriber_dm_embed(event)
-    subs = RepeaterSubscription.objects.filter(
-        event_repeater=event.event_repeater
-    ).select_related("user")
+    subscribers = get_repeater_subscribers(event.event_repeater_id)
 
     sent = 0
     skipped = 0
     failed = 0
 
-    for sub in subs:
-        if not sub.user.discordId:
-            continue
-
-        # Get OrgUser — skip if not a member
-        org_user = OrgUser.objects.filter(
-            user=sub.user, organization=event.organization
-        ).first()
-        if not org_user:
-            continue
-
-        # Idempotency: skip if already tracked
-        if DiscordEventDM.objects.filter(
-            discord_event=discord_event,
-            org_user=org_user,
-            dm_type=DMType.SIGNUP_REMINDER,
-        ).exists():
-            skipped += 1
-            continue
-
-        # Create record FIRST via internal API (crash safety + idempotency)
-        from app.internal_client import create_event_dm, update_event_dm
-
+    for sub in subscribers:
+        # Create DM record FIRST via internal API (crash safety + idempotency)
         dm_resp = create_event_dm(
-            discord_event=discord_event.pk,
-            org_user=org_user.pk,
-            dm_type=DMType.SIGNUP_REMINDER,
+            discord_event=discord_event_pk,
+            org_user=sub.org_user_pk,
+            dm_type="signup_reminder",
             delivered=False,
         )
-        dm_pk = dm_resp.json().get("id") if dm_resp and dm_resp.ok else None
+        if not dm_resp or not dm_resp.ok:
+            # Likely already exists (idempotency) or error
+            skipped += 1
+            continue
+        dm_pk = dm_resp.json().get("id")
 
         # Send DM
-        result = sync_send_dm(sub.user.discordId, embed=embed)
+        result = sync_send_dm(sub.discord_id, embed=embed)
 
         # Update delivery status via internal API
         if result and dm_pk:
