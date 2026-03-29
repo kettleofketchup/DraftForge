@@ -28,7 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
-import { createEventInputSchema, GameType, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, type CreateEventInput } from './schemas';
+import { createEventInputSchema, GameType, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, type CreateEventInput } from './schemas';
 import type { LeagueType } from '~/components/league';
 
 interface CreateEventModalProps {
@@ -71,6 +71,7 @@ export function CreateEventModal({
       lobby_steam_league_id: null,
       people_per_team: 5,
       number_of_teams: null,
+      timezone: '',
       discord_notify_new_events: true,
       ...DISCORD_CONFIG_DEFAULTS,
       signup_mode: 'immediate' as const,
@@ -99,6 +100,7 @@ export function CreateEventModal({
         lobby_steam_league_id: orgDefaults.lobby_steam_league_id,
         people_per_team: orgDefaults.people_per_team,
         number_of_teams: orgDefaults.number_of_teams,
+        timezone: orgDefaults.timezone,
         discord_notify_new_events: true,
         signup_mode: 'immediate' as const,
         signup_days_before: 3,
@@ -673,6 +675,32 @@ export function CreateEventModal({
             )}
           />
         )}
+
+        <FormField
+          control={form.control}
+          name="timezone"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Timezone</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger data-testid="event-timezone-input">
+                    <SelectValue placeholder="Select timezone" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {COMMON_TIMEZONES.map((tz) => (
+                    <SelectItem key={tz} value={tz}>{tz.replace(/_/g, ' ')}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Inherited from org defaults
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
           </TabsContent>
 

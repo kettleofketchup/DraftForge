@@ -164,6 +164,33 @@ export const FREQUENCY_LABELS: Record<string, string> = {
 
 export const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+export const COMMON_TIMEZONES = [
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Phoenix',
+  'America/Anchorage',
+  'Pacific/Honolulu',
+  'America/Toronto',
+  'America/Vancouver',
+  'America/Sao_Paulo',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Moscow',
+  'Asia/Dubai',
+  'Asia/Kolkata',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Asia/Shanghai',
+  'Asia/Seoul',
+  'Australia/Sydney',
+  'Australia/Melbourne',
+  'Pacific/Auckland',
+  'UTC',
+] as const;
+
 export const discordConfigSchema = z.object({
   discord_create_event: z.boolean(),
   discord_sync_signups: z.boolean(),
@@ -240,6 +267,7 @@ export const createEventInputSchema = z.object({
   lobby_steam_league_id: z.number().nullable(),
   people_per_team: z.number().int().min(1),
   number_of_teams: z.number().int().min(2).nullable(),
+  timezone: z.string().min(1, 'Timezone is required'),
   discord_notify_new_events: z.boolean().optional(),
   signup_mode: z.enum(['immediate', 'scheduled', 'manual']),
   signup_days_before: z.number().int().min(1).optional(),
