@@ -438,11 +438,16 @@ def build_new_event_embed(event):
     }
 
 
-def _build_reminder_embed(event, title, description, color, extra_fields=None):
+def _build_reminder_embed(
+    event, title, description, color, extra_fields=None, include_buttons=False
+):
     """Shared layout for all reminder embeds — matches announcement style.
 
     Includes: branding (org name + logo), event time, signup count, event page
     link, and optional extra fields.
+
+    Returns dict with 'embed' key always, plus 'components' if include_buttons=True.
+    For backwards compat, also has 'title'/'description'/'color' at top level.
     """
     LOGO_URL = "https://assets.kettle.sh/draftforge/DFLogo.png"
 
@@ -485,7 +490,48 @@ def _build_reminder_embed(event, title, description, color, extra_fields=None):
         if hasattr(event.organization, "logo") and event.organization.logo:
             embed["author"]["icon_url"] = event.organization.logo
 
-    return embed
+    # Build components (buttons) if requested
+    components = []
+    if include_buttons:
+        row = {"type": 1, "components": []}
+
+        # Sign Up button
+        row["components"].append(
+            {
+                "type": 2,
+                "style": 3,  # Success (green)
+                "label": "Sign Up",
+                "custom_id": f"event_signup:{event.pk}",
+                "emoji": {"name": "\u2705"},
+            }
+        )
+
+        # View Event link button
+        if url:
+            row["components"].append(
+                {
+                    "type": 2,
+                    "style": 5,  # Link
+                    "label": "View Event",
+                    "url": url,
+                    "emoji": {"name": "\U0001f310"},
+                }
+            )
+
+        components.append(row)
+
+    # Return both embed dict and the full result for sync_send_embed_with_components
+    result = {
+        # Legacy keys for sync_send_embed (title/description/color)
+        "title": embed["title"],
+        "description": embed["description"],
+        "color": embed["color"],
+        "fields": embed.get("fields"),
+        # Full embed for sync_send_embed_with_components
+        "embed": embed,
+        "components": components,
+    }
+    return result
 
 
 def build_signup_reminder_embed(event):
@@ -501,6 +547,7 @@ def build_signup_reminder_embed(event):
         title=f"\u23f0 {event.name} \u2014 Signup Reminder",
         description=desc,
         color=COLOR_REMINDER,
+        include_buttons=True,
     )
 
 

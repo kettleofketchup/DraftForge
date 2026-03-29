@@ -705,13 +705,13 @@ def check_event_reminders():
             hours=event.discord_signup_reminder_hours
         )
         if now >= threshold:
-            embed = build_signup_reminder_embed(event)
-            sync_send_embed(
+            from discordbot.utils import sync_send_embed_with_components
+
+            result = build_signup_reminder_embed(event)
+            sync_send_embed_with_components(
                 channel_id=event.discord_announcement_channel_id,
-                title=embed["title"],
-                description=embed["description"],
-                color=embed["color"],
-                fields=embed.get("fields"),
+                embed=result["embed"],
+                components=result.get("components"),
                 source="signup_reminder",
                 source_id=event.pk,
             )
