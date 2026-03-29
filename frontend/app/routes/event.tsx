@@ -765,6 +765,13 @@ function SignupsTab({
   );
 
   const signupUserPks = useMemo(() => new Set(signups.map((s) => s.user)), [signups]);
+  const entityContext = useMemo(() => ({ orgId }), [orgId]);
+  const handleAddUser = useCallback(async (payload: { user_id: number }) => {
+    const resp = await adminAddSignup(eventId!, payload.user_id);
+    queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+    return resp;
+  }, [eventId, queryClient]);
+  const checkIsAdded = useCallback((user: { pk: number }) => signupUserPks.has(user.pk), [signupUserPks]);
 
   return (
     <div className="space-y-3">
@@ -782,13 +789,9 @@ function SignupsTab({
             open={addUserOpen}
             onOpenChange={setAddUserOpen}
             title="Add User to Event"
-            entityContext={{ orgId }}
-            onAdd={async (payload) => {
-              const resp = await adminAddSignup(eventId, payload.user_id);
-              queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-              return resp;
-            }}
-            isAdded={(user) => signupUserPks.has(user.pk)}
+            entityContext={entityContext}
+            onAdd={handleAddUser}
+            isAdded={checkIsAdded}
             hasDiscordServer={!!hasDiscordServer}
           />
         </div>
