@@ -12,6 +12,7 @@ import { hydrateTournament } from '~/lib/hydrateTournament';
 import type { TournamentType } from '~/components/tournament/types';
 import TournamentTabs from './tabs/TournamentTabs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
+import { TournamentSettingsModal } from '~/components/tournament/settings/TournamentSettingsModal';
 
 import { getLogger } from '~/lib/logger';
 const log = getLogger('TournamentDetailPage');
@@ -20,6 +21,8 @@ export const TournamentDetailPage: React.FC = () => {
   const { pk, '*': slug } = useParams<{ pk: string; '*': string }>();
   const navigate = useNavigate();
   const pkNum = pk ? parseInt(pk, 10) : null;
+
+  const currentUser = useUserStore((state) => state.currentUser);
 
   // TanStack Query for tournament data
   const { data: tournament, isLoading, error } = useTournament(
@@ -228,14 +231,17 @@ export const TournamentDetailPage: React.FC = () => {
 
   const title = () => {
     return (
-      <>
-        <div className="flex flex-col sm:flex-row sm:items-center mb-2 gap-1">
+      <div className="flex flex-col sm:flex-row sm:items-center mb-2 gap-1">
+        <div className="flex items-center gap-2">
           {tournamentName()}
-          <span className="sm:ml-4 text-base text-base-content/50 font-normal">
-            played on {getDate()}
-          </span>
+          {currentUser?.is_staff && hydratedTournament && (
+            <TournamentSettingsModal tournament={hydratedTournament} />
+          )}
         </div>
-      </>
+        <span className="sm:ml-4 text-base text-base-content/50 font-normal">
+          played on {getDate()}
+        </span>
+      </div>
     );
   };
 
