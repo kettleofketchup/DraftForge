@@ -174,6 +174,7 @@ class EventSlimSerializer(serializers.ModelSerializer):
             "state",
             "game_type",
             "tournament_name",
+            "tournament_league",
             "tournament_type",
             "draft_type",
             "people_per_team",
