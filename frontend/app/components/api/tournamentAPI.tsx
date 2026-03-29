@@ -75,3 +75,22 @@ export async function addTournamentMember(
   );
   return response.data.tournament;
 }
+
+export interface DiscordTournamentLogEntry {
+  id: number;
+  category: string;
+  notification_type: string;
+  message: string;
+  recipient_count: number;
+  success: boolean;
+  created_at: string;
+}
+
+export async function fetchDiscordTournamentLogs(
+  tournamentId: number,
+): Promise<DiscordTournamentLogEntry[]> {
+  const response = await axios.get<DiscordTournamentLogEntry[]>(
+    `/tournaments/${tournamentId}/discord-logs/`,
+  );
+  return response.data;
+}
