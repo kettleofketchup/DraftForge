@@ -198,7 +198,7 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     const createTeam1 = await postWithCsrf(
       context,
       `${API_URL}/tournaments/create-team-from-captain`,
-      { tournament_pk: tournamentPk, captain_pk: 1001 },
+      { tournament_pk: tournamentPk, user_pk: 1001 },
     );
     expect(createTeam1.ok(), `Create team 1 failed: ${await createTeam1.text()}`).toBeTruthy();
 
@@ -206,7 +206,7 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     const createTeam2 = await postWithCsrf(
       context,
       `${API_URL}/tournaments/create-team-from-captain`,
-      { tournament_pk: tournamentPk, captain_pk: 5001 },
+      { tournament_pk: tournamentPk, user_pk: 5001 },
     );
     expect(createTeam2.ok(), `Create team 2 failed: ${await createTeam2.text()}`).toBeTruthy();
 
