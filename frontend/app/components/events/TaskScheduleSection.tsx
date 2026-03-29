@@ -1,10 +1,21 @@
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Play } from 'lucide-react';
 import { toast } from 'sonner';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
+import { ConfirmDialog } from '~/components/ui/dialogs';
+import { UserAvatar } from '~/components/user/UserAvatar';
 import api from '~/components/api/axios';
 import { useUserStore } from '~/store/userStore';
+
+interface FiredByUser {
+  pk: number;
+  username: string;
+  nickname: string | null;
+  discordId: string | null;
+  avatar: string | null;
+}
 
 interface TaskEntry {
   task: string;
@@ -14,6 +25,7 @@ interface TaskEntry {
   description: string;
   check_interval: string | null;
   last_fired_at: string | null;
+  fired_by: FiredByUser | null;
   can_fire: boolean;
 }
 
@@ -68,6 +80,7 @@ export function TaskScheduleSection({ eventId, isAdmin }: TaskScheduleSectionPro
   const { data: tasks, isLoading } = useEventTaskSchedule(eventId);
   const queryClient = useQueryClient();
   const currentUser = useUserStore((state) => state.currentUser);
+  const [confirmTask, setConfirmTask] = useState<TaskEntry | null>(null);
   // Site staff can always fire, plus explicit isAdmin prop
   const canFire = isAdmin || currentUser?.is_staff || currentUser?.is_superuser;
 
@@ -80,7 +93,12 @@ export function TaskScheduleSection({ eventId, isAdmin }: TaskScheduleSectionPro
       queryClient.invalidateQueries({ queryKey: ['event-discord', eventId] });
     },
     onError: (err: any, taskName) => {
-      toast.error(`Failed to fire "${taskName}": ${err?.response?.data?.error || err.message}`);
+      const msg = err?.response?.data?.error || err.message;
+      if (err?.response?.status === 409) {
+        toast.warning(msg);
+      } else {
+        toast.error(`Failed to fire "${taskName}": ${msg}`);
+      }
     },
   });
 
@@ -120,6 +138,7 @@ export function TaskScheduleSection({ eventId, isAdmin }: TaskScheduleSectionPro
             <th className="text-left py-2 hidden sm:table-cell">Timing</th>
             <th className="text-left py-2 hidden md:table-cell">Check</th>
             <th className="text-left py-2">Status</th>
+            <th className="text-left py-2 hidden lg:table-cell">Fired By</th>
             {canFire && <th className="text-right py-2 pr-1 w-16"></th>}
           </tr>
         </thead>
@@ -183,6 +202,28 @@ export function TaskScheduleSection({ eventId, isAdmin }: TaskScheduleSectionPro
                 </Badge>
               </td>
 
+              {/* Fired by */}
+              <td className="py-2.5 hidden lg:table-cell">
+                {task.fired_by ? (
+                  <div className="flex items-center gap-1.5">
+                    <UserAvatar
+                      user={{
+                        nickname: task.fired_by.nickname,
+                        username: task.fired_by.username,
+                        discordId: task.fired_by.discordId,
+                        avatar: task.fired_by.avatar,
+                      }}
+                      size="xs"
+                    />
+                    <span className="text-xs text-foreground truncate max-w-[100px]">
+                      {task.fired_by.nickname || task.fired_by.username}
+                    </span>
+                  </div>
+                ) : task.status === 'fired' ? (
+                  <span className="text-xs text-muted-foreground">Auto</span>
+                ) : null}
+              </td>
+
               {/* Fire button (admin only) */}
               {canFire && (
                 <td className="py-2.5 text-right pr-1">
@@ -191,7 +232,7 @@ export function TaskScheduleSection({ eventId, isAdmin }: TaskScheduleSectionPro
                       variant="ghost"
                       size="sm"
                       className="h-7 w-7 p-0"
-                      onClick={() => fireMutation.mutate(task.task)}
+                      onClick={() => setConfirmTask(task)}
                       disabled={fireMutation.isPending}
                       title={`Fire ${task.label} now`}
                       data-testid={`fire-task-${task.task}`}
@@ -205,6 +246,21 @@ export function TaskScheduleSection({ eventId, isAdmin }: TaskScheduleSectionPro
           ))}
         </tbody>
       </table>
+
+      <ConfirmDialog
+        open={!!confirmTask}
+        onOpenChange={(open) => !open && setConfirmTask(null)}
+        title={`Fire ${confirmTask?.label}?`}
+        description={`This will immediately execute "${confirmTask?.label}" for this event. This action cannot be undone.`}
+        confirmLabel="Fire Now"
+        variant="default"
+        onConfirm={() => {
+          if (confirmTask) {
+            fireMutation.mutate(confirmTask.task);
+            setConfirmTask(null);
+          }
+        }}
+      />
     </div>
   );
 }

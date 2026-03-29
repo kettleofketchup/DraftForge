@@ -174,6 +174,43 @@ export const TournamentDetailPage: React.FC = () => {
     };
   }, [tournament?.league_pk]);
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const isAdmin = currentUser?.is_staff || currentUser?.is_superuser;
+
+  const handleDelete = async () => {
+    if (!tournament?.pk) return;
+    if (!window.confirm('Are you sure you want to permanently delete this tournament? This cannot be undone.')) return;
+    try {
+      await deleteTournament(tournament.pk);
+      toast.success('Tournament deleted');
+      navigate(-1);
+    } catch {
+      toast.error('Failed to delete tournament');
+    }
+  };
+
+  const adminActions = useMemo((): BrandDropdownAction[] => {
+    if (!isAdmin || !tournament) return [];
+    return [
+      {
+        key: 'edit',
+        icon: <Pencil className="h-4 w-4 mr-1.5" />,
+        label: 'Edit',
+        onClick: () => setSettingsOpen(true),
+        variant: 'success',
+        'data-testid': 'tournament-edit-btn',
+      },
+      {
+        key: 'delete',
+        icon: <Trash2 className="h-4 w-4 mr-1.5" />,
+        label: 'Delete',
+        onClick: handleDelete,
+        variant: 'destructive',
+        'data-testid': 'tournament-delete-btn',
+      },
+    ];
+  }, [isAdmin, tournament]);
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -233,43 +270,6 @@ export const TournamentDetailPage: React.FC = () => {
       </h1>
     );
   };
-
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const isAdmin = currentUser?.is_staff || currentUser?.is_superuser;
-
-  const handleDelete = async () => {
-    if (!tournament?.pk) return;
-    if (!window.confirm('Are you sure you want to permanently delete this tournament? This cannot be undone.')) return;
-    try {
-      await deleteTournament(tournament.pk);
-      toast.success('Tournament deleted');
-      navigate(-1);
-    } catch {
-      toast.error('Failed to delete tournament');
-    }
-  };
-
-  const adminActions = useMemo((): BrandDropdownAction[] => {
-    if (!isAdmin || !tournament) return [];
-    return [
-      {
-        key: 'edit',
-        icon: <Pencil className="h-4 w-4 mr-1.5" />,
-        label: 'Edit',
-        onClick: () => setSettingsOpen(true),
-        variant: 'success',
-        'data-testid': 'tournament-edit-btn',
-      },
-      {
-        key: 'delete',
-        icon: <Trash2 className="h-4 w-4 mr-1.5" />,
-        label: 'Delete',
-        onClick: handleDelete,
-        variant: 'destructive',
-        'data-testid': 'tournament-delete-btn',
-      },
-    ];
-  }, [isAdmin, tournament]);
 
   const title = () => {
     return (

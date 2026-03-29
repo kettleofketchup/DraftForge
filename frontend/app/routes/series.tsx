@@ -1,17 +1,21 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarDays, Pencil, Repeat, Users, ArrowLeft } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Bell, BellOff, CalendarDays, Pencil, Repeat, Users } from 'lucide-react';
+import { toast } from 'sonner';
 import { generateMeta } from '~/lib/seo';
 import { EventStateBadge } from '~/components/events';
 import { EditRepeaterModal } from '~/components/events/EditRepeaterModal';
+import { SubscriberList } from '~/components/events/SubscriberList';
 import type { EventType } from '~/components/events/schemas';
 import { Badge } from '~/components/ui/badge';
-import { SecondaryButton } from '~/components/ui/buttons';
+import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import { useOrganization } from '~/components/organization';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
+import { useUserStore } from '~/store/userStore';
+import { subscribeToRepeater, unsubscribeFromRepeater } from '~/components/api/api';
 import api from '~/components/api/axios';
 import type { Route } from './+types/series';
 
@@ -44,6 +48,7 @@ interface RepeaterDetail {
   day_of_week: number | null;
   time_of_day: string;
   is_active: boolean;
+  is_subscribed: boolean;
   subscriber_count: number;
   next_event_date: string | null;
   tournament_name: string;
@@ -118,9 +123,28 @@ export default function SeriesPage() {
   const { data: repeater, isLoading } = useRepeater(id);
   const { data: events } = useRepeaterEvents(id);
   const [editOpen, setEditOpen] = useState(false);
+  const currentUser = useUserStore((state) => state.currentUser);
 
   const { organization } = useOrganization(repeater?.organization);
   const isStaff = useIsOrganizationStaff(organization);
+
+  const subscribeMutation = useMutation({
+    mutationFn: () => subscribeToRepeater(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['repeater', id] });
+      queryClient.invalidateQueries({ queryKey: ['repeater-subscribers', id] });
+      toast.success('Subscribed to notifications');
+    },
+  });
+
+  const unsubscribeMutation = useMutation({
+    mutationFn: () => unsubscribeFromRepeater(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['repeater', id] });
+      queryClient.invalidateQueries({ queryKey: ['repeater-subscribers', id] });
+      toast.success('Unsubscribed from notifications');
+    },
+  });
 
   // Current: signups_open, roll_call, in_progress
   const currentEvents = useMemo(
@@ -181,6 +205,27 @@ export default function SeriesPage() {
           </Link>
         </div>
         <div className="flex items-center gap-2">
+          {currentUser && (
+            repeater.is_subscribed ? (
+              <SecondaryButton
+                size="sm"
+                onClick={() => unsubscribeMutation.mutate()}
+                disabled={unsubscribeMutation.isPending}
+              >
+                <BellOff className="h-4 w-4 mr-1" />
+                Unsubscribe
+              </SecondaryButton>
+            ) : (
+              <PrimaryButton
+                size="sm"
+                onClick={() => subscribeMutation.mutate()}
+                disabled={subscribeMutation.isPending}
+              >
+                <Bell className="h-4 w-4 mr-1" />
+                Subscribe
+              </PrimaryButton>
+            )
+          )}
           {isStaff && (
             <SecondaryButton
               size="sm"
@@ -251,6 +296,13 @@ export default function SeriesPage() {
       {repeater.description && (
         <div className="bg-base-300 border border-border rounded-lg p-4 mb-6">
           <p className="text-sm text-muted-foreground">{repeater.description}</p>
+        </div>
+      )}
+
+      {/* Subscriber list (staff only) */}
+      {isStaff && (
+        <div className="mb-6">
+          <SubscriberList repeaterId={repeater.id} />
         </div>
       )}
 

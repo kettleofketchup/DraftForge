@@ -551,8 +551,8 @@ class Tournament(models.Model):
         help_text="Steam league ID for Dota 2 lobby ticket",
     )
     auto_create_hero_drafts = models.BooleanField(default=False)
-    discord_send_draft_link = models.BooleanField(default=False)
-    discord_send_herodraft_link = models.BooleanField(default=False)
+    discord_send_draft_link = models.BooleanField(default=True)
+    discord_send_herodraft_link = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name

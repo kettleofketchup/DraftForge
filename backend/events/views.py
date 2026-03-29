@@ -539,10 +539,14 @@ class EventViewSet(viewsets.ModelViewSet):
 
         from cacheops import cached_as
 
+        from discordbot.models import DiscordEventDM, DiscordEventLog, DiscordMessageLog
         from discordbot.serializers_discord_event import DiscordEventDetailSerializer
 
         @cached_as(
             DiscordEvent,
+            DiscordEventLog,
+            DiscordEventDM,
+            DiscordMessageLog,
             extra=f"discord_state:{pk}",
             timeout=60,
         )
@@ -779,9 +783,9 @@ def get_event_task_schedule(request, event_id):
     from discordbot.models import DiscordEventLog, DiscordMessageLog
 
     try:
-        event = Event.objects.select_related("organization", "event_repeater").get(
-            pk=event_id
-        )
+        event = Event.objects.select_related(
+            "organization", "event_repeater", "tournament"
+        ).get(pk=event_id)
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -874,7 +878,7 @@ def get_event_task_schedule(request, event_id):
             return entry
 
         # Determine status
-        if task == "subscriber_dm":
+        if task == "signup_reminder":
             s = (
                 "fired"
                 if has_dms
@@ -937,7 +941,8 @@ def get_event_task_schedule(request, event_id):
         _task(
             "signup_reminder",
             "Signup Reminder",
-            enabled=event.discord_signup_reminder and has_channel,
+            enabled=event.discord_signup_reminder
+            and event.event_repeater_id is not None,
             fires_at=(
                 event.scheduled_at
                 - timedelta(hours=event.discord_signup_reminder_hours)
@@ -946,7 +951,9 @@ def get_event_task_schedule(request, event_id):
             ),
             log_source="signup_reminder",
             check_interval="Every 30s",
-            description=f"Posts {event.discord_signup_reminder_hours}h before event",
+            misconfigured=event.discord_signup_reminder
+            and event.event_repeater_id is None,
+            description=f"DMs subscribers who haven't signed up {event.discord_signup_reminder_hours}h before event",
         ),
         _task(
             "confirm_attendance",
@@ -977,18 +984,6 @@ def get_event_task_schedule(request, event_id):
             description=f"Posts {event.discord_profile_reminder_hours}h before event",
         ),
         _task(
-            "subscriber_dm",
-            "Subscriber DM",
-            enabled=event.discord_subscriber_dm and event.event_repeater_id is not None,
-            fires_at=(
-                event.scheduled_at - timedelta(hours=event.discord_subscriber_dm_hours)
-                if event.discord_subscriber_dm
-                else None
-            ),
-            check_interval="Every 30s",
-            description=f"DMs subscribers {event.discord_subscriber_dm_hours}h before event",
-        ),
-        _task(
             "signup_update",
             "Signup Update",
             enabled=event.discord_announcement and has_channel,
@@ -1008,6 +1003,22 @@ def get_event_task_schedule(request, event_id):
             check_interval="Every 60s",
             description="Transitions event from upcoming to signups_open",
         ),
+        _task(
+            "draft_dm",
+            "Team Draft DM",
+            enabled=event.discord_send_draft_link and event.tournament_id is not None,
+            log_source="draft_link",
+            check_interval="On draft start",
+            description="DMs participants the team draft link",
+        ),
+        _task(
+            "herodraft_dm",
+            "Hero Draft DM",
+            enabled=event.discord_send_herodraft_link
+            and event.tournament_id is not None,
+            check_interval="On hero draft start",
+            description="DMs participants the hero draft link",
+        ),
     ]
 
     return Response(tasks)
@@ -1017,18 +1028,18 @@ FIREABLE_TASKS = {
     "announcement": "events.tasks.send_event_announcement",
     "signup_post": "events.tasks.send_event_announcement",
     "scheduled_event": "events.tasks.create_discord_scheduled_event",
-    "signup_reminder": "events.tasks.fire_event_reminder",
+    "signup_reminder": "events.tasks.send_subscriber_notifications",
     "confirm_attendance": "events.tasks.fire_event_reminder",
     "profile_reminder": "events.tasks.fire_event_reminder",
-    "subscriber_dm": "events.tasks.send_subscriber_notifications",
     "signup_update": "events.tasks.send_signup_update",
     "open_signups": "events.tasks.open_scheduled_signups",
+    "draft_dm": "events.tournament_tasks.send_tournament_draft_links",
+    "herodraft_dm": "events.tournament_tasks.send_tournament_herodraft_links",
 }
 
 # Map fire task names to their message log source for idempotency
 TASK_LOG_SOURCES = {
     "announcement": "event_announcement",
-    "signup_reminder": "signup_reminder",
     "confirm_attendance": "attendance_reminder",
     "profile_reminder": "profile_reminder",
 }
@@ -1053,36 +1064,90 @@ def fire_event_task(request, event_id, task_name):
             {"error": f"Unknown task: {task_name}"}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Idempotency: prevent double-fire for tasks with log sources
-    log_source = TASK_LOG_SOURCES.get(task_name)
-    if log_source:
-        from discordbot.models import DiscordMessageLog
+    # Idempotency: prevent double-fire
+    if task_name == "signup_reminder":
+        from discordbot.models import DiscordEventDM, DMType
 
-        if DiscordMessageLog.objects.filter(
-            source=log_source, source_id=event_id, success=True
+        if DiscordEventDM.objects.filter(
+            discord_event__event_id=event_id,
+            dm_type=DMType.SIGNUP_REMINDER,
         ).exists():
             return Response(
-                {"error": f"{task_name} has already been fired for this event"},
+                {"error": "Signup reminder DMs have already been sent for this event"},
                 status=status.HTTP_409_CONFLICT,
             )
+    else:
+        log_source = TASK_LOG_SOURCES.get(task_name)
+        if log_source:
+            from discordbot.models import DiscordMessageLog
+
+            if DiscordMessageLog.objects.filter(
+                source=log_source, source_id=event_id, success=True
+            ).exists():
+                return Response(
+                    {"error": f"{task_name} has already been fired for this event"},
+                    status=status.HTTP_409_CONFLICT,
+                )
 
     from celery import current_app
 
     celery_task = FIREABLE_TASKS[task_name]
 
-    # Reminder tasks: fire per-event with reminder_type and fired_by
-    if task_name in ("signup_reminder", "confirm_attendance", "profile_reminder"):
+    # Signup reminder → send_subscriber_notifications (DMs, takes event_id only)
+    if task_name == "signup_reminder":
+        current_app.send_task(celery_task, args=[event_id])
+    # Channel-post reminders: fire per-event with reminder_type and fired_by
+    elif task_name in ("confirm_attendance", "profile_reminder"):
         current_app.send_task(
             celery_task,
             args=[event_id, task_name],
             kwargs={"fired_by_user_id": request.user.pk},
+        )
+    elif task_name == "draft_dm":
+        if not event.tournament_id:
+            return Response(
+                {"error": "No tournament linked"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        from app.models import Draft
+
+        draft = Draft.objects.filter(tournament=event.tournament).first()
+        if not draft:
+            return Response(
+                {"error": "No draft found for this tournament"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        current_app.send_task(celery_task, args=[event.tournament_id, draft.pk])
+    elif task_name == "herodraft_dm":
+        if not event.tournament_id:
+            return Response(
+                {"error": "No tournament linked"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        from app.models import Game, HeroDraft
+
+        game = Game.objects.filter(tournament=event.tournament).order_by("-pk").first()
+        if not game:
+            return Response(
+                {"error": "No games found"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        herodraft = HeroDraft.objects.filter(game=game).first()
+        if not herodraft:
+            return Response(
+                {"error": "No hero draft found"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        current_app.send_task(
+            celery_task,
+            args=[
+                event.tournament_id,
+                herodraft.pk,
+                game.radiant_team.name if game.radiant_team else "Radiant",
+                game.dire_team.name if game.dire_team else "Dire",
+            ],
         )
     elif task_name in (
         "announcement",
         "signup_post",
         "scheduled_event",
         "signup_update",
-        "subscriber_dm",
     ):
         current_app.send_task(celery_task, args=[event_id])
     else:

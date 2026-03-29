@@ -11,12 +11,14 @@ from cacheops import invalidate_obj
 from django.utils import timezone as tz
 
 from app.models import CustomUser, GameType, League, Organization, PositionsModel
+from discordbot.models import DiscordEvent
 from events.models import (
     Event,
     EventRepeater,
     EventSignup,
     EventState,
     OrgEventDefaults,
+    RepeaterSubscription,
     RepeatFrequency,
     SignupStatus,
 )
@@ -181,6 +183,7 @@ def populate_events_data(force=False):
         org.admins.add(event_admin)
     if site_admin:
         org.admins.add(site_admin)
+        ensure_org_user(site_admin, org, mmr=5000)
     invalidate_obj(org)
 
     # 5. Create a sample EventRepeater + Event for E2E tests
@@ -243,9 +246,10 @@ def populate_events_data(force=False):
         name="Demo Signup Event",
         defaults={
             "description": "Event with active signups for UI viewing.",
-            "scheduled_at": tz.now() + timedelta(days=2),
+            "scheduled_at": tz.now() + timedelta(hours=6),
             "state": EventState.SIGNUPS_OPEN,
             "created_by": event_admin or site_admin,
+            "event_repeater": repeater,
             "tournament_name": "Demo Signup Tournament",
             "tournament_league": league,
             "tournament_type": "single_elimination",
@@ -258,7 +262,17 @@ def populate_events_data(force=False):
             "max_players": 10,
             "discord_announcement": True,
             "discord_announcement_channel_id": "1482767177063858216",
+            "discord_post_signups": True,
+            "discord_post_signups_channel_id": "1482767709279096893",
+            "discord_create_event": True,
+            "discord_signup_reminder": True,
+            "discord_signup_reminder_hours": 24,
         },
+    )
+    # Create DiscordEvent so the Discord tab works
+    DiscordEvent.objects.update_or_create(
+        event=demo_signup_event,
+        defaults={"guild_id": EVENTS_ORG.discord_server_id},
     )
     # Add signups from first 6 players
     for user_data in EVENTS_USERS[:6]:
@@ -267,6 +281,12 @@ def populate_events_data(force=False):
             event=demo_signup_event,
             user=user,
             defaults={"status": SignupStatus.APPROVED},
+        )
+    # Subscribe site admin (kettleofketchup) to the Weekly Inhouse repeater
+    if site_admin:
+        RepeaterSubscription.objects.update_or_create(
+            event_repeater=repeater,
+            user=site_admin,
         )
 
     demo_rollcall_event, _ = Event.objects.update_or_create(
@@ -290,6 +310,10 @@ def populate_events_data(force=False):
             "discord_announcement": True,
             "discord_announcement_channel_id": "1482767177063858216",
         },
+    )
+    DiscordEvent.objects.update_or_create(
+        event=demo_rollcall_event,
+        defaults={"guild_id": EVENTS_ORG.discord_server_id},
     )
     # Add signups — 6 confirmed, 4 approved (waiting)
     for i, user_data in enumerate(EVENTS_USERS[:10]):
@@ -320,6 +344,10 @@ def populate_events_data(force=False):
             "max_players": 10,
         },
     )
+    DiscordEvent.objects.update_or_create(
+        event=demo_past_event,
+        defaults={"guild_id": EVENTS_ORG.discord_server_id},
+    )
     # Add past signups — all confirmed
     for user_data in EVENTS_USERS[:8]:
         user = CustomUser.objects.get(pk=user_data.pk)
@@ -330,6 +358,50 @@ def populate_events_data(force=False):
         )
 
     print(f"    Created 3 demo events with signups")
+
+    # 5c. Draft Test Tournament — ready for draft start, stable PK for browser testing
+    from app.models import Team, Tournament
+
+    draft_tournament, _ = Tournament.objects.update_or_create(
+        pk=100,
+        defaults={
+            "name": "Draft Test Tournament",
+            "league": league,
+            "tournament_type": "single_elimination",
+            "game_type": GameType.DOTA2,
+            "draft_type": "shuffle",
+            "people_per_team": 5,
+            "number_of_teams": 2,
+            "date_played": tz.now() + timedelta(hours=2),
+            "timezone": EVENTS_ORG.timezone,
+            "state": "in_progress",
+            "discord_send_draft_link": True,
+            "discord_send_herodraft_link": True,
+        },
+    )
+    # Add 10 players (you + 9 event players)
+    draft_players = [site_admin] + [
+        CustomUser.objects.get(pk=u.pk) for u in EVENTS_USERS[:9]
+    ]
+    draft_tournament.users.set([p for p in draft_players if p])
+    # Create 2 teams with captains (you + event_player_1)
+    team_a, _ = Team.objects.update_or_create(
+        tournament=draft_tournament,
+        name="Team Alpha",
+        defaults={"captain": site_admin, "draft_order": 1},
+    )
+    team_b, _ = Team.objects.update_or_create(
+        tournament=draft_tournament,
+        name="Team Beta",
+        defaults={
+            "captain": CustomUser.objects.get(pk=EVENTS_USERS[0].pk),
+            "draft_order": 2,
+        },
+    )
+    # Add captains as team members
+    team_a.members.add(site_admin)
+    team_b.members.add(CustomUser.objects.get(pk=EVENTS_USERS[0].pk))
+    print(f"    Created Draft Test Tournament (pk=100) with 10 players, 2 captains")
 
     # 6. Create org event defaults
     OrgEventDefaults.objects.update_or_create(

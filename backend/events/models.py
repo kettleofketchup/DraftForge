@@ -175,7 +175,8 @@ class DiscordEventConfigMixin(models.Model):
         help_text="Additional info shown in the Discord event",
     )
     discord_signup_reminder = models.BooleanField(
-        default=False, help_text="Send a signup reminder before the event"
+        default=True,
+        help_text="DM subscribers who haven't signed up before the event",
     )
     discord_signup_reminder_hours = models.IntegerField(
         default=24, help_text="Hours before event to send signup reminder"
@@ -265,8 +266,14 @@ class DiscordEventConfigMixin(models.Model):
 class DiscordTournamentConfigMixin(models.Model):
     """Discord notification options for tournaments created from events."""
 
-    discord_send_draft_link = models.BooleanField(default=False)
-    discord_send_herodraft_link = models.BooleanField(default=False)
+    discord_send_draft_link = models.BooleanField(
+        default=True,
+        help_text="DM participants the draft link when the team draft starts",
+    )
+    discord_send_herodraft_link = models.BooleanField(
+        default=True,
+        help_text="DM participants the hero draft link when a hero draft starts",
+    )
 
     class Meta:
         abstract = True

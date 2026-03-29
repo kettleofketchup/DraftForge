@@ -35,6 +35,8 @@ export function meta({ data }: Route.MetaArgs) {
 
 import { useState, useCallback, useMemo } from 'react';
 import {
+  Bell,
+  BellOff,
   Building2,
   Loader2,
   Users,
@@ -45,6 +47,7 @@ import {
   UserCheck,
   UserX,
   Pencil,
+  Repeat,
   ShieldAlert,
   ArrowDownToLine,
   Undo2,
@@ -73,6 +76,8 @@ import {
   useEventActionMutation,
   useSignupActionMutations,
 } from '~/hooks/useEvent';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { subscribeToRepeater, unsubscribeFromRepeater } from '~/components/api/api';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrganization } from '~/components/organization';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
@@ -80,6 +85,7 @@ import { usePageNav } from '~/hooks/usePageNav';
 import { useUserStore } from '~/store/userStore';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
+import api from '~/components/api/axios';
 
 export default function EventPage() {
   const { eventId, tab } = useParams<{ eventId: string; tab?: string }>();
@@ -102,9 +108,37 @@ export default function EventPage() {
   const isAdmin = useIsOrganizationStaff(eventOrg);
 
   // Mutations
+  const queryClient = useQueryClient();
   const rsvpMutation = useRsvpMutation(id ?? 0);
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
+
+  // Repeater subscription state
+  const repeaterId = event?.event_repeater;
+  const { data: repeaterData } = useQuery({
+    queryKey: ['repeater', repeaterId],
+    queryFn: () => api.get(`/events/repeaters/${repeaterId}/`).then((r) => r.data),
+    enabled: !!repeaterId && !!currentUser,
+  });
+  const isSubscribed = repeaterData?.is_subscribed ?? false;
+
+  const subscribeMutation = useMutation({
+    mutationFn: () => subscribeToRepeater(repeaterId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['repeater', repeaterId] });
+      queryClient.invalidateQueries({ queryKey: ['repeater-subscribers', repeaterId] });
+      toast.success('Subscribed to event series notifications');
+    },
+  });
+
+  const unsubscribeMutation = useMutation({
+    mutationFn: () => unsubscribeFromRepeater(repeaterId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['repeater', repeaterId] });
+      queryClient.invalidateQueries({ queryKey: ['repeater-subscribers', repeaterId] });
+      toast.success('Unsubscribed from event series notifications');
+    },
+  });
 
   const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
     if (!event) return [];
@@ -301,23 +335,39 @@ export default function EventPage() {
 
       {/* Page Header */}
       <div className="space-y-4">
-        {/* Row 1: Title (left) + Org (right on md+) */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        {/* Row 1: Title (left) + Org/Series (right, lg+ only) */}
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
           <h1 className="text-xl sm:text-2xl lg:text-4xl font-bold min-w-0">
             {event.name}
           </h1>
-          {event.organization_name && (
-            <HighlightButton
-              size="sm"
-              onClick={() => navigate(`/organizations/${event.organization}`)}
-              avatarUrl={eventOrg?.logo || undefined}
-              avatarAlt={event.organization_name}
-              className="shrink-0"
-            >
-              {!eventOrg?.logo && <Building2 className="h-4 w-4 mr-1.5" />}
-              {event.organization_name}
-            </HighlightButton>
-          )}
+          <div className="hidden lg:flex flex-wrap items-center gap-2 shrink-0">
+            {event.organization_name && (
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Organization</span>
+                <HighlightButton
+                  size="sm"
+                  onClick={() => navigate(`/organizations/${event.organization}`)}
+                  avatarUrl={eventOrg?.logo || undefined}
+                  avatarAlt={event.organization_name}
+                >
+                  {!eventOrg?.logo && <Building2 className="h-4 w-4 mr-1.5" />}
+                  {event.organization_name}
+                </HighlightButton>
+              </div>
+            )}
+            {event.event_repeater && event.event_repeater_name && (
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Event Series</span>
+                <HighlightButton
+                  size="sm"
+                  onClick={() => navigate(`/event-series/${event.event_repeater}`)}
+                >
+                  <Repeat className="h-4 w-4 mr-1.5" />
+                  {event.event_repeater_name}
+                </HighlightButton>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Row 2: Status + Date */}
@@ -329,14 +379,14 @@ export default function EventPage() {
           </Badge>
         </div>
 
-        {/* Row 3: Admin button group (left) + RSVP (right) */}
-        {(isAdmin || (currentUser && event.state === EventState.SIGNUPS_OPEN && signups)) && (
+        {/* Row 3: Admin button group (left) + Subscribe/RSVP (right) */}
+        {(isAdmin || (currentUser && event.state === EventState.SIGNUPS_OPEN && signups) || (currentUser && event.event_repeater)) && (
           <div className="flex items-center justify-between gap-3">
             {/* Admin actions — left side */}
             {isAdmin ? (
               <>
                 {/* Desktop: button group */}
-                <div className="hidden md:inline-flex items-center rounded-lg overflow-hidden shadow-lg shadow-black/20 [&_[data-slot=button]]:rounded-none [&_[data-slot=button]]:shadow-none [&_[data-slot=button]]:border-b-0">
+                <div className="hidden md:flex items-center gap-2">
                   <SecondaryButton
                     color="emerald"
                     size="sm"
@@ -388,8 +438,6 @@ export default function EventPage() {
                         size="sm"
                         onClick={() => actions.cancelEvent.mutate()}
                         loading={actions.cancelEvent.isPending}
-                        depth={false}
-                        className="bg-gradient-to-r from-red-700/80 to-violet-900/80 hover:from-red-600/80 hover:to-violet-800/80"
                         data-testid="event-cancel-btn"
                       >
                         <XCircle className="h-4 w-4 mr-1.5" />
@@ -407,8 +455,6 @@ export default function EventPage() {
                       }
                     }}
                     loading={actions.deleteEvent.isPending}
-                    depth={false}
-                    className="bg-gradient-to-r from-red-700/80 to-violet-900/80 hover:from-red-600/80 hover:to-violet-800/80"
                     data-testid="event-delete-btn"
                   >
                     <Trash2 className="h-4 w-4 mr-1.5" />
@@ -431,7 +477,29 @@ export default function EventPage() {
               <div />
             )}
 
-            {/* RSVP — right side, always inline */}
+            {/* Right side: Subscribe + RSVP */}
+            <div className="flex items-center gap-2">
+            {event.event_repeater && currentUser && (
+              isSubscribed ? (
+                <SecondaryButton
+                  size="sm"
+                  onClick={() => unsubscribeMutation.mutate()}
+                  disabled={unsubscribeMutation.isPending}
+                >
+                  <BellOff className="h-4 w-4 mr-1" />
+                  Unsubscribe
+                </SecondaryButton>
+              ) : (
+                <PrimaryButton
+                  size="sm"
+                  onClick={() => subscribeMutation.mutate()}
+                  disabled={subscribeMutation.isPending}
+                >
+                  <Bell className="h-4 w-4 mr-1" />
+                  Subscribe
+                </PrimaryButton>
+              )
+            )}
             {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && !mySignup && !myCancelledSignup && (
               <PrimaryButton
                 size="sm"
@@ -466,6 +534,7 @@ export default function EventPage() {
                 Cancel RSVP
               </DestructiveButton>
             )}
+            </div>
           </div>
         )}
       </div>
@@ -490,6 +559,11 @@ export default function EventPage() {
 
           <TabsContent value="details">
             <DetailsTab event={event} />
+            {isAdmin && event.event_repeater && (
+              <div className="mt-4">
+                <SubscriberList repeaterId={event.event_repeater} />
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="signups">
@@ -650,11 +724,6 @@ function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>[
         </Card>
       )}
 
-      {event.event_repeater && (
-        <div className="md:col-span-2 lg:col-span-3">
-          <SubscriberList repeaterId={event.event_repeater} />
-        </div>
-      )}
     </div>
   );
 }

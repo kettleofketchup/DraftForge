@@ -31,8 +31,13 @@ def send_tournament_draft_links(tournament_id, draft_id):
     if not tournament.discord_send_draft_link:
         return "Config disabled"
 
-    embed = build_draft_link_embed(tournament.name, tournament.draft_type, draft_id)
-    components = build_draft_link_components(draft_id)
+    embed = build_draft_link_embed(
+        tournament.name,
+        tournament.draft_type,
+        tournament_id,
+        date_played=tournament.date_played,
+    )
+    components = build_draft_link_components(tournament_id)
     participants = get_tournament_participants(tournament_id)
 
     # Create tournament log first so individual DM message logs can link to it

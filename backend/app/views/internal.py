@@ -319,13 +319,11 @@ def get_repeater_subscribers(request, repeater_id):
             user=sub.user,
             organization=sub.event_repeater.organization,
         ).first()
-        if not org_user:
-            continue
         data.append(
             {
                 "user_pk": sub.user.pk,
                 "discord_id": sub.user.discordId,
-                "org_user_pk": org_user.pk,
+                "org_user_pk": org_user.pk if org_user else None,
             }
         )
     return Response(data)
@@ -606,6 +604,11 @@ def create_event_dm(request):
     if err:
         return err
     data = {k: v for k, v in request.data.items() if k in DM_CREATE_FIELDS}
+    # Map FK fields to _id columns for raw PK assignment
+    if "discord_event" in data:
+        data["discord_event_id"] = data.pop("discord_event")
+    if "org_user" in data:
+        data["org_user_id"] = data.pop("org_user")
     dm = DiscordEventDM.objects.create(**data)
     return Response({"id": dm.pk}, status=status.HTTP_201_CREATED)
 
@@ -692,6 +695,7 @@ def get_tournament_for_task(request, tournament_id):
             "id": t.pk,
             "name": t.name,
             "state": t.state,
+            "date_played": t.date_played.isoformat() if t.date_played else None,
             "auto_create_hero_drafts": t.auto_create_hero_drafts,
             "discord_send_draft_link": t.discord_send_draft_link,
             "discord_send_herodraft_link": t.discord_send_herodraft_link,

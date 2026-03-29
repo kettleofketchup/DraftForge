@@ -200,7 +200,7 @@ export const DISCORD_CONFIG_DEFAULTS = {
   discord_event_title: '',
   discord_event_description: '',
   discord_event_info: '',
-  discord_signup_reminder: false,
+  discord_signup_reminder: true,
   discord_signup_reminder_hours: 24,
   discord_confirm_attendance: false,
   discord_confirm_attendance_hours: 2,

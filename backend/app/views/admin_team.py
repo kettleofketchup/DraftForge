@@ -193,6 +193,7 @@ def add_org_admin(request, org_id):
         )
 
     org.admins.add(user)
+    OrgUser.objects.get_or_create(user=user, organization=org)
     invalidate_obj(org)
 
     # Log the action
@@ -281,6 +282,7 @@ def add_org_staff(request, org_id):
         )
 
     org.staff.add(user)
+    OrgUser.objects.get_or_create(user=user, organization=org)
     invalidate_obj(org)
 
     # Log the action

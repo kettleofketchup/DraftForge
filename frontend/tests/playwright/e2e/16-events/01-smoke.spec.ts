@@ -56,9 +56,9 @@ test.describe('Events - List Page (@cicd)', () => {
   test('filters events by organization', async ({ page }) => {
     await visitAndWaitForHydration(page, '/events');
 
-    // Select Events Test Org in filter
+    // Select Events Test Org in filter (Popover with button items)
     await page.getByTestId('events-org-filter').click();
-    await page.getByRole('option', { name: 'Events Test Org' }).click();
+    await page.getByRole('button', { name: 'Events Test Org' }).click();
 
     // Should show the E2E Signup Event card
     await expect(page.getByText('E2E Signup Event')).toBeVisible({ timeout: 10000 });

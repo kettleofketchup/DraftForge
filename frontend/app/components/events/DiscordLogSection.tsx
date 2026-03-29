@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Eye } from 'lucide-react';
 import { getEventDiscordState } from '~/components/api/api';
 import type { DiscordEventState } from '~/components/events/schemas';
 import { LogCategory, LOG_CATEGORY_LABELS } from '~/components/events/schemas';
 import { Badge } from '~/components/ui/badge';
+import { Button } from '~/components/ui/button';
+import { UserStrip } from '~/components/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
@@ -33,6 +36,7 @@ export function DiscordLogSection({ eventId, isAdmin }: DiscordLogSectionProps) 
   const { data: discordState, isLoading } = useQuery({
     queryKey: ['event-discord', eventId],
     queryFn: () => getEventDiscordState(eventId),
+    refetchInterval: 15_000,
   });
   const [activeFilter, setActiveFilter] = useState<number | null>(null);
   const [selectedLog, setSelectedLog] = useState<DiscordEventState['logs'][number] | null>(null);
@@ -44,13 +48,34 @@ export function DiscordLogSection({ eventId, isAdmin }: DiscordLogSectionProps) 
     return <div className="text-muted-foreground p-4">No Discord integration configured for this event.</div>;
   }
 
+  // Merge DMs into activity log as synthetic NOTIFICATION entries
+  const allLogs = useMemo(() => {
+    const dmLogs: DiscordEventState['logs'] = discordState.dms.map((dm) => ({
+      id: -dm.id, // negative to avoid collisions
+      category: LogCategory.NOTIFICATION,
+      category_display: 'Notification',
+      action: `DM: ${dm.dm_type_display}`,
+      target_type: dm.nickname || dm.username || '',
+      discord_user_id: dm.discord_user_id || '',
+      discord_username: dm.nickname || dm.username || '',
+      message_id: dm.message_id || null,
+      status_code: null,
+      error_message: dm.delivered ? '' : (dm.can_send ? 'Pending delivery' : 'User has no Discord'),
+      success: dm.delivered,
+      created_at: dm.sent_at || dm.created_at,
+    }));
+    return [...discordState.logs, ...dmLogs].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [discordState.logs, discordState.dms]);
+
   const filteredLogs = activeFilter
-    ? discordState.logs.filter((log: DiscordEventState['logs'][number]) => log.category === activeFilter)
-    : discordState.logs;
+    ? allLogs.filter((log) => log.category === activeFilter)
+    : allLogs;
 
   // Count per category
   const categoryCounts: Record<number, number> = {};
-  for (const log of discordState.logs) {
+  for (const log of allLogs) {
     categoryCounts[log.category] = (categoryCounts[log.category] || 0) + 1;
   }
 
@@ -85,13 +110,11 @@ export function DiscordLogSection({ eventId, isAdmin }: DiscordLogSectionProps) 
             Task Schedule
           </TabsTrigger>
           <TabsTrigger value="activity" data-testid="discord-subtab-activity">
-            Activity Log ({discordState.logs.length})
+            Activity Log ({allLogs.length})
           </TabsTrigger>
-          {discordState.dms.length > 0 && (
-            <TabsTrigger value="dms" data-testid="discord-subtab-dms">
-              DM History ({discordState.dms.length})
-            </TabsTrigger>
-          )}
+          <TabsTrigger value="dms" data-testid="discord-subtab-dms">
+            DM History ({discordState.dms.length})
+          </TabsTrigger>
         </TabsList>
 
         {/* Task Schedule */}
@@ -111,7 +134,7 @@ export function DiscordLogSection({ eventId, isAdmin }: DiscordLogSectionProps) 
                   : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
               }`}
             >
-              All ({discordState.logs.length})
+              All ({allLogs.length})
             </button>
             {Object.entries(LOG_CATEGORY_LABELS).map(([id, label]) => {
               const count = categoryCounts[Number(id)] || 0;
@@ -184,31 +207,60 @@ export function DiscordLogSection({ eventId, isAdmin }: DiscordLogSectionProps) 
 
         {/* DM History */}
         <TabsContent value="dms">
-          <div className="space-y-2">
+          <div className="space-y-1">
             {discordState.dms.map((dm: DiscordEventState['dms'][number]) => (
-              <div key={dm.id} className="bg-base-300 rounded p-3 flex items-center gap-3">
-                <UserAvatar
-                  user={{ nickname: dm.nickname, username: dm.username, discordId: dm.discord_user_id }}
-                  size="sm"
-                />
-                <div className="flex-1">
-                  <span className="text-foreground text-sm">{dm.nickname || dm.username}</span>
-                  <span className="text-muted-foreground text-xs ml-2">{dm.dm_type_display}</span>
-                </div>
-                <div className="flex gap-1">
-                  {dm.delivered ? (
-                    <Badge className="bg-success text-xs">Delivered</Badge>
-                  ) : dm.can_send ? (
-                    <Badge className="bg-warning text-xs">Pending</Badge>
-                  ) : (
-                    <Badge variant="destructive" className="text-xs">No Discord</Badge>
-                  )}
-                  {dm.responded && (
-                    <Badge className="bg-info text-xs">Responded</Badge>
-                  )}
-                </div>
-              </div>
+              <UserStrip
+                key={dm.id}
+                user={{
+                  nickname: dm.nickname,
+                  username: dm.username,
+                  discordId: dm.discord_user_id,
+                }}
+                compact
+                showPositions={false}
+                contextSlot={
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">{dm.dm_type_display}</Badge>
+                    {dm.delivered ? (
+                      <Badge className="bg-success/20 text-success border-success/30 text-[10px] px-1.5 py-0">Delivered</Badge>
+                    ) : dm.can_send ? (
+                      <Badge className="bg-warning/20 text-warning border-warning/30 text-[10px] px-1.5 py-0">Pending</Badge>
+                    ) : (
+                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0">No Discord</Badge>
+                    )}
+                    {dm.responded && (
+                      <Badge className="bg-info/20 text-info border-info/30 text-[10px] px-1.5 py-0">Responded</Badge>
+                    )}
+                  </div>
+                }
+                actionSlot={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => setSelectedLog({
+                      id: dm.id,
+                      action: `DM: ${dm.dm_type_display}`,
+                      target_type: dm.nickname || dm.username || '',
+                      success: dm.delivered,
+                      message_id: dm.message_id || undefined,
+                      discord_user_id: dm.discord_user_id || undefined,
+                      discord_username: dm.nickname || dm.username || undefined,
+                      error_message: !dm.delivered && !dm.can_send ? 'User has no Discord ID' : undefined,
+                      created_at: dm.sent_at || dm.created_at,
+                      category: LogCategory.NOTIFICATION,
+                      category_display: 'Notification',
+                    })}
+                    title="View DM details"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                  </Button>
+                }
+              />
             ))}
+            {discordState.dms.length === 0 && (
+              <p className="text-muted-foreground text-sm py-4 text-center">No DMs sent yet.</p>
+            )}
           </div>
         </TabsContent>
       </Tabs>

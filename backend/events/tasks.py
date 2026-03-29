@@ -11,7 +11,7 @@ from discordbot.models import (
     DiscordMessageLog,
 )
 from discordbot.utils import sync_send_embed
-from events.models import Event, EventRepeater, EventState
+from events.models import Event, EventRepeater, EventSignup, EventState, SignupStatus
 from events.services import generate_events_for_repeater
 
 logger = logging.getLogger(__name__)
@@ -136,16 +136,16 @@ def sync_discord_events():
         logger.error("Failed to fetch sync Discord state from internal API")
         return "Failed: could not fetch sync state"
 
-    existing_logs = {tuple(x) for x in state["existing_logs"]}
-    events_with_signup_post = set(state["events_with_signup"])
-    events_with_scheduled = set(state["events_with_scheduled"])
-    events_with_recent_attempt = set(state["events_with_recent_attempt"])
+    existing_logs = {tuple(x) for x in state.existing_logs}
+    events_with_signup_post = set(state.events_with_signup)
+    events_with_scheduled = set(state.events_with_scheduled)
+    events_with_recent_attempt = set(state.events_with_recent_attempt)
 
     signup_posts_created = 0
     notices_created = 0
     discord_events_created = 0
 
-    for event in state["active_events"]:
+    for event in state.active_events:
         pk = event["pk"]
 
         # 1. Signup post — only when signups are actually open
@@ -194,7 +194,7 @@ def sync_discord_events():
             discord_events_created,
         )
     return (
-        f"Scanned {active_events.count()} events: "
+        f"Scanned {len(state.active_events)} events: "
         f"{signup_posts_created} signup posts, "
         f"{discord_events_created} scheduled events created"
     )
@@ -673,6 +673,78 @@ def mark_interested_discord_event(event_id, user_id):
 
 
 @shared_task
+def fire_event_reminder(event_id, reminder_type, fired_by_user_id=None):
+    """Manually fire a specific reminder for a specific event.
+
+    Bypasses time threshold checks but respects idempotency via message log.
+    Called from the admin "Fire" button, not from celery beat.
+    """
+    from app.internal_client import (
+        check_message_log_exists,
+        create_event_log,
+        get_or_create_discord_event,
+    )
+    from discordbot.utils import sync_send_embed_with_components
+    from events.discord import (
+        build_attendance_reminder_embed,
+        build_profile_reminder_embed,
+        build_signup_reminder_embed,
+    )
+
+    REMINDER_MAP = {
+        "signup_reminder": ("signup_reminder", build_signup_reminder_embed),
+        "confirm_attendance": ("attendance_reminder", build_attendance_reminder_embed),
+        "profile_reminder": ("profile_reminder", build_profile_reminder_embed),
+    }
+
+    if reminder_type not in REMINDER_MAP:
+        return f"Unknown reminder type: {reminder_type}"
+
+    source, builder = REMINDER_MAP[reminder_type]
+
+    # Idempotency check
+    if check_message_log_exists(source, event_id):
+        return f"Already fired: {reminder_type} for event {event_id}"
+
+    try:
+        event = Event.objects.select_related("organization").get(pk=event_id)
+    except Event.DoesNotExist:
+        return f"Event {event_id} not found"
+
+    if not event.discord_announcement_channel_id:
+        return f"No announcement channel configured for event {event_id}"
+
+    result = builder(event)
+    response = sync_send_embed_with_components(
+        channel_id=event.discord_announcement_channel_id,
+        embed=result["embed"],
+        components=result.get("components"),
+        source=source,
+        source_id=event.pk,
+        fired_by_user_id=fired_by_user_id,
+    )
+
+    # Log to DiscordEventLog so it shows in the Activity Log tab
+    guild_id = event.organization.discord_server_id
+    if guild_id:
+        de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
+        if de_resp and de_resp.ok:
+            discord_event_pk = de_resp.json().get("id")
+            msg_id = response.get("id") if response else None
+            msg_log_id = response.get("_message_log_id") if response else None
+            create_event_log(
+                discord_event_id=discord_event_pk,
+                action=source,
+                target_type="DiscordMessageLog",
+                message_id=msg_id,
+                message_log_id=msg_log_id,
+                success=bool(response),
+            )
+
+    return f"Fired {reminder_type} for event {event_id}"
+
+
+@shared_task
 def check_event_reminders():
     """Check for events needing reminders. Runs every 30 seconds.
 
@@ -682,6 +754,11 @@ def check_event_reminders():
     """
     from datetime import timedelta
 
+    from app.internal_client import (
+        check_message_log_exists,
+        create_event_log,
+        get_or_create_discord_event,
+    )
     from events.discord import (
         build_attendance_reminder_embed,
         build_profile_reminder_embed,
@@ -690,13 +767,28 @@ def check_event_reminders():
 
     now = timezone.now()
 
-    from app.internal_client import check_message_log_exists
+    def _log_reminder(event, source, response):
+        """Log reminder to DiscordEventLog for the Activity Log tab."""
+        guild_id = getattr(event.organization, "discord_server_id", None)
+        if not guild_id:
+            return
+        de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
+        if de_resp and de_resp.ok:
+            msg_log_id = response.get("_message_log_id") if response else None
+            create_event_log(
+                discord_event_id=de_resp.json().get("id"),
+                action=source,
+                target_type="DiscordMessageLog",
+                message_id=response.get("id") if response else None,
+                message_log_id=msg_log_id,
+                success=bool(response),
+            )
 
-    # 1. Signup reminders
+    # 1. Signup reminders — DM subscribers who haven't signed up yet
     signup_reminder_events = Event.objects.filter(
         state__in=[EventState.SIGNUPS_OPEN],
         discord_signup_reminder=True,
-        discord_announcement_channel_id__gt="",
+        event_repeater__isnull=False,
     )
     for event in signup_reminder_events:
         if check_message_log_exists("signup_reminder", event.pk):
@@ -705,16 +797,7 @@ def check_event_reminders():
             hours=event.discord_signup_reminder_hours
         )
         if now >= threshold:
-            from discordbot.utils import sync_send_embed_with_components
-
-            result = build_signup_reminder_embed(event)
-            sync_send_embed_with_components(
-                channel_id=event.discord_announcement_channel_id,
-                embed=result["embed"],
-                components=result.get("components"),
-                source="signup_reminder",
-                source_id=event.pk,
-            )
+            send_subscriber_notifications.delay(event.pk)
 
     # 2. Attendance confirmation reminders
     attendance_events = Event.objects.filter(
@@ -732,13 +815,14 @@ def check_event_reminders():
             from discordbot.utils import sync_send_embed_with_components
 
             result = build_attendance_reminder_embed(event)
-            sync_send_embed_with_components(
+            response = sync_send_embed_with_components(
                 channel_id=event.discord_announcement_channel_id,
                 embed=result["embed"],
                 components=result.get("components"),
                 source="attendance_reminder",
                 source_id=event.pk,
             )
+            _log_reminder(event, "attendance_reminder", response)
 
     # 3. Profile completion reminders
     profile_events = Event.objects.filter(
@@ -756,45 +840,23 @@ def check_event_reminders():
             from discordbot.utils import sync_send_embed_with_components
 
             result = build_profile_reminder_embed(event)
-            sync_send_embed_with_components(
+            response = sync_send_embed_with_components(
                 channel_id=event.discord_announcement_channel_id,
                 embed=result["embed"],
                 components=result.get("components"),
                 source="profile_reminder",
                 source_id=event.pk,
             )
-
-    # 4. Subscriber DM notifications
-    from discordbot.models import DMType as DMTypeChoices
-
-    dm_events = Event.objects.filter(
-        state__in=[EventState.SIGNUPS_OPEN, EventState.ROLL_CALL],
-        discord_subscriber_dm=True,
-        event_repeater__isnull=False,
-    )
-    for event in dm_events:
-        # Skip if any DMs already sent for this event
-        from discordbot.models import DiscordEventDM
-
-        has_dms = DiscordEventDM.objects.filter(
-            discord_event__event=event,
-            dm_type=DMTypeChoices.SIGNUP_REMINDER,
-        ).exists()
-        if has_dms:
-            continue
-        threshold = event.scheduled_at - timedelta(
-            hours=event.discord_subscriber_dm_hours
-        )
-        if now >= threshold:
-            send_subscriber_notifications(event.pk)
+            _log_reminder(event, "profile_reminder", response)
 
     return "Checked reminders"
 
 
 @shared_task
 def send_subscriber_notifications(event_id):
-    """Send DM to all repeater subscribers for an upcoming event.
+    """Send signup reminder DMs to repeater subscribers who haven't signed up.
 
+    Filters out subscribers who already have an EventSignup for this event.
     Uses create-first pattern for crash safety:
     1. Create DiscordEventDM record (delivered=False)
     2. Send DM
@@ -827,6 +889,13 @@ def send_subscriber_notifications(event_id):
         return "No Discord event"
     discord_event_pk = discord_state.discord_event_pk
 
+    # Get user PKs who already signed up — skip them
+    signed_up_user_pks = set(
+        EventSignup.objects.filter(event_id=event_id)
+        .exclude(status=SignupStatus.CANCELLED)
+        .values_list("user_id", flat=True)
+    )
+
     embed = build_subscriber_dm_embed(event)
     subscribers = get_repeater_subscribers(event.event_repeater_id)
 
@@ -835,36 +904,64 @@ def send_subscriber_notifications(event_id):
     failed = 0
 
     for sub in subscribers:
-        # Create DM record FIRST via internal API (crash safety + idempotency)
-        dm_resp = create_event_dm(
-            discord_event=discord_event_pk,
-            org_user=sub.org_user_pk,
-            dm_type="signup_reminder",
-            delivered=False,
-        )
-        if not dm_resp or not dm_resp.ok:
-            # Likely already exists (idempotency) or error
+        # Skip subscribers who already signed up
+        if sub.user_pk in signed_up_user_pks:
             skipped += 1
             continue
-        dm_pk = dm_resp.json().get("id")
+
+        # Create DM record via internal API (crash safety + idempotency)
+        from discordbot.models import DMType
+
+        dm_pk = None
+        if sub.org_user_pk:
+            dm_resp = create_event_dm(
+                discord_event=discord_event_pk,
+                org_user=sub.org_user_pk,
+                dm_type=DMType.SIGNUP_REMINDER,
+                delivered=False,
+            )
+            if not dm_resp or not dm_resp.ok:
+                # Likely already exists (idempotency) or error
+                skipped += 1
+                continue
+            dm_pk = dm_resp.json().get("id")
 
         # Send DM
         result = sync_send_dm(sub.discord_id, embed=embed)
 
         # Update delivery status via internal API
-        if result and dm_pk:
-            update_event_dm(
-                dm_pk,
-                message_id=result.get("id", ""),
-                sent_at=timezone.now().isoformat(),
-                delivered=True,
-            )
+        if result:
+            if dm_pk:
+                update_event_dm(
+                    dm_pk,
+                    message_id=result.get("id", ""),
+                    sent_at=timezone.now().isoformat(),
+                    delivered=True,
+                )
             sent += 1
         else:
             failed += 1
 
+    # Log completion so check_event_reminders won't re-dispatch
+    # Only log if we actually sent or attempted DMs (not when all were skipped)
+    if sent > 0 or failed > 0:
+        from app.internal_client import create_message_log
+
+        create_message_log(
+            channel_id="dm",
+            embed_data={
+                "type": "signup_reminder_batch",
+                "sent": sent,
+                "skipped": skipped,
+                "failed": failed,
+            },
+            source="signup_reminder",
+            source_id=event_id,
+            success=sent > 0,
+        )
+
     logger.info(
-        "Subscriber DMs for event %s: sent=%d, skipped=%d, failed=%d",
+        "Signup reminder DMs for event %s: sent=%d, skipped=%d, failed=%d",
         event_id,
         sent,
         skipped,

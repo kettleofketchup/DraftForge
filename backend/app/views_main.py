@@ -1058,8 +1058,11 @@ class OrganizationView(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Set creator as owner and admin of the new organization."""
+        from org.models import OrgUser
+
         org = serializer.save(owner=self.request.user)
         org.admins.add(self.request.user)
+        OrgUser.objects.get_or_create(user=self.request.user, organization=org)
 
     def list(self, request, *args, **kwargs):
         cache_key = f"organization_list:{request.get_full_path()}"

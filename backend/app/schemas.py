@@ -169,7 +169,7 @@ class RepeaterSubscriber(BaseModel):
 
     user_pk: int
     discord_id: str
-    org_user_pk: int
+    org_user_pk: Optional[int] = None
 
     model_config = {"extra": "ignore"}
 
@@ -203,6 +203,7 @@ class TournamentTaskData(BaseModel):
     id: int
     name: str
     state: str
+    date_played: Optional[datetime] = None
     auto_create_hero_drafts: bool = False
     discord_send_draft_link: bool = False
     discord_send_herodraft_link: bool = False
