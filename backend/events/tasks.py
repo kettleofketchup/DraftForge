@@ -896,7 +896,9 @@ def send_subscriber_notifications(event_id):
         .values_list("user_id", flat=True)
     )
 
-    embed = build_subscriber_dm_embed(event)
+    dm_data = build_subscriber_dm_embed(event)
+    embed = dm_data["embed"]
+    components = dm_data.get("components")
     subscribers = get_repeater_subscribers(event.event_repeater_id)
 
     sent = 0
@@ -927,7 +929,7 @@ def send_subscriber_notifications(event_id):
             dm_pk = dm_resp.json().get("id")
 
         # Send DM
-        result = sync_send_dm(sub.discord_id, embed=embed)
+        result = sync_send_dm(sub.discord_id, embed=embed, components=components)
 
         # Update delivery status via internal API
         if result:
