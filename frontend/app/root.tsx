@@ -65,6 +65,10 @@ export function DevScripts() {
 
 // Create a client outside component to avoid recreation on renders
 // Exported so route loaders can seed the cache, avoiding double-fetches
+// WARNING: Module-level singleton shared across all concurrent SSR requests.
+// NEVER call setQueryData/prefetchQuery from a server-side loader().
+// Safe today because SSR only renders loading skeletons — no data is cached server-side.
+// If SSR scope expands to render real data, move to per-request factory.
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
