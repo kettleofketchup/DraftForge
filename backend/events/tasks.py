@@ -729,12 +729,13 @@ def check_event_reminders():
             hours=event.discord_confirm_attendance_hours
         )
         if now >= threshold:
-            embed = build_attendance_reminder_embed(event)
-            sync_send_embed(
+            from discordbot.utils import sync_send_embed_with_components
+
+            result = build_attendance_reminder_embed(event)
+            sync_send_embed_with_components(
                 channel_id=event.discord_announcement_channel_id,
-                title=embed["title"],
-                description=embed["description"],
-                color=embed["color"],
+                embed=result["embed"],
+                components=result.get("components"),
                 source="attendance_reminder",
                 source_id=event.pk,
             )
@@ -752,12 +753,13 @@ def check_event_reminders():
             hours=event.discord_profile_reminder_hours
         )
         if now >= threshold:
-            embed = build_profile_reminder_embed(event)
-            sync_send_embed(
+            from discordbot.utils import sync_send_embed_with_components
+
+            result = build_profile_reminder_embed(event)
+            sync_send_embed_with_components(
                 channel_id=event.discord_announcement_channel_id,
-                title=embed["title"],
-                description=embed["description"],
-                color=embed["color"],
+                embed=result["embed"],
+                components=result.get("components"),
                 source="profile_reminder",
                 source_id=event.pk,
             )

@@ -557,6 +557,7 @@ def build_attendance_reminder_embed(event):
         title=f"\u270b {event.name} \u2014 Confirm Attendance",
         description="The event is coming up! Please confirm your attendance by reacting to the signup post.",
         color=COLOR_REMINDER,
+        include_buttons=True,
     )
 
 
@@ -574,6 +575,7 @@ def build_profile_reminder_embed(event):
         title=f"\U0001f464 {event.name} \u2014 Complete Your Profile",
         description=f"Please make sure you have: {req_text}",
         color=COLOR_PROFILE,
+        include_buttons=True,
     )
 
 
