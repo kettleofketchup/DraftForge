@@ -104,7 +104,7 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
         number_of_teams: repeater.number_of_teams,
         frequency: repeater.frequency,
         day_of_week: repeater.day_of_week ?? undefined,
-        time_of_day: repeater.time_of_day.slice(0, 5),
+        time_of_day: repeater.time_of_day?.slice(0, 5) ?? '19:00',
         ends_at: repeater.ends_at ?? '',
         generate_days_ahead: repeater.generate_days_ahead,
         discord_create_event: repeater.discord_create_event,
