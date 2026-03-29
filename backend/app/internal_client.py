@@ -290,3 +290,54 @@ def update_sync_state(pk, **data):
 def update_user_avatar(pk, avatar_url):
     """Update CustomUser avatar field."""
     return _patch(f"/users/{pk}/avatar/", {"avatar": avatar_url})
+
+
+# ---- Tournament reads ----
+
+
+def get_tournament_for_task(pk):
+    """Get tournament config for Celery tasks. Returns TournamentTaskData or None."""
+    from app.schemas import TournamentTaskData
+
+    resp = _get(f"/tournaments/{pk}/full/")
+    if resp and resp.ok:
+        return TournamentTaskData.model_validate(resp.json())
+    return None
+
+
+def get_tournament_participants(tournament_id):
+    """Get participants with Discord IDs. Returns list of TournamentParticipant."""
+    from app.schemas import TournamentParticipant
+
+    resp = _get(f"/tournaments/{tournament_id}/participants/")
+    if resp and resp.ok:
+        return [TournamentParticipant.model_validate(p) for p in resp.json()]
+    return []
+
+
+def get_match_participants(game_id):
+    """Get match players with Discord IDs. Returns list of TournamentParticipant."""
+    from app.schemas import TournamentParticipant
+
+    resp = _get(f"/games/{game_id}/participants/")
+    if resp and resp.ok:
+        return [TournamentParticipant.model_validate(p) for p in resp.json()]
+    return []
+
+
+def get_games_without_herodraft(tournament_id):
+    """Get games needing hero drafts. Returns list of GameWithoutHeroDraft."""
+    from app.schemas import GameWithoutHeroDraft
+
+    resp = _get(f"/tournaments/{tournament_id}/games-without-herodraft/")
+    if resp and resp.ok:
+        return [GameWithoutHeroDraft.model_validate(g) for g in resp.json()]
+    return []
+
+
+# ---- Tournament writes ----
+
+
+def create_herodraft_for_game(game_id):
+    """Atomically create a HeroDraft for a game. Returns response or None."""
+    return _post(f"/games/{game_id}/create-herodraft/", {})

@@ -661,3 +661,170 @@ def transition_event_state(request, pk):
     event.transition_state(new_state)
     invalidate_after_commit(event)
     return Response({"id": event.pk, "state": event.state})
+
+
+# ---------------------------------------------------------------------------
+# Tournament reads (for Celery tasks)
+# ---------------------------------------------------------------------------
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def get_tournament_for_task(request, tournament_id):
+    """Get tournament config data for Celery tasks."""
+    from app.models import Tournament
+
+    try:
+        t = Tournament.objects.get(pk=tournament_id)
+    except Tournament.DoesNotExist:
+        return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+    return Response(
+        {
+            "id": t.pk,
+            "name": t.name,
+            "state": t.state,
+            "auto_create_hero_drafts": t.auto_create_hero_drafts,
+            "discord_send_draft_link": t.discord_send_draft_link,
+            "discord_send_herodraft_link": t.discord_send_herodraft_link,
+            "tournament_type": t.tournament_type,
+            "draft_type": t.draft_type,
+        }
+    )
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def get_tournament_participants(request, tournament_id):
+    """Get tournament participants with Discord IDs (for DM sending)."""
+    from app.models import CustomUser
+
+    users = (
+        CustomUser.objects.filter(
+            teams_as_member__tournament_id=tournament_id,
+            discordId__isnull=False,
+        )
+        .distinct()
+        .values("pk", "discordId", "username")
+    )
+    return Response(
+        [
+            {
+                "user_pk": u["pk"],
+                "discord_id": u["discordId"],
+                "username": u["username"] or "",
+            }
+            for u in users
+        ]
+    )
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def get_match_participants(request, game_id):
+    """Get players from both teams in a match (for hero draft DMs)."""
+    from app.models import CustomUser, Game
+
+    try:
+        game = Game.objects.select_related("radiant_team", "dire_team").get(pk=game_id)
+    except Game.DoesNotExist:
+        return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+    users = (
+        CustomUser.objects.filter(
+            teams_as_member__in=[game.radiant_team, game.dire_team],
+            discordId__isnull=False,
+        )
+        .distinct()
+        .values("pk", "discordId", "username")
+    )
+    return Response(
+        [
+            {
+                "user_pk": u["pk"],
+                "discord_id": u["discordId"],
+                "username": u["username"] or "",
+            }
+            for u in users
+        ]
+    )
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def get_games_without_herodraft(request, tournament_id):
+    """Get games with both teams assigned but no hero draft."""
+    from app.models import Game
+
+    games = Game.objects.filter(
+        tournament_id=tournament_id,
+        radiant_team__isnull=False,
+        dire_team__isnull=False,
+        herodraft__isnull=True,
+    ).select_related("radiant_team", "dire_team")
+    return Response(
+        [
+            {
+                "id": g.pk,
+                "radiant_team_id": g.radiant_team_id,
+                "radiant_team_name": g.radiant_team.name,
+                "dire_team_id": g.dire_team_id,
+                "dire_team_name": g.dire_team.name,
+                "round": g.round,
+                "has_captains": bool(g.radiant_team.captain and g.dire_team.captain),
+            }
+            for g in games
+        ]
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tournament writes (CACHED — invalidate after writes)
+# ---------------------------------------------------------------------------
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def create_herodraft_for_game(request, game_id):
+    """Atomically create a HeroDraft for a game (select_for_update guard).
+
+    Returns existing herodraft if one already exists (idempotent).
+    Returns 400 if teams missing captains.
+    """
+    from cacheops import invalidate_obj
+    from django.db import transaction
+
+    from app.models import DraftTeam, Game, HeroDraft, HeroDraftState
+
+    with transaction.atomic():
+        game = (
+            Game.objects.select_for_update()
+            .select_related("radiant_team", "dire_team")
+            .get(pk=game_id)
+        )
+
+        # Idempotent: return existing
+        if hasattr(game, "herodraft"):
+            return Response({"id": game.herodraft.pk, "created": False})
+
+        if not game.radiant_team.captain or not game.dire_team.captain:
+            return Response(
+                {"error": "Both teams must have captains"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        herodraft = HeroDraft.objects.create(
+            game=game, state=HeroDraftState.WAITING_FOR_CAPTAINS
+        )
+        DraftTeam.objects.create(draft=herodraft, tournament_team=game.radiant_team)
+        DraftTeam.objects.create(draft=herodraft, tournament_team=game.dire_team)
+        invalidate_obj(game)
+        invalidate_after_commit(game)
+
+    return Response(
+        {"id": herodraft.pk, "created": True},
+        status=status.HTTP_201_CREATED,
+    )

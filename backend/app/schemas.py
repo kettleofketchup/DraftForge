@@ -188,6 +188,47 @@ class EventTemplateData(BaseModel):
     model_config = {"extra": "ignore"}
 
 
+class TournamentParticipant(BaseModel):
+    """User with Discord ID for tournament DM sending."""
+
+    user_pk: int
+    discord_id: str
+    username: str = ""
+    model_config = {"extra": "ignore"}
+
+
+class TournamentTaskData(BaseModel):
+    """Tournament data needed by Celery tasks."""
+
+    id: int
+    name: str
+    state: str
+    auto_create_hero_drafts: bool = False
+    discord_send_draft_link: bool = False
+    discord_send_herodraft_link: bool = False
+    tournament_type: str = "double_elimination"
+    draft_type: str = "shuffle"
+
+    @property
+    def pk(self) -> int:
+        return self.id
+
+    model_config = {"extra": "ignore"}
+
+
+class GameWithoutHeroDraft(BaseModel):
+    """Game that needs a hero draft auto-created."""
+
+    id: int
+    radiant_team_id: int
+    radiant_team_name: str = ""
+    dire_team_id: int
+    dire_team_name: str = ""
+    round: int = 1
+    has_captains: bool = False
+    model_config = {"extra": "ignore"}
+
+
 class ScheduledEventDue(BaseModel):
     """ScheduledEvent due for posting."""
 

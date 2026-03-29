@@ -313,15 +313,20 @@ from app.views.internal import (
     create_discord_event_log,
     create_discord_message_log,
     create_event_dm,
+    create_herodraft_for_game,
     create_or_update_announcement,
     create_or_update_signup_message,
     create_tournament_log,
     get_discord_event_state,
     get_due_scheduled_events,
     get_event_for_task,
+    get_games_without_herodraft,
+    get_match_participants,
     get_or_create_discord_event,
     get_repeater_subscribers,
     get_sync_discord_state,
+    get_tournament_for_task,
+    get_tournament_participants,
     search_message_logs,
     transition_event_state,
     update_discord_event,
@@ -351,6 +356,27 @@ urlpatterns += [
     ),
     path("api/internal/scheduled-events/due/", get_due_scheduled_events),
     path("api/internal/events/<int:event_id>/full/", get_event_for_task),
+    # Tournament endpoints
+    path(
+        "api/internal/tournaments/<int:tournament_id>/full/",
+        get_tournament_for_task,
+    ),
+    path(
+        "api/internal/tournaments/<int:tournament_id>/participants/",
+        get_tournament_participants,
+    ),
+    path(
+        "api/internal/tournaments/<int:tournament_id>/games-without-herodraft/",
+        get_games_without_herodraft,
+    ),
+    path(
+        "api/internal/games/<int:game_id>/participants/",
+        get_match_participants,
+    ),
+    path(
+        "api/internal/games/<int:game_id>/create-herodraft/",
+        create_herodraft_for_game,
+    ),
 ]
 
 log.debug(f"Test Environ:  {isTestEnvironment()}")

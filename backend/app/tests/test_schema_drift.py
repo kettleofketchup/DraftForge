@@ -18,10 +18,13 @@ from app.models import CustomUser, Organization
 from app.schemas import (
     DiscordEventState,
     EventTaskData,
+    GameWithoutHeroDraft,
     MessageLogEntry,
     RepeaterSubscriber,
     ScheduledEventDue,
     SyncDiscordState,
+    TournamentParticipant,
+    TournamentTaskData,
 )
 
 
@@ -126,6 +129,92 @@ class RepeaterSubscriberDriftTest(TestCase):
         data = {"user_pk": 1, "discord_id": "123456", "org_user_pk": 10}
         parsed = RepeaterSubscriber.model_validate(data)
         self.assertEqual(parsed.discord_id, "123456")
+
+
+class TournamentTaskDataDriftTest(TestCase):
+    """Verify Tournament model output validates against TournamentTaskData schema."""
+
+    def test_tournament_validates(self):
+        from app.models import Tournament
+        from app.schemas import TournamentTaskData
+
+        t = Tournament.objects.create(
+            name="Test", state="future", date_played=timezone.now()
+        )
+        data = {
+            "id": t.pk,
+            "name": t.name,
+            "state": t.state,
+            "auto_create_hero_drafts": t.auto_create_hero_drafts,
+            "discord_send_draft_link": t.discord_send_draft_link,
+            "discord_send_herodraft_link": t.discord_send_herodraft_link,
+            "tournament_type": t.tournament_type,
+            "draft_type": t.draft_type,
+        }
+        parsed = TournamentTaskData.model_validate(data)
+        self.assertEqual(parsed.pk, t.pk)
+        self.assertFalse(parsed.auto_create_hero_drafts)
+
+    def test_extra_fields_ignored(self):
+        from app.schemas import TournamentTaskData
+
+        data = {
+            "id": 1,
+            "name": "T",
+            "state": "future",
+            "some_new_field": "ignored",
+        }
+        parsed = TournamentTaskData.model_validate(data)
+        self.assertEqual(parsed.id, 1)
+
+    def test_missing_required_field_raises(self):
+        from app.schemas import TournamentTaskData
+
+        with self.assertRaises(ValidationError):
+            TournamentTaskData(name="T")  # missing id and state
+
+
+class GameWithoutHeroDraftDriftTest(TestCase):
+    """Verify GameWithoutHeroDraft schema validates correctly."""
+
+    def test_game_without_herodraft_validates(self):
+        from app.schemas import GameWithoutHeroDraft
+
+        data = {
+            "id": 1,
+            "radiant_team_id": 10,
+            "radiant_team_name": "Team A",
+            "dire_team_id": 20,
+            "dire_team_name": "Team B",
+            "round": 1,
+            "has_captains": True,
+        }
+        parsed = GameWithoutHeroDraft.model_validate(data)
+        self.assertEqual(parsed.id, 1)
+        self.assertTrue(parsed.has_captains)
+
+
+class TournamentParticipantDriftTest(TestCase):
+    """Verify TournamentParticipant schema validates correctly."""
+
+    def test_participant_validates(self):
+        from app.schemas import TournamentParticipant
+
+        data = {"user_pk": 1, "discord_id": "123456789", "username": "player1"}
+        parsed = TournamentParticipant.model_validate(data)
+        self.assertEqual(parsed.discord_id, "123456789")
+
+    def test_extra_fields_ignored(self):
+        from app.schemas import TournamentParticipant
+
+        data = {
+            "user_pk": 1,
+            "discord_id": "123",
+            "username": "p",
+            "extra_field": "ignored",
+        }
+        parsed = TournamentParticipant.model_validate(data)
+        self.assertEqual(parsed.user_pk, 1)
 
 
 class ScheduledEventDueDriftTest(TestCase):
