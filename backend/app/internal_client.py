@@ -159,10 +159,16 @@ def get_event(pk):
 
 
 def get_event_for_task(pk):
-    """Get full event data + org Discord config for celery tasks."""
+    """Get full event data + org Discord config for celery tasks.
+
+    Returns EventTaskData (Pydantic) with typed attribute access,
+    or None if event not found / API error.
+    """
+    from app.schemas import EventTaskData
+
     resp = _get(f"/events/{pk}/full/")
     if resp and resp.ok:
-        return resp.json()
+        return EventTaskData.model_validate(resp.json())
     return None
 
 
@@ -185,10 +191,12 @@ def check_message_log_exists(source, source_id):
 
 
 def search_message_logs(**params):
-    """Search DiscordMessageLog entries. Returns list of dicts."""
+    """Search DiscordMessageLog entries. Returns list of MessageLogEntry."""
+    from app.schemas import MessageLogEntry
+
     resp = _get("/discord/message-logs/", params)
     if resp and resp.ok:
-        return resp.json()
+        return [MessageLogEntry.model_validate(e) for e in resp.json()]
     return []
 
 
@@ -219,26 +227,42 @@ def get_first_message_log(source, source_id):
 
 
 def get_sync_discord_state():
-    """Get bulk Discord sync state for all active events."""
+    """Get bulk Discord sync state. Returns SyncDiscordState or None."""
+    from app.schemas import SyncDiscordState
+
     resp = _get("/discord/sync-state/")
     if resp and resp.ok:
-        return resp.json()
+        return SyncDiscordState.model_validate(resp.json())
+    return None
+
+
+def get_discord_event_state(event_id):
+    """Get Discord event state. Returns DiscordEventState or None."""
+    from app.schemas import DiscordEventState
+
+    resp = _get(f"/discord/event-state/{event_id}/")
+    if resp and resp.ok:
+        return DiscordEventState.model_validate(resp.json())
     return None
 
 
 def get_repeater_subscribers(repeater_id):
-    """Get subscribers for a repeater with Discord IDs."""
+    """Get subscribers for a repeater. Returns list of RepeaterSubscriber."""
+    from app.schemas import RepeaterSubscriber
+
     resp = _get(f"/repeaters/{repeater_id}/subscribers/")
     if resp and resp.ok:
-        return resp.json()
+        return [RepeaterSubscriber.model_validate(s) for s in resp.json()]
     return []
 
 
 def get_due_scheduled_events():
-    """Get ScheduledEvents due for posting."""
+    """Get ScheduledEvents due for posting. Returns list of ScheduledEventDue."""
+    from app.schemas import ScheduledEventDue
+
     resp = _get("/scheduled-events/due/")
     if resp and resp.ok:
-        return resp.json()
+        return [ScheduledEventDue.model_validate(e) for e in resp.json()]
     return []
 
 
