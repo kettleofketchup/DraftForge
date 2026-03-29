@@ -141,9 +141,10 @@ class SignupButton(ui.Button):
         )
 
         if result["action"] == "signed_up":
-            await interaction.response.send_message(
+            await interaction.response.defer()
+            await interaction.followup.send(
                 f"\u2705 You're signed up! Status: **{result['status']}**",
-                ephemeral=True,
+                delete_after=60,
             )
         elif result["action"] == "needs_modal":
             modal = EventSignupModal(
@@ -231,9 +232,10 @@ class TentativeButton(ui.Button):
         )
 
         if result["action"] == "tentative":
-            await interaction.response.send_message(
+            await interaction.response.defer()
+            await interaction.followup.send(
                 "\u2753 Marked as tentative. We'll count you as interested!",
-                ephemeral=True,
+                delete_after=60,
             )
         elif result["action"] == "error":
             await interaction.response.send_message(
@@ -264,9 +266,10 @@ class DeclineButton(ui.Button):
         )
 
         if result["action"] == "declined":
-            await interaction.response.send_message(
+            await interaction.response.defer()
+            await interaction.followup.send(
                 "You've declined the event.",
-                ephemeral=True,
+                delete_after=60,
             )
         elif result["action"] == "not_signed_up":
             await interaction.response.send_message(

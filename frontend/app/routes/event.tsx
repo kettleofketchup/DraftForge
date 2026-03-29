@@ -557,6 +557,11 @@ export default function EventPage() {
             <TabsTrigger value="signups" data-testid="event-tab-signups">
               Signups ({activeSignups.length})
             </TabsTrigger>
+            {tentativeSignups.length > 0 && (
+              <TabsTrigger value="tentative" data-testid="event-tab-tentative">
+                Tentative ({tentativeSignups.length})
+              </TabsTrigger>
+            )}
             <TabsTrigger value="waitlist" data-testid="event-tab-waitlist">
               Waitlist ({waitlistedSignups.length})
             </TabsTrigger>
@@ -583,6 +588,15 @@ export default function EventPage() {
               eventId={event.id}
               orgId={event.organization}
               hasDiscordServer={!!eventOrg?.discord_server_id}
+            />
+          </TabsContent>
+
+          <TabsContent value="tentative">
+            <SignupsTab
+              signups={tentativeSignups}
+              isAdmin={isAdmin}
+              signupActions={signupActions}
+              gameType={event.game_type}
             />
           </TabsContent>
 
