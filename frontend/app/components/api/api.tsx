@@ -141,6 +141,7 @@ export {
   getDiscordChannels,
   getDiscordRoles,
   adminAddSignup,
+  tentativeForEvent,
   subscribeToRepeater, unsubscribeFromRepeater,
   getRepeaterSubscribers,
   getOrgEventDefaults,

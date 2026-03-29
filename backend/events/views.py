@@ -408,6 +408,49 @@ class EventViewSet(viewsets.ModelViewSet):
             )
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=True, methods=["post"])
+    def tentative(self, request, pk=None):
+        """Mark yourself as tentative for an event (interested but not committed).
+        POST /api/events/<pk>/tentative/
+        """
+        event = self.get_object()
+        if event.state != EventState.SIGNUPS_OPEN:
+            return Response(
+                {"error": "Event is not accepting signups"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Check for existing active signup
+        existing = (
+            EventSignup.objects.filter(event=event, user=request.user)
+            .exclude(status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED])
+            .first()
+        )
+        if existing:
+            if existing.status == SignupStatus.TENTATIVE:
+                return Response(
+                    {"error": "Already marked as tentative"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response(
+                {"error": f"Already signed up (status: {existing.status})"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Delete cancelled/rejected signup to allow fresh tentative
+        EventSignup.objects.filter(
+            event=event,
+            user=request.user,
+            status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED],
+        ).delete()
+        signup = EventSignup.objects.create(
+            event=event, user=request.user, status=SignupStatus.TENTATIVE
+        )
+        from app.cache_utils import invalidate_after_commit
+
+        invalidate_after_commit(signup, event)
+        return Response(
+            EventSignupSerializer(signup).data, status=status.HTTP_201_CREATED
+        )
+
     @action(detail=True, methods=["post"], url_path="admin-signup")
     def admin_signup(self, request, pk=None):
         """Admin adds a user to the event signup list.

@@ -118,6 +118,10 @@ def process_rsvp(event, user, event_team=None):
             # Allow re-RSVP after cancellation/rejection — delete old signup
             existing.delete()
             logger.info("Deleted cancelled/rejected signup, allowing re-RSVP")
+        elif existing.status == SignupStatus.TENTATIVE:
+            # Upgrade from tentative to full signup — delete and re-create
+            existing.delete()
+            logger.info("Upgrading tentative signup to full RSVP")
         else:
             raise ValueError("User has already signed up for this event.")
 

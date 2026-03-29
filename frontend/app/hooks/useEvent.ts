@@ -21,6 +21,7 @@ import {
   demoteSignup as demoteSignupAPI,
   reinstateSignup as reinstateSignupAPI,
   rsvpForEvent,
+  tentativeForEvent,
   startRollCall as startRollCallAPI,
   startTournament as startTournamentAPI,
   subscribeToRepeater,
@@ -73,7 +74,20 @@ export function useRsvpMutation(eventId: number) {
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
     },
     onError: () => {
-      // Refetch signups on error (e.g., "already signed up") so UI toggles correctly
+      queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+    },
+  });
+}
+
+export function useTentativeMutation(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => tentativeForEvent(eventId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+    },
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
     },
   });

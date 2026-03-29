@@ -47,6 +47,7 @@ import {
   UserCheck,
   UserX,
   Pencil,
+  HelpCircle,
   Repeat,
   ShieldAlert,
   ArrowDownToLine,
@@ -75,6 +76,7 @@ import {
   useEventSignups,
   useEventSignupUsers,
   useRsvpMutation,
+  useTentativeMutation,
   useEventActionMutation,
   useSignupActionMutations,
 } from '~/hooks/useEvent';
@@ -113,6 +115,7 @@ export default function EventPage() {
   // Mutations
   const queryClient = useQueryClient();
   const rsvpMutation = useRsvpMutation(id ?? 0);
+  const tentativeMutation = useTentativeMutation(id ?? 0);
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
 
@@ -508,29 +511,54 @@ export default function EventPage() {
                 </PrimaryButton>
               )
             )}
+            {/* Not signed up — show Sign Up + Tentative */}
             {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && !mySignup && !myCancelledSignup && (
-              <PrimaryButton
-                size="sm"
-                onClick={() => setShowRsvpConfirm(true)}
-                disabled={rsvpMutation.isPending}
-                data-testid="event-rsvp-btn"
-              >
-                <Users className="h-4 w-4 mr-1.5" />
-                RSVP
-              </PrimaryButton>
+              <>
+                <PrimaryButton
+                  size="sm"
+                  onClick={() => setShowRsvpConfirm(true)}
+                  disabled={rsvpMutation.isPending}
+                  data-testid="event-rsvp-btn"
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                  Sign Up
+                </PrimaryButton>
+                <SecondaryButton
+                  size="sm"
+                  onClick={() => tentativeMutation.mutate()}
+                  disabled={tentativeMutation.isPending}
+                  data-testid="event-tentative-btn"
+                >
+                  <HelpCircle className="h-4 w-4 mr-1.5" />
+                  <span className="hidden sm:inline">Tentative</span>
+                </SecondaryButton>
+              </>
             )}
+            {/* Cancelled — can reinstate */}
             {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && !mySignup && myCancelledSignup && (
-              <SecondaryButton
-                size="sm"
-                onClick={() => signupActions.reinstate.mutate(myCancelledSignup.id)}
-                disabled={signupActions.reinstate.isPending}
-                data-testid="event-reinstate-btn"
-              >
-                <Undo2 className="h-4 w-4 mr-1.5" />
-                Reinstate RSVP
-              </SecondaryButton>
+              <>
+                <SecondaryButton
+                  size="sm"
+                  onClick={() => signupActions.reinstate.mutate(myCancelledSignup.id)}
+                  disabled={signupActions.reinstate.isPending}
+                  data-testid="event-reinstate-btn"
+                >
+                  <Undo2 className="h-4 w-4 mr-1.5" />
+                  Reinstate
+                </SecondaryButton>
+                <SecondaryButton
+                  size="sm"
+                  onClick={() => tentativeMutation.mutate()}
+                  disabled={tentativeMutation.isPending}
+                  data-testid="event-tentative-btn"
+                >
+                  <HelpCircle className="h-4 w-4 mr-1.5" />
+                  <span className="hidden sm:inline">Tentative</span>
+                </SecondaryButton>
+              </>
             )}
-            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && mySignup && (
+            {/* Signed up (active) — show status + cancel */}
+            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && mySignup && mySignup.status !== 'tentative' && (
               <DestructiveButton
                 size="sm"
                 onClick={() => setShowCancelRsvpConfirm(true)}
@@ -541,6 +569,30 @@ export default function EventPage() {
                 <XCircle className="h-4 w-4 mr-1.5" />
                 Cancel RSVP
               </DestructiveButton>
+            )}
+            {/* Tentative — can upgrade to full signup or cancel */}
+            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && mySignup && mySignup.status === 'tentative' && (
+              <>
+                <PrimaryButton
+                  size="sm"
+                  onClick={() => setShowRsvpConfirm(true)}
+                  disabled={rsvpMutation.isPending}
+                  data-testid="event-upgrade-rsvp-btn"
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                  Sign Up
+                </PrimaryButton>
+                <DestructiveButton
+                  size="sm"
+                  onClick={() => setShowCancelRsvpConfirm(true)}
+                  loading={signupActions.cancel.isPending}
+                  depth={false}
+                  data-testid="event-cancel-tentative-btn"
+                >
+                  <XCircle className="h-4 w-4 mr-1.5" />
+                  Cancel
+                </DestructiveButton>
+              </>
             )}
             </div>
           </div>

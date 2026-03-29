@@ -295,6 +295,11 @@ export interface DiscordRole {
   position: number;
 }
 
+export async function tentativeForEvent(eventId: number): Promise<EventSignupType> {
+  const { data } = await axios.post<EventSignupType>(`/events/${eventId}/tentative/`);
+  return data;
+}
+
 export async function adminAddSignup(eventId: number, userId: number) {
   const { data } = await axios.post(`/events/${eventId}/admin-signup/`, { user_id: userId });
   return data;
