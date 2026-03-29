@@ -457,6 +457,26 @@ class TournamentView(viewsets.ModelViewSet):
             self.permission_classes = [IsAuthenticated]
         return super(TournamentView, self).get_permissions()
 
+    @action(detail=True, methods=["get"], url_path="discord-logs")
+    def discord_logs(self, request, pk=None):
+        from discordbot.models import DiscordTournamentLog
+
+        tournament = self.get_object()
+        logs = DiscordTournamentLog.objects.filter(tournament=tournament)
+        data = [
+            {
+                "id": log.pk,
+                "category": log.category,
+                "notification_type": log.notification_type,
+                "message": log.message,
+                "recipient_count": log.recipient_count,
+                "success": log.success,
+                "created_at": log.created_at.isoformat(),
+            }
+            for log in logs
+        ]
+        return Response(data)
+
     def perform_create(self, serializer):
         """Check that user can create tournament in the specified league."""
         from rest_framework.exceptions import PermissionDenied, ValidationError
