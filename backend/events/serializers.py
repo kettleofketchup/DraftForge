@@ -30,6 +30,7 @@ class EventRepeaterSlimSerializer(serializers.ModelSerializer):
             "frequency",
             "day_of_week",
             "time_of_day",
+            "timezone",
             "is_active",
             "subscriber_count",
             "next_event_date",
