@@ -133,9 +133,9 @@ export const TournamentEditForm: React.FC<Props> = ({
       date_played: combineDateAndTime(initialDateTime.date, initialDateTime.time),
       timezone: (tourn as unknown as { timezone?: string })?.timezone || 'America/New_York',
       league: tourn?.league || null,
-      auto_create_hero_drafts: (tourn as any)?.auto_create_hero_drafts || false,
-      discord_send_draft_link: (tourn as any)?.discord_send_draft_link || false,
-      discord_send_herodraft_link: (tourn as any)?.discord_send_herodraft_link || false,
+      auto_create_hero_drafts: tourn?.auto_create_hero_drafts ?? false,
+      discord_send_draft_link: tourn?.discord_send_draft_link ?? false,
+      discord_send_herodraft_link: tourn?.discord_send_herodraft_link ?? false,
     },
   });
 

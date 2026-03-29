@@ -457,7 +457,12 @@ class TournamentView(viewsets.ModelViewSet):
             self.permission_classes = [IsAuthenticated]
         return super(TournamentView, self).get_permissions()
 
-    @action(detail=True, methods=["get"], url_path="discord-logs")
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="discord-logs",
+        permission_classes=[IsAuthenticated],
+    )
     def discord_logs(self, request, pk=None):
         from discordbot.models import DiscordTournamentLog
 

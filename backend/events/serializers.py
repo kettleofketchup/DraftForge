@@ -116,6 +116,10 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "discord_require_battlecup_screenshot",
             "min_mmr",
             "discord_notify_new_events",
+            # DiscordTournamentConfig
+            "auto_create_hero_drafts",
+            "discord_send_draft_link",
+            "discord_send_herodraft_link",
             "subscriber_count",
             "is_subscribed",
             "next_event_date",
@@ -256,6 +260,10 @@ class EventSerializer(serializers.ModelSerializer):
             "discord_require_rank_screenshot",
             "discord_require_battlecup_screenshot",
             "min_mmr",
+            # DiscordTournamentConfig
+            "auto_create_hero_drafts",
+            "discord_send_draft_link",
+            "discord_send_herodraft_link",
         ]
         read_only_fields = [
             "id",
@@ -436,6 +444,10 @@ class OrgEventDefaultsSerializer(serializers.ModelSerializer):
             "discord_require_rank_screenshot",
             "discord_require_battlecup_screenshot",
             "min_mmr",
+            # DiscordTournamentConfig
+            "auto_create_hero_drafts",
+            "discord_send_draft_link",
+            "discord_send_herodraft_link",
         ]
         read_only_fields = ["id", "organization"]
 

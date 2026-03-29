@@ -130,7 +130,7 @@ class SendDraftLinksTaskTest(TestCase):
             TournamentParticipant(user_pk=2, discord_id="222", username="p2"),
         ]
         mock_dm.return_value = {"id": "msg123"}
-        mock_log.return_value = MagicMock(ok=True)
+        mock_log.return_value = MagicMock(ok=True, json=lambda: {"id": 1})
 
         from events.tournament_tasks import send_tournament_draft_links
 
@@ -170,15 +170,16 @@ class SendDraftLinksTaskTest(TestCase):
             TournamentParticipant(user_pk=1, discord_id="111", username="p1"),
         ]
         mock_dm.return_value = {"id": "msg123"}
-        mock_log.return_value = MagicMock(ok=True)
+        mock_log.return_value = MagicMock(ok=True, json=lambda: {"id": 1})
 
         from events.tournament_tasks import send_tournament_draft_links
 
         send_tournament_draft_links(1, 42)
+        # Tournament log is created before DMs (for FK linking)
         mock_log.assert_called_once()
         call_kwargs = mock_log.call_args[1]
         self.assertEqual(call_kwargs["notification_type"], "draft_link")
-        self.assertEqual(call_kwargs["recipient_count"], 1)
+        self.assertEqual(call_kwargs["tournament_id"], 1)
 
 
 class SendHeroDraftLinksTaskTest(TestCase):
@@ -200,7 +201,7 @@ class SendHeroDraftLinksTaskTest(TestCase):
             TournamentParticipant(user_pk=2, discord_id="222", username="p2"),
         ]
         mock_dm.return_value = {"id": "msg123"}
-        mock_log.return_value = MagicMock(ok=True)
+        mock_log.return_value = MagicMock(ok=True, json=lambda: {"id": 1})
 
         from events.tournament_tasks import send_tournament_herodraft_links
 

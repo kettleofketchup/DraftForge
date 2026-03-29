@@ -205,14 +205,6 @@ def search_message_logs(**params):
     return []
 
 
-def get_discord_event_state(event_id):
-    """Get Discord event state (DiscordEvent, logs, DMs) for an event."""
-    resp = _get(f"/discord/event-state/{event_id}/")
-    if resp and resp.ok:
-        return resp.json()
-    return None
-
-
 def get_fired_message_sources(event_id):
     """Get set of fired log sources for an event (for sync_discord_events)."""
     logs = search_message_logs(
@@ -220,7 +212,7 @@ def get_fired_message_sources(event_id):
         success="true",
         limit=100,
     )
-    return {log["source"] for log in logs}
+    return {log.source for log in logs}
 
 
 def get_first_message_log(source, source_id):

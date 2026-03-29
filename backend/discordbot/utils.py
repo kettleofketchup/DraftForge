@@ -107,6 +107,8 @@ def _log_discord_message(
     response_data=None,
     discord_message_id=None,
     success=False,
+    fired_by_user_id=None,
+    tournament_log_id=None,
 ):
     """Log a Discord message send via the internal API (HTTP, not direct DB).
 
@@ -118,7 +120,7 @@ def _log_discord_message(
     from app.internal_client import create_message_log
 
     for attempt in range(2):
-        resp = create_message_log(
+        kwargs = dict(
             channel_id=str(channel_id),
             embed_data=embed_data,
             source=source or "unknown",
@@ -128,6 +130,11 @@ def _log_discord_message(
             discord_message_id=discord_message_id,
             success=success,
         )
+        if fired_by_user_id:
+            kwargs["fired_by_user_id"] = fired_by_user_id
+        if tournament_log_id:
+            kwargs["tournament_log_id"] = tournament_log_id
+        resp = create_message_log(**kwargs)
         if resp and resp.ok:
             return resp.json().get("id")
         if attempt == 0:
@@ -335,6 +342,7 @@ def sync_send_embed_with_components(
     forum_thread_name=None,
     content=None,
     allowed_mentions=None,
+    fired_by_user_id=None,
 ):
     """Send an embed with components to a Discord channel.
 
@@ -404,7 +412,7 @@ def sync_send_embed_with_components(
                 source_id,
             )
 
-        _log_discord_message(
+        log_pk = _log_discord_message(
             channel_id=channel_id,
             embed_data=embed_data,
             source=source,
@@ -413,7 +421,9 @@ def sync_send_embed_with_components(
             response_data=response_data,
             discord_message_id=msg_id,
             success=True,
+            fired_by_user_id=fired_by_user_id,
         )
+        response_data["_message_log_id"] = log_pk
         return response_data
     except requests.RequestException as e:
         status_code = (
@@ -436,6 +446,7 @@ def sync_send_embed_with_components(
             status_code=status_code,
             response_data=resp_data,
             success=False,
+            fired_by_user_id=fired_by_user_id,
         )
         log.error("Failed to send to channel %s: %s", channel_id, e)
         return None
@@ -604,20 +615,37 @@ def sync_create_dm_channel(user_id):
         return None
 
 
-def sync_send_dm(user_id, embed=None, content=None, components=None):
+def sync_send_dm(
+    user_id, embed=None, content=None, components=None, tournament_log_id=None
+):
     """Send a DM to a Discord user.
 
     Creates a DM channel then sends a message with optional embed.
+
+    In test environments (TEST=true), only DMs to TEST_DISCORD_USER_ID
+    are sent. All other DMs return a fake success response.
 
     Args:
         user_id: Discord user ID
         embed: Optional embed dict
         content: Optional text content
         components: Optional components list (action rows)
+        tournament_log_id: Optional FK to link message log to tournament log
 
     Returns:
         dict: API response with message data, or None on error
     """
+    # Test environment safety: only DM the designated test user
+    if getattr(settings, "TEST", False):
+        test_user_id = getattr(settings, "TEST_DISCORD_USER_ID", "")
+        if test_user_id and str(user_id) != str(test_user_id):
+            log.info(
+                "TEST mode: skipping DM to %s (only sending to test user %s)",
+                user_id,
+                test_user_id,
+            )
+            return {"id": "test-fake-message-id", "test_skipped": True}
+
     dm_channel_id = sync_create_dm_channel(user_id)
     if not dm_channel_id:
         return None
@@ -642,9 +670,30 @@ def sync_send_dm(user_id, embed=None, content=None, components=None):
         response.raise_for_status()
         data = response.json()
         log.info("Sent DM to user %s (message_id=%s)", user_id, data.get("id"))
+        if tournament_log_id:
+            _log_discord_message(
+                channel_id=dm_channel_id,
+                embed_data=embed or {},
+                source="tournament_dm",
+                source_id=None,
+                status_code=response.status_code,
+                response_data=data,
+                discord_message_id=data.get("id"),
+                success=True,
+                tournament_log_id=tournament_log_id,
+            )
         return data
     except requests.RequestException as e:
         log.error("Failed to send DM to user %s: %s", user_id, e)
+        if tournament_log_id:
+            _log_discord_message(
+                channel_id=dm_channel_id,
+                embed_data=embed or {},
+                source="tournament_dm",
+                source_id=None,
+                success=False,
+                tournament_log_id=tournament_log_id,
+            )
         return None
 
 

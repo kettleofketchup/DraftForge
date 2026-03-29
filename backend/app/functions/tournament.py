@@ -337,6 +337,12 @@ def generate_draft_rounds(request):
     invalidate_obj(draft)
     invalidate_obj(tournament)
 
+    # Dispatch Discord notification if configured
+    if tournament.discord_send_draft_link:
+        from events.discord.tournament_dispatch import notify_draft_started
+
+        notify_draft_started(tournament, draft)
+
     return Response(_serialize_tournament(tournament), status=201)
 
 
@@ -406,6 +412,12 @@ def rebuild_team(request):
     # Invalidate specific objects after rebuilding teams
     invalidate_obj(draft)
     invalidate_obj(tournament)
+
+    # Dispatch Discord notification if new rounds were built
+    if will_build_rounds and tournament.discord_send_draft_link:
+        from events.discord.tournament_dispatch import notify_draft_started
+
+        notify_draft_started(tournament, draft)
 
     return Response(data, status=201)
 

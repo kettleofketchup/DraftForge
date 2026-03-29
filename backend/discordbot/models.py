@@ -99,6 +99,25 @@ class DiscordMessageLog(models.Model):
     source = models.CharField(max_length=64, default="unknown")
     source_id = models.IntegerField(null=True, blank=True)
 
+    # Link to tournament log (for grouping DM sends under one log entry)
+    tournament_log = models.ForeignKey(
+        "DiscordTournamentLog",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="message_logs",
+    )
+
+    # Manual fire tracking
+    fired_by = models.ForeignKey(
+        "app.CustomUser",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="fired_discord_messages",
+        help_text="User who manually fired this task (null = automatic)",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -312,6 +331,14 @@ class DiscordEventLog(models.Model):
         null=True,
         blank=True,
         related_name="logs",
+    )
+    message_log = models.ForeignKey(
+        DiscordMessageLog,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="event_logs",
+        help_text="Linked outbound message with embed data and Discord API response",
     )
     category = models.IntegerField(
         choices=LogCategory.choices,

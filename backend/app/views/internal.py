@@ -10,6 +10,7 @@ Field whitelists on update endpoints prevent unintended field modifications.
 
 import logging
 
+from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.decorators import (
     api_view,
@@ -64,6 +65,8 @@ def create_discord_message_log(request):
         "status_code",
         "response_data",
         "success",
+        "fired_by_user_id",
+        "tournament_log_id",
     }
     IDEMPOTENT_SOURCES = {
         "signup_reminder",
@@ -76,6 +79,10 @@ def create_discord_message_log(request):
     if err:
         return err
     data = {k: v for k, v in request.data.items() if k in ALLOWED_FIELDS}
+
+    # Map fired_by_user_id → fired_by_id (Django FK column name)
+    if "fired_by_user_id" in data:
+        data["fired_by_id"] = data.pop("fired_by_user_id")
 
     # Idempotency for reminder sources — prevent duplicate posts
     source = data.get("source")
@@ -407,6 +414,7 @@ def create_discord_event_log(request):
         "response_data",
         "success",
         "error_message",
+        "message_log_id",
     }
     data = {k: v for k, v in request.data.items() if k in EVENT_LOG_FIELDS}
     discord_event = DiscordEvent.objects.get(pk=request.data["discord_event_id"])
@@ -705,6 +713,7 @@ def get_tournament_participants(request, tournament_id):
             teams_as_member__tournament_id=tournament_id,
             discordId__isnull=False,
         )
+        .exclude(discordId="")
         .distinct()
         .values("pk", "discordId", "username")
     )
@@ -736,6 +745,7 @@ def get_match_participants(request, game_id):
             teams_as_member__in=[game.radiant_team, game.dire_team],
             discordId__isnull=False,
         )
+        .exclude(discordId="")
         .distinct()
         .values("pk", "discordId", "username")
     )
@@ -794,7 +804,6 @@ def create_herodraft_for_game(request, game_id):
     Returns existing herodraft if one already exists (idempotent).
     Returns 400 if teams missing captains.
     """
-    from cacheops import invalidate_obj
     from django.db import transaction
 
     from app.models import DraftTeam, Game, HeroDraft, HeroDraftState
@@ -821,7 +830,6 @@ def create_herodraft_for_game(request, game_id):
         )
         DraftTeam.objects.create(draft=herodraft, tournament_team=game.radiant_team)
         DraftTeam.objects.create(draft=herodraft, tournament_team=game.dire_team)
-        invalidate_obj(game)
         invalidate_after_commit(game)
 
     return Response(

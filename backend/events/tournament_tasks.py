@@ -35,10 +35,26 @@ def send_tournament_draft_links(tournament_id, draft_id):
     components = build_draft_link_components(draft_id)
     participants = get_tournament_participants(tournament_id)
 
+    # Create tournament log first so individual DM message logs can link to it
+    log_resp = create_tournament_log(
+        tournament_id=tournament_id,
+        category="notification",
+        notification_type="draft_link",
+        message=f"Sending draft link to {len(participants)} participants...",
+        recipient_count=0,
+        success=True,
+    )
+    tournament_log_id = log_resp.json().get("id") if log_resp and log_resp.ok else None
+
     sent = 0
     failed_users = []
     for p in participants:
-        result = sync_send_dm(p.discord_id, embed=embed, components=components)
+        result = sync_send_dm(
+            p.discord_id,
+            embed=embed,
+            components=components,
+            tournament_log_id=tournament_log_id,
+        )
         if result:
             sent += 1
         else:
@@ -47,15 +63,6 @@ def send_tournament_draft_links(tournament_id, draft_id):
     message = f"Sent draft link to {sent}/{len(participants)} participants"
     if failed_users:
         message += f". Failed: {', '.join(failed_users[:10])}"
-
-    create_tournament_log(
-        tournament_id=tournament_id,
-        category="notification",
-        notification_type="draft_link",
-        message=message,
-        recipient_count=sent,
-        success=sent > 0,
-    )
     logger.info("Tournament %d draft links: %s", tournament_id, message)
     return message
 
@@ -88,30 +95,37 @@ def send_tournament_herodraft_links(
     components = build_herodraft_link_components(herodraft_id)
     participants = get_match_participants(game_id)
 
+    # Create tournament log first so individual DM message logs can link to it
+    team_names = f"{radiant_name} vs {dire_name}"
+    log_resp = create_tournament_log(
+        tournament_id=tournament_id,
+        category="notification",
+        notification_type="herodraft_link",
+        message=f"Sending hero draft link to {len(participants)} players ({team_names})...",
+        recipient_count=0,
+        success=True,
+    )
+    tournament_log_id = log_resp.json().get("id") if log_resp and log_resp.ok else None
+
     sent = 0
     failed_users = []
     for p in participants:
-        result = sync_send_dm(p.discord_id, embed=embed, components=components)
+        result = sync_send_dm(
+            p.discord_id,
+            embed=embed,
+            components=components,
+            tournament_log_id=tournament_log_id,
+        )
         if result:
             sent += 1
         else:
             failed_users.append(p.username or p.discord_id)
 
-    team_names = f"{radiant_name} vs {dire_name}"
     message = (
         f"Sent hero draft link to {sent}/{len(participants)} players ({team_names})"
     )
     if failed_users:
         message += f". Failed: {', '.join(failed_users[:10])}"
-
-    create_tournament_log(
-        tournament_id=tournament_id,
-        category="notification",
-        notification_type="herodraft_link",
-        message=message,
-        recipient_count=sent,
-        success=sent > 0,
-    )
     logger.info("Tournament %d herodraft links: %s", tournament_id, message)
     return message
 
