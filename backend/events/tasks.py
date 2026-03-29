@@ -127,102 +127,62 @@ def open_scheduled_signups():
 def sync_discord_events():
     """Reconciliation task: ensure Discord matches the DB for all active events.
 
-    Runs every 5 minutes via celery beat. Scans all active events and ensures:
-    1. Signup posts exist (forum thread or regular message)
-    2. Announcement notices exist (if announcement channel configured)
-    3. Discord scheduled events exist (if discord_create_event enabled)
-
-    Self-heals: catches failed dispatches, late config changes, events created
-    before the Discord feature, worker downtime, and any other gaps.
-
-    Checks both DiscordEvent (new) and DiscordMessageLog (legacy) models.
+    Runs every 5 minutes via celery beat. All reads via internal HTTP API.
     """
-    from datetime import timedelta
+    from app.internal_client import get_sync_discord_state
 
-    from discordbot.models import DiscordMessageLog
+    state = get_sync_discord_state()
+    if not state:
+        logger.error("Failed to fetch sync Discord state from internal API")
+        return "Failed: could not fetch sync state"
 
-    # Only process active events (not completed/cancelled) scheduled within 30 days
-    active_events = Event.objects.filter(
-        state__in=[EventState.UPCOMING, EventState.SIGNUPS_OPEN, EventState.ROLL_CALL],
-        scheduled_at__gte=timezone.now() - timedelta(days=1),
-        scheduled_at__lte=timezone.now() + timedelta(days=30),
-    ).select_related("organization", "event_repeater")
-
-    # Get all existing successful log entries in one query (legacy)
-    existing_logs = set(
-        DiscordMessageLog.objects.filter(
-            success=True,
-            source__in=["event_announcement", "event_notice", "create_discord_event"],
-        ).values_list("source", "source_id")
-    )
-
-    # New model: event IDs that already have posted signup messages
-    events_with_signup_post = set(
-        DiscordEventMsgSignup.objects.filter(has_posted=True).values_list(
-            "event_id", flat=True
-        )
-    )
-
-    # New model: event IDs that already have scheduled Discord events
-    events_with_scheduled = set(
-        DiscordEvent.objects.filter(
-            scheduled_event_id__isnull=False,
-        )
-        .exclude(scheduled_event_id="")
-        .values_list("event_id", flat=True)
-    )
-
-    # Avoid retrying create_scheduled_event that was attempted recently (5 min backoff)
-    events_with_recent_scheduled_attempt = set(
-        DiscordEventLog.objects.filter(
-            action="create_scheduled_event",
-            created_at__gte=timezone.now() - timedelta(minutes=5),
-        ).values_list("discord_event__event_id", flat=True)
-    )
+    existing_logs = {tuple(x) for x in state["existing_logs"]}
+    events_with_signup_post = set(state["events_with_signup"])
+    events_with_scheduled = set(state["events_with_scheduled"])
+    events_with_recent_attempt = set(state["events_with_recent_attempt"])
 
     signup_posts_created = 0
     notices_created = 0
     discord_events_created = 0
 
-    for event in active_events:
+    for event in state["active_events"]:
+        pk = event["pk"]
+
         # 1. Signup post — only when signups are actually open
         has_signup = (
-            event.pk in events_with_signup_post
-            or ("event_announcement", event.pk) in existing_logs
+            pk in events_with_signup_post or ("event_announcement", pk) in existing_logs
         )
         if (
-            event.state == EventState.SIGNUPS_OPEN
-            and event.discord_announcement
-            and event.discord_announcement_channel_id
+            event["state"] == "signups_open"
+            and event["discord_announcement"]
+            and event["discord_announcement_channel_id"]
             and not has_signup
         ):
             try:
-                send_event_announcement(event.pk)
+                send_event_announcement(pk)
                 signup_posts_created += 1
-                logger.info("Sync: created signup post for event %s", event.pk)
+                logger.info("Sync: created signup post for event %s", pk)
             except Exception:
-                logger.exception("Sync: failed signup post for event %s", event.pk)
+                logger.exception("Sync: failed signup post for event %s", pk)
 
         # 2. Discord scheduled event
         has_scheduled = (
-            event.pk in events_with_scheduled
-            or ("create_discord_event", event.pk) in existing_logs
-            or event.pk in events_with_recent_scheduled_attempt
+            pk in events_with_scheduled
+            or ("create_discord_event", pk) in existing_logs
+            or pk in events_with_recent_attempt
         )
         if (
-            event.discord_create_event
-            and event.organization.discord_server_id
+            event["discord_create_event"]
+            and event["organization__discord_server_id"]
             and not has_scheduled
         ):
             try:
-                create_discord_scheduled_event(event.pk)
+                create_discord_scheduled_event(pk)
                 discord_events_created += 1
-                logger.info(
-                    "Sync: created Discord scheduled event for event %s", event.pk
-                )
+                logger.info("Sync: created Discord scheduled event for event %s", pk)
             except Exception:
                 logger.exception(
-                    "Sync: failed Discord scheduled event for event %s", event.pk
+                    "Sync: failed Discord scheduled event for event %s", pk
                 )
 
     total = signup_posts_created + notices_created + discord_events_created

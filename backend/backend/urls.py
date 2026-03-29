@@ -315,7 +315,13 @@ from app.views.internal import (
     create_event_dm,
     create_or_update_announcement,
     create_or_update_signup_message,
+    get_discord_event_state,
+    get_due_scheduled_events,
+    get_event_for_task,
     get_or_create_discord_event,
+    get_repeater_subscribers,
+    get_sync_discord_state,
+    search_message_logs,
     transition_event_state,
     update_discord_event,
     update_event_dm,
@@ -334,6 +340,15 @@ urlpatterns += [
     path("api/internal/discord/scheduled-events/<int:pk>/", update_scheduled_event),
     path("api/internal/events/<int:pk>/transition/", transition_event_state),
     path("api/internal/discord/check-log/", check_message_log_exists),
+    path("api/internal/discord/message-logs/", search_message_logs),
+    path("api/internal/discord/event-state/<int:event_id>/", get_discord_event_state),
+    path("api/internal/discord/sync-state/", get_sync_discord_state),
+    path(
+        "api/internal/repeaters/<int:repeater_id>/subscribers/",
+        get_repeater_subscribers,
+    ),
+    path("api/internal/scheduled-events/due/", get_due_scheduled_events),
+    path("api/internal/events/<int:event_id>/full/", get_event_for_task),
 ]
 
 log.debug(f"Test Environ:  {isTestEnvironment()}")

@@ -158,6 +158,14 @@ def get_event(pk):
     return _api_get(f"/events/{pk}/")
 
 
+def get_event_for_task(pk):
+    """Get full event data + org Discord config for celery tasks."""
+    resp = _get(f"/events/{pk}/full/")
+    if resp and resp.ok:
+        return resp.json()
+    return None
+
+
 def get_events(params=None):
     """List events with filters via public API."""
     return _api_get("/events/", params=params)
@@ -170,10 +178,68 @@ def get_event_signups(event_pk):
 
 def check_message_log_exists(source, source_id):
     """Check if a successful DiscordMessageLog exists for idempotency."""
-    resp = _get(f"/discord/check-log/", {"source": source, "source_id": source_id})
+    resp = _get("/discord/check-log/", {"source": source, "source_id": source_id})
     if resp and resp.ok:
         return resp.json().get("exists", False)
     return False
+
+
+def search_message_logs(**params):
+    """Search DiscordMessageLog entries. Returns list of dicts."""
+    resp = _get("/discord/message-logs/", params)
+    if resp and resp.ok:
+        return resp.json()
+    return []
+
+
+def get_discord_event_state(event_id):
+    """Get Discord event state (DiscordEvent, logs, DMs) for an event."""
+    resp = _get(f"/discord/event-state/{event_id}/")
+    if resp and resp.ok:
+        return resp.json()
+    return None
+
+
+def get_fired_message_sources(event_id):
+    """Get set of fired log sources for an event (for sync_discord_events)."""
+    logs = search_message_logs(
+        source_id=event_id,
+        success="true",
+        limit=100,
+    )
+    return {log["source"] for log in logs}
+
+
+def get_first_message_log(source, source_id):
+    """Get the most recent successful message log for a source+source_id."""
+    logs = search_message_logs(
+        source=source, source_id=source_id, success="true", limit=1
+    )
+    return logs[0] if logs else None
+
+
+def get_sync_discord_state():
+    """Get bulk Discord sync state for all active events."""
+    resp = _get("/discord/sync-state/")
+    if resp and resp.ok:
+        return resp.json()
+    return None
+
+
+def get_repeater_subscribers(repeater_id):
+    """Get subscribers for a repeater with Discord IDs."""
+    resp = _get(f"/repeaters/{repeater_id}/subscribers/")
+    if resp and resp.ok:
+        return resp.json()
+    return []
+
+
+def get_due_scheduled_events():
+    """Get ScheduledEvents due for posting."""
+    resp = _get("/scheduled-events/due/")
+    if resp and resp.ok:
+        return resp.json()
+    return []
 
 
 # ---- Steam writes ----

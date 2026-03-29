@@ -114,6 +114,268 @@ def check_message_log_exists(request):
     return Response({"exists": exists})
 
 
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def search_message_logs(request):
+    """Search DiscordMessageLog entries with filters.
+
+    Query params: source, source_id, success, source__in (comma-separated),
+    order_by (default: -created_at), limit (default: 10)
+    """
+    from discordbot.models import DiscordMessageLog
+
+    qs = DiscordMessageLog.objects.all()
+    params = request.query_params
+
+    if params.get("source"):
+        qs = qs.filter(source=params["source"])
+    if params.get("source__in"):
+        qs = qs.filter(source__in=params["source__in"].split(","))
+    if params.get("source_id"):
+        qs = qs.filter(source_id=params["source_id"])
+    if params.get("success"):
+        qs = qs.filter(success=params["success"].lower() == "true")
+
+    order_by = params.get("order_by", "-created_at")
+    if order_by in ("created_at", "-created_at"):
+        qs = qs.order_by(order_by)
+
+    limit = min(int(params.get("limit", 10)), 100)
+    entries = qs[:limit]
+
+    data = [
+        {
+            "id": e.pk,
+            "channel_id": e.channel_id,
+            "source": e.source,
+            "source_id": e.source_id,
+            "discord_message_id": e.discord_message_id,
+            "status_code": e.status_code,
+            "success": e.success,
+            "response_data": e.response_data,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in entries
+    ]
+    return Response(data)
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def get_discord_event_state(request, event_id):
+    """Get DiscordEvent + related records for an event (celery reads)."""
+    from discordbot.models import (
+        DiscordEvent,
+        DiscordEventDM,
+        DiscordEventLog,
+        DiscordEventMsgSignup,
+    )
+
+    result = {
+        "has_discord_event": False,
+        "scheduled_event_id": None,
+        "signup_posted": False,
+        "fired_actions": [],
+        "has_dms": False,
+    }
+
+    try:
+        de = DiscordEvent.objects.get(event_id=event_id)
+        result["has_discord_event"] = True
+        result["discord_event_pk"] = de.pk
+        result["scheduled_event_id"] = de.scheduled_event_id or None
+
+        result["fired_actions"] = list(
+            DiscordEventLog.objects.filter(discord_event=de, success=True).values_list(
+                "action", flat=True
+            )
+        )
+
+        result["has_dms"] = DiscordEventDM.objects.filter(discord_event=de).exists()
+    except DiscordEvent.DoesNotExist:
+        pass
+
+    result["signup_posted"] = DiscordEventMsgSignup.objects.filter(
+        event_id=event_id, has_posted=True
+    ).exists()
+
+    return Response(result)
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def get_sync_discord_state(request):
+    """Bulk state for sync_discord_events — all active events' Discord status.
+
+    Returns event IDs that have: signup posts, scheduled events, recent log attempts.
+    Replaces 4 separate queries in sync_discord_events task.
+    """
+    from datetime import timedelta
+
+    from discordbot.models import (
+        DiscordEvent,
+        DiscordEventLog,
+        DiscordEventMsgSignup,
+        DiscordMessageLog,
+    )
+    from events.models import Event, EventState
+
+    now = tz.now()
+
+    # Active events (same filter as sync_discord_events)
+    active_events = list(
+        Event.objects.filter(
+            state__in=[
+                EventState.UPCOMING,
+                EventState.SIGNUPS_OPEN,
+                EventState.ROLL_CALL,
+            ],
+            scheduled_at__gte=now - timedelta(days=1),
+            scheduled_at__lte=now + timedelta(days=30),
+        )
+        .select_related("organization", "event_repeater")
+        .values(
+            "pk",
+            "name",
+            "state",
+            "scheduled_at",
+            "discord_announcement",
+            "discord_announcement_channel_id",
+            "discord_post_signups",
+            "discord_post_signups_channel_id",
+            "discord_create_event",
+            "organization__discord_server_id",
+        )
+    )
+
+    # Existing successful logs (legacy)
+    existing_logs = set(
+        DiscordMessageLog.objects.filter(
+            success=True,
+            source__in=["event_announcement", "event_notice", "create_discord_event"],
+        ).values_list("source", "source_id")
+    )
+
+    # Events with posted signup messages
+    events_with_signup = set(
+        DiscordEventMsgSignup.objects.filter(has_posted=True).values_list(
+            "event_id", flat=True
+        )
+    )
+
+    # Events with scheduled Discord events
+    events_with_scheduled = set(
+        DiscordEvent.objects.filter(scheduled_event_id__isnull=False)
+        .exclude(scheduled_event_id="")
+        .values_list("event_id", flat=True)
+    )
+
+    # Recent create_scheduled_event attempts (5-min backoff)
+    events_with_recent_attempt = set(
+        DiscordEventLog.objects.filter(
+            action="create_scheduled_event",
+            created_at__gte=now - timedelta(minutes=5),
+        ).values_list("discord_event__event_id", flat=True)
+    )
+
+    return Response(
+        {
+            "active_events": active_events,
+            "existing_logs": list(existing_logs),
+            "events_with_signup": list(events_with_signup),
+            "events_with_scheduled": list(events_with_scheduled),
+            "events_with_recent_attempt": list(events_with_recent_attempt),
+        }
+    )
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def get_repeater_subscribers(request, repeater_id):
+    """Get subscribers for a repeater with Discord IDs and org membership."""
+    from events.models import RepeaterSubscription
+    from org.models import OrgUser
+
+    subs = RepeaterSubscription.objects.filter(
+        event_repeater_id=repeater_id
+    ).select_related("user")
+
+    data = []
+    for sub in subs:
+        if not sub.user.discordId:
+            continue
+        org_user = OrgUser.objects.filter(
+            user=sub.user,
+            organization=sub.event_repeater.organization,
+        ).first()
+        if not org_user:
+            continue
+        data.append(
+            {
+                "user_pk": sub.user.pk,
+                "discord_id": sub.user.discordId,
+                "org_user_pk": org_user.pk,
+            }
+        )
+    return Response(data)
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def get_due_scheduled_events(request):
+    """Get ScheduledEvents that are due for posting."""
+    from discordbot.models import ScheduledEvent
+
+    now = tz.now()
+    due = ScheduledEvent.objects.filter(
+        is_active=True,
+        next_post_at__lte=now,
+        discord_message_id__isnull=True,
+    ).select_related("template")
+
+    data = [
+        {
+            "pk": se.pk,
+            "is_recurring": se.is_recurring,
+            "next_post_at": se.next_post_at.isoformat() if se.next_post_at else None,
+            "template": {
+                "name": se.template.name,
+                "channel_id": se.template.channel_id,
+                "include_rsvp": se.template.include_rsvp,
+            },
+        }
+        for se in due
+    ]
+    return Response(data)
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def get_event_for_task(request, event_id):
+    """Get full event data + org Discord config needed by celery tasks."""
+    from events.models import Event
+
+    try:
+        event = Event.objects.select_related("organization", "event_repeater").get(
+            pk=event_id
+        )
+    except Event.DoesNotExist:
+        return Response({"error": "Event not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from events.serializers import EventSerializer
+
+    data = EventSerializer(event).data
+    data["organization_discord_server_id"] = event.organization.discord_server_id or ""
+    data["event_repeater_id"] = event.event_repeater_id
+    return Response(data)
+
+
 # ---------------------------------------------------------------------------
 # DiscordEventLog (NOT cached — no invalidation needed)
 # ---------------------------------------------------------------------------
