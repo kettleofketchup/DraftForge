@@ -138,10 +138,16 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
             "message": "Could not create your account. Please try again.",
         }
 
-    # Check if already signed up
+    # Check if already signed up (tentative can upgrade to full signup)
     existing = (
         EventSignup.objects.filter(event=event, user=user)
-        .exclude(status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED])
+        .exclude(
+            status__in=[
+                SignupStatus.CANCELLED,
+                SignupStatus.REJECTED,
+                SignupStatus.TENTATIVE,
+            ]
+        )
         .first()
     )
     if existing:
