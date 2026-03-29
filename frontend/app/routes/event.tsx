@@ -56,6 +56,7 @@ import {
 import { toast } from 'sonner';
 
 import { Badge } from '~/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
 import { EventStateBadge } from '~/components/events';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import { EventState, GameType } from '~/components/events/schemas';
@@ -804,100 +805,96 @@ function SignupsTab({
 
         const adminActions = isAdmin ? (
           <div className="flex gap-1">
-            {/* RSVP / Pending Approval → Approve or Reject */}
             {(signup.status === 'rsvp' || signup.status === 'pending_approval') && (
               <>
-                <SecondaryButton
-                  color="green"
-                  size="sm"
-                  onClick={() =>
-                    gameType === GameType.DOTA2
-                      ? setApprovalSignup(signup)
-                      : signupActions.approve.mutate({ id: signup.id })
-                  }
-                  disabled={signupActions.approve.isPending}
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline ml-1">Approve</span>
-                </SecondaryButton>
-                <DestructiveButton
-                  size="sm"
-                  onClick={() => signupActions.demote.mutate(signup.id)}
-                  loading={signupActions.demote.isPending}
-                  depth={false}
-                >
-                  <ArrowDownToLine className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline ml-1">Waitlist</span>
-                </DestructiveButton>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <SecondaryButton color="green" size="sm"
+                      onClick={() => gameType === GameType.DOTA2 ? setApprovalSignup(signup) : signupActions.approve.mutate({ id: signup.id })}
+                      disabled={signupActions.approve.isPending}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Approve</span>
+                    </SecondaryButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="lg:hidden">Approve</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DestructiveButton size="sm" onClick={() => signupActions.demote.mutate(signup.id)} loading={signupActions.demote.isPending} depth={false}>
+                      <ArrowDownToLine className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Waitlist</span>
+                    </DestructiveButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="lg:hidden">Waitlist</TooltipContent>
+                </Tooltip>
               </>
             )}
-            {/* Approved → Confirm or Demote to waitlist */}
             {signup.status === 'approved' && (
               <>
-                <SecondaryButton
-                  color="blue"
-                  size="sm"
-                  onClick={() => signupActions.confirm.mutate(signup.id)}
-                  disabled={signupActions.confirm.isPending}
-                >
-                  <UserCheck className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline ml-1">Confirm</span>
-                </SecondaryButton>
-                <DestructiveButton
-                  size="sm"
-                  onClick={() => signupActions.demote.mutate(signup.id)}
-                  loading={signupActions.demote.isPending}
-                  depth={false}
-                >
-                  <ArrowDownToLine className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline ml-1">Waitlist</span>
-                </DestructiveButton>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <SecondaryButton color="blue" size="sm" onClick={() => signupActions.confirm.mutate(signup.id)} disabled={signupActions.confirm.isPending}>
+                      <UserCheck className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Confirm</span>
+                    </SecondaryButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="lg:hidden">Confirm</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DestructiveButton size="sm" onClick={() => signupActions.demote.mutate(signup.id)} loading={signupActions.demote.isPending} depth={false}>
+                      <ArrowDownToLine className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Waitlist</span>
+                    </DestructiveButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="lg:hidden">Waitlist</TooltipContent>
+                </Tooltip>
               </>
             )}
-            {/* Confirmed → Unconfirm (back to approved) */}
             {signup.status === 'confirmed' && (
-              <SecondaryButton
-                color="orange"
-                size="sm"
-                onClick={() => signupActions.unconfirm.mutate(signup.id)}
-                disabled={signupActions.unconfirm.isPending}
-              >
-                <Undo2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline ml-1">Unconfirm</span>
-              </SecondaryButton>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SecondaryButton color="orange" size="sm" onClick={() => signupActions.unconfirm.mutate(signup.id)} disabled={signupActions.unconfirm.isPending}>
+                    <Undo2 className="h-3.5 w-3.5" />
+                    <span className="hidden lg:inline ml-1">Unconfirm</span>
+                  </SecondaryButton>
+                </TooltipTrigger>
+                <TooltipContent className="lg:hidden">Unconfirm</TooltipContent>
+              </Tooltip>
             )}
-            {/* Waitlisted → Approve (promote from waitlist) */}
             {signup.status === 'waitlisted' && (
-              <SecondaryButton
-                color="green"
-                size="sm"
-                onClick={() =>
-                  gameType === GameType.DOTA2
-                    ? setApprovalSignup(signup)
-                    : signupActions.approve.mutate({ id: signup.id })
-                }
-                disabled={signupActions.approve.isPending}
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline ml-1">Approve</span>
-              </SecondaryButton>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SecondaryButton color="green" size="sm"
+                    onClick={() => gameType === GameType.DOTA2 ? setApprovalSignup(signup) : signupActions.approve.mutate({ id: signup.id })}
+                    disabled={signupActions.approve.isPending}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span className="hidden lg:inline ml-1">Approve</span>
+                  </SecondaryButton>
+                </TooltipTrigger>
+                <TooltipContent className="lg:hidden">Approve</TooltipContent>
+              </Tooltip>
             )}
-            {/* Remove — all statuses except already cancelled */}
             {signup.status !== 'cancelled' && (
-              <DestructiveButton
-                size="sm"
-                onClick={() => {
-                  const name = user ? (user.nickname || user.username) : `User #${signup.user}`;
-                  if (window.confirm(`Remove ${name} from this event? They will lose their signup position.`)) {
-                    signupActions.cancel.mutate(signup.id);
-                  }
-                }}
-                loading={signupActions.cancel.isPending}
-                depth={false}
-              >
-                <UserX className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline ml-1">Remove</span>
-              </DestructiveButton>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DestructiveButton size="sm" depth={false}
+                    onClick={() => {
+                      const name = user ? (user.nickname || user.username) : `User #${signup.user}`;
+                      if (window.confirm(`Remove ${name} from this event? They will lose their signup position.`)) {
+                        signupActions.cancel.mutate(signup.id);
+                      }
+                    }}
+                    loading={signupActions.cancel.isPending}
+                  >
+                    <UserX className="h-3.5 w-3.5" />
+                    <span className="hidden lg:inline ml-1">Remove</span>
+                  </DestructiveButton>
+                </TooltipTrigger>
+                <TooltipContent className="lg:hidden">Remove user</TooltipContent>
+              </Tooltip>
             )}
           </div>
         ) : undefined;
