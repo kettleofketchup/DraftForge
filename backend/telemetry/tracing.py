@@ -98,8 +98,9 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
             AggregationTemporality,
             PeriodicExportingMetricReader,
         )
+        from opentelemetry.sdk.metrics.view import View
 
-        # Grafana Cloud Mimir requires delta temporality for cumulative counters
+        # Grafana Cloud Mimir requires delta temporality for all instrument types
         delta_temporality = {
             Counter: AggregationTemporality.DELTA,
             UpDownCounter: AggregationTemporality.CUMULATIVE,
@@ -114,8 +115,29 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
             preferred_temporality=delta_temporality,
         )
         metric_reader = PeriodicExportingMetricReader(metric_exporter)
+
+        # Drop http.client.duration — requests instrumentation creates it with
+        # incompatible temporality that Grafana rejects. We get the same data
+        # from server-side http.server.duration spans.
+        from opentelemetry.sdk.metrics.export import DropAggregation
+
         meter_provider = MeterProvider(
-            resource=resource, metric_readers=[metric_reader]
+            resource=resource,
+            metric_readers=[metric_reader],
+            views=[
+                View(
+                    instrument_name="http.client.duration",
+                    aggregation=DropAggregation(),
+                ),
+                View(
+                    instrument_name="http.client.request.size",
+                    aggregation=DropAggregation(),
+                ),
+                View(
+                    instrument_name="http.client.response.size",
+                    aggregation=DropAggregation(),
+                ),
+            ],
         )
         metrics.set_meter_provider(meter_provider)
     except Exception as e:
