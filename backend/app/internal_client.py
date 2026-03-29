@@ -21,6 +21,11 @@ INTERNAL_API_URL = os.environ.get(
     "INTERNAL_API_URL",
     "http://backend:8000/api/internal",
 )
+# Base API URL for reads — same host, public API paths
+API_BASE_URL = os.environ.get(
+    "API_BASE_URL",
+    "http://backend:8000/api",
+)
 TIMEOUT = 30
 
 
@@ -132,17 +137,43 @@ def transition_event_state(event_pk, new_state):
     return _post(f"/events/{event_pk}/transition/", {"state": new_state})
 
 
-# ---- Event reads ----
+# ---- Reads via public API (internal token accepted globally) ----
+
+
+def _api_get(path, params=None):
+    """GET from the public API (not /internal/). Uses same auth token."""
+    url = f"{API_BASE_URL}{path}"
+    try:
+        resp = requests.get(url, params=params, headers=_headers(), timeout=TIMEOUT)
+        if not resp.ok:
+            logger.error("API GET %s: %s %s", path, resp.status_code, resp.text[:200])
+        return resp
+    except requests.RequestException:
+        logger.exception("API GET %s failed", path)
+        return None
 
 
 def get_event(pk):
-    """Get event data by PK."""
-    return _get(f"/events/{pk}/")
+    """Get event data by PK via public API."""
+    return _api_get(f"/events/{pk}/")
+
+
+def get_events(params=None):
+    """List events with filters via public API."""
+    return _api_get("/events/", params=params)
 
 
 def get_event_signups(event_pk):
-    """Get signups for an event."""
-    return _get(f"/events/{event_pk}/signups/")
+    """Get signups for an event via public API."""
+    return _api_get(f"/events/signups/", params={"event": event_pk})
+
+
+def check_message_log_exists(source, source_id):
+    """Check if a successful DiscordMessageLog exists for idempotency."""
+    resp = _get(f"/discord/check-log/", {"source": source, "source_id": source_id})
+    if resp and resp.ok:
+        return resp.json().get("exists", False)
+    return False
 
 
 # ---- Steam writes ----

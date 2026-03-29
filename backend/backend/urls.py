@@ -309,6 +309,7 @@ urlpatterns += [
 
 # Internal API — celery workers and Discord bot (token auth via X-Internal-Token)
 from app.views.internal import (
+    check_message_log_exists,
     create_discord_event_log,
     create_discord_message_log,
     create_event_dm,
@@ -332,6 +333,7 @@ urlpatterns += [
     path("api/internal/discord/event-dm/<int:pk>/", update_event_dm),
     path("api/internal/discord/scheduled-events/<int:pk>/", update_scheduled_event),
     path("api/internal/events/<int:pk>/transition/", transition_event_state),
+    path("api/internal/discord/check-log/", check_message_log_exists),
 ]
 
 log.debug(f"Test Environ:  {isTestEnvironment()}")

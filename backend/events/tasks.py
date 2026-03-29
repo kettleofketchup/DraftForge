@@ -720,17 +720,17 @@ def check_event_reminders():
 
     now = timezone.now()
 
+    from app.internal_client import check_message_log_exists
+
     # 1. Signup reminders
     signup_reminder_events = Event.objects.filter(
         state__in=[EventState.SIGNUPS_OPEN],
         discord_signup_reminder=True,
         discord_announcement_channel_id__gt="",
-    ).exclude(
-        pk__in=DiscordMessageLog.objects.filter(source="signup_reminder").values_list(
-            "source_id", flat=True
-        )
     )
     for event in signup_reminder_events:
+        if check_message_log_exists("signup_reminder", event.pk):
+            continue
         threshold = event.scheduled_at - timedelta(
             hours=event.discord_signup_reminder_hours
         )
@@ -751,12 +751,10 @@ def check_event_reminders():
         state__in=[EventState.SIGNUPS_OPEN, EventState.ROLL_CALL],
         discord_confirm_attendance=True,
         discord_announcement_channel_id__gt="",
-    ).exclude(
-        pk__in=DiscordMessageLog.objects.filter(
-            source="attendance_reminder"
-        ).values_list("source_id", flat=True)
     )
     for event in attendance_events:
+        if check_message_log_exists("attendance_reminder", event.pk):
+            continue
         threshold = event.scheduled_at - timedelta(
             hours=event.discord_confirm_attendance_hours
         )
@@ -776,12 +774,10 @@ def check_event_reminders():
         state__in=[EventState.SIGNUPS_OPEN],
         discord_profile_reminder=True,
         discord_announcement_channel_id__gt="",
-    ).exclude(
-        pk__in=DiscordMessageLog.objects.filter(source="profile_reminder").values_list(
-            "source_id", flat=True
-        )
     )
     for event in profile_events:
+        if check_message_log_exists("profile_reminder", event.pk):
+            continue
         threshold = event.scheduled_at - timedelta(
             hours=event.discord_profile_reminder_hours
         )

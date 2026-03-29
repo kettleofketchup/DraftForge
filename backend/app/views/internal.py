@@ -94,6 +94,26 @@ def create_discord_message_log(request):
     return Response({"id": entry.pk}, status=status.HTTP_201_CREATED)
 
 
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def check_message_log_exists(request):
+    """Check if a successful DiscordMessageLog exists (for celery idempotency)."""
+    from discordbot.models import DiscordMessageLog
+
+    source = request.query_params.get("source")
+    source_id = request.query_params.get("source_id")
+    if not source or not source_id:
+        return Response(
+            {"error": "source and source_id required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    exists = DiscordMessageLog.objects.filter(
+        source=source, source_id=source_id, success=True
+    ).exists()
+    return Response({"exists": exists})
+
+
 # ---------------------------------------------------------------------------
 # DiscordEventLog (NOT cached — no invalidation needed)
 # ---------------------------------------------------------------------------

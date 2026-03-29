@@ -134,6 +134,14 @@ INSTALLED_APPS = [
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Django REST Framework — internal service token accepted globally alongside session auth
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+        "app.auth.InternalServiceAuth",
+    ],
+}
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -258,7 +266,6 @@ DATABASES = {
         "OPTIONS": {
             "timeout": 30,  # seconds — busy_timeout for lock waiting
             "transaction_mode": "IMMEDIATE",  # acquire RESERVED lock upfront, prevents deadlocks
-            "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL",
         },
     }
 }
