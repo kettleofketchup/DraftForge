@@ -194,7 +194,11 @@ export default function EventPage() {
 
   // Split signups into active and waitlisted
   const activeSignups = useMemo(
-    () => (signups ?? []).filter((s) => s.status !== 'waitlisted' && s.status !== 'cancelled' && s.status !== 'rejected'),
+    () => (signups ?? []).filter((s) => !['waitlisted', 'tentative', 'cancelled', 'rejected'].includes(s.status)),
+    [signups],
+  );
+  const tentativeSignups = useMemo(
+    () => (signups ?? []).filter((s) => s.status === 'tentative'),
     [signups],
   );
   const waitlistedSignups = useMemo(
@@ -216,10 +220,11 @@ export default function EventPage() {
     () => [
       { value: 'details', label: 'Details' },
       { value: 'signups', label: `${activeSignups.length} Signups` },
+      ...(tentativeSignups.length > 0 ? [{ value: 'tentative', label: `${tentativeSignups.length} Tentative` }] : []),
       { value: 'waitlist', label: `${waitlistedSignups.length} Waitlist` },
       { value: 'discord', label: 'Discord' },
     ],
-    [activeSignups.length, waitlistedSignups.length, isAdmin],
+    [activeSignups.length, tentativeSignups.length, waitlistedSignups.length, isAdmin],
   );
 
   usePageNav(event ? pageNavOptions : null, activeTab, handleTabChange);

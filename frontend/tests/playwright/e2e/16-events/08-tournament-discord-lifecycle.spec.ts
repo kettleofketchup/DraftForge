@@ -288,9 +288,10 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
       saveBracketResp.ok(),
       `Save bracket failed: ${await saveBracketResp.text()}`,
     ).toBeTruthy();
-    const savedGames = await saveBracketResp.json();
+    const bracketData = await saveBracketResp.json();
+    const savedGames = bracketData.matches || bracketData;
     expect(savedGames.length).toBeGreaterThanOrEqual(1);
-    const gamePk = savedGames[0].pk;
+    const gamePk = savedGames[0].pk || savedGames[0].id;
 
     // =========================================================================
     // 12. Create herodraft for the match (triggers discord_send_herodraft_link DMs)

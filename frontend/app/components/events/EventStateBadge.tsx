@@ -16,6 +16,7 @@ const stateConfig: Record<string, { label: string; className: string }> = {
   [SignupStatus.APPROVED]: { label: 'Approved', className: 'bg-primary/20 text-primary border-primary/30' },
   [SignupStatus.CONFIRMED]: { label: 'Confirmed', className: 'bg-success/20 text-success border-success/30' },
   [SignupStatus.WAITLISTED]: { label: 'Waitlisted', className: 'bg-muted text-muted-foreground border-border' },
+  [SignupStatus.TENTATIVE]: { label: 'Tentative', className: 'bg-violet-500/20 text-violet-300 border-violet-500/30' },
   [SignupStatus.REJECTED]: { label: 'Rejected', className: 'bg-error/20 text-error border-error/30' },
 };
 
