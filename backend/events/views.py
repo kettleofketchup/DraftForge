@@ -37,6 +37,7 @@ from events.services import (
     confirm_signup,
     create_tournament_for_event,
     demote_to_waitlist,
+    ensure_discord_event,
     finalize_event_tournament,
     process_rsvp,
     reinstate_signup,
@@ -310,6 +311,8 @@ class EventViewSet(viewsets.ModelViewSet):
 
         event = serializer.save(created_by=self.request.user)
         create_tournament_for_event(event)
+        # Auto-create DiscordEvent if org has Discord configured
+        ensure_discord_event(event)
         # Auto-open signups if requested via query param
         if self.request.query_params.get("open_signups") == "true":
             try:
@@ -457,6 +460,13 @@ class EventViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             finalize_event_tournament(event)
+            # Start auto-create herodrafts polling if enabled
+            if event.tournament and event.tournament.auto_create_hero_drafts:
+                from events.discord.tournament_dispatch import (
+                    start_auto_create_herodrafts,
+                )
+
+                start_auto_create_herodrafts(event.tournament)
             qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
             return Response(EventSerializer(qs.first()).data)
         except ValueError as e:
@@ -809,15 +819,27 @@ def get_event_task_schedule(request, event_id):
     except Exception:
         pass
 
-    # Last fired timestamps from logs
+    # Last fired timestamps + fired_by from logs
     last_fired_map = {}
-    for source, created_at in (
+    for row in (
         DiscordMessageLog.objects.filter(source_id=event.pk, success=True)
-        .values_list("source", "created_at")
+        .select_related("fired_by")
         .order_by("-created_at")
     ):
-        if source not in last_fired_map:
-            last_fired_map[source] = created_at
+        if row.source not in last_fired_map:
+            fired_by_data = None
+            if row.fired_by:
+                fired_by_data = {
+                    "pk": row.fired_by.pk,
+                    "username": row.fired_by.username,
+                    "nickname": row.fired_by.nickname,
+                    "discordId": row.fired_by.discordId,
+                    "avatar": row.fired_by.avatar,
+                }
+            last_fired_map[row.source] = {
+                "created_at": row.created_at,
+                "fired_by": fired_by_data,
+            }
 
     def _task(
         task,
@@ -837,6 +859,7 @@ def get_event_task_schedule(request, event_id):
             "description": description,
             "check_interval": check_interval,
             "last_fired_at": None,
+            "fired_by": None,
             "can_fire": False,
         }
 
@@ -873,7 +896,9 @@ def get_event_task_schedule(request, event_id):
         entry["status"] = s
         entry["can_fire"] = s in ("ready", "pending")
         if log_source and log_source in last_fired_map:
-            entry["last_fired_at"] = last_fired_map[log_source].isoformat()
+            info = last_fired_map[log_source]
+            entry["last_fired_at"] = info["created_at"].isoformat()
+            entry["fired_by"] = info["fired_by"]
 
         return entry
 
@@ -992,12 +1017,20 @@ FIREABLE_TASKS = {
     "announcement": "events.tasks.send_event_announcement",
     "signup_post": "events.tasks.send_event_announcement",
     "scheduled_event": "events.tasks.create_discord_scheduled_event",
-    "signup_reminder": "events.tasks.check_event_reminders",
-    "confirm_attendance": "events.tasks.check_event_reminders",
-    "profile_reminder": "events.tasks.check_event_reminders",
+    "signup_reminder": "events.tasks.fire_event_reminder",
+    "confirm_attendance": "events.tasks.fire_event_reminder",
+    "profile_reminder": "events.tasks.fire_event_reminder",
     "subscriber_dm": "events.tasks.send_subscriber_notifications",
     "signup_update": "events.tasks.send_signup_update",
     "open_signups": "events.tasks.open_scheduled_signups",
+}
+
+# Map fire task names to their message log source for idempotency
+TASK_LOG_SOURCES = {
+    "announcement": "event_announcement",
+    "signup_reminder": "signup_reminder",
+    "confirm_attendance": "attendance_reminder",
+    "profile_reminder": "profile_reminder",
 }
 
 
@@ -1020,12 +1053,31 @@ def fire_event_task(request, event_id, task_name):
             {"error": f"Unknown task: {task_name}"}, status=status.HTTP_400_BAD_REQUEST
         )
 
+    # Idempotency: prevent double-fire for tasks with log sources
+    log_source = TASK_LOG_SOURCES.get(task_name)
+    if log_source:
+        from discordbot.models import DiscordMessageLog
+
+        if DiscordMessageLog.objects.filter(
+            source=log_source, source_id=event_id, success=True
+        ).exists():
+            return Response(
+                {"error": f"{task_name} has already been fired for this event"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
     from celery import current_app
 
     celery_task = FIREABLE_TASKS[task_name]
 
-    # Tasks that take event_id as argument
-    if task_name in (
+    # Reminder tasks: fire per-event with reminder_type and fired_by
+    if task_name in ("signup_reminder", "confirm_attendance", "profile_reminder"):
+        current_app.send_task(
+            celery_task,
+            args=[event_id, task_name],
+            kwargs={"fired_by_user_id": request.user.pk},
+        )
+    elif task_name in (
         "announcement",
         "signup_post",
         "scheduled_event",
@@ -1034,7 +1086,6 @@ def fire_event_task(request, event_id, task_name):
     ):
         current_app.send_task(celery_task, args=[event_id])
     else:
-        # Reminders and open_signups operate globally, not per-event
         current_app.send_task(celery_task)
 
     logger.info(

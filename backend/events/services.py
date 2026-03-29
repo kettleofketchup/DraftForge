@@ -363,6 +363,12 @@ LOBBY_CONFIG_FIELDS = [
     "lobby_steam_league_id",
 ]
 
+DISCORD_TOURNAMENT_CONFIG_FIELDS = [
+    "auto_create_hero_drafts",
+    "discord_send_draft_link",
+    "discord_send_herodraft_link",
+]
+
 
 @transaction.atomic
 def create_tournament_for_event(event):
@@ -381,12 +387,39 @@ def create_tournament_for_event(event):
         custom_game_name=event.custom_game_name,
         captains_draft_time=event.captains_draft_time,
         lobby_steam_league_id=event.lobby_steam_league_id,
+        auto_create_hero_drafts=event.auto_create_hero_drafts,
+        discord_send_draft_link=event.discord_send_draft_link,
+        discord_send_herodraft_link=event.discord_send_herodraft_link,
         state="future",
     )
     event.tournament = tournament
     event.save(update_fields=["tournament", "updated_at"])
     invalidate_after_commit(event)
     return tournament
+
+
+def ensure_discord_event(event):
+    """Auto-create a DiscordEvent row if the org has a discord_server_id.
+
+    This ensures the Discord tab works immediately after event creation
+    without waiting for celery tasks to run.
+    """
+    org = event.organization
+    if not org or not org.discord_server_id:
+        return None
+    from discordbot.models import DiscordEvent
+
+    de, created = DiscordEvent.objects.get_or_create(
+        event=event,
+        defaults={"guild_id": org.discord_server_id},
+    )
+    if created:
+        logger.info(
+            "Auto-created DiscordEvent for event %s (guild=%s)",
+            event.pk,
+            org.discord_server_id,
+        )
+    return de
 
 
 def add_user_to_tournament(event, user):
@@ -430,7 +463,7 @@ def sync_tournament_from_event(event):
         event.tournament.number_of_teams = event.number_of_teams
         event.tournament.date_played = event.tournament_date or event.scheduled_at
         event.tournament.timezone = event.timezone
-        for field in LOBBY_CONFIG_FIELDS:
+        for field in LOBBY_CONFIG_FIELDS + DISCORD_TOURNAMENT_CONFIG_FIELDS:
             setattr(event.tournament, field, getattr(event, field))
         event.tournament.save()
         invalidate_obj(event.tournament)
@@ -583,6 +616,7 @@ def generate_events_for_repeater(repeater):
         event.tournament_date = dt
         event.save()
         create_tournament_for_event(event)
+        ensure_discord_event(event)
         created_events.append(event)
         # Send Discord signup post + announcement for the new event
         if event.discord_announcement and event.discord_announcement_channel_id:
