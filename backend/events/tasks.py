@@ -386,20 +386,19 @@ def send_signup_update(event_id):
     signup_msg = None
     discord_event = None
 
-    from discordbot.models import DiscordEvent
+    from app.internal_client import get_discord_event_state
 
-    try:
-        db_event = Event.objects.select_related("organization").get(pk=event_id)
-        discord_event = db_event.discord_event
-        signup_msg = discord_event.signup_message
-        if signup_msg and signup_msg.has_posted and signup_msg.message_id:
-            message_id = signup_msg.message_id
-            if signup_msg.thread_id:
-                edit_channel_id = signup_msg.thread_id
-            else:
-                edit_channel_id = signup_msg.channel_id
-    except (Event.DoesNotExist, DiscordEvent.DoesNotExist):
-        pass
+    discord_state = get_discord_event_state(event_id)
+    if (
+        discord_state
+        and discord_state.signup_posted
+        and discord_state.signup_message_id
+    ):
+        message_id = discord_state.signup_message_id
+        if discord_state.signup_thread_id:
+            edit_channel_id = discord_state.signup_thread_id
+        else:
+            edit_channel_id = discord_state.signup_channel_id
 
     # Fall back to DiscordMessageLog for pre-migration events
     if not message_id:

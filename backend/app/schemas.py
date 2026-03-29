@@ -158,6 +158,9 @@ class DiscordEventState(BaseModel):
     discord_event_pk: Optional[int] = None
     scheduled_event_id: Optional[str] = None
     signup_posted: bool = False
+    signup_message_id: Optional[str] = None
+    signup_channel_id: Optional[str] = None
+    signup_thread_id: Optional[str] = None
     fired_actions: list[str] = []
     has_dms: bool = False
 

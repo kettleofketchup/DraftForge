@@ -204,9 +204,14 @@ def get_discord_event_state(request, event_id):
     except DiscordEvent.DoesNotExist:
         pass
 
-    result["signup_posted"] = DiscordEventMsgSignup.objects.filter(
+    signup_msg = DiscordEventMsgSignup.objects.filter(
         event_id=event_id, has_posted=True
-    ).exists()
+    ).first()
+    result["signup_posted"] = signup_msg is not None
+    if signup_msg:
+        result["signup_message_id"] = signup_msg.message_id
+        result["signup_channel_id"] = signup_msg.channel_id
+        result["signup_thread_id"] = signup_msg.thread_id
 
     return Response(result)
 
