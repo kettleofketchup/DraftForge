@@ -882,6 +882,23 @@ function SignupsTab({
                 <span className="hidden sm:inline ml-1">Approve</span>
               </SecondaryButton>
             )}
+            {/* Remove — all statuses except already cancelled */}
+            {signup.status !== 'cancelled' && (
+              <DestructiveButton
+                size="sm"
+                onClick={() => {
+                  const name = user ? (user.nickname || user.username) : `User #${signup.user}`;
+                  if (window.confirm(`Remove ${name} from this event? They will lose their signup position.`)) {
+                    signupActions.cancel.mutate(signup.id);
+                  }
+                }}
+                loading={signupActions.cancel.isPending}
+                depth={false}
+              >
+                <UserX className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline ml-1">Remove</span>
+              </DestructiveButton>
+            )}
           </div>
         ) : undefined;
 
