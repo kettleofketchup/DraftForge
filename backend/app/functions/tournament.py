@@ -237,9 +237,10 @@ def create_team_from_captain(request):
             status=201,
         )
 
+    display_name = user.nickname or user.username
     team = Team.objects.create(
         tournament=tournament,
-        name=f"{user.username}'s Team",
+        name=f"{display_name}'s Team",
         captain=user,
         draft_order=draft_order,
     )

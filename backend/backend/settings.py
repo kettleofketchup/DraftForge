@@ -90,6 +90,10 @@ TEST = env_bool("TEST")
 RELEASE = env_bool("RELEASE")
 DEBUG = env_bool("DEBUG")
 
+# In test environments, only send Discord DMs to this user ID.
+# All other DMs return a fake success. Prevents spamming real users during testing.
+TEST_DISCORD_USER_ID = os.environ.get("TEST_DISCORD_USER_ID", "243497113906970625")
+
 # Configure logging - default to INFO, allow override via LOG_LEVEL env var
 _log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
@@ -346,8 +350,10 @@ else:
         "discordbot.discordevent": {"ops": "all", "timeout": 60 * 60},
         "discordbot.discordeventmsgsignup": {"ops": "all", "timeout": 60 * 60},
         "discordbot.discordeventmsgannouncement": {"ops": "all", "timeout": 60 * 60},
-        # DO NOT cache DiscordEventLog or DiscordEventDM — write-heavy
-        # DO NOT cache DiscordTournamentLog — write-heavy audit log
+        # Discord audit/log models — few writes per event lifecycle
+        "discordbot.discordeventlog": {"ops": "all", "timeout": 60 * 60},
+        "discordbot.discordeventdm": {"ops": "all", "timeout": 60 * 60},
+        "discordbot.discordmessagelog": {"ops": "all", "timeout": 60 * 60},
     }
 
 CACHEOPS_DEGRADE_ON_FAILURE = True

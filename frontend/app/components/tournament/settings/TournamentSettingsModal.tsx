@@ -1,20 +1,11 @@
 import { Settings } from 'lucide-react';
-import { useState } from 'react';
-import { Button } from '~/components/ui/button';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '~/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '~/components/ui/tooltip';
 import type { TournamentClassType } from '~/components/tournament/types';
 import { TournamentEditForm } from '~/components/tournament/create/editForm';
 import { DiscordActivityLog } from './DiscordActivityLog';
@@ -23,33 +14,14 @@ import type { TournamentType } from '~/components/tournament/types';
 
 interface Props {
   tournament: TournamentType;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
-export function TournamentSettingsModal({ tournament }: Props) {
-  const [open, setOpen] = useState(false);
-
+export function TournamentSettingsModal({ tournament, open, onOpenChange }: Props) {
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DialogTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-muted-foreground hover:text-foreground hover:bg-violet-500/20"
-                aria-label="Tournament Settings"
-                data-testid="tournament-settings-button"
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
-            </DialogTrigger>
-          </TooltipTrigger>
-          <TooltipContent>Tournament Settings</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-6xl h-[calc(100vh-4rem)] overflow-hidden flex flex-col">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-screen max-w-none sm:max-w-none h-screen max-h-none rounded-none border-0 overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Tournament Settings — {tournament.name}</DialogTitle>
         </DialogHeader>
@@ -69,7 +41,7 @@ export function TournamentSettingsModal({ tournament }: Props) {
           <TabsContent value="settings" className="flex-1 overflow-auto mt-4">
             <TournamentEditForm
               tourn={tournament as TournamentClassType}
-              onSuccess={() => setOpen(false)}
+              onSuccess={() => onOpenChange(false)}
             />
           </TabsContent>
 
