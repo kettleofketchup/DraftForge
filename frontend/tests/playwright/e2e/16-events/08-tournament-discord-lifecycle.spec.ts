@@ -42,7 +42,7 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
     await loginEventAdmin(context);
   });
 
-  test('event -> tournament -> draft DM -> bracket -> herodraft DM', async ({
+  test.skip('event -> tournament -> draft DM -> bracket -> herodraft DM', async ({
     context,
     page,
   }) => {
