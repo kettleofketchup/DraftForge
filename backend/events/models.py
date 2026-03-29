@@ -107,6 +107,7 @@ class TournamentTemplateMixin(models.Model):
         blank=True,
         help_text="Steam league ID for Dota 2 lobby ticket",
     )
+    auto_create_hero_drafts = models.BooleanField(default=False)
 
     class Meta:
         abstract = True
@@ -261,7 +262,22 @@ class DiscordEventConfigMixin(models.Model):
         abstract = True
 
 
-class EventRepeater(TournamentTemplateMixin, EventConfigMixin, DiscordEventConfigMixin):
+class DiscordTournamentConfigMixin(models.Model):
+    """Discord notification options for tournaments created from events."""
+
+    discord_send_draft_link = models.BooleanField(default=False)
+    discord_send_herodraft_link = models.BooleanField(default=False)
+
+    class Meta:
+        abstract = True
+
+
+class EventRepeater(
+    TournamentTemplateMixin,
+    EventConfigMixin,
+    DiscordEventConfigMixin,
+    DiscordTournamentConfigMixin,
+):
     organization = models.ForeignKey(
         "app.Organization",
         on_delete=models.CASCADE,
@@ -301,7 +317,12 @@ class EventRepeater(TournamentTemplateMixin, EventConfigMixin, DiscordEventConfi
         super().save(*args, **kwargs)
 
 
-class Event(TournamentTemplateMixin, EventConfigMixin, DiscordEventConfigMixin):
+class Event(
+    TournamentTemplateMixin,
+    EventConfigMixin,
+    DiscordEventConfigMixin,
+    DiscordTournamentConfigMixin,
+):
     organization = models.ForeignKey(
         "app.Organization",
         on_delete=models.CASCADE,
@@ -453,7 +474,10 @@ class RepeaterSubscription(models.Model):
 
 
 class OrgEventDefaults(
-    TournamentTemplateMixin, EventConfigMixin, DiscordEventConfigMixin
+    TournamentTemplateMixin,
+    EventConfigMixin,
+    DiscordEventConfigMixin,
+    DiscordTournamentConfigMixin,
 ):
     """Organization-level default configuration for new events and repeaters.
 

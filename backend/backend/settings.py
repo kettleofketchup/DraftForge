@@ -347,6 +347,7 @@ else:
         "discordbot.discordeventmsgsignup": {"ops": "all", "timeout": 60 * 60},
         "discordbot.discordeventmsgannouncement": {"ops": "all", "timeout": 60 * 60},
         # DO NOT cache DiscordEventLog or DiscordEventDM — write-heavy
+        # DO NOT cache DiscordTournamentLog — write-heavy audit log
     }
 
 CACHEOPS_DEGRADE_ON_FAILURE = True
