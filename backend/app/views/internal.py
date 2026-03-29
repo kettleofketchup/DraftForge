@@ -47,7 +47,12 @@ def _validate_required(data, fields):
 @authentication_classes(_auth)
 @permission_classes(_perm)
 def create_discord_message_log(request):
-    """Create a DiscordMessageLog entry."""
+    """Create a DiscordMessageLog entry.
+
+    For reminder-type sources, checks idempotency: if a successful log
+    with the same source+source_id already exists, returns it instead
+    of creating a duplicate.
+    """
     from discordbot.models import DiscordMessageLog
 
     ALLOWED_FIELDS = {
@@ -60,12 +65,31 @@ def create_discord_message_log(request):
         "response_data",
         "success",
     }
+    IDEMPOTENT_SOURCES = {
+        "signup_reminder",
+        "attendance_reminder",
+        "profile_reminder",
+    }
     err = _validate_required(
         request.data, ["channel_id", "source", "source_id", "embed_data"]
     )
     if err:
         return err
     data = {k: v for k, v in request.data.items() if k in ALLOWED_FIELDS}
+
+    # Idempotency for reminder sources — prevent duplicate posts
+    source = data.get("source")
+    source_id = data.get("source_id")
+    if source in IDEMPOTENT_SOURCES and source_id:
+        existing = DiscordMessageLog.objects.filter(
+            source=source, source_id=source_id, success=True
+        ).first()
+        if existing:
+            return Response(
+                {"id": existing.pk, "deduplicated": True},
+                status=status.HTTP_200_OK,
+            )
+
     entry = DiscordMessageLog.objects.create(**data)
     return Response({"id": entry.pk}, status=status.HTTP_201_CREATED)
 
