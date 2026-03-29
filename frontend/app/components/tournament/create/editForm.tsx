@@ -34,6 +34,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import {
@@ -43,6 +44,8 @@ import {
   type TournamentTypeValue,
 } from '../schemas';
 import type { TournamentClassType, TournamentType } from '../types';
+import { TournamentConfigSection } from './TournamentConfigSection';
+import { DiscordTournamentConfigSection } from './DiscordTournamentConfigSection';
 import { getLogger } from '~/lib/logger';
 import { SCROLLAREA_CSS } from '~/components/reusable/modal';
 
@@ -130,6 +133,9 @@ export const TournamentEditForm: React.FC<Props> = ({
       date_played: combineDateAndTime(initialDateTime.date, initialDateTime.time),
       timezone: (tourn as unknown as { timezone?: string })?.timezone || 'America/New_York',
       league: tourn?.league || null,
+      auto_create_hero_drafts: (tourn as any)?.auto_create_hero_drafts || false,
+      discord_send_draft_link: (tourn as any)?.discord_send_draft_link || false,
+      discord_send_herodraft_link: (tourn as any)?.discord_send_herodraft_link || false,
     },
   });
 
@@ -158,6 +164,9 @@ export const TournamentEditForm: React.FC<Props> = ({
         date_played: data.date_played,
         timezone: data.timezone,
         league_id_write: data.league || null,
+        auto_create_hero_drafts: data.auto_create_hero_drafts,
+        discord_send_draft_link: data.discord_send_draft_link,
+        discord_send_herodraft_link: data.discord_send_herodraft_link,
       };
 
       if (isEditing) {
@@ -188,213 +197,231 @@ export const TournamentEditForm: React.FC<Props> = ({
           className="flex flex-col gap-4 p-1"
           data-testid="tournament-form"
         >
-          {/* Tournament Name */}
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Tournament Name</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="Enter tournament name"
-                    data-testid="tournament-name-input"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <Tabs defaultValue="general">
+            <TabsList className="w-full">
+              <TabsTrigger value="general" className="flex-1">General</TabsTrigger>
+              <TabsTrigger value="config" className="flex-1">Config</TabsTrigger>
+              <TabsTrigger value="discord" className="flex-1">Discord</TabsTrigger>
+            </TabsList>
 
-          {/* Tournament Type */}
-          <FormField
-            control={form.control}
-            name="tournament_type"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Tournament Type</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger data-testid="tournament-type-select">
-                      <SelectValue placeholder="Select tournament type" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem
-                      value="single_elimination"
-                      data-testid="tournament-type-single"
-                    >
-                      Single Elimination
-                    </SelectItem>
-                    <SelectItem
-                      value="double_elimination"
-                      data-testid="tournament-type-double"
-                    >
-                      Double Elimination
-                    </SelectItem>
-                    <SelectItem
-                      value="swiss"
-                      data-testid="tournament-type-swiss"
-                    >
-                      Swiss System
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Date & Time Picker */}
-          <FormField
-            control={form.control}
-            name="date_played"
-            render={({ field }) => (
-              <FormItem className="flex flex-col">
-                <FormLabel>Tournament Date & Time</FormLabel>
-                <div className="flex flex-wrap gap-2">
-                  {/* Date Picker */}
-                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen} modal={true}>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            'pl-3 text-left font-normal',
-                            !selectedDate && 'text-muted-foreground'
-                          )}
-                          data-testid="tournament-date-picker"
-                        >
-                          {selectedDate ? (
-                            format(localDate(selectedDate), 'PPP')
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={selectedDate ? localDate(selectedDate) : undefined}
-                        onSelect={(date) => {
-                          if (date) {
-                            setSelectedDate(format(date, 'yyyy-MM-dd'));
-                          }
-                          setCalendarOpen(false);
-                        }}
-                        data-testid="tournament-calendar"
+            <TabsContent value="general" className="space-y-4 mt-4">
+              {/* Tournament Name */}
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tournament Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Enter tournament name"
+                        data-testid="tournament-name-input"
+                        {...field}
                       />
-                    </PopoverContent>
-                  </Popover>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-                  {/* Time Picker */}
-                  <Input
-                    type="time"
-                    value={selectedTime}
-                    onChange={(e) => setSelectedTime(e.target.value)}
-                    className="w-fit"
-                    data-testid="tournament-time-picker"
-                  />
-                </div>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              {/* Tournament Type */}
+              <FormField
+                control={form.control}
+                name="tournament_type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tournament Type</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="tournament-type-select">
+                          <SelectValue placeholder="Select tournament type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem
+                          value="single_elimination"
+                          data-testid="tournament-type-single"
+                        >
+                          Single Elimination
+                        </SelectItem>
+                        <SelectItem
+                          value="double_elimination"
+                          data-testid="tournament-type-double"
+                        >
+                          Double Elimination
+                        </SelectItem>
+                        <SelectItem
+                          value="swiss"
+                          data-testid="tournament-type-swiss"
+                        >
+                          Swiss System
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          {/* Timezone Picker */}
-          <FormField
-            control={form.control}
-            name="timezone"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="flex items-center gap-2">
-                  <Globe className="h-4 w-4" />
-                  Timezone
-                </FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  value={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger data-testid="tournament-timezone-select">
-                      <SelectValue placeholder="Select timezone" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {COMMON_TIMEZONES.map((tz) => (
-                      <SelectItem
-                        key={tz}
-                        value={tz}
-                        data-testid={`tournament-timezone-${tz}`}
-                      >
-                        {tz === 'UTC' ? 'UTC' : `${formatTimezoneLabel(tz)} (${tz})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormDescription>
-                  The timezone in which the tournament will be played
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+              {/* Date & Time Picker */}
+              <FormField
+                control={form.control}
+                name="date_played"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Tournament Date & Time</FormLabel>
+                    <div className="flex flex-wrap gap-2">
+                      {/* Date Picker */}
+                      <Popover open={calendarOpen} onOpenChange={setCalendarOpen} modal={true}>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                'pl-3 text-left font-normal',
+                                !selectedDate && 'text-muted-foreground'
+                              )}
+                              data-testid="tournament-date-picker"
+                            >
+                              {selectedDate ? (
+                                format(localDate(selectedDate), 'PPP')
+                              ) : (
+                                <span>Pick a date</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={selectedDate ? localDate(selectedDate) : undefined}
+                            onSelect={(date) => {
+                              if (date) {
+                                setSelectedDate(format(date, 'yyyy-MM-dd'));
+                              }
+                              setCalendarOpen(false);
+                            }}
+                            data-testid="tournament-calendar"
+                          />
+                        </PopoverContent>
+                      </Popover>
 
-          {/* League Picker */}
-          <FormField
-            control={form.control}
-            name="league"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>League (Optional)</FormLabel>
-                <Select
-                  onValueChange={(value) => {
-                    const leagueId = value === 'none' ? null : parseInt(value, 10);
-                    field.onChange(leagueId);
-                    if (leagueId && leagues) {
-                      const selectedLeague = leagues.find((l: LeagueType) => l.pk === leagueId);
-                      if (selectedLeague?.timezone) {
-                        form.setValue('timezone', selectedLeague.timezone);
-                      }
-                    }
-                  }}
-                  value={field.value?.toString() || 'none'}
-                >
-                  <FormControl>
-                    <SelectTrigger data-testid="tournament-league-select">
-                      <SelectValue placeholder="Select a league" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="none" data-testid="tournament-league-none">
-                      No League
-                    </SelectItem>
-                    {leagues?.map((league: LeagueType) => (
-                      <SelectItem
-                        key={league.pk}
-                        value={league.pk?.toString() || ''}
-                        data-testid={`tournament-league-${league.pk}`}
-                      >
-                        {league.name}
-                        {league.organization_name && (
-                          <span className="text-muted-foreground ml-2">
-                            ({league.organization_name})
-                          </span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                      {/* Time Picker */}
+                      <Input
+                        type="time"
+                        value={selectedTime}
+                        onChange={(e) => setSelectedTime(e.target.value)}
+                        className="w-fit"
+                        data-testid="tournament-time-picker"
+                      />
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Timezone Picker */}
+              <FormField
+                control={form.control}
+                name="timezone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <Globe className="h-4 w-4" />
+                      Timezone
+                    </FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="tournament-timezone-select">
+                          <SelectValue placeholder="Select timezone" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {COMMON_TIMEZONES.map((tz) => (
+                          <SelectItem
+                            key={tz}
+                            value={tz}
+                            data-testid={`tournament-timezone-${tz}`}
+                          >
+                            {tz === 'UTC' ? 'UTC' : `${formatTimezoneLabel(tz)} (${tz})`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      The timezone in which the tournament will be played
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* League Picker */}
+              <FormField
+                control={form.control}
+                name="league"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>League (Optional)</FormLabel>
+                    <Select
+                      onValueChange={(value) => {
+                        const leagueId = value === 'none' ? null : parseInt(value, 10);
+                        field.onChange(leagueId);
+                        if (leagueId && leagues) {
+                          const selectedLeague = leagues.find((l: LeagueType) => l.pk === leagueId);
+                          if (selectedLeague?.timezone) {
+                            form.setValue('timezone', selectedLeague.timezone);
+                          }
+                        }
+                      }}
+                      value={field.value?.toString() || 'none'}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="tournament-league-select">
+                          <SelectValue placeholder="Select a league" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none" data-testid="tournament-league-none">
+                          No League
+                        </SelectItem>
+                        {leagues?.map((league: LeagueType) => (
+                          <SelectItem
+                            key={league.pk}
+                            value={league.pk?.toString() || ''}
+                            data-testid={`tournament-league-${league.pk}`}
+                          >
+                            {league.name}
+                            {league.organization_name && (
+                              <span className="text-muted-foreground ml-2">
+                                ({league.organization_name})
+                              </span>
+                            )}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </TabsContent>
+
+            <TabsContent value="config" className="mt-4">
+              <TournamentConfigSection control={form.control} />
+            </TabsContent>
+
+            <TabsContent value="discord" className="mt-4">
+              <DiscordTournamentConfigSection control={form.control} />
+            </TabsContent>
+          </Tabs>
 
           {/* Submit Button */}
           <div className="flex flex-row justify-end gap-2 pt-4">
