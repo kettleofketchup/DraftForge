@@ -753,6 +753,7 @@ function SignupsTab({
   hasDiscordServer?: boolean;
 }) {
   const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(null);
+  const [removeSignup, setRemoveSignup] = useState<{ signup: EventSignupType; name: string } | null>(null);
   const [addUserOpen, setAddUserOpen] = useState(false);
   const queryClient = useQueryClient();
 
@@ -883,11 +884,8 @@ function SignupsTab({
                   <DestructiveButton size="sm" depth={false}
                     onClick={() => {
                       const name = user ? (user.nickname || user.username) : `User #${signup.user}`;
-                      if (window.confirm(`Remove ${name} from this event? They will lose their signup position.`)) {
-                        signupActions.cancel.mutate(signup.id);
-                      }
+                      setRemoveSignup({ signup, name });
                     }}
-                    loading={signupActions.cancel.isPending}
                   >
                     <UserX className="h-3.5 w-3.5" />
                     <span className="hidden lg:inline ml-1">Remove</span>
@@ -949,6 +947,22 @@ function SignupsTab({
           });
         }}
         isApproving={signupActions.approve.isPending}
+      />
+      <ConfirmDialog
+        open={!!removeSignup}
+        onOpenChange={(open) => { if (!open) setRemoveSignup(null); }}
+        title="Remove User"
+        description={`Remove ${removeSignup?.name ?? 'this user'} from the event? They will lose their signup position and need to re-sign up.`}
+        confirmLabel="Remove"
+        variant="destructive"
+        isLoading={signupActions.cancel.isPending}
+        onConfirm={() => {
+          if (removeSignup) {
+            signupActions.cancel.mutate(removeSignup.signup.id, {
+              onSuccess: () => setRemoveSignup(null),
+            });
+          }
+        }}
       />
     </div>
   );
