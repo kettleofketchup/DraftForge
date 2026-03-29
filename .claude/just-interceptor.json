@@ -1,0 +1,18 @@
+{
+  "redirects": [
+    {
+      "category": "test",
+      "enabled": true,
+      "pattern": "^npx playwright test",
+      "just_command": "just test::pw::spec",
+      "reason": "uses project test runner with correct config"
+    },
+    {
+      "category": "docker",
+      "enabled": true,
+      "pattern": "^docker compose.*down",
+      "just_command": "just test::down",
+      "reason": "project-standard compose config"
+    }
+  ]
+}
