@@ -32,7 +32,7 @@ def _event_url(event):
 
 
 def _signup_counts(event):
-    signups = EventSignup.objects.filter(event=event)
+    signups = EventSignup.objects.filter(event_id=event.pk)
     active = signups.exclude(
         status__in=[
             SignupStatus.CANCELLED,
@@ -116,7 +116,7 @@ def build_announcement_embeds(event):
     }
 
     # Embed 2: Participants
-    signups = EventSignup.objects.filter(event=event).select_related("user")
+    signups = EventSignup.objects.filter(event_id=event.pk).select_related("user")
 
     active = signups.exclude(
         status__in=[
@@ -246,7 +246,7 @@ def build_announcement_v2(event):
     fields.append({"name": "\u200b", "value": "\u200b", "inline": False})
 
     # Signup lists (blockquoted player names)
-    signups = EventSignup.objects.filter(event=event).select_related("user")
+    signups = EventSignup.objects.filter(event_id=event.pk).select_related("user")
 
     # Signed Up
     active = signups.exclude(
