@@ -408,6 +408,35 @@ class EventViewSet(viewsets.ModelViewSet):
             )
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=True, methods=["post"], url_path="admin-signup")
+    def admin_signup(self, request, pk=None):
+        """Admin adds a user to the event signup list.
+        POST /api/events/<pk>/admin-signup/ {"user_id": <pk>}
+        """
+        from app.models import CustomUser
+
+        event = self.get_object()
+        if not has_org_staff_access(request.user, event.organization):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        user_id = request.data.get("user_id")
+        if not user_id:
+            return Response(
+                {"error": "user_id is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            user = CustomUser.objects.get(pk=user_id)
+        except CustomUser.DoesNotExist:
+            return Response(
+                {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
+            )
+        try:
+            signup = process_rsvp(event, user)
+            return Response(
+                EventSignupSerializer(signup).data, status=status.HTTP_201_CREATED
+            )
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
     @action(detail=True, methods=["post"])
     def open_signups(self, request, pk=None):
         event = self.get_object()

@@ -421,9 +421,16 @@ def build_signup_update_embed(event):
 
 
 def build_new_event_embed(event):
+    from zoneinfo import ZoneInfo
+
     desc = f"A new event has been created for **{event.organization.name}**!"
     if url := _event_url(event):
         desc += f"\n\n[Sign Up]({url})"
+
+    tz = ZoneInfo(event.timezone) if getattr(event, "timezone", None) else None
+    local_dt = event.scheduled_at.astimezone(tz) if tz else event.scheduled_at
+    tz_time = local_dt.strftime("%-I:%M %p %Z")
+
     return {
         "title": f"\U0001f195 {event.name}",
         "description": desc,
@@ -431,7 +438,7 @@ def build_new_event_embed(event):
         "fields": [
             {
                 "name": "When",
-                "value": _discord_timestamp(event.scheduled_at),
+                "value": f"{_discord_timestamp(event.scheduled_at)} ({tz_time})",
                 "inline": True,
             },
         ],
@@ -455,10 +462,16 @@ def _build_reminder_embed(
     active = getattr(event, "signup_count", 0)
     max_display = str(event.max_players) if event.max_players else "\u221e"
 
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(event.timezone) if getattr(event, "timezone", None) else None
+    local_dt = event.scheduled_at.astimezone(tz) if tz else event.scheduled_at
+    tz_time = local_dt.strftime("%-I:%M %p %Z")  # "6:00 PM EST"
+
     fields = [
         {
             "name": "When",
-            "value": f"{_discord_timestamp(event.scheduled_at, style='F')}\n{_discord_timestamp(event.scheduled_at, style='R')}",
+            "value": f"{_discord_timestamp(event.scheduled_at, style='F')}\n{_discord_timestamp(event.scheduled_at, style='R')} ({tz_time})",
             "inline": True,
         },
         {

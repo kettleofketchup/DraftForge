@@ -28,7 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
-import { createEventInputSchema, GameType, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, type CreateEventInput } from './schemas';
+import { createEventInputSchema, GameType, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC, type CreateEventInput } from './schemas';
 import type { LeagueType } from '~/components/league';
 
 interface CreateEventModalProps {
@@ -147,7 +147,9 @@ export function CreateEventModal({
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at, discord_notify_new_events, signup_mode, signup_days_before, ...shared } = data;
+      const { is_recurring, frequency, day_of_week, time_of_day, starts_at, ends_at, generate_days_ahead, scheduled_at: rawScheduledAt, discord_notify_new_events, signup_mode, signup_days_before, ...shared } = data;
+      // Convert naive datetime-local to UTC using the selected timezone
+      const scheduled_at = rawScheduledAt ? localToUTC(rawScheduledAt, data.timezone) : rawScheduledAt;
 
       if (is_recurring) {
         await createEventRepeater({

@@ -51,6 +51,7 @@ import {
   ShieldAlert,
   ArrowDownToLine,
   Undo2,
+  UserPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -77,7 +78,8 @@ import {
   useSignupActionMutations,
 } from '~/hooks/useEvent';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { subscribeToRepeater, unsubscribeFromRepeater } from '~/components/api/api';
+import { adminAddSignup, subscribeToRepeater, unsubscribeFromRepeater } from '~/components/api/api';
+import { AddUserModal } from '~/components/user/AddUserModal';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrganization } from '~/components/organization';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
@@ -572,6 +574,9 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
+              eventId={event.id}
+              orgId={event.organization}
+              hasDiscordServer={!!eventOrg?.discord_server_id}
             />
           </TabsContent>
 
@@ -585,7 +590,7 @@ export default function EventPage() {
           </TabsContent>
 
           <TabsContent value="discord">
-            <DiscordLogSection eventId={event.id} isAdmin={isAdmin} />
+            <DiscordLogSection eventId={event.id} isAdmin={isAdmin} eventTimezone={event.timezone} />
           </TabsContent>
         </Tabs>
       </div>
@@ -734,13 +739,21 @@ function SignupsTab({
   isAdmin,
   signupActions,
   gameType,
+  eventId,
+  orgId,
+  hasDiscordServer,
 }: {
   signups: EventSignupType[];
   isAdmin: boolean;
   signupActions: ReturnType<typeof useSignupActionMutations>;
   gameType: number;
+  eventId?: number;
+  orgId?: number;
+  hasDiscordServer?: boolean;
 }) {
   const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(null);
+  const [addUserOpen, setAddUserOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
   const resolvedUsers = useResolvedUsers(userPks);
@@ -749,17 +762,42 @@ function SignupsTab({
     [resolvedUsers],
   );
 
-  if (signups.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-        <Users className="w-12 h-12 mb-3 opacity-50" />
-        <p>No signups yet</p>
-      </div>
-    );
-  }
+  const signupUserPks = useMemo(() => new Set(signups.map((s) => s.user)), [signups]);
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-3">
+      {isAdmin && eventId && (
+        <div className="flex justify-end">
+          <SecondaryButton
+            size="sm"
+            onClick={() => setAddUserOpen(true)}
+            data-testid="admin-add-signup-btn"
+          >
+            <UserPlus className="h-4 w-4 mr-1" />
+            Add User
+          </SecondaryButton>
+          <AddUserModal
+            open={addUserOpen}
+            onOpenChange={setAddUserOpen}
+            title="Add User to Event"
+            entityContext={{ orgId }}
+            onAdd={async (payload) => {
+              const resp = await adminAddSignup(eventId, payload.user_id);
+              queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+              return resp;
+            }}
+            isAdded={(user) => signupUserPks.has(user.pk)}
+            hasDiscordServer={!!hasDiscordServer}
+          />
+        </div>
+      )}
+      {signups.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <Users className="w-12 h-12 mb-3 opacity-50" />
+          <p>No signups yet</p>
+        </div>
+      )}
+      <div className="space-y-1.5">
       {signups.map((signup, index) => {
         const user = userMap.get(signup.user);
         const position = signup.waitlist_position ?? index + 1;
@@ -886,6 +924,7 @@ function SignupsTab({
         );
       })}
 
+      </div>
       <MmrApprovalModal
         signup={approvalSignup}
         open={!!approvalSignup}

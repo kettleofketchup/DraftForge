@@ -28,7 +28,7 @@ import { useUpdateEventMutation } from '~/hooks/useEvent';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
-import { discordConfigSchema, GameType, GameMode, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES } from './schemas';
+import { discordConfigSchema, GameType, GameMode, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC } from './schemas';
 import type { EventType } from './schemas';
 
 const editEventSchema = z.object({
@@ -138,7 +138,12 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
     if (isSubmitting || !event) return;
     setIsSubmitting(true);
     try {
-      const result = await mutation.mutateAsync(data);
+      // Convert naive datetime-local to UTC using selected timezone
+      const payload = {
+        ...data,
+        scheduled_at: data.scheduled_at ? localToUTC(data.scheduled_at, data.timezone) : data.scheduled_at,
+      };
+      const result = await mutation.mutateAsync(payload);
       if (result._warning) {
         toast.warning(result._warning);
       } else {

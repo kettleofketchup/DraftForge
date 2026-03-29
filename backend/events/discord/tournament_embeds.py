@@ -26,19 +26,19 @@ def _site_url():
 
 
 def build_draft_link_embed(
-    tournament_name, draft_type_display, tournament_id, date_played=None
+    tournament_name, draft_type_display, tournament_id, date_played=None, timezone=None
 ):
     """Rich embed for team draft start DM."""
     url = f"{_site_url()}/tournament/{tournament_id}/teams/draft"
     fields = [{"name": "Draft Type", "value": draft_type_display, "inline": True}]
     if date_played:
-        fields.append(
-            {
-                "name": "Date / Time",
-                "value": f"<t:{int(date_played.timestamp())}:F>",
-                "inline": True,
-            }
-        )
+        when_value = f"<t:{int(date_played.timestamp())}:F>"
+        if timezone:
+            from zoneinfo import ZoneInfo
+
+            local_dt = date_played.astimezone(ZoneInfo(timezone))
+            when_value += f" ({local_dt.strftime('%-I:%M %p %Z')})"
+        fields.append({"name": "Date / Time", "value": when_value, "inline": True})
     return {
         "author": {"name": "DraftForge", "icon_url": LOGO_URL},
         "thumbnail": {"url": LOGO_URL},

@@ -74,9 +74,10 @@ function formatRelativeTime(dateStr: string): string {
 interface TaskScheduleSectionProps {
   eventId: number;
   isAdmin?: boolean;
+  eventTimezone?: string;
 }
 
-export function TaskScheduleSection({ eventId, isAdmin }: TaskScheduleSectionProps) {
+export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskScheduleSectionProps) {
   const { data: tasks, isLoading } = useEventTaskSchedule(eventId);
   const queryClient = useQueryClient();
   const currentUser = useUserStore((state) => state.currentUser);
@@ -171,7 +172,9 @@ export function TaskScheduleSection({ eventId, isAdmin }: TaskScheduleSectionPro
                     <div className="text-foreground">{formatRelativeTime(task.fires_at)}</div>
                     <div className="text-[10px] text-muted-foreground">
                       {new Date(task.fires_at).toLocaleString(undefined, {
+                        timeZone: eventTimezone || undefined,
                         month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                        timeZoneName: 'short',
                       })}
                     </div>
                   </div>

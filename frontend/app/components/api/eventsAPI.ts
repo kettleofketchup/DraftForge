@@ -295,6 +295,11 @@ export interface DiscordRole {
   position: number;
 }
 
+export async function adminAddSignup(eventId: number, userId: number) {
+  const { data } = await axios.post(`/events/${eventId}/admin-signup/`, { user_id: userId });
+  return data;
+}
+
 export async function subscribeToRepeater(repeaterId: number): Promise<void> {
   await axios.post(`/events/repeaters/${repeaterId}/subscribe/`);
 }

@@ -191,6 +191,49 @@ export const COMMON_TIMEZONES = [
   'UTC',
 ] as const;
 
+/**
+ * Convert a naive datetime-local string to UTC ISO string using the given IANA timezone.
+ * datetime-local gives "2026-03-29T19:00" — this interprets it as 7 PM in the given tz
+ * and converts to UTC for the API.
+ *
+ * Uses Intl.DateTimeFormat to compute the UTC offset for the target timezone at the
+ * given date/time, which correctly handles DST transitions.
+ */
+export function localToUTC(datetimeLocal: string, timezone: string): string {
+  if (!datetimeLocal || !timezone) return datetimeLocal;
+
+  // Parse the naive datetime parts (YYYY-MM-DDTHH:MM)
+  const [datePart, timePart] = datetimeLocal.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute] = (timePart || '00:00').split(':').map(Number);
+
+  // Create a UTC date with these exact numbers
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute);
+
+  // Find what that UTC instant looks like in the target timezone
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', hour12: false,
+  });
+  const parts = Object.fromEntries(
+    fmt.formatToParts(new Date(utcGuess)).map((p) => [p.type, p.value])
+  );
+  const tzHour = Number(parts.hour === '24' ? '0' : parts.hour);
+  const tzMinute = Number(parts.minute);
+  const tzDay = Number(parts.day);
+
+  // Offset = difference between what we want (the naive values) and what the tz shows
+  let diffMinutes = (hour - tzHour) * 60 + (minute - tzMinute);
+  // Handle day boundary crossing
+  if (tzDay !== day) {
+    diffMinutes += (day - tzDay) * 24 * 60;
+  }
+
+  const result = new Date(utcGuess + diffMinutes * 60_000);
+  return result.toISOString();
+}
+
 export const discordConfigSchema = z.object({
   discord_create_event: z.boolean(),
   discord_sync_signups: z.boolean(),

@@ -36,6 +36,7 @@ def send_tournament_draft_links(tournament_id, draft_id):
         tournament.draft_type,
         tournament_id,
         date_played=tournament.date_played,
+        timezone=getattr(tournament, "timezone", None),
     )
     components = build_draft_link_components(tournament_id)
     participants = get_tournament_participants(tournament_id)
