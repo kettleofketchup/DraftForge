@@ -438,77 +438,110 @@ def build_new_event_embed(event):
     }
 
 
-def build_signup_reminder_embed(event):
-    active, _ = _signup_counts(event)
+def _build_reminder_embed(event, title, description, color, extra_fields=None):
+    """Shared layout for all reminder embeds — matches announcement style.
+
+    Includes: branding (org name + logo), event time, signup count, event page
+    link, and optional extra fields.
+    """
+    LOGO_URL = "https://assets.kettle.sh/draftforge/DFLogo.png"
+
+    url = _event_url(event)
+    active = getattr(event, "signup_count", 0)
     max_display = str(event.max_players) if event.max_players else "\u221e"
-    return {
-        "title": f"\u23f0 {event.name} \u2014 Signup Reminder",
-        "description": f"Don't forget to sign up! Currently **{active}/{max_display}** players.",
-        "color": COLOR_REMINDER,
+
+    fields = [
+        {
+            "name": "When",
+            "value": f"{_discord_timestamp(event.scheduled_at, style='F')}\n{_discord_timestamp(event.scheduled_at, style='R')}",
+            "inline": True,
+        },
+        {
+            "name": "Signups",
+            "value": f"**{active}/{max_display}** players",
+            "inline": True,
+        },
+    ]
+
+    if url:
+        fields.append(
+            {"name": "Event Page", "value": f"[View & Sign Up]({url})", "inline": True}
+        )
+
+    if extra_fields:
+        fields.extend(extra_fields)
+
+    embed = {
+        "title": title[:256],
+        "description": description,
+        "color": color,
+        "fields": fields,
+        "thumbnail": {"url": LOGO_URL},
+        "timestamp": event.scheduled_at.isoformat(),
     }
+
+    if hasattr(event, "organization") and event.organization:
+        embed["author"] = {"name": event.organization.name}
+        if hasattr(event.organization, "logo") and event.organization.logo:
+            embed["author"]["icon_url"] = event.organization.logo
+
+    return embed
+
+
+def build_signup_reminder_embed(event):
+    active = getattr(event, "signup_count", 0)
+    max_display = str(event.max_players) if event.max_players else "\u221e"
+    desc = event.description or ""
+    if desc:
+        desc = desc[:200] + ("\u2026" if len(desc) > 200 else "")
+        desc += "\n\n"
+    desc += f"Don't forget to sign up! Currently **{active}/{max_display}** players."
+    return _build_reminder_embed(
+        event,
+        title=f"\u23f0 {event.name} \u2014 Signup Reminder",
+        description=desc,
+        color=COLOR_REMINDER,
+    )
 
 
 def build_attendance_reminder_embed(event):
-    return {
-        "title": f"\u270b {event.name} \u2014 Confirm Attendance",
-        "description": "The event is coming up! Please confirm your attendance.",
-        "color": COLOR_REMINDER,
-    }
+    return _build_reminder_embed(
+        event,
+        title=f"\u270b {event.name} \u2014 Confirm Attendance",
+        description="The event is coming up! Please confirm your attendance by reacting to the signup post.",
+        color=COLOR_REMINDER,
+    )
 
 
 def build_profile_reminder_embed(event):
     requirements = []
-    if event.require_steam_id:
+    if getattr(event, "require_steam_id", False):
         requirements.append("Steam ID")
-    if event.require_mmr_verified:
+    if getattr(event, "require_mmr_verified", False):
         requirements.append("Verified MMR")
-    if event.require_profile_complete:
+    if getattr(event, "require_profile_complete", False):
         requirements.append("Complete profile")
     req_text = ", ".join(requirements) if requirements else "a complete profile"
-    return {
-        "title": f"\U0001f464 {event.name} \u2014 Complete Your Profile",
-        "description": f"Please make sure you have: {req_text}",
-        "color": COLOR_PROFILE,
-    }
+    return _build_reminder_embed(
+        event,
+        title=f"\U0001f464 {event.name} \u2014 Complete Your Profile",
+        description=f"Please make sure you have: {req_text}",
+        color=COLOR_PROFILE,
+    )
 
 
 def build_subscriber_dm_embed(event):
-    """Build DM embed for subscriber pre-event notification."""
-    url = _event_url(event)
-    signup_link = ""
-    try:
-        de = event.discord_event
-        if de.signup_message and de.signup_message.has_posted:
-            sm = de.signup_message
-            guild_id = de.guild_id
-            channel = sm.thread_id or sm.channel_id
-            signup_link = (
-                f"https://discord.com/channels/{guild_id}/{channel}/{sm.message_id}"
-            )
-    except Exception:
-        logger.debug("Could not build signup link for event %s", event.pk)
+    """Build DM embed for subscriber pre-event notification.
 
-    description = f"**{event.name}** is starting soon!\n\n"
-    description += f"\U0001f4c5 {_discord_timestamp(event.scheduled_at)}\n"
-    if signup_link:
-        description += f"\n\U0001f517 **[Sign up on Discord]({signup_link})**\n"
-    if url:
-        description += f"\U0001f310 **[View Event]({url})**\n"
+    Works with both Django model instances and Pydantic EventTaskData.
+    """
+    desc = f"**{event.name}** is starting soon!"
+    if event.description:
+        desc += f"\n\n{event.description[:200]}"
 
-    title = f"\U0001f514 Event Reminder: {event.name}"[:256]
-
-    embed = {
-        "title": title,
-        "description": description,
-        "color": COLOR_REMINDER,
-    }
-
-    # Add branding
-    if hasattr(event, "organization") and event.organization:
-        embed["author"] = {
-            "name": event.organization.name,
-        }
-        if event.organization.logo:
-            embed["author"]["icon_url"] = event.organization.logo
-
-    return embed
+    return _build_reminder_embed(
+        event,
+        title=f"\U0001f514 Event Reminder: {event.name}",
+        description=desc,
+        color=COLOR_REMINDER,
+    )
