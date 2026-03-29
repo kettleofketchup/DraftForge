@@ -9,6 +9,7 @@ import type {
   TournamentType,
   UserType,
 } from '~/index';
+import type { DiscordTournamentLogEntry } from '~/components/tournament/schemas';
 import type { AddMemberPayload, AddUserResponse } from './types';
 import { getLogger } from '~/lib/logger';
 import axios from './axios';
@@ -76,15 +77,7 @@ export async function addTournamentMember(
   return response.data.tournament;
 }
 
-export interface DiscordTournamentLogEntry {
-  id: number;
-  category: string;
-  notification_type: string;
-  message: string;
-  recipient_count: number;
-  success: boolean;
-  created_at: string;
-}
+export type { DiscordTournamentLogEntry } from '~/components/tournament/schemas';
 
 export async function fetchDiscordTournamentLogs(
   tournamentId: number,

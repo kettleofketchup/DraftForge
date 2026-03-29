@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { CalendarIcon, Globe } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -8,7 +9,7 @@ import { toast } from 'sonner';
 import { createTournament, updateTournament } from '~/components/api/api';
 import type { LeagueType } from '~/components/league/schemas';
 import { Button } from '~/components/ui/button';
-import { SubmitButton } from '~/components/ui/buttons';
+import { CancelButton, SubmitButton } from '~/components/ui/buttons';
 import { Calendar } from '~/components/ui/calendar';
 import { DialogClose } from '~/components/ui/dialog';
 import {
@@ -94,8 +95,6 @@ function localDate(dateStr: string): Date {
 
 interface Props {
   tourn: TournamentClassType;
-  form?: TournamentClassType;
-  setForm?: React.Dispatch<React.SetStateAction<TournamentClassType>>;
   onSuccess?: () => void;
 }
 
@@ -103,6 +102,7 @@ export const TournamentEditForm: React.FC<Props> = ({
   tourn,
   onSuccess,
 }) => {
+  const queryClient = useQueryClient();
   const currentUser = useUserStore((state) => state.currentUser);
   const getTournaments = useUserStore((state) => state.getTournaments);
   const leagues = useUserStore((state) => state.leagues);
@@ -178,12 +178,18 @@ export const TournamentEditForm: React.FC<Props> = ({
       }
 
       getTournaments();
+      queryClient.invalidateQueries({ queryKey: ['tournaments'] });
+      if (isEditing && tourn?.pk) {
+        queryClient.invalidateQueries({ queryKey: ['tournament', tourn.pk] });
+      }
       onSuccess?.();
       form.reset();
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       log.error('Failed to save tournament:', err);
-      toast.error(isEditing ? 'Failed to update tournament' : 'Failed to create tournament');
+      toast.error(isEditing ? 'Failed to update tournament' : 'Failed to create tournament', {
+        description: errorMessage,
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -426,14 +432,10 @@ export const TournamentEditForm: React.FC<Props> = ({
           {/* Submit Button */}
           <div className="flex flex-row justify-end gap-2 pt-4">
             <DialogClose asChild>
-              <Button
-                type="button"
-                variant="outline"
+              <CancelButton
                 disabled={isSubmitting}
                 data-testid="tournament-cancel-button"
-              >
-                Cancel
-              </Button>
+              />
             </DialogClose>
             <SubmitButton
               loading={isSubmitting}

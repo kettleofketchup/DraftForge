@@ -37,6 +37,8 @@ export function TournamentSettingsModal({ tournament }: Props) {
               <Button
                 variant="ghost"
                 size="icon"
+                className="text-muted-foreground hover:text-foreground hover:bg-violet-500/20"
+                aria-label="Tournament Settings"
                 data-testid="tournament-settings-button"
               >
                 <Settings className="h-4 w-4" />
@@ -47,7 +49,7 @@ export function TournamentSettingsModal({ tournament }: Props) {
         </Tooltip>
       </TooltipProvider>
 
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-6xl h-[calc(100vh-4rem)] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Tournament Settings — {tournament.name}</DialogTitle>
         </DialogHeader>

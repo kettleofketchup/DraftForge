@@ -102,3 +102,15 @@ export const CreateTournamentSchema = z.object({
 });
 
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;
+
+export const DiscordTournamentLogSchema = z.object({
+  id: z.number(),
+  category: z.string(),
+  notification_type: z.string(),
+  message: z.string(),
+  recipient_count: z.number(),
+  success: z.boolean(),
+  created_at: z.string(),
+});
+
+export type DiscordTournamentLogEntry = z.infer<typeof DiscordTournamentLogSchema>;
