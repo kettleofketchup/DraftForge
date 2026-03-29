@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import api from '~/components/api/axios';
+import { useUserStore } from '~/store/userStore';
 
 interface TaskEntry {
   task: string;
@@ -66,6 +67,9 @@ interface TaskScheduleSectionProps {
 export function TaskScheduleSection({ eventId, isAdmin }: TaskScheduleSectionProps) {
   const { data: tasks, isLoading } = useEventTaskSchedule(eventId);
   const queryClient = useQueryClient();
+  const currentUser = useUserStore((state) => state.currentUser);
+  // Site staff can always fire, plus explicit isAdmin prop
+  const canFire = isAdmin || currentUser?.is_staff || currentUser?.is_superuser;
 
   const fireMutation = useMutation({
     mutationFn: (taskName: string) =>
@@ -116,7 +120,7 @@ export function TaskScheduleSection({ eventId, isAdmin }: TaskScheduleSectionPro
             <th className="text-left py-2 hidden sm:table-cell">Timing</th>
             <th className="text-left py-2 hidden md:table-cell">Check</th>
             <th className="text-left py-2">Status</th>
-            {isAdmin && <th className="text-right py-2 pr-1 w-16"></th>}
+            {canFire && <th className="text-right py-2 pr-1 w-16"></th>}
           </tr>
         </thead>
         <tbody>
@@ -180,7 +184,7 @@ export function TaskScheduleSection({ eventId, isAdmin }: TaskScheduleSectionPro
               </td>
 
               {/* Fire button (admin only) */}
-              {isAdmin && (
+              {canFire && (
                 <td className="py-2.5 text-right pr-1">
                   {task.can_fire && (
                     <Button
