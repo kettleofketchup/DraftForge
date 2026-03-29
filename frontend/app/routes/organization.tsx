@@ -136,7 +136,7 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
                   {FREQUENCY_LABELS[r.frequency] ?? r.frequency}
                   {r.day_of_week != null && ` on ${DAY_LABELS[r.day_of_week]}`}
                   {' at '}
-                  {r.time_of_day.slice(0, 5)}
+                  {r.time_of_day?.slice(0, 5)}
                   {r.subscriber_count > 0 && (
                     <span className="ml-2 text-xs">{'\u00B7'} {r.subscriber_count} subscribed</span>
                   )}
