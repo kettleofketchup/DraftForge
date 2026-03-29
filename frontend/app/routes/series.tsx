@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, BellOff, CalendarDays, Pencil, Repeat, Users } from 'lucide-react';
+import { Bell, BellOff, CalendarDays, Pencil, Repeat, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { generateMeta } from '~/lib/seo';
 import { EventStateBadge } from '~/components/events';
@@ -9,7 +9,7 @@ import { EditRepeaterModal } from '~/components/events/EditRepeaterModal';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import type { EventType } from '~/components/events/schemas';
 import { Badge } from '~/components/ui/badge';
-import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
+import { DestructiveButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import { useOrganization } from '~/components/organization';
@@ -137,6 +137,8 @@ export default function SeriesPage() {
     },
   });
 
+  const navigate = useNavigate();
+
   const unsubscribeMutation = useMutation({
     mutationFn: () => unsubscribeFromRepeater(id!),
     onSuccess: () => {
@@ -144,6 +146,16 @@ export default function SeriesPage() {
       queryClient.invalidateQueries({ queryKey: ['repeater-subscribers', id] });
       toast.success('Unsubscribed from notifications');
     },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.delete(`/events/repeaters/${id}/`),
+    onSuccess: () => {
+      toast.success('Event series deleted');
+      queryClient.invalidateQueries({ queryKey: ['repeaters'] });
+      navigate('/events');
+    },
+    onError: () => toast.error('Failed to delete event series'),
   });
 
   // Current: signups_open, roll_call, in_progress
@@ -227,14 +239,29 @@ export default function SeriesPage() {
             )
           )}
           {isStaff && (
-            <SecondaryButton
-              size="sm"
-              onClick={() => setEditOpen(true)}
-              data-testid="edit-series-btn"
-            >
-              <Pencil className="h-4 w-4 mr-1" />
-              Edit
-            </SecondaryButton>
+            <>
+              <SecondaryButton
+                size="sm"
+                onClick={() => setEditOpen(true)}
+                data-testid="edit-series-btn"
+              >
+                <Pencil className="h-4 w-4 mr-1" />
+                Edit
+              </SecondaryButton>
+              <DestructiveButton
+                size="sm"
+                onClick={() => {
+                  if (window.confirm(`Delete "${repeater.name}"? This will not delete existing events.`)) {
+                    deleteMutation.mutate();
+                  }
+                }}
+                loading={deleteMutation.isPending}
+                data-testid="delete-series-btn"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Delete
+              </DestructiveButton>
+            </>
           )}
           <Badge
             className={
