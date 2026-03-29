@@ -128,7 +128,10 @@ test.describe('Event Notification DM (@cicd)', () => {
       expect(notif.embed.description).toContain('Sign up on Discord');
     }
 
-    // View Event link should always be present
-    expect(notif.embed.description).toContain('View Event');
+    // View Event button should be present in components
+    const hasViewEvent = notif.components?.some((row: { components: { label: string }[] }) =>
+      row.components?.some((btn) => btn.label === 'View Event')
+    ) ?? false;
+    expect(hasViewEvent || notif.embed.description?.includes('View Event')).toBeTruthy();
   });
 });

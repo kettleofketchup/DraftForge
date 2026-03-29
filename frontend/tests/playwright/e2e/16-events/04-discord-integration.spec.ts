@@ -315,8 +315,8 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await expect(page.getByText('approved')).toBeVisible({ timeout: 10000 });
   });
 
-  test('Discord tab shows "not configured" when no Discord config', async ({ context, page }) => {
-    // Create a fresh event WITHOUT Discord config
+  test('Discord tab shows empty state for fresh event', async ({ context, page }) => {
+    // Create a fresh event — DiscordEvent auto-created since org has discord_server_id
     const createResp = await postWithCsrf(context, `${API_URL}/events/?open_signups=true`, {
       organization: eventInfo.orgPk,
       name: 'No Discord Config Event',
@@ -336,6 +336,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
 
     await visitAndWaitForHydration(page, `/events/${event.id}`);
     await page.getByTestId('event-tab-discord').click();
-    await expect(page.getByText('No Discord integration configured')).toBeVisible({ timeout: 5000 });
+    // Discord tab should load with empty activity (no "not configured" since DiscordEvent auto-created)
+    await expect(page.getByText('Task Schedule')).toBeVisible({ timeout: 5000 });
   });
 });

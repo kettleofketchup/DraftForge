@@ -606,4 +606,5 @@ def build_subscriber_dm_embed(event):
         title=f"\U0001f514 Event Reminder: {event.name}",
         description=desc,
         color=COLOR_REMINDER,
+        include_buttons=True,
     )
