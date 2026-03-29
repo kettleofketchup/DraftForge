@@ -118,6 +118,7 @@ def configure_logging(
         "httpcore",
         "opentelemetry.attributes",
         "opentelemetry.exporter.otlp.proto.http._log_exporter",
+        "opentelemetry.sdk.metrics._internal.export",
     ]:
         logging.getLogger(logger_name).setLevel(logging.ERROR)
 
