@@ -256,6 +256,41 @@ class DiscordEventDM(models.Model):
         return bool(self.org_user.user.discordId)
 
 
+class DiscordTournamentLog(models.Model):
+    """Audit log for Discord notifications sent for tournaments."""
+
+    class NotificationType(models.TextChoices):
+        DRAFT_LINK = "draft_link", "Draft Link"
+        HERODRAFT_LINK = "herodraft_link", "Hero Draft Link"
+
+    class Category(models.TextChoices):
+        NOTIFICATION = "notification", "Notification"
+        SYSTEM = "system", "System"
+        ERROR = "error", "Error"
+
+    tournament = models.ForeignKey(
+        "app.Tournament", on_delete=models.CASCADE, related_name="discord_logs"
+    )
+    category = models.CharField(
+        max_length=20, choices=Category.choices, default=Category.NOTIFICATION
+    )
+    notification_type = models.CharField(
+        max_length=20, choices=NotificationType.choices
+    )
+    message = models.TextField()
+    recipient_count = models.IntegerField(default=0)
+    success = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Discord Tournament Log"
+        verbose_name_plural = "Discord Tournament Logs"
+
+    def __str__(self):
+        return f"{self.notification_type} for tournament {self.tournament_id} ({'ok' if self.success else 'fail'})"
+
+
 class LogCategory(models.IntegerChoices):
     SYSTEM = 1, "System"  # Bot-initiated: announcements, scheduled events
     INTERACTION = 2, "Interaction"  # User button clicks, selects

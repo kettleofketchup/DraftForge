@@ -315,6 +315,7 @@ from app.views.internal import (
     create_event_dm,
     create_or_update_announcement,
     create_or_update_signup_message,
+    create_tournament_log,
     get_discord_event_state,
     get_due_scheduled_events,
     get_event_for_task,
@@ -331,6 +332,7 @@ from app.views.internal import (
 urlpatterns += [
     path("api/internal/discord/message-log/", create_discord_message_log),
     path("api/internal/discord/event-log/", create_discord_event_log),
+    path("api/internal/discord/tournament-log/", create_tournament_log),
     path("api/internal/discord/events/get-or-create/", get_or_create_discord_event),
     path("api/internal/discord/events/<int:pk>/", update_discord_event),
     path("api/internal/discord/signup-message/", create_or_update_signup_message),

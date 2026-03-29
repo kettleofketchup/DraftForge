@@ -415,6 +415,36 @@ def create_discord_event_log(request):
 
 
 # ---------------------------------------------------------------------------
+# DiscordTournamentLog (NOT cached — no invalidation needed)
+# ---------------------------------------------------------------------------
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def create_tournament_log(request):
+    """Create DiscordTournamentLog entry."""
+    from discordbot.models import DiscordTournamentLog
+
+    ALLOWED_FIELDS = {
+        "tournament_id",
+        "category",
+        "notification_type",
+        "message",
+        "recipient_count",
+        "success",
+    }
+    err = _validate_required(
+        request.data, ["tournament_id", "notification_type", "message"]
+    )
+    if err:
+        return err
+    data = {k: v for k, v in request.data.items() if k in ALLOWED_FIELDS}
+    entry = DiscordTournamentLog.objects.create(**data)
+    return Response({"id": entry.pk}, status=status.HTTP_201_CREATED)
+
+
+# ---------------------------------------------------------------------------
 # DiscordEvent (CACHED — invalidate after writes)
 # ---------------------------------------------------------------------------
 

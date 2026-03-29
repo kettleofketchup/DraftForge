@@ -9,6 +9,7 @@ from .models import (
     DiscordEventMsgAnnouncement,
     DiscordEventMsgSignup,
     DiscordMessageLog,
+    DiscordTournamentLog,
     EventTemplate,
     ScheduledEvent,
 )
@@ -75,6 +76,19 @@ class DiscordEventLogAdmin(admin.ModelAdmin):
     list_display = ["discord_event", "action", "target_type", "success", "created_at"]
     list_filter = ["action", "target_type", "success"]
     readonly_fields = ["response_data"]
+
+
+@admin.register(DiscordTournamentLog)
+class DiscordTournamentLogAdmin(admin.ModelAdmin):
+    list_display = [
+        "tournament",
+        "notification_type",
+        "recipient_count",
+        "success",
+        "created_at",
+    ]
+    list_filter = ["notification_type", "success"]
+    readonly_fields = ["message"]
 
 
 @admin.register(DiscordEventDM)

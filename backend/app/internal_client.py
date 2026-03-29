@@ -94,6 +94,11 @@ def create_event_log(**data):
     return _post("/discord/event-log/", data)
 
 
+def create_tournament_log(**data):
+    """Create DiscordTournamentLog entry."""
+    return _post("/discord/tournament-log/", data)
+
+
 def get_or_create_discord_event(**data):
     """Get or create DiscordEvent for an event."""
     return _post("/discord/events/get-or-create/", data)

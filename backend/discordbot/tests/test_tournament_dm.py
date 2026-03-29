@@ -1,4 +1,42 @@
 from django.test import TestCase
+from django.utils import timezone
+
+
+class DiscordTournamentLogTest(TestCase):
+    def setUp(self):
+        from app.models import Tournament
+
+        self.tournament = Tournament.objects.create(
+            name="Test", state="future", date_played=timezone.now()
+        )
+
+    def test_create_log(self):
+        from discordbot.models import DiscordTournamentLog
+
+        log_entry = DiscordTournamentLog.objects.create(
+            tournament=self.tournament,
+            notification_type="draft_link",
+            message="Sent to 5/8",
+            recipient_count=5,
+        )
+        self.assertTrue(log_entry.success)
+        self.assertEqual(log_entry.notification_type, "draft_link")
+
+    def test_log_ordering_newest_first(self):
+        from discordbot.models import DiscordTournamentLog
+
+        log1 = DiscordTournamentLog.objects.create(
+            tournament=self.tournament,
+            notification_type="draft_link",
+            message="First",
+        )
+        log2 = DiscordTournamentLog.objects.create(
+            tournament=self.tournament,
+            notification_type="herodraft_link",
+            message="Second",
+        )
+        logs = list(DiscordTournamentLog.objects.filter(tournament=self.tournament))
+        self.assertEqual(logs[0].pk, log2.pk)
 
 
 class DiscordTournamentConfigFieldsTest(TestCase):
