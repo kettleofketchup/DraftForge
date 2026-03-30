@@ -7,16 +7,16 @@ connection counting, and server-side ping keepalive.
 
 import asyncio
 import json
-import logging
 import time
 from abc import abstractmethod
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
+from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 # Heartbeat expires after 30 seconds without renewal
 HEARTBEAT_TTL = 30
@@ -99,7 +99,14 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         r = get_redis_client()
         heartbeat_key = self._heartbeat_key(self.draft_id, self.user.id)
         r.set(heartbeat_key, str(time.time()), ex=HEARTBEAT_TTL)
-        log.debug(f"Heartbeat received: user={self.user.id} draft={self.draft_id}")
+        log.debug(
+            "heartbeat_received",
+            system="websocket",
+            subsystem="heartbeat",
+            draft_id=self.draft_id,
+            user_id=self.user.id,
+            ttl=HEARTBEAT_TTL,
+        )
 
     # --- Captain channel registration ---
 
@@ -112,9 +119,13 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         r.set(channel_key, self.channel_name, ex=CAPTAIN_CHANNEL_TTL)
         # Initialize heartbeat
         await self.handle_heartbeat()
-        log.debug(
-            f"Registered captain channel for user {self.user.id} "
-            f"in draft {self.draft_id}: {self.channel_name}"
+        log.info(
+            "captain_registered",
+            system="websocket",
+            subsystem="heartbeat",
+            draft_id=self.draft_id,
+            user_id=self.user.id,
+            channel=self.channel_name,
         )
 
     async def _unregister_captain_if_current(self):
@@ -129,9 +140,12 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         if current_channel == self.channel_name:
             r.delete(channel_key)
             r.delete(heartbeat_key)
-            log.debug(
-                f"Unregistered captain channel for user {self.user.id} "
-                f"in draft {self.draft_id}"
+            log.info(
+                "captain_unregistered",
+                system="websocket",
+                subsystem="heartbeat",
+                draft_id=self.draft_id,
+                user_id=self.user.id,
             )
 
     # --- Connection count tracking ---
