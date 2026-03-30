@@ -6,7 +6,8 @@ regardless of whether the caller has Django models or Pydantic objects.
 
 from django.conf import settings
 
-LOGO_URL = "https://assets.kettle.sh/draftforge/DFLogo.png"
+from app.constants import LOGO_URL
+
 COLOR_DRAFT = 0x5865F2
 COLOR_HERODRAFT = 0xED4245
 

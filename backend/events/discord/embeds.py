@@ -8,6 +8,7 @@ import logging
 
 from django.conf import settings
 
+from app.constants import LOGO_URL
 from app.internal_client import get_event_signups
 
 logger = logging.getLogger(__name__)
@@ -183,8 +184,6 @@ def build_announcement_v2(event):
     """
     from events.discord.components import build_announcement_components
 
-    LOGO_URL = "https://assets.kettle.sh/draftforge/DFLogo.png"
-
     title = event.discord_event_title or event.name
     desc = event.discord_event_description or event.description or "No description."
 
@@ -333,7 +332,6 @@ def build_announcement_notice(event, signup_link=None):
     Posted to the announcement channel to notify users about a new event.
     Not updated — just a one-time heads up.
     """
-    LOGO_URL = "https://assets.kettle.sh/draftforge/DFLogo.png"
     title = event.discord_event_title or event.name
 
     from zoneinfo import ZoneInfo
@@ -431,7 +429,6 @@ def _build_reminder_embed(
     Returns dict with 'embed' key always, plus 'components' if include_buttons=True.
     For backwards compat, also has 'title'/'description'/'color' at top level.
     """
-    LOGO_URL = "https://assets.kettle.sh/draftforge/DFLogo.png"
 
     url = _event_url(event)
     active = getattr(event, "signup_count", 0)
