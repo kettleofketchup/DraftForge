@@ -1,85 +1,77 @@
 ---
 name: logging
-description: [TODO: Complete and informative explanation of what the skill does and when to use it. Include WHEN to use this skill - specific scenarios, file types, or tasks that trigger it.]
+description: Structured logging conventions for DraftForge backend (Django/Celery/Daphne) and frontend (React). This skill should be used when adding log statements, creating new modules, debugging with logs, or reviewing logging patterns. Covers structlog usage, system/subsystem taxonomy, required fields, log levels, and Grafana query patterns.
 ---
 
-# Logging
+# Structured Logging
 
-## Overview
+DraftForge uses **structlog** (backend) for structured JSON logging exported to Grafana Cloud via OpenTelemetry. All logs use a `system`/`subsystem` taxonomy for filtering.
 
-[TODO: 1-2 sentences explaining what this skill enables]
+## Backend: Quick Start
 
-## Structuring This Skill
+```python
+from telemetry.logging import get_logger
+log = get_logger(__name__)
 
-[TODO: Choose the structure that best fits this skill's purpose. Common patterns:
+# Structured log — event name first, then kwargs
+log.info("order_created", system="tournament", subsystem="registration", draft_id=5, user_id=42)
+```
 
-**1. Workflow-Based** (best for sequential processes)
-- Works well when there are clear step-by-step procedures
-- Example: DOCX skill with "Workflow Decision Tree" → "Reading" → "Creating" → "Editing"
-- Structure: ## Overview → ## Workflow Decision Tree → ## Step 1 → ## Step 2...
+**Never use f-strings or `%` formatting in log messages.** The first argument is always an event name (snake_case). All context goes in kwargs.
 
-**2. Task-Based** (best for tool collections)
-- Works well when the skill offers different operations/capabilities
-- Example: PDF skill with "Quick Start" → "Merge PDFs" → "Split PDFs" → "Extract Text"
-- Structure: ## Overview → ## Quick Start → ## Task Category 1 → ## Task Category 2...
+## System / Subsystem Taxonomy
 
-**3. Reference/Guidelines** (best for standards or specifications)
-- Works well for brand guidelines, coding standards, or requirements
-- Example: Brand styling with "Brand Guidelines" → "Colors" → "Typography" → "Features"
-- Structure: ## Overview → ## Guidelines → ## Specifications → ## Usage...
+Every log MUST include `system` and `subsystem` kwargs. These are the primary Grafana filter dimensions.
 
-**4. Capabilities-Based** (best for integrated systems)
-- Works well when the skill provides multiple interrelated features
-- Example: Product Management with "Core Capabilities" → numbered capability list
-- Structure: ## Overview → ## Core Capabilities → ### 1. Feature → ### 2. Feature...
+| system | subsystem | Where | What |
+|--------|-----------|-------|------|
+| `herodraft` | `connection` | `consumers.py` | WS connect/disconnect, captain state, kicks |
+| `herodraft` | `heartbeat` | `herodraft_tick.py` | Heartbeat staleness checks, heartbeat-triggered pauses |
+| `herodraft` | `timer` | `herodraft_tick.py` | Tick loop lifecycle, tick broadcast, timeout auto-pick, resume |
+| `websocket` | `heartbeat` | `consumers_base.py` | Heartbeat receive, captain register/unregister (generic WS infra) |
+| `events` | `discord` | `events/tasks.py` | Discord event sync, announcements, reminders |
+| `events` | `scheduling` | `events/tasks.py` | Event generation, signup opening, repeaters |
+| `tournament` | `discord` | `discordbot/tasks.py` | Tournament DMs, bracket notifications |
 
-Patterns can be mixed and matched as needed. Most skills combine patterns (e.g., start with task-based, add workflow for complex operations).
+Add new systems/subsystems as features grow. Keep systems coarse (feature area), subsystems functional (what role the code plays).
 
-Delete this entire "Structuring This Skill" section when done - it's just guidance.]
+## Log Levels
 
-## [TODO: Replace with the first main section based on chosen structure]
+| Level | When | Exported to Grafana? |
+|-------|------|---------------------|
+| `DEBUG` | Per-request/per-tick detail, heartbeat received | No (prod=INFO) |
+| `INFO` | State transitions, lifecycle events, periodic health | Yes |
+| `WARNING` | Anomalies that self-recover (stale heartbeat, slow tick) | Yes |
+| `ERROR` | Failures requiring attention (broadcast failed, API error) | Yes |
 
-[TODO: Add content here. See examples in existing skills:
-- Code samples for technical skills
-- Decision trees for complex workflows
-- Concrete examples with realistic user requests
-- References to scripts/templates/references as needed]
+## Required Fields
 
-## Resources
+Beyond `system` and `subsystem`, include relevant entity IDs:
 
-This skill includes example resource directories that demonstrate how to organize different types of bundled resources:
+- `draft_id` — for anything draft-related
+- `user_id` / `username` — for user-scoped actions
+- `event_id` — for event system logs
+- `duration_s` / `elapsed_ms` — for timing-sensitive operations
+- `reason` — for skipped/stopped/failed actions
+- `error` — for exception context (`str(e)`, never the full traceback)
 
-### scripts/
-Executable code (Python/Bash/etc.) that can be run directly to perform specific operations.
+## References
 
-**Examples from other skills:**
-- PDF skill: `fill_fillable_fields.py`, `extract_form_field_info.py` - utilities for PDF manipulation
-- DOCX skill: `document.py`, `utilities.py` - Python modules for document processing
+- Backend patterns (structlog config, OTel export, Celery/Daphne logging, middleware): [references/backend.md](references/backend.md)
+- Frontend console logging conventions: [references/frontend.md](references/frontend.md)
 
-**Appropriate for:** Python scripts, shell scripts, or any executable code that performs automation, data processing, or specific operations.
+## Grafana Queries
 
-**Note:** Scripts may be executed without loading into context, but can still be read by Claude for patching or environment adjustments.
+```logql
+# All herodraft heartbeat logs
+{service_name="backend"} | json | system="herodraft" | subsystem="heartbeat"
 
-### references/
-Documentation and reference material intended to be loaded into context to inform Claude's process and thinking.
+# Slow ticks
+{service_name="backend"} | json | event="tick_slow"
 
-**Examples from other skills:**
-- Product management: `communication.md`, `context_building.md` - detailed workflow guides
-- BigQuery: API reference documentation and query examples
-- Finance: Schema documentation, company policies
+# All errors across systems
+{service_name="backend"} | json | level="error"
 
-**Appropriate for:** In-depth documentation, API references, database schemas, comprehensive guides, or any detailed information that Claude should reference while working.
-
-### assets/
-Files not intended to be loaded into context, but rather used within the output Claude produces.
-
-**Examples from other skills:**
-- Brand styling: PowerPoint template files (.pptx), logo files
-- Frontend builder: HTML/React boilerplate project directories
-- Typography: Font files (.ttf, .woff2)
-
-**Appropriate for:** Templates, boilerplate code, document templates, images, icons, fonts, or any files meant to be copied or used in the final output.
-
----
-
-**Any unneeded directories can be deleted.** Not every skill requires all three types of resources.
+# Filter by draft
+{service_name="backend"} | json | draft_id="42"
+```
