@@ -146,6 +146,7 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
         "app.auth.InternalServiceAuth",
     ],
+    "EXCEPTION_HANDLER": "app.exception_handler.exception_handler",
 }
 
 MIDDLEWARE = [

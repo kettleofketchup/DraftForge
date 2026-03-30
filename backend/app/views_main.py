@@ -26,7 +26,6 @@ from social_django.utils import load_strategy, psa
 # Create your views here.
 from app.permissions_org import has_org_staff_access
 from backend import settings
-from telemetry.logging import get_logger
 
 from .decorators import render_to
 from .models import (
