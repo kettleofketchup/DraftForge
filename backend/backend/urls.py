@@ -70,6 +70,13 @@ from app.views.csv_import import import_csv_org, import_csv_tournament
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from org.views import ClaimRequestViewSet
+from org.views_profiles import (
+    delete_user_dota_profile,
+    get_my_dota_profile,
+    get_user_dota_profile,
+    update_my_dota_profile,
+    update_user_dota_profile,
+)
 
 router = routers.DefaultRouter()
 router.register(r"users", UserView, "users")
@@ -272,6 +279,32 @@ urlpatterns = [
         "api/organizations/<int:org_id>/users/<int:org_user_id>/",
         update_org_user,
         name="update_org_user",
+    ),
+    # Dota profiles (self + staff)
+    path(
+        "api/organizations/<int:org_id>/my-dota-profile/",
+        get_my_dota_profile,
+        name="my-dota-profile",
+    ),
+    path(
+        "api/organizations/<int:org_id>/my-dota-profile/update/",
+        update_my_dota_profile,
+        name="update-my-dota-profile",
+    ),
+    path(
+        "api/organizations/<int:org_id>/users/<int:user_pk>/dota-profile/",
+        get_user_dota_profile,
+        name="user-dota-profile",
+    ),
+    path(
+        "api/organizations/<int:org_id>/users/<int:user_pk>/dota-profile/update/",
+        update_user_dota_profile,
+        name="update-user-dota-profile",
+    ),
+    path(
+        "api/organizations/<int:org_id>/users/<int:user_pk>/dota-profile/delete/",
+        delete_user_dota_profile,
+        name="delete-user-dota-profile",
     ),
     # Member management
     path(

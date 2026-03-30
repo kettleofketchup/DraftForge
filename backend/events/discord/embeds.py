@@ -8,7 +8,7 @@ import logging
 
 from django.conf import settings
 
-from events.models import EventSignup, SignupStatus
+from app.internal_client import get_event_signups
 
 logger = logging.getLogger(__name__)
 
@@ -31,41 +31,39 @@ def _event_url(event):
     return f"{SITE_URL}/events/{event.pk}" if SITE_URL else ""
 
 
+INACTIVE_STATUSES = {"cancelled", "rejected", "waitlisted", "tentative"}
+DECLINED_STATUSES = {"cancelled", "rejected"}
+CONFIRMED_STATUSES = {"confirmed", "approved"}
+
+
 def _signup_counts(event):
-    signups = EventSignup.objects.filter(event_id=event.pk)
-    active = signups.exclude(
-        status__in=[
-            SignupStatus.CANCELLED,
-            SignupStatus.REJECTED,
-            SignupStatus.WAITLISTED,
-        ]
-    ).count()
-    confirmed = signups.filter(status=SignupStatus.CONFIRMED).count()
-    return active, confirmed
+    signups = get_event_signups(event.pk)
+    active = [s for s in signups if s.status not in INACTIVE_STATUSES]
+    confirmed = [s for s in signups if s.status == "confirmed"]
+    return len(active), len(confirmed)
 
 
 def _user_list(signups, max_items=20):
-    """Build a newline-separated list of user nicknames from signups."""
+    """Build a newline-separated list of user display names from signups."""
     lines = []
     for s in signups[:max_items]:
-        name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-        lines.append(name)
-    remaining = signups.count() - max_items
+        lines.append(s.display_name)
+    remaining = len(signups) - max_items
     if remaining > 0:
         lines.append(f"*and {remaining} more...*")
     return "\n".join(lines) if lines else "*None yet*"
 
 
 def _user_list_quoted(signups, max_items=20, numbered=True):
-    """Build a blockquoted numbered list of user nicknames from signups."""
+    """Build a blockquoted numbered list of user display names from signups."""
     lines = []
     for i, s in enumerate(signups[:max_items], 1):
-        name = s.user.nickname or s.user.username or f"User {s.user.pk}"
+        name = s.display_name
         if numbered:
             lines.append(f"> {i}. {name}")
         else:
             lines.append(f"> {name}")
-    remaining = signups.count() - max_items
+    remaining = len(signups) - max_items
     if remaining > 0:
         lines.append(f"> *and {remaining} more...*")
     return "\n".join(lines) if lines else "> *—*"
@@ -115,29 +113,17 @@ def build_announcement_embeds(event):
         "fields": info_fields,
     }
 
-    # Embed 2: Participants
-    signups = EventSignup.objects.filter(event_id=event.pk).select_related("user")
+    # Embed 2: Participants (fetched via public API)
+    all_signups = get_event_signups(event.pk)
 
-    active = signups.exclude(
-        status__in=[
-            SignupStatus.CANCELLED,
-            SignupStatus.REJECTED,
-            SignupStatus.WAITLISTED,
-            SignupStatus.TENTATIVE,
-        ]
-    )
+    active = [s for s in all_signups if s.status not in INACTIVE_STATUSES]
     active_lines = []
     for s in active[:20]:
-        icon = (
-            "\u2705"
-            if s.status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED)
-            else "\u23f3"
-        )
-        name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-        active_lines.append(f"{icon} {name}")
-    if active.count() > 20:
-        active_lines.append(f"*and {active.count() - 20} more...*")
-    count = active.count()
+        icon = "\u2705" if s.status in CONFIRMED_STATUSES else "\u23f3"
+        active_lines.append(f"{icon} {s.display_name}")
+    if len(active) > 20:
+        active_lines.append(f"*and {len(active) - 20} more...*")
+    count = len(active)
     max_display = str(event.max_players) if event.max_players else "\u221e"
 
     participant_fields = [
@@ -148,21 +134,19 @@ def build_announcement_embeds(event):
         },
     ]
 
-    declined = signups.filter(
-        status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED]
-    )
+    declined = [s for s in all_signups if s.status in DECLINED_STATUSES]
     participant_fields.append(
         {
-            "name": f"\u274c Declined ({declined.count()})",
+            "name": f"\u274c Declined ({len(declined)})",
             "value": _user_list(declined),
             "inline": True,
         }
     )
 
-    tentative = signups.filter(status=SignupStatus.TENTATIVE)
+    tentative = [s for s in all_signups if s.status == "tentative"]
     participant_fields.append(
         {
-            "name": f"\u2753 Tentative ({tentative.count()})",
+            "name": f"\u2753 Tentative ({len(tentative)})",
             "value": _user_list(tentative),
             "inline": True,
         }
@@ -245,28 +229,20 @@ def build_announcement_v2(event):
     # Force row break — signup fields go on their own row
     fields.append({"name": "\u200b", "value": "\u200b", "inline": False})
 
-    # Signup lists (blockquoted player names)
-    signups = EventSignup.objects.filter(event_id=event.pk).select_related("user")
+    # Signup lists (fetched via public API, typed as EventSignupData)
+    all_signups = get_event_signups(event.pk)
 
     # Signed Up
-    active = signups.exclude(
-        status__in=[
-            SignupStatus.CANCELLED,
-            SignupStatus.REJECTED,
-            SignupStatus.WAITLISTED,
-            SignupStatus.TENTATIVE,
-        ]
-    )
+    active = [s for s in all_signups if s.status not in INACTIVE_STATUSES]
     active_lines = []
     for i, s in enumerate(active[:20], 1):
-        name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-        if s.status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED):
-            active_lines.append(f"> {i}. {name}")
+        if s.status in CONFIRMED_STATUSES:
+            active_lines.append(f"> {i}. {s.display_name}")
         else:
-            active_lines.append(f"> {i}. *{name} (pending)*")
-    if active.count() > 20:
-        active_lines.append(f"> *and {active.count() - 20} more...*")
-    count = active.count()
+            active_lines.append(f"> {i}. *{s.display_name} (pending)*")
+    if len(active) > 20:
+        active_lines.append(f"> *and {len(active) - 20} more...*")
+    count = len(active)
     max_display = str(event.max_players) if event.max_players else "\u221e"
     fields.append(
         {
@@ -277,35 +253,34 @@ def build_announcement_v2(event):
     )
 
     # Declined
-    declined = signups.filter(
-        status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED]
-    )
+    declined = [s for s in all_signups if s.status in DECLINED_STATUSES]
     fields.append(
         {
-            "name": f"\u274c Declined ({declined.count()})",
+            "name": f"\u274c Declined ({len(declined)})",
             "value": _user_list_quoted(declined),
             "inline": True,
         }
     )
 
     # Tentative
-    tentative = signups.filter(status=SignupStatus.TENTATIVE)
+    tentative = [s for s in all_signups if s.status == "tentative"]
     fields.append(
         {
-            "name": f"\u2753 Tentative ({tentative.count()})",
+            "name": f"\u2753 Tentative ({len(tentative)})",
             "value": _user_list_quoted(tentative),
             "inline": True,
         }
     )
 
     # Waitlisted
-    waitlisted = signups.filter(status=SignupStatus.WAITLISTED).order_by(
-        "waitlist_position"
+    waitlisted = sorted(
+        [s for s in all_signups if s.status == "waitlisted"],
+        key=lambda s: s.waitlist_position or 999,
     )
-    if waitlisted.exists():
+    if waitlisted:
         fields.append(
             {
-                "name": f"\U0001f4cb Waitlisted ({waitlisted.count()})",
+                "name": f"\U0001f4cb Waitlisted ({len(waitlisted)})",
                 "value": _user_list_quoted(waitlisted),
                 "inline": True,
             }

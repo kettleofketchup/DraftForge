@@ -168,6 +168,19 @@ def get_event(pk):
     return _api_get(f"/events/{pk}/")
 
 
+def get_event_signups(event_id):
+    """Get signup list for an event via public API.
+
+    Returns list of EventSignupData (Pydantic), or empty list on error.
+    """
+    from app.schemas import EventSignupData
+
+    resp = _api_get(f"/events/{event_id}/signups/")
+    if resp and resp.ok:
+        return [EventSignupData.model_validate(s) for s in resp.json()]
+    return []
+
+
 def get_event_for_task(pk):
     """Get full event data + org Discord config for celery tasks.
 

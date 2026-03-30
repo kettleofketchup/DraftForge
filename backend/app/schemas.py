@@ -167,6 +167,73 @@ class DiscordEventState(BaseModel):
     model_config = {"extra": "ignore"}
 
 
+class UserSchema(BaseModel):
+    """Shared user schema matching TournamentUserSerializer output.
+
+    Reusable anywhere celery needs user data — signups, DMs, embeds, etc.
+    """
+
+    pk: int
+    username: Optional[str] = None
+    nickname: Optional[str] = None
+    avatar: Optional[str] = None
+    discordId: Optional[str] = None
+    discordNickname: Optional[str] = None
+    steam_account_id: Optional[int] = None
+    avatarUrl: Optional[str] = None
+    mmr: Optional[int] = None
+    league_mmr: Optional[int] = None
+
+    @property
+    def display_name(self) -> str:
+        return self.nickname or self.username or f"User {self.pk}"
+
+    model_config = {"extra": "ignore"}
+
+
+class DotaProfileSchema(BaseModel):
+    """Dota profile data — matches EventSignupSerializer.dota_profile output."""
+
+    rank_status: str = "never"
+    rank_medal: str = ""
+    mmr: Optional[int] = None
+    battle_cup_tier: Optional[int] = None
+    rank_screenshot: Optional[str] = None
+    battlecup_screenshot: Optional[str] = None
+    positions: Optional[dict] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class EventSignupData(BaseModel):
+    """Full signup data from GET /api/events/:id/signups/.
+
+    Matches EventSignupSerializer output.
+    """
+
+    id: int
+    event: int
+    user: int  # user PK
+    username: Optional[str] = None  # user.nickname
+    user_avatar: Optional[str] = None
+    user_data: Optional[UserSchema] = None
+    dota_profile: Optional[DotaProfileSchema] = None
+    event_team: Optional[int] = None
+    signup_type: str = "user"
+    status: str = "rsvp"
+    waitlist_position: Optional[int] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    @property
+    def display_name(self) -> str:
+        if self.user_data:
+            return self.user_data.display_name
+        return self.username or f"User {self.user}"
+
+    model_config = {"extra": "ignore"}
+
+
 class RepeaterSubscriber(BaseModel):
     """Subscriber info for DM sending."""
 
