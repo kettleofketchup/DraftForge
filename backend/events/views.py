@@ -119,6 +119,11 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         org_id = self.request.query_params.get("organization")
         if org_id:
             qs = qs.filter(organization_id=org_id)
+        is_active = self.request.query_params.get("is_active")
+        if is_active == "true":
+            qs = qs.filter(is_active=True)
+        elif is_active == "false":
+            qs = qs.filter(is_active=False)
         return qs
 
     def list(self, request, *args, **kwargs):
@@ -248,6 +253,30 @@ class EventViewSet(viewsets.ModelViewSet):
         repeater_id = params.get("event_repeater")
         if repeater_id:
             qs = qs.filter(event_repeater_id=repeater_id)
+
+        # Date range filters (ISO format)
+        scheduled_before = params.get("scheduled_before")
+        if scheduled_before:
+            qs = qs.filter(scheduled_at__lt=scheduled_before)
+        scheduled_after = params.get("scheduled_after")
+        if scheduled_after:
+            qs = qs.filter(scheduled_at__gte=scheduled_after)
+
+        # Filter by signups_open_at (for open_scheduled_signups task)
+        signups_due_before = params.get("signups_due_before")
+        if signups_due_before:
+            qs = qs.filter(
+                signups_open_at__isnull=False, signups_open_at__lte=signups_due_before
+            )
+
+        # Boolean filters
+        has_repeater = params.get("has_repeater")
+        if has_repeater == "true":
+            qs = qs.filter(event_repeater__isnull=False)
+
+        has_announcement_channel = params.get("has_announcement_channel")
+        if has_announcement_channel == "true":
+            qs = qs.filter(discord_announcement_channel_id__gt="")
 
         # Ordering
         ordering = params.get("ordering", "-scheduled_at")

@@ -181,6 +181,48 @@ def get_event_signups(event_id):
     return []
 
 
+def get_events_list(**params):
+    """Get events list via public API with query params.
+
+    Returns list of dicts (slim serializer output).
+    Example: get_events_list(states="upcoming,signups_open", scheduled_before="2026-01-01T00:00:00Z")
+    """
+    resp = _api_get("/events/", params=params)
+    if resp and resp.ok:
+        return resp.json()
+    return []
+
+
+def get_active_repeaters():
+    """Get active event repeaters via public API.
+
+    Returns list of dicts (slim serializer output).
+    """
+    resp = _api_get("/events/repeaters/", params={"is_active": "true"})
+    if resp and resp.ok:
+        return resp.json()
+    return []
+
+
+def search_message_logs(source, source_id, success=True, limit=1):
+    """Search DiscordMessageLog via internal API.
+
+    Returns list of log dicts, or empty list.
+    """
+    resp = _get(
+        "/discord/message-logs/",
+        params={
+            "source": source,
+            "source_id": source_id,
+            "success": str(success).lower(),
+            "limit": limit,
+        },
+    )
+    if resp and resp.ok:
+        return resp.json()
+    return []
+
+
 def get_event_for_task(pk):
     """Get full event data + org Discord config for celery tasks.
 

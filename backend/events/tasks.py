@@ -3,15 +3,7 @@ import logging
 from celery import shared_task
 from django.utils import timezone
 
-from discordbot.models import (
-    DiscordEvent,
-    DiscordEventLog,
-    DiscordEventMsgAnnouncement,
-    DiscordEventMsgSignup,
-    DiscordMessageLog,
-)
-from discordbot.utils import sync_send_embed
-from events.models import Event, EventRepeater, EventSignup, EventState, SignupStatus
+from events.models import EventState, SignupStatus
 from events.services import generate_events_for_repeater
 
 logger = logging.getLogger(__name__)
@@ -19,7 +11,14 @@ logger = logging.getLogger(__name__)
 
 @shared_task
 def generate_upcoming_events():
-    """Generate upcoming events for all active repeaters. Runs hourly."""
+    """Generate upcoming events for all active repeaters. Runs hourly.
+
+    TODO: This still uses direct ORM for the repeater query and calls
+    generate_events_for_repeater() which is ORM-heavy. Needs refactoring
+    to use internal API when services.py is migrated.
+    """
+    from events.models import EventRepeater
+
     repeaters = EventRepeater.objects.filter(is_active=True).select_related(
         "organization",
         "tournament_league",
@@ -46,47 +45,45 @@ def cleanup_stale_events():
     """
     from datetime import timedelta
 
-    from app.internal_client import transition_event_state
+    from app.internal_client import get_events_list, transition_event_state
 
-    cutoff = timezone.now() - timedelta(days=1)
+    cutoff = (timezone.now() - timedelta(days=1)).isoformat()
 
     # Never-started events → cancelled
-    never_started = Event.objects.filter(
-        state__in=[EventState.UPCOMING, EventState.SIGNUPS_OPEN],
-        scheduled_at__lt=cutoff,
+    never_started = get_events_list(
+        states="upcoming,signups_open", scheduled_before=cutoff
     )
     cancelled_count = 0
     for event in never_started:
         try:
-            resp = transition_event_state(event.pk, "cancelled")
+            resp = transition_event_state(event["id"], "cancelled")
             if resp and resp.ok:
                 cancelled_count += 1
                 logger.info(
-                    "Auto-cancelled stale event %s (pk=%s)", event.name, event.pk
+                    "Auto-cancelled stale event %s (pk=%s)", event["name"], event["id"]
                 )
             else:
-                logger.warning("Failed to auto-cancel event %s: %s", event.pk, resp)
+                logger.warning("Failed to auto-cancel event %s: %s", event["id"], resp)
         except Exception:
-            logger.exception("Failed to auto-cancel event %s", event.pk)
+            logger.exception("Failed to auto-cancel event %s", event["id"])
 
     # Started but not closed → completed
-    started = Event.objects.filter(
-        state__in=[EventState.ROLL_CALL, EventState.IN_PROGRESS],
-        scheduled_at__lt=cutoff,
-    )
+    started = get_events_list(states="roll_call,in_progress", scheduled_before=cutoff)
     completed_count = 0
     for event in started:
         try:
-            resp = transition_event_state(event.pk, "completed")
+            resp = transition_event_state(event["id"], "completed")
             if resp and resp.ok:
                 completed_count += 1
                 logger.info(
-                    "Auto-completed stale event %s (pk=%s)", event.name, event.pk
+                    "Auto-completed stale event %s (pk=%s)", event["name"], event["id"]
                 )
             else:
-                logger.warning("Failed to auto-complete event %s: %s", event.pk, resp)
+                logger.warning(
+                    "Failed to auto-complete event %s: %s", event["id"], resp
+                )
         except Exception:
-            logger.exception("Failed to auto-complete event %s", event.pk)
+            logger.exception("Failed to auto-complete event %s", event["id"])
 
     return f"Cleaned up {cancelled_count} cancelled, {completed_count} completed"
 
@@ -97,29 +94,27 @@ def open_scheduled_signups():
 
     State transition via internal HTTP API (no direct DB writes).
     """
-    from app.internal_client import transition_event_state
+    from app.internal_client import get_events_list, transition_event_state
 
-    now = timezone.now()
-    events = Event.objects.filter(
-        state=EventState.UPCOMING,
-        signups_open_at__isnull=False,
-        signups_open_at__lte=now,
-    )
+    now = timezone.now().isoformat()
+    events = get_events_list(states="upcoming", signups_due_before=now)
     opened = 0
     for event in events:
         try:
-            resp = transition_event_state(event.pk, "signups_open")
+            resp = transition_event_state(event["id"], "signups_open")
             if resp and resp.ok:
                 opened += 1
                 logger.info(
-                    "Auto-opened signups for event %s (pk=%s)", event.name, event.pk
+                    "Auto-opened signups for event %s (pk=%s)",
+                    event["name"],
+                    event["id"],
                 )
             else:
                 logger.warning(
-                    "Failed to auto-open signups for event %s: %s", event.pk, resp
+                    "Failed to auto-open signups for event %s: %s", event["id"], resp
                 )
         except Exception:
-            logger.exception("Failed to auto-open signups for event %s", event.pk)
+            logger.exception("Failed to auto-open signups for event %s", event["id"])
     return f"Opened signups for {opened} events"
 
 
@@ -402,28 +397,26 @@ def send_signup_update(event_id):
 
     # Fall back to DiscordMessageLog for pre-migration events
     if not message_id:
-        log_entry = (
-            DiscordMessageLog.objects.filter(
-                source="event_announcement",
-                source_id=event.pk,
-                success=True,
-            )
-            .order_by("-created_at")
-            .first()
-        )
+        from app.internal_client import search_message_logs
 
-        if not log_entry or not log_entry.discord_message_id:
+        logs = search_message_logs(
+            "event_announcement", event.pk, success=True, limit=1
+        )
+        log_entry = logs[0] if logs else None
+
+        if not log_entry or not log_entry.get("discord_message_id"):
             logger.info(
                 "No announcement message found for event %s, skipping update",
                 event.pk,
             )
             return "Skipped: no announcement message"
 
-        message_id = log_entry.discord_message_id
-        edit_channel_id = log_entry.channel_id
-        if log_entry.response_data and log_entry.response_data.get("id"):
-            thread_id = log_entry.response_data.get("id")
-            if log_entry.response_data.get("message"):
+        message_id = log_entry.get("discord_message_id")
+        edit_channel_id = log_entry.get("channel_id")
+        response_data = log_entry.get("response_data") or {}
+        if response_data.get("id"):
+            thread_id = response_data.get("id")
+            if response_data.get("message"):
                 edit_channel_id = thread_id
 
     result = build_announcement_v2(event)
@@ -466,6 +459,8 @@ def send_new_event_notification(event_id):
         return f"Failed: event {event_id} not found"
     if not event.discord_announcement or not event.discord_announcement_channel_id:
         return "Skipped: announcements disabled"
+    from discordbot.utils import sync_send_embed
+
     embed = build_new_event_embed(event)
     sync_send_embed(
         channel_id=event.discord_announcement_channel_id,
@@ -707,9 +702,8 @@ def fire_event_reminder(event_id, reminder_type, fired_by_user_id=None):
     if check_message_log_exists(source, event_id):
         return f"Already fired: {reminder_type} for event {event_id}"
 
-    try:
-        event = Event.objects.select_related("organization").get(pk=event_id)
-    except Event.DoesNotExist:
+    event = get_event_for_task(event_id)
+    if not event:
         return f"Event {event_id} not found"
 
     if not event.discord_announcement_channel_id:
@@ -785,36 +779,43 @@ def check_event_reminders():
                 success=bool(response),
             )
 
+    from app.internal_client import get_event_for_task, get_events_list
+
     # 1. Signup reminders — DM subscribers who haven't signed up yet
-    signup_reminder_events = Event.objects.filter(
-        state__in=[EventState.SIGNUPS_OPEN],
-        discord_signup_reminder=True,
-        event_repeater__isnull=False,
-    )
-    for event in signup_reminder_events:
-        if check_message_log_exists("signup_reminder", event.pk):
+    signup_candidates = get_events_list(states="signups_open", has_repeater="true")
+    for ev in signup_candidates:
+        if not ev.get("discord_signup_reminder"):
             continue
-        threshold = event.scheduled_at - timedelta(
-            hours=event.discord_signup_reminder_hours
+        if check_message_log_exists("signup_reminder", ev["id"]):
+            continue
+        from dateutil.parser import isoparse
+
+        threshold = isoparse(ev["scheduled_at"]) - timedelta(
+            hours=ev.get("discord_signup_reminder_hours", 24)
         )
         if now >= threshold:
-            send_subscriber_notifications.delay(event.pk)
+            send_subscriber_notifications.delay(ev["id"])
 
     # 2. Attendance confirmation reminders
-    attendance_events = Event.objects.filter(
-        state__in=[EventState.SIGNUPS_OPEN, EventState.ROLL_CALL],
-        discord_confirm_attendance=True,
-        discord_announcement_channel_id__gt="",
+    attendance_candidates = get_events_list(
+        states="signups_open,roll_call", has_announcement_channel="true"
     )
-    for event in attendance_events:
-        if check_message_log_exists("attendance_reminder", event.pk):
+    for ev in attendance_candidates:
+        if not ev.get("discord_confirm_attendance"):
             continue
-        threshold = event.scheduled_at - timedelta(
-            hours=event.discord_confirm_attendance_hours
+        if check_message_log_exists("attendance_reminder", ev["id"]):
+            continue
+        from dateutil.parser import isoparse
+
+        threshold = isoparse(ev["scheduled_at"]) - timedelta(
+            hours=ev.get("discord_confirm_attendance_hours", 2)
         )
         if now >= threshold:
             from discordbot.utils import sync_send_embed_with_components
 
+            event = get_event_for_task(ev["id"])
+            if not event:
+                continue
             result = build_attendance_reminder_embed(event)
             response = sync_send_embed_with_components(
                 channel_id=event.discord_announcement_channel_id,
@@ -826,20 +827,25 @@ def check_event_reminders():
             _log_reminder(event, "attendance_reminder", response)
 
     # 3. Profile completion reminders
-    profile_events = Event.objects.filter(
-        state__in=[EventState.SIGNUPS_OPEN],
-        discord_profile_reminder=True,
-        discord_announcement_channel_id__gt="",
+    profile_candidates = get_events_list(
+        states="signups_open", has_announcement_channel="true"
     )
-    for event in profile_events:
-        if check_message_log_exists("profile_reminder", event.pk):
+    for ev in profile_candidates:
+        if not ev.get("discord_profile_reminder"):
             continue
-        threshold = event.scheduled_at - timedelta(
-            hours=event.discord_profile_reminder_hours
+        if check_message_log_exists("profile_reminder", ev["id"]):
+            continue
+        from dateutil.parser import isoparse
+
+        threshold = isoparse(ev["scheduled_at"]) - timedelta(
+            hours=ev.get("discord_profile_reminder_hours", 24)
         )
         if now >= threshold:
             from discordbot.utils import sync_send_embed_with_components
 
+            event = get_event_for_task(ev["id"])
+            if not event:
+                continue
             result = build_profile_reminder_embed(event)
             response = sync_send_embed_with_components(
                 channel_id=event.discord_announcement_channel_id,
@@ -891,11 +897,10 @@ def send_subscriber_notifications(event_id):
     discord_event_pk = discord_state.discord_event_pk
 
     # Get user PKs who already signed up — skip them
-    signed_up_user_pks = set(
-        EventSignup.objects.filter(event_id=event_id)
-        .exclude(status=SignupStatus.CANCELLED)
-        .values_list("user_id", flat=True)
-    )
+    from app.internal_client import get_event_signups
+
+    all_signups = get_event_signups(event_id)
+    signed_up_user_pks = {s.user for s in all_signups if s.status != "cancelled"}
 
     dm_data = build_subscriber_dm_embed(event)
     embed = dm_data["embed"]
