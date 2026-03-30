@@ -123,48 +123,12 @@ class EventTaskData(BaseModel):
     model_config = {"extra": "ignore"}  # ignore extra fields from serializer
 
 
-class SyncDiscordState(BaseModel):
-    """Bulk state returned by get_sync_discord_state endpoint."""
-
-    active_events: list[dict]
-    existing_logs: list[list]  # [[source, source_id], ...]
-    events_with_signup: list[int]
-    events_with_scheduled: list[int]
-    events_with_recent_attempt: list[int]
-
-    model_config = {"extra": "ignore"}
-
-
-class MessageLogEntry(BaseModel):
-    """Single DiscordMessageLog entry from search endpoint."""
-
-    id: int
-    channel_id: str = ""
-    source: str = ""
-    source_id: Optional[int] = None
-    discord_message_id: Optional[str] = None
-    status_code: Optional[int] = None
-    success: bool = False
-    response_data: Optional[dict] = None
-    created_at: Optional[str] = None
-
-    model_config = {"extra": "ignore"}
-
-
-class DiscordEventState(BaseModel):
-    """Discord event state for a single event."""
-
-    has_discord_event: bool = False
-    discord_event_pk: Optional[int] = None
-    scheduled_event_id: Optional[str] = None
-    signup_posted: bool = False
-    signup_message_id: Optional[str] = None
-    signup_channel_id: Optional[str] = None
-    signup_thread_id: Optional[str] = None
-    fired_actions: list[str] = []
-    has_dms: bool = False
-
-    model_config = {"extra": "ignore"}
+# Backward-compat re-exports (moved to discordbot/schemas.py with new names)
+from discordbot.schemas import (  # noqa: F401
+    DiscordEventStateSchema as DiscordEventState,
+)
+from discordbot.schemas import MessageLogSchema as MessageLogEntry
+from discordbot.schemas import SyncDiscordStateSchema as SyncDiscordState
 
 
 class UserSchema(BaseModel):
