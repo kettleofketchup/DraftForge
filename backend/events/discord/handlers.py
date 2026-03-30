@@ -9,7 +9,8 @@ Return dicts with 'action' key so the caller knows how to respond.
 import logging
 
 from discordbot.models import DiscordEventLog
-from events.models import Event, EventSignup, EventState, SignupStatus
+from events.constants import EventState, SignupStatus
+from events.models import Event, EventSignup
 
 logger = logging.getLogger(__name__)
 

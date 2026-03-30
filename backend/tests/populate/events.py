@@ -12,15 +12,13 @@ from django.utils import timezone as tz
 
 from app.models import CustomUser, GameType, League, Organization, PositionsModel
 from discordbot.models import DiscordEvent
+from events.constants import EventState, RepeatFrequency, SignupStatus
 from events.models import (
     Event,
     EventRepeater,
     EventSignup,
-    EventState,
     OrgEventDefaults,
     RepeaterSubscription,
-    RepeatFrequency,
-    SignupStatus,
 )
 from org.models_profiles import PlayerDotaProfile
 from tests.data import (

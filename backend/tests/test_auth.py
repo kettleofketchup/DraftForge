@@ -1081,7 +1081,8 @@ def reset_events_data(request):
 
     from cacheops import invalidate_model, invalidate_obj
 
-    from events.models import Event, EventRepeater, EventSignup, EventState
+    from events.constants import EventState
+    from events.models import Event, EventRepeater, EventSignup
 
     EVENTS_ORG_NAME = "Events Test Org"
 

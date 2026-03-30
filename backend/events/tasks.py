@@ -3,7 +3,7 @@ import logging
 from celery import shared_task
 from django.utils import timezone
 
-from events.models import EventState, SignupStatus
+from events.constants import EventState, SignupStatus
 from events.services import generate_events_for_repeater
 
 logger = logging.getLogger(__name__)

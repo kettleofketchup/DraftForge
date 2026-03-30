@@ -3,14 +3,8 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone as tz
 
-from events.models import (
-    EventState,
-    GameType,
-    RepeatFrequency,
-    RollCallMode,
-    SignupStatus,
-    SignupType,
-)
+from events.constants import EventState, RepeatFrequency, SignupStatus, SignupType
+from events.models import GameType, RollCallMode
 from events.tests.base import EventTestCase
 
 
@@ -61,7 +55,8 @@ class EnumTests(TestCase):
 
 class EventRepeaterModelTests(EventTestCase):
     def test_create_event_repeater(self):
-        from events.models import EventRepeater, RepeatFrequency
+        from events.constants import RepeatFrequency
+        from events.models import EventRepeater
 
         repeater = EventRepeater.objects.create(
             organization=self.org,
@@ -81,7 +76,8 @@ class EventRepeaterModelTests(EventTestCase):
         self.assertEqual(repeater.frequency, RepeatFrequency.WEEKLY)
 
     def test_event_repeater_str(self):
-        from events.models import EventRepeater, RepeatFrequency
+        from events.constants import RepeatFrequency
+        from events.models import EventRepeater
 
         repeater = EventRepeater.objects.create(
             organization=self.org,
@@ -98,7 +94,8 @@ class EventRepeaterModelTests(EventTestCase):
         self.assertEqual(str(repeater), "Tuesday Inhouses (weekly)")
 
     def test_description_sanitized_on_save(self):
-        from events.models import EventRepeater, RepeatFrequency
+        from events.constants import RepeatFrequency
+        from events.models import EventRepeater
 
         repeater = EventRepeater.objects.create(
             organization=self.org,
@@ -118,7 +115,8 @@ class EventRepeaterModelTests(EventTestCase):
 
 class EventModelTests(EventTestCase):
     def test_create_standalone_event(self):
-        from events.models import Event, EventState
+        from events.constants import EventState
+        from events.models import Event
 
         event = Event.objects.create(
             organization=self.org,
@@ -133,7 +131,8 @@ class EventModelTests(EventTestCase):
         self.assertIsNone(event.tournament)
 
     def test_state_transition_valid(self):
-        from events.models import Event, EventState
+        from events.constants import EventState
+        from events.models import Event
 
         event = Event.objects.create(
             organization=self.org,
@@ -147,7 +146,8 @@ class EventModelTests(EventTestCase):
         self.assertEqual(event.state, EventState.SIGNUPS_OPEN)
 
     def test_state_transition_invalid(self):
-        from events.models import Event, EventState
+        from events.constants import EventState
+        from events.models import Event
 
         event = Event.objects.create(
             organization=self.org,
@@ -161,7 +161,8 @@ class EventModelTests(EventTestCase):
             event.transition_state(EventState.IN_PROGRESS)
 
     def test_cancel_from_any_pre_game_state(self):
-        from events.models import Event, EventState
+        from events.constants import EventState
+        from events.models import Event
 
         for initial in [
             EventState.UPCOMING,
@@ -188,7 +189,8 @@ class EventModelTests(EventTestCase):
     def test_unique_repeater_scheduled_at(self):
         from django.db import IntegrityError
 
-        from events.models import Event, EventRepeater, RepeatFrequency
+        from events.constants import RepeatFrequency
+        from events.models import Event, EventRepeater
 
         repeater = EventRepeater.objects.create(
             organization=self.org,
@@ -288,7 +290,8 @@ class EventSignupModelTests(EventTestCase):
         )
 
     def test_create_user_signup(self):
-        from events.models import EventSignup, SignupStatus, SignupType
+        from events.constants import SignupStatus, SignupType
+        from events.models import EventSignup
 
         signup = EventSignup.objects.create(
             event=self.event,
@@ -301,7 +304,8 @@ class EventSignupModelTests(EventTestCase):
     def test_unique_user_per_event(self):
         from django.db import IntegrityError
 
-        from events.models import EventSignup, SignupType
+        from events.constants import SignupType
+        from events.models import EventSignup
 
         EventSignup.objects.create(
             event=self.event, user=self.user, signup_type=SignupType.USER

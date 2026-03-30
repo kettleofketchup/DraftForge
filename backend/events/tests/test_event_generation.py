@@ -4,7 +4,8 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.utils import timezone as tz
 
-from events.models import Event, EventRepeater, RepeatFrequency
+from events.constants import RepeatFrequency
+from events.models import Event, EventRepeater
 from events.tests.base import EventTestCase
 
 PATCH_TODAY = "events.services._today"

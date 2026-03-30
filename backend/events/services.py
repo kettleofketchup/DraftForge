@@ -9,6 +9,7 @@ from django.db import models, transaction
 
 from app.cache_utils import invalidate_after_commit
 from app.models import Tournament
+from events.constants import EventState, RepeatFrequency, SignupStatus, SignupType
 from events.discord import (
     notify_event_announced,
     notify_mark_interested,
@@ -20,10 +21,6 @@ from events.models import (
     Event,
     EventConfigMixin,
     EventSignup,
-    EventState,
-    RepeatFrequency,
-    SignupStatus,
-    SignupType,
     TournamentTemplateMixin,
 )
 

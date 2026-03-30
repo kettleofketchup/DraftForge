@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from discordbot.models import DiscordMessageLog
-from events.models import EventState
+from events.constants import EventState
 from events.tests.base import EventTestCase
 
 

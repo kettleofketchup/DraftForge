@@ -12,15 +12,14 @@ logger = logging.getLogger(__name__)
 
 from app.models import Organization
 from app.permissions_org import has_org_staff_access
+from events.constants import EventState, SignupStatus
 from events.models import (
     Event,
     EventRepeater,
     EventSignup,
-    EventState,
     EventTeam,
     OrgEventDefaults,
     RepeaterSubscription,
-    SignupStatus,
 )
 from events.serializers import (
     EventRepeaterSerializer,

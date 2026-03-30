@@ -4,7 +4,8 @@ from django.test import TestCase
 from django.utils import timezone as tz
 
 from app.models import CustomUser, League, Organization, PositionsModel
-from events.models import Event, EventState
+from events.constants import EventState
+from events.models import Event
 
 
 class EventTestCase(TestCase):

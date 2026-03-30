@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from events.models import EventState
+from events.constants import EventState
 from events.services import approve_signup, cancel_signup, confirm_signup, process_rsvp
 from events.tests.base import EventTestCase
 

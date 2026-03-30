@@ -233,7 +233,8 @@ def get_sync_discord_state(request):
         DiscordEventMsgSignup,
         DiscordMessageLog,
     )
-    from events.models import Event, EventState
+    from events.constants import EventState
+    from events.models import Event
 
     now = tz.now()
 

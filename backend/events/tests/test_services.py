@@ -3,7 +3,8 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone as tz
 
-from events.models import Event, EventSignup, EventState, SignupStatus, SignupType
+from events.constants import EventState, SignupStatus, SignupType
+from events.models import Event, EventSignup
 from events.tests.base import EventTestCase
 
 
