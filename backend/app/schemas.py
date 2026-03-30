@@ -22,113 +22,12 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-
-class OrgProxy:
-    """Proxy for event.organization attribute access in embed builders.
-
-    Allows event.organization.name, .discord_server_id, .logo to work
-    on both Django model instances and Pydantic EventTaskData.
-    Also truthful (bool(proxy) == True) so `if event.organization:` works.
-    """
-
-    def __init__(self, pk: int, name: str, discord_server_id: str, logo: str):
-        self.pk = pk
-        self.name = name
-        self.discord_server_id = discord_server_id
-        self.logo = logo
-
-    def __bool__(self):
-        return True
-
-
-class EventTaskData(BaseModel):
-    """Event data needed by celery tasks. Matches EventSerializer + org extras.
-
-    Provides attribute access compatible with Django model instances so
-    embed builders (build_announcement_v2, etc.) work unchanged:
-      event.pk, event.name, event.organization.name, event.organization.logo
-    """
-
-    id: int
-    name: str
-    description: str = ""
-    state: str
-    scheduled_at: datetime
-    signups_open_at: Optional[datetime] = None
-    organization_id: int = 0  # the raw PK
-    organization_name: str = ""
-    organization_discord_server_id: str = ""
-    organization_logo: str = ""
-    event_repeater: Optional[int] = None
-    event_repeater_id: Optional[int] = None
-    event_repeater_name: Optional[str] = None
-    tournament: Optional[int] = None
-    tournament_name: str = ""
-    tournament_league: Optional[int] = None
-
-    @property
-    def pk(self) -> int:
-        return self.id
-
-    @property
-    def organization(self) -> OrgProxy:
-        """Returns OrgProxy so event.organization.name works like Django."""
-        return OrgProxy(
-            pk=self.organization_id,
-            name=self.organization_name,
-            discord_server_id=self.organization_discord_server_id,
-            logo=self.organization_logo,
-        )
-
-    # Counts
-    signup_count: int = 0
-    confirmed_count: int = 0
-    max_players: Optional[int] = None
-    min_players: Optional[int] = None
-
-    # Tournament config
-    tournament_type: str = "single_elimination"
-    draft_type: str = "shuffle"
-    game_type: int = 1
-    people_per_team: int = 5
-    number_of_teams: Optional[int] = None
-
-    # Discord config
-    discord_create_event: bool = False
-    discord_sync_signups: bool = False
-    discord_event_title: str = ""
-    discord_event_description: str = ""
-    discord_event_info: str = ""
-    discord_signup_reminder: bool = False
-    discord_signup_reminder_hours: int = 24
-    discord_confirm_attendance: bool = False
-    discord_confirm_attendance_hours: int = 2
-    discord_profile_reminder: bool = False
-    discord_profile_reminder_hours: int = 24
-    discord_mark_interested: bool = False
-    discord_post_signups: bool = False
-    discord_post_signups_channel_id: str = ""
-    discord_announcement: bool = False
-    discord_announcement_channel_id: str = ""
-    discord_announcement_hours: int = 24
-    discord_announcement_role_ids: list = []
-    discord_signup_role_ids: list = []
-    discord_subscriber_dm: bool = False
-    discord_subscriber_dm_hours: int = 24
-
-    # Config
-    timezone: str = "America/New_York"
-    roll_call_enabled: bool = False
-
-    model_config = {"extra": "ignore"}  # ignore extra fields from serializer
-
-
 # Backward-compat re-exports (moved to discordbot/schemas.py with new names)
 from discordbot.schemas import (  # noqa: F401
     DiscordEventStateSchema as DiscordEventState,
 )
-from discordbot.schemas import MessageLogSchema as MessageLogEntry
-from discordbot.schemas import SyncDiscordStateSchema as SyncDiscordState
+from discordbot.schemas import MessageLogSchema as MessageLogEntry  # noqa: F401
+from discordbot.schemas import SyncDiscordStateSchema as SyncDiscordState  # noqa: F401
 
 
 class UserSchema(BaseModel):
@@ -151,73 +50,6 @@ class UserSchema(BaseModel):
     @property
     def display_name(self) -> str:
         return self.nickname or self.username or f"User {self.pk}"
-
-    model_config = {"extra": "ignore"}
-
-
-class DotaProfileSchema(BaseModel):
-    """Dota profile data — matches EventSignupSerializer.dota_profile output."""
-
-    rank_status: str = "never"
-    rank_medal: str = ""
-    mmr: Optional[int] = None
-    battle_cup_tier: Optional[int] = None
-    rank_screenshot: Optional[str] = None
-    battlecup_screenshot: Optional[str] = None
-    positions: Optional[dict] = None
-
-    model_config = {"extra": "ignore"}
-
-
-class EventSignupData(BaseModel):
-    """Full signup data from GET /api/events/:id/signups/.
-
-    Matches EventSignupSerializer output.
-    """
-
-    id: int
-    event: int
-    user: int  # user PK
-    username: Optional[str] = None  # user.nickname
-    user_avatar: Optional[str] = None
-    user_data: Optional[UserSchema] = None
-    dota_profile: Optional[DotaProfileSchema] = None
-    event_team: Optional[int] = None
-    signup_type: str = "user"
-    status: str = "rsvp"
-    waitlist_position: Optional[int] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
-
-    @property
-    def display_name(self) -> str:
-        if self.user_data:
-            return self.user_data.display_name
-        return self.username or f"User {self.user}"
-
-    model_config = {"extra": "ignore"}
-
-
-class RepeaterSubscriber(BaseModel):
-    """Subscriber info for DM sending."""
-
-    user_pk: int
-    discord_id: str
-    org_user_pk: Optional[int] = None
-
-    model_config = {"extra": "ignore"}
-
-
-class EventTemplateData(BaseModel):
-    """EventTemplate data for building Discord embeds."""
-
-    name: str = ""
-    template_type: str = ""
-    title: str = ""
-    description: str = ""
-    color: str = "#7289DA"
-    channel_id: str = ""
-    include_rsvp: bool = True
 
     model_config = {"extra": "ignore"}
 
@@ -264,12 +96,15 @@ class GameWithoutHeroDraft(BaseModel):
     model_config = {"extra": "ignore"}
 
 
-class ScheduledEventDue(BaseModel):
-    """ScheduledEvent due for posting."""
-
-    pk: int
-    is_recurring: bool = False
-    next_post_at: Optional[str] = None
-    template: EventTemplateData = EventTemplateData()
-
-    model_config = {"extra": "ignore"}
+# Backward compat -- use events.schemas for new code
+from events.schemas import DotaProfileSchema  # noqa: F401, E402
+from events.schemas import OrgProxy  # noqa: F401, E402
+from events.schemas import EventSignupSchema as EventSignupData  # noqa: F401, E402
+from events.schemas import EventTaskSchema as EventTaskData  # noqa: F401, E402
+from events.schemas import EventTemplateSchema as EventTemplateData  # noqa: F401, E402
+from events.schemas import (  # noqa: F401, E402
+    RepeaterSubscriberSchema as RepeaterSubscriber,
+)
+from events.schemas import (  # noqa: F401, E402
+    ScheduledEventDueSchema as ScheduledEventDue,
+)
