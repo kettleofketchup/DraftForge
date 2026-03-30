@@ -17,7 +17,10 @@ export async function initSentry() {
       enableLogs: true,
       integrations: [
         Sentry.reactRouterTracingIntegration(),
-        Sentry.replayIntegration(),
+        Sentry.replayIntegration({
+          maskAllText: false,
+          blockAllMedia: false,
+        }),
       ],
       tracesSampleRate: 0.2,
       tracePropagationTargets: [/^\//, /^https:\/\/dota\.kettle\.sh\/api/],
