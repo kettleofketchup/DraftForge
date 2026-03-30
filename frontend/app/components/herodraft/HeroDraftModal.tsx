@@ -267,8 +267,12 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
       await setReady(draft.id);
       toast.success("You are ready!");
     } catch (error: unknown) {
-      const axiosError = error as { response?: { data?: { error?: string } } };
-      toast.error(axiosError.response?.data?.error || "Failed to set ready");
+      const axiosError = error as { response?: { status?: number; data?: { error?: string } } };
+      if (axiosError.response?.status === 401 || axiosError.response?.status === 403) {
+        toast.error("You are not logged in. Please refresh and log in again.");
+      } else {
+        toast.error(axiosError.response?.data?.error || "Failed to set ready");
+      }
     } finally {
       setIsSubmitting(false);
     }
