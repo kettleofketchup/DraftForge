@@ -173,11 +173,11 @@ def get_event_signups(event_id):
 
     Returns list of EventSignupData (Pydantic), or empty list on error.
     """
-    from app.schemas import EventSignupData
+    from events.schemas import EventSignupSchema
 
     resp = _api_get(f"/events/{event_id}/signups/")
     if resp and resp.ok:
-        return [EventSignupData.model_validate(s) for s in resp.json()]
+        return [EventSignupSchema.model_validate(s) for s in resp.json()]
     return []
 
 
@@ -229,11 +229,11 @@ def get_event_for_task(pk):
     Returns EventTaskData (Pydantic) with typed attribute access,
     or None if event not found / API error.
     """
-    from app.schemas import EventTaskData
+    from events.schemas import EventTaskSchema
 
     resp = _get(f"/events/{pk}/full/")
     if resp and resp.ok:
-        return EventTaskData.model_validate(resp.json())
+        return EventTaskSchema.model_validate(resp.json())
     return None
 
 
@@ -257,11 +257,11 @@ def check_message_log_exists(source, source_id):
 
 def search_message_logs(**params):
     """Search DiscordMessageLog entries. Returns list of MessageLogEntry."""
-    from app.schemas import MessageLogEntry
+    from discordbot.schemas import MessageLogSchema
 
     resp = _get("/discord/message-logs/", params)
     if resp and resp.ok:
-        return [MessageLogEntry.model_validate(e) for e in resp.json()]
+        return [MessageLogSchema.model_validate(e) for e in resp.json()]
     return []
 
 
@@ -285,41 +285,41 @@ def get_first_message_log(source, source_id):
 
 def get_sync_discord_state():
     """Get bulk Discord sync state. Returns SyncDiscordState or None."""
-    from app.schemas import SyncDiscordState
+    from discordbot.schemas import SyncDiscordStateSchema
 
     resp = _get("/discord/sync-state/")
     if resp and resp.ok:
-        return SyncDiscordState.model_validate(resp.json())
+        return SyncDiscordStateSchema.model_validate(resp.json())
     return None
 
 
 def get_discord_event_state(event_id):
     """Get Discord event state. Returns DiscordEventState or None."""
-    from app.schemas import DiscordEventState
+    from discordbot.schemas import DiscordEventStateSchema
 
     resp = _get(f"/discord/event-state/{event_id}/")
     if resp and resp.ok:
-        return DiscordEventState.model_validate(resp.json())
+        return DiscordEventStateSchema.model_validate(resp.json())
     return None
 
 
 def get_repeater_subscribers(repeater_id):
     """Get subscribers for a repeater. Returns list of RepeaterSubscriber."""
-    from app.schemas import RepeaterSubscriber
+    from events.schemas import RepeaterSubscriberSchema
 
     resp = _get(f"/repeaters/{repeater_id}/subscribers/")
     if resp and resp.ok:
-        return [RepeaterSubscriber.model_validate(s) for s in resp.json()]
+        return [RepeaterSubscriberSchema.model_validate(s) for s in resp.json()]
     return []
 
 
 def get_due_scheduled_events():
     """Get ScheduledEvents due for posting. Returns list of ScheduledEventDue."""
-    from app.schemas import ScheduledEventDue
+    from events.schemas import ScheduledEventDueSchema
 
     resp = _get("/scheduled-events/due/")
     if resp and resp.ok:
-        return [ScheduledEventDue.model_validate(e) for e in resp.json()]
+        return [ScheduledEventDueSchema.model_validate(e) for e in resp.json()]
     return []
 
 
@@ -336,12 +336,29 @@ def update_sync_state(pk, **data):
     return _patch(f"/steam/sync-state/{pk}/", data)
 
 
+# ---- User reads ----
+
+
+def get_users_for_avatar_check(has_avatar=None, limit=100, offset=0):
+    """Get users with Discord IDs for avatar validation.
+
+    Returns list of dicts with pk, discord_id, avatar, username.
+    """
+    params = {"limit": limit, "offset": offset}
+    if has_avatar is not None:
+        params["has_avatar"] = "true" if has_avatar else "false"
+    resp = _get("/users/avatar-check/", params=params)
+    if resp and resp.ok:
+        return resp.json()
+    return []
+
+
 # ---- User writes ----
 
 
-def update_user_avatar(pk, avatar_url):
-    """Update CustomUser avatar field."""
-    return _patch(f"/users/{pk}/avatar/", {"avatar": avatar_url})
+def update_user_avatar(pk, avatar):
+    """Update CustomUser avatar hash."""
+    return _patch(f"/users/{pk}/avatar/", {"avatar": avatar})
 
 
 # ---- Tournament reads ----
@@ -349,41 +366,41 @@ def update_user_avatar(pk, avatar_url):
 
 def get_tournament_for_task(pk):
     """Get tournament config for Celery tasks. Returns TournamentTaskData or None."""
-    from app.schemas import TournamentTaskData
+    from app.schemas import TournamentTaskSchema
 
     resp = _get(f"/tournaments/{pk}/full/")
     if resp and resp.ok:
-        return TournamentTaskData.model_validate(resp.json())
+        return TournamentTaskSchema.model_validate(resp.json())
     return None
 
 
 def get_tournament_participants(tournament_id):
     """Get participants with Discord IDs. Returns list of TournamentParticipant."""
-    from app.schemas import TournamentParticipant
+    from app.schemas import TournamentParticipantSchema
 
     resp = _get(f"/tournaments/{tournament_id}/participants/")
     if resp and resp.ok:
-        return [TournamentParticipant.model_validate(p) for p in resp.json()]
+        return [TournamentParticipantSchema.model_validate(p) for p in resp.json()]
     return []
 
 
 def get_match_participants(game_id):
     """Get match players with Discord IDs. Returns list of TournamentParticipant."""
-    from app.schemas import TournamentParticipant
+    from app.schemas import TournamentParticipantSchema
 
     resp = _get(f"/games/{game_id}/participants/")
     if resp and resp.ok:
-        return [TournamentParticipant.model_validate(p) for p in resp.json()]
+        return [TournamentParticipantSchema.model_validate(p) for p in resp.json()]
     return []
 
 
 def get_games_without_herodraft(tournament_id):
     """Get games needing hero drafts. Returns list of GameWithoutHeroDraft."""
-    from app.schemas import GameWithoutHeroDraft
+    from app.schemas import GameWithoutHeroDraftSchema
 
     resp = _get(f"/tournaments/{tournament_id}/games-without-herodraft/")
     if resp and resp.ok:
-        return [GameWithoutHeroDraft.model_validate(g) for g in resp.json()]
+        return [GameWithoutHeroDraftSchema.model_validate(g) for g in resp.json()]
     return []
 
 

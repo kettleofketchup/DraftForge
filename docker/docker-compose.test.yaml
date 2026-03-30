@@ -101,7 +101,7 @@ services:
       - ./backend:/app/backend
     env_file: "./docker/.env.test"
     environment:
-      OTEL_SERVICE_NAME: discord-bot
+      OTEL_SERVICE_NAME: discord
     depends_on:
       - redis
       - backend

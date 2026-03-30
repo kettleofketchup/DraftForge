@@ -30,11 +30,8 @@ from discordbot.schemas import MessageLogSchema as MessageLogEntry  # noqa: F401
 from discordbot.schemas import SyncDiscordStateSchema as SyncDiscordState  # noqa: F401
 
 
-class UserSchema(BaseModel):
-    """Shared user schema matching TournamentUserSerializer output.
-
-    Reusable anywhere celery needs user data — signups, DMs, embeds, etc.
-    """
+class TournamentUserSchema(BaseModel):
+    """Validates: TournamentUserSerializer (app/serializers.py)"""
 
     pk: int
     username: Optional[str] = None
@@ -54,8 +51,8 @@ class UserSchema(BaseModel):
     model_config = {"extra": "ignore"}
 
 
-class TournamentParticipant(BaseModel):
-    """User with Discord ID for tournament DM sending."""
+class TournamentParticipantSchema(BaseModel):
+    """Validates: get_tournament_participants() (app/views/internal.py)"""
 
     user_pk: int
     discord_id: str
@@ -63,8 +60,8 @@ class TournamentParticipant(BaseModel):
     model_config = {"extra": "ignore"}
 
 
-class TournamentTaskData(BaseModel):
-    """Tournament data needed by Celery tasks."""
+class TournamentTaskSchema(BaseModel):
+    """Validates: get_tournament_for_task() (app/views/internal.py)"""
 
     id: int
     name: str
@@ -83,8 +80,8 @@ class TournamentTaskData(BaseModel):
     model_config = {"extra": "ignore"}
 
 
-class GameWithoutHeroDraft(BaseModel):
-    """Game that needs a hero draft auto-created."""
+class GameWithoutHeroDraftSchema(BaseModel):
+    """Validates: get_games_without_herodraft() (app/views/internal.py)"""
 
     id: int
     radiant_team_id: int
@@ -95,6 +92,12 @@ class GameWithoutHeroDraft(BaseModel):
     has_captains: bool = False
     model_config = {"extra": "ignore"}
 
+
+# Backward compat aliases — use new names for new code
+UserSchema = TournamentUserSchema
+TournamentTaskData = TournamentTaskSchema
+TournamentParticipant = TournamentParticipantSchema
+GameWithoutHeroDraft = GameWithoutHeroDraftSchema
 
 # Backward compat -- use events.schemas for new code
 from events.schemas import DotaProfileSchema  # noqa: F401, E402

@@ -30,8 +30,6 @@ function MembershipBadge({ result }: { result: SearchUserResult }) {
   );
 }
 
-const MIN_QUERY_LENGTH = 3;
-
 export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
   results,
   loading,
@@ -79,10 +77,10 @@ export const SiteUserResults: React.FC<SiteUserResultsProps> = ({
     );
   }
 
-  if (queryLength < MIN_QUERY_LENGTH) {
+  if (queryLength < 1) {
     return (
       <div className="py-8 text-center text-sm text-muted-foreground">
-        Type at least {MIN_QUERY_LENGTH} characters to search
+        Search for users by name
       </div>
     );
   }

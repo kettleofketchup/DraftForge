@@ -474,4 +474,4 @@ def run_bot():
         log.error("DISCORD_BOT_TOKEN not set!")
         sys.exit(1)
 
-    bot.run(token)
+    bot.run(token, log_handler=None)

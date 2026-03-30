@@ -92,6 +92,7 @@ async def broadcast_tick(draft_id: int):
         try:
             draft = HeroDraft.objects.get(id=draft_id)
         except HeroDraft.DoesNotExist:
+            log.warning(f"Tick skipped: draft {draft_id} not found")
             return None
 
         # Handle RESUMING state - broadcast countdown remaining
@@ -109,10 +110,14 @@ async def broadcast_tick(draft_id: int):
             }
 
         if draft.state != HeroDraftState.DRAFTING:
+            log.info(
+                f"Tick skipped: draft {draft_id} state={draft.state} (not DRAFTING)"
+            )
             return None
 
         current_round = draft.rounds.filter(state="active").first()
         if not current_round:
+            log.warning(f"Tick skipped: draft {draft_id} has no active round")
             return None
 
         # Use explicit ordering by ID for deterministic team order
@@ -171,7 +176,7 @@ async def broadcast_tick(draft_id: int):
         try:
             await channel_layer.group_send(room_group_name, tick_data)
         except Exception as e:
-            log.warning(f"Failed to broadcast tick for draft {draft_id}: {e}")
+            log.error(f"Failed to broadcast tick for draft {draft_id}: {e}")
 
 
 async def check_timeout(draft_id: int):
@@ -460,8 +465,11 @@ async def run_tick_loop(draft_id: int, stop_event: threading.Event):
         r.expire(lock_key, LOCK_TIMEOUT)
 
     log.info(f"Tick loop started for draft {draft_id}")
+    tick_count = 0
 
     while not stop_event.is_set():
+        tick_start = time.time()
+
         should_continue, reason = await check_continue()
         if not should_continue:
             log.info(f"Stopping tick loop for draft {draft_id}: {reason}")
@@ -474,6 +482,22 @@ async def run_tick_loop(draft_id: int, stop_event: threading.Event):
         await broadcast_tick(draft_id)
         await check_timeout(draft_id)
         await extend_lock()
+
+        tick_duration = time.time() - tick_start
+        tick_count += 1
+
+        # Log every 30 ticks (~30s) as a health check, or if a tick was slow
+        if tick_duration > 2.0:
+            log.warning(
+                f"Slow tick for draft {draft_id}: {tick_duration:.2f}s "
+                f"(tick #{tick_count})"
+            )
+        elif tick_count % 30 == 0:
+            log.info(
+                f"Tick loop healthy: draft={draft_id} tick=#{tick_count} "
+                f"last_duration={tick_duration:.3f}s"
+            )
+
         await asyncio.sleep(1)
 
     log.info(f"Tick loop ended for draft {draft_id}")

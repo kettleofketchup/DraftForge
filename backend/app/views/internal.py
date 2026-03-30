@@ -864,3 +864,74 @@ def create_herodraft_for_game(request, game_id):
         {"id": herodraft.pk, "created": True},
         status=status.HTTP_201_CREATED,
     )
+
+
+# ---------------------------------------------------------------------------
+# User avatar management
+# ---------------------------------------------------------------------------
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def list_users_for_avatar_check(request):
+    """Return users with Discord IDs for avatar validation.
+
+    Query params:
+        has_avatar: "true" (only users with existing avatar) or "false"
+        limit: max results (default 100)
+        offset: pagination offset (default 0)
+    """
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+
+    qs = User.objects.filter(discordId__isnull=False)
+
+    has_avatar = request.query_params.get("has_avatar")
+    if has_avatar == "true":
+        qs = qs.exclude(avatar__isnull=True).exclude(avatar="")
+    elif has_avatar == "false":
+        from django.db.models import Q
+
+        qs = qs.filter(Q(avatar__isnull=True) | Q(avatar=""))
+
+    limit = int(request.query_params.get("limit", 100))
+    offset = int(request.query_params.get("offset", 0))
+
+    users = qs[offset : offset + limit]
+    return Response(
+        [
+            {
+                "pk": u.pk,
+                "discord_id": u.discordId,
+                "avatar": u.avatar,
+                "username": u.username,
+            }
+            for u in users
+        ]
+    )
+
+
+@api_view(["PATCH"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def update_user_avatar(request, pk):
+    """Update a user's avatar hash.
+
+    Body: {"avatar": "new_avatar_hash"} or {"avatar": null} to clear.
+    """
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+
+    try:
+        user = User.objects.get(pk=pk)
+    except User.DoesNotExist:
+        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    user.avatar = request.data.get("avatar")
+    user.save(update_fields=["avatar"])
+    invalidate_after_commit(user)
+
+    return Response({"pk": user.pk, "avatar": user.avatar})

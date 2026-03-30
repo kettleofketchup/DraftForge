@@ -20,12 +20,13 @@ def init_worker_telemetry(**kwargs):
     but forked worker processes don't inherit the OTel providers properly.
     This signal fires after fork, ensuring each worker has its own exporters.
     """
-    # Reset the guard so init_tracing runs again in this process
+    # Reset guards so init_tracing and init_log_export run again in this process.
+    # Both providers from the parent are stale after fork.
     import telemetry.tracing
     from telemetry.config import init_telemetry
-    from telemetry.tracing import _tracing_initialized
 
     telemetry.tracing._tracing_initialized = False
+    telemetry.tracing._log_export_initialized = False
 
     init_telemetry()
 

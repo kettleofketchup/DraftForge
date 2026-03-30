@@ -166,6 +166,14 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
     except Exception as e:
         _log.warning(f"Failed to instrument Django: {e}")
 
+    # Instrument Celery task execution (creates root spans for every task)
+    try:
+        from opentelemetry.instrumentation.celery import CeleryInstrumentor
+
+        CeleryInstrumentor().instrument()
+    except Exception as e:
+        _log.warning(f"Failed to instrument Celery: {e}")
+
     # Instrument requests (for outbound HTTP)
     try:
         from opentelemetry.instrumentation.requests import RequestsInstrumentor

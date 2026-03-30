@@ -360,12 +360,14 @@ from app.views.internal import (
     get_sync_discord_state,
     get_tournament_for_task,
     get_tournament_participants,
+    list_users_for_avatar_check,
     search_message_logs,
     transition_event_state,
     update_discord_event,
     update_event_dm,
     update_scheduled_event,
     update_tournament_log,
+    update_user_avatar,
 )
 
 urlpatterns += [
@@ -412,6 +414,9 @@ urlpatterns += [
         "api/internal/games/<int:game_id>/create-herodraft/",
         create_herodraft_for_game,
     ),
+    # User avatar management
+    path("api/internal/users/avatar-check/", list_users_for_avatar_check),
+    path("api/internal/users/<int:pk>/avatar/", update_user_avatar),
 ]
 
 log.debug(f"Test Environ:  {isTestEnvironment()}")

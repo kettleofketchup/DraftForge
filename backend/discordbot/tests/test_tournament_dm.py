@@ -116,9 +116,9 @@ class SendDraftLinksTaskTest(TestCase):
     def test_sends_dm_to_participants(
         self, mock_get_tourn, mock_get_parts, mock_dm, mock_log
     ):
-        from app.schemas import TournamentParticipant, TournamentTaskData
+        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
 
-        mock_get_tourn.return_value = TournamentTaskData(
+        mock_get_tourn.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
             state="in_progress",
@@ -126,8 +126,8 @@ class SendDraftLinksTaskTest(TestCase):
             draft_type="snake",
         )
         mock_get_parts.return_value = [
-            TournamentParticipant(user_pk=1, discord_id="111", username="p1"),
-            TournamentParticipant(user_pk=2, discord_id="222", username="p2"),
+            TournamentParticipantSchema(user_pk=1, discord_id="111", username="p1"),
+            TournamentParticipantSchema(user_pk=2, discord_id="222", username="p2"),
         ]
         mock_dm.return_value = {"id": "msg123"}
         mock_log.return_value = MagicMock(ok=True, json=lambda: {"id": 1})
@@ -139,9 +139,9 @@ class SendDraftLinksTaskTest(TestCase):
 
     @patch("app.internal_client.get_tournament_for_task")
     def test_skips_when_disabled(self, mock_get):
-        from app.schemas import TournamentTaskData
+        from app.schemas import TournamentTaskSchema
 
-        mock_get.return_value = TournamentTaskData(
+        mock_get.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
             state="in_progress",
@@ -157,9 +157,9 @@ class SendDraftLinksTaskTest(TestCase):
     @patch("app.internal_client.get_tournament_participants")
     @patch("app.internal_client.get_tournament_for_task")
     def test_creates_log(self, mock_get_tourn, mock_get_parts, mock_dm, mock_log):
-        from app.schemas import TournamentParticipant, TournamentTaskData
+        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
 
-        mock_get_tourn.return_value = TournamentTaskData(
+        mock_get_tourn.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
             state="in_progress",
@@ -167,7 +167,7 @@ class SendDraftLinksTaskTest(TestCase):
             draft_type="snake",
         )
         mock_get_parts.return_value = [
-            TournamentParticipant(user_pk=1, discord_id="111", username="p1"),
+            TournamentParticipantSchema(user_pk=1, discord_id="111", username="p1"),
         ]
         mock_dm.return_value = {"id": "msg123"}
         mock_log.return_value = MagicMock(ok=True, json=lambda: {"id": 1})
@@ -188,17 +188,17 @@ class SendHeroDraftLinksTaskTest(TestCase):
     @patch("app.internal_client.get_match_participants")
     @patch("app.internal_client.get_tournament_for_task")
     def test_sends_dm_to_match_players(self, mock_tourn, mock_parts, mock_dm, mock_log):
-        from app.schemas import TournamentParticipant, TournamentTaskData
+        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
 
-        mock_tourn.return_value = TournamentTaskData(
+        mock_tourn.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
             state="in_progress",
             discord_send_herodraft_link=True,
         )
         mock_parts.return_value = [
-            TournamentParticipant(user_pk=1, discord_id="111", username="p1"),
-            TournamentParticipant(user_pk=2, discord_id="222", username="p2"),
+            TournamentParticipantSchema(user_pk=1, discord_id="111", username="p1"),
+            TournamentParticipantSchema(user_pk=2, discord_id="222", username="p2"),
         ]
         mock_dm.return_value = {"id": "msg123"}
         mock_log.return_value = MagicMock(ok=True, json=lambda: {"id": 1})
@@ -219,16 +219,16 @@ class AutoCreateHeroDraftsTaskTest(TestCase):
     def test_creates_herodrafts(
         self, mock_tourn, mock_games, mock_create, mock_resched
     ):
-        from app.schemas import GameWithoutHeroDraft, TournamentTaskData
+        from app.schemas import GameWithoutHeroDraftSchema, TournamentTaskSchema
 
-        mock_tourn.return_value = TournamentTaskData(
+        mock_tourn.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
             state="in_progress",
             auto_create_hero_drafts=True,
         )
         mock_games.return_value = [
-            GameWithoutHeroDraft(
+            GameWithoutHeroDraftSchema(
                 id=10,
                 radiant_team_id=1,
                 dire_team_id=2,
@@ -250,9 +250,9 @@ class AutoCreateHeroDraftsTaskTest(TestCase):
     @patch("events.tournament_tasks.auto_create_herodrafts.apply_async")
     @patch("app.internal_client.get_tournament_for_task")
     def test_stops_when_completed(self, mock_tourn, mock_resched):
-        from app.schemas import TournamentTaskData
+        from app.schemas import TournamentTaskSchema
 
-        mock_tourn.return_value = TournamentTaskData(
+        mock_tourn.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
             state="past",
@@ -266,9 +266,9 @@ class AutoCreateHeroDraftsTaskTest(TestCase):
     @patch("events.tournament_tasks.auto_create_herodrafts.apply_async")
     @patch("app.internal_client.get_tournament_for_task")
     def test_stops_when_disabled(self, mock_tourn, mock_resched):
-        from app.schemas import TournamentTaskData
+        from app.schemas import TournamentTaskSchema
 
-        mock_tourn.return_value = TournamentTaskData(
+        mock_tourn.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
             state="in_progress",
@@ -283,16 +283,16 @@ class AutoCreateHeroDraftsTaskTest(TestCase):
     @patch("app.internal_client.get_games_without_herodraft")
     @patch("app.internal_client.get_tournament_for_task")
     def test_skips_games_without_captains(self, mock_tourn, mock_games, mock_resched):
-        from app.schemas import GameWithoutHeroDraft, TournamentTaskData
+        from app.schemas import GameWithoutHeroDraftSchema, TournamentTaskSchema
 
-        mock_tourn.return_value = TournamentTaskData(
+        mock_tourn.return_value = TournamentTaskSchema(
             id=1,
             name="Test",
             state="in_progress",
             auto_create_hero_drafts=True,
         )
         mock_games.return_value = [
-            GameWithoutHeroDraft(
+            GameWithoutHeroDraftSchema(
                 id=10,
                 radiant_team_id=1,
                 dire_team_id=2,

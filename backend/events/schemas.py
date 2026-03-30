@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Optional
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from app.schemas import UserSchema as TournamentUserSchema
+    from app.schemas import TournamentUserSchema
 
 
 class OrgProxy:
@@ -198,7 +198,7 @@ class ScheduledEventDueSchema(BaseModel):
 
 def _rebuild_forward_refs() -> None:
     """Resolve deferred TournamentUserSchema reference (avoids circular import)."""
-    from app.schemas import UserSchema as TournamentUserSchema  # noqa: F811
+    from app.schemas import TournamentUserSchema  # noqa: F811
 
     EventSignupSchema.model_rebuild(
         _types_namespace={"TournamentUserSchema": TournamentUserSchema}

@@ -99,6 +99,7 @@ class BaseDraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
         r = get_redis_client()
         heartbeat_key = self._heartbeat_key(self.draft_id, self.user.id)
         r.set(heartbeat_key, str(time.time()), ex=HEARTBEAT_TTL)
+        log.debug(f"Heartbeat received: user={self.user.id} draft={self.draft_id}")
 
     # --- Captain channel registration ---
 

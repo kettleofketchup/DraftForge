@@ -85,7 +85,7 @@ services:
     entrypoint: ["python", "manage.py", "run_discord_bot"]
     env_file: "./docker/.env.prod"
     environment:
-      OTEL_SERVICE_NAME: discord-bot
+      OTEL_SERVICE_NAME: discord
     volumes:
       - ./backend/db.sqlite3:/app/backend/prod.db.sqlite3
       - ./backend/.env:/app/backend/.env

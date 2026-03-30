@@ -16,20 +16,24 @@ from pydantic import ValidationError
 
 from app.models import CustomUser, Organization
 from app.schemas import (
-    DiscordEventState,
-    EventTaskData,
-    GameWithoutHeroDraft,
-    MessageLogEntry,
-    RepeaterSubscriber,
-    ScheduledEventDue,
-    SyncDiscordState,
-    TournamentParticipant,
-    TournamentTaskData,
+    GameWithoutHeroDraftSchema,
+    TournamentParticipantSchema,
+    TournamentTaskSchema,
+)
+from discordbot.schemas import (
+    DiscordEventStateSchema,
+    MessageLogSchema,
+    SyncDiscordStateSchema,
+)
+from events.schemas import (
+    EventTaskSchema,
+    RepeaterSubscriberSchema,
+    ScheduledEventDueSchema,
 )
 
 
-class EventTaskDataDriftTest(TestCase):
-    """Verify EventSerializer output validates against EventTaskData schema."""
+class EventTaskSchemaDriftTest(TestCase):
+    """Verify EventSerializer output validates against EventTaskSchema schema."""
 
     def test_serializer_output_matches_schema(self):
         from events.models import Event
@@ -53,16 +57,16 @@ class EventTaskDataDriftTest(TestCase):
         data["event_repeater_id"] = event.event_repeater_id
 
         # This will raise ValidationError if schema drifts from serializer
-        parsed = EventTaskData.model_validate(data)
+        parsed = EventTaskSchema.model_validate(data)
         self.assertEqual(parsed.id, event.pk)
         self.assertEqual(parsed.name, "Schema Test Event")
         self.assertEqual(parsed.organization_discord_server_id, "123456")
         self.assertTrue(parsed.discord_announcement)
 
     def test_missing_required_field_raises(self):
-        """EventTaskData requires id and name at minimum."""
+        """EventTaskSchema requires id and name at minimum."""
         with self.assertRaises(ValidationError):
-            EventTaskData(state="upcoming", scheduled_at=timezone.now())
+            EventTaskSchema(state="upcoming", scheduled_at=timezone.now())
 
     def test_extra_fields_ignored(self):
         """Extra fields from serializer don't break the schema."""
@@ -74,11 +78,11 @@ class EventTaskDataDriftTest(TestCase):
             "organization": 1,
             "some_new_field": "should be ignored",
         }
-        parsed = EventTaskData.model_validate(data)
+        parsed = EventTaskSchema.model_validate(data)
         self.assertEqual(parsed.id, 1)
 
 
-class MessageLogEntryDriftTest(TestCase):
+class MessageLogSchemaDriftTest(TestCase):
     def test_log_entry_validates(self):
         data = {
             "id": 1,
@@ -91,12 +95,12 @@ class MessageLogEntryDriftTest(TestCase):
             "response_data": {"id": "789"},
             "created_at": "2026-01-01T00:00:00Z",
         }
-        parsed = MessageLogEntry.model_validate(data)
+        parsed = MessageLogSchema.model_validate(data)
         self.assertEqual(parsed.source, "signup_reminder")
         self.assertTrue(parsed.success)
 
 
-class SyncDiscordStateDriftTest(TestCase):
+class SyncDiscordStateSchemaDriftTest(TestCase):
     def test_sync_state_validates(self):
         data = {
             "active_events": [{"pk": 1, "name": "Test", "state": "signups_open"}],
@@ -105,11 +109,11 @@ class SyncDiscordStateDriftTest(TestCase):
             "events_with_scheduled": [],
             "events_with_recent_attempt": [],
         }
-        parsed = SyncDiscordState.model_validate(data)
+        parsed = SyncDiscordStateSchema.model_validate(data)
         self.assertEqual(len(parsed.active_events), 1)
 
 
-class DiscordEventStateDriftTest(TestCase):
+class DiscordEventStateSchemaDriftTest(TestCase):
     def test_discord_state_validates(self):
         data = {
             "has_discord_event": True,
@@ -119,24 +123,24 @@ class DiscordEventStateDriftTest(TestCase):
             "fired_actions": ["send_signup_post", "create_scheduled_event"],
             "has_dms": False,
         }
-        parsed = DiscordEventState.model_validate(data)
+        parsed = DiscordEventStateSchema.model_validate(data)
         self.assertTrue(parsed.has_discord_event)
         self.assertEqual(len(parsed.fired_actions), 2)
 
 
-class RepeaterSubscriberDriftTest(TestCase):
+class RepeaterSubscriberSchemaDriftTest(TestCase):
     def test_subscriber_validates(self):
         data = {"user_pk": 1, "discord_id": "123456", "org_user_pk": 10}
-        parsed = RepeaterSubscriber.model_validate(data)
+        parsed = RepeaterSubscriberSchema.model_validate(data)
         self.assertEqual(parsed.discord_id, "123456")
 
 
-class TournamentTaskDataDriftTest(TestCase):
-    """Verify Tournament model output validates against TournamentTaskData schema."""
+class TournamentTaskSchemaDriftTest(TestCase):
+    """Verify Tournament model output validates against TournamentTaskSchema schema."""
 
     def test_tournament_validates(self):
         from app.models import Tournament
-        from app.schemas import TournamentTaskData
+        from app.schemas import TournamentTaskSchema
 
         t = Tournament.objects.create(
             name="Test", state="future", date_played=timezone.now()
@@ -151,12 +155,12 @@ class TournamentTaskDataDriftTest(TestCase):
             "tournament_type": t.tournament_type,
             "draft_type": t.draft_type,
         }
-        parsed = TournamentTaskData.model_validate(data)
+        parsed = TournamentTaskSchema.model_validate(data)
         self.assertEqual(parsed.pk, t.pk)
         self.assertFalse(parsed.auto_create_hero_drafts)
 
     def test_extra_fields_ignored(self):
-        from app.schemas import TournamentTaskData
+        from app.schemas import TournamentTaskSchema
 
         data = {
             "id": 1,
@@ -164,21 +168,21 @@ class TournamentTaskDataDriftTest(TestCase):
             "state": "future",
             "some_new_field": "ignored",
         }
-        parsed = TournamentTaskData.model_validate(data)
+        parsed = TournamentTaskSchema.model_validate(data)
         self.assertEqual(parsed.id, 1)
 
     def test_missing_required_field_raises(self):
-        from app.schemas import TournamentTaskData
+        from app.schemas import TournamentTaskSchema
 
         with self.assertRaises(ValidationError):
-            TournamentTaskData(name="T")  # missing id and state
+            TournamentTaskSchema(name="T")  # missing id and state
 
 
-class GameWithoutHeroDraftDriftTest(TestCase):
-    """Verify GameWithoutHeroDraft schema validates correctly."""
+class GameWithoutHeroDraftSchemaDriftTest(TestCase):
+    """Verify GameWithoutHeroDraftSchema schema validates correctly."""
 
     def test_game_without_herodraft_validates(self):
-        from app.schemas import GameWithoutHeroDraft
+        from app.schemas import GameWithoutHeroDraftSchema
 
         data = {
             "id": 1,
@@ -189,23 +193,23 @@ class GameWithoutHeroDraftDriftTest(TestCase):
             "round": 1,
             "has_captains": True,
         }
-        parsed = GameWithoutHeroDraft.model_validate(data)
+        parsed = GameWithoutHeroDraftSchema.model_validate(data)
         self.assertEqual(parsed.id, 1)
         self.assertTrue(parsed.has_captains)
 
 
-class TournamentParticipantDriftTest(TestCase):
-    """Verify TournamentParticipant schema validates correctly."""
+class TournamentParticipantSchemaDriftTest(TestCase):
+    """Verify TournamentParticipantSchema schema validates correctly."""
 
     def test_participant_validates(self):
-        from app.schemas import TournamentParticipant
+        from app.schemas import TournamentParticipantSchema
 
         data = {"user_pk": 1, "discord_id": "123456789", "username": "player1"}
-        parsed = TournamentParticipant.model_validate(data)
+        parsed = TournamentParticipantSchema.model_validate(data)
         self.assertEqual(parsed.discord_id, "123456789")
 
     def test_extra_fields_ignored(self):
-        from app.schemas import TournamentParticipant
+        from app.schemas import TournamentParticipantSchema
 
         data = {
             "user_pk": 1,
@@ -213,11 +217,11 @@ class TournamentParticipantDriftTest(TestCase):
             "username": "p",
             "extra_field": "ignored",
         }
-        parsed = TournamentParticipant.model_validate(data)
+        parsed = TournamentParticipantSchema.model_validate(data)
         self.assertEqual(parsed.user_pk, 1)
 
 
-class ScheduledEventDueDriftTest(TestCase):
+class ScheduledEventDueSchemaDriftTest(TestCase):
     def test_scheduled_event_validates(self):
         data = {
             "pk": 1,
@@ -233,7 +237,7 @@ class ScheduledEventDueDriftTest(TestCase):
                 "include_rsvp": True,
             },
         }
-        parsed = ScheduledEventDue.model_validate(data)
+        parsed = ScheduledEventDueSchema.model_validate(data)
         self.assertTrue(parsed.is_recurring)
         self.assertEqual(parsed.template.title, "Weekly Inhouse Night")
         self.assertEqual(parsed.template.color, "#7289DA")
