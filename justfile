@@ -37,7 +37,13 @@ bootstrap *args:
             cp "$main_repo/backend/.env" "{{root}}/backend/.env"
         fi
     fi
-    inv dev.debug {{args}}
+    # Use M1 compose on macOS ARM, standard compose elsewhere
+    if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
+        echo "Detected macOS ARM — using M1 Docker Compose config"
+        inv dev.mac {{args}}
+    else
+        inv dev.debug {{args}}
+    fi
 
 # Modules (namespaced with ::)
 mod dev 'just/dev.just'

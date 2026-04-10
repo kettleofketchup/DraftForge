@@ -246,14 +246,16 @@ def dev_prod(c):
 
 @task
 def dev_mac(c):
+    db_migrate(c, paths.DEBUG_ENV_FILE)
     with c.cd(paths.PROJECT_PATH):
-
         load_dotenv(paths.DEBUG_ENV_FILE)
 
-        load_dotenv(paths.PROD_ENV_FILE)
-        db_migrate(c, paths.PROD_ENV_FILE)
-
-        cmd = f"docker compose --project-directory {paths.PROJECT_PATH.resolve()} -f {paths.DOCKER_COMPOSE_DEBUG_M1_PATH.resolve()} up"
+        cmd = (
+            f"docker compose "
+            f"--project-directory {paths.PROJECT_PATH.resolve()} "
+            f"-f {paths.DOCKER_COMPOSE_DEBUG_M1_PATH.resolve()} "
+            f"--ansi always up --no-attach nginx --remove-orphans"
+        )
         c.run(cmd)
 
 
