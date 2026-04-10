@@ -1,31 +1,31 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useUserStore } from '~/store/userStore';
+
+// Shared across all hook instances — prevents duplicate fetches
+let fetchPromise: Promise<void> | null = null;
 
 export function useOrganizations() {
   const organizations = useUserStore((state) => state.organizations);
   const getOrganizations = useUserStore((state) => state.getOrganizations);
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasFetched, setHasFetched] = useState(false);
+  const fetched = useRef(false);
 
   const refetch = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      await getOrganizations();
-    } finally {
-      setIsLoading(false);
-      setHasFetched(true);
-    }
+    fetchPromise = null;
+    await getOrganizations();
   }, [getOrganizations]);
 
   useEffect(() => {
-    if (!hasFetched) {
-      refetch();
+    if (organizations.length > 0 || fetched.current) return;
+    fetched.current = true;
+
+    if (!fetchPromise) {
+      fetchPromise = getOrganizations();
     }
-  }, [hasFetched, refetch]);
+  }, [organizations.length, getOrganizations]);
 
   return {
     organizations,
-    isLoading,
+    isLoading: organizations.length === 0 && !fetched.current,
     refetch,
   };
 }

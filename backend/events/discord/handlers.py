@@ -9,7 +9,8 @@ Return dicts with 'action' key so the caller knows how to respond.
 import logging
 
 from discordbot.models import DiscordEventLog
-from events.models import Event, EventSignup, EventState, SignupStatus
+from events.constants import EventState, SignupStatus
+from events.models import Event, EventSignup
 
 logger = logging.getLogger(__name__)
 
@@ -138,10 +139,16 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
             "message": "Could not create your account. Please try again.",
         }
 
-    # Check if already signed up
+    # Check if already signed up (tentative can upgrade to full signup)
     existing = (
         EventSignup.objects.filter(event=event, user=user)
-        .exclude(status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED])
+        .exclude(
+            status__in=[
+                SignupStatus.CANCELLED,
+                SignupStatus.REJECTED,
+                SignupStatus.TENTATIVE,
+            ]
+        )
         .first()
     )
     if existing:
@@ -165,6 +172,9 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
         try:
             signup = process_rsvp(event, user)
             _log_signup(event_id, "signup_direct", discord_user_id, discord_username)
+            from events.discord.dispatch import notify_signup_changed
+
+            notify_signup_changed(event)
             return {"action": "signed_up", "status": signup.status}
         except ValueError as e:
             _log_signup(
@@ -591,6 +601,9 @@ def handle_decline_button(event_id, discord_user_id):
             return {"action": "already_declined", "message": "You've already declined."}
         cancel_signup(signup)
         _log_signup(event_id, "declined", discord_user_id)
+        from events.discord.dispatch import notify_signup_changed
+
+        notify_signup_changed(event)
         return {"action": "declined", "message": "You've declined the event."}
     except EventSignup.DoesNotExist:
         return {"action": "not_signed_up", "message": "You weren't signed up."}

@@ -82,6 +82,9 @@ export const TournamentSchema = z.object({
   // League PK
   league_pk: z.number().nullable().optional(),
   source_event: SourceEventSchema.nullable().optional(),
+  auto_create_hero_drafts: z.boolean().default(false),
+  discord_send_draft_link: z.boolean().default(false),
+  discord_send_herodraft_link: z.boolean().default(false),
 });
 
 // Schema for creating a new tournament
@@ -93,6 +96,21 @@ export const CreateTournamentSchema = z.object({
   date_played: z.string().min(1, 'Date and time is required'),
   timezone: z.string().min(1, 'Timezone is required'),
   league: z.number().nullable().optional(),
+  auto_create_hero_drafts: z.boolean().default(false),
+  discord_send_draft_link: z.boolean().default(false),
+  discord_send_herodraft_link: z.boolean().default(false),
 });
 
 export type CreateTournamentInput = z.infer<typeof CreateTournamentSchema>;
+
+export const DiscordTournamentLogSchema = z.object({
+  id: z.number(),
+  category: z.string(),
+  notification_type: z.string(),
+  message: z.string(),
+  recipient_count: z.number(),
+  success: z.boolean(),
+  created_at: z.string(),
+});
+
+export type DiscordTournamentLogEntry = z.infer<typeof DiscordTournamentLogSchema>;

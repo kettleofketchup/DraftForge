@@ -2,7 +2,7 @@ import { Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { button3DVariants } from './styles';
+import { brandErrorPrimary, button3DBase, button3DDisabled } from './styles';
 
 export interface DestructiveButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
@@ -32,7 +32,7 @@ const DestructiveButton = React.forwardRef<
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        depth ? button3DVariants.destructive : 'bg-red-600 text-white hover:bg-red-500',
+        depth ? `${button3DBase} ${button3DDisabled} ${brandErrorPrimary} border-b-red-900/50` : brandErrorPrimary,
         className
       )}
       {...props}

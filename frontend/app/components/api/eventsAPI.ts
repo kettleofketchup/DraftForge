@@ -1,10 +1,21 @@
 import type { EventSignupType, EventType } from '~/components/events/schemas';
 import axios from './axios';
 
-export async function getEvents(params?: { organization?: number; state?: string }): Promise<EventType[]> {
+export async function getEvents(params?: {
+  organization?: number;
+  state?: string;
+  states?: string[];
+  search?: string;
+  ordering?: string;
+  event_repeater?: number;
+}): Promise<EventType[]> {
   const sp = new URLSearchParams();
   if (params?.organization) sp.set('organization', String(params.organization));
   if (params?.state) sp.set('state', params.state);
+  if (params?.states?.length) sp.set('states', params.states.join(','));
+  if (params?.search) sp.set('search', params.search);
+  if (params?.ordering) sp.set('ordering', params.ordering);
+  if (params?.event_repeater) sp.set('event_repeater', String(params.event_repeater));
   const q = sp.toString();
   const { data } = await axios.get<EventType[]>(`/events/${q ? `?${q}` : ''}`);
   return data;
@@ -282,6 +293,16 @@ export interface DiscordRole {
   color: number;
   mentionable: boolean;
   position: number;
+}
+
+export async function tentativeForEvent(eventId: number): Promise<EventSignupType> {
+  const { data } = await axios.post<EventSignupType>(`/events/${eventId}/tentative/`);
+  return data;
+}
+
+export async function adminAddSignup(eventId: number, userId: number) {
+  const { data } = await axios.post(`/events/${eventId}/admin-signup/`, { user_id: userId });
+  return data;
 }
 
 export async function subscribeToRepeater(repeaterId: number): Promise<void> {

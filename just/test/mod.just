@@ -59,4 +59,14 @@ run cmd service="backend":
 
 [group('test')]
 setup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # If worktree, ensure backend/.env is copied from main repo
+    main_repo="$(git -C "{{root}}" rev-parse --git-common-dir 2>/dev/null | sed 's|/\.git$||')"
+    if [[ -n "$main_repo" && "$main_repo" != "{{root}}/.git" && "$main_repo" != "." ]]; then
+        if [[ -f "$main_repo/backend/.env" && ! -f "{{root}}/backend/.env" ]]; then
+            echo "Worktree detected — copying backend/.env from main repo..."
+            cp "$main_repo/backend/.env" "{{root}}/backend/.env"
+        fi
+    fi
     {{inv}} test.setup

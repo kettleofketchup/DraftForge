@@ -7,7 +7,6 @@ WebSocket clients are connected.
 
 import asyncio
 import atexit
-import logging
 import threading
 import time
 from collections import namedtuple
@@ -19,7 +18,9 @@ from channels.layers import get_channel_layer
 from django.conf import settings
 from django.utils import timezone
 
-log = logging.getLogger(__name__)
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 # Redis client for locking and connection tracking
 _redis_client = None
@@ -92,6 +93,13 @@ async def broadcast_tick(draft_id: int):
         try:
             draft = HeroDraft.objects.get(id=draft_id)
         except HeroDraft.DoesNotExist:
+            log.warning(
+                "tick_skipped",
+                system="herodraft",
+                subsystem="timer",
+                draft_id=draft_id,
+                reason="not_found",
+            )
             return None
 
         # Handle RESUMING state - broadcast countdown remaining
@@ -109,10 +117,25 @@ async def broadcast_tick(draft_id: int):
             }
 
         if draft.state != HeroDraftState.DRAFTING:
+            log.info(
+                "tick_skipped",
+                system="herodraft",
+                subsystem="timer",
+                draft_id=draft_id,
+                reason="wrong_state",
+                draft_state=draft.state,
+            )
             return None
 
         current_round = draft.rounds.filter(state="active").first()
         if not current_round:
+            log.warning(
+                "tick_skipped",
+                system="herodraft",
+                subsystem="timer",
+                draft_id=draft_id,
+                reason="no_active_round",
+            )
             return None
 
         # Use explicit ordering by ID for deterministic team order
@@ -146,10 +169,16 @@ async def broadcast_tick(draft_id: int):
             team_b_reserve = max(0, team_b_reserve - reserve_consumed_ms)
 
         log.debug(
-            f"Tick draft {draft_id}: round={current_round.round_number}, "
-            f"elapsed={elapsed_ms}ms, grace_remaining={grace_remaining}ms, "
-            f"reserve_consumed={reserve_consumed_ms}ms, "
-            f"team_a_reserve={team_a_reserve}ms, team_b_reserve={team_b_reserve}ms"
+            "tick_broadcast",
+            system="herodraft",
+            subsystem="timer",
+            draft_id=draft_id,
+            round=current_round.round_number,
+            elapsed_ms=elapsed_ms,
+            grace_remaining_ms=grace_remaining,
+            reserve_consumed_ms=reserve_consumed_ms,
+            team_a_reserve_ms=team_a_reserve,
+            team_b_reserve_ms=team_b_reserve,
         )
 
         return {
@@ -171,7 +200,13 @@ async def broadcast_tick(draft_id: int):
         try:
             await channel_layer.group_send(room_group_name, tick_data)
         except Exception as e:
-            log.warning(f"Failed to broadcast tick for draft {draft_id}: {e}")
+            log.error(
+                "tick_broadcast_failed",
+                system="herodraft",
+                subsystem="timer",
+                draft_id=draft_id,
+                error=str(e),
+            )
 
 
 async def check_timeout(draft_id: int):
@@ -217,7 +252,13 @@ async def check_timeout(draft_id: int):
             if elapsed_ms >= total_time:
                 # Time's up - auto pick
                 log.info(
-                    f"Timeout reached for draft {draft_id}, round {current_round.round_number}"
+                    "timeout_auto_pick",
+                    system="herodraft",
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    round=current_round.round_number,
+                    elapsed_ms=elapsed_ms,
+                    total_time_ms=total_time,
                 )
                 completed_round = auto_random_pick(draft, team)
 
@@ -233,9 +274,20 @@ async def check_timeout(draft_id: int):
                     "rounds",
                 ).get(id=draft_id)
                 broadcast_herodraft_state(draft, "hero_selected")
-                log.debug(f"Broadcast auto-pick state for draft {draft_id}")
+                log.debug(
+                    "timeout_auto_pick_broadcast",
+                    system="herodraft",
+                    subsystem="timer",
+                    draft_id=draft_id,
+                )
             except Exception as e:
-                log.error(f"Failed to broadcast auto-pick for draft {draft_id}: {e}")
+                log.error(
+                    "timeout_auto_pick_broadcast_failed",
+                    system="herodraft",
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    error=str(e),
+                )
 
         return completed_round
 
@@ -275,7 +327,12 @@ async def check_resume_countdown(draft_id: int):
                 event_type="draft_resumed",
                 metadata={},
             )
-            log.info(f"HeroDraft {draft_id} resumed after countdown")
+            log.info(
+                "draft_resumed",
+                system="herodraft",
+                subsystem="timer",
+                draft_id=draft_id,
+            )
             transitioned = True
 
         # Broadcast AFTER transaction commits
@@ -345,8 +402,14 @@ async def check_captain_heartbeats(draft_id: int):
                 # or heartbeat expired (30s TTL)
                 if draft_team.is_connected:
                     log.warning(
-                        f"Captain {captain.username} has no heartbeat but marked connected - "
-                        f"treating as stale for draft {draft_id}"
+                        "heartbeat_missing",
+                        system="herodraft",
+                        subsystem="heartbeat",
+                        draft_id=draft_id,
+                        user_id=captain.id,
+                        username=captain.username,
+                        is_connected=True,
+                        reason="no_heartbeat_key",
                     )
                     stale_captain = (draft_team, captain)
                     break
@@ -354,8 +417,14 @@ async def check_captain_heartbeats(draft_id: int):
                 heartbeat_age = now - float(last_heartbeat)
                 if heartbeat_age > HEARTBEAT_STALE_SECONDS:
                     log.warning(
-                        f"Captain {captain.username} heartbeat stale ({heartbeat_age:.1f}s) "
-                        f"for draft {draft_id}"
+                        "heartbeat_stale",
+                        system="herodraft",
+                        subsystem="heartbeat",
+                        draft_id=draft_id,
+                        user_id=captain.id,
+                        username=captain.username,
+                        heartbeat_age_s=round(heartbeat_age, 1),
+                        threshold_s=HEARTBEAT_STALE_SECONDS,
                     )
                     stale_captain = (draft_team, captain)
                     break
@@ -396,7 +465,12 @@ async def check_captain_heartbeats(draft_id: int):
                 metadata={"reason": "heartbeat_stale"},
             )
             log.info(
-                f"HeroDraft {draft_id} paused: captain {captain.username} heartbeat stale"
+                "heartbeat_triggered_pause",
+                system="herodraft",
+                subsystem="heartbeat",
+                draft_id=draft_id,
+                user_id=captain.id,
+                username=captain.username,
             )
 
         # Broadcast after transaction commits
@@ -408,7 +482,13 @@ async def check_captain_heartbeats(draft_id: int):
             ).get(id=draft_id)
             broadcast_herodraft_state(draft, "draft_paused", draft_team=draft_team)
         except Exception as e:
-            log.error(f"Failed to broadcast draft_paused for draft {draft_id}: {e}")
+            log.error(
+                "heartbeat_broadcast_failed",
+                system="herodraft",
+                subsystem="heartbeat",
+                draft_id=draft_id,
+                error=str(e),
+            )
 
         return captain.username
 
@@ -459,12 +539,24 @@ async def run_tick_loop(draft_id: int, stop_event: threading.Event):
         # Extend lock timeout to show we're still alive
         r.expire(lock_key, LOCK_TIMEOUT)
 
-    log.info(f"Tick loop started for draft {draft_id}")
+    log.info(
+        "tick_loop_started", system="herodraft", subsystem="timer", draft_id=draft_id
+    )
+    tick_count = 0
 
     while not stop_event.is_set():
+        tick_start = time.time()
+
         should_continue, reason = await check_continue()
         if not should_continue:
-            log.info(f"Stopping tick loop for draft {draft_id}: {reason}")
+            log.info(
+                "tick_loop_stopping",
+                system="herodraft",
+                subsystem="timer",
+                draft_id=draft_id,
+                reason=reason,
+                tick_count=tick_count,
+            )
             break
 
         # Check if RESUMING countdown is complete first
@@ -474,9 +566,39 @@ async def run_tick_loop(draft_id: int, stop_event: threading.Event):
         await broadcast_tick(draft_id)
         await check_timeout(draft_id)
         await extend_lock()
+
+        tick_duration = time.time() - tick_start
+        tick_count += 1
+
+        # Log every 30 ticks (~30s) as a health check, or if a tick was slow
+        if tick_duration > 2.0:
+            log.warning(
+                "tick_slow",
+                system="herodraft",
+                subsystem="timer",
+                draft_id=draft_id,
+                tick_count=tick_count,
+                duration_s=round(tick_duration, 2),
+            )
+        elif tick_count % 30 == 0:
+            log.info(
+                "tick_loop_healthy",
+                system="herodraft",
+                subsystem="timer",
+                draft_id=draft_id,
+                tick_count=tick_count,
+                duration_s=round(tick_duration, 3),
+            )
+
         await asyncio.sleep(1)
 
-    log.info(f"Tick loop ended for draft {draft_id}")
+    log.info(
+        "tick_loop_ended",
+        system="herodraft",
+        subsystem="timer",
+        draft_id=draft_id,
+        tick_count=tick_count,
+    )
 
 
 def start_tick_broadcaster(draft_id: int) -> bool:

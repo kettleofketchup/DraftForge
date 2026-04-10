@@ -196,7 +196,9 @@ def create_team_from_captain(request):
         return Response(serializer.errors, status=400)
 
     try:
-        tournament = Tournament.objects.select_related("league").get(pk=tournament_pk)
+        tournament = Tournament.objects.select_related(
+            "league", "league__organization"
+        ).get(pk=tournament_pk)
         user = CustomUser.objects.get(pk=user_pk)
 
     except Tournament.DoesNotExist:
@@ -237,9 +239,10 @@ def create_team_from_captain(request):
             status=201,
         )
 
+    display_name = user.nickname or user.username
     team = Team.objects.create(
         tournament=tournament,
-        name=f"{user.username}'s Team",
+        name=f"{display_name}'s Team",
         captain=user,
         draft_order=draft_order,
     )
@@ -274,7 +277,9 @@ def generate_draft_rounds(request):
         return Response(serializer.errors, status=400)
 
     try:
-        tournament = Tournament.objects.select_related("league").get(pk=tournament_pk)
+        tournament = Tournament.objects.select_related(
+            "league", "league__organization"
+        ).get(pk=tournament_pk)
 
     except Tournament.DoesNotExist:
         return Response({"error": "Tournament not found"}, status=404)
@@ -337,6 +342,12 @@ def generate_draft_rounds(request):
     invalidate_obj(draft)
     invalidate_obj(tournament)
 
+    # Dispatch Discord notification if configured
+    if tournament.discord_send_draft_link:
+        from events.discord.tournament_dispatch import notify_draft_started
+
+        notify_draft_started(tournament, draft)
+
     return Response(_serialize_tournament(tournament), status=201)
 
 
@@ -353,7 +364,9 @@ def rebuild_team(request):
         return Response(serializer.errors, status=400)
 
     try:
-        tournament = Tournament.objects.select_related("league").get(pk=tournament_pk)
+        tournament = Tournament.objects.select_related(
+            "league", "league__organization"
+        ).get(pk=tournament_pk)
 
     except Tournament.DoesNotExist:
         return Response({"error": "Tournament not found"}, status=404)
@@ -406,6 +419,12 @@ def rebuild_team(request):
     # Invalidate specific objects after rebuilding teams
     invalidate_obj(draft)
     invalidate_obj(tournament)
+
+    # Dispatch Discord notification if new rounds were built
+    if will_build_rounds and tournament.discord_send_draft_link:
+        from events.discord.tournament_dispatch import notify_draft_started
+
+        notify_draft_started(tournament, draft)
 
     return Response(data, status=201)
 

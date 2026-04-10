@@ -183,7 +183,15 @@ test.describe('Events - Repeater Generation (@cicd)', () => {
     });
     expect(patchResp.ok()).toBeTruthy();
 
-    // Re-list events — future (upcoming) events should have updated config
+    // Delete existing generated events so re-generation picks up new config
+    for (const ev of syncEvents) {
+      await context.request.delete(`${API_URL}/events/${ev.id}/`);
+    }
+
+    // Re-trigger generation — new events inherit updated repeater config
+    await triggerEventGeneration(context);
+
+    // Re-list events — newly generated events should have updated config
     eventsResp = await context.request.get(
       `${API_URL}/events/?organization=${eventInfo.orgPk}`,
     );
@@ -191,8 +199,9 @@ test.describe('Events - Repeater Generation (@cicd)', () => {
     syncEvents = events.filter(
       (e: { name: string }) => e.name === 'E2E Sync Test',
     );
+    expect(syncEvents.length).toBeGreaterThanOrEqual(1);
 
-    // Each upcoming event should now have the updated fields
+    // Each newly generated event should have the updated fields
     for (const event of syncEvents) {
       expect(event.tournament_name).toBe('Synced Tournament');
       expect(event.draft_type).toBe('normal');

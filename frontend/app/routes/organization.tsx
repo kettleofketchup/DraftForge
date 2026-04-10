@@ -38,7 +38,7 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { addOrgMember, checkDiscordBotStatus } from '~/components/api/api';
 import type { AddMemberPayload } from '~/components/api/api';
@@ -126,92 +126,79 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
         <Repeat className="inline h-4 w-4 mr-1.5 align-text-bottom" />
         Repeating Events ({repeaters.length})
       </h3>
-      <div className="grid gap-3">
+      <div className="grid gap-2">
         {repeaters.map((r) => (
-          <div key={r.id} className="rounded-lg border border-border p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="font-medium truncate">{r.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {FREQUENCY_LABELS[r.frequency] ?? r.frequency}
-                  {r.day_of_week != null && ` on ${DAY_LABELS[r.day_of_week]}`}
-                  {' at '}
-                  {r.time_of_day.slice(0, 5)}
-                  {r.subscriber_count > 0 && (
-                    <span className="ml-2 text-xs">{'\u00B7'} {r.subscriber_count} subscribed</span>
-                  )}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {currentUser && r.discord_notify_new_events && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={cn("h-8 w-8", r.is_subscribed && "text-interactive")}
-                        disabled={isPending}
-                        onClick={() => {
-                          if (r.is_subscribed) {
-                            unsubscribe.mutate(r.id, {
-                              onError: () => toast.error('Failed to unsubscribe'),
-                            });
-                          } else {
-                            subscribe.mutate(r.id, {
-                              onSuccess: () => toast.success('Subscribed to notifications'),
-                              onError: () => toast.error('Failed to subscribe'),
-                            });
-                          }
-                        }}
-                      >
-                        {r.is_subscribed ? <MailCheck className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {r.is_subscribed ? 'Unsubscribe from notifications' : 'Get notified about new events'}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-                {onEdit && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => onEdit(r)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Edit repeating event</TooltipContent>
-                  </Tooltip>
-                )}
-                {onDelete && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-error hover:text-error"
-                        onClick={() => {
-                          if (window.confirm(`Delete "${r.name}"? This will not delete existing events.`)) {
-                            onDelete(r);
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Delete repeating event</TooltipContent>
-                  </Tooltip>
-                )}
-                <Badge variant={r.is_active ? 'default' : 'secondary'}>
+          <Link
+            key={r.id}
+            to={`/event-series/${r.id}`}
+            className="flex items-center gap-3 rounded-lg p-3 border border-border/50 bg-muted/25 hover:bg-muted/45 transition-colors cursor-pointer"
+            data-testid={`repeater-strip-${r.id}`}
+          >
+            {/* Icon block */}
+            <div className="shrink-0 text-center w-12">
+              <Repeat className="h-5 w-5 mx-auto text-muted-foreground" />
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {FREQUENCY_LABELS[r.frequency]?.slice(0, 4) ?? r.frequency.slice(0, 4)}
+              </p>
+            </div>
+
+            {/* Info */}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="font-medium truncate text-sm">{r.name}</p>
+                <Badge variant={r.is_active ? 'default' : 'secondary'} className="shrink-0 text-[10px] px-1.5 py-0">
                   {r.is_active ? 'Active' : 'Paused'}
                 </Badge>
               </div>
+              <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
+                {r.day_of_week != null && <span>{DAY_LABELS[r.day_of_week]}</span>}
+                {r.time_of_day && <span>{r.time_of_day?.slice(0, 5)}</span>}
+                <span className="inline-flex items-center gap-0.5">
+                  <Users className="h-3 w-3" />
+                  {r.subscriber_count}
+                </span>
+              </div>
             </div>
-          </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-1 shrink-0">
+              {currentUser && r.discord_notify_new_events && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn("h-8 w-8", r.is_subscribed && "text-interactive")}
+                      disabled={isPending}
+                      onClick={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        if (r.is_subscribed) {
+                          unsubscribe.mutate(r.id, { onError: () => toast.error('Failed to unsubscribe') });
+                        } else {
+                          subscribe.mutate(r.id, { onSuccess: () => toast.success('Subscribed'), onError: () => toast.error('Failed to subscribe') });
+                        }
+                      }}
+                    >
+                      {r.is_subscribed ? <MailCheck className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{r.is_subscribed ? 'Unsubscribe' : 'Subscribe'}</TooltipContent>
+                </Tooltip>
+              )}
+              {onEdit && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(r); }}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Edit series</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          </Link>
         ))}
       </div>
     </div>

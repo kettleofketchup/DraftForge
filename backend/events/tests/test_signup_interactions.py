@@ -2,7 +2,8 @@ from django.test import TestCase
 
 from app.models import CustomUser, GameType, Organization, PositionsModel
 from discordbot.models import DiscordMessageLog
-from events.models import Event, EventSignup, EventState, SignupStatus
+from events.constants import EventState, SignupStatus
+from events.models import Event, EventSignup
 from events.tests.base import EventTestCase
 from org.models import OrgUser
 from org.models_profiles import PlayerDotaProfile

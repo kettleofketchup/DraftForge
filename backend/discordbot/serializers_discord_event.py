@@ -6,6 +6,7 @@ from .models import (
     DiscordEventLog,
     DiscordEventMsgAnnouncement,
     DiscordEventMsgSignup,
+    DiscordMessageLog,
 )
 
 
@@ -34,10 +35,37 @@ class DiscordEventMsgAnnouncementSerializer(DiscordEventMsgSerializer):
         model = DiscordEventMsgAnnouncement
 
 
+class MessageLogInlineSerializer(serializers.ModelSerializer):
+    fired_by_username = serializers.CharField(
+        source="fired_by.username", read_only=True, default=None
+    )
+    fired_by_nickname = serializers.CharField(
+        source="fired_by.nickname", read_only=True, default=None
+    )
+
+    class Meta:
+        model = DiscordMessageLog
+        fields = [
+            "id",
+            "channel_id",
+            "source",
+            "source_id",
+            "discord_message_id",
+            "status_code",
+            "success",
+            "embed_data",
+            "response_data",
+            "fired_by_username",
+            "fired_by_nickname",
+            "created_at",
+        ]
+
+
 class DiscordEventLogSerializer(serializers.ModelSerializer):
     category_display = serializers.CharField(
         source="get_category_display", read_only=True
     )
+    message_log = MessageLogInlineSerializer(read_only=True)
 
     class Meta:
         model = DiscordEventLog
@@ -53,6 +81,7 @@ class DiscordEventLogSerializer(serializers.ModelSerializer):
             "status_code",
             "error_message",
             "success",
+            "message_log",
             "created_at",
         ]
 

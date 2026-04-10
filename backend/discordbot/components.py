@@ -141,9 +141,10 @@ class SignupButton(ui.Button):
         )
 
         if result["action"] == "signed_up":
-            await interaction.response.send_message(
+            await interaction.response.defer()
+            await interaction.followup.send(
                 f"\u2705 You're signed up! Status: **{result['status']}**",
-                ephemeral=True,
+                delete_after=60,
             )
         elif result["action"] == "needs_modal":
             modal = EventSignupModal(
@@ -231,9 +232,10 @@ class TentativeButton(ui.Button):
         )
 
         if result["action"] == "tentative":
-            await interaction.response.send_message(
+            await interaction.response.defer()
+            await interaction.followup.send(
                 "\u2753 Marked as tentative. We'll count you as interested!",
-                ephemeral=True,
+                delete_after=60,
             )
         elif result["action"] == "error":
             await interaction.response.send_message(
@@ -264,9 +266,10 @@ class DeclineButton(ui.Button):
         )
 
         if result["action"] == "declined":
-            await interaction.response.send_message(
+            await interaction.response.defer()
+            await interaction.followup.send(
                 "You've declined the event.",
-                ephemeral=True,
+                delete_after=60,
             )
         elif result["action"] == "not_signed_up":
             await interaction.response.send_message(
@@ -683,7 +686,14 @@ class RankDetailsView(ui.View):
     - never: Battle Cup Tier select → signs up
     """
 
-    def __init__(self, event_id, rank_status, require_screenshot=False, min_mmr=None):
+    def __init__(
+        self,
+        event_id,
+        rank_status,
+        require_screenshot=False,
+        min_mmr=None,
+        selected_medal=None,
+    ):
         super().__init__(timeout=300)
         self.event_id = event_id
         self.rank_status = rank_status
@@ -693,7 +703,12 @@ class RankDetailsView(ui.View):
         if rank_status in ("active", "previous"):
             self.add_item(MedalSelect(event_id))
             self.add_item(
-                StarSelect(event_id, rank_status, require_screenshot=require_screenshot)
+                StarSelect(
+                    event_id,
+                    rank_status,
+                    require_screenshot=require_screenshot,
+                    selected_medal=selected_medal,
+                )
             )
         elif rank_status == "never":
             self.add_item(
@@ -719,12 +734,23 @@ class MedalSelect(ui.Select):
 
 
 class StarSelect(ui.Select):
-    """Select menu for medal star 1-5. Triggers signup on selection."""
+    """Select menu for medal star 1-5. Triggers signup on selection.
 
-    def __init__(self, event_id, rank_status="active", require_screenshot=False):
+    The selected medal is encoded in custom_id as rank_star:{event_id}:{medal}
+    so the bot gateway handler can read it reliably.
+    """
+
+    def __init__(
+        self,
+        event_id,
+        rank_status="active",
+        require_screenshot=False,
+        selected_medal=None,
+    ):
+        medal_part = selected_medal or "Herald"
         super().__init__(
             placeholder="Select your star (1-5)",
-            custom_id=f"rank_star:{event_id}",
+            custom_id=f"rank_star:{event_id}:{medal_part}",
             min_values=1,
             max_values=1,
             options=_star_options(),
@@ -738,13 +764,18 @@ class StarSelect(ui.Select):
 
         from events.discord import handle_rank_medal_select
 
-        medal_select = None
-        for item in self.view.children:
-            if isinstance(item, MedalSelect) and item.values:
-                medal_select = item
-                break
+        # Read medal from custom_id (rank_star:{event_id}:{medal})
+        parts = self.custom_id.split(":")
+        medal = parts[2] if len(parts) > 2 and parts[2] != "Herald" else None
 
-        medal = medal_select.values[0] if medal_select else "Herald"
+        # Fallback: try reading from MedalSelect values
+        if not medal:
+            for item in self.view.children:
+                if isinstance(item, MedalSelect) and item.values:
+                    medal = item.values[0]
+                    break
+        medal = medal or "Herald"
+
         star = self.values[0]
         medal_with_star = f"{medal} {star}" if medal != "Immortal" else "Immortal"
 

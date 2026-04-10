@@ -35,6 +35,8 @@ export function meta({ data }: Route.MetaArgs) {
 
 import { useState, useCallback, useMemo } from 'react';
 import {
+  Bell,
+  BellOff,
   Building2,
   Loader2,
   Users,
@@ -45,13 +47,17 @@ import {
   UserCheck,
   UserX,
   Pencil,
+  HelpCircle,
+  Repeat,
   ShieldAlert,
   ArrowDownToLine,
   Undo2,
+  UserPlus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Badge } from '~/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
 import { EventStateBadge } from '~/components/events';
 import { SubscriberList } from '~/components/events/SubscriberList';
 import { EventState, GameType } from '~/components/events/schemas';
@@ -70,9 +76,13 @@ import {
   useEventSignups,
   useEventSignupUsers,
   useRsvpMutation,
+  useTentativeMutation,
   useEventActionMutation,
   useSignupActionMutations,
 } from '~/hooks/useEvent';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { adminAddSignup, subscribeToRepeater, unsubscribeFromRepeater } from '~/components/api/api';
+import { AddUserModal } from '~/components/user/AddUserModal';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrganization } from '~/components/organization';
 import { useIsOrganizationStaff } from '~/hooks/usePermissions';
@@ -80,6 +90,7 @@ import { usePageNav } from '~/hooks/usePageNav';
 import { useUserStore } from '~/store/userStore';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
+import api from '~/components/api/axios';
 
 export default function EventPage() {
   const { eventId, tab } = useParams<{ eventId: string; tab?: string }>();
@@ -102,9 +113,38 @@ export default function EventPage() {
   const isAdmin = useIsOrganizationStaff(eventOrg);
 
   // Mutations
+  const queryClient = useQueryClient();
   const rsvpMutation = useRsvpMutation(id ?? 0);
+  const tentativeMutation = useTentativeMutation(id ?? 0);
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
+
+  // Repeater subscription state
+  const repeaterId = event?.event_repeater;
+  const { data: repeaterData } = useQuery({
+    queryKey: ['repeater', repeaterId],
+    queryFn: () => api.get(`/events/repeaters/${repeaterId}/`).then((r) => r.data),
+    enabled: !!repeaterId && !!currentUser,
+  });
+  const isSubscribed = repeaterData?.is_subscribed ?? false;
+
+  const subscribeMutation = useMutation({
+    mutationFn: () => subscribeToRepeater(repeaterId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['repeater', repeaterId] });
+      queryClient.invalidateQueries({ queryKey: ['repeater-subscribers', repeaterId] });
+      toast.success('Subscribed to event series notifications');
+    },
+  });
+
+  const unsubscribeMutation = useMutation({
+    mutationFn: () => unsubscribeFromRepeater(repeaterId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['repeater', repeaterId] });
+      queryClient.invalidateQueries({ queryKey: ['repeater-subscribers', repeaterId] });
+      toast.success('Unsubscribed from event series notifications');
+    },
+  });
 
   const breadcrumbSegments = useMemo((): BreadcrumbSegment[] => {
     if (!event) return [];
@@ -157,7 +197,11 @@ export default function EventPage() {
 
   // Split signups into active and waitlisted
   const activeSignups = useMemo(
-    () => (signups ?? []).filter((s) => s.status !== 'waitlisted' && s.status !== 'cancelled' && s.status !== 'rejected'),
+    () => (signups ?? []).filter((s) => !['waitlisted', 'tentative', 'cancelled', 'rejected'].includes(s.status)),
+    [signups],
+  );
+  const tentativeSignups = useMemo(
+    () => (signups ?? []).filter((s) => s.status === 'tentative'),
     [signups],
   );
   const waitlistedSignups = useMemo(
@@ -179,10 +223,11 @@ export default function EventPage() {
     () => [
       { value: 'details', label: 'Details' },
       { value: 'signups', label: `${activeSignups.length} Signups` },
+      ...(tentativeSignups.length > 0 ? [{ value: 'tentative', label: `${tentativeSignups.length} Tentative` }] : []),
       { value: 'waitlist', label: `${waitlistedSignups.length} Waitlist` },
       { value: 'discord', label: 'Discord' },
     ],
-    [activeSignups.length, waitlistedSignups.length, isAdmin],
+    [activeSignups.length, tentativeSignups.length, waitlistedSignups.length, isAdmin],
   );
 
   usePageNav(event ? pageNavOptions : null, activeTab, handleTabChange);
@@ -301,23 +346,39 @@ export default function EventPage() {
 
       {/* Page Header */}
       <div className="space-y-4">
-        {/* Row 1: Title (left) + Org (right on md+) */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        {/* Row 1: Title (left) + Org/Series (right, lg+ only) */}
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
           <h1 className="text-xl sm:text-2xl lg:text-4xl font-bold min-w-0">
             {event.name}
           </h1>
-          {event.organization_name && (
-            <HighlightButton
-              size="sm"
-              onClick={() => navigate(`/organizations/${event.organization}`)}
-              avatarUrl={eventOrg?.logo || undefined}
-              avatarAlt={event.organization_name}
-              className="shrink-0"
-            >
-              {!eventOrg?.logo && <Building2 className="h-4 w-4 mr-1.5" />}
-              {event.organization_name}
-            </HighlightButton>
-          )}
+          <div className="hidden lg:flex flex-wrap items-center gap-2 shrink-0">
+            {event.organization_name && (
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Organization</span>
+                <HighlightButton
+                  size="sm"
+                  onClick={() => navigate(`/organizations/${event.organization}`)}
+                  avatarUrl={eventOrg?.logo || undefined}
+                  avatarAlt={event.organization_name}
+                >
+                  {!eventOrg?.logo && <Building2 className="h-4 w-4 mr-1.5" />}
+                  {event.organization_name}
+                </HighlightButton>
+              </div>
+            )}
+            {event.event_repeater && event.event_repeater_name && (
+              <div className="flex flex-col items-center gap-0.5">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Event Series</span>
+                <HighlightButton
+                  size="sm"
+                  onClick={() => navigate(`/event-series/${event.event_repeater}`)}
+                >
+                  <Repeat className="h-4 w-4 mr-1.5" />
+                  {event.event_repeater_name}
+                </HighlightButton>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Row 2: Status + Date */}
@@ -329,14 +390,14 @@ export default function EventPage() {
           </Badge>
         </div>
 
-        {/* Row 3: Admin button group (left) + RSVP (right) */}
-        {(isAdmin || (currentUser && event.state === EventState.SIGNUPS_OPEN && signups)) && (
+        {/* Row 3: Admin button group (left) + Subscribe/RSVP (right) */}
+        {(isAdmin || (currentUser && event.state === EventState.SIGNUPS_OPEN && signups) || (currentUser && event.event_repeater)) && (
           <div className="flex items-center justify-between gap-3">
             {/* Admin actions — left side */}
             {isAdmin ? (
               <>
                 {/* Desktop: button group */}
-                <div className="hidden md:inline-flex items-center rounded-lg overflow-hidden shadow-lg shadow-black/20 [&_[data-slot=button]]:rounded-none [&_[data-slot=button]]:shadow-none [&_[data-slot=button]]:border-b-0">
+                <div className="hidden md:flex items-center gap-2">
                   <SecondaryButton
                     color="emerald"
                     size="sm"
@@ -388,8 +449,6 @@ export default function EventPage() {
                         size="sm"
                         onClick={() => actions.cancelEvent.mutate()}
                         loading={actions.cancelEvent.isPending}
-                        depth={false}
-                        className="bg-gradient-to-r from-red-700/80 to-violet-900/80 hover:from-red-600/80 hover:to-violet-800/80"
                         data-testid="event-cancel-btn"
                       >
                         <XCircle className="h-4 w-4 mr-1.5" />
@@ -407,8 +466,6 @@ export default function EventPage() {
                       }
                     }}
                     loading={actions.deleteEvent.isPending}
-                    depth={false}
-                    className="bg-gradient-to-r from-red-700/80 to-violet-900/80 hover:from-red-600/80 hover:to-violet-800/80"
                     data-testid="event-delete-btn"
                   >
                     <Trash2 className="h-4 w-4 mr-1.5" />
@@ -431,30 +488,77 @@ export default function EventPage() {
               <div />
             )}
 
-            {/* RSVP — right side, always inline */}
+            {/* Right side: Subscribe + RSVP */}
+            <div className="flex items-center gap-2">
+            {event.event_repeater && currentUser && (
+              isSubscribed ? (
+                <SecondaryButton
+                  size="sm"
+                  onClick={() => unsubscribeMutation.mutate()}
+                  disabled={unsubscribeMutation.isPending}
+                >
+                  <BellOff className="h-4 w-4 mr-1" />
+                  Unsubscribe
+                </SecondaryButton>
+              ) : (
+                <PrimaryButton
+                  size="sm"
+                  onClick={() => subscribeMutation.mutate()}
+                  disabled={subscribeMutation.isPending}
+                >
+                  <Bell className="h-4 w-4 mr-1" />
+                  Subscribe
+                </PrimaryButton>
+              )
+            )}
+            {/* Not signed up — show Sign Up + Tentative */}
             {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && !mySignup && !myCancelledSignup && (
-              <PrimaryButton
-                size="sm"
-                onClick={() => setShowRsvpConfirm(true)}
-                disabled={rsvpMutation.isPending}
-                data-testid="event-rsvp-btn"
-              >
-                <Users className="h-4 w-4 mr-1.5" />
-                RSVP
-              </PrimaryButton>
+              <>
+                <PrimaryButton
+                  size="sm"
+                  onClick={() => setShowRsvpConfirm(true)}
+                  disabled={rsvpMutation.isPending}
+                  data-testid="event-rsvp-btn"
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                  Sign Up
+                </PrimaryButton>
+                <SecondaryButton
+                  size="sm"
+                  onClick={() => tentativeMutation.mutate()}
+                  disabled={tentativeMutation.isPending}
+                  data-testid="event-tentative-btn"
+                >
+                  <HelpCircle className="h-4 w-4 mr-1.5" />
+                  <span className="hidden sm:inline">Tentative</span>
+                </SecondaryButton>
+              </>
             )}
+            {/* Cancelled — can reinstate */}
             {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && !mySignup && myCancelledSignup && (
-              <SecondaryButton
-                size="sm"
-                onClick={() => signupActions.reinstate.mutate(myCancelledSignup.id)}
-                disabled={signupActions.reinstate.isPending}
-                data-testid="event-reinstate-btn"
-              >
-                <Undo2 className="h-4 w-4 mr-1.5" />
-                Reinstate RSVP
-              </SecondaryButton>
+              <>
+                <SecondaryButton
+                  size="sm"
+                  onClick={() => signupActions.reinstate.mutate(myCancelledSignup.id)}
+                  disabled={signupActions.reinstate.isPending}
+                  data-testid="event-reinstate-btn"
+                >
+                  <Undo2 className="h-4 w-4 mr-1.5" />
+                  Reinstate
+                </SecondaryButton>
+                <SecondaryButton
+                  size="sm"
+                  onClick={() => tentativeMutation.mutate()}
+                  disabled={tentativeMutation.isPending}
+                  data-testid="event-tentative-btn"
+                >
+                  <HelpCircle className="h-4 w-4 mr-1.5" />
+                  <span className="hidden sm:inline">Tentative</span>
+                </SecondaryButton>
+              </>
             )}
-            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && mySignup && (
+            {/* Signed up (active) — show status + cancel */}
+            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && mySignup && mySignup.status !== 'tentative' && (
               <DestructiveButton
                 size="sm"
                 onClick={() => setShowCancelRsvpConfirm(true)}
@@ -466,6 +570,31 @@ export default function EventPage() {
                 Cancel RSVP
               </DestructiveButton>
             )}
+            {/* Tentative — can upgrade to full signup or cancel */}
+            {currentUser && event.state === EventState.SIGNUPS_OPEN && signups && mySignup && mySignup.status === 'tentative' && (
+              <>
+                <PrimaryButton
+                  size="sm"
+                  onClick={() => setShowRsvpConfirm(true)}
+                  disabled={rsvpMutation.isPending}
+                  data-testid="event-upgrade-rsvp-btn"
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                  Sign Up
+                </PrimaryButton>
+                <DestructiveButton
+                  size="sm"
+                  onClick={() => setShowCancelRsvpConfirm(true)}
+                  loading={signupActions.cancel.isPending}
+                  depth={false}
+                  data-testid="event-cancel-tentative-btn"
+                >
+                  <XCircle className="h-4 w-4 mr-1.5" />
+                  Cancel
+                </DestructiveButton>
+              </>
+            )}
+            </div>
           </div>
         )}
       </div>
@@ -480,6 +609,11 @@ export default function EventPage() {
             <TabsTrigger value="signups" data-testid="event-tab-signups">
               Signups ({activeSignups.length})
             </TabsTrigger>
+            {tentativeSignups.length > 0 && (
+              <TabsTrigger value="tentative" data-testid="event-tab-tentative">
+                Tentative ({tentativeSignups.length})
+              </TabsTrigger>
+            )}
             <TabsTrigger value="waitlist" data-testid="event-tab-waitlist">
               Waitlist ({waitlistedSignups.length})
             </TabsTrigger>
@@ -490,11 +624,28 @@ export default function EventPage() {
 
           <TabsContent value="details">
             <DetailsTab event={event} />
+            {isAdmin && event.event_repeater && (
+              <div className="mt-4">
+                <SubscriberList repeaterId={event.event_repeater} />
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="signups">
             <SignupsTab
               signups={activeSignups}
+              isAdmin={isAdmin}
+              signupActions={signupActions}
+              gameType={event.game_type}
+              eventId={event.id}
+              orgId={event.organization}
+              hasDiscordServer={!!eventOrg?.discord_server_id}
+            />
+          </TabsContent>
+
+          <TabsContent value="tentative">
+            <SignupsTab
+              signups={tentativeSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
@@ -511,7 +662,7 @@ export default function EventPage() {
           </TabsContent>
 
           <TabsContent value="discord">
-            <DiscordLogSection eventId={event.id} />
+            <DiscordLogSection eventId={event.id} isAdmin={isAdmin} eventTimezone={event.timezone} />
           </TabsContent>
         </Tabs>
       </div>
@@ -650,11 +801,6 @@ function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>[
         </Card>
       )}
 
-      {event.event_repeater && (
-        <div className="md:col-span-2 lg:col-span-3">
-          <SubscriberList repeaterId={event.event_repeater} />
-        </div>
-      )}
     </div>
   );
 }
@@ -665,13 +811,22 @@ function SignupsTab({
   isAdmin,
   signupActions,
   gameType,
+  eventId,
+  orgId,
+  hasDiscordServer,
 }: {
   signups: EventSignupType[];
   isAdmin: boolean;
   signupActions: ReturnType<typeof useSignupActionMutations>;
   gameType: number;
+  eventId?: number;
+  orgId?: number;
+  hasDiscordServer?: boolean;
 }) {
   const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(null);
+  const [removeSignup, setRemoveSignup] = useState<{ signup: EventSignupType; name: string } | null>(null);
+  const [addUserOpen, setAddUserOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
   const resolvedUsers = useResolvedUsers(userPks);
@@ -680,100 +835,140 @@ function SignupsTab({
     [resolvedUsers],
   );
 
-  if (signups.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-        <Users className="w-12 h-12 mb-3 opacity-50" />
-        <p>No signups yet</p>
-      </div>
-    );
-  }
+  const signupUserPks = useMemo(() => new Set(signups.map((s) => s.user)), [signups]);
+  const entityContext = useMemo(() => ({ orgId }), [orgId]);
+  const handleAddUser = useCallback(async (payload: { user_id: number }) => {
+    const resp = await adminAddSignup(eventId!, payload.user_id);
+    queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+    return resp;
+  }, [eventId, queryClient]);
+  const checkIsAdded = useCallback((user: { pk: number }) => signupUserPks.has(user.pk), [signupUserPks]);
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-3">
+      {isAdmin && eventId && (
+        <div className="flex justify-end">
+          <SecondaryButton
+            size="sm"
+            onClick={() => setAddUserOpen(true)}
+            data-testid="admin-add-signup-btn"
+          >
+            <UserPlus className="h-4 w-4 mr-1" />
+            Add User
+          </SecondaryButton>
+          {addUserOpen && (
+            <AddUserModal
+              open={addUserOpen}
+              onOpenChange={setAddUserOpen}
+              title="Add User to Event"
+              entityContext={entityContext}
+              onAdd={handleAddUser}
+              isAdded={checkIsAdded}
+              hasDiscordServer={!!hasDiscordServer}
+            />
+          )}
+        </div>
+      )}
+      {signups.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+          <Users className="w-12 h-12 mb-3 opacity-50" />
+          <p>No signups yet</p>
+        </div>
+      )}
+      <div className="space-y-1.5">
       {signups.map((signup, index) => {
         const user = userMap.get(signup.user);
         const position = signup.waitlist_position ?? index + 1;
 
         const adminActions = isAdmin ? (
           <div className="flex gap-1">
-            {/* RSVP / Pending Approval → Approve or Reject */}
             {(signup.status === 'rsvp' || signup.status === 'pending_approval') && (
               <>
-                <SecondaryButton
-                  color="green"
-                  size="sm"
-                  onClick={() =>
-                    gameType === GameType.DOTA2
-                      ? setApprovalSignup(signup)
-                      : signupActions.approve.mutate({ id: signup.id })
-                  }
-                  disabled={signupActions.approve.isPending}
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline ml-1">Approve</span>
-                </SecondaryButton>
-                <DestructiveButton
-                  size="sm"
-                  onClick={() => signupActions.demote.mutate(signup.id)}
-                  loading={signupActions.demote.isPending}
-                  depth={false}
-                >
-                  <ArrowDownToLine className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline ml-1">Waitlist</span>
-                </DestructiveButton>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <SecondaryButton color="green" size="sm"
+                      onClick={() => gameType === GameType.DOTA2 ? setApprovalSignup(signup) : signupActions.approve.mutate({ id: signup.id })}
+                      disabled={signupActions.approve.isPending}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Approve</span>
+                    </SecondaryButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="lg:hidden">Approve</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DestructiveButton size="sm" onClick={() => signupActions.demote.mutate(signup.id)} loading={signupActions.demote.isPending} depth={false}>
+                      <ArrowDownToLine className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Waitlist</span>
+                    </DestructiveButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="lg:hidden">Waitlist</TooltipContent>
+                </Tooltip>
               </>
             )}
-            {/* Approved → Confirm or Demote to waitlist */}
             {signup.status === 'approved' && (
               <>
-                <SecondaryButton
-                  color="blue"
-                  size="sm"
-                  onClick={() => signupActions.confirm.mutate(signup.id)}
-                  disabled={signupActions.confirm.isPending}
-                >
-                  <UserCheck className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline ml-1">Confirm</span>
-                </SecondaryButton>
-                <DestructiveButton
-                  size="sm"
-                  onClick={() => signupActions.demote.mutate(signup.id)}
-                  loading={signupActions.demote.isPending}
-                  depth={false}
-                >
-                  <ArrowDownToLine className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline ml-1">Waitlist</span>
-                </DestructiveButton>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <SecondaryButton color="blue" size="sm" onClick={() => signupActions.confirm.mutate(signup.id)} disabled={signupActions.confirm.isPending}>
+                      <UserCheck className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Confirm</span>
+                    </SecondaryButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="lg:hidden">Confirm</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <DestructiveButton size="sm" onClick={() => signupActions.demote.mutate(signup.id)} loading={signupActions.demote.isPending} depth={false}>
+                      <ArrowDownToLine className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline ml-1">Waitlist</span>
+                    </DestructiveButton>
+                  </TooltipTrigger>
+                  <TooltipContent className="lg:hidden">Waitlist</TooltipContent>
+                </Tooltip>
               </>
             )}
-            {/* Confirmed → Unconfirm (back to approved) */}
             {signup.status === 'confirmed' && (
-              <SecondaryButton
-                color="orange"
-                size="sm"
-                onClick={() => signupActions.unconfirm.mutate(signup.id)}
-                disabled={signupActions.unconfirm.isPending}
-              >
-                <Undo2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline ml-1">Unconfirm</span>
-              </SecondaryButton>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SecondaryButton color="orange" size="sm" onClick={() => signupActions.unconfirm.mutate(signup.id)} disabled={signupActions.unconfirm.isPending}>
+                    <Undo2 className="h-3.5 w-3.5" />
+                    <span className="hidden lg:inline ml-1">Unconfirm</span>
+                  </SecondaryButton>
+                </TooltipTrigger>
+                <TooltipContent className="lg:hidden">Unconfirm</TooltipContent>
+              </Tooltip>
             )}
-            {/* Waitlisted → Approve (promote from waitlist) */}
             {signup.status === 'waitlisted' && (
-              <SecondaryButton
-                color="green"
-                size="sm"
-                onClick={() =>
-                  gameType === GameType.DOTA2
-                    ? setApprovalSignup(signup)
-                    : signupActions.approve.mutate({ id: signup.id })
-                }
-                disabled={signupActions.approve.isPending}
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline ml-1">Approve</span>
-              </SecondaryButton>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SecondaryButton color="green" size="sm"
+                    onClick={() => gameType === GameType.DOTA2 ? setApprovalSignup(signup) : signupActions.approve.mutate({ id: signup.id })}
+                    disabled={signupActions.approve.isPending}
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span className="hidden lg:inline ml-1">Approve</span>
+                  </SecondaryButton>
+                </TooltipTrigger>
+                <TooltipContent className="lg:hidden">Approve</TooltipContent>
+              </Tooltip>
+            )}
+            {signup.status !== 'cancelled' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DestructiveButton size="sm" depth={false}
+                    onClick={() => {
+                      const name = user ? (user.nickname || user.username) : `User #${signup.user}`;
+                      setRemoveSignup({ signup, name });
+                    }}
+                  >
+                    <UserX className="h-3.5 w-3.5" />
+                    <span className="hidden lg:inline ml-1">Remove</span>
+                  </DestructiveButton>
+                </TooltipTrigger>
+                <TooltipContent className="lg:hidden">Remove user</TooltipContent>
+              </Tooltip>
             )}
           </div>
         ) : undefined;
@@ -817,6 +1012,7 @@ function SignupsTab({
         );
       })}
 
+      </div>
       <MmrApprovalModal
         signup={approvalSignup}
         open={!!approvalSignup}
@@ -827,6 +1023,22 @@ function SignupsTab({
           });
         }}
         isApproving={signupActions.approve.isPending}
+      />
+      <ConfirmDialog
+        open={!!removeSignup}
+        onOpenChange={(open) => { if (!open) setRemoveSignup(null); }}
+        title="Remove User"
+        description={`Remove ${removeSignup?.name ?? 'this user'} from the event? They will lose their signup position and need to re-sign up.`}
+        confirmLabel="Remove"
+        variant="destructive"
+        isLoading={signupActions.cancel.isPending}
+        onConfirm={() => {
+          if (removeSignup) {
+            signupActions.cancel.mutate(removeSignup.signup.id, {
+              onSuccess: () => setRemoveSignup(null),
+            });
+          }
+        }}
       />
     </div>
   );

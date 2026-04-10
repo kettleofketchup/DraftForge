@@ -9,17 +9,32 @@ import { getLogger } from '~/lib/logger';
 const log = getLogger('handleSaveHook');
 
 export const createErrorMessage = (
-  val: Partial<Record<keyof UserType, string>>,
+  val: Partial<Record<keyof UserType, string | Record<string, string[]>>>,
 ): JSX.Element => {
   if (!val || Object.keys(val).length === 0)
     return <h5>Error creating user:</h5>;
 
+  const formatMessage = (field: string, message: unknown): JSX.Element[] => {
+    if (typeof message === 'string') return [<li key={field}>{message}</li>];
+    if (Array.isArray(message))
+      return [<li key={field}>{`${field}: ${message.join(', ')}`}</li>];
+    if (typeof message === 'object' && message !== null) {
+      // Nested serializer errors (e.g. positions: {hard_support: ["This field is required."]})
+      return Object.entries(message).map(([subField, subMsg]) => (
+        <li key={`${field}.${subField}`}>
+          {`${field}.${subField}: ${Array.isArray(subMsg) ? subMsg.join(', ') : subMsg}`}
+        </li>
+      ));
+    }
+    return [<li key={field}>{String(message)}</li>];
+  };
+
   return (
     <div className="text-error">
       <ul>
-        {Object.entries(val).map(([field, message]) => (
-          <li key={field}>{message}</li>
-        ))}
+        {Object.entries(val).flatMap(([field, message]) =>
+          formatMessage(field, message),
+        )}
       </ul>
     </div>
   );

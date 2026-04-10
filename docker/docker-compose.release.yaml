@@ -12,6 +12,8 @@ services:
     image: ghcr.io/kettleofketchup/draftforge/backend:${VERSION}
     # No ports exposed - accessed only through nginx reverse proxy
     restart: always
+    environment:
+      OTEL_SERVICE_NAME: backend
     volumes:
       - ./backend/prod.db.sqlite3:/app/backend/prod.db.sqlite3
       - ./backend/.env:/app/backend/.env
@@ -49,6 +51,8 @@ services:
     entrypoint: ["celery"]
     command: ["-A", "config", "worker", "-l", "info"]
     env_file: "./docker/.env.release"
+    environment:
+      OTEL_SERVICE_NAME: celery-worker
     volumes:
       - ./backend/prod.db.sqlite3:/app/backend/prod.db.sqlite3
       - ./backend/.env:/app/backend/.env
@@ -63,6 +67,8 @@ services:
     entrypoint: ["celery"]
     command: ["-A", "config", "beat", "-l", "info"]
     env_file: "./docker/.env.release"
+    environment:
+      OTEL_SERVICE_NAME: celery-beat
     volumes:
       - ./backend/prod.db.sqlite3:/app/backend/prod.db.sqlite3
       - ./backend/.env:/app/backend/.env
@@ -76,6 +82,8 @@ services:
     user: "1000:1000"
     entrypoint: ["python", "manage.py", "run_discord_bot"]
     env_file: "./docker/.env.release"
+    environment:
+      OTEL_SERVICE_NAME: discord
     volumes:
       - ./backend/prod.db.sqlite3:/app/backend/prod.db.sqlite3
       - ./backend/.env:/app/backend/.env

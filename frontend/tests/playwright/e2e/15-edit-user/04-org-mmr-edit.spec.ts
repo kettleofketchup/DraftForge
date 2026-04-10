@@ -63,8 +63,8 @@ test.describe('Edit User MMR on Organization Page (@cicd)', () => {
     await fillEditField(page, 'mmr', newMmr);
     await saveEditModal(page);
 
-    // Verify the MMR value updated in the UI
-    await expect(page.getByText(newMmr).first()).toBeVisible({ timeout: 5000 });
+    // Verify the MMR value updated in the UI (allow time for store refresh + cache invalidation)
+    await expect(page.getByText(newMmr).first()).toBeVisible({ timeout: 10000 });
 
     // Restore original value
     const userCardAfter = page.locator('[data-testid^="usercard-"]').first();

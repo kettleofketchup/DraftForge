@@ -9,7 +9,8 @@ export const EventState = {
 
 export const SignupStatus = {
   RSVP: 'rsvp', PENDING_APPROVAL: 'pending_approval', APPROVED: 'approved',
-  CONFIRMED: 'confirmed', WAITLISTED: 'waitlisted', REJECTED: 'rejected', CANCELLED: 'cancelled',
+  CONFIRMED: 'confirmed', WAITLISTED: 'waitlisted', TENTATIVE: 'tentative',
+  REJECTED: 'rejected', CANCELLED: 'cancelled',
 } as const;
 
 export const GameMode = {
@@ -164,6 +165,76 @@ export const FREQUENCY_LABELS: Record<string, string> = {
 
 export const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+export const COMMON_TIMEZONES = [
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Phoenix',
+  'America/Anchorage',
+  'Pacific/Honolulu',
+  'America/Toronto',
+  'America/Vancouver',
+  'America/Sao_Paulo',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Moscow',
+  'Asia/Dubai',
+  'Asia/Kolkata',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Asia/Shanghai',
+  'Asia/Seoul',
+  'Australia/Sydney',
+  'Australia/Melbourne',
+  'Pacific/Auckland',
+  'UTC',
+] as const;
+
+/**
+ * Convert a naive datetime-local string to UTC ISO string using the given IANA timezone.
+ * datetime-local gives "2026-03-29T19:00" — this interprets it as 7 PM in the given tz
+ * and converts to UTC for the API.
+ *
+ * Uses Intl.DateTimeFormat to compute the UTC offset for the target timezone at the
+ * given date/time, which correctly handles DST transitions.
+ */
+export function localToUTC(datetimeLocal: string, timezone: string): string {
+  if (!datetimeLocal || !timezone) return datetimeLocal;
+
+  // Parse the naive datetime parts (YYYY-MM-DDTHH:MM)
+  const [datePart, timePart] = datetimeLocal.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute] = (timePart || '00:00').split(':').map(Number);
+
+  // Create a UTC date with these exact numbers
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute);
+
+  // Find what that UTC instant looks like in the target timezone
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', hour12: false,
+  });
+  const parts = Object.fromEntries(
+    fmt.formatToParts(new Date(utcGuess)).map((p) => [p.type, p.value])
+  );
+  const tzHour = Number(parts.hour === '24' ? '0' : parts.hour);
+  const tzMinute = Number(parts.minute);
+  const tzDay = Number(parts.day);
+
+  // Offset = difference between what we want (the naive values) and what the tz shows
+  let diffMinutes = (hour - tzHour) * 60 + (minute - tzMinute);
+  // Handle day boundary crossing
+  if (tzDay !== day) {
+    diffMinutes += (day - tzDay) * 24 * 60;
+  }
+
+  const result = new Date(utcGuess + diffMinutes * 60_000);
+  return result.toISOString();
+}
+
 export const discordConfigSchema = z.object({
   discord_create_event: z.boolean(),
   discord_sync_signups: z.boolean(),
@@ -200,7 +271,7 @@ export const DISCORD_CONFIG_DEFAULTS = {
   discord_event_title: '',
   discord_event_description: '',
   discord_event_info: '',
-  discord_signup_reminder: false,
+  discord_signup_reminder: true,
   discord_signup_reminder_hours: 24,
   discord_confirm_attendance: false,
   discord_confirm_attendance_hours: 2,
@@ -240,6 +311,7 @@ export const createEventInputSchema = z.object({
   lobby_steam_league_id: z.number().nullable(),
   people_per_team: z.number().int().min(1),
   number_of_teams: z.number().int().min(2).nullable(),
+  timezone: z.string().min(1, 'Timezone is required'),
   discord_notify_new_events: z.boolean().optional(),
   signup_mode: z.enum(['immediate', 'scheduled', 'manual']),
   signup_days_before: z.number().int().min(1).optional(),

@@ -3,16 +3,16 @@ WebSocket consumers for draft event broadcasting.
 """
 
 import json
-import logging
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.utils import timezone
 
 from app.consumers_base import BaseDraftConsumer
+from telemetry.logging import get_logger
 from telemetry.websocket import TelemetryConsumerMixin
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 class DraftConsumer(TelemetryConsumerMixin, AsyncWebsocketConsumer):
@@ -237,9 +237,34 @@ class HeroDraftConsumer(BaseDraftConsumer):
             if existing_channel and existing_channel != self.channel_name:
                 await self._kick_channel(existing_channel)
 
-        await self.base_connect()
+        result = await self.base_connect()
+        if result:
+            log.info(
+                "herodraft_connected",
+                system="herodraft",
+                subsystem="connection",
+                draft_id=self.draft_id,
+                user_id=(
+                    self.user.id if self.user and self.user.is_authenticated else None
+                ),
+                is_captain=self._is_captain,
+            )
 
     async def disconnect(self, close_code):
+        log.info(
+            "herodraft_disconnected",
+            system="herodraft",
+            subsystem="connection",
+            draft_id=getattr(self, "draft_id", None),
+            user_id=(
+                self.user.id
+                if getattr(self, "user", None) and self.user.is_authenticated
+                else None
+            ),
+            is_captain=getattr(self, "_is_captain", False),
+            close_code=close_code,
+            was_kicked=getattr(self, "_was_kicked", False),
+        )
         await self.base_disconnect(close_code)
 
     # --- Receive ---
@@ -256,7 +281,13 @@ class HeroDraftConsumer(BaseDraftConsumer):
             if msg_type == "heartbeat":
                 await self.handle_heartbeat()
         except json.JSONDecodeError:
-            pass  # Ignore malformed messages
+            log.warning(
+                "ws_malformed_message",
+                system="herodraft",
+                subsystem="connection",
+                draft_id=self.draft_id,
+                user_id=self.user.id,
+            )
 
     # --- Captain state change (pause-on-disconnect) ---
 
@@ -296,6 +327,16 @@ class HeroDraftConsumer(BaseDraftConsumer):
                         draft_team=draft_team,
                         metadata={"user_id": user.id, "username": user.username},
                     )
+                    log.info(
+                        "captain_state_changed",
+                        system="herodraft",
+                        subsystem="connection",
+                        draft_id=draft_id,
+                        user_id=user.id,
+                        username=user.username,
+                        is_connected=is_connected,
+                        draft_state=draft.state,
+                    )
 
                     # Handle pause on disconnect - only during DRAFTING phase
                     # (when timers are running and picks matter)
@@ -311,7 +352,13 @@ class HeroDraftConsumer(BaseDraftConsumer):
                             metadata={"reason": "captain_disconnected"},
                         )
                         log.info(
-                            f"HeroDraft {draft_id} paused: captain {user.username} disconnected"
+                            "captain_disconnect_paused",
+                            system="herodraft",
+                            subsystem="connection",
+                            draft_id=draft_id,
+                            user_id=user.id,
+                            username=user.username,
+                            previous_state=HeroDraftState.DRAFTING.value,
                         )
                         broadcast_event_type = "draft_paused"
                         should_broadcast = True
@@ -342,7 +389,14 @@ class HeroDraftConsumer(BaseDraftConsumer):
                     draft, broadcast_event_type, draft_team=fresh_draft_team
                 )
             except Exception as e:
-                log.error(f"Failed to broadcast herodraft state: {e}")
+                log.error(
+                    "captain_state_broadcast_failed",
+                    system="herodraft",
+                    subsystem="connection",
+                    draft_id=draft_id,
+                    user_id=user.id,
+                    error=str(e),
+                )
 
     # --- HeroDraft-specific kick detection ---
 
@@ -357,8 +411,13 @@ class HeroDraftConsumer(BaseDraftConsumer):
     async def _kick_channel(self, old_channel):
         """Send kick message to an existing captain connection."""
         log.info(
-            f"Kicking existing captain connection for user {self.user.id} "
-            f"in draft {self.draft_id}: {old_channel} -> {self.channel_name}"
+            "captain_kicked",
+            system="herodraft",
+            subsystem="connection",
+            draft_id=self.draft_id,
+            user_id=self.user.id,
+            old_channel=old_channel,
+            new_channel=self.channel_name,
         )
         try:
             await self.channel_layer.send(
@@ -366,14 +425,29 @@ class HeroDraftConsumer(BaseDraftConsumer):
                 {"type": "herodraft.kicked", "reason": "new_connection"},
             )
         except Exception as e:
-            log.warning(f"Failed to send kick message to {old_channel}: {e}")
+            log.warning(
+                "captain_kick_failed",
+                system="herodraft",
+                subsystem="connection",
+                draft_id=self.draft_id,
+                user_id=self.user.id,
+                old_channel=old_channel,
+                error=str(e),
+            )
 
     # --- HeroDraft-specific channel layer handlers ---
 
     async def herodraft_kicked(self, event):
         """Handle being kicked by a newer connection."""
         reason = event.get("reason", "unknown")
-        log.info(f"Captain {self.user.id} kicked from draft {self.draft_id}: {reason}")
+        log.info(
+            "captain_was_kicked",
+            system="herodraft",
+            subsystem="connection",
+            draft_id=self.draft_id,
+            user_id=self.user.id,
+            reason=reason,
+        )
         # Mark this connection as kicked so disconnect() knows not to trigger
         # disconnect events (the new connection is already active)
         self._was_kicked = True

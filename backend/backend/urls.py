@@ -70,6 +70,13 @@ from app.views.csv_import import import_csv_org, import_csv_tournament
 from app.views_joke import buy_tango, get_tangoes
 from common.utils import isTestEnvironment
 from org.views import ClaimRequestViewSet
+from org.views_profiles import (
+    delete_user_dota_profile,
+    get_my_dota_profile,
+    get_user_dota_profile,
+    update_my_dota_profile,
+    update_user_dota_profile,
+)
 
 router = routers.DefaultRouter()
 router.register(r"users", UserView, "users")
@@ -273,6 +280,32 @@ urlpatterns = [
         update_org_user,
         name="update_org_user",
     ),
+    # Dota profiles (self + staff)
+    path(
+        "api/organizations/<int:org_id>/my-dota-profile/",
+        get_my_dota_profile,
+        name="my-dota-profile",
+    ),
+    path(
+        "api/organizations/<int:org_id>/my-dota-profile/update/",
+        update_my_dota_profile,
+        name="update-my-dota-profile",
+    ),
+    path(
+        "api/organizations/<int:org_id>/users/<int:user_pk>/dota-profile/",
+        get_user_dota_profile,
+        name="user-dota-profile",
+    ),
+    path(
+        "api/organizations/<int:org_id>/users/<int:user_pk>/dota-profile/update/",
+        update_user_dota_profile,
+        name="update-user-dota-profile",
+    ),
+    path(
+        "api/organizations/<int:org_id>/users/<int:user_pk>/dota-profile/delete/",
+        delete_user_dota_profile,
+        name="delete-user-dota-profile",
+    ),
     # Member management
     path(
         "api/organizations/<int:org_id>/members/",
@@ -289,6 +322,101 @@ urlpatterns = [
         add_tournament_member,
         name="add_tournament_member",
     ),
+]
+
+# Event task schedule
+from events.views import fire_event_task, get_event_task_schedule
+
+urlpatterns += [
+    path(
+        "api/events/<int:event_id>/task-schedule/",
+        get_event_task_schedule,
+        name="event_task_schedule",
+    ),
+    path(
+        "api/events/<int:event_id>/task-schedule/<str:task_name>/fire/",
+        fire_event_task,
+        name="fire_event_task",
+    ),
+]
+
+# Internal API — celery workers and Discord bot (token auth via X-Internal-Token)
+from app.views.internal import (
+    check_message_log_exists,
+    create_discord_event_log,
+    create_discord_message_log,
+    create_event_dm,
+    create_herodraft_for_game,
+    create_or_update_announcement,
+    create_or_update_signup_message,
+    create_tournament_log,
+    get_discord_event_state,
+    get_due_scheduled_events,
+    get_event_for_task,
+    get_games_without_herodraft,
+    get_match_participants,
+    get_or_create_discord_event,
+    get_repeater_subscribers,
+    get_sync_discord_state,
+    get_tournament_for_task,
+    get_tournament_participants,
+    list_users_for_avatar_check,
+    search_message_logs,
+    transition_event_state,
+    update_discord_event,
+    update_event_dm,
+    update_scheduled_event,
+    update_tournament_log,
+    update_user_avatar,
+)
+
+urlpatterns += [
+    path("api/internal/discord/message-log/", create_discord_message_log),
+    path("api/internal/discord/event-log/", create_discord_event_log),
+    path("api/internal/discord/tournament-log/", create_tournament_log),
+    path("api/internal/discord/tournament-log/<int:pk>/", update_tournament_log),
+    path("api/internal/discord/events/get-or-create/", get_or_create_discord_event),
+    path("api/internal/discord/events/<int:pk>/", update_discord_event),
+    path("api/internal/discord/signup-message/", create_or_update_signup_message),
+    path("api/internal/discord/announcement/", create_or_update_announcement),
+    path("api/internal/discord/event-dm/", create_event_dm),
+    path("api/internal/discord/event-dm/<int:pk>/", update_event_dm),
+    path("api/internal/discord/scheduled-events/<int:pk>/", update_scheduled_event),
+    path("api/internal/events/<int:pk>/transition/", transition_event_state),
+    path("api/internal/discord/check-log/", check_message_log_exists),
+    path("api/internal/discord/message-logs/", search_message_logs),
+    path("api/internal/discord/event-state/<int:event_id>/", get_discord_event_state),
+    path("api/internal/discord/sync-state/", get_sync_discord_state),
+    path(
+        "api/internal/repeaters/<int:repeater_id>/subscribers/",
+        get_repeater_subscribers,
+    ),
+    path("api/internal/scheduled-events/due/", get_due_scheduled_events),
+    path("api/internal/events/<int:event_id>/full/", get_event_for_task),
+    # Tournament endpoints
+    path(
+        "api/internal/tournaments/<int:tournament_id>/full/",
+        get_tournament_for_task,
+    ),
+    path(
+        "api/internal/tournaments/<int:tournament_id>/participants/",
+        get_tournament_participants,
+    ),
+    path(
+        "api/internal/tournaments/<int:tournament_id>/games-without-herodraft/",
+        get_games_without_herodraft,
+    ),
+    path(
+        "api/internal/games/<int:game_id>/participants/",
+        get_match_participants,
+    ),
+    path(
+        "api/internal/games/<int:game_id>/create-herodraft/",
+        create_herodraft_for_game,
+    ),
+    # User avatar management
+    path("api/internal/users/avatar-check/", list_users_for_avatar_check),
+    path("api/internal/users/<int:pk>/avatar/", update_user_avatar),
 ]
 
 log.debug(f"Test Environ:  {isTestEnvironment()}")

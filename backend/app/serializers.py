@@ -948,6 +948,9 @@ class TournamentSerializer(serializers.ModelSerializer):
             "organization_pk",
             "league_pk",
             "source_event",
+            "auto_create_hero_drafts",
+            "discord_send_draft_link",
+            "discord_send_herodraft_link",
         )
 
     def update(self, instance, validated_data):

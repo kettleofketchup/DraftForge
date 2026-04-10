@@ -38,8 +38,35 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(undefined, (error) => {
-  // Capture API errors in Sentry (skip 4xx client errors except 429)
   const status = error.response?.status;
+
+  // Session expired or not authenticated — notify user
+  if (status === 401 || status === 403) {
+    const url = error.config?.url || '';
+    // Don't redirect on auth check endpoints (they're expected to 401)
+    const isAuthCheck = url.includes('/auth/') || url.includes('/tests/login');
+    if (!isAuthCheck && typeof window !== 'undefined') {
+      // Only show once per session to avoid toast spam
+      const key = '_auth_toast_shown';
+      if (!(window as Record<string, unknown>)[key]) {
+        (window as Record<string, unknown>)[key] = true;
+        // Dynamic import to avoid circular deps
+        import('sonner').then(({ toast }) => {
+          toast.error('Session expired — please log in again', {
+            duration: 10000,
+            action: {
+              label: 'Log In',
+              onClick: () => { window.location.href = '/login'; },
+            },
+          });
+        });
+        // Reset after 30s so it can show again if needed
+        setTimeout(() => { (window as Record<string, unknown>)[key] = false; }, 30000);
+      }
+    }
+  }
+
+  // Capture API errors in Sentry (skip 4xx client errors except 429)
   if (!status || status >= 500 || status === 429) {
     Sentry.captureException(error);
   }

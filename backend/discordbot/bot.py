@@ -266,38 +266,35 @@ class KettleBot(discord.Client):
                         "\u274c User not found.", ephemeral=True
                     )
             elif custom_id.startswith("rank_medal:"):
+                # Medal selected — update the star select custom_id to encode the medal
                 event_id = int(custom_id.split(":")[1])
-                from discordbot.components import MedalSelect
+                medal_values = interaction.data.get("values", [])
+                medal = medal_values[0] if medal_values else "Herald"
 
-                select = MedalSelect(event_id)
-                select._values = interaction.data.get("values", [])
-                await select.callback(interaction)
+                from discordbot.components import RankDetailsView
+
+                # Rebuild the view with the medal encoded in star select
+                view = RankDetailsView(
+                    event_id,
+                    rank_status="active",
+                    selected_medal=medal,
+                )
+                await interaction.response.edit_message(
+                    content=f"\U0001f3c5 Selected **{medal}** — now pick your star:",
+                    view=view,
+                )
             elif custom_id.startswith("rank_star:"):
-                event_id = int(custom_id.split(":")[1])
+                # custom_id format: rank_star:{event_id}:{medal}
+                parts = custom_id.split(":")
+                event_id = int(parts[1])
+                medal = parts[2] if len(parts) > 2 else "Herald"
+
                 from asgiref.sync import sync_to_async
 
                 from events.discord import handle_rank_medal_select
 
                 star_values = interaction.data.get("values", [])
                 star = star_values[0] if star_values else "1"
-
-                # Find medal from message components' select default option
-                medal_value = None
-                if interaction.message and interaction.message.components:
-                    for row in interaction.message.components:
-                        for child in row.children:
-                            if (
-                                hasattr(child, "custom_id")
-                                and child.custom_id
-                                and child.custom_id.startswith("rank_medal:")
-                            ):
-                                if hasattr(child, "options"):
-                                    for opt in child.options:
-                                        if opt.default:
-                                            medal_value = opt.value
-                                            break
-
-                medal = medal_value or "Herald"
                 medal_with_star = (
                     f"{medal} {star}" if medal != "Immortal" else "Immortal"
                 )
@@ -477,4 +474,4 @@ def run_bot():
         log.error("DISCORD_BOT_TOKEN not set!")
         sys.exit(1)
 
-    bot.run(token)
+    bot.run(token, log_handler=None)

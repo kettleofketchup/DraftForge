@@ -26,6 +26,8 @@ services:
     env_file: "./docker/.env.test"
     image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
     restart: always
+    environment:
+      OTEL_SERVICE_NAME: backend
     volumes:
       - ./backend:/app/backend
     depends_on:
@@ -65,6 +67,8 @@ services:
     volumes:
       - ./backend:/app/backend
     env_file: "./docker/.env.test"
+    environment:
+      OTEL_SERVICE_NAME: celery-worker
     depends_on:
       - redis
       - backend
@@ -80,6 +84,8 @@ services:
     volumes:
       - ./backend:/app/backend
     env_file: "./docker/.env.test"
+    environment:
+      OTEL_SERVICE_NAME: celery-beat
     depends_on:
       - redis
       - celery-worker
@@ -94,6 +100,8 @@ services:
     volumes:
       - ./backend:/app/backend
     env_file: "./docker/.env.test"
+    environment:
+      OTEL_SERVICE_NAME: discord
     depends_on:
       - redis
       - backend

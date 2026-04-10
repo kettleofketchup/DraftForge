@@ -37,6 +37,9 @@ export class Tournament implements TournamentClassType {
   draft?: TeamDraftType;
   league?: number | null;
   steam_league_id?: number | null;
+  auto_create_hero_drafts: boolean = false;
+  discord_send_draft_link: boolean = false;
+  discord_send_herodraft_link: boolean = false;
 
   constructor(data: TournamentType) {
     Object.assign(this, data);

@@ -131,7 +131,8 @@ class RealEventAnnouncementTaskTest(TestCase):
         from django.utils import timezone
 
         from app.models import CustomUser, Organization, PositionsModel
-        from events.models import Event, EventState
+        from events.constants import EventState
+        from events.models import Event
 
         org = Organization.objects.create(
             name="Discord Integration Test Org",
@@ -210,7 +211,8 @@ class MultiUserReactionTest(TestCase):
         from django.utils import timezone
 
         from app.models import CustomUser, Organization, PositionsModel
-        from events.models import Event, EventState
+        from events.constants import EventState
+        from events.models import Event
         from events.tasks import send_event_announcement
 
         org = Organization.objects.create(

@@ -9,6 +9,7 @@ import type {
   TournamentType,
   UserType,
 } from '~/index';
+import type { DiscordTournamentLogEntry } from '~/components/tournament/schemas';
 import type { AddMemberPayload, AddUserResponse } from './types';
 import { getLogger } from '~/lib/logger';
 import axios from './axios';
@@ -74,4 +75,15 @@ export async function addTournamentMember(
     payload,
   );
   return response.data.tournament;
+}
+
+export type { DiscordTournamentLogEntry } from '~/components/tournament/schemas';
+
+export async function fetchDiscordTournamentLogs(
+  tournamentId: number,
+): Promise<DiscordTournamentLogEntry[]> {
+  const response = await axios.get<DiscordTournamentLogEntry[]>(
+    `/tournaments/${tournamentId}/discord-logs/`,
+  );
+  return response.data;
 }

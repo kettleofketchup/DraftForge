@@ -7,14 +7,15 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '~/components/ui/breadcrumb';
+import { EntityIcon } from '~/components/ui/entity-icons';
 import { cn } from '~/lib/utils';
 
-const TYPE_LABELS: Record<EntityType, string> = {
-  organization: 'Organization',
-  league: 'League',
-  'event-series': 'Event Series',
-  event: 'Event',
-  tournament: 'Tournament',
+const TYPE_CONFIG: Record<EntityType, { label: string; listHref: string }> = {
+  organization: { label: 'Organization', listHref: '/organizations' },
+  league: { label: 'League', listHref: '/leagues' },
+  'event-series': { label: 'Event Series', listHref: '/events' },
+  event: { label: 'Event', listHref: '/events' },
+  tournament: { label: 'Tournament', listHref: '/tournaments' },
 };
 
 export type EntityType = 'organization' | 'league' | 'event-series' | 'event' | 'tournament';
@@ -41,9 +42,15 @@ export function EntityBreadcrumb({ segments, className }: EntityBreadcrumbProps)
           return (
             <span key={`${segment.type}-${index}`} className="contents">
               <BreadcrumbItem className="flex flex-col items-start gap-0">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-medium leading-none">
-                  {TYPE_LABELS[segment.type]}
-                </span>
+                <BreadcrumbLink asChild>
+                  <Link
+                    to={TYPE_CONFIG[segment.type].listHref}
+                    className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider font-medium leading-none"
+                  >
+                    <EntityIcon type={segment.type} size="xs" />
+                    {TYPE_CONFIG[segment.type].label}
+                  </Link>
+                </BreadcrumbLink>
                 {isLast || !segment.href ? (
                   <BreadcrumbPage className="text-sm font-medium">
                     {segment.label}

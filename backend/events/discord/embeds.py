@@ -8,7 +8,8 @@ import logging
 
 from django.conf import settings
 
-from events.models import EventSignup, SignupStatus
+from app.constants import LOGO_URL
+from app.internal_client import get_event_signups
 
 logger = logging.getLogger(__name__)
 
@@ -31,41 +32,39 @@ def _event_url(event):
     return f"{SITE_URL}/events/{event.pk}" if SITE_URL else ""
 
 
+INACTIVE_STATUSES = {"cancelled", "rejected", "waitlisted", "tentative"}
+DECLINED_STATUSES = {"cancelled", "rejected"}
+CONFIRMED_STATUSES = {"confirmed", "approved"}
+
+
 def _signup_counts(event):
-    signups = EventSignup.objects.filter(event=event)
-    active = signups.exclude(
-        status__in=[
-            SignupStatus.CANCELLED,
-            SignupStatus.REJECTED,
-            SignupStatus.WAITLISTED,
-        ]
-    ).count()
-    confirmed = signups.filter(status=SignupStatus.CONFIRMED).count()
-    return active, confirmed
+    signups = get_event_signups(event.pk)
+    active = [s for s in signups if s.status not in INACTIVE_STATUSES]
+    confirmed = [s for s in signups if s.status == "confirmed"]
+    return len(active), len(confirmed)
 
 
 def _user_list(signups, max_items=20):
-    """Build a newline-separated list of user nicknames from signups."""
+    """Build a newline-separated list of user display names from signups."""
     lines = []
     for s in signups[:max_items]:
-        name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-        lines.append(name)
-    remaining = signups.count() - max_items
+        lines.append(s.display_name)
+    remaining = len(signups) - max_items
     if remaining > 0:
         lines.append(f"*and {remaining} more...*")
     return "\n".join(lines) if lines else "*None yet*"
 
 
 def _user_list_quoted(signups, max_items=20, numbered=True):
-    """Build a blockquoted numbered list of user nicknames from signups."""
+    """Build a blockquoted numbered list of user display names from signups."""
     lines = []
     for i, s in enumerate(signups[:max_items], 1):
-        name = s.user.nickname or s.user.username or f"User {s.user.pk}"
+        name = s.display_name
         if numbered:
             lines.append(f"> {i}. {name}")
         else:
             lines.append(f"> {name}")
-    remaining = signups.count() - max_items
+    remaining = len(signups) - max_items
     if remaining > 0:
         lines.append(f"> *and {remaining} more...*")
     return "\n".join(lines) if lines else "> *—*"
@@ -115,29 +114,17 @@ def build_announcement_embeds(event):
         "fields": info_fields,
     }
 
-    # Embed 2: Participants
-    signups = EventSignup.objects.filter(event=event).select_related("user")
+    # Embed 2: Participants (fetched via public API)
+    all_signups = get_event_signups(event.pk)
 
-    active = signups.exclude(
-        status__in=[
-            SignupStatus.CANCELLED,
-            SignupStatus.REJECTED,
-            SignupStatus.WAITLISTED,
-            SignupStatus.TENTATIVE,
-        ]
-    )
+    active = [s for s in all_signups if s.status not in INACTIVE_STATUSES]
     active_lines = []
     for s in active[:20]:
-        icon = (
-            "\u2705"
-            if s.status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED)
-            else "\u23f3"
-        )
-        name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-        active_lines.append(f"{icon} {name}")
-    if active.count() > 20:
-        active_lines.append(f"*and {active.count() - 20} more...*")
-    count = active.count()
+        icon = "\u2705" if s.status in CONFIRMED_STATUSES else "\u23f3"
+        active_lines.append(f"{icon} {s.display_name}")
+    if len(active) > 20:
+        active_lines.append(f"*and {len(active) - 20} more...*")
+    count = len(active)
     max_display = str(event.max_players) if event.max_players else "\u221e"
 
     participant_fields = [
@@ -148,21 +135,19 @@ def build_announcement_embeds(event):
         },
     ]
 
-    declined = signups.filter(
-        status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED]
-    )
+    declined = [s for s in all_signups if s.status in DECLINED_STATUSES]
     participant_fields.append(
         {
-            "name": f"\u274c Declined ({declined.count()})",
+            "name": f"\u274c Declined ({len(declined)})",
             "value": _user_list(declined),
             "inline": True,
         }
     )
 
-    tentative = signups.filter(status=SignupStatus.TENTATIVE)
+    tentative = [s for s in all_signups if s.status == "tentative"]
     participant_fields.append(
         {
-            "name": f"\u2753 Tentative ({tentative.count()})",
+            "name": f"\u2753 Tentative ({len(tentative)})",
             "value": _user_list(tentative),
             "inline": True,
         }
@@ -198,8 +183,6 @@ def build_announcement_v2(event):
     signup/declined/tentative row, and event page link.
     """
     from events.discord.components import build_announcement_components
-
-    LOGO_URL = "https://assets.kettle.sh/draftforge/DFLogo.png"
 
     title = event.discord_event_title or event.name
     desc = event.discord_event_description or event.description or "No description."
@@ -245,28 +228,20 @@ def build_announcement_v2(event):
     # Force row break — signup fields go on their own row
     fields.append({"name": "\u200b", "value": "\u200b", "inline": False})
 
-    # Signup lists (blockquoted player names)
-    signups = EventSignup.objects.filter(event=event).select_related("user")
+    # Signup lists (fetched via public API, typed as EventSignupData)
+    all_signups = get_event_signups(event.pk)
 
     # Signed Up
-    active = signups.exclude(
-        status__in=[
-            SignupStatus.CANCELLED,
-            SignupStatus.REJECTED,
-            SignupStatus.WAITLISTED,
-            SignupStatus.TENTATIVE,
-        ]
-    )
+    active = [s for s in all_signups if s.status not in INACTIVE_STATUSES]
     active_lines = []
     for i, s in enumerate(active[:20], 1):
-        name = s.user.nickname or s.user.username or f"User {s.user.pk}"
-        if s.status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED):
-            active_lines.append(f"> {i}. {name}")
+        if s.status in CONFIRMED_STATUSES:
+            active_lines.append(f"> {i}. {s.display_name}")
         else:
-            active_lines.append(f"> {i}. *{name} (pending)*")
-    if active.count() > 20:
-        active_lines.append(f"> *and {active.count() - 20} more...*")
-    count = active.count()
+            active_lines.append(f"> {i}. *{s.display_name} (pending)*")
+    if len(active) > 20:
+        active_lines.append(f"> *and {len(active) - 20} more...*")
+    count = len(active)
     max_display = str(event.max_players) if event.max_players else "\u221e"
     fields.append(
         {
@@ -277,35 +252,34 @@ def build_announcement_v2(event):
     )
 
     # Declined
-    declined = signups.filter(
-        status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED]
-    )
+    declined = [s for s in all_signups if s.status in DECLINED_STATUSES]
     fields.append(
         {
-            "name": f"\u274c Declined ({declined.count()})",
+            "name": f"\u274c Declined ({len(declined)})",
             "value": _user_list_quoted(declined),
             "inline": True,
         }
     )
 
     # Tentative
-    tentative = signups.filter(status=SignupStatus.TENTATIVE)
+    tentative = [s for s in all_signups if s.status == "tentative"]
     fields.append(
         {
-            "name": f"\u2753 Tentative ({tentative.count()})",
+            "name": f"\u2753 Tentative ({len(tentative)})",
             "value": _user_list_quoted(tentative),
             "inline": True,
         }
     )
 
     # Waitlisted
-    waitlisted = signups.filter(status=SignupStatus.WAITLISTED).order_by(
-        "waitlist_position"
+    waitlisted = sorted(
+        [s for s in all_signups if s.status == "waitlisted"],
+        key=lambda s: s.waitlist_position or 999,
     )
-    if waitlisted.exists():
+    if waitlisted:
         fields.append(
             {
-                "name": f"\U0001f4cb Waitlisted ({waitlisted.count()})",
+                "name": f"\U0001f4cb Waitlisted ({len(waitlisted)})",
                 "value": _user_list_quoted(waitlisted),
                 "inline": True,
             }
@@ -358,7 +332,6 @@ def build_announcement_notice(event, signup_link=None):
     Posted to the announcement channel to notify users about a new event.
     Not updated — just a one-time heads up.
     """
-    LOGO_URL = "https://assets.kettle.sh/draftforge/DFLogo.png"
     title = event.discord_event_title or event.name
 
     from zoneinfo import ZoneInfo
@@ -421,9 +394,16 @@ def build_signup_update_embed(event):
 
 
 def build_new_event_embed(event):
+    from zoneinfo import ZoneInfo
+
     desc = f"A new event has been created for **{event.organization.name}**!"
     if url := _event_url(event):
         desc += f"\n\n[Sign Up]({url})"
+
+    tz = ZoneInfo(event.timezone) if getattr(event, "timezone", None) else None
+    local_dt = event.scheduled_at.astimezone(tz) if tz else event.scheduled_at
+    tz_time = local_dt.strftime("%-I:%M %p %Z")
+
     return {
         "title": f"\U0001f195 {event.name}",
         "description": desc,
@@ -431,84 +411,172 @@ def build_new_event_embed(event):
         "fields": [
             {
                 "name": "When",
-                "value": _discord_timestamp(event.scheduled_at),
+                "value": f"{_discord_timestamp(event.scheduled_at)} ({tz_time})",
                 "inline": True,
             },
         ],
     }
 
 
-def build_signup_reminder_embed(event):
-    active, _ = _signup_counts(event)
+def _build_reminder_embed(
+    event, title, description, color, extra_fields=None, include_buttons=False
+):
+    """Shared layout for all reminder embeds — matches announcement style.
+
+    Includes: branding (org name + logo), event time, signup count, event page
+    link, and optional extra fields.
+
+    Returns dict with 'embed' key always, plus 'components' if include_buttons=True.
+    For backwards compat, also has 'title'/'description'/'color' at top level.
+    """
+
+    url = _event_url(event)
+    active = getattr(event, "signup_count", 0)
     max_display = str(event.max_players) if event.max_players else "\u221e"
-    return {
-        "title": f"\u23f0 {event.name} \u2014 Signup Reminder",
-        "description": f"Don't forget to sign up! Currently **{active}/{max_display}** players.",
-        "color": COLOR_REMINDER,
+
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo(event.timezone) if getattr(event, "timezone", None) else None
+    local_dt = event.scheduled_at.astimezone(tz) if tz else event.scheduled_at
+    tz_time = local_dt.strftime("%-I:%M %p %Z")  # "6:00 PM EST"
+
+    fields = [
+        {
+            "name": "When",
+            "value": f"{_discord_timestamp(event.scheduled_at, style='F')}\n{_discord_timestamp(event.scheduled_at, style='R')} ({tz_time})",
+            "inline": True,
+        },
+        {
+            "name": "Signups",
+            "value": f"**{active}/{max_display}** players",
+            "inline": True,
+        },
+    ]
+
+    if url:
+        fields.append(
+            {"name": "Event Page", "value": f"[View & Sign Up]({url})", "inline": True}
+        )
+
+    if extra_fields:
+        fields.extend(extra_fields)
+
+    embed = {
+        "title": title[:256],
+        "description": description,
+        "color": color,
+        "fields": fields,
+        "thumbnail": {"url": LOGO_URL},
+        "timestamp": event.scheduled_at.isoformat(),
     }
+
+    if hasattr(event, "organization") and event.organization:
+        embed["author"] = {"name": event.organization.name}
+        if hasattr(event.organization, "logo") and event.organization.logo:
+            embed["author"]["icon_url"] = event.organization.logo
+
+    # Build components (buttons) if requested
+    components = []
+    if include_buttons:
+        row = {"type": 1, "components": []}
+
+        # Sign Up button
+        row["components"].append(
+            {
+                "type": 2,
+                "style": 3,  # Success (green)
+                "label": "Sign Up",
+                "custom_id": f"event_signup:{event.pk}",
+                "emoji": {"name": "\u2705"},
+            }
+        )
+
+        # View Event link button
+        if url:
+            row["components"].append(
+                {
+                    "type": 2,
+                    "style": 5,  # Link
+                    "label": "View Event",
+                    "url": url,
+                    "emoji": {"name": "\U0001f310"},
+                }
+            )
+
+        components.append(row)
+
+    # Return both embed dict and the full result for sync_send_embed_with_components
+    result = {
+        # Legacy keys for sync_send_embed (title/description/color)
+        "title": embed["title"],
+        "description": embed["description"],
+        "color": embed["color"],
+        "fields": embed.get("fields"),
+        # Full embed for sync_send_embed_with_components
+        "embed": embed,
+        "components": components,
+    }
+    return result
+
+
+def build_signup_reminder_embed(event):
+    active = getattr(event, "signup_count", 0)
+    max_display = str(event.max_players) if event.max_players else "\u221e"
+    desc = event.description or ""
+    if desc:
+        desc = desc[:200] + ("\u2026" if len(desc) > 200 else "")
+        desc += "\n\n"
+    desc += f"Don't forget to sign up! Currently **{active}/{max_display}** players."
+    return _build_reminder_embed(
+        event,
+        title=f"\u23f0 {event.name} \u2014 Signup Reminder",
+        description=desc,
+        color=COLOR_REMINDER,
+        include_buttons=True,
+    )
 
 
 def build_attendance_reminder_embed(event):
-    return {
-        "title": f"\u270b {event.name} \u2014 Confirm Attendance",
-        "description": "The event is coming up! Please confirm your attendance.",
-        "color": COLOR_REMINDER,
-    }
+    return _build_reminder_embed(
+        event,
+        title=f"\u270b {event.name} \u2014 Confirm Attendance",
+        description="The event is coming up! Please confirm your attendance by reacting to the signup post.",
+        color=COLOR_REMINDER,
+        include_buttons=True,
+    )
 
 
 def build_profile_reminder_embed(event):
     requirements = []
-    if event.require_steam_id:
+    if getattr(event, "require_steam_id", False):
         requirements.append("Steam ID")
-    if event.require_mmr_verified:
+    if getattr(event, "require_mmr_verified", False):
         requirements.append("Verified MMR")
-    if event.require_profile_complete:
+    if getattr(event, "require_profile_complete", False):
         requirements.append("Complete profile")
     req_text = ", ".join(requirements) if requirements else "a complete profile"
-    return {
-        "title": f"\U0001f464 {event.name} \u2014 Complete Your Profile",
-        "description": f"Please make sure you have: {req_text}",
-        "color": COLOR_PROFILE,
-    }
+    return _build_reminder_embed(
+        event,
+        title=f"\U0001f464 {event.name} \u2014 Complete Your Profile",
+        description=f"Please make sure you have: {req_text}",
+        color=COLOR_PROFILE,
+        include_buttons=True,
+    )
 
 
 def build_subscriber_dm_embed(event):
-    """Build DM embed for subscriber pre-event notification."""
-    url = _event_url(event)
-    signup_link = ""
-    try:
-        de = event.discord_event
-        if de.signup_message and de.signup_message.has_posted:
-            sm = de.signup_message
-            guild_id = de.guild_id
-            channel = sm.thread_id or sm.channel_id
-            signup_link = (
-                f"https://discord.com/channels/{guild_id}/{channel}/{sm.message_id}"
-            )
-    except Exception:
-        logger.debug("Could not build signup link for event %s", event.pk)
+    """Build DM embed for subscriber pre-event notification.
 
-    description = f"**{event.name}** is starting soon!\n\n"
-    description += f"\U0001f4c5 {_discord_timestamp(event.scheduled_at)}\n"
-    if signup_link:
-        description += f"\n\U0001f517 **[Sign up on Discord]({signup_link})**\n"
-    if url:
-        description += f"\U0001f310 **[View Event]({url})**\n"
+    Works with both Django model instances and Pydantic EventTaskData.
+    """
+    desc = f"**{event.name}** is starting soon!"
+    if event.description:
+        desc += f"\n\n{event.description[:200]}"
 
-    title = f"\U0001f514 Event Reminder: {event.name}"[:256]
-
-    embed = {
-        "title": title,
-        "description": description,
-        "color": COLOR_REMINDER,
-    }
-
-    # Add branding
-    if hasattr(event, "organization") and event.organization:
-        embed["author"] = {
-            "name": event.organization.name,
-        }
-        if event.organization.logo:
-            embed["author"]["icon_url"] = event.organization.logo
-
-    return embed
+    return _build_reminder_embed(
+        event,
+        title=f"\U0001f514 Event Reminder: {event.name}",
+        description=desc,
+        color=COLOR_REMINDER,
+        include_buttons=True,
+    )

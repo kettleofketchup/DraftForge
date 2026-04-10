@@ -11,8 +11,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '~/components/ui/alert-dialog';
-import { Button } from '~/components/ui/button';
-import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
+import { CancelButton, ConfirmButton, DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
 import type { TeamType, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -43,8 +42,6 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
   const [draft_order, setDraftOrder] = useState<string>(getDraftOrder());
   const msg = () => (isCaptain ? `Remove` : `Add`);
 
-  const getButtonVariant = (): 'destructive' | 'default' => isCaptain ? 'destructive' : 'default';
-
   useEffect(() => {
     setIsCaptain(determineIsCaptain());
   }, [tournament.captains, tournament.teams, isCaptain, draft_order]);
@@ -70,7 +67,11 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
     >
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <Button variant={getButtonVariant()}>{msg()} Captain</Button>
+          {isCaptain ? (
+            <DestructiveButton className="w-40">{msg()} Captain</DestructiveButton>
+          ) : (
+            <PrimaryButton className="w-40">{msg()} Captain</PrimaryButton>
+          )}
         </AlertDialogTrigger>
         <AlertDialogContent className={dialogBG()}>
           <AlertDialogHeader>

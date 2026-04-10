@@ -1,14 +1,22 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Eye } from 'lucide-react';
 import { getEventDiscordState } from '~/components/api/api';
 import type { DiscordEventState } from '~/components/events/schemas';
 import { LogCategory, LOG_CATEGORY_LABELS } from '~/components/events/schemas';
 import { Badge } from '~/components/ui/badge';
+import { Button } from '~/components/ui/button';
+import { UserStrip } from '~/components/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { ScrollArea } from '~/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { TaskScheduleSection } from './TaskScheduleSection';
+import { DiscordLogDetailModal } from './DiscordLogDetailModal';
 
 interface DiscordLogSectionProps {
   eventId: number;
+  isAdmin?: boolean;
+  eventTimezone?: string;
 }
 
 const CATEGORY_COLORS: Record<number, string> = {
@@ -25,12 +33,37 @@ const CATEGORY_BORDER: Record<number, string> = {
   [LogCategory.NOTIFICATION]: 'border-amber-500',
 };
 
-export function DiscordLogSection({ eventId }: DiscordLogSectionProps) {
+export function DiscordLogSection({ eventId, isAdmin, eventTimezone }: DiscordLogSectionProps) {
   const { data: discordState, isLoading } = useQuery({
     queryKey: ['event-discord', eventId],
     queryFn: () => getEventDiscordState(eventId),
+    refetchInterval: 15_000,
   });
   const [activeFilter, setActiveFilter] = useState<number | null>(null);
+  const [selectedLog, setSelectedLog] = useState<DiscordEventState['logs'][number] | null>(null);
+
+  // Merge DMs into activity log as synthetic NOTIFICATION entries
+  // (must be before early returns to keep hook order stable)
+  const allLogs = useMemo(() => {
+    if (!discordState) return [];
+    const dmLogs: DiscordEventState['logs'] = discordState.dms.map((dm) => ({
+      id: -dm.id,
+      category: LogCategory.NOTIFICATION,
+      category_display: 'Notification',
+      action: `DM: ${dm.dm_type_display}`,
+      target_type: dm.nickname || dm.username || '',
+      discord_user_id: dm.discord_user_id || '',
+      discord_username: dm.nickname || dm.username || '',
+      message_id: dm.message_id || null,
+      status_code: null,
+      error_message: dm.delivered ? '' : (dm.can_send ? 'Pending delivery' : 'User has no Discord'),
+      success: dm.delivered,
+      created_at: dm.sent_at || dm.created_at,
+    }));
+    return [...discordState.logs, ...dmLogs].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [discordState?.logs, discordState?.dms]);
 
   if (isLoading) {
     return <div className="text-muted-foreground p-4">Loading Discord state...</div>;
@@ -40,18 +73,18 @@ export function DiscordLogSection({ eventId }: DiscordLogSectionProps) {
   }
 
   const filteredLogs = activeFilter
-    ? discordState.logs.filter((log: DiscordEventState['logs'][number]) => log.category === activeFilter)
-    : discordState.logs;
+    ? allLogs.filter((log) => log.category === activeFilter)
+    : allLogs;
 
   // Count per category
   const categoryCounts: Record<number, number> = {};
-  for (const log of discordState.logs) {
+  for (const log of allLogs) {
     categoryCounts[log.category] = (categoryCounts[log.category] || 0) + 1;
   }
 
   return (
     <div className="space-y-6">
-      {/* Status Cards */}
+      {/* Status Cards — ALWAYS VISIBLE (above tabs) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MessageStatusCard
           title="Signup Post"
@@ -73,124 +106,175 @@ export function DiscordLogSection({ eventId }: DiscordLogSectionProps) {
         </div>
       </div>
 
-      {/* Activity Log */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-foreground font-semibold">Activity Log</h3>
-          <span className="text-muted-foreground text-xs">{discordState.logs.length} entries</span>
-        </div>
+      {/* Sub-tabs for different views */}
+      <Tabs defaultValue="schedule">
+        <TabsList>
+          <TabsTrigger value="schedule" data-testid="discord-subtab-schedule">
+            Task Schedule
+          </TabsTrigger>
+          <TabsTrigger value="activity" data-testid="discord-subtab-activity">
+            Activity Log ({allLogs.length})
+          </TabsTrigger>
+          <TabsTrigger value="dms" data-testid="discord-subtab-dms">
+            DM History ({discordState.dms.length})
+          </TabsTrigger>
+        </TabsList>
 
-        {/* Category filter tabs */}
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          <button
-            onClick={() => setActiveFilter(null)}
-            className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
-              activeFilter === null
-                ? 'bg-primary/20 text-primary font-medium'
-                : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
-            }`}
-          >
-            All ({discordState.logs.length})
-          </button>
-          {Object.entries(LOG_CATEGORY_LABELS).map(([id, label]) => {
-            const count = categoryCounts[Number(id)] || 0;
-            if (count === 0) return null;
-            return (
-              <button
-                key={id}
-                onClick={() => setActiveFilter(Number(id) === activeFilter ? null : Number(id))}
-                className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
-                  activeFilter === Number(id)
-                    ? CATEGORY_COLORS[Number(id)]
-                    : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
-                }`}
-              >
-                {label} ({count})
-              </button>
-            );
-          })}
-        </div>
+        {/* Task Schedule */}
+        <TabsContent value="schedule">
+          <TaskScheduleSection eventId={eventId} isAdmin={isAdmin} eventTimezone={eventTimezone} />
+        </TabsContent>
 
-        {/* Scrollable log list */}
-        <ScrollArea className="h-[400px] rounded-lg border border-border bg-base-300/50 p-3">
-          <div className="space-y-2">
-            {filteredLogs.length === 0 && (
-              <p className="text-muted-foreground text-sm py-4 text-center">No activity yet.</p>
-            )}
-            {filteredLogs.map((log: DiscordEventState['logs'][number]) => (
-              <div
-                key={log.id}
-                className={`border-l-2 pl-3 py-1.5 ${
-                  CATEGORY_BORDER[log.category] || (log.success ? 'border-success' : 'border-error')
-                }`}
-              >
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] px-1.5 py-0 ${CATEGORY_COLORS[log.category] || ''}`}
-                  >
-                    {log.category_display}
-                  </Badge>
-                  <span className="text-foreground text-sm font-medium">{log.action}</span>
-                  {log.target_type && (
-                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
-                      {log.target_type}
+        {/* Activity Log */}
+        <TabsContent value="activity">
+          {/* Category filter tabs */}
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            <button
+              onClick={() => setActiveFilter(null)}
+              className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
+                activeFilter === null
+                  ? 'bg-primary/20 text-primary font-medium'
+                  : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
+              }`}
+            >
+              All ({allLogs.length})
+            </button>
+            {Object.entries(LOG_CATEGORY_LABELS).map(([id, label]) => {
+              const count = categoryCounts[Number(id)] || 0;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setActiveFilter(Number(id) === activeFilter ? null : Number(id))}
+                  className={`px-2.5 py-1 text-xs rounded-md transition-colors cursor-pointer ${
+                    activeFilter === Number(id)
+                      ? CATEGORY_COLORS[Number(id)]
+                      : 'bg-muted/30 text-muted-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  {label} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Scrollable log list — clickable entries */}
+          <ScrollArea className="h-[400px] rounded-lg border border-border bg-base-300/50 p-3">
+            <div className="space-y-2">
+              {filteredLogs.length === 0 && (
+                <p className="text-muted-foreground text-sm py-4 text-center">No activity yet.</p>
+              )}
+              {filteredLogs.map((log: DiscordEventState['logs'][number]) => (
+                <div
+                  key={log.id}
+                  data-testid={`discord-log-entry-${log.id}`}
+                  className={`border-l-2 pl-3 py-1.5 cursor-pointer hover:bg-base-400/30 rounded-r transition-colors ${
+                    CATEGORY_BORDER[log.category] || (log.success ? 'border-success' : 'border-error')
+                  }`}
+                  onClick={() => setSelectedLog(log)}
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] px-1.5 py-0 ${CATEGORY_COLORS[log.category] || ''}`}
+                    >
+                      {log.category_display}
                     </Badge>
-                  )}
-                </div>
-                {log.discord_username && (
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <UserAvatar
-                      user={{ nickname: log.discord_username, discordId: log.discord_user_id }}
-                      size="tiny"
-                    />
-                    <span className="text-muted-foreground text-xs">{log.discord_username}</span>
+                    <span className="text-foreground text-sm font-medium">{log.action}</span>
+                    {log.target_type && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                        {log.target_type}
+                      </Badge>
+                    )}
                   </div>
-                )}
-                {log.error_message && (
-                  <p className="text-error text-xs mt-0.5">{log.error_message}</p>
-                )}
-                <span className="text-muted-foreground text-[10px]">
-                  {new Date(log.created_at).toLocaleString()}
-                </span>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
-      </div>
+                  {log.discord_username && (
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <UserAvatar
+                        user={{ nickname: log.discord_username, discordId: log.discord_user_id }}
+                        size="tiny"
+                      />
+                      <span className="text-muted-foreground text-xs">{log.discord_username}</span>
+                    </div>
+                  )}
+                  {log.error_message && (
+                    <p className="text-error text-xs mt-0.5">{log.error_message}</p>
+                  )}
+                  <span className="text-muted-foreground text-[10px]">
+                    {new Date(log.created_at).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </TabsContent>
 
-      {/* DM History */}
-      {discordState.dms.length > 0 && (
-        <div>
-          <h3 className="text-foreground font-semibold mb-3">DM History</h3>
-          <div className="space-y-2">
+        {/* DM History */}
+        <TabsContent value="dms">
+          <div className="space-y-1">
             {discordState.dms.map((dm: DiscordEventState['dms'][number]) => (
-              <div key={dm.id} className="bg-base-300 rounded p-3 flex items-center gap-3">
-                <UserAvatar
-                  user={{ nickname: dm.nickname, username: dm.username, discordId: dm.discord_user_id }}
-                  size="sm"
-                />
-                <div className="flex-1">
-                  <span className="text-foreground text-sm">{dm.nickname || dm.username}</span>
-                  <span className="text-muted-foreground text-xs ml-2">{dm.dm_type_display}</span>
-                </div>
-                <div className="flex gap-1">
-                  {dm.delivered ? (
-                    <Badge className="bg-success text-xs">Delivered</Badge>
-                  ) : dm.can_send ? (
-                    <Badge className="bg-warning text-xs">Pending</Badge>
-                  ) : (
-                    <Badge variant="destructive" className="text-xs">No Discord</Badge>
-                  )}
-                  {dm.responded && (
-                    <Badge className="bg-info text-xs">Responded</Badge>
-                  )}
-                </div>
-              </div>
+              <UserStrip
+                key={dm.id}
+                user={{
+                  nickname: dm.nickname,
+                  username: dm.username,
+                  discordId: dm.discord_user_id,
+                }}
+                compact
+                showPositions={false}
+                contextSlot={
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">{dm.dm_type_display}</Badge>
+                    {dm.delivered ? (
+                      <Badge className="bg-success/20 text-success border-success/30 text-[10px] px-1.5 py-0">Delivered</Badge>
+                    ) : dm.can_send ? (
+                      <Badge className="bg-warning/20 text-warning border-warning/30 text-[10px] px-1.5 py-0">Pending</Badge>
+                    ) : (
+                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0">No Discord</Badge>
+                    )}
+                    {dm.responded && (
+                      <Badge className="bg-info/20 text-info border-info/30 text-[10px] px-1.5 py-0">Responded</Badge>
+                    )}
+                  </div>
+                }
+                actionSlot={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => setSelectedLog({
+                      id: dm.id,
+                      action: `DM: ${dm.dm_type_display}`,
+                      target_type: dm.nickname || dm.username || '',
+                      success: dm.delivered,
+                      message_id: dm.message_id || undefined,
+                      discord_user_id: dm.discord_user_id || undefined,
+                      discord_username: dm.nickname || dm.username || undefined,
+                      error_message: !dm.delivered && !dm.can_send ? 'User has no Discord ID' : undefined,
+                      created_at: dm.sent_at || dm.created_at,
+                      category: LogCategory.NOTIFICATION,
+                      category_display: 'Notification',
+                    })}
+                    title="View DM details"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                  </Button>
+                }
+              />
             ))}
+            {discordState.dms.length === 0 && (
+              <p className="text-muted-foreground text-sm py-4 text-center">No DMs sent yet.</p>
+            )}
           </div>
-        </div>
-      )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Log Detail Modal */}
+      <DiscordLogDetailModal
+        log={selectedLog}
+        open={!!selectedLog}
+        onOpenChange={(open) => !open && setSelectedLog(null)}
+        repeaterName={discordState.event_repeater_name}
+      />
     </div>
   );
 }

@@ -14,7 +14,10 @@ export {
   updateTournament,
   deleteTournament,
   addTournamentMember,
+  fetchDiscordTournamentLogs,
 } from './tournamentAPI';
+
+export type { DiscordTournamentLogEntry } from './tournamentAPI';
 
 // Draft
 export {
@@ -137,6 +140,8 @@ export {
   getEventDiscordState,
   getDiscordChannels,
   getDiscordRoles,
+  adminAddSignup,
+  tentativeForEvent,
   subscribeToRepeater, unsubscribeFromRepeater,
   getRepeaterSubscribers,
   getOrgEventDefaults,

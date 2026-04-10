@@ -111,8 +111,16 @@ def configure_logging(
         root_logger.addHandler(otel_handler)
 
     # Quiet noisy third-party loggers
-    for logger_name in ["urllib3", "requests", "httpx", "httpcore"]:
-        logging.getLogger(logger_name).setLevel(logging.WARNING)
+    for logger_name in [
+        "urllib3",
+        "requests",
+        "httpx",
+        "httpcore",
+        "opentelemetry.attributes",
+        "opentelemetry.exporter.otlp.proto.http._log_exporter",
+        "opentelemetry.sdk.metrics._internal.export",
+    ]:
+        logging.getLogger(logger_name).setLevel(logging.ERROR)
 
     _configured = True
 

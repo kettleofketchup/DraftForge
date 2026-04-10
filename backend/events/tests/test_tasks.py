@@ -1,7 +1,8 @@
 from datetime import date, time
 from unittest.mock import patch
 
-from events.models import Event, EventRepeater, RepeatFrequency
+from events.constants import RepeatFrequency
+from events.models import Event, EventRepeater
 from events.tests.base import EventTestCase
 
 PATCH_TODAY = "events.services._today"

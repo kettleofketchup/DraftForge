@@ -123,12 +123,13 @@ test.describe('Event Notification DM (@cicd)', () => {
     expect(notif.embed.title).toContain('Event Reminder');
     expect(notif.embed.title).toContain('DM Notification Test');
 
-    // Signup link only present if Discord announcement was posted
+    // Buttons should be present in components (Sign Up + View Event)
+    const buttons = notif.components?.flatMap((row: { components: { label: string }[] }) =>
+      row.components?.map((btn) => btn.label) ?? []
+    ) ?? [];
+    expect(buttons).toContain('View Event');
     if (discordReady) {
-      expect(notif.embed.description).toContain('Sign up on Discord');
+      expect(buttons).toContain('Sign Up');
     }
-
-    // View Event link should always be present
-    expect(notif.embed.description).toContain('View Event');
   });
 });

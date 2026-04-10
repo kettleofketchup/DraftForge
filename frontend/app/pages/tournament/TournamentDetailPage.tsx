@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import { Pencil, Trash2, ShieldAlert } from 'lucide-react';
 import type { UserType } from '~/components/user/types';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
@@ -9,9 +10,14 @@ import { useUserStore } from '~/store/userStore';
 import { useTournament } from '~/hooks/useTournament';
 import { useTournamentSocket } from '~/hooks/useTournamentSocket';
 import { hydrateTournament } from '~/lib/hydrateTournament';
+import { deleteTournament } from '~/components/api/api';
 import type { TournamentType } from '~/components/tournament/types';
 import TournamentTabs from './tabs/TournamentTabs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
+import { TournamentSettingsModal } from '~/components/tournament/settings/TournamentSettingsModal';
+import { SecondaryButton, DestructiveButton } from '~/components/ui/buttons';
+import { BrandDropdownMenu, type BrandDropdownAction } from '~/components/ui/brand-dropdown-menu';
+import { toast } from 'sonner';
 
 import { getLogger } from '~/lib/logger';
 const log = getLogger('TournamentDetailPage');
@@ -20,6 +26,8 @@ export const TournamentDetailPage: React.FC = () => {
   const { pk, '*': slug } = useParams<{ pk: string; '*': string }>();
   const navigate = useNavigate();
   const pkNum = pk ? parseInt(pk, 10) : null;
+
+  const currentUser = useUserStore((state) => state.currentUser);
 
   // TanStack Query for tournament data
   const { data: tournament, isLoading, error } = useTournament(
@@ -166,6 +174,43 @@ export const TournamentDetailPage: React.FC = () => {
     };
   }, [tournament?.league_pk]);
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const isAdmin = currentUser?.is_staff || currentUser?.is_superuser;
+
+  const handleDelete = async () => {
+    if (!tournament?.pk) return;
+    if (!window.confirm('Are you sure you want to permanently delete this tournament? This cannot be undone.')) return;
+    try {
+      await deleteTournament(tournament.pk);
+      toast.success('Tournament deleted');
+      navigate(-1);
+    } catch {
+      toast.error('Failed to delete tournament');
+    }
+  };
+
+  const adminActions = useMemo((): BrandDropdownAction[] => {
+    if (!isAdmin || !tournament) return [];
+    return [
+      {
+        key: 'edit',
+        icon: <Pencil className="h-4 w-4 mr-1.5" />,
+        label: 'Edit',
+        onClick: () => setSettingsOpen(true),
+        variant: 'success',
+        'data-testid': 'tournament-edit-btn',
+      },
+      {
+        key: 'delete',
+        icon: <Trash2 className="h-4 w-4 mr-1.5" />,
+        label: 'Delete',
+        onClick: handleDelete,
+        variant: 'destructive',
+        'data-testid': 'tournament-delete-btn',
+      },
+    ];
+  }, [isAdmin, tournament]);
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -235,6 +280,47 @@ export const TournamentDetailPage: React.FC = () => {
             played on {getDate()}
           </span>
         </div>
+        {isAdmin && hydratedTournament && (
+          <div className="flex items-center gap-2 mb-3">
+            {/* Desktop: button group */}
+            <div className="hidden md:flex items-center gap-2">
+              <SecondaryButton
+                color="emerald"
+                size="sm"
+                onClick={() => setSettingsOpen(true)}
+                data-testid="tournament-edit-btn"
+              >
+                <Pencil className="h-4 w-4 mr-1.5" />
+                Edit
+              </SecondaryButton>
+              <DestructiveButton
+                size="sm"
+                onClick={handleDelete}
+                data-testid="tournament-delete-btn"
+              >
+                <Trash2 className="h-4 w-4 mr-1.5" />
+                Delete
+              </DestructiveButton>
+            </div>
+
+            {/* Mobile: dropdown */}
+            <div className="md:hidden">
+              <BrandDropdownMenu
+                label="Admin"
+                icon={<ShieldAlert className="h-4 w-4 mr-1.5" />}
+                actions={adminActions}
+                variant="admin"
+                data-testid="tournament-admin-actions-mobile"
+              />
+            </div>
+
+            <TournamentSettingsModal
+              tournament={hydratedTournament}
+              open={settingsOpen}
+              onOpenChange={setSettingsOpen}
+            />
+          </div>
+        )}
       </>
     );
   };

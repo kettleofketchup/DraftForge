@@ -97,15 +97,14 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await page.getByTestId('event-tab-discord').click();
 
     // 6. Verify Discord state is shown
-    // Should see status cards
-    await expect(page.getByText('Signup Post')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('heading', { name: 'Announcement' })).toBeVisible();
+    // Status cards are always visible above sub-tabs
+    await expect(page.getByText('Signup Post').first()).toBeVisible({ timeout: 10000 });
 
-    // Should see activity log entries
-    await expect(page.getByText('Activity Log')).toBeVisible();
+    // Switch to Activity Log sub-tab to see log entries
+    await page.getByTestId('discord-subtab-activity').click();
 
-    // At least one log entry should exist (signup_created or similar)
-    await expect(page.locator('[class*="border-l-2"]').first()).toBeVisible({ timeout: 10000 });
+    // At least one log entry should exist
+    await expect(page.locator('[data-testid^="discord-log-entry-"]').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('signup updates Discord post and shows in activity log', async ({ context, page }) => {
@@ -170,13 +169,13 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await visitAndWaitForHydration(page, `/events/${eventId}`);
     await page.getByTestId('event-tab-discord').click();
 
-    // Should see activity log with more than the initial 2 entries
-    await expect(page.getByText('Activity Log')).toBeVisible({ timeout: 5000 });
-    const logEntries = page.locator('[class*="border-l-2"]');
+    // Switch to Activity Log sub-tab
+    await page.getByTestId('discord-subtab-activity').click();
+    const logEntries = page.locator('[data-testid^="discord-log-entry-"]');
     await expect(logEntries.first()).toBeVisible({ timeout: 10000 });
 
-    // Verify signup post shows as posted
-    await expect(page.getByText('Signup Post')).toBeVisible();
+    // Status card shows signup post as posted
+    await expect(page.getByText('Signup Post').first()).toBeVisible();
   });
 
   test('event with screenshot config fields persists settings', async ({ context, page }) => {
@@ -316,8 +315,8 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await expect(page.getByText('approved')).toBeVisible({ timeout: 10000 });
   });
 
-  test('Discord tab shows "not configured" when no Discord config', async ({ context, page }) => {
-    // Create a fresh event WITHOUT Discord config
+  test('Discord tab shows empty state for fresh event', async ({ context, page }) => {
+    // Create a fresh event — DiscordEvent auto-created since org has discord_server_id
     const createResp = await postWithCsrf(context, `${API_URL}/events/?open_signups=true`, {
       organization: eventInfo.orgPk,
       name: 'No Discord Config Event',
@@ -337,6 +336,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
 
     await visitAndWaitForHydration(page, `/events/${event.id}`);
     await page.getByTestId('event-tab-discord').click();
-    await expect(page.getByText('No Discord integration configured')).toBeVisible({ timeout: 5000 });
+    // Discord tab should load with task schedule (DiscordEvent auto-created since org has discord_server_id)
+    await expect(page.getByTestId('discord-subtab-schedule')).toBeVisible({ timeout: 5000 });
   });
 });

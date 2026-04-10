@@ -3,33 +3,22 @@ import logging
 from celery import shared_task
 from django.utils import timezone
 
-from discordbot.models import (
-    DiscordEvent,
-    DiscordEventLog,
-    DiscordEventMsgAnnouncement,
-    DiscordEventMsgSignup,
-    DiscordMessageLog,
-)
-from discordbot.utils import sync_send_embed
-from events.models import Event, EventRepeater, EventState
+from events.constants import EventState, SignupStatus
 from events.services import generate_events_for_repeater
 
 logger = logging.getLogger(__name__)
 
 
-def _get_or_create_discord_event(event):
-    """Get or create a DiscordEvent for the given Event."""
-    guild_id = event.organization.discord_server_id or ""
-    discord_event, _ = DiscordEvent.objects.get_or_create(
-        event=event,
-        defaults={"guild_id": guild_id},
-    )
-    return discord_event
-
-
 @shared_task
 def generate_upcoming_events():
-    """Generate upcoming events for all active repeaters. Runs hourly."""
+    """Generate upcoming events for all active repeaters. Runs hourly.
+
+    TODO: This still uses direct ORM for the repeater query and calls
+    generate_events_for_repeater() which is ORM-heavy. Needs refactoring
+    to use internal API when services.py is migrated.
+    """
+    from events.models import EventRepeater
+
     repeaters = EventRepeater.objects.filter(is_active=True).select_related(
         "organization",
         "tournament_league",
@@ -46,24 +35,86 @@ def generate_upcoming_events():
 
 
 @shared_task
-def open_scheduled_signups():
-    """Open signups for events where signups_open_at has passed. Runs every minute."""
-    now = timezone.now()
-    events = Event.objects.filter(
-        state=EventState.UPCOMING,
-        signups_open_at__isnull=False,
-        signups_open_at__lte=now,
+def cleanup_stale_events():
+    """Auto-close events whose scheduled_at + 1 day has passed. Runs hourly.
+
+    - upcoming / signups_open → cancelled (event never started)
+    - roll_call / in_progress → completed (event ran but wasn't formally closed)
+
+    State transitions go through internal HTTP API (no direct DB writes).
+    """
+    from datetime import timedelta
+
+    from app.internal_client import get_events_list, transition_event_state
+
+    cutoff = (timezone.now() - timedelta(days=1)).isoformat()
+
+    # Never-started events → cancelled
+    never_started = get_events_list(
+        states="upcoming,signups_open", scheduled_before=cutoff
     )
+    cancelled_count = 0
+    for event in never_started:
+        try:
+            resp = transition_event_state(event["id"], "cancelled")
+            if resp and resp.ok:
+                cancelled_count += 1
+                logger.info(
+                    "Auto-cancelled stale event %s (pk=%s)", event["name"], event["id"]
+                )
+            else:
+                logger.warning("Failed to auto-cancel event %s: %s", event["id"], resp)
+        except Exception:
+            logger.exception("Failed to auto-cancel event %s", event["id"])
+
+    # Started but not closed → completed
+    started = get_events_list(states="roll_call,in_progress", scheduled_before=cutoff)
+    completed_count = 0
+    for event in started:
+        try:
+            resp = transition_event_state(event["id"], "completed")
+            if resp and resp.ok:
+                completed_count += 1
+                logger.info(
+                    "Auto-completed stale event %s (pk=%s)", event["name"], event["id"]
+                )
+            else:
+                logger.warning(
+                    "Failed to auto-complete event %s: %s", event["id"], resp
+                )
+        except Exception:
+            logger.exception("Failed to auto-complete event %s", event["id"])
+
+    return f"Cleaned up {cancelled_count} cancelled, {completed_count} completed"
+
+
+@shared_task
+def open_scheduled_signups():
+    """Open signups for events where signups_open_at has passed. Runs every minute.
+
+    State transition via internal HTTP API (no direct DB writes).
+    """
+    from app.internal_client import get_events_list, transition_event_state
+
+    now = timezone.now().isoformat()
+    events = get_events_list(states="upcoming", signups_due_before=now)
     opened = 0
     for event in events:
         try:
-            event.transition_state(EventState.SIGNUPS_OPEN)
-            opened += 1
-            logger.info(
-                "Auto-opened signups for event %s (pk=%s)", event.name, event.pk
-            )
+            resp = transition_event_state(event["id"], "signups_open")
+            if resp and resp.ok:
+                opened += 1
+                logger.info(
+                    "Auto-opened signups for event %s (pk=%s)",
+                    event["name"],
+                    event["id"],
+                )
+            else:
+                logger.warning(
+                    "Failed to auto-open signups for event %s: %s", event["id"], resp
+                )
         except Exception:
-            logger.exception("Failed to auto-open signups for event %s", event.pk)
+            logger.exception("Failed to auto-open signups for event %s", event["id"])
     return f"Opened signups for {opened} events"
 
 
@@ -71,102 +122,62 @@ def open_scheduled_signups():
 def sync_discord_events():
     """Reconciliation task: ensure Discord matches the DB for all active events.
 
-    Runs every 5 minutes via celery beat. Scans all active events and ensures:
-    1. Signup posts exist (forum thread or regular message)
-    2. Announcement notices exist (if announcement channel configured)
-    3. Discord scheduled events exist (if discord_create_event enabled)
-
-    Self-heals: catches failed dispatches, late config changes, events created
-    before the Discord feature, worker downtime, and any other gaps.
-
-    Checks both DiscordEvent (new) and DiscordMessageLog (legacy) models.
+    Runs every 5 minutes via celery beat. All reads via internal HTTP API.
     """
-    from datetime import timedelta
+    from app.internal_client import get_sync_discord_state
 
-    from discordbot.models import DiscordMessageLog
+    state = get_sync_discord_state()
+    if not state:
+        logger.error("Failed to fetch sync Discord state from internal API")
+        return "Failed: could not fetch sync state"
 
-    # Only process active events (not completed/cancelled) scheduled within 30 days
-    active_events = Event.objects.filter(
-        state__in=[EventState.UPCOMING, EventState.SIGNUPS_OPEN, EventState.ROLL_CALL],
-        scheduled_at__gte=timezone.now() - timedelta(days=1),
-        scheduled_at__lte=timezone.now() + timedelta(days=30),
-    ).select_related("organization", "event_repeater")
-
-    # Get all existing successful log entries in one query (legacy)
-    existing_logs = set(
-        DiscordMessageLog.objects.filter(
-            success=True,
-            source__in=["event_announcement", "event_notice", "create_discord_event"],
-        ).values_list("source", "source_id")
-    )
-
-    # New model: event IDs that already have posted signup messages
-    events_with_signup_post = set(
-        DiscordEventMsgSignup.objects.filter(has_posted=True).values_list(
-            "event_id", flat=True
-        )
-    )
-
-    # New model: event IDs that already have scheduled Discord events
-    events_with_scheduled = set(
-        DiscordEvent.objects.filter(
-            scheduled_event_id__isnull=False,
-        )
-        .exclude(scheduled_event_id="")
-        .values_list("event_id", flat=True)
-    )
-
-    # Avoid retrying create_scheduled_event that was attempted recently (5 min backoff)
-    events_with_recent_scheduled_attempt = set(
-        DiscordEventLog.objects.filter(
-            action="create_scheduled_event",
-            created_at__gte=timezone.now() - timedelta(minutes=5),
-        ).values_list("discord_event__event_id", flat=True)
-    )
+    existing_logs = {tuple(x) for x in state.existing_logs}
+    events_with_signup_post = set(state.events_with_signup)
+    events_with_scheduled = set(state.events_with_scheduled)
+    events_with_recent_attempt = set(state.events_with_recent_attempt)
 
     signup_posts_created = 0
     notices_created = 0
     discord_events_created = 0
 
-    for event in active_events:
+    for event in state.active_events:
+        pk = event["pk"]
+
         # 1. Signup post — only when signups are actually open
         has_signup = (
-            event.pk in events_with_signup_post
-            or ("event_announcement", event.pk) in existing_logs
+            pk in events_with_signup_post or ("event_announcement", pk) in existing_logs
         )
         if (
-            event.state == EventState.SIGNUPS_OPEN
-            and event.discord_announcement
-            and event.discord_announcement_channel_id
+            event["state"] == "signups_open"
+            and event["discord_announcement"]
+            and event["discord_announcement_channel_id"]
             and not has_signup
         ):
             try:
-                send_event_announcement(event.pk)
+                send_event_announcement(pk)
                 signup_posts_created += 1
-                logger.info("Sync: created signup post for event %s", event.pk)
+                logger.info("Sync: created signup post for event %s", pk)
             except Exception:
-                logger.exception("Sync: failed signup post for event %s", event.pk)
+                logger.exception("Sync: failed signup post for event %s", pk)
 
         # 2. Discord scheduled event
         has_scheduled = (
-            event.pk in events_with_scheduled
-            or ("create_discord_event", event.pk) in existing_logs
-            or event.pk in events_with_recent_scheduled_attempt
+            pk in events_with_scheduled
+            or ("create_discord_event", pk) in existing_logs
+            or pk in events_with_recent_attempt
         )
         if (
-            event.discord_create_event
-            and event.organization.discord_server_id
+            event["discord_create_event"]
+            and event["organization__discord_server_id"]
             and not has_scheduled
         ):
             try:
-                create_discord_scheduled_event(event.pk)
+                create_discord_scheduled_event(pk)
                 discord_events_created += 1
-                logger.info(
-                    "Sync: created Discord scheduled event for event %s", event.pk
-                )
+                logger.info("Sync: created Discord scheduled event for event %s", pk)
             except Exception:
                 logger.exception(
-                    "Sync: failed Discord scheduled event for event %s", event.pk
+                    "Sync: failed Discord scheduled event for event %s", pk
                 )
 
     total = signup_posts_created + notices_created + discord_events_created
@@ -178,7 +189,7 @@ def sync_discord_events():
             discord_events_created,
         )
     return (
-        f"Scanned {active_events.count()} events: "
+        f"Scanned {len(state.active_events)} events: "
         f"{signup_posts_created} signup posts, "
         f"{discord_events_created} scheduled events created"
     )
@@ -196,19 +207,23 @@ def send_event_announcement(event_id):
     If no signups channel is configured, the signup post goes to the
     announcement channel instead (no separate announcement needed).
 
-    Also creates DiscordEvent/DiscordEventMsg* records alongside the existing
-    DiscordMessageLog entries (coexistence during migration).
+    All DB writes go through the internal HTTP API — no direct ORM access.
     """
-    from cacheops import invalidate_obj
-
-    from discordbot.models import ChannelType
-    from discordbot.utils import sync_send_embed, sync_send_embed_with_components
+    from app.internal_client import (
+        create_event_log,
+        create_or_update_announcement,
+        create_or_update_signup_message,
+        get_event_for_task,
+        get_or_create_discord_event,
+        update_discord_event,
+    )
+    from discordbot.utils import sync_send_embed_with_components
     from events.discord.embeds import build_announcement_v2
 
-    event = Event.objects.select_related("organization", "event_repeater").get(
-        pk=event_id
-    )
-    if event.state != EventState.SIGNUPS_OPEN:
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Failed: event {event_id} not found"
+    if event.state != "signups_open":
         return f"Skipped: event state is {event.state}, not signups_open"
     if not event.discord_announcement or not event.discord_announcement_channel_id:
         return "Skipped: announcement disabled"
@@ -221,22 +236,49 @@ def send_event_announcement(event_id):
     thread_name = event.discord_event_title or event.name
     guild_id = event.organization.discord_server_id
 
-    # Get or create DiscordEvent for this event
-    discord_event = _get_or_create_discord_event(event)
+    # Get or create DiscordEvent via internal API
+    de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id or "")
+    if not de_resp or not de_resp.ok:
+        logger.error("Failed to get/create DiscordEvent for event %s", event.pk)
+        return "Failed: could not get/create DiscordEvent"
+    discord_event_pk = de_resp.json().get("id")
 
     # Step 1: Create the signup post
     signup_post_result = None
     signup_message_link = None
 
-    if event.discord_post_signups and event.discord_post_signups_channel_id:
-        # Create DiscordEventMsgSignup record before sending
-        signup_msg, _ = DiscordEventMsgSignup.objects.get_or_create(
-            event=event,
-            channel_id=event.discord_post_signups_channel_id,
-            defaults={"channel_type": ChannelType.TEXT},
-        )
+    def _update_signup_msg(channel_id, post_result):
+        """Update signup message record via internal API after Discord post."""
+        update_data = {
+            "event_id": event.pk,
+            "channel_id": channel_id,
+            "has_posted": True,
+            "message_last_updated": timezone.now().isoformat(),
+        }
+        if post_result.get("message"):
+            update_data["thread_id"] = post_result["id"]
+            update_data["message_id"] = post_result["message"]["id"]
+            update_data["channel_type"] = "forum"
+        else:
+            update_data["message_id"] = post_result.get("id")
 
+        msg_resp = create_or_update_signup_message(**update_data)
+        signup_msg_pk = msg_resp.json().get("id") if msg_resp and msg_resp.ok else None
+
+        if signup_msg_pk:
+            update_discord_event(discord_event_pk, signup_message_id=signup_msg_pk)
+            create_event_log(
+                discord_event_id=discord_event_pk,
+                action="send_signup_post",
+                target_type="DiscordEventMsgSignup",
+                message_id=update_data.get("message_id"),
+                success=True,
+            )
+        return update_data.get("message_id")
+
+    if event.discord_post_signups and event.discord_post_signups_channel_id:
         # Signups channel configured — post there (forum thread or regular)
+        # DiscordMessageLog is written by sync_send_embed_with_components via HTTP
         signup_post_result = sync_send_embed_with_components(
             channel_id=event.discord_post_signups_channel_id,
             embed=embeds,
@@ -249,35 +291,11 @@ def send_event_announcement(event_id):
         )
 
         if signup_post_result:
-            # Update the signup message record with Discord IDs
-            if signup_post_result.get("message"):
-                # Forum thread
-                signup_msg.thread_id = signup_post_result["id"]
-                signup_msg.message_id = signup_post_result["message"]["id"]
-                signup_msg.channel_type = ChannelType.FORUM
-            else:
-                # Regular message
-                signup_msg.message_id = signup_post_result["id"]
-            signup_msg.has_posted = True
-            signup_msg.message_last_updated = timezone.now()
-            signup_msg.save()
-
-            # Link signup_message to discord_event
-            discord_event.signup_message = signup_msg
-            discord_event.save(update_fields=["signup_message", "updated_at"])
-            invalidate_obj(discord_event)
-
-            # Create audit log entry
-            DiscordEventLog.objects.create(
-                discord_event=discord_event,
-                action="send_signup_post",
-                target_type="DiscordEventMsgSignup",
-                message_id=signup_msg.message_id,
-                success=True,
+            _update_signup_msg(
+                event.discord_post_signups_channel_id, signup_post_result
             )
 
             if guild_id:
-                # Build Discord message link
                 if signup_post_result.get("message"):
                     thread_id = signup_post_result["id"]
                     msg_id = signup_post_result["message"]["id"]
@@ -285,21 +303,11 @@ def send_event_announcement(event_id):
                         f"https://discord.com/channels/{guild_id}/{thread_id}/{msg_id}"
                     )
                 else:
-                    channel_id = event.discord_post_signups_channel_id
                     msg_id = signup_post_result["id"]
-                    signup_message_link = (
-                        f"https://discord.com/channels/{guild_id}/{channel_id}/{msg_id}"
-                    )
+                    signup_message_link = f"https://discord.com/channels/{guild_id}/{event.discord_post_signups_channel_id}/{msg_id}"
 
     if not signup_post_result:
-        # No signups channel or it failed — post to announcement channel directly
-        # Create signup msg record for the announcement channel fallback
-        signup_msg, _ = DiscordEventMsgSignup.objects.get_or_create(
-            event=event,
-            channel_id=event.discord_announcement_channel_id,
-            defaults={"channel_type": ChannelType.TEXT},
-        )
-
+        # No signups channel or it failed — post to announcement channel
         fallback_result = sync_send_embed_with_components(
             channel_id=event.discord_announcement_channel_id,
             embed=embeds,
@@ -309,34 +317,12 @@ def send_event_announcement(event_id):
         )
 
         if fallback_result:
-            signup_msg.message_id = fallback_result.get("id")
-            signup_msg.has_posted = True
-            signup_msg.message_last_updated = timezone.now()
-            signup_msg.save()
-
-            discord_event.signup_message = signup_msg
-            discord_event.save(update_fields=["signup_message", "updated_at"])
-            invalidate_obj(discord_event)
-
-            DiscordEventLog.objects.create(
-                discord_event=discord_event,
-                action="send_signup_post",
-                target_type="DiscordEventMsgSignup",
-                message_id=signup_msg.message_id,
-                success=True,
-            )
+            _update_signup_msg(event.discord_announcement_channel_id, fallback_result)
 
         return f"Announced event {event.pk}"
 
     # Step 2: Post lightweight announcement linking to the signup post
     from events.discord.embeds import build_announcement_notice
-
-    # Create DiscordEventMsgAnnouncement record
-    announcement_msg, _ = DiscordEventMsgAnnouncement.objects.get_or_create(
-        event=event,
-        channel_id=event.discord_announcement_channel_id,
-        defaults={"channel_type": ChannelType.TEXT},
-    )
 
     notice_result = build_announcement_notice(event, signup_message_link)
     notice_api_result = sync_send_embed_with_components(
@@ -349,22 +335,23 @@ def send_event_announcement(event_id):
     )
 
     if notice_api_result:
-        announcement_msg.message_id = notice_api_result.get("id")
-        announcement_msg.has_posted = True
-        announcement_msg.message_last_updated = timezone.now()
-        announcement_msg.save()
-
-        discord_event.announcement = announcement_msg
-        discord_event.save(update_fields=["announcement", "updated_at"])
-        invalidate_obj(discord_event)
-
-        DiscordEventLog.objects.create(
-            discord_event=discord_event,
-            action="send_announcement_notice",
-            target_type="DiscordEventMsgAnnouncement",
-            message_id=announcement_msg.message_id,
-            success=True,
+        ann_resp = create_or_update_announcement(
+            event_id=event.pk,
+            channel_id=event.discord_announcement_channel_id,
+            has_posted=True,
+            message_id=notice_api_result.get("id"),
+            message_last_updated=timezone.now().isoformat(),
         )
+        ann_pk = ann_resp.json().get("id") if ann_resp and ann_resp.ok else None
+        if ann_pk:
+            update_discord_event(discord_event_pk, announcement_id=ann_pk)
+            create_event_log(
+                discord_event_id=discord_event_pk,
+                action="send_announcement_notice",
+                target_type="DiscordEventMsgAnnouncement",
+                message_id=notice_api_result.get("id"),
+                success=True,
+            )
 
     return f"Announced event {event.pk} (signup: {signup_message_link})"
 
@@ -376,14 +363,17 @@ def send_signup_update(event_id):
     Tries the new DiscordEvent.signup_message first, falls back to
     DiscordMessageLog for pre-migration events.
     """
-    from cacheops import invalidate_obj
-
+    from app.internal_client import (
+        create_event_log,
+        create_or_update_signup_message,
+        get_event_for_task,
+    )
     from discordbot.utils import sync_edit_message
     from events.discord.embeds import build_announcement_v2
 
-    event = Event.objects.select_related("organization", "event_repeater").get(
-        pk=event_id
-    )
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Failed: event {event_id} not found"
 
     # Try new model first
     edit_channel_id = None
@@ -391,43 +381,42 @@ def send_signup_update(event_id):
     signup_msg = None
     discord_event = None
 
-    try:
-        discord_event = event.discord_event
-        signup_msg = discord_event.signup_message
-        if signup_msg and signup_msg.has_posted and signup_msg.message_id:
-            message_id = signup_msg.message_id
-            # For forum threads, edit within the thread channel
-            if signup_msg.thread_id:
-                edit_channel_id = signup_msg.thread_id
-            else:
-                edit_channel_id = signup_msg.channel_id
-    except DiscordEvent.DoesNotExist:
-        pass
+    from app.internal_client import get_discord_event_state
+
+    discord_state = get_discord_event_state(event_id)
+    if (
+        discord_state
+        and discord_state.signup_posted
+        and discord_state.signup_message_id
+    ):
+        message_id = discord_state.signup_message_id
+        if discord_state.signup_thread_id:
+            edit_channel_id = discord_state.signup_thread_id
+        else:
+            edit_channel_id = discord_state.signup_channel_id
 
     # Fall back to DiscordMessageLog for pre-migration events
     if not message_id:
-        log_entry = (
-            DiscordMessageLog.objects.filter(
-                source="event_announcement",
-                source_id=event.pk,
-                success=True,
-            )
-            .order_by("-created_at")
-            .first()
-        )
+        from app.internal_client import search_message_logs
 
-        if not log_entry or not log_entry.discord_message_id:
+        logs = search_message_logs(
+            "event_announcement", event.pk, success=True, limit=1
+        )
+        log_entry = logs[0] if logs else None
+
+        if not log_entry or not log_entry.get("discord_message_id"):
             logger.info(
                 "No announcement message found for event %s, skipping update",
                 event.pk,
             )
             return "Skipped: no announcement message"
 
-        message_id = log_entry.discord_message_id
-        edit_channel_id = log_entry.channel_id
-        if log_entry.response_data and log_entry.response_data.get("id"):
-            thread_id = log_entry.response_data.get("id")
-            if log_entry.response_data.get("message"):
+        message_id = log_entry.get("discord_message_id")
+        edit_channel_id = log_entry.get("channel_id")
+        response_data = log_entry.get("response_data") or {}
+        if response_data.get("id"):
+            thread_id = response_data.get("id")
+            if response_data.get("message"):
                 edit_channel_id = thread_id
 
     result = build_announcement_v2(event)
@@ -439,15 +428,17 @@ def send_signup_update(event_id):
         components=result["components"],
     )
 
-    # Update tracking on the new model if available
+    # Update tracking via internal API
     if signup_msg:
-        signup_msg.message_last_updated = timezone.now()
-        signup_msg.save(update_fields=["message_last_updated", "updated_at"])
-        invalidate_obj(signup_msg)
+        create_or_update_signup_message(
+            event_id=event.pk,
+            channel_id=signup_msg.channel_id,
+            message_last_updated=timezone.now().isoformat(),
+        )
 
         if discord_event:
-            DiscordEventLog.objects.create(
-                discord_event=discord_event,
+            create_event_log(
+                discord_event_id=discord_event.pk,
                 action="edit_signup_post",
                 target_type="DiscordEventMsgSignup",
                 message_id=message_id,
@@ -460,11 +451,16 @@ def send_signup_update(event_id):
 @shared_task
 def send_new_event_notification(event_id):
     """Notify Discord channel about a new event from a repeater."""
+    from app.internal_client import get_event_for_task
     from events.discord import build_new_event_embed
 
-    event = Event.objects.select_related("organization").get(pk=event_id)
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Failed: event {event_id} not found"
     if not event.discord_announcement or not event.discord_announcement_channel_id:
         return "Skipped: announcements disabled"
+    from discordbot.utils import sync_send_embed
+
     embed = build_new_event_embed(event)
     sync_send_embed(
         channel_id=event.discord_announcement_channel_id,
@@ -482,22 +478,30 @@ def send_new_event_notification(event_id):
 def create_discord_scheduled_event(event_id):
     """Create a Discord scheduled event via the API.
 
-    Also stores the scheduled_event_id on the DiscordEvent model and creates
-    a DiscordEventLog entry.
+    Stores the scheduled_event_id on the DiscordEvent model and creates
+    audit log entries — all via internal HTTP API (no direct DB writes).
     """
-    from cacheops import invalidate_obj
+    from datetime import timedelta
 
-    event = Event.objects.select_related("organization").get(pk=event_id)
+    import requests as req
+
+    from app.internal_client import (
+        create_event_log,
+        create_message_log,
+        get_event_for_task,
+        get_or_create_discord_event,
+        update_discord_event,
+    )
+    from discordbot.utils import DISCORD_API_BASE, _get_headers
+
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Failed: event {event_id} not found"
     if not event.discord_create_event:
         return "Skipped: discord_create_event disabled"
     guild_id = event.organization.discord_server_id
     if not guild_id:
         return "Skipped: no discord_server_id on organization"
-    from datetime import timedelta
-
-    import requests as req
-
-    from discordbot.utils import DISCORD_API_BASE, _get_headers
 
     title = event.discord_event_title or event.name
     description = event.discord_event_description or event.description or ""
@@ -511,15 +515,21 @@ def create_discord_scheduled_event(event_id):
         "entity_metadata": {"location": "DraftForge"},
     }
     url = f"{DISCORD_API_BASE}/guilds/{guild_id}/scheduled-events"
-    discord_event = _get_or_create_discord_event(event)
+
+    # Get or create DiscordEvent via internal API
+    de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
+    if not de_resp or not de_resp.ok:
+        logger.error("Failed to get/create DiscordEvent for event %s", event.pk)
+        return "Failed: could not get/create DiscordEvent"
+    discord_event_pk = de_resp.json().get("id")
 
     try:
         response = req.post(url, json=payload, headers=_get_headers())
         data = response.json()
         success = response.status_code in (200, 201)
 
-        # Legacy log
-        DiscordMessageLog.objects.create(
+        # Legacy log via internal API
+        create_message_log(
             channel_id=guild_id,
             embed_data=payload,
             source="create_discord_event",
@@ -530,15 +540,13 @@ def create_discord_scheduled_event(event_id):
             success=success,
         )
 
-        # New model: store scheduled event ID
+        # Store scheduled event ID via internal API
         if success and data.get("id"):
-            discord_event.scheduled_event_id = data["id"]
-            discord_event.save(update_fields=["scheduled_event_id", "updated_at"])
-            invalidate_obj(discord_event)
+            update_discord_event(discord_event_pk, scheduled_event_id=data["id"])
 
-        # Audit log
-        DiscordEventLog.objects.create(
-            discord_event=discord_event,
+        # Audit log via internal API
+        create_event_log(
+            discord_event_id=discord_event_pk,
             action="create_scheduled_event",
             target_type="DiscordEvent",
             status_code=response.status_code,
@@ -548,15 +556,15 @@ def create_discord_scheduled_event(event_id):
 
         return f"Created Discord event for event {event.pk}"
     except Exception as e:
-        DiscordMessageLog.objects.create(
+        create_message_log(
             channel_id=guild_id,
             embed_data=payload,
             source="create_discord_event",
             source_id=event.pk,
             success=False,
         )
-        DiscordEventLog.objects.create(
-            discord_event=discord_event,
+        create_event_log(
+            discord_event_id=discord_event_pk,
             action="create_scheduled_event",
             target_type="DiscordEvent",
             success=False,
@@ -571,18 +579,14 @@ def create_discord_scheduled_event(event_id):
 @shared_task
 def sync_discord_event_signups(event_id):
     """Sync signup count to Discord scheduled event description."""
-    event = Event.objects.select_related("organization").get(pk=event_id)
+    from app.internal_client import get_event_for_task, get_first_message_log
+
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Failed: event {event_id} not found"
     if not event.discord_sync_signups:
         return "Skipped: sync disabled"
-    creation_log = (
-        DiscordMessageLog.objects.filter(
-            source="create_discord_event",
-            source_id=event.pk,
-            success=True,
-        )
-        .order_by("-created_at")
-        .first()
-    )
+    creation_log = get_first_message_log("create_discord_event", event.pk)
     if not creation_log or not creation_log.discord_message_id:
         return "Skipped: no Discord event found"
     import requests as req
@@ -592,7 +596,7 @@ def sync_discord_event_signups(event_id):
 
     guild_id = event.organization.discord_server_id
     discord_event_id = creation_log.discord_message_id
-    active, confirmed = _signup_counts(event)
+    active, confirmed = event.signup_count, event.confirmed_count
     payload = {
         "description": (
             f"{event.description or ''}\n\n"
@@ -602,7 +606,9 @@ def sync_discord_event_signups(event_id):
     url = f"{DISCORD_API_BASE}/guilds/{guild_id}/scheduled-events/{discord_event_id}"
     try:
         response = req.patch(url, json=payload, headers=_get_headers())
-        DiscordMessageLog.objects.create(
+        from app.internal_client import create_message_log
+
+        create_message_log(
             channel_id=guild_id,
             embed_data=payload,
             source="sync_discord_signups",
@@ -620,23 +626,26 @@ def sync_discord_event_signups(event_id):
 @shared_task
 def mark_interested_discord_event(event_id, user_id):
     """Mark a user as 'interested' on the Discord scheduled event."""
-    event = Event.objects.select_related("organization").get(pk=event_id)
+    from app.internal_client import get_event_for_task, get_first_message_log
+
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Failed: event {event_id} not found"
     if not event.discord_mark_interested:
         return "Skipped: mark_interested disabled"
-    from app.models import CustomUser
 
-    user = CustomUser.objects.get(pk=user_id)
-    if not user.discordId:
+    # Get user's Discord ID via public API
+    from app.internal_client import _api_get
+
+    user_resp = _api_get(f"/users/{user_id}/")
+    if not user_resp or not user_resp.ok:
+        return f"Skipped: user {user_id} not found"
+    user_data = user_resp.json()
+    discord_id = user_data.get("discordId")
+    if not discord_id:
         return "Skipped: user has no discordId"
-    creation_log = (
-        DiscordMessageLog.objects.filter(
-            source="create_discord_event",
-            source_id=event.pk,
-            success=True,
-        )
-        .order_by("-created_at")
-        .first()
-    )
+
+    creation_log = get_first_message_log("create_discord_event", event.pk)
     if not creation_log or not creation_log.discord_message_id:
         return "Skipped: no Discord event found"
     import requests as req
@@ -647,16 +656,87 @@ def mark_interested_discord_event(event_id, user_id):
     discord_event_id = creation_log.discord_message_id
     url = (
         f"{DISCORD_API_BASE}/guilds/{guild_id}/scheduled-events"
-        f"/{discord_event_id}/users/{user.discordId}"
+        f"/{discord_event_id}/users/{discord_id}"
     )
     try:
         response = req.put(url, headers=_get_headers())
-        return f"Marked user {user.pk} interested: {response.status_code}"
+        return f"Marked user {user_id} interested: {response.status_code}"
     except Exception as e:
         logger.exception(
-            "Failed to mark interested for event %s user %s", event.pk, user.pk
+            "Failed to mark interested for event %s user %s", event.pk, user_id
         )
         return f"Failed: {e}"
+
+
+@shared_task
+def fire_event_reminder(event_id, reminder_type, fired_by_user_id=None):
+    """Manually fire a specific reminder for a specific event.
+
+    Bypasses time threshold checks but respects idempotency via message log.
+    Called from the admin "Fire" button, not from celery beat.
+    """
+    from app.internal_client import (
+        check_message_log_exists,
+        create_event_log,
+        get_or_create_discord_event,
+    )
+    from discordbot.utils import sync_send_embed_with_components
+    from events.discord import (
+        build_attendance_reminder_embed,
+        build_profile_reminder_embed,
+        build_signup_reminder_embed,
+    )
+
+    REMINDER_MAP = {
+        "signup_reminder": ("signup_reminder", build_signup_reminder_embed),
+        "confirm_attendance": ("attendance_reminder", build_attendance_reminder_embed),
+        "profile_reminder": ("profile_reminder", build_profile_reminder_embed),
+    }
+
+    if reminder_type not in REMINDER_MAP:
+        return f"Unknown reminder type: {reminder_type}"
+
+    source, builder = REMINDER_MAP[reminder_type]
+
+    # Idempotency check
+    if check_message_log_exists(source, event_id):
+        return f"Already fired: {reminder_type} for event {event_id}"
+
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Event {event_id} not found"
+
+    if not event.discord_announcement_channel_id:
+        return f"No announcement channel configured for event {event_id}"
+
+    result = builder(event)
+    response = sync_send_embed_with_components(
+        channel_id=event.discord_announcement_channel_id,
+        embed=result["embed"],
+        components=result.get("components"),
+        source=source,
+        source_id=event.pk,
+        fired_by_user_id=fired_by_user_id,
+    )
+
+    # Log to DiscordEventLog so it shows in the Activity Log tab
+    guild_id = event.organization.discord_server_id
+    if guild_id:
+        de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
+        if de_resp and de_resp.ok:
+            discord_event_pk = de_resp.json().get("id")
+            msg_id = response.get("id") if response else None
+            msg_log_id = response.get("_message_log_id") if response else None
+            create_event_log(
+                discord_event_id=discord_event_pk,
+                action=source,
+                target_type="DiscordMessageLog",
+                message_id=msg_id,
+                message_log_id=msg_log_id,
+                success=bool(response),
+            )
+
+    return f"Fired {reminder_type} for event {event_id}"
 
 
 @shared_task
@@ -669,6 +749,11 @@ def check_event_reminders():
     """
     from datetime import timedelta
 
+    from app.internal_client import (
+        check_message_log_exists,
+        create_event_log,
+        get_or_create_discord_event,
+    )
     from events.discord import (
         build_attendance_reminder_embed,
         build_profile_reminder_embed,
@@ -677,113 +762,108 @@ def check_event_reminders():
 
     now = timezone.now()
 
-    # 1. Signup reminders
-    signup_reminder_events = Event.objects.filter(
-        state__in=[EventState.SIGNUPS_OPEN],
-        discord_signup_reminder=True,
-        discord_announcement_channel_id__gt="",
-    ).exclude(
-        pk__in=DiscordMessageLog.objects.filter(source="signup_reminder").values_list(
-            "source_id", flat=True
-        )
-    )
-    for event in signup_reminder_events:
-        threshold = event.scheduled_at - timedelta(
-            hours=event.discord_signup_reminder_hours
-        )
-        if now >= threshold:
-            embed = build_signup_reminder_embed(event)
-            sync_send_embed(
-                channel_id=event.discord_announcement_channel_id,
-                title=embed["title"],
-                description=embed["description"],
-                color=embed["color"],
-                fields=embed.get("fields"),
-                source="signup_reminder",
-                source_id=event.pk,
+    def _log_reminder(event, source, response):
+        """Log reminder to DiscordEventLog for the Activity Log tab."""
+        guild_id = getattr(event.organization, "discord_server_id", None)
+        if not guild_id:
+            return
+        de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
+        if de_resp and de_resp.ok:
+            msg_log_id = response.get("_message_log_id") if response else None
+            create_event_log(
+                discord_event_id=de_resp.json().get("id"),
+                action=source,
+                target_type="DiscordMessageLog",
+                message_id=response.get("id") if response else None,
+                message_log_id=msg_log_id,
+                success=bool(response),
             )
 
-    # 2. Attendance confirmation reminders
-    attendance_events = Event.objects.filter(
-        state__in=[EventState.SIGNUPS_OPEN, EventState.ROLL_CALL],
-        discord_confirm_attendance=True,
-        discord_announcement_channel_id__gt="",
-    ).exclude(
-        pk__in=DiscordMessageLog.objects.filter(
-            source="attendance_reminder"
-        ).values_list("source_id", flat=True)
-    )
-    for event in attendance_events:
-        threshold = event.scheduled_at - timedelta(
-            hours=event.discord_confirm_attendance_hours
+    from app.internal_client import get_event_for_task, get_events_list
+
+    # 1. Signup reminders — DM subscribers who haven't signed up yet
+    signup_candidates = get_events_list(states="signups_open", has_repeater="true")
+    for ev in signup_candidates:
+        if not ev.get("discord_signup_reminder"):
+            continue
+        if check_message_log_exists("signup_reminder", ev["id"]):
+            continue
+        from dateutil.parser import isoparse
+
+        threshold = isoparse(ev["scheduled_at"]) - timedelta(
+            hours=ev.get("discord_signup_reminder_hours", 24)
         )
         if now >= threshold:
-            embed = build_attendance_reminder_embed(event)
-            sync_send_embed(
+            send_subscriber_notifications.delay(ev["id"])
+
+    # 2. Attendance confirmation reminders
+    attendance_candidates = get_events_list(
+        states="signups_open,roll_call", has_announcement_channel="true"
+    )
+    for ev in attendance_candidates:
+        if not ev.get("discord_confirm_attendance"):
+            continue
+        if check_message_log_exists("attendance_reminder", ev["id"]):
+            continue
+        from dateutil.parser import isoparse
+
+        threshold = isoparse(ev["scheduled_at"]) - timedelta(
+            hours=ev.get("discord_confirm_attendance_hours", 2)
+        )
+        if now >= threshold:
+            from discordbot.utils import sync_send_embed_with_components
+
+            event = get_event_for_task(ev["id"])
+            if not event:
+                continue
+            result = build_attendance_reminder_embed(event)
+            response = sync_send_embed_with_components(
                 channel_id=event.discord_announcement_channel_id,
-                title=embed["title"],
-                description=embed["description"],
-                color=embed["color"],
+                embed=result["embed"],
+                components=result.get("components"),
                 source="attendance_reminder",
                 source_id=event.pk,
             )
+            _log_reminder(event, "attendance_reminder", response)
 
     # 3. Profile completion reminders
-    profile_events = Event.objects.filter(
-        state__in=[EventState.SIGNUPS_OPEN],
-        discord_profile_reminder=True,
-        discord_announcement_channel_id__gt="",
-    ).exclude(
-        pk__in=DiscordMessageLog.objects.filter(source="profile_reminder").values_list(
-            "source_id", flat=True
-        )
+    profile_candidates = get_events_list(
+        states="signups_open", has_announcement_channel="true"
     )
-    for event in profile_events:
-        threshold = event.scheduled_at - timedelta(
-            hours=event.discord_profile_reminder_hours
+    for ev in profile_candidates:
+        if not ev.get("discord_profile_reminder"):
+            continue
+        if check_message_log_exists("profile_reminder", ev["id"]):
+            continue
+        from dateutil.parser import isoparse
+
+        threshold = isoparse(ev["scheduled_at"]) - timedelta(
+            hours=ev.get("discord_profile_reminder_hours", 24)
         )
         if now >= threshold:
-            embed = build_profile_reminder_embed(event)
-            sync_send_embed(
+            from discordbot.utils import sync_send_embed_with_components
+
+            event = get_event_for_task(ev["id"])
+            if not event:
+                continue
+            result = build_profile_reminder_embed(event)
+            response = sync_send_embed_with_components(
                 channel_id=event.discord_announcement_channel_id,
-                title=embed["title"],
-                description=embed["description"],
-                color=embed["color"],
+                embed=result["embed"],
+                components=result.get("components"),
                 source="profile_reminder",
                 source_id=event.pk,
             )
-
-    # 4. Subscriber DM notifications
-    from discordbot.models import DMType as DMTypeChoices
-
-    dm_events = Event.objects.filter(
-        state__in=[EventState.SIGNUPS_OPEN, EventState.ROLL_CALL],
-        discord_subscriber_dm=True,
-        event_repeater__isnull=False,
-    )
-    for event in dm_events:
-        # Skip if any DMs already sent for this event
-        from discordbot.models import DiscordEventDM
-
-        has_dms = DiscordEventDM.objects.filter(
-            discord_event__event=event,
-            dm_type=DMTypeChoices.SIGNUP_REMINDER,
-        ).exists()
-        if has_dms:
-            continue
-        threshold = event.scheduled_at - timedelta(
-            hours=event.discord_subscriber_dm_hours
-        )
-        if now >= threshold:
-            send_subscriber_notifications(event.pk)
+            _log_reminder(event, "profile_reminder", response)
 
     return "Checked reminders"
 
 
 @shared_task
 def send_subscriber_notifications(event_id):
-    """Send DM to all repeater subscribers for an upcoming event.
+    """Send signup reminder DMs to repeater subscribers who haven't signed up.
 
+    Filters out subscribers who already have an EventSignup for this event.
     Uses create-first pattern for crash safety:
     1. Create DiscordEventDM record (delivered=False)
     2. Send DM
@@ -793,81 +873,103 @@ def send_subscriber_notifications(event_id):
     """
     import time
 
-    from discordbot.models import DiscordEventDM, DMType
+    from app.internal_client import (
+        create_event_dm,
+        get_discord_event_state,
+        get_event_for_task,
+        get_repeater_subscribers,
+        update_event_dm,
+    )
     from discordbot.utils import sync_send_dm
     from events.discord.embeds import build_subscriber_dm_embed
-    from events.models import RepeaterSubscription
-    from org.models import OrgUser
 
-    try:
-        event = Event.objects.select_related("event_repeater", "organization").get(
-            pk=event_id
-        )
-    except Event.DoesNotExist:
+    event = get_event_for_task(event_id)
+    if not event:
         return f"Event {event_id} not found"
 
-    if not event.event_repeater:
+    if not event.event_repeater_id:
         return "No repeater"
 
-    try:
-        discord_event = event.discord_event
-    except DiscordEvent.DoesNotExist:
+    # Check Discord event exists
+    discord_state = get_discord_event_state(event_id)
+    if not discord_state or not discord_state.has_discord_event:
         return "No Discord event"
+    discord_event_pk = discord_state.discord_event_pk
 
-    embed = build_subscriber_dm_embed(event)
-    subs = RepeaterSubscription.objects.filter(
-        event_repeater=event.event_repeater
-    ).select_related("user")
+    # Get user PKs who already signed up — skip them
+    from app.internal_client import get_event_signups
+
+    all_signups = get_event_signups(event_id)
+    signed_up_user_pks = {s.user for s in all_signups if s.status != "cancelled"}
+
+    dm_data = build_subscriber_dm_embed(event)
+    embed = dm_data["embed"]
+    components = dm_data.get("components")
+    subscribers = get_repeater_subscribers(event.event_repeater_id)
 
     sent = 0
     skipped = 0
     failed = 0
 
-    for sub in subs:
-        if not sub.user.discordId:
-            continue
-
-        # Get OrgUser — skip if not a member
-        org_user = OrgUser.objects.filter(
-            user=sub.user, organization=event.organization
-        ).first()
-        if not org_user:
-            continue
-
-        # Idempotency: skip if already tracked
-        if DiscordEventDM.objects.filter(
-            discord_event=discord_event,
-            org_user=org_user,
-            dm_type=DMType.SIGNUP_REMINDER,
-        ).exists():
+    for sub in subscribers:
+        # Skip subscribers who already signed up
+        if sub.user_pk in signed_up_user_pks:
             skipped += 1
             continue
 
-        # Create record FIRST (crash safety + idempotency)
-        dm_record = DiscordEventDM.objects.create(
-            discord_event=discord_event,
-            org_user=org_user,
-            dm_type=DMType.SIGNUP_REMINDER,
-            delivered=False,
-        )
+        # Create DM record via internal API (crash safety + idempotency)
+        from discordbot.models import DMType
+
+        dm_pk = None
+        if sub.org_user_pk:
+            dm_resp = create_event_dm(
+                discord_event=discord_event_pk,
+                org_user=sub.org_user_pk,
+                dm_type=DMType.SIGNUP_REMINDER,
+                delivered=False,
+            )
+            if not dm_resp or not dm_resp.ok:
+                # Likely already exists (idempotency) or error
+                skipped += 1
+                continue
+            dm_pk = dm_resp.json().get("id")
 
         # Send DM
-        result = sync_send_dm(sub.user.discordId, embed=embed)
+        result = sync_send_dm(sub.discord_id, embed=embed, components=components)
 
-        # Update delivery status
+        # Update delivery status via internal API
         if result:
-            dm_record.message_id = result.get("id", "")
-            dm_record.sent_at = timezone.now()
-            dm_record.delivered = True
-            dm_record.save(update_fields=["message_id", "sent_at", "delivered"])
+            if dm_pk:
+                update_event_dm(
+                    dm_pk,
+                    message_id=result.get("id", ""),
+                    sent_at=timezone.now().isoformat(),
+                    delivered=True,
+                )
             sent += 1
         else:
             failed += 1
 
-        time.sleep(1.0)  # Respect Discord DM rate limits
+    # Log completion so check_event_reminders won't re-dispatch
+    # Only log if we actually sent or attempted DMs (not when all were skipped)
+    if sent > 0 or failed > 0:
+        from app.internal_client import create_message_log
+
+        create_message_log(
+            channel_id="dm",
+            embed_data={
+                "type": "signup_reminder_batch",
+                "sent": sent,
+                "skipped": skipped,
+                "failed": failed,
+            },
+            source="signup_reminder",
+            source_id=event_id,
+            success=sent > 0,
+        )
 
     logger.info(
-        "Subscriber DMs for event %s: sent=%d, skipped=%d, failed=%d",
+        "Signup reminder DMs for event %s: sent=%d, skipped=%d, failed=%d",
         event_id,
         sent,
         skipped,

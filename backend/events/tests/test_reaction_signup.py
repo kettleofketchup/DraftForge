@@ -5,8 +5,9 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from discordbot.models import DiscordMessageLog
+from events.constants import EventState, SignupStatus
 from events.discord import handle_reaction_cancel, handle_reaction_signup
-from events.models import EventSignup, EventState, SignupStatus
+from events.models import EventSignup
 from events.tests.base import EventTestCase
 
 

@@ -2,14 +2,34 @@ import os
 
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_process_init
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 
 app = Celery("dtx")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
+app.autodiscover_tasks(["events"], related_name="tournament_tasks")
 
-IS_TEST = os.environ.get("TEST", "").lower() in ("true", "1", "yes")
+
+@worker_process_init.connect
+def init_worker_telemetry(**kwargs):
+    """Re-initialize telemetry in each forked celery worker process.
+
+    The main celery process loads Django settings (which calls init_telemetry),
+    but forked worker processes don't inherit the OTel providers properly.
+    This signal fires after fork, ensuring each worker has its own exporters.
+    """
+    # Reset guards so init_tracing and init_log_export run again in this process.
+    # Both providers from the parent are stale after fork.
+    import telemetry.tracing
+    from telemetry.config import init_telemetry
+
+    telemetry.tracing._tracing_initialized = False
+    telemetry.tracing._log_export_initialized = False
+
+    init_telemetry()
+
 
 # Beat schedule for periodic tasks
 _beat_schedule = {
@@ -52,14 +72,15 @@ _event_tasks = {
         "task": "events.tasks.sync_discord_events",
         "schedule": 60.0,
     },
+    "cleanup-stale-events-hourly": {
+        "task": "events.tasks.cleanup_stale_events",
+        "schedule": 3600.0,
+    },
 }
 
-if not IS_TEST:
-    _beat_schedule.update(_event_tasks)
-else:
-    # In test, disable all periodic tasks to prevent SQLite lock contention.
-    # Celery worker still runs for on-demand tasks triggered by tests.
-    _beat_schedule = {}
+# Event tasks now write via internal HTTP API (no direct DB access),
+# so they're safe to run alongside tests. Re-enable in all environments.
+_beat_schedule.update(_event_tasks)
 
 app.conf.beat_schedule = _beat_schedule
 

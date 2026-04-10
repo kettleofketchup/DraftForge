@@ -28,7 +28,7 @@ import { useUpdateEventMutation } from '~/hooks/useEvent';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
-import { discordConfigSchema, GameType, GameMode, DISCORD_CONFIG_DEFAULTS } from './schemas';
+import { discordConfigSchema, GameType, GameMode, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC } from './schemas';
 import type { EventType } from './schemas';
 
 const editEventSchema = z.object({
@@ -45,6 +45,7 @@ const editEventSchema = z.object({
   lobby_steam_league_id: z.number().nullable(),
   people_per_team: z.number().int().min(1),
   number_of_teams: z.number().int().min(2).nullable(),
+  timezone: z.string().min(1, 'Timezone is required'),
 }).merge(discordConfigSchema);
 
 type EditEventInput = z.infer<typeof editEventSchema>;
@@ -81,6 +82,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
       lobby_steam_league_id: null,
       people_per_team: 5,
       number_of_teams: null,
+      timezone: '',
       ...DISCORD_CONFIG_DEFAULTS,
     },
   });
@@ -92,6 +94,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
         name: event.name,
         description: event.description,
         scheduled_at: toDatetimeLocal(event.scheduled_at),
+        timezone: event.timezone,
         tournament_name: event.tournament_name,
         tournament_type: event.tournament_type,
         game_type: event.game_type,
@@ -135,7 +138,12 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
     if (isSubmitting || !event) return;
     setIsSubmitting(true);
     try {
-      const result = await mutation.mutateAsync(data);
+      // Convert naive datetime-local to UTC using selected timezone
+      const payload = {
+        ...data,
+        scheduled_at: data.scheduled_at ? localToUTC(data.scheduled_at, data.timezone) : data.scheduled_at,
+      };
+      const result = await mutation.mutateAsync(payload);
       if (result._warning) {
         toast.warning(result._warning);
       } else {
@@ -202,6 +210,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
           )}
         />
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <FormField
           control={form.control}
           name="scheduled_at"
@@ -215,6 +224,30 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
             </FormItem>
           )}
         />
+
+        <FormField
+          control={form.control}
+          name="timezone"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Timezone</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select timezone" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {COMMON_TIMEZONES.map((tz) => (
+                    <SelectItem key={tz} value={tz}>{tz.replace(/_/g, ' ')}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        </div>
 
         <FormField
           control={form.control}

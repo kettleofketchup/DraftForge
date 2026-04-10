@@ -21,14 +21,8 @@ old_config = runner.setup_databases()
 
 from app.models import CustomUser, GameType, Organization, PositionsModel
 from discordbot.models import DiscordMessageLog
-from events.models import (
-    Event,
-    EventRepeater,
-    EventSignup,
-    EventState,
-    RepeatFrequency,
-    SignupStatus,
-)
+from events.constants import EventState, RepeatFrequency, SignupStatus
+from events.models import Event, EventRepeater, EventSignup
 from events.tasks import send_event_announcement
 
 # Create org

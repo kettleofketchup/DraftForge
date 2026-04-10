@@ -38,6 +38,16 @@ DISCORD_BOT_TOKEN = os.environ.get("discord_token")
 DISCORD_GUILD_ID = 734185035623825559
 DISCORD_ADMIN_CHANNEL_ID = os.environ.get("DISCORD_ADMIN_CHANNEL_ID")
 DISCORD_PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY")
+DFLOGO_EMOJI_ID = os.environ.get("DFLOGO_EMOJI_ID")
+SITE_URL = os.environ.get("SITE_URL", "https://localhost")
+
+# Internal service auth — celery workers and Discord bot call Django via HTTP
+INTERNAL_SERVICE_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
+# Comma-separated IP/CIDR allowlist for internal API (empty = use defaults: localhost + Docker networks)
+_raw_ips = os.environ.get("INTERNAL_SERVICE_ALLOWED_IPS", "")
+INTERNAL_SERVICE_ALLOWED_IPS = [
+    ip.strip() for ip in _raw_ips.split(",") if ip.strip()
+] or None
 
 # Test bot tokens for multi-user Discord integration tests.
 # Create additional bot applications at https://discord.com/developers/applications
@@ -82,6 +92,10 @@ TEST = env_bool("TEST")
 RELEASE = env_bool("RELEASE")
 DEBUG = env_bool("DEBUG")
 
+# In test environments, only send Discord DMs to this user ID.
+# All other DMs return a fake success. Prevents spamming real users during testing.
+TEST_DISCORD_USER_ID = os.environ.get("TEST_DISCORD_USER_ID", "243497113906970625")
+
 # Configure logging - default to INFO, allow override via LOG_LEVEL env var
 _log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
@@ -125,6 +139,15 @@ INSTALLED_APPS = [
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Django REST Framework — internal service token accepted globally alongside session auth
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+        "app.auth.InternalServiceAuth",
+    ],
+    "EXCEPTION_HANDLER": "app.exception_handler.exception_handler",
+}
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -248,7 +271,8 @@ DATABASES = {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR_PATH / db_name,
         "OPTIONS": {
-            "timeout": 30,  # seconds
+            "timeout": 30,  # seconds — busy_timeout for lock waiting
+            "transaction_mode": "IMMEDIATE",  # acquire RESERVED lock upfront, prevents deadlocks
         },
     }
 }
@@ -329,7 +353,10 @@ else:
         "discordbot.discordevent": {"ops": "all", "timeout": 60 * 60},
         "discordbot.discordeventmsgsignup": {"ops": "all", "timeout": 60 * 60},
         "discordbot.discordeventmsgannouncement": {"ops": "all", "timeout": 60 * 60},
-        # DO NOT cache DiscordEventLog or DiscordEventDM — write-heavy
+        # Discord audit/log models — few writes per event lifecycle
+        "discordbot.discordeventlog": {"ops": "all", "timeout": 60 * 60},
+        "discordbot.discordeventdm": {"ops": "all", "timeout": 60 * 60},
+        "discordbot.discordmessagelog": {"ops": "all", "timeout": 60 * 60},
     }
 
 CACHEOPS_DEGRADE_ON_FAILURE = True

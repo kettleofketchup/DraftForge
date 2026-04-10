@@ -33,23 +33,30 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
 }) => {
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, DEBOUNCE_MS);
+  const [manualQuery, setManualQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+
+  // Reset manual query when input changes
+  useEffect(() => { setManualQuery(''); }, [query]);
+
+  // Debounced auto-search for 3+ chars, or manual search on Enter for shorter queries
+  const searchTerm = debouncedQuery.length >= MIN_QUERY_LENGTH ? debouncedQuery : manualQuery;
   const [addedUsers, setAddedUsers] = useState<Set<number>>(new Set());
   const [addedDiscordIds, setAddedDiscordIds] = useState<Set<string>>(new Set());
   const queryClient = useQueryClient();
 
   // Site user search via react-query (automatic race condition handling)
   const siteQuery = useQuery({
-    queryKey: ['userSearch', debouncedQuery, entityContext.orgId, entityContext.leagueId],
-    queryFn: () => searchUsers(debouncedQuery, entityContext.orgId, entityContext.leagueId),
-    enabled: open && debouncedQuery.length >= MIN_QUERY_LENGTH,
+    queryKey: ['userSearch', searchTerm, entityContext.orgId, entityContext.leagueId],
+    queryFn: () => searchUsers(searchTerm, entityContext.orgId, entityContext.leagueId),
+    enabled: open && searchTerm.length >= 1,
   });
 
   // Discord member search via react-query
   const discordQuery = useQuery({
-    queryKey: ['discordSearch', debouncedQuery, entityContext.orgId],
-    queryFn: () => searchDiscordMembers(entityContext.orgId!, debouncedQuery),
-    enabled: open && debouncedQuery.length >= MIN_QUERY_LENGTH && hasDiscordServer && !!entityContext.orgId,
+    queryKey: ['discordSearch', searchTerm, entityContext.orgId],
+    queryFn: () => searchDiscordMembers(entityContext.orgId!, searchTerm),
+    enabled: open && searchTerm.length >= 1 && hasDiscordServer && !!entityContext.orgId,
   });
 
   const siteResults = siteQuery.data ?? [];
@@ -188,7 +195,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     highlightedIndex,
     activeColumn,
     setActiveColumn,
-    handleKeyDown,
+    handleKeyDown: navKeyDown,
   } = useListKeyboardNav({
     siteCount: sortedSiteResults.length,
     discordCount: sortedDiscordResults.length,
@@ -196,6 +203,19 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
     onSelect: handleKeySelect,
     isDesktop,
   });
+
+  // Wrap keydown: Enter with short query triggers search, otherwise defer to nav
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter' && query.length >= 1 && query.length < MIN_QUERY_LENGTH && highlightedIndex < 0) {
+        e.preventDefault();
+        setManualQuery(query);
+        return;
+      }
+      navKeyDown(e);
+    },
+    [query, highlightedIndex, navKeyDown],
+  );
 
   return (
     <FormDialog
@@ -232,9 +252,9 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             `}</style>
           </div>
         )}
-        {query.length > 0 && query.length < MIN_QUERY_LENGTH && (
+        {query.length > 0 && query.length < MIN_QUERY_LENGTH && !manualQuery && (
           <p className="mt-1 text-xs text-muted-foreground">
-            Type at least {MIN_QUERY_LENGTH} characters to search
+            Press Enter to search, or type {MIN_QUERY_LENGTH}+ characters
           </p>
         )}
       </div>
@@ -253,7 +273,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
             loading={siteQuery.isFetching}
             onAdd={handleAdd}
             isAdded={checkIsAdded}
-            queryLength={debouncedQuery.length}
+            queryLength={searchTerm.length}
             highlightedIndex={activeColumn === 'site' ? highlightedIndex : -1}
           />
         </div>
@@ -299,7 +319,7 @@ export const AddUserModal: React.FC<AddUserModalProps> = ({
               loading={siteQuery.isFetching}
               onAdd={handleAdd}
               isAdded={checkIsAdded}
-              queryLength={debouncedQuery.length}
+              queryLength={searchTerm.length}
               highlightedIndex={activeColumn === 'site' ? highlightedIndex : -1}
               showMembership={false}
             />

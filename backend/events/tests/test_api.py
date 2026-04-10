@@ -4,7 +4,8 @@ from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from events.models import Event, EventSignup, EventState, SignupStatus
+from events.constants import EventState, SignupStatus
+from events.models import Event, EventSignup
 from events.tests.base import EventTestCase
 
 

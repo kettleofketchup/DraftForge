@@ -2,7 +2,6 @@ import { Crown } from 'lucide-react';
 import React, { useState } from 'react';
 import { TEAMS_BUTTONS_WIDTH } from '~/components/constants';
 import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
-import { Button } from '~/components/ui/button';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import {
   Dialog,
@@ -71,7 +70,7 @@ export const CaptainSelectionModal: React.FC = () => {
 
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">Close</Button>
+            <SecondaryButton>Close</SecondaryButton>
           </DialogClose>
         </DialogFooter>
       </DialogContent>

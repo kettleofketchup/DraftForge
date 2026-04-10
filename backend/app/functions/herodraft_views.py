@@ -131,6 +131,12 @@ def create_herodraft(request, game_pk):
 
     broadcast_herodraft_event(draft, "draft_created")
 
+    # Notify Discord if tournament has discord_send_herodraft_link enabled
+    if game.tournament:
+        from events.discord.tournament_dispatch import notify_herodraft_created
+
+        notify_herodraft_created(game.tournament, draft, game)
+
     # Refetch with prefetch for proper serialization
     draft = _get_draft_with_prefetch(draft.pk)
     return Response(HeroDraftSerializer(draft).data, status=status.HTTP_201_CREATED)

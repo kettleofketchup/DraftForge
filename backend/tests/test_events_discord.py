@@ -198,8 +198,10 @@ def send_test_notification(request, event_pk):
     except Event.DoesNotExist:
         return Response({"error": "Event not found"}, status=404)
 
-    embed = build_subscriber_dm_embed(event)
-    result = sync_send_dm(discord_user_id, embed=embed)
+    dm_data = build_subscriber_dm_embed(event)
+    embed = dm_data["embed"]
+    components = dm_data.get("components")
+    result = sync_send_dm(discord_user_id, embed=embed, components=components)
 
     if result:
         return Response(
@@ -207,6 +209,7 @@ def send_test_notification(request, event_pk):
                 "success": True,
                 "message_id": result.get("id"),
                 "embed": embed,
+                "components": components,
             }
         )
     return Response(

@@ -5,15 +5,15 @@ from requests.exceptions import HTTPError
 
 
 class SyncEditMessageTest(TestCase):
-    @patch("discordbot.utils.requests.patch")
-    def test_edit_message_sends_patch(self, mock_patch):
+    @patch("discordbot.utils._rate_limited_request")
+    def test_edit_message_sends_patch(self, mock_request):
         from discordbot.utils import sync_edit_message
 
-        mock_patch.return_value = MagicMock(
+        mock_request.return_value = MagicMock(
             status_code=200,
             json=MagicMock(return_value={"id": "111222333"}),
         )
-        mock_patch.return_value.raise_for_status = MagicMock()
+        mock_request.return_value.raise_for_status = MagicMock()
 
         result = sync_edit_message(
             channel_id="123456789",
@@ -21,16 +21,17 @@ class SyncEditMessageTest(TestCase):
             embed={"title": "Updated", "description": "New content", "color": 0x00FF00},
         )
 
-        mock_patch.assert_called_once()
+        mock_request.assert_called_once()
+        self.assertEqual(mock_request.call_args[0][0], "PATCH")
         self.assertIsNotNone(result)
 
-    @patch("discordbot.utils.requests.patch")
-    def test_edit_message_with_components(self, mock_patch):
+    @patch("discordbot.utils._rate_limited_request")
+    def test_edit_message_with_components(self, mock_request):
         from discordbot.utils import sync_edit_message
 
-        mock_patch.return_value = MagicMock(status_code=200)
-        mock_patch.return_value.json.return_value = {"id": "111222333"}
-        mock_patch.return_value.raise_for_status = MagicMock()
+        mock_request.return_value = MagicMock(status_code=200)
+        mock_request.return_value.json.return_value = {"id": "111222333"}
+        mock_request.return_value.raise_for_status = MagicMock()
 
         components = [
             {
@@ -45,23 +46,23 @@ class SyncEditMessageTest(TestCase):
             components=components,
         )
 
-        call_args = mock_patch.call_args
+        call_args = mock_request.call_args
         payload = call_args.kwargs.get("json") or call_args[1].get("json")
         self.assertIn("components", payload)
 
 
 class SyncSendEmbedLoggingTest(TestCase):
-    @patch("discordbot.utils.requests.post")
-    def test_send_embed_creates_log_on_success(self, mock_post):
+    @patch("discordbot.utils._rate_limited_request")
+    def test_send_embed_creates_log_on_success(self, mock_request):
         """sync_send_embed creates a DiscordMessageLog entry on success."""
         from discordbot.models import DiscordMessageLog
         from discordbot.utils import sync_send_embed
 
-        mock_post.return_value = MagicMock(
+        mock_request.return_value = MagicMock(
             status_code=200,
             json=MagicMock(return_value={"id": "111222333"}),
         )
-        mock_post.return_value.raise_for_status = MagicMock()
+        mock_request.return_value.raise_for_status = MagicMock()
 
         sync_send_embed(
             channel_id="123456789",
@@ -78,8 +79,8 @@ class SyncSendEmbedLoggingTest(TestCase):
         self.assertEqual(log.status_code, 200)
         self.assertEqual(log.channel_id, "123456789")
 
-    @patch("discordbot.utils.requests.post")
-    def test_send_embed_creates_log_on_failure(self, mock_post):
+    @patch("discordbot.utils._rate_limited_request")
+    def test_send_embed_creates_log_on_failure(self, mock_request):
         """sync_send_embed creates a DiscordMessageLog entry on API failure."""
         from discordbot.models import DiscordMessageLog
         from discordbot.utils import sync_send_embed
@@ -87,7 +88,7 @@ class SyncSendEmbedLoggingTest(TestCase):
         mock_response = MagicMock(status_code=403)
         mock_response.json.return_value = {"message": "Missing Access"}
         mock_response.raise_for_status.side_effect = HTTPError(response=mock_response)
-        mock_post.return_value = mock_response
+        mock_request.return_value = mock_response
 
         sync_send_embed(
             channel_id="123456789",
@@ -102,17 +103,17 @@ class SyncSendEmbedLoggingTest(TestCase):
         self.assertFalse(log.success)
         self.assertEqual(log.status_code, 403)
 
-    @patch("discordbot.utils.requests.post")
-    def test_send_embed_without_source_uses_unknown(self, mock_post):
+    @patch("discordbot.utils._rate_limited_request")
+    def test_send_embed_without_source_uses_unknown(self, mock_request):
         """sync_send_embed defaults source to 'unknown' when not provided."""
         from discordbot.models import DiscordMessageLog
         from discordbot.utils import sync_send_embed
 
-        mock_post.return_value = MagicMock(
+        mock_request.return_value = MagicMock(
             status_code=200,
             json=MagicMock(return_value={"id": "444555666"}),
         )
-        mock_post.return_value.raise_for_status = MagicMock()
+        mock_request.return_value.raise_for_status = MagicMock()
 
         sync_send_embed(
             channel_id="123456789",

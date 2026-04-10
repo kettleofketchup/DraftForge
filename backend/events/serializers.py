@@ -11,12 +11,39 @@ from events.models import (
 )
 
 
+class EventRepeaterSlimSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for repeater list views (events page Series tab)."""
+
+    organization_name = serializers.CharField(
+        source="organization.name", read_only=True
+    )
+    subscriber_count = serializers.IntegerField(read_only=True, default=0)
+    next_event_date = serializers.DateTimeField(read_only=True, default=None)
+
+    class Meta:
+        model = EventRepeater
+        fields = [
+            "id",
+            "organization",
+            "organization_name",
+            "name",
+            "frequency",
+            "day_of_week",
+            "time_of_day",
+            "timezone",
+            "is_active",
+            "subscriber_count",
+            "next_event_date",
+        ]
+
+
 class EventRepeaterSerializer(serializers.ModelSerializer):
     organization_name = serializers.CharField(
         source="organization.name", read_only=True
     )
     subscriber_count = serializers.IntegerField(read_only=True, default=0)
     is_subscribed = serializers.BooleanField(read_only=True, default=False)
+    next_event_date = serializers.DateTimeField(read_only=True, default=None)
 
     class Meta:
         model = EventRepeater
@@ -92,8 +119,13 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "discord_require_battlecup_screenshot",
             "min_mmr",
             "discord_notify_new_events",
+            # DiscordTournamentConfig
+            "auto_create_hero_drafts",
+            "discord_send_draft_link",
+            "discord_send_herodraft_link",
             "subscriber_count",
             "is_subscribed",
+            "next_event_date",
         ]
         read_only_fields = [
             "id",
@@ -102,6 +134,7 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
             "updated_at",
             "subscriber_count",
             "is_subscribed",
+            "next_event_date",
         ]
 
     def validate_description(self, value):
@@ -119,6 +152,37 @@ class EventRepeaterSerializer(serializers.ModelSerializer):
                 {"game_mode": f"{game_mode} is only available for Dota 2."}
             )
         return data
+
+
+class EventSlimSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for event list views — only fields needed for cards."""
+
+    organization_name = serializers.CharField(
+        source="organization.name", read_only=True
+    )
+    signup_count = serializers.IntegerField(read_only=True, default=0)
+    confirmed_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = Event
+        fields = [
+            "id",
+            "organization",
+            "organization_name",
+            "name",
+            "scheduled_at",
+            "state",
+            "game_type",
+            "tournament_name",
+            "tournament_league",
+            "tournament_type",
+            "draft_type",
+            "people_per_team",
+            "number_of_teams",
+            "signup_count",
+            "confirmed_count",
+            "event_repeater",
+        ]
 
 
 class EventSerializer(serializers.ModelSerializer):
@@ -206,6 +270,10 @@ class EventSerializer(serializers.ModelSerializer):
             "discord_require_rank_screenshot",
             "discord_require_battlecup_screenshot",
             "min_mmr",
+            # DiscordTournamentConfig
+            "auto_create_hero_drafts",
+            "discord_send_draft_link",
+            "discord_send_herodraft_link",
         ]
         read_only_fields = [
             "id",
@@ -386,6 +454,10 @@ class OrgEventDefaultsSerializer(serializers.ModelSerializer):
             "discord_require_rank_screenshot",
             "discord_require_battlecup_screenshot",
             "min_mmr",
+            # DiscordTournamentConfig
+            "auto_create_hero_drafts",
+            "discord_send_draft_link",
+            "discord_send_herodraft_link",
         ]
         read_only_fields = ["id", "organization"]
 

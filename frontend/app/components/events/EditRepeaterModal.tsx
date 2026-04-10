@@ -27,7 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { useUpdateEventRepeaterMutation } from '~/hooks/useEvent';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
-import { discordConfigSchema, GameType, GameMode, DISCORD_CONFIG_DEFAULTS, Frequency, FREQUENCY_LABELS, DAY_LABELS } from './schemas';
+import { discordConfigSchema, GameType, GameMode, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, Frequency, FREQUENCY_LABELS, DAY_LABELS } from './schemas';
 
 const editRepeaterSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -47,6 +47,7 @@ const editRepeaterSchema = z.object({
   time_of_day: z.string(),
   ends_at: z.string().optional(),
   generate_days_ahead: z.number().int().min(1),
+  timezone: z.string().min(1, 'Timezone is required'),
   discord_notify_new_events: z.boolean(),
 }).merge(discordConfigSchema);
 
@@ -82,6 +83,7 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
       time_of_day: '19:00',
       ends_at: '',
       generate_days_ahead: 7,
+      timezone: '',
       discord_notify_new_events: true,
       ...DISCORD_CONFIG_DEFAULTS,
     },
@@ -104,9 +106,10 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
         number_of_teams: repeater.number_of_teams,
         frequency: repeater.frequency,
         day_of_week: repeater.day_of_week ?? undefined,
-        time_of_day: repeater.time_of_day.slice(0, 5),
+        time_of_day: repeater.time_of_day?.slice(0, 5) ?? '19:00',
         ends_at: repeater.ends_at ?? '',
         generate_days_ahead: repeater.generate_days_ahead,
+        timezone: repeater.timezone,
         discord_create_event: repeater.discord_create_event,
         discord_sync_signups: repeater.discord_sync_signups,
         discord_event_title: repeater.discord_event_title,
@@ -281,6 +284,29 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
                 <FormControl>
                   <Input type="time" {...field} />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="timezone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Timezone</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select timezone" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {COMMON_TIMEZONES.map((tz) => (
+                      <SelectItem key={tz} value={tz}>{tz.replace(/_/g, ' ')}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}

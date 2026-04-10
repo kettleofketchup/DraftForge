@@ -29,6 +29,14 @@ bootstrap *args:
         cd "{{frontend}}" && npm install
         cd "{{root}}"
     fi
+    # If running in a git worktree, copy backend/.env from the main repo
+    main_repo="$(git rev-parse --git-common-dir 2>/dev/null | sed 's|/\.git$||')"
+    if [[ -n "$main_repo" && "$main_repo" != "{{root}}/.git" && "$main_repo" != "." ]]; then
+        if [[ -f "$main_repo/backend/.env" && ! -f "{{root}}/backend/.env" ]]; then
+            echo "Worktree detected — copying backend/.env from main repo..."
+            cp "$main_repo/backend/.env" "{{root}}/backend/.env"
+        fi
+    fi
     inv dev.debug {{args}}
 
 # Modules (namespaced with ::)

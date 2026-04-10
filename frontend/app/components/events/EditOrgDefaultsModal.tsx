@@ -26,7 +26,7 @@ import {
 } from '~/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
-import { discordConfigSchema, DISCORD_CONFIG_DEFAULTS, GameType, GameMode } from './schemas';
+import { discordConfigSchema, DISCORD_CONFIG_DEFAULTS, GameType, GameMode, COMMON_TIMEZONES } from './schemas';
 
 const orgDefaultsSchema = z.object({
   // Tournament defaults
@@ -182,9 +182,18 @@ export function EditOrgDefaultsModal({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Timezone</FormLabel>
-                  <FormControl>
-                    <Input placeholder="America/New_York" {...field} />
-                  </FormControl>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select timezone" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {COMMON_TIMEZONES.map((tz) => (
+                        <SelectItem key={tz} value={tz}>{tz.replace(/_/g, ' ')}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormDescription>
                     Default timezone for new events
                   </FormDescription>

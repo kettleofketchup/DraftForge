@@ -71,7 +71,8 @@ class BuildAnnouncementEmbedSignupListTest(EventTestCase):
         self.assertIn("None yet", signed_up["value"])
 
     def test_signup_list_shows_confirmed_users(self):
-        from events.models import EventSignup, SignupStatus
+        from events.constants import SignupStatus
+        from events.models import EventSignup
 
         EventSignup.objects.create(
             event=self.event, user=self.user, status=SignupStatus.CONFIRMED
@@ -81,7 +82,8 @@ class BuildAnnouncementEmbedSignupListTest(EventTestCase):
         self.assertTrue(any("Signed Up" in n for n in field_names))
 
     def test_signup_list_shows_status_icons(self):
-        from events.models import EventSignup, SignupStatus
+        from events.constants import SignupStatus
+        from events.models import EventSignup
 
         EventSignup.objects.create(
             event=self.event, user=self.user, status=SignupStatus.CONFIRMED
@@ -92,8 +94,9 @@ class BuildAnnouncementEmbedSignupListTest(EventTestCase):
 
     def test_waitlisted_in_separate_field(self):
         from app.models import CustomUser, PositionsModel
+        from events.constants import SignupStatus
         from events.discord.embeds import build_announcement_v2
-        from events.models import EventSignup, SignupStatus
+        from events.models import EventSignup
 
         self.event.max_players = 1
         self.event.save()
@@ -119,7 +122,8 @@ class BuildAnnouncementEmbedSignupListTest(EventTestCase):
         self.assertIn("waitlisted_user", waitlist_field["value"])
 
     def test_signup_fields_are_inline(self):
-        from events.models import EventSignup, SignupStatus
+        from events.constants import SignupStatus
+        from events.models import EventSignup
 
         EventSignup.objects.create(
             event=self.event, user=self.user, status=SignupStatus.CONFIRMED
