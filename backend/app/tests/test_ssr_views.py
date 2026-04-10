@@ -76,6 +76,8 @@ class SSREndpointTests(TestCase):
         resp = self.client.get(f"/api/users/{user.pk}/ssr/")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["username"], "testplayer")
+        self.assertIn("avatar_url", resp.data)
+        self.assertNotIn("avatar", resp.data)
         self.assertNotIn("email", resp.data)
 
     def test_tournament_ssr_with_org(self):

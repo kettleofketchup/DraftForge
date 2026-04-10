@@ -42,5 +42,5 @@ export interface UserSSR {
   pk: number;
   username: string;
   nickname: string | null;
-  avatar: string | null;
+  avatar_url: string | null;
 }

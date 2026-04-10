@@ -1,5 +1,4 @@
 import logging
-from venv import create
 
 from django.contrib import admin
 from django.urls import include, path

@@ -87,6 +87,11 @@ class HeroDraftSerializerSSR(serializers.ModelSerializer):
 
 
 class UserSerializerSSR(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
+
     class Meta:
         model = CustomUser
-        fields = ["pk", "username", "nickname", "avatar"]
+        fields = ["pk", "username", "nickname", "avatar_url"]
+
+    def get_avatar_url(self, obj):
+        return obj.avatarUrl

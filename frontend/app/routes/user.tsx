@@ -30,6 +30,7 @@ export function meta({ data }: Route.MetaArgs) {
     return generateMeta({
       title: displayName,
       description: `${displayName} — Dota 2 player profile on DraftForge`,
+      image: user.avatar_url || undefined,
       url: `/user/${user.pk}`,
     });
   }
