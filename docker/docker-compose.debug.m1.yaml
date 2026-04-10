@@ -6,11 +6,13 @@ services:
     env_file: "./docker/.env.dev"
     build:
       context: ./frontend
-      dockerfile: frontend/Dockerfile
-      target: runtime-dev   # 👈 choose your stage:
+      dockerfile: Dockerfile
+      target: runtime-dev
     volumes:
       - ./frontend:/app
       - /app/node_modules/
+    restart: always
+
   backend:
     container_name: backend
     env_file: "./docker/.env.dev"
@@ -20,6 +22,7 @@ services:
       - ./backend:/app/backend
     depends_on:
       - redis
+
   redis:
     image: redis:8.2.1-alpine
     container_name: redis
@@ -47,3 +50,38 @@ services:
     depends_on:
       - frontend
       - backend
+
+  celery-worker:
+    image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
+    entrypoint: ["celery"]
+    command: ["-A", "config", "worker", "-l", "info"]
+    volumes:
+      - ./backend:/app/backend
+    env_file: "./docker/.env.dev"
+    depends_on:
+      - redis
+      - backend
+    restart: always
+
+  celery-beat:
+    image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
+    entrypoint: ["celery"]
+    command: ["-A", "config", "beat", "-l", "info"]
+    volumes:
+      - ./backend:/app/backend
+    env_file: "./docker/.env.dev"
+    depends_on:
+      - redis
+      - celery-worker
+    restart: always
+
+  discord-bot:
+    image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
+    entrypoint: ["python", "manage.py", "run_discord_bot"]
+    volumes:
+      - ./backend:/app/backend
+    env_file: "./docker/.env.dev"
+    depends_on:
+      - redis
+      - backend
+    restart: always
