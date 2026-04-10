@@ -27,10 +27,11 @@ export function generateMeta({
 }: MetaOptions) {
   const fullTitle = `${title} | ${SITE_NAME}`;
   const desc = description || DEFAULT_DESCRIPTION;
+  const isDefaultImage = !image;
   const img = image?.startsWith('http') ? image : `${SITE_URL}${image || DEFAULT_IMAGE}`;
   const pageUrl = url ? `${SITE_URL}${url}` : undefined;
 
-  const meta = [
+  const meta: Record<string, string>[] = [
     // Standard meta
     { title: fullTitle },
     { name: 'description', content: desc },
@@ -39,8 +40,6 @@ export function generateMeta({
     { property: 'og:title', content: fullTitle },
     { property: 'og:description', content: desc },
     { property: 'og:image', content: img },
-    { property: 'og:image:width', content: '1280' },
-    { property: 'og:image:height', content: '800' },
     { property: 'og:type', content: type },
     { property: 'og:site_name', content: SITE_NAME },
 
@@ -50,6 +49,12 @@ export function generateMeta({
     { name: 'twitter:description', content: desc },
     { name: 'twitter:image', content: img },
   ];
+
+  // Only include dimensions for the default OG image (known 1280x800)
+  if (isDefaultImage) {
+    meta.push({ property: 'og:image:width', content: '1280' });
+    meta.push({ property: 'og:image:height', content: '800' });
+  }
 
   // Add URL if provided
   if (pageUrl) {

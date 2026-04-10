@@ -91,8 +91,9 @@ ENV PROD=false
 ENV NODE_ENV="dev"
 ENV RELEASE=false
 ENV TEST=false
+ENV PORT=3000
 EXPOSE 3000
-COPY --from=builder --chown=node:node /app/build/client /app/build/client
+COPY --from=builder --chown=node:node /app/build /app/build
 
 USER node
 CMD ["npm", "run", "start"]

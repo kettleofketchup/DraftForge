@@ -2,6 +2,13 @@ import { generateMeta } from '~/lib/seo';
 import { fetchLeague } from '~/components/api/api';
 import { useParams, useNavigate } from 'react-router';
 import type { Route } from './+types/league';
+import type { LeagueSSR } from '~/lib/ssr-types';
+
+export async function loader({ params }: Route.LoaderArgs) {
+  const { fetchSSR } = await import('~/lib/ssr.server');
+  const league = await fetchSSR<LeagueSSR>(`/leagues/${params.leagueId}/ssr/`);
+  return { league };
+}
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const pk = params.leagueId ? parseInt(params.leagueId, 10) : null;
@@ -16,13 +23,13 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
 }
 
 export function meta({ data }: Route.MetaArgs) {
-  const league = data?.league;
+  const league = data?.league as LeagueSSR | null;
 
   if (league?.name) {
-    const orgName = league.organization_name ? ` by ${league.organization_name}` : '';
+    const orgName = league.org_name ? ` by ${league.org_name}` : '';
     return generateMeta({
       title: league.name,
-      description: `${league.name}${orgName} - League standings and tournament schedule`,
+      description: `${league.name}${orgName} — League standings and tournament schedule on DraftForge`,
       url: `/leagues/${league.pk}`,
     });
   }

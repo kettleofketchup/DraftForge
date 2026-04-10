@@ -3,6 +3,13 @@ import { generateMeta } from '~/lib/seo';
 import { fetchTournament } from '~/components/api/api';
 import { queryClient } from '~/root';
 import type { Route } from './+types/tournament';
+import type { TournamentSSR } from '~/lib/ssr-types';
+
+export async function loader({ params }: Route.LoaderArgs) {
+  const { fetchSSR } = await import('~/lib/ssr.server');
+  const tournament = await fetchSSR<TournamentSSR>(`/tournaments/${params.pk}/ssr/`);
+  return { tournament };
+}
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const pk = params.pk ? parseInt(params.pk, 10) : null;
@@ -19,14 +26,14 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
 }
 
 export function meta({ data }: Route.MetaArgs) {
-  const tournament = data?.tournament;
+  const tournament = data?.tournament as TournamentSSR | null;
 
   if (tournament?.name) {
-    const teamCount = tournament.teams?.length || 0;
+    const orgText = tournament.org_name ? ` presented by ${tournament.org_name}` : '';
     return generateMeta({
       title: tournament.name,
-      description: `${tournament.name} - ${teamCount} teams competing in Dota 2 tournament`,
-      image: '/assets/site_snapshots/tournament.png',
+      description: `${tournament.name}${orgText} — DraftForge tournament management, drafts, and team organization`,
+      image: tournament.org_logo || '/assets/site_snapshots/tournament.png',
       url: `/tournament/${tournament.pk}`,
     });
   }

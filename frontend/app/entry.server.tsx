@@ -1,3 +1,8 @@
+// Known acceptable hydration mismatches (cosmetic, React handles gracefully):
+// - Navbar: Admin link only appears after client hydration for staff users
+//   (server renders without auth state, client adds it from sessionStorage)
+// - Zustand persist: hasHydrated is false during SSR, true after client hydration
+
 import { PassThrough } from 'node:stream';
 
 import { createReadableStreamFromReadable } from '@react-router/node';
@@ -36,6 +41,3 @@ export default function handleRequest(
     setTimeout(abort, 5000);
   });
 }
-
-// SPA mode: this file only runs at build time to generate the static HTML shell.
-// No server-side rendering or error handling occurs at runtime.

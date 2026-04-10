@@ -2,6 +2,13 @@ import { generateMeta } from '~/lib/seo';
 import { getEvent } from '~/components/api/api';
 import { useParams, useNavigate } from 'react-router';
 import type { Route } from './+types/event';
+import type { EventSSR } from '~/lib/ssr-types';
+
+export async function loader({ params }: Route.LoaderArgs) {
+  const { fetchSSR } = await import('~/lib/ssr.server');
+  const event = await fetchSSR<EventSSR>(`/events/${params.eventId}/ssr/`);
+  return { event };
+}
 
 export async function clientLoader({ params }: Route.ClientLoaderArgs) {
   const id = params.eventId ? parseInt(params.eventId, 10) : null;
@@ -16,13 +23,13 @@ export async function clientLoader({ params }: Route.ClientLoaderArgs) {
 }
 
 export function meta({ data }: Route.MetaArgs) {
-  const event = data?.event;
+  const event = data?.event as EventSSR | null;
 
   if (event?.name) {
-    const orgName = event.organization_name ? ` by ${event.organization_name}` : '';
+    const orgName = event.org_name ? ` by ${event.org_name}` : '';
     return generateMeta({
       title: event.name,
-      description: `${event.name}${orgName} - Event details and signups`,
+      description: `${event.name}${orgName} — Event details and signups on DraftForge`,
       url: `/events/${event.id}`,
     });
   }
