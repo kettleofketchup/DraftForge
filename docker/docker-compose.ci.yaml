@@ -63,27 +63,13 @@ services:
     image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
     user: "1000:1000"
     entrypoint: ["celery"]
-    command: ["-A", "config", "worker", "-l", "info"]
+    command: ["-A", "config", "worker", "-B", "-l", "info", "--pool=solo"]
     volumes:
       - ./backend:/app/backend
     env_file: "./docker/.env.test"
     depends_on:
       - redis
       - backend
-    networks:
-      - ci-network
-
-  celery-beat:
-    image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
-    user: "1000:1000"
-    entrypoint: ["celery"]
-    command: ["-A", "config", "beat", "-l", "info"]
-    volumes:
-      - ./backend:/app/backend
-    env_file: "./docker/.env.test"
-    depends_on:
-      - redis
-      - celery-worker
     networks:
       - ci-network
 

@@ -51,7 +51,7 @@ services:
     image: ghcr.io/kettleofketchup/draftforge/backend:latest
     user: "1000:1000"
     entrypoint: ["celery"]
-    command: ["-A", "config", "worker", "-l", "info"]
+    command: ["-A", "config", "worker", "-B", "-l", "info", "--pool=solo"]
     env_file: "./docker/.env.prod"
     environment:
       OTEL_SERVICE_NAME: celery-worker
@@ -61,22 +61,6 @@ services:
     depends_on:
       - redis
       - backend
-    restart: always
-
-  celery-beat:
-    image: ghcr.io/kettleofketchup/draftforge/backend:latest
-    user: "1000:1000"
-    entrypoint: ["celery"]
-    command: ["-A", "config", "beat", "-l", "info"]
-    env_file: "./docker/.env.prod"
-    environment:
-      OTEL_SERVICE_NAME: celery-beat
-    volumes:
-      - ./backend/db.sqlite3:/app/backend/prod.db.sqlite3
-      - ./backend/.env:/app/backend/.env
-    depends_on:
-      - redis
-      - celery-worker
     restart: always
 
   discord-bot:
