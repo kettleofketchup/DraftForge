@@ -5,9 +5,6 @@ import logging
 from datetime import datetime, timedelta
 
 from celery import shared_task
-from django.utils import timezone
-
-from .utils import sync_add_reactions, sync_send_embed
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +18,7 @@ def check_scheduled_events():
     All reads via internal HTTP API. Embeds built from template data.
     """
     from app.internal_client import get_due_scheduled_events, update_scheduled_event
+    from discordbot.utils import sync_add_reactions, sync_send_embed
 
     due_events = get_due_scheduled_events()
     processed = 0

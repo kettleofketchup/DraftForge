@@ -5,10 +5,10 @@ are made directly from the worker since they're external HTTP calls.
 """
 
 import logging
+import os
 
 import requests
 from celery import shared_task
-from django.conf import settings
 
 from app.internal_client import get_users_for_avatar_check, update_user_avatar
 
@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 
 def _is_test_environment():
     """Check if running in test environment (skip Discord API calls)."""
-    return getattr(settings, "TEST", False) and settings.DEBUG
+    return os.environ.get("TEST", "").lower() == "true" and os.environ.get("DEBUG", "").lower() == "true"
 
 
 def _is_avatar_url_valid(url):
@@ -31,12 +31,13 @@ def _is_avatar_url_valid(url):
 
 def _fetch_discord_avatar(discord_id):
     """Fetch latest avatar hash from Discord API. Returns hash or None."""
-    token = getattr(settings, "DISCORD_BOT_TOKEN", None)
+    token = os.environ.get("DISCORD_BOT_TOKEN", "")
     if not token:
         return None
+    api_base = os.environ.get("DISCORD_API_BASE_URL", "https://discord.com/api/v10")
     try:
         resp = requests.get(
-            f"{settings.DISCORD_API_BASE_URL}/users/{discord_id}",
+            f"{api_base}/users/{discord_id}",
             headers={"Authorization": f"Bot {token}"},
             timeout=10,
         )

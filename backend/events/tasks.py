@@ -1,9 +1,7 @@
 import logging
+from datetime import datetime, timezone as tz
 
 from celery import shared_task
-from django.utils import timezone
-
-from events.constants import EventState, SignupStatus
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +40,7 @@ def cleanup_stale_events():
 
     from app.internal_client import get_events_list, transition_event_state
 
-    cutoff = (timezone.now() - timedelta(days=1)).isoformat()
+    cutoff = (datetime.now(tz.utc) - timedelta(days=1)).isoformat()
 
     # Never-started events → cancelled
     never_started = get_events_list(
@@ -91,7 +89,7 @@ def open_scheduled_signups():
     """
     from app.internal_client import get_events_list, transition_event_state
 
-    now = timezone.now().isoformat()
+    now = datetime.now(tz.utc).isoformat()
     events = get_events_list(states="upcoming", signups_due_before=now)
     opened = 0
     for event in events:
@@ -248,7 +246,7 @@ def send_event_announcement(event_id):
             "event_id": event.pk,
             "channel_id": channel_id,
             "has_posted": True,
-            "message_last_updated": timezone.now().isoformat(),
+            "message_last_updated": datetime.now(tz.utc).isoformat(),
         }
         if post_result.get("message"):
             update_data["thread_id"] = post_result["id"]
@@ -335,7 +333,7 @@ def send_event_announcement(event_id):
             channel_id=event.discord_announcement_channel_id,
             has_posted=True,
             message_id=notice_api_result.get("id"),
-            message_last_updated=timezone.now().isoformat(),
+            message_last_updated=datetime.now(tz.utc).isoformat(),
         )
         ann_pk = ann_resp.json().get("id") if ann_resp and ann_resp.ok else None
         if ann_pk:
@@ -428,7 +426,7 @@ def send_signup_update(event_id):
         create_or_update_signup_message(
             event_id=event.pk,
             channel_id=signup_msg.channel_id,
-            message_last_updated=timezone.now().isoformat(),
+            message_last_updated=datetime.now(tz.utc).isoformat(),
         )
 
         if discord_event:
@@ -755,7 +753,7 @@ def check_event_reminders():
         build_signup_reminder_embed,
     )
 
-    now = timezone.now()
+    now = datetime.now(tz.utc)
 
     def _log_reminder(event, source, response):
         """Log reminder to DiscordEventLog for the Activity Log tab."""
@@ -938,7 +936,7 @@ def send_subscriber_notifications(event_id):
                 update_event_dm(
                     dm_pk,
                     message_id=result.get("id", ""),
-                    sent_at=timezone.now().isoformat(),
+                    sent_at=datetime.now(tz.utc).isoformat(),
                     delivered=True,
                 )
             sent += 1
