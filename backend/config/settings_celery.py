@@ -1,0 +1,35 @@
+"""Minimal Django settings for lightweight Celery workers.
+
+This loads just enough Django to register tasks and connect to Redis.
+No ORM, no middleware, no templates, no auth — tasks communicate with
+Django/Daphne over HTTP via internal_client.py.
+"""
+
+import os
+
+SECRET_KEY = "celery-worker-not-serving-http"
+DEBUG = False
+ALLOWED_HOSTS = []
+
+# Minimal installed apps — only what's needed for task autodiscovery
+INSTALLED_APPS = [
+    "config",
+    "app",
+    "events",
+    "discordbot",
+]
+
+# No database — workers don't touch the DB
+DATABASES = {}
+
+# Celery configuration
+REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", f"redis://{REDIS_HOST}:6379/1")
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", f"redis://{REDIS_HOST}:6379/1")
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "UTC"
+CELERY_TASK_TRACK_STARTED = True
+
+INTERNAL_SERVICE_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
