@@ -49,12 +49,11 @@ services:
     image: ghcr.io/kettleofketchup/draftforge/backend:${VERSION}
     user: "1000:1000"
     entrypoint: ["celery"]
-    command: ["-A", "config", "worker", "-B", "-l", "info", "--pool=solo"]
+    command: ["-A", "config.celery_light", "worker", "-B", "-l", "info", "--pool=solo"]
     env_file: "./docker/.env.release"
     environment:
       OTEL_SERVICE_NAME: celery-worker
     volumes:
-      - ./backend/prod.db.sqlite3:/app/backend/prod.db.sqlite3
       - ./backend/.env:/app/backend/.env
     depends_on:
       - redis

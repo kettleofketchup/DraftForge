@@ -54,7 +54,7 @@ services:
   celery-worker:
     image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
     entrypoint: ["celery"]
-    command: ["-A", "config", "worker", "-B", "-l", "info", "--pool=solo"]
+    command: ["-A", "config.celery_light", "worker", "-B", "-l", "info", "--pool=solo"]
     volumes:
       - ./backend:/app/backend
     env_file: "./docker/.env.dev"
