@@ -4,7 +4,6 @@ from celery import shared_task
 from django.utils import timezone
 
 from events.constants import EventState, SignupStatus
-from events.services import generate_events_for_repeater
 
 logger = logging.getLogger(__name__)
 
@@ -13,25 +12,21 @@ logger = logging.getLogger(__name__)
 def generate_upcoming_events():
     """Generate upcoming events for all active repeaters. Runs hourly.
 
-    TODO: This still uses direct ORM for the repeater query and calls
-    generate_events_for_repeater() which is ORM-heavy. Needs refactoring
-    to use internal API when services.py is migrated.
+    Calls internal API — no direct ORM access.
     """
-    from events.models import EventRepeater
+    from app.internal_client import generate_repeater_events, get_active_repeaters
 
-    repeaters = EventRepeater.objects.filter(is_active=True).select_related(
-        "organization",
-        "tournament_league",
-        "created_by",
-    )
+    repeaters = get_active_repeaters()
     total = 0
     for repeater in repeaters:
         try:
-            events = generate_events_for_repeater(repeater)
-            total += len(events)
+            count = generate_repeater_events(repeater["pk"])
+            total += count
         except Exception:
-            logger.exception("Failed to generate events for repeater %s", repeater.pk)
-    return f"Generated {total} events from {repeaters.count()} repeaters"
+            logger.exception(
+                "Failed to generate events for repeater %s", repeater["pk"]
+            )
+    return f"Generated {total} events from {len(repeaters)} repeaters"
 
 
 @shared_task
