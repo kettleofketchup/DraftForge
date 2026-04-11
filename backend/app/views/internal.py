@@ -935,3 +935,51 @@ def update_user_avatar(request, pk):
     invalidate_after_commit(user)
 
     return Response({"pk": user.pk, "avatar": user.avatar})
+
+
+# ---------------------------------------------------------------------------
+# EventRepeater (for generate_upcoming_events task)
+# ---------------------------------------------------------------------------
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def get_active_repeaters(request):
+    """List active repeaters for event generation task."""
+    from events.models import EventRepeater
+
+    repeaters = EventRepeater.objects.filter(is_active=True).select_related(
+        "organization", "tournament_league", "created_by"
+    )
+    data = []
+    for r in repeaters:
+        data.append({
+            "pk": r.pk,
+            "name": r.name,
+            "organization_id": r.organization_id,
+        })
+    return Response(data)
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def generate_repeater_events(request, repeater_id):
+    """Generate upcoming events for a specific repeater."""
+    from events.models import EventRepeater
+    from events.services import generate_events_for_repeater
+
+    try:
+        repeater = EventRepeater.objects.select_related(
+            "organization", "tournament_league", "created_by"
+        ).get(pk=repeater_id)
+    except EventRepeater.DoesNotExist:
+        return Response({"error": "Repeater not found"}, status=404)
+
+    try:
+        events = generate_events_for_repeater(repeater)
+        return Response({"created_count": len(events)})
+    except Exception as e:
+        logger.exception("Failed to generate events for repeater %s", repeater_id)
+        return Response({"error": str(e)}, status=500)
