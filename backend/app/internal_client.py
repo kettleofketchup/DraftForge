@@ -13,7 +13,6 @@ import logging
 import os
 
 import requests
-from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,7 @@ TIMEOUT = 30
 
 def _headers():
     return {
-        "X-Internal-Token": getattr(settings, "INTERNAL_SERVICE_TOKEN", ""),
+        "X-Internal-Token": os.environ.get("INTERNAL_SERVICE_TOKEN", ""),
         "Content-Type": "application/json",
     }
 
