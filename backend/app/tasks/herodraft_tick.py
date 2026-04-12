@@ -7,16 +7,16 @@ WebSocket clients are connected.
 
 import asyncio
 import atexit
-import os
 import threading
 import time
 from collections import namedtuple
-from datetime import datetime, timezone as tz
 
 import redis
 from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
+from django.conf import settings
+from django.utils import timezone
 
 from telemetry.logging import get_logger
 
@@ -30,7 +30,7 @@ def get_redis_client():
     """Get or create Redis client singleton."""
     global _redis_client
     if _redis_client is None:
-        redis_host = os.environ.get("REDIS_HOST", "localhost")
+        redis_host = getattr(settings, "REDIS_HOST", "localhost")
         _redis_client = redis.Redis(
             host=redis_host, port=6379, db=2, decode_responses=True
         )
@@ -104,7 +104,7 @@ async def broadcast_tick(draft_id: int):
 
         # Handle RESUMING state - broadcast countdown remaining
         if draft.state == HeroDraftState.RESUMING:
-            now = datetime.now(tz.utc)
+            now = timezone.now()
             countdown_remaining_ms = 0
             if draft.resuming_until:
                 remaining = (draft.resuming_until - now).total_seconds() * 1000
@@ -144,7 +144,7 @@ async def broadcast_tick(draft_id: int):
         team_b = teams[1] if len(teams) > 1 else None
 
         # Calculate grace time remaining and reserve time being consumed
-        now = datetime.now(tz.utc)
+        now = timezone.now()
         elapsed_ms = 0
         grace_remaining = current_round.grace_time_ms
 
@@ -237,7 +237,7 @@ async def check_timeout(draft_id: int):
             if not current_round:
                 return None
 
-            now = datetime.now(tz.utc)
+            now = timezone.now()
             if not current_round.started_at:
                 return None
 
@@ -314,7 +314,7 @@ async def check_resume_countdown(draft_id: int):
             if draft.state != HeroDraftState.RESUMING:
                 return False
 
-            now = datetime.now(tz.utc)
+            now = timezone.now()
             if not draft.resuming_until or now < draft.resuming_until:
                 return False
 
@@ -445,7 +445,7 @@ async def check_captain_heartbeats(draft_id: int):
             draft_team.save()
 
             draft.state = HeroDraftState.PAUSED
-            draft.paused_at = datetime.now(tz.utc)
+            draft.paused_at = timezone.now()
             draft.save()
 
             HeroDraftEvent.objects.create(
