@@ -1059,9 +1059,19 @@ def generate_events(request):
     if not isTestEnvironment(request):
         return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
 
-    from events.tasks import generate_upcoming_events
+    # Call service layer directly (not the Celery task, which uses HTTP internal API).
+    # This runs synchronously on the backend where Django ORM is available.
+    from events.models import EventRepeater
+    from events.services import generate_events_for_repeater
 
-    result = generate_upcoming_events()
+    repeaters = EventRepeater.objects.filter(is_active=True).select_related(
+        "organization", "tournament_league", "created_by"
+    )
+    total = 0
+    for repeater in repeaters:
+        events = generate_events_for_repeater(repeater)
+        total += len(events)
+    result = f"Generated {total} events from {repeaters.count()} repeaters"
     return Response({"generated": True, "message": result})
 
 
