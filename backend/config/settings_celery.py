@@ -37,3 +37,6 @@ CELERY_TIMEZONE = "UTC"
 CELERY_TASK_TRACK_STARTED = True
 
 INTERNAL_SERVICE_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
+
+# Required by app.models at import time
+AUTH_USER_MODEL = "app.CustomUser"

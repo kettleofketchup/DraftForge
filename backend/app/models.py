@@ -508,7 +508,7 @@ class Tournament(models.Model):
     steam_league_id = models.IntegerField(
         null=True,
         blank=True,
-        default=settings.DEFAULT_LEAGUE_ID,
+        default=None,
         help_text="Steam league ID for match linking",
         db_column="league_id",  # Keep existing column name for backwards compatibility
     )

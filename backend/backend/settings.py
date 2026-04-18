@@ -493,7 +493,6 @@ LEAGUE_MMR_MIN_GAMES = int(os.environ.get("LEAGUE_MMR_MIN_GAMES", "5"))
 from config.leagues import app_config
 
 LEAGUE_CHOICES = app_config.league_choices
-DEFAULT_LEAGUE_ID = app_config.default_league_id
 
 # =============================================================================
 # Telemetry Configuration

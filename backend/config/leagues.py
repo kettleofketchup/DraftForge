@@ -21,13 +21,6 @@ class AppConfig(BaseSettings):
         return cls(**data)
 
     @property
-    def default_league_id(self) -> int | None:
-        for league in self.leagues:
-            if league.default:
-                return league.id
-        return self.leagues[0].id if self.leagues else None
-
-    @property
     def league_choices(self) -> list[tuple[int, str]]:
         return [(league.id, league.name) for league in self.leagues]
 
