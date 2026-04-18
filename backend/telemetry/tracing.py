@@ -119,7 +119,7 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
         # Drop http.client.duration — requests instrumentation creates it with
         # incompatible temporality that Grafana rejects. We get the same data
         # from server-side http.server.duration spans.
-        from opentelemetry.sdk.metrics.export import DropAggregation
+        from opentelemetry.sdk.metrics.view import DropAggregation
 
         meter_provider = MeterProvider(
             resource=resource,

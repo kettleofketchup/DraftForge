@@ -58,6 +58,7 @@ services:
       - ./backend:/app/backend
     env_file: "./docker/.env.dev"
     environment:
+      DJANGO_SETTINGS_MODULE: config.settings_celery
       OTEL_SERVICE_NAME: celery-worker
     depends_on:
       - redis

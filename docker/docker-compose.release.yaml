@@ -52,6 +52,7 @@ services:
     command: ["-A", "config.celery_light", "worker", "-B", "-l", "info", "--pool=solo"]
     env_file: "./docker/.env.release"
     environment:
+      DJANGO_SETTINGS_MODULE: config.settings_celery
       OTEL_SERVICE_NAME: celery-worker
     volumes:
       - ./backend/.env:/app/backend/.env
