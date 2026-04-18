@@ -286,6 +286,76 @@ class EventStateTransitionEndpointTest(TestCase):
 
 
 @override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
+class RepeaterEndpointTest(TestCase):
+    def setUp(self):
+        from app.models import CustomUser
+
+        self.org = Organization.objects.create(name="Repeater Test Org")
+        self.admin = CustomUser.objects.create_user(
+            username="repeater_admin", password="pass"
+        )
+        self.client = APIClient()
+        self.client.credentials(**HEADERS)
+
+    def test_get_active_repeaters(self):
+        from events.models import EventRepeater
+
+        repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Weekly Inhouse",
+            is_active=True,
+            frequency="weekly",
+            day_of_week=3,
+            time_of_day="20:00:00",
+            starts_at="2026-01-01",
+            generate_days_ahead=7,
+            created_by=self.admin,
+        )
+        EventRepeater.objects.create(
+            organization=self.org,
+            name="Inactive",
+            is_active=False,
+            frequency="weekly",
+            day_of_week=5,
+            time_of_day="20:00:00",
+            starts_at="2026-01-01",
+            generate_days_ahead=7,
+            created_by=self.admin,
+        )
+        resp = self.client.get("/api/internal/repeaters/active/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["name"], "Weekly Inhouse")
+        self.assertIn("pk", data[0])
+
+    def test_generate_events_for_repeater(self):
+        import datetime
+
+        from events.models import EventRepeater
+
+        repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Generate Test",
+            is_active=True,
+            frequency="daily",
+            time_of_day="20:00:00",
+            starts_at=datetime.date.today(),
+            generate_days_ahead=3,
+            created_by=self.admin,
+        )
+        resp = self.client.post(f"/api/internal/repeaters/{repeater.pk}/generate/")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("created_count", data)
+        self.assertGreaterEqual(data["created_count"], 0)
+
+    def test_generate_events_for_nonexistent_repeater(self):
+        resp = self.client.post("/api/internal/repeaters/99999/generate/")
+        self.assertEqual(resp.status_code, 404)
+
+
+@override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
 class InternalClientIntegrationTest(LiveServerTestCase):
     """Real HTTP integration: internal_client -> actual HTTP -> endpoint -> DB."""
 

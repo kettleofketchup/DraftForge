@@ -374,6 +374,8 @@ from app.views.internal import (
     create_or_update_announcement,
     create_or_update_signup_message,
     create_tournament_log,
+    generate_repeater_events,
+    get_active_repeaters,
     get_discord_event_state,
     get_due_scheduled_events,
     get_event_for_task,
@@ -414,6 +416,16 @@ urlpatterns += [
     path(
         "api/internal/repeaters/<int:repeater_id>/subscribers/",
         get_repeater_subscribers,
+    ),
+    path(
+        "api/internal/repeaters/active/",
+        get_active_repeaters,
+        name="internal_active_repeaters",
+    ),
+    path(
+        "api/internal/repeaters/<int:repeater_id>/generate/",
+        generate_repeater_events,
+        name="internal_generate_repeater_events",
     ),
     path("api/internal/scheduled-events/due/", get_due_scheduled_events),
     path("api/internal/events/<int:event_id>/full/", get_event_for_task),

@@ -13,7 +13,6 @@ import logging
 import os
 
 import requests
-from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,7 @@ TIMEOUT = 30
 
 def _headers():
     return {
-        "X-Internal-Token": getattr(settings, "INTERNAL_SERVICE_TOKEN", ""),
+        "X-Internal-Token": os.environ.get("INTERNAL_SERVICE_TOKEN", ""),
         "Content-Type": "application/json",
     }
 
@@ -194,14 +193,19 @@ def get_events_list(**params):
 
 
 def get_active_repeaters():
-    """Get active event repeaters via public API.
-
-    Returns list of dicts (slim serializer output).
-    """
-    resp = _api_get("/events/repeaters/", params={"is_active": "true"})
+    """Get all active repeaters via internal API."""
+    resp = _get("/repeaters/active/")
     if resp and resp.ok:
         return resp.json()
     return []
+
+
+def generate_repeater_events(repeater_pk):
+    """Trigger event generation for a specific repeater. Returns created count."""
+    resp = _post(f"/repeaters/{repeater_pk}/generate/", {})
+    if resp and resp.ok:
+        return resp.json().get("created_count", 0)
+    return 0
 
 
 def search_message_logs(source, source_id, success=True, limit=1):
