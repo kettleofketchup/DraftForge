@@ -54,7 +54,7 @@ services:
   celery-worker:
     image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
     entrypoint: ["celery"]
-    command: ["-A", "config.celery_light", "worker", "-B", "-l", "info", "--pool=solo"]
+    command: ["-A", "config.celery_light", "worker", "-l", "info", "--pool=solo"]
     volumes:
       - ./backend:/app/backend
     env_file: "./docker/.env.dev"
@@ -63,6 +63,20 @@ services:
     depends_on:
       - redis
       - backend
+    restart: always
+
+  celery-beat:
+    image: ghcr.io/kettleofketchup/draftforge/backend-dev:latest
+    entrypoint: ["celery"]
+    command: ["-A", "config.celery_light", "beat", "-l", "info"]
+    volumes:
+      - ./backend:/app/backend
+    env_file: "./docker/.env.dev"
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings_celery
+    depends_on:
+      - redis
+      - celery-worker
     restart: always
 
   discord-bot:
