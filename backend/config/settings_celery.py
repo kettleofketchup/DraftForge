@@ -11,9 +11,17 @@ SECRET_KEY = "celery-worker-not-serving-http"
 DEBUG = False
 ALLOWED_HOSTS = []
 
-# No apps — task discovery is handled explicitly in celery_light.py
-# to avoid importing Django models (which pull in auth/contenttypes).
-INSTALLED_APPS = []
+# Minimal installed apps for task autodiscovery.
+# Django contrib apps required because app.models imports AbstractUser.
+INSTALLED_APPS = [
+    "django.contrib.contenttypes",
+    "django.contrib.auth",
+    "config",
+    "app",
+    "events",
+    "discordbot",
+    "steam",
+]
 
 # No database — workers don't touch the DB
 DATABASES = {}
