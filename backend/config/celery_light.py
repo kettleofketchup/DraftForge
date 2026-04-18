@@ -22,7 +22,10 @@ init_telemetry()
 
 app = Celery("dtx")
 app.config_from_object("django.conf:settings", namespace="CELERY")
-app.autodiscover_tasks()
+
+# Explicit task discovery — no INSTALLED_APPS, so autodiscover won't work.
+# This avoids importing Django models (which pull in auth/contenttypes).
+app.autodiscover_tasks(["app.tasks", "events", "discordbot", "steam"])
 app.autodiscover_tasks(["events"], related_name="tournament_tasks")
 
 # Beat schedule — copied from config/celery.py
