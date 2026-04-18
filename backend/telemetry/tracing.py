@@ -272,12 +272,27 @@ def init_log_export():
         from opentelemetry._logs import set_logger_provider
         from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
         from opentelemetry.sdk._logs import LoggerProvider
-        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor, LogExportResult
+
+        # SDK 1.20.0 only accepts 200/202; Grafana Cloud returns 204.
+        # Accept all 2xx until we upgrade to a version that handles this.
+        class _PatchedLogExporter(OTLPLogExporter):
+            def export(self, batch):
+                if self._shutdown:
+                    return LogExportResult.FAILURE
+                from opentelemetry.exporter.otlp.proto.common._log_encoder import encode_logs
+
+                serialized_data = encode_logs(batch).SerializeToString()
+                resp = self._export(serialized_data)
+                if 200 <= resp.status_code < 300:
+                    return LogExportResult.SUCCESS
+                _log.warning("OTLP log export failed: %s %s", resp.status_code, resp.reason)
+                return LogExportResult.FAILURE
 
         _log_provider = LoggerProvider(resource=_build_resource())
         set_logger_provider(_log_provider)
 
-        exporter = OTLPLogExporter(
+        exporter = _PatchedLogExporter(
             endpoint=endpoint + "/v1/logs", headers=header_dict or None
         )
         _log_provider.add_log_record_processor(BatchLogRecordProcessor(exporter))

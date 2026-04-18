@@ -14,6 +14,12 @@ import django
 
 django.setup()
 
+# Initialize telemetry (structlog + optional OTel tracing).
+# Solo pool has no fork, so init once in the main process.
+from telemetry.config import init_telemetry
+
+init_telemetry()
+
 app = Celery("dtx")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
