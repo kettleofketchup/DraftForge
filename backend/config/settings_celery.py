@@ -7,6 +7,10 @@ Django/Daphne over HTTP via internal_client.py.
 
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 SECRET_KEY = "celery-worker-not-serving-http"
 DEBUG = False
 ALLOWED_HOSTS = []
