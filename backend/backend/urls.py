@@ -456,11 +456,20 @@ urlpatterns += [
 ]
 
 # Internal API — Steam sync endpoints
-from app.views.internal_steam import steam_sync_state, store_match
+from app.views.internal_steam import (
+    recalculate_mmr,
+    steam_sync_state,
+    store_match,
+    update_league_stats,
+)
 
 urlpatterns += [
     path("api/internal/steam/sync-state/<int:league_id>/", steam_sync_state),
     path("api/internal/steam/store-match/", store_match),
+    path(
+        "api/internal/steam/update-league-stats/<int:league_id>/", update_league_stats
+    ),
+    path("api/internal/steam/recalculate-mmr/<int:user_id>/", recalculate_mmr),
 ]
 
 log.debug(f"Test Environ:  {isTestEnvironment()}")

@@ -1,6 +1,9 @@
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
+from app.models import CustomUser
+from steam.models import Match, PlayerMatchStats
+
 TOKEN = "test-internal-token"
 HEADERS = {"HTTP_X_INTERNAL_TOKEN": TOKEN}
 
@@ -204,3 +207,89 @@ class StoreMatchEndpointTest(TestCase):
         del payload["match_id"]
         resp = self.client.post(self.url, payload, format="json", **HEADERS)
         self.assertEqual(resp.status_code, 400)
+
+
+@override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
+class UpdateLeagueStatsEndpointTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = CustomUser.objects.create_user(
+            username="statsplayer", steamid=76561198000000001
+        )
+        # Create a match with player stats linked to user
+        match = Match.objects.create(
+            match_id=9000000001,
+            radiant_win=True,
+            duration=2000,
+            start_time=1713600000,
+            game_mode=2,
+            lobby_type=1,
+            league_id=17929,
+        )
+        PlayerMatchStats.objects.create(
+            match=match,
+            steam_id=76561198000000001,
+            user=self.user,
+            player_slot=0,
+            hero_id=1,
+            kills=5,
+            deaths=2,
+            assists=10,
+            gold_per_min=400,
+            xp_per_min=500,
+            last_hits=150,
+            denies=5,
+            hero_damage=15000,
+            tower_damage=2000,
+            hero_healing=0,
+        )
+
+    def test_updates_stats(self):
+        resp = self.client.post(
+            "/api/internal/steam/update-league-stats/17929/",
+            format="json",
+            **HEADERS,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["updated_count"], 1)
+        # Verify stats were created
+        from steam.models import LeaguePlayerStats
+
+        stats = LeaguePlayerStats.objects.get(user=self.user, league_id=17929)
+        self.assertEqual(stats.games_played, 1)
+        self.assertEqual(stats.wins, 1)
+
+    def test_no_stats_returns_zero(self):
+        resp = self.client.post(
+            "/api/internal/steam/update-league-stats/99999/",
+            format="json",
+            **HEADERS,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["updated_count"], 0)
+
+
+@override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
+class RecalculateMmrEndpointTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = CustomUser.objects.create_user(
+            username="mmrplayer", steamid=76561198000000002
+        )
+
+    def test_recalculates_mmr(self):
+        resp = self.client.post(
+            f"/api/internal/steam/recalculate-mmr/{self.user.pk}/",
+            format="json",
+            **HEADERS,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["user_id"], self.user.pk)
+
+    def test_user_not_found(self):
+        resp = self.client.post(
+            "/api/internal/steam/recalculate-mmr/99999/",
+            format="json",
+            **HEADERS,
+        )
+        self.assertEqual(resp.status_code, 404)

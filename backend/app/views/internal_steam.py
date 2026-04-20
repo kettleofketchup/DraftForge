@@ -11,6 +11,7 @@ from rest_framework.decorators import (
     authentication_classes,
     permission_classes,
 )
+from rest_framework import status
 from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
@@ -138,3 +139,31 @@ def store_match(request):
         },
         status=201,
     )
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def update_league_stats(request, league_id):
+    """Recalculate LeaguePlayerStats for all users in a league."""
+    from steam.functions.stats_update import update_all_league_stats_for_league
+
+    updated_count = update_all_league_stats_for_league(league_id)
+    return Response({"updated_count": updated_count})
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def recalculate_mmr(request, user_id):
+    """Recalculate a single user's league MMR."""
+    from app.models import CustomUser
+    from steam.functions.mmr_calculation import update_user_league_mmr
+
+    try:
+        user = CustomUser.objects.get(pk=user_id)
+    except CustomUser.DoesNotExist:
+        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    update_user_league_mmr(user)
+    return Response({"user_id": user_id, "status": "recalculated"})
