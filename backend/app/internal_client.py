@@ -327,7 +327,45 @@ def get_due_scheduled_events():
     return []
 
 
-# ---- Steam writes ----
+# ---- Steam sync ----
+
+
+def get_steam_sync_state(league_id):
+    """Get LeagueSyncState for a league (creates if missing)."""
+    resp = _get(f"/steam/sync-state/{league_id}/")
+    if resp and resp.ok:
+        return resp.json()
+    return None
+
+
+def update_steam_sync_state(league_id, **fields):
+    """Update sync state fields. Returns True on success."""
+    resp = _patch(f"/steam/sync-state/{league_id}/", fields)
+    return resp is not None and resp.ok
+
+
+def store_steam_match(match_data):
+    """Store a match + player stats. Returns response dict or None."""
+    resp = _post("/steam/store-match/", match_data)
+    if resp and resp.ok:
+        return resp.json()
+    return None
+
+
+def update_league_stats(league_id):
+    """Trigger league stats recalculation. Returns updated_count or None."""
+    resp = _post(f"/steam/update-league-stats/{league_id}/", {})
+    if resp and resp.ok:
+        return resp.json().get("updated_count")
+    return None
+
+
+def recalculate_user_mmr(user_id):
+    """Recalculate a user's league MMR. Returns response dict or None."""
+    resp = _post(f"/steam/recalculate-mmr/{user_id}/", {})
+    if resp and resp.ok:
+        return resp.json()
+    return None
 
 
 def batch_upsert_matches(data):
