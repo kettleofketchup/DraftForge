@@ -195,7 +195,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
           </div>
 
           {/* Staff controls */}
-          {isStaff && match.status !== 'completed' && match.radiantTeam && match.direTeam && (
+          {isLeagueStaff && match.status !== 'completed' && match.radiantTeam && match.direTeam && (
             <div className="border-t pt-4">
               <p className="text-sm text-muted-foreground mb-2">Set Winner:</p>
               <div className="flex gap-2">

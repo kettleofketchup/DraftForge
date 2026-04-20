@@ -344,6 +344,8 @@ else:
         # Steam match data - cached with shorter timeout for freshness
         "steam.match": {"ops": "all", "timeout": 30 * 60},
         "steam.playermatchstats": {"ops": "all", "timeout": 30 * 60},
+        "steam.leaguesyncstate": {"ops": "all", "timeout": 30 * 60},
+        "steam.leagueplayerstats": {"ops": "all", "timeout": 30 * 60},
         # Events app
         "events.eventrepeater": {"ops": "all", "timeout": 60 * 60},
         "events.event": {"ops": "all", "timeout": 60 * 60},
