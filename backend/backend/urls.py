@@ -455,6 +455,13 @@ urlpatterns += [
     path("api/internal/users/<int:pk>/avatar/", update_user_avatar),
 ]
 
+# Internal API — Steam sync endpoints
+from app.views.internal_steam import steam_sync_state
+
+urlpatterns += [
+    path("api/internal/steam/sync-state/<int:league_id>/", steam_sync_state),
+]
+
 log.debug(f"Test Environ:  {isTestEnvironment()}")
 if isTestEnvironment():
     log.debug("Adding test environment URLs")
