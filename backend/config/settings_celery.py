@@ -1,12 +1,9 @@
-"""Minimal Django settings for Celery workers.
+"""Minimal Django settings for Celery workers. No ORM, no DB.
 
-Loads just enough Django to register tasks, connect to Redis, and access
-the database (steam tasks use ORM directly). No middleware, no templates.
-Event tasks communicate with Django/Daphne over HTTP via internal_client.py.
+Tasks communicate with Django/Daphne over HTTP via internal_client.py.
 """
 
 import os
-from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -28,26 +25,8 @@ INSTALLED_APPS = [
     "steam",
 ]
 
-# Database — steam tasks (sync_league_matches, update_league_stats) use ORM
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-db_name = "prod.db.sqlite3"
-match os.environ.get("NODE_ENV", "").lower():
-    case "dev":
-        db_name = "dev.db.sqlite3"
-    case "test":
-        db_name = "test.db.sqlite3"
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / db_name,
-        "OPTIONS": {
-            "timeout": 30,
-            "transaction_mode": "IMMEDIATE",
-        },
-    }
-}
+# No database — all tasks use internal HTTP API
+DATABASES = {}
 
 # Celery configuration
 REDIS_HOST = os.environ.get("REDIS_HOST", "redis")
