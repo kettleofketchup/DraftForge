@@ -3,16 +3,6 @@
 
   "hooks": {
     "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/home/kettle/git_repos/claude/just-interceptor/intercept.sh",
-            "timeout": 5
-          }
-        ]
-      }
     ]
   },
 
