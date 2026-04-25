@@ -55,7 +55,6 @@ services:
       DJANGO_SETTINGS_MODULE: config.settings_celery
       OTEL_SERVICE_NAME: celery-worker
     volumes:
-      - ./backend/prod.db.sqlite3:/app/backend/prod.db.sqlite3
       - ./backend/.env:/app/backend/.env
     depends_on:
       - redis
