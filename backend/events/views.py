@@ -89,7 +89,10 @@ def _attach_user_can_manage(payload, user):
     if not items:
         return payload
     events_by_pk = {
-        e.pk: e for e in Event.objects.filter(pk__in=[p["id"] for p in items])
+        e.pk: e
+        for e in Event.objects.filter(pk__in=[p["id"] for p in items]).select_related(
+            "organization", "tournament_league"
+        )
     }
     for p in items:
         ev = events_by_pk.get(p["id"])
