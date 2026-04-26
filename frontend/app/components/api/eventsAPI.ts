@@ -56,6 +56,11 @@ export async function startRollCall(eventId: number): Promise<EventType> {
   return data;
 }
 
+export async function reopenSignups(eventId: number): Promise<EventType> {
+  const { data } = await axios.post<EventType>(`/events/${eventId}/reopen_signups/`);
+  return data;
+}
+
 export async function startTournament(eventId: number): Promise<EventType> {
   const { data } = await axios.post<EventType>(`/events/${eventId}/start_tournament/`);
   return data;
@@ -300,8 +305,14 @@ export async function tentativeForEvent(eventId: number): Promise<EventSignupTyp
   return data;
 }
 
-export async function adminAddSignup(eventId: number, userId: number) {
-  const { data } = await axios.post(`/events/${eventId}/admin-signup/`, { user_id: userId });
+export async function adminAddSignup(
+  eventId: number,
+  userId: number,
+): Promise<EventSignupType> {
+  const { data } = await axios.post<EventSignupType>(
+    `/events/${eventId}/admin-signup/`,
+    { user_id: userId },
+  );
   return data;
 }
 
