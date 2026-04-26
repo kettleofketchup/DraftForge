@@ -114,6 +114,15 @@ LEAGUE_STAFF_USER: TestUser = TestUser(
     league_id=1,  # Staff of league 1
 )
 
+EVENT_LEAGUE_STAFF_USER: TestUser = TestUser(
+    pk=1032,
+    username="event_league_staff_tester",
+    nickname="Event League Staff Tester",
+    discord_id="100000000000000010",
+    steam_id_64=76561198012345684,
+    league_id=7,  # Staff of Events Test League (league 7)
+)
+
 # =============================================================================
 # Real Tournament 38 Users (pk=3000-3019, from production data)
 # These are real users with Steam IDs for testing Steam league sync
@@ -696,6 +705,7 @@ AUTH_TEST_USERS: list[TestUser] = [
     ORG_STAFF_USER,
     LEAGUE_ADMIN_USER,
     LEAGUE_STAFF_USER,
+    EVENT_LEAGUE_STAFF_USER,
 ]
 
 # Legacy alias

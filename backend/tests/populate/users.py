@@ -94,6 +94,7 @@ def populate_test_auth_users(force=False):
     from tests.data.users import (
         ADMIN_USER,
         CLAIMABLE_USER,
+        EVENT_LEAGUE_STAFF_USER,
         LEAGUE_ADMIN_USER,
         LEAGUE_STAFF_USER,
         ORG_ADMIN_USER,
@@ -187,6 +188,7 @@ def populate_test_auth_users(force=False):
     # Create league role users
     league_admin = create_user_with_pk(LEAGUE_ADMIN_USER)
     league_staff = create_user_with_pk(LEAGUE_STAFF_USER)
+    event_league_staff = create_user_with_pk(EVENT_LEAGUE_STAFF_USER)
 
     # Assign org/league roles
     # Org roles
@@ -208,5 +210,12 @@ def populate_test_auth_users(force=False):
         if league_staff not in league.staff.all():
             league.staff.add(league_staff)
             print(f"  Added {league_staff.username} as staff of {league.name}")
+
+    # Event-specific league staff (staff of league 7 ONLY, never of org 7)
+    events_league = League.objects.filter(pk=EVENT_LEAGUE_STAFF_USER.league_id).first()
+    if events_league:
+        if event_league_staff not in events_league.staff.all():
+            events_league.staff.add(event_league_staff)
+            print(f"  Added {event_league_staff.username} as staff of {events_league.name}")
 
     print(f"Test auth users created/updated successfully!")

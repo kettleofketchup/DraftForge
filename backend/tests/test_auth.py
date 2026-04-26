@@ -563,6 +563,27 @@ def login_league_staff(request):
 @api_view(["POST"])
 @authentication_classes([])
 @permission_classes([AllowAny])
+def login_event_league_staff(request):
+    """Login as event-league-staff test user (staff of league 7)."""
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from tests.data.users import EVENT_LEAGUE_STAFF_USER
+
+    user = CustomUser.objects.filter(pk=EVENT_LEAGUE_STAFF_USER.pk).first()
+    if not user:
+        return Response(
+            {"detail": "Test user not populated. Run db::populate first."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+    return return_tokens(user)
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
 def login_as_user(request):
     """
     TEST ONLY: Login as any user by primary key.

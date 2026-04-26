@@ -184,6 +184,22 @@ def populate_events_data(force=False):
         ensure_org_user(site_admin, org, mmr=5000)
     invalidate_obj(org)
 
+    # 4b. Add event_league_staff_tester as staff of league 7 ONLY (never of org 7)
+    # This user is created in populate_test_auth_users (step 3); the league
+    # assignment is deferred to here because league pk=7 is created above.
+    from tests.data.users import EVENT_LEAGUE_STAFF_USER
+
+    event_league_staff = CustomUser.objects.filter(
+        pk=EVENT_LEAGUE_STAFF_USER.pk
+    ).first()
+    if event_league_staff:
+        if event_league_staff not in league.staff.all():
+            league.staff.add(event_league_staff)
+            print(
+                f"    Added {event_league_staff.username} as staff of {league.name}"
+            )
+        invalidate_obj(league)
+
     # 5. Create a sample EventRepeater + Event for E2E tests
     repeater, _ = EventRepeater.objects.update_or_create(
         organization=org,
