@@ -441,10 +441,11 @@ class AddTournamentMemberTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn(self.target_user, self.tournament.users.all())
 
-    def test_league_admin_cannot_add_tournament_member(self):
-        """League admin without org staff role gets 403."""
+    def test_league_admin_can_add_tournament_member(self):
+        """League admins are league staff and can add tournament members."""
         resp = self._post(self.league_admin)
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(self.target_user, self.tournament.users.all())
 
     def test_league_user_cannot_add_tournament_member(self):
         resp = self._post(self.league_user)
