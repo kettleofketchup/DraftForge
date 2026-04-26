@@ -62,5 +62,10 @@ INTERNAL_SERVICE_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
 # the Daphne backend uses.
 DISCORD_BOT_TOKEN = os.environ.get("discord_token", "")
 
+# Public site URL used by Discord embed builders to construct links
+# (e.g. /herodraft/<id>, /tournament/<id>/teams/draft). Without this,
+# tournament_embeds._site_url() falls back to https://localhost.
+SITE_URL = os.environ.get("SITE_URL", "https://localhost")
+
 # Required by app.models at import time
 AUTH_USER_MODEL = "app.CustomUser"
