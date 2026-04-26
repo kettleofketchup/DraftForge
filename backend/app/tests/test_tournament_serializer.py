@@ -1,4 +1,5 @@
 from django.test import TestCase
+from django.utils import timezone
 
 from app.models import CustomUser, League, Organization, Tournament
 from app.serializers import TournamentSerializer
@@ -21,6 +22,7 @@ class TournamentSourceEventSerializerTest(TestCase):
             name="Test Tournament",
             league=self.league,
             tournament_type="double_elimination",
+            date_played=timezone.now(),
         )
 
     def test_source_event_null_when_no_event(self):
