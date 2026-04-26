@@ -8,10 +8,15 @@ from events.discord import (
     build_signup_reminder_embed,
     build_signup_update_embed,
 )
+from events.tests._internal_client_orm import DiscordTestMixin
 from events.tests.base import EventTestCase
 
 
-class BuildAnnouncementEmbedTest(EventTestCase):
+class _EmbedTestCase(DiscordTestMixin, EventTestCase):
+    """EventTestCase + ORM-backed internal_client patches."""
+
+
+class BuildAnnouncementEmbedTest(_EmbedTestCase):
     def test_uses_event_name_as_title(self):
         embed = build_announcement_embed(self.event)
         self.assertIn(self.event.name, embed["title"])
@@ -25,7 +30,7 @@ class BuildAnnouncementEmbedTest(EventTestCase):
         self.assertIsInstance(embed["color"], int)
 
 
-class BuildSignupUpdateEmbedTest(EventTestCase):
+class BuildSignupUpdateEmbedTest(_EmbedTestCase):
     def test_includes_event_name(self):
         embed = build_signup_update_embed(self.event)
         self.assertIn(self.event.name, embed["title"])
@@ -38,31 +43,31 @@ class BuildSignupUpdateEmbedTest(EventTestCase):
         )
 
 
-class BuildNewEventEmbedTest(EventTestCase):
+class BuildNewEventEmbedTest(_EmbedTestCase):
     def test_includes_event_name(self):
         embed = build_new_event_embed(self.event)
         self.assertIn(self.event.name, embed["title"])
 
 
-class BuildSignupReminderEmbedTest(EventTestCase):
+class BuildSignupReminderEmbedTest(_EmbedTestCase):
     def test_includes_event_name(self):
         embed = build_signup_reminder_embed(self.event)
         self.assertIn(self.event.name, embed["title"])
 
 
-class BuildAttendanceReminderEmbedTest(EventTestCase):
+class BuildAttendanceReminderEmbedTest(_EmbedTestCase):
     def test_includes_event_name(self):
         embed = build_attendance_reminder_embed(self.event)
         self.assertIn(self.event.name, embed["title"])
 
 
-class BuildProfileReminderEmbedTest(EventTestCase):
+class BuildProfileReminderEmbedTest(_EmbedTestCase):
     def test_includes_event_name(self):
         embed = build_profile_reminder_embed(self.event)
         self.assertIn(self.event.name, embed["title"])
 
 
-class BuildAnnouncementEmbedSignupListTest(EventTestCase):
+class BuildAnnouncementEmbedSignupListTest(_EmbedTestCase):
     def test_empty_signup_list(self):
         embed = build_announcement_embed(self.event)
         field_names = [f["name"] for f in embed.get("fields", [])]
