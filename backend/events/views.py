@@ -42,6 +42,7 @@ from events.services import (
     reinstate_signup,
     reject_signup,
     restart_event_tournament,
+    staff_add_signup,
     sync_future_events,
     sync_tournament_from_event,
     unconfirm_signup,
@@ -501,7 +502,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 {"error": "User not found"}, status=status.HTTP_404_NOT_FOUND
             )
         try:
-            signup = process_rsvp(event, user)
+            signup = staff_add_signup(event, user)
             return Response(
                 EventSignupSerializer(signup).data, status=status.HTTP_201_CREATED
             )

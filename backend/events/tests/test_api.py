@@ -246,3 +246,41 @@ class LeagueStaffEventActionsTest(TestCase):
         # we only care about the permission check (200 or 400, NOT 403).
         resp = self.client.post(f"/api/events/{self.event.pk}/restart_tournament/")
         assert resp.status_code != 403, resp.content
+
+
+class AdminSignupDuringRollCallTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = CustomUser.objects.create_user(username="adm_staff", password="x")
+        cls.staff.positions = PositionsModel.objects.create()
+        cls.staff.save()
+        cls.player = CustomUser.objects.create_user(username="adm_player", password="x")
+        cls.player.positions = PositionsModel.objects.create()
+        cls.player.save()
+        cls.org = Organization.objects.create(name="Adm Org", owner=cls.staff)
+        cls.org.staff.add(cls.staff)
+        cls.event = Event.objects.create(
+            organization=cls.org,
+            name="Adm Event",
+            scheduled_at=tz.now() + timedelta(days=1),
+            state=EventState.ROLL_CALL,
+            created_by=cls.staff,
+            tournament_name="T",
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.staff)
+
+    def test_admin_signup_succeeds_during_roll_call(self):
+        resp = self.client.post(
+            f"/api/events/{self.event.pk}/admin-signup/",
+            {"user_id": self.player.pk},
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+
+    def test_public_rsvp_still_rejected_during_roll_call(self):
+        self.client.force_authenticate(self.player)
+        resp = self.client.post(f"/api/events/{self.event.pk}/rsvp/")
+        assert resp.status_code == 400
