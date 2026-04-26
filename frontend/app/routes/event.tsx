@@ -94,6 +94,7 @@ import { useUserStore } from '~/store/userStore';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import api from '~/components/api/axios';
+import { extractApiError } from '~/lib/apiError';
 
 export default function EventPage() {
   const { eventId, tab } = useParams<{ eventId: string; tab?: string }>();
@@ -308,7 +309,7 @@ export default function EventPage() {
 
         {/* Row 2: Status + Date */}
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 text-muted-foreground">
-          <EventStateBadge state={event.state} />
+          <EventStateBadge state={event.state} data-testid="event-state-badge" />
           <Badge variant="secondary" className="flex items-center gap-1 w-fit">
             <Clock className="h-3 w-3" />
             {formattedDate}
@@ -568,6 +569,25 @@ export default function EventPage() {
             toast.success('RSVP cancelled');
           } catch {
             toast.error('Failed to cancel RSVP');
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={showReopenConfirm}
+        onOpenChange={setShowReopenConfirm}
+        title="Reopen Signups"
+        description={`Reopen signups for "${event.name}" and allow new RSVPs? Existing confirmations will be kept and no announcement will be sent.`}
+        confirmLabel="Reopen Signups"
+        variant="warning"
+        isLoading={actions.reopenSignups.isPending}
+        onConfirm={async () => {
+          try {
+            await actions.reopenSignups.mutateAsync();
+            toast.success('Signups reopened');
+          } catch (err: unknown) {
+            const message = extractApiError(err);
+            toast.error(message || 'Failed to reopen signups');
           }
         }}
       />
