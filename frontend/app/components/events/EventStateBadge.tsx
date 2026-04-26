@@ -20,10 +20,18 @@ const stateConfig: Record<string, { label: string; className: string }> = {
   [SignupStatus.REJECTED]: { label: 'Rejected', className: 'bg-error/20 text-error border-error/30' },
 };
 
-export function EventStateBadge({ state, className }: { state: string; className?: string }) {
+export function EventStateBadge({
+  state,
+  className,
+  'data-testid': dataTestId,
+}: {
+  state: string;
+  className?: string;
+  'data-testid'?: string;
+}) {
   const config = stateConfig[state] ?? { label: state, className: '' };
   return (
-    <Badge variant="outline" className={cn(config.className, className)}>
+    <Badge variant="outline" className={cn(config.className, className)} data-testid={dataTestId}>
       {config.label}
     </Badge>
   );

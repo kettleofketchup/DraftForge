@@ -360,20 +360,25 @@ class InternalClientIntegrationTest(LiveServerTestCase):
     """Real HTTP integration: internal_client -> actual HTTP -> endpoint -> DB."""
 
     def test_create_message_log_full_chain(self):
+        import os
+        from unittest.mock import patch
+
         import app.internal_client as client
         from discordbot.models import DiscordMessageLog
 
         old_url = client.INTERNAL_API_URL
         client.INTERNAL_API_URL = f"{self.live_server_url}/api/internal"
         try:
-            resp = client.create_message_log(
-                channel_id="live-integration-test",
-                source="test_integration",
-                source_id=1,
-                embed_data={"title": "Integration Test"},
-                status_code=200,
-                success=True,
-            )
+            # Client reads token from env; server reads via override_settings.
+            with patch.dict(os.environ, {"INTERNAL_SERVICE_TOKEN": TOKEN}):
+                resp = client.create_message_log(
+                    channel_id="live-integration-test",
+                    source="test_integration",
+                    source_id=1,
+                    embed_data={"title": "Integration Test"},
+                    status_code=200,
+                    success=True,
+                )
             self.assertIsNotNone(resp)
             self.assertEqual(resp.status_code, 201)
             self.assertTrue(

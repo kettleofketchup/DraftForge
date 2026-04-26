@@ -18,6 +18,7 @@ EVENT_STATE_TRANSITIONS = {
         EventState.CANCELLED,
     ],
     EventState.ROLL_CALL: [
+        EventState.SIGNUPS_OPEN,
         EventState.IN_PROGRESS,
         EventState.COMPLETED,
         EventState.CANCELLED,

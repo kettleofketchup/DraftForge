@@ -57,7 +57,7 @@ class PlayerDotaProfileTest(TestCase):
 
         profile = PlayerDotaProfile.objects.create(
             org_user=self.org_user,
-            friend_id="123456789",
+            unverified_friend_id="123456789",
         )
         self.assertEqual(profile.unverified_friend_id, "123456789")
         # Verify it did NOT touch CustomUser.steam_account_id
@@ -98,6 +98,6 @@ class PlayerDeadlockProfileTest(TestCase):
 
         profile = PlayerDeadlockProfile.objects.create(
             org_user=self.org_user,
-            friend_id="987654321",
+            unverified_friend_id="987654321",
         )
         self.assertEqual(profile.unverified_friend_id, "987654321")

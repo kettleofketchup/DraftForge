@@ -9,12 +9,22 @@ from app.models import CustomUser, Organization
 
 class TaskScheduleEndpointTest(TestCase):
     def setUp(self):
-        from events.models import Event
+        from events.models import Event, EventRepeater
 
         self.client = APIClient()
         self.org = Organization.objects.create(name="Schedule Test Org")
+        # signup_reminder requires an event_repeater to be enabled (not misconfigured).
+        self.repeater = EventRepeater.objects.create(
+            organization=self.org,
+            name="Schedule Test Repeater",
+            frequency="weekly",
+            day_of_week=3,
+            time_of_day="19:00:00",
+            starts_at="2026-01-01",
+        )
         self.event = Event.objects.create(
             organization=self.org,
+            event_repeater=self.repeater,
             name="Schedule Test Event",
             state="signups_open",
             scheduled_at=timezone.now() + timedelta(hours=24),
@@ -26,8 +36,6 @@ class TaskScheduleEndpointTest(TestCase):
             discord_profile_reminder_hours=4,
             discord_announcement=True,
             discord_announcement_channel_id="123456",
-            discord_subscriber_dm=True,
-            discord_subscriber_dm_hours=12,
             discord_create_event=True,
         )
         user = CustomUser.objects.create_user(
@@ -49,10 +57,11 @@ class TaskScheduleEndpointTest(TestCase):
         tasks = resp.json()
         task_names = [t["task"] for t in tasks]
         self.assertIn("announcement", task_names)
+        # signup_reminder absorbed the former subscriber_dm task — it now drives
+        # subscriber DMs and uses has_dms for fired detection.
         self.assertIn("signup_reminder", task_names)
         self.assertIn("confirm_attendance", task_names)
         self.assertIn("profile_reminder", task_names)
-        self.assertIn("subscriber_dm", task_names)
         self.assertIn("scheduled_event", task_names)
 
     def test_includes_fires_at(self):
@@ -74,7 +83,6 @@ class TaskScheduleEndpointTest(TestCase):
             discord_confirm_attendance=False,
             discord_profile_reminder=False,
             discord_announcement=False,
-            discord_subscriber_dm=False,
             discord_create_event=False,
         )
         resp = self.client.get(f"/api/events/{event.pk}/task-schedule/")
@@ -84,7 +92,6 @@ class TaskScheduleEndpointTest(TestCase):
                 "signup_reminder",
                 "confirm_attendance",
                 "profile_reminder",
-                "subscriber_dm",
                 "scheduled_event",
             ):
                 self.assertEqual(
@@ -92,14 +99,22 @@ class TaskScheduleEndpointTest(TestCase):
                 )
 
     def test_fired_tasks_detected(self):
-        from discordbot.models import DiscordMessageLog
+        # signup_reminder fired status is driven by DiscordEventDM rows
+        # (subscriber DMs sent), not DiscordMessageLog.
+        from discordbot.models import DiscordEvent, DiscordEventDM, DMType
+        from org.models import OrgUser
 
-        DiscordMessageLog.objects.create(
-            channel_id="123456",
-            embed_data={"test": True},
-            source="signup_reminder",
-            source_id=self.event.pk,
-            success=True,
+        user = CustomUser.objects.create_user(
+            username="dm_recipient", password="x", discordId="999"
+        )
+        org_user = OrgUser.objects.create(user=user, organization=self.org)
+        discord_event = DiscordEvent.objects.create(
+            event=self.event, guild_id="guild123"
+        )
+        DiscordEventDM.objects.create(
+            discord_event=discord_event,
+            org_user=org_user,
+            dm_type=DMType.SIGNUP_REMINDER,
         )
         resp = self.client.get(f"/api/events/{self.event.pk}/task-schedule/")
         tasks = resp.json()

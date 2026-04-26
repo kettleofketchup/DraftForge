@@ -50,13 +50,10 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  Trash2,
   UserCheck,
   UserX,
-  Pencil,
   HelpCircle,
   Repeat,
-  ShieldAlert,
   ArrowDownToLine,
   Undo2,
   UserPlus,
@@ -71,9 +68,9 @@ import { EventState, GameType } from '~/components/events/schemas';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
 import { DiscordLogSection } from '~/components/events/DiscordLogSection';
 import { EditEventModal } from '~/components/events/EditEventModal';
-import type { EventSignupType } from '~/components/events/schemas';
+import type { EventSignupType, EventType } from '~/components/events/schemas';
 import { PrimaryButton, SecondaryButton, DestructiveButton, HighlightButton } from '~/components/ui/buttons';
-import { BrandDropdownMenu, type BrandDropdownAction } from '~/components/ui/brand-dropdown-menu';
+import { EventAdminActions } from '~/components/events/EventAdminActions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { UserEventStrip } from '~/components/user';
@@ -92,12 +89,12 @@ import { adminAddSignup, subscribeToRepeater, unsubscribeFromRepeater } from '~/
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrganization } from '~/components/organization';
-import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 import { usePageNav } from '~/hooks/usePageNav';
 import { useUserStore } from '~/store/userStore';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import api from '~/components/api/axios';
+import { extractApiError } from '~/lib/apiError';
 
 export default function EventPage() {
   const { eventId, tab } = useParams<{ eventId: string; tab?: string }>();
@@ -111,13 +108,15 @@ export default function EventPage() {
 
   const [activeTab, setActiveTab] = useState(tab || 'details');
   const [showRollCallConfirm, setShowRollCallConfirm] = useState(false);
+  const [showReopenConfirm, setShowReopenConfirm] = useState(false);
   const [showRsvpConfirm, setShowRsvpConfirm] = useState(false);
   const [showCancelRsvpConfirm, setShowCancelRsvpConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
 
-  // Permission check - fetch the specific org for this event
+  // Fetch the specific org for this event (needed for org logo and discord server id)
   const { organization: eventOrg } = useOrganization(event?.organization ?? undefined);
-  const isAdmin = useIsOrganizationStaff(eventOrg);
+  // Permission check uses backend-derived flag (covers org staff AND league staff).
+  const isAdmin = event?.user_can_manage ?? false;
 
   // Mutations
   const queryClient = useQueryClient();
@@ -239,86 +238,6 @@ export default function EventPage() {
 
   usePageNav(event ? pageNavOptions : null, activeTab, handleTabChange);
 
-  // Build admin actions for mobile dropdown — must be before early returns
-  const adminActions = useMemo((): BrandDropdownAction[] => {
-    if (!isAdmin || !event) return [];
-    const items: BrandDropdownAction[] = [
-      {
-        key: 'edit',
-        icon: <Pencil className="h-4 w-4 mr-1.5" />,
-        label: 'Edit',
-        onClick: () => setShowEditModal(true),
-        variant: 'success',
-        'data-testid': 'event-edit-btn',
-      },
-    ];
-
-    if (event.state === EventState.UPCOMING) {
-      items.push({
-        key: 'open-signups',
-        icon: <Users className="h-4 w-4 mr-1.5" />,
-        label: 'Open Signups',
-        onClick: () => actions.openSignups.mutate(),
-        variant: 'primary',
-        disabled: actions.openSignups.isPending,
-        'data-testid': 'event-open-signups-btn',
-      });
-    }
-
-    if (event.state === EventState.SIGNUPS_OPEN) {
-      items.push({
-        key: 'start-rollcall',
-        icon: <Clock className="h-4 w-4 mr-1.5" />,
-        label: 'Start Roll Call',
-        onClick: () => setShowRollCallConfirm(true),
-        variant: 'primary',
-        disabled: actions.startRollCall.isPending,
-        'data-testid': 'event-start-rollcall-btn',
-      });
-    }
-
-    if (event.state === EventState.ROLL_CALL) {
-      items.push({
-        key: 'open-rollcall',
-        icon: <CheckCircle2 className="h-4 w-4 mr-1.5" />,
-        label: 'Open Roll Call',
-        onClick: () => navigate(`/rollcall/${eventId}`),
-        variant: 'primary',
-        'data-testid': 'event-start-tournament-btn',
-      });
-    }
-
-    if (event.state !== EventState.COMPLETED && event.state !== EventState.CANCELLED) {
-      items.push({
-        key: 'cancel',
-        icon: <XCircle className="h-4 w-4 mr-1.5" />,
-        label: 'Cancel',
-        onClick: () => actions.cancelEvent.mutate(),
-        variant: 'destructive',
-        disabled: actions.cancelEvent.isPending,
-        'data-testid': 'event-cancel-btn',
-      });
-    }
-
-    items.push({
-      key: 'delete',
-      icon: <Trash2 className="h-4 w-4 mr-1.5" />,
-      label: 'Delete',
-      onClick: () => {
-        if (window.confirm('Are you sure you want to permanently delete this event? This cannot be undone.')) {
-          actions.deleteEvent.mutate(undefined, {
-            onSuccess: () => navigate('/events'),
-          });
-        }
-      },
-      variant: 'destructive',
-      disabled: actions.deleteEvent.isPending,
-      'data-testid': 'event-delete-btn',
-    });
-
-    return items;
-  }, [isAdmin, event?.state, event?.organization, actions, eventId, navigate]);
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -390,7 +309,7 @@ export default function EventPage() {
 
         {/* Row 2: Status + Date */}
         <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 text-muted-foreground">
-          <EventStateBadge state={event.state} />
+          <EventStateBadge state={event.state} data-testid="event-state-badge" />
           <Badge variant="secondary" className="flex items-center gap-1 w-fit">
             <Clock className="h-3 w-3" />
             {formattedDate}
@@ -402,95 +321,17 @@ export default function EventPage() {
           <div className="flex items-center justify-between gap-3">
             {/* Admin actions — left side */}
             {isAdmin ? (
-              <>
-                {/* Desktop: button group */}
-                <div className="hidden md:flex items-center gap-2">
-                  <SecondaryButton
-                    color="emerald"
-                    size="sm"
-                    onClick={() => setShowEditModal(true)}
-                    title="Edit settings"
-                    data-testid="event-edit-btn"
-                  >
-                    <Pencil className="h-4 w-4 mr-1.5" />
-                    Edit
-                  </SecondaryButton>
-
-                  {event.state === EventState.UPCOMING && (
-                    <SecondaryButton
-                      color="green"
-                      size="sm"
-                      onClick={() => actions.openSignups.mutate()}
-                      disabled={actions.openSignups.isPending}
-                      data-testid="event-open-signups-btn"
-                    >
-                      Open Signups
-                    </SecondaryButton>
-                  )}
-
-                  {event.state === EventState.SIGNUPS_OPEN && (
-                    <SecondaryButton
-                      color="orange"
-                      size="sm"
-                      onClick={() => setShowRollCallConfirm(true)}
-                      disabled={actions.startRollCall.isPending}
-                      data-testid="event-start-rollcall-btn"
-                    >
-                      Start Roll Call
-                    </SecondaryButton>
-                  )}
-
-                  {event.state === EventState.ROLL_CALL && (
-                    <PrimaryButton
-                      size="sm"
-                      onClick={() => navigate(`/rollcall/${eventId}`)}
-                      data-testid="event-start-tournament-btn"
-                    >
-                      Open Roll Call
-                    </PrimaryButton>
-                  )}
-
-                  {event.state !== EventState.COMPLETED &&
-                    event.state !== EventState.CANCELLED && (
-                      <DestructiveButton
-                        size="sm"
-                        onClick={() => actions.cancelEvent.mutate()}
-                        loading={actions.cancelEvent.isPending}
-                        data-testid="event-cancel-btn"
-                      >
-                        <XCircle className="h-4 w-4 mr-1.5" />
-                        Cancel
-                      </DestructiveButton>
-                    )}
-
-                  <DestructiveButton
-                    size="sm"
-                    onClick={() => {
-                      if (window.confirm('Are you sure you want to permanently delete this event? This cannot be undone.')) {
-                        actions.deleteEvent.mutate(undefined, {
-                          onSuccess: () => navigate('/events'),
-                        });
-                      }
-                    }}
-                    loading={actions.deleteEvent.isPending}
-                    data-testid="event-delete-btn"
-                  >
-                    <Trash2 className="h-4 w-4 mr-1.5" />
-                    Delete
-                  </DestructiveButton>
-                </div>
-
-                {/* Mobile: labeled dropdown */}
-                <div className="md:hidden">
-                  <BrandDropdownMenu
-                    label="Admin"
-                    icon={<ShieldAlert className="h-4 w-4 mr-1.5" />}
-                    actions={adminActions}
-                    variant="admin"
-                    data-testid="event-admin-actions-mobile"
-                  />
-                </div>
-              </>
+              <EventAdminActions
+                event={event}
+                actions={actions}
+                onEditClick={() => setShowEditModal(true)}
+                onStartRollCallClick={() => setShowRollCallConfirm(true)}
+                onReopenSignupsClick={() => setShowReopenConfirm(true)}
+                onOpenRollCallClick={() => navigate(`/rollcall/${eventId}`)}
+                onDeleteConfirmed={() => {
+                  actions.deleteEvent.mutate(undefined, { onSuccess: () => navigate('/events') });
+                }}
+              />
             ) : (
               <div />
             )}
@@ -647,6 +488,7 @@ export default function EventPage() {
               eventId={event.id}
               orgId={event.organization}
               hasDiscordServer={!!eventOrg?.discord_server_id}
+              state={event.state}
             />
           </TabsContent>
 
@@ -656,6 +498,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
+              state={event.state}
             />
           </TabsContent>
 
@@ -665,6 +508,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
+              state={event.state}
             />
           </TabsContent>
 
@@ -728,6 +572,25 @@ export default function EventPage() {
             toast.success('RSVP cancelled');
           } catch {
             toast.error('Failed to cancel RSVP');
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={showReopenConfirm}
+        onOpenChange={setShowReopenConfirm}
+        title="Reopen Signups"
+        description={`Reopen signups for "${event.name}" and allow new RSVPs? Existing confirmations will be kept and no announcement will be sent.`}
+        confirmLabel="Reopen Signups"
+        variant="warning"
+        isLoading={actions.reopenSignups.isPending}
+        onConfirm={async () => {
+          try {
+            await actions.reopenSignups.mutateAsync();
+            toast.success('Signups reopened');
+          } catch (err: unknown) {
+            const message = extractApiError(err);
+            toast.error(message || 'Failed to reopen signups');
           }
         }}
       />
@@ -821,6 +684,7 @@ function SignupsTab({
   eventId,
   orgId,
   hasDiscordServer,
+  state,
 }: {
   signups: EventSignupType[];
   isAdmin: boolean;
@@ -829,6 +693,7 @@ function SignupsTab({
   eventId?: number;
   orgId?: number;
   hasDiscordServer?: boolean;
+  state: EventType['state'];
 }) {
   const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(null);
   const [removeSignup, setRemoveSignup] = useState<{ signup: EventSignupType; name: string } | null>(null);
@@ -853,7 +718,7 @@ function SignupsTab({
 
   return (
     <div className="space-y-3">
-      {isAdmin && eventId && (
+      {isAdmin && eventId && (state === EventState.SIGNUPS_OPEN || state === EventState.ROLL_CALL) && (
         <div className="flex justify-end">
           <SecondaryButton
             size="sm"

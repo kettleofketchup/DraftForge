@@ -195,6 +195,9 @@ class EventSerializer(serializers.ModelSerializer):
     # Use annotated fields from queryset (no per-row queries)
     signup_count = serializers.IntegerField(read_only=True, default=0)
     confirmed_count = serializers.IntegerField(read_only=True, default=0)
+    # Per-request override; populated in the view layer AFTER the cached payload
+    # is resolved, so the cache stays user-agnostic.
+    user_can_manage = serializers.BooleanField(read_only=True, default=False)
 
     class Meta:
         model = Event
@@ -274,6 +277,7 @@ class EventSerializer(serializers.ModelSerializer):
             "auto_create_hero_drafts",
             "discord_send_draft_link",
             "discord_send_herodraft_link",
+            "user_can_manage",
         ]
         read_only_fields = [
             "id",

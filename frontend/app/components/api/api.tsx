@@ -133,6 +133,7 @@ export type { AddMemberPayload, AddUserResponse } from './types';
 export {
   getEvents, getEvent, createEvent, updateEvent, deleteEvent,
   rsvpForEvent, openSignups, startRollCall, startTournament, cancelEvent,
+  reopenSignups,
   restartTournament,
   getEventSignups, approveSignup, rejectSignup, confirmSignup, cancelSignup,
   unconfirmSignup, demoteSignup, reinstateSignup,

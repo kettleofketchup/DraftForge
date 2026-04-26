@@ -27,7 +27,7 @@ export const eventSchema = z.object({
   description: z.string(),
   scheduled_at: z.string(),
   signups_open_at: z.string().nullable(),
-  state: z.string(),
+  state: z.nativeEnum(EventState),
   tournament: z.number().nullable(),
   created_by: z.number().nullable(),
   created_at: z.string(),
@@ -86,6 +86,7 @@ export const eventSchema = z.object({
   discord_require_rank_screenshot: z.boolean(),
   discord_require_battlecup_screenshot: z.boolean(),
   min_mmr: z.number().nullable(),
+  user_can_manage: z.boolean().default(false),
   _warning: z.string().optional(),
 });
 

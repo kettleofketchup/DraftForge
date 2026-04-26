@@ -39,6 +39,18 @@ class EventTestCase(TestCase):
         cls.user_incomplete.positions = PositionsModel.objects.create()
         cls.user_incomplete.save()
 
+        cls.league_staff = CustomUser.objects.create_user(
+            username="event_league_staff", password="testpass"
+        )
+        cls.league_staff.positions = PositionsModel.objects.create()
+        cls.league_staff.save()
+
+        cls.unrelated_user = CustomUser.objects.create_user(
+            username="event_unrelated", password="testpass"
+        )
+        cls.unrelated_user.positions = PositionsModel.objects.create()
+        cls.unrelated_user.save()
+
         cls.org = Organization.objects.create(name="Event Test Org", owner=cls.admin)
         cls.org.staff.add(cls.admin)
 
@@ -47,6 +59,7 @@ class EventTestCase(TestCase):
             organization=cls.org,
             steam_league_id=99999,
         )
+        cls.league.staff.add(cls.league_staff)
 
         cls.event = Event.objects.create(
             organization=cls.org,

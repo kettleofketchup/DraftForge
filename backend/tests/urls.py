@@ -13,6 +13,7 @@ from .test_auth import (
     login_admin,
     login_as_discord_id,
     login_as_user,
+    login_event_league_staff,
     login_league_admin,
     login_league_staff,
     login_org_admin,
@@ -86,6 +87,12 @@ urlpatterns = [
         "login-league-staff/",
         login_league_staff,
         name="login-league-staff",
+    ),
+    # Event-only League Staff (staff of league 7, never of org 7)
+    path(
+        "login-event-league-staff/",
+        login_event_league_staff,
+        name="login-event-league-staff",
     ),
     path(
         "login-as/",

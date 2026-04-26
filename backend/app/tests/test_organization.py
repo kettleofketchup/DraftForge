@@ -43,20 +43,30 @@ class OrganizationAPITest(TestCase):
         self.assertEqual(response.data["name"], "Test Org")
 
     def test_create_organization_requires_superuser(self):
-        """POST /api/organizations/ requires superuser."""
-        # Org admin (not superuser) should be denied
+        """POST /api/organizations/ requires authentication; creator becomes owner+admin."""
+        # Anonymous denied
+        response = self.client.post(
+            "/api/organizations/",
+            {"name": "New Org Anon"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Any authenticated user can create; they become owner and admin.
         self.client.force_authenticate(user=self.org_admin)
         response = self.client.post(
             "/api/organizations/",
             {"name": "New Org"},
         )
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        new_org = Organization.objects.get(name="New Org")
+        self.assertEqual(new_org.owner, self.org_admin)
+        self.assertIn(self.org_admin, new_org.admins.all())
 
-        # Superuser should succeed
+        # Superuser also succeeds
         self.client.force_authenticate(user=self.superuser)
         response = self.client.post(
             "/api/organizations/",
-            {"name": "New Org"},
+            {"name": "New Org 2"},
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 

@@ -174,7 +174,7 @@ def get_event_signups(event_id):
     """
     from events.schemas import EventSignupSchema
 
-    resp = _api_get(f"/events/{event_id}/signups/")
+    resp = _api_get("/events/signups/", params={"event": event_id})
     if resp and resp.ok:
         return [EventSignupSchema.model_validate(s) for s in resp.json()]
     return []
@@ -208,25 +208,6 @@ def generate_repeater_events(repeater_pk):
     return 0
 
 
-def search_message_logs(source, source_id, success=True, limit=1):
-    """Search DiscordMessageLog via internal API.
-
-    Returns list of log dicts, or empty list.
-    """
-    resp = _get(
-        "/discord/message-logs/",
-        params={
-            "source": source,
-            "source_id": source_id,
-            "success": str(success).lower(),
-            "limit": limit,
-        },
-    )
-    if resp and resp.ok:
-        return resp.json()
-    return []
-
-
 def get_event_for_task(pk):
     """Get full event data + org Discord config for celery tasks.
 
@@ -244,11 +225,6 @@ def get_event_for_task(pk):
 def get_events(params=None):
     """List events with filters via public API."""
     return _api_get("/events/", params=params)
-
-
-def get_event_signups(event_pk):
-    """Get signups for an event via public API."""
-    return _api_get(f"/events/signups/", params={"event": event_pk})
 
 
 def check_message_log_exists(source, source_id):

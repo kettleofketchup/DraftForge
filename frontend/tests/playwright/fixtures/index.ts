@@ -20,6 +20,7 @@ export {
   loginOrgStaff,
   loginLeagueAdmin,
   loginLeagueStaff,
+  loginEventLeagueStaff,
   waitForHydration,
   visitAndWait,
   type UserInfo,

@@ -18,6 +18,7 @@ import {
   loginEventAdmin,
   loginEventPlayer,
   postWithCsrf,
+  verifyDiscordMessages,
   type EventInfo,
 } from '../../fixtures';
 
@@ -117,5 +118,54 @@ test.describe('Roll Call Flow (@cicd)', () => {
     // Click should navigate to roll call page
     await openRollCallBtn.click();
     await page.waitForURL(/\/rollcall\//);
+  });
+
+  test('staff can reopen signups from roll_call (@cicd)', async ({ page, context }) => {
+    await loginEventAdmin(context);
+
+    // Force the event into ROLL_CALL via the existing test API.
+    const startResp = await postWithCsrf(
+      context,
+      `${API_URL}/events/${eventInfo.pk}/start_roll_call/`,
+    );
+    expect(startResp.ok()).toBeTruthy();
+
+    // Snapshot the announcement message BEFORE reopen so we can assert it didn't change.
+    const beforeDiscord = await verifyDiscordMessages(context, eventInfo.pk);
+
+    // Route is /events/:eventId/:tab? — plural (see frontend/app/routes.tsx)
+    await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
+    await expect(page.getByTestId('event-state-badge')).toHaveText(/Roll Call/i);
+
+    // Click Reopen Signups (desktop; mobile dropdown unreachable at 1280×720)
+    await page.getByTestId('event-reopen-signups-btn').click();
+
+    // Confirm dialog → click the WarningButton confirm
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.url().includes(`/events/${eventInfo.pk}/reopen_signups/`) &&
+          r.request().method() === 'POST',
+      ),
+      page.getByRole('button', { name: /^Reopen Signups$/ }).last().click(),
+    ]);
+    expect(response.status()).toBe(200);
+
+    // Positive: state flipped, button is gone
+    await expect(page.getByTestId('event-state-badge')).toHaveText(/Signups Open/i);
+    await expect(page.getByTestId('event-reopen-signups-btn')).toHaveCount(0);
+
+    // Negative: no Discord re-announcement was posted.
+    const afterDiscord = await verifyDiscordMessages(context, eventInfo.pk);
+    expect(afterDiscord.announcement?.id ?? null).toBe(beforeDiscord.announcement?.id ?? null);
+  });
+
+  test('Reopen Signups button is hidden outside roll_call (@cicd)', async ({ page, context }) => {
+    await loginEventAdmin(context);
+
+    // The events test data leaves `eventInfo.pk` in SIGNUPS_OPEN by default after resetEventsData.
+    await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
+    await expect(page.getByTestId('event-state-badge')).toHaveText(/Signups Open/i);
+    await expect(page.getByTestId('event-reopen-signups-btn')).toHaveCount(0);
   });
 });

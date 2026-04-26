@@ -180,7 +180,11 @@ class RealEventAnnouncementTaskTest(TestCase):
         )
 
 
-@unittest.skipUnless(HAS_MULTI_USER, SKIP_MULTI_USER)
+@unittest.skipUnless(
+    HAS_TOKEN and HAS_MULTI_USER,
+    "Requires DISCORD_BOT_TOKEN AND DISCORD_TEST_BOT_2_TOKEN (the main bot "
+    "posts the announcement; secondary bots react to it).",
+)
 class MultiUserReactionTest(TestCase):
     """Test multiple bot users reacting to an announcement message.
 

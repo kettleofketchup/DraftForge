@@ -23,6 +23,7 @@ import {
 } from '../../fixtures';
 
 import { postWithCsrf } from '../../fixtures/events';
+import { waitForAddUserModal, searchAndAddUser, closeAddUserModal } from '../../helpers/add-user';
 
 const API_URL = 'https://localhost/api';
 
@@ -243,5 +244,39 @@ test.describe('Event Signup Management (@cicd)', () => {
 
     // Waitlist tab should show 2
     await expect(page.getByTestId('event-tab-waitlist')).toContainText('2');
+  });
+
+  test('staff can admin-add a user during roll_call (@cicd)', async ({ page, context }) => {
+    // Force the event into ROLL_CALL via the existing test API.
+    const startResp = await postWithCsrf(
+      context,
+      `${API_URL}/events/${eventInfo.pk}/start_roll_call/`,
+    );
+    expect(startResp.ok()).toBeTruthy();
+
+    // Route is /events/:eventId/:tab? — plural; navigate directly to the signups tab.
+    await visitAndWaitForHydration(page, `/events/${eventInfo.pk}/signups`);
+    await expect(page.getByTestId('event-state-badge')).toHaveText(/Roll Call/i);
+
+    // Open AddUserModal via canonical testid (gate widened to ROLL_CALL in Task 16).
+    await page.getByTestId('admin-add-signup-btn').click();
+    await waitForAddUserModal(page);
+
+    // Search for a seeded user, click their add button, and capture the admin-signup POST.
+    const targetUsername = 'event_player_1';
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.url().includes(`/events/${eventInfo.pk}/admin-signup/`) &&
+          r.request().method() === 'POST',
+      ),
+      searchAndAddUser(page, targetUsername),
+    ]);
+    expect(response.status()).toBe(201);
+
+    // Close the modal so the underlying signup list is unobscured, then assert
+    // the newly added user (rendered by nickname in UserEventStrip) appears.
+    await closeAddUserModal(page);
+    await expect(page.getByText('EventPlayer1').first()).toBeVisible();
   });
 });

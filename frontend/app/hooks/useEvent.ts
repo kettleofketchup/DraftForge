@@ -16,6 +16,7 @@ import {
   getEventRepeaters,
   getEventSignups,
   openSignups as openSignupsAPI,
+  reopenSignups as reopenSignupsAPI,
   rejectSignup as rejectSignupAPI,
   unconfirmSignup as unconfirmSignupAPI,
   demoteSignup as demoteSignupAPI,
@@ -103,6 +104,16 @@ export function useEventActionMutation(eventId: number) {
     startRollCall: useMutation({
       mutationFn: () => startRollCallAPI(eventId),
       onSuccess: (data) => queryClient.setQueryData(['event', eventId], data),
+    }),
+    reopenSignups: useMutation({
+      // Corrective transition; no optimistic update intentionally.
+      mutationFn: () => reopenSignupsAPI(eventId),
+      onSuccess: (data) => {
+        queryClient.setQueryData(['event', eventId], data);
+        // The events list filters by state — a regression from roll_call → signups_open
+        // changes which lists this event appears in.
+        queryClient.invalidateQueries({ queryKey: ['events'] });
+      },
     }),
     startTournament: useMutation({
       mutationFn: () => startTournamentAPI(eventId),
