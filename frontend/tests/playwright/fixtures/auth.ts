@@ -400,6 +400,36 @@ export async function loginLeagueStaff(context: BrowserContext): Promise<void> {
 }
 
 /**
+ * Login as event-league-staff (staff of league 7 ONLY, not org 7).
+ * Use to assert league-staff access on events tied to the Events Test League.
+ */
+export async function loginEventLeagueStaff(context: BrowserContext): Promise<void> {
+  const url = `${API_URL}/tests/login-event-league-staff/`;
+  console.log(`[auth] loginEventLeagueStaff: POST ${url}`);
+
+  const response = await context.request.post(url);
+
+  if (!response.ok()) {
+    const status = response.status();
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    console.error(`[auth] loginEventLeagueStaff FAILED: ${status} - ${body}`);
+    throw new Error(`loginEventLeagueStaff failed: ${status} - ${body.slice(0, 500)}`);
+  }
+
+  console.log(`[auth] loginEventLeagueStaff: OK (${response.status()})`);
+
+  const cookies = response.headers()['set-cookie'];
+  if (cookies) {
+    await setSessionCookies(context, cookies);
+  }
+}
+
+/**
  * Parse and set session cookies from response headers.
  */
 async function setSessionCookies(
