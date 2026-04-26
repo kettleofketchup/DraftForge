@@ -208,25 +208,6 @@ def generate_repeater_events(repeater_pk):
     return 0
 
 
-def search_message_logs(source, source_id, success=True, limit=1):
-    """Search DiscordMessageLog via internal API.
-
-    Returns list of log dicts, or empty list.
-    """
-    resp = _get(
-        "/discord/message-logs/",
-        params={
-            "source": source,
-            "source_id": source_id,
-            "success": str(success).lower(),
-            "limit": limit,
-        },
-    )
-    if resp and resp.ok:
-        return resp.json()
-    return []
-
-
 def get_event_for_task(pk):
     """Get full event data + org Discord config for celery tasks.
 

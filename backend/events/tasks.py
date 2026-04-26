@@ -393,20 +393,23 @@ def send_signup_update(event_id):
         from app.internal_client import search_message_logs
 
         logs = search_message_logs(
-            "event_announcement", event.pk, success=True, limit=1
+            source="event_announcement",
+            source_id=event.pk,
+            success="true",
+            limit=1,
         )
         log_entry = logs[0] if logs else None
 
-        if not log_entry or not log_entry.get("discord_message_id"):
+        if not log_entry or not log_entry.discord_message_id:
             logger.info(
                 "No announcement message found for event %s, skipping update",
                 event.pk,
             )
             return "Skipped: no announcement message"
 
-        message_id = log_entry.get("discord_message_id")
-        edit_channel_id = log_entry.get("channel_id")
-        response_data = log_entry.get("response_data") or {}
+        message_id = log_entry.discord_message_id
+        edit_channel_id = log_entry.channel_id
+        response_data = log_entry.response_data or {}
         if response_data.get("id"):
             thread_id = response_data.get("id")
             if response_data.get("message"):
