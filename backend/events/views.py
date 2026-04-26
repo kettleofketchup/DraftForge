@@ -672,7 +672,7 @@ class EventViewSet(viewsets.ModelViewSet):
     def restart_tournament(self, request, pk=None):
         """Delete current tournament, create fresh one, reopen signups."""
         event = self.get_object()
-        if not has_org_staff_access(request.user, event.organization):
+        if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             restart_event_tournament(event)

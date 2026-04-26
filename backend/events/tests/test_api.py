@@ -238,3 +238,11 @@ class LeagueStaffEventActionsTest(TestCase):
         # League staff approves
         resp = self.client.post(f"/api/events/signups/{signup.pk}/approve/")
         assert resp.status_code == 200, resp.content
+
+    def test_league_staff_can_restart_tournament(self):
+        """League staff should be able to restart_tournament on a league event."""
+        # restart_tournament typically requires the event to be in a state where a tournament exists.
+        # If your test event doesn't have a tournament, the action may return 400 — acceptable;
+        # we only care about the permission check (200 or 400, NOT 403).
+        resp = self.client.post(f"/api/events/{self.event.pk}/restart_tournament/")
+        assert resp.status_code != 403, resp.content
