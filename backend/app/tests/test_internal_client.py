@@ -1,22 +1,23 @@
+import os
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
 
 
 class InternalClientHeadersTest(TestCase):
-    @override_settings(INTERNAL_SERVICE_TOKEN="my-token")
     def test_headers_include_token(self):
         from app.internal_client import _headers
 
-        h = _headers()
+        with patch.dict(os.environ, {"INTERNAL_SERVICE_TOKEN": "my-token"}):
+            h = _headers()
         self.assertEqual(h["X-Internal-Token"], "my-token")
         self.assertEqual(h["Content-Type"], "application/json")
 
-    @override_settings(INTERNAL_SERVICE_TOKEN="")
     def test_headers_with_empty_token(self):
         from app.internal_client import _headers
 
-        h = _headers()
+        with patch.dict(os.environ, {"INTERNAL_SERVICE_TOKEN": ""}):
+            h = _headers()
         self.assertEqual(h["X-Internal-Token"], "")
 
 
