@@ -35,8 +35,8 @@ import { toast } from 'sonner';
 import { Badge } from '~/components/ui/badge';
 import { PrimaryButton, SecondaryButton, DestructiveButton } from '~/components/ui/buttons';
 import { Button } from '~/components/ui/button';
-import { EventStateBadge } from '~/components/events';
-import { EventState } from '~/components/events/schemas';
+import { EventStateBadge, MmrApprovalModal } from '~/components/events';
+import { EventState, GameType, SignupStatus } from '~/components/events/schemas';
 import type { EventSignupType } from '~/components/events/schemas';
 import { UserStrip } from '~/components/user';
 import {
@@ -48,7 +48,6 @@ import {
 } from '~/hooks/useEvent';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrganization } from '~/components/organization';
-import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb } from '~/components/ui/entity-breadcrumb';
 
@@ -64,10 +63,11 @@ export default function RollCallPage() {
   const signupActions = useSignupActionMutations(id ?? 0);
 
   const { organization: eventOrg } = useOrganization(event?.organization ?? undefined);
-  const isAdmin = useIsOrganizationStaff(eventOrg);
+  const isAdmin = event?.user_can_manage ?? false;
 
   const [showStartConfirm, setShowStartConfirm] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(null);
 
   // Resolve all signup users from cache
   const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
@@ -187,7 +187,9 @@ export default function RollCallPage() {
                   signup={signup}
                   userMap={userMap}
                   isAdmin={isAdmin}
+                  gameType={event.game_type}
                   signupActions={signupActions}
+                  onRequestApproval={setApprovalSignup}
                 />
               ))}
             </div>
@@ -207,7 +209,9 @@ export default function RollCallPage() {
                   signup={signup}
                   userMap={userMap}
                   isAdmin={isAdmin}
+                  gameType={event.game_type}
                   signupActions={signupActions}
+                  onRequestApproval={setApprovalSignup}
                 />
               ))}
             </div>
@@ -227,7 +231,9 @@ export default function RollCallPage() {
                   signup={signup}
                   userMap={userMap}
                   isAdmin={isAdmin}
+                  gameType={event.game_type}
                   signupActions={signupActions}
+                  onRequestApproval={setApprovalSignup}
                 />
               ))}
             </div>
@@ -241,6 +247,19 @@ export default function RollCallPage() {
           </div>
         )}
       </div>
+
+      {/* MMR approval modal — opens for Dota2 events so previously-approved MMR is shown */}
+      <MmrApprovalModal
+        signup={approvalSignup}
+        open={!!approvalSignup}
+        onOpenChange={(open) => { if (!open) setApprovalSignup(null); }}
+        onApprove={(signupId, mmr) => {
+          signupActions.approve.mutate({ id: signupId, mmr }, {
+            onSuccess: () => setApprovalSignup(null),
+          });
+        }}
+        isApproving={signupActions.approve.isPending}
+      />
 
       {/* Start Tournament Confirmation */}
       <ConfirmDialog
@@ -276,14 +295,31 @@ function SignupStrip({
   signup,
   userMap,
   isAdmin,
+  gameType,
   signupActions,
+  onRequestApproval,
 }: {
   signup: EventSignupType;
   userMap: Map<number, import('~/store/userCacheTypes').UserEntry>;
   isAdmin: boolean;
+  gameType: number;
   signupActions: ReturnType<typeof useSignupActionMutations>;
+  onRequestApproval: (signup: EventSignupType) => void;
 }) {
   const user = userMap.get(signup.user);
+
+  const isApprovable =
+    signup.status === SignupStatus.RSVP ||
+    signup.status === SignupStatus.PENDING_APPROVAL ||
+    signup.status === SignupStatus.WAITLISTED;
+
+  const handleApprove = () => {
+    if (gameType === GameType.DOTA2) {
+      onRequestApproval(signup);
+    } else {
+      signupActions.approve.mutate({ id: signup.id });
+    }
+  };
 
   const actionSlot = isAdmin ? (
     <div className="flex gap-1">
@@ -317,6 +353,28 @@ function SignupStrip({
           <XCircle className="h-3.5 w-3.5" />
           <span className="hidden sm:inline ml-1">Remove</span>
         </DestructiveButton>
+      )}
+      {isApprovable && (
+        <>
+          <SecondaryButton
+            color="green"
+            size="sm"
+            data-testid="rollcall-approve-btn"
+            onClick={handleApprove}
+            disabled={signupActions.approve.isPending}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline ml-1">Approve</span>
+          </SecondaryButton>
+          <DestructiveButton
+            size="sm"
+            data-testid="rollcall-reject-btn"
+            onClick={() => signupActions.reject.mutate(signup.id)}
+            loading={signupActions.reject.isPending}
+          >
+            <XCircle className="h-3.5 w-3.5" />
+          </DestructiveButton>
+        </>
       )}
     </div>
   ) : undefined;

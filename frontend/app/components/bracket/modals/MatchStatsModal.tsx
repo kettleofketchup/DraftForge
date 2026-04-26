@@ -24,6 +24,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { BarChart3, Link2, Loader2, RotateCcw, Swords, UserLock } from 'lucide-react';
 import { useUserStore } from '~/store/userStore';
 import { useIsLeagueStaff } from '~/hooks/usePermissions';
+import { useOrganization } from '~/components/organization';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import { useBracketStore } from '~/store/bracketStore';
 import { useQueryClient } from '@tanstack/react-query';
@@ -48,7 +49,10 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
   const isStaff = useUserStore((state) => state.isStaff());
   const currentUser = useUserStore((state) => state.currentUser);
   const tournament = useUserStore((state) => state.tournament);
-  const isLeagueStaff = useIsLeagueStaff(tournament?.league);
+  // Fetch the full org so org-staff membership flows into useIsLeagueStaff —
+  // tournament.league.organization (when serialized) is the lightweight org without staff_ids.
+  const { organization: leagueOrg } = useOrganization(tournament?.organization_pk ?? undefined);
+  const isLeagueStaff = useIsLeagueStaff(tournament?.league, leagueOrg);
 
   // Subscribe to match directly from store for reactive updates
   const storeMatch = useBracketStore((state) =>

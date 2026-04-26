@@ -130,6 +130,7 @@ export const eventSignupSchema = z.object({
     battlecup_screenshot: z.string().nullable(),
     battle_cup_tier: z.number().nullable(),
   }).nullable(),
+  org_user_mmr: z.number().nullable().default(null),
   event_team: z.number().nullable(),
   signup_type: z.string(),
   status: z.string(),

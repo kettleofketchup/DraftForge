@@ -85,11 +85,15 @@ export function MmrApprovalModal({
     defaultValues: { mmr: 0 },
   });
 
-  // Reset form when signup changes
+  // Reset form when signup changes. Prefer the previously admin-approved MMR
+  // (org_user_mmr) over the user's self-reported PlayerDotaProfile.mmr.
   useEffect(() => {
-    if (signup?.dota_profile && open) {
+    if (signup && open) {
       const profile = signup.dota_profile;
-      const defaultMmr = profile.mmr ?? estimateMmr(profile.rank_medal);
+      const defaultMmr =
+        signup.org_user_mmr ??
+        profile?.mmr ??
+        (profile ? estimateMmr(profile.rank_medal) : 0);
       form.reset({ mmr: defaultMmr });
     }
   }, [signup, open]);
@@ -143,6 +147,15 @@ export function MmrApprovalModal({
             </div>
           </div>
         </DialogHeader>
+
+        {/* Previously approved MMR (admin-set on OrgUser). Shown even when no
+            PlayerDotaProfile exists, so admins can re-approve at the prior value. */}
+        {signup.org_user_mmr != null && (
+          <div className="bg-base-300 border border-border rounded-lg p-4 text-sm flex justify-between">
+            <span className="text-muted-foreground">Previously Approved MMR</span>
+            <span className="font-mono">{signup.org_user_mmr.toLocaleString()}</span>
+          </div>
+        )}
 
         {/* Profile summary (read-only) */}
         {profile && (

@@ -330,6 +330,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
     user_avatar = serializers.CharField(source="user.avatar", read_only=True)
     user_data = serializers.SerializerMethodField()
     dota_profile = serializers.SerializerMethodField()
+    org_user_mmr = serializers.SerializerMethodField()
 
     class Meta:
         model = EventSignup
@@ -341,6 +342,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "user_avatar",
             "user_data",
             "dota_profile",
+            "org_user_mmr",
             "event_team",
             "signup_type",
             "status",
@@ -396,6 +398,18 @@ class EventSignupSerializer(serializers.ModelSerializer):
             }
         except (OrgUser.DoesNotExist, PlayerDotaProfile.DoesNotExist):
             return None
+
+    def get_org_user_mmr(self, obj):
+        """Return the previously admin-approved MMR for this user in the event's org."""
+        from org.models import OrgUser
+
+        try:
+            org_user = OrgUser.objects.get(
+                user=obj.user, organization=obj.event.organization
+            )
+        except OrgUser.DoesNotExist:
+            return None
+        return org_user.mmr if org_user.has_active_dota_mmr else None
 
 
 class OrgEventDefaultsSerializer(serializers.ModelSerializer):
