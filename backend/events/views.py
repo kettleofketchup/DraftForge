@@ -76,6 +76,28 @@ def _annotate_event_qs(qs):
     )
 
 
+def _attach_user_can_manage(payload, user):
+    """Mutate a serialized Event payload (or list of them) to set user_can_manage per-request.
+
+    Called AFTER cached_as serves a payload, so the cache itself stays user-agnostic.
+    The Event instances are looked up by id from the payload; one batched query
+    covers both list and single-item cases.
+    """
+    if not user or not user.is_authenticated:
+        return payload  # default False already set by serializer
+    items = payload if isinstance(payload, list) else [payload]
+    if not items:
+        return payload
+    events_by_pk = {
+        e.pk: e for e in Event.objects.filter(pk__in=[p["id"] for p in items])
+    }
+    for p in items:
+        ev = events_by_pk.get(p["id"])
+        if ev is not None:
+            p["user_can_manage"] = has_event_staff_access(user, ev)
+    return payload
+
+
 class EventRepeaterViewSet(viewsets.ModelViewSet):
     serializer_class = EventRepeaterSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
@@ -303,7 +325,10 @@ class EventViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
 
-        return Response(get_data())
+        # cacheops returns a fresh deserialization on every hit; safe to mutate in place.
+        data = list(get_data())  # shallow-copy the outer container
+        _attach_user_can_manage(data, request.user)
+        return Response(data)
 
     def retrieve(self, request, *args, **kwargs):
         pk = kwargs.get("pk")
@@ -320,7 +345,9 @@ class EventViewSet(viewsets.ModelViewSet):
             instance = self.get_object()
             return self.get_serializer(instance).data
 
-        return Response(get_data())
+        data = dict(get_data())  # shallow-copy
+        _attach_user_can_manage(data, request.user)
+        return Response(data)
 
     def perform_create(self, serializer):
         org = serializer.validated_data.get("organization")
@@ -520,7 +547,9 @@ class EventViewSet(viewsets.ModelViewSet):
 
             notify_event_announced(event)
             qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
-            return Response(EventSerializer(qs.first()).data)
+            data = EventSerializer(qs.first()).data
+            _attach_user_can_manage(data, request.user)
+            return Response(data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -532,7 +561,9 @@ class EventViewSet(viewsets.ModelViewSet):
         try:
             event.transition_state(EventState.ROLL_CALL)
             qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
-            return Response(EventSerializer(qs.first()).data)
+            data = EventSerializer(qs.first()).data
+            _attach_user_can_manage(data, request.user)
+            return Response(data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -553,7 +584,9 @@ class EventViewSet(viewsets.ModelViewSet):
                 event.transition_state(EventState.SIGNUPS_OPEN)
                 invalidate_after_commit(event)
             qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
-            return Response(EventSerializer(qs.first()).data)
+            data = EventSerializer(qs.first()).data
+            _attach_user_can_manage(data, request.user)
+            return Response(data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -582,7 +615,9 @@ class EventViewSet(viewsets.ModelViewSet):
 
                 start_auto_create_herodrafts(event.tournament)
             qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
-            return Response(EventSerializer(qs.first()).data)
+            data = EventSerializer(qs.first()).data
+            _attach_user_can_manage(data, request.user)
+            return Response(data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -633,7 +668,9 @@ class EventViewSet(viewsets.ModelViewSet):
                     tournament.delete()
                 event.transition_state(EventState.CANCELLED)
             qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
-            return Response(EventSerializer(qs.first()).data)
+            data = EventSerializer(qs.first()).data
+            _attach_user_can_manage(data, request.user)
+            return Response(data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -679,7 +716,9 @@ class EventViewSet(viewsets.ModelViewSet):
             restart_event_tournament(event)
             event.refresh_from_db()
             qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
-            return Response(EventSerializer(qs.first()).data)
+            data = EventSerializer(qs.first()).data
+            _attach_user_can_manage(data, request.user)
+            return Response(data)
         except ValueError as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 

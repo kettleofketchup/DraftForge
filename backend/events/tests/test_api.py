@@ -284,3 +284,64 @@ class AdminSignupDuringRollCallTest(TestCase):
         self.client.force_authenticate(self.player)
         resp = self.client.post(f"/api/events/{self.event.pk}/rsvp/")
         assert resp.status_code == 400
+
+
+class UserCanManageRetrieveTest(EventTestCase):
+    """Verify cached retrieve() emits per-request user_can_manage."""
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_org_staff_sees_user_can_manage_true(self):
+        self.client.force_authenticate(self.admin)
+        resp = self.client.get(f"/api/events/{self.event.pk}/")
+        assert resp.status_code == 200
+        assert resp.json()["user_can_manage"] is True
+
+    def test_league_staff_sees_user_can_manage_true(self):
+        self.client.force_authenticate(self.league_staff)
+        resp = self.client.get(f"/api/events/{self.event.pk}/")
+        assert resp.status_code == 200
+        assert resp.json()["user_can_manage"] is True
+
+    def test_unrelated_user_sees_user_can_manage_false(self):
+        self.client.force_authenticate(self.unrelated_user)
+        resp = self.client.get(f"/api/events/{self.event.pk}/")
+        assert resp.status_code == 200
+        assert resp.json()["user_can_manage"] is False
+
+    def test_no_cache_leak_across_users(self):
+        """Hit retrieve as staff, unrelated, then staff again — values must alternate per request.
+
+        The third round-trip catches a regression where the cached payload gets
+        mutated to True (from the staff read), which would only manifest after a re-read.
+        """
+        self.client.force_authenticate(self.admin)
+        first = self.client.get(f"/api/events/{self.event.pk}/").json()
+        assert first["user_can_manage"] is True
+
+        self.client.force_authenticate(self.unrelated_user)
+        second = self.client.get(f"/api/events/{self.event.pk}/").json()
+        assert second["user_can_manage"] is False
+
+        self.client.force_authenticate(self.admin)
+        third = self.client.get(f"/api/events/{self.event.pk}/").json()
+        assert third["user_can_manage"] is True, (
+            "Third request as staff should be True again — if False, the cached "
+            "payload was poisoned by the unrelated user's read."
+        )
+
+    def test_event_without_league_returns_false_for_league_staff(self):
+        from events.models import Event
+
+        no_league_event = Event.objects.create(
+            organization=self.org,
+            name="No League",
+            scheduled_at=self.event.scheduled_at,
+            state=self.event.state,
+            created_by=self.admin,
+            tournament_name="T",
+        )
+        self.client.force_authenticate(self.league_staff)
+        resp = self.client.get(f"/api/events/{no_league_event.pk}/")
+        assert resp.json()["user_can_manage"] is False
