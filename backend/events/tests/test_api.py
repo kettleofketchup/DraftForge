@@ -1,9 +1,12 @@
 from datetime import timedelta
+from unittest.mock import patch
 
+from django.test import TestCase
 from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from app.models import CustomUser, League, Organization, PositionsModel
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.tests.base import EventTestCase
@@ -125,3 +128,113 @@ class EventAPITests(EventTestCase):
         self.assertEqual(r.status_code, status.HTTP_200_OK)
         # Base event (signups_open) + the one created above = 2
         self.assertEqual(len(r.data), 2)
+
+
+class ReopenSignupsViewTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = CustomUser.objects.create_user(username="reopen_staff", password="x")
+        cls.staff.positions = PositionsModel.objects.create()
+        cls.staff.save()
+        cls.unrelated = CustomUser.objects.create_user(username="reopen_unrelated", password="x")
+        cls.unrelated.positions = PositionsModel.objects.create()
+        cls.unrelated.save()
+        cls.org = Organization.objects.create(name="Reopen Org", owner=cls.staff)
+        cls.org.staff.add(cls.staff)
+        cls.event = Event.objects.create(
+            organization=cls.org,
+            name="Reopen Event",
+            scheduled_at=tz.now() + timedelta(days=1),
+            state=EventState.ROLL_CALL,
+            created_by=cls.staff,
+            tournament_name="T",
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_reopen_signups_succeeds_for_staff_in_roll_call(self):
+        self.client.force_authenticate(self.staff)
+        with patch("events.discord.notify_event_announced") as mock_notify:
+            resp = self.client.post(f"/api/events/{self.event.pk}/reopen_signups/")
+        assert resp.status_code == 200, resp.content
+        self.event.refresh_from_db()
+        assert self.event.state == EventState.SIGNUPS_OPEN
+        mock_notify.assert_not_called()
+
+    def test_reopen_signups_403_for_unrelated(self):
+        self.client.force_authenticate(self.unrelated)
+        resp = self.client.post(f"/api/events/{self.event.pk}/reopen_signups/")
+        assert resp.status_code == 403
+
+    def test_reopen_signups_400_when_not_in_roll_call(self):
+        self.event.state = EventState.SIGNUPS_OPEN
+        self.event.save(update_fields=["state"])
+        self.client.force_authenticate(self.staff)
+        resp = self.client.post(f"/api/events/{self.event.pk}/reopen_signups/")
+        assert resp.status_code == 400
+
+
+class LeagueStaffEventActionsTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = CustomUser.objects.create_user(username="league_owner", password="x")
+        cls.owner.positions = PositionsModel.objects.create()
+        cls.owner.save()
+        cls.league_staff_user = CustomUser.objects.create_user(username="league_staff_v", password="x")
+        cls.league_staff_user.positions = PositionsModel.objects.create()
+        cls.league_staff_user.save()
+        cls.org = Organization.objects.create(name="LS Org", owner=cls.owner)
+        cls.league = League.objects.create(name="LS League", organization=cls.org, steam_league_id=77777)
+        cls.league.staff.add(cls.league_staff_user)
+        cls.event = Event.objects.create(
+            organization=cls.org,
+            name="LS Event",
+            scheduled_at=tz.now() + timedelta(days=1),
+            state=EventState.ROLL_CALL,
+            created_by=cls.owner,
+            tournament_name="T",
+            tournament_league=cls.league,
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.league_staff_user)
+
+    def test_league_staff_can_reopen_signups(self):
+        resp = self.client.post(f"/api/events/{self.event.pk}/reopen_signups/")
+        assert resp.status_code == 200, resp.content
+
+    def test_league_staff_can_admin_signup(self):
+        """League staff can admin-add during SIGNUPS_OPEN. Roll-call coverage lands in Task 5."""
+        # Flip the event to SIGNUPS_OPEN since Task 5 (admin_signup → staff_add_signup) hasn't landed yet.
+        self.event.state = EventState.SIGNUPS_OPEN
+        self.event.save(update_fields=["state"])
+        player = CustomUser.objects.create_user(username="ls_player", password="x")
+        player.positions = PositionsModel.objects.create()
+        player.save()
+        resp = self.client.post(
+            f"/api/events/{self.event.pk}/admin-signup/",
+            {"user_id": player.pk},
+            format="json",
+        )
+        assert resp.status_code == 201, resp.content
+
+    def test_league_staff_can_act_on_event_signups(self):
+        """Verify the EventSignup-level action permission widening (Task 4 step 4)."""
+        from events.models import EventSignup
+        from events.constants import SignupStatus
+
+        # Create a signup to act on
+        player = CustomUser.objects.create_user(username="ls_target", password="x")
+        player.positions = PositionsModel.objects.create()
+        player.save()
+        signup = EventSignup.objects.create(
+            event=self.event,
+            user=player,
+            status=SignupStatus.RSVP,
+        )
+
+        # League staff approves
+        resp = self.client.post(f"/api/events/signups/{signup.pk}/approve/")
+        assert resp.status_code == 200, resp.content

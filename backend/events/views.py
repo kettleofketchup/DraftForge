@@ -11,7 +11,7 @@ from rest_framework.response import Response
 logger = logging.getLogger(__name__)
 
 from app.models import Organization
-from app.permissions_org import has_org_staff_access
+from app.permissions_org import has_event_staff_access, has_org_staff_access
 from events.constants import EventState, SignupStatus
 from events.models import (
     Event,
@@ -487,7 +487,7 @@ class EventViewSet(viewsets.ModelViewSet):
         from app.models import CustomUser
 
         event = self.get_object()
-        if not has_org_staff_access(request.user, event.organization):
+        if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         user_id = request.data.get("user_id")
         if not user_id:
@@ -511,7 +511,7 @@ class EventViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def open_signups(self, request, pk=None):
         event = self.get_object()
-        if not has_org_staff_access(request.user, event.organization):
+        if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             event.transition_state(EventState.SIGNUPS_OPEN)
@@ -526,7 +526,7 @@ class EventViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def start_roll_call(self, request, pk=None):
         event = self.get_object()
-        if not has_org_staff_access(request.user, event.organization):
+        if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             event.transition_state(EventState.ROLL_CALL)
@@ -536,10 +536,31 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post"])
+    def reopen_signups(self, request, pk=None):
+        """Corrective transition from ROLL_CALL back to SIGNUPS_OPEN.
+
+        Quiet: no Discord re-announcement, no signup-changed notify. Existing
+        confirmations and tournament additions are preserved.
+        """
+        from app.cache_utils import invalidate_after_commit
+
+        event = self.get_object()
+        if not has_event_staff_access(request.user, event):
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        try:
+            with transaction.atomic():
+                event.transition_state(EventState.SIGNUPS_OPEN)
+                invalidate_after_commit(event)
+            qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
+            return Response(EventSerializer(qs.first()).data)
+        except ValueError as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"])
     def start_tournament(self, request, pk=None):
         """Start the tournament (after roll call or directly)."""
         event = self.get_object()
-        if not has_org_staff_access(request.user, event.organization):
+        if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             if event.state == EventState.ROLL_CALL:
@@ -599,7 +620,7 @@ class EventViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
         event = self.get_object()
-        if not has_org_staff_access(request.user, event.organization):
+        if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             with transaction.atomic():
@@ -676,7 +697,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
         signup = self.get_object()
-        if not has_org_staff_access(request.user, signup.event.organization):
+        if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
 
         # Optional MMR override from admin
@@ -719,7 +740,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"])
     def reject(self, request, pk=None):
         signup = self.get_object()
-        if not has_org_staff_access(request.user, signup.event.organization):
+        if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             return Response(EventSignupSerializer(reject_signup(signup)).data)
@@ -729,7 +750,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"])
     def confirm(self, request, pk=None):
         signup = self.get_object()
-        if not has_org_staff_access(request.user, signup.event.organization):
+        if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             return Response(EventSignupSerializer(confirm_signup(signup)).data)
@@ -739,8 +760,8 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["post"])
     def cancel_signup(self, request, pk=None):
         signup = self.get_object()
-        if signup.user != request.user and not has_org_staff_access(
-            request.user, signup.event.organization
+        if signup.user != request.user and not has_event_staff_access(
+            request.user, signup.event
         ):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
@@ -752,7 +773,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     def unconfirm(self, request, pk=None):
         """Revert a confirmed signup back to approved."""
         signup = self.get_object()
-        if not has_org_staff_access(request.user, signup.event.organization):
+        if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             return Response(EventSignupSerializer(unconfirm_signup(signup)).data)
@@ -763,7 +784,7 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     def demote(self, request, pk=None):
         """Move an active signup to the end of the waitlist."""
         signup = self.get_object()
-        if not has_org_staff_access(request.user, signup.event.organization):
+        if not has_event_staff_access(request.user, signup.event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             return Response(EventSignupSerializer(demote_to_waitlist(signup)).data)
@@ -774,8 +795,8 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     def reinstate(self, request, pk=None):
         """Reinstate a cancelled signup (user can reinstate their own)."""
         signup = self.get_object()
-        if signup.user != request.user and not has_org_staff_access(
-            request.user, signup.event.organization
+        if signup.user != request.user and not has_event_staff_access(
+            request.user, signup.event
         ):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
