@@ -92,7 +92,6 @@ import { adminAddSignup, subscribeToRepeater, unsubscribeFromRepeater } from '~/
 import { AddUserModal } from '~/components/user/AddUserModal';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrganization } from '~/components/organization';
-import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 import { usePageNav } from '~/hooks/usePageNav';
 import { useUserStore } from '~/store/userStore';
 import { ConfirmDialog } from '~/components/ui/dialogs';
@@ -115,9 +114,10 @@ export default function EventPage() {
   const [showCancelRsvpConfirm, setShowCancelRsvpConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
 
-  // Permission check - fetch the specific org for this event
+  // Fetch the specific org for this event (needed for org logo and discord server id)
   const { organization: eventOrg } = useOrganization(event?.organization ?? undefined);
-  const isAdmin = useIsOrganizationStaff(eventOrg);
+  // Permission check uses backend-derived flag (covers org staff AND league staff).
+  const isAdmin = event?.user_can_manage ?? false;
 
   // Mutations
   const queryClient = useQueryClient();
