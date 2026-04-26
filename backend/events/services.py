@@ -98,10 +98,16 @@ def _get_active_signup_count(event):
 
 
 @transaction.atomic
-def process_rsvp(event, user, event_team=None):
-    """Process an RSVP for an event."""
-    if event.state != EventState.SIGNUPS_OPEN:
-        raise ValueError("Event is not accepting signups.")
+def _create_signup(event, user, event_team=None):
+    """Internal: create a signup with no state check.
+
+    Handles existing-signup detection, waitlist placement, auto-approve / auto-confirm,
+    tournament addition, and notify hooks. State authorization is the caller's job.
+
+    INVARIANT: invalidate_after_commit MUST be registered before any transaction.on_commit
+    notify hook. Notify handlers may re-query, and reading through a stale cache would
+    re-warm it with stale data.
+    """
     existing = EventSignup.objects.filter(event=event, user=user).first()
     if existing:
         logger.info(
@@ -112,11 +118,9 @@ def process_rsvp(event, user, event_team=None):
             existing.id,
         )
         if existing.status in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
-            # Allow re-RSVP after cancellation/rejection — delete old signup
             existing.delete()
             logger.info("Deleted cancelled/rejected signup, allowing re-RSVP")
         elif existing.status == SignupStatus.TENTATIVE:
-            # Upgrade from tentative to full signup — delete and re-create
             existing.delete()
             logger.info("Upgrading tentative signup to full RSVP")
         else:
@@ -124,7 +128,6 @@ def process_rsvp(event, user, event_team=None):
 
     signup_type = SignupType.TEAM if event_team else SignupType.USER
 
-    # Check waitlist
     if event.max_players and _get_active_signup_count(event) >= event.max_players:
         max_pos = (
             EventSignup.objects.filter(event=event, status=SignupStatus.WAITLISTED)
@@ -144,7 +147,6 @@ def process_rsvp(event, user, event_team=None):
         transaction.on_commit(lambda: notify_signup_changed(event))
         return signup
 
-    # Determine initial status
     status = SignupStatus.RSVP
     if event.auto_approve:
         if check_requirements(event, user):
@@ -170,6 +172,20 @@ def process_rsvp(event, user, event_team=None):
     if status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED):
         transaction.on_commit(lambda: notify_mark_interested(event, user.pk))
     return signup
+
+
+def process_rsvp(event, user, event_team=None):
+    """Public-path signup. Locked to SIGNUPS_OPEN."""
+    if event.state != EventState.SIGNUPS_OPEN:
+        raise ValueError("Event is not accepting signups.")
+    return _create_signup(event, user, event_team=event_team)
+
+
+def staff_add_signup(event, user, event_team=None):
+    """Staff-path signup. Allowed during SIGNUPS_OPEN or ROLL_CALL."""
+    if event.state not in (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL):
+        raise ValueError("Event is not accepting signups.")
+    return _create_signup(event, user, event_team=event_team)
 
 
 APPROVABLE_STATUSES = [
