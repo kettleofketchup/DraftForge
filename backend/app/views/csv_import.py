@@ -135,11 +135,9 @@ def _resolve_user_for_csv_row(row):
     user = None
     created = False
 
-    # Lookup by identifiers
+    # Lookup by identifiers (steam_friend_id is the 64-bit Steam ID)
     steam_user = (
-        CustomUser.objects.filter(steam_account_id=steam_id).first()
-        if steam_id
-        else None
+        CustomUser.objects.filter(steamid=steam_id).first() if steam_id else None
     )
     discord_user = (
         CustomUser.objects.filter(discordId=discord_id).first() if discord_id else None
@@ -177,7 +175,7 @@ def _resolve_user_for_csv_row(row):
     elif discord_user:
         user = discord_user
         # Conflict: user's steam doesn't match provided steam
-        if steam_id and user.steam_account_id and user.steam_account_id != steam_id:
+        if steam_id and user.steamid and user.steamid != steam_id:
             name = user.nickname or user.username or f"#{user.pk}"
             return (
                 None,
@@ -193,7 +191,9 @@ def _resolve_user_for_csv_row(row):
                 positions = PositionsModel.objects.create()
                 user = CustomUser(positions=positions)
                 if steam_id is not None:
-                    user.steam_account_id = steam_id
+                    # steam_friend_id from CSV is 64-bit Steam ID;
+                    # save() syncs to steam_account_id automatically
+                    user.steamid = steam_id
                     user.username = f"steam_{steam_id}"
                 if discord_id is not None:
                     user.discordId = discord_id
