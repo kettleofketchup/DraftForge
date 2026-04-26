@@ -3,7 +3,13 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone as tz
 
-from events.constants import EventState, RepeatFrequency, SignupStatus, SignupType
+from events.constants import (
+    EVENT_STATE_TRANSITIONS,
+    EventState,
+    RepeatFrequency,
+    SignupStatus,
+    SignupType,
+)
 from events.models import GameType, RollCallMode
 from events.tests.base import EventTestCase
 
@@ -314,3 +320,16 @@ class EventSignupModelTests(EventTestCase):
             EventSignup.objects.create(
                 event=self.event, user=self.user, signup_type=SignupType.USER
             )
+
+
+class EventStateTransitionsTest(TestCase):
+    def test_roll_call_allows_reopen_to_signups_open(self):
+        assert EventState.SIGNUPS_OPEN in EVENT_STATE_TRANSITIONS[EventState.ROLL_CALL]
+
+    def test_other_states_still_reject_reopen_to_signups_open(self):
+        for state in (
+            EventState.IN_PROGRESS,
+            EventState.COMPLETED,
+            EventState.CANCELLED,
+        ):
+            assert EventState.SIGNUPS_OPEN not in EVENT_STATE_TRANSITIONS[state]
