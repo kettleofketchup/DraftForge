@@ -68,7 +68,7 @@ import { EventState, GameType } from '~/components/events/schemas';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
 import { DiscordLogSection } from '~/components/events/DiscordLogSection';
 import { EditEventModal } from '~/components/events/EditEventModal';
-import type { EventSignupType } from '~/components/events/schemas';
+import type { EventSignupType, EventType } from '~/components/events/schemas';
 import { PrimaryButton, SecondaryButton, DestructiveButton, HighlightButton } from '~/components/ui/buttons';
 import { EventAdminActions } from '~/components/events/EventAdminActions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
@@ -488,6 +488,7 @@ export default function EventPage() {
               eventId={event.id}
               orgId={event.organization}
               hasDiscordServer={!!eventOrg?.discord_server_id}
+              state={event.state}
             />
           </TabsContent>
 
@@ -497,6 +498,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
+              state={event.state}
             />
           </TabsContent>
 
@@ -506,6 +508,7 @@ export default function EventPage() {
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
+              state={event.state}
             />
           </TabsContent>
 
@@ -681,6 +684,7 @@ function SignupsTab({
   eventId,
   orgId,
   hasDiscordServer,
+  state,
 }: {
   signups: EventSignupType[];
   isAdmin: boolean;
@@ -689,6 +693,7 @@ function SignupsTab({
   eventId?: number;
   orgId?: number;
   hasDiscordServer?: boolean;
+  state: EventType['state'];
 }) {
   const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(null);
   const [removeSignup, setRemoveSignup] = useState<{ signup: EventSignupType; name: string } | null>(null);
@@ -713,7 +718,7 @@ function SignupsTab({
 
   return (
     <div className="space-y-3">
-      {isAdmin && eventId && (
+      {isAdmin && eventId && (state === EventState.SIGNUPS_OPEN || state === EventState.ROLL_CALL) && (
         <div className="flex justify-end">
           <SecondaryButton
             size="sm"
