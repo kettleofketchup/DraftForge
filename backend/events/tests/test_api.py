@@ -1,7 +1,7 @@
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -345,3 +345,133 @@ class UserCanManageRetrieveTest(EventTestCase):
         self.client.force_authenticate(self.league_staff)
         resp = self.client.get(f"/api/events/{no_league_event.pk}/")
         assert resp.json()["user_can_manage"] is False
+
+
+class EventPatchTournamentLeagueTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = CustomUser.objects.create_user(username="eptl_admin", password="x")
+        cls.admin.positions = PositionsModel.objects.create()
+        cls.admin.save()
+        cls.org_a = Organization.objects.create(name="EPTL Org A", owner=cls.admin)
+        cls.org_a.staff.add(cls.admin)
+        cls.org_b = Organization.objects.create(name="EPTL Org B", owner=cls.admin)
+        cls.league_a1 = League.objects.create(
+            name="A League 1",
+            organization=cls.org_a,
+            steam_league_id=40001,
+        )
+        cls.league_a2 = League.objects.create(
+            name="A League 2",
+            organization=cls.org_a,
+            steam_league_id=40002,
+        )
+        cls.league_b = League.objects.create(
+            name="B League",
+            organization=cls.org_b,
+            steam_league_id=40003,
+        )
+        cls.event = Event.objects.create(
+            organization=cls.org_a,
+            name="EPTL Event",
+            scheduled_at=tz.now() + timedelta(days=1),
+            state=EventState.SIGNUPS_OPEN,
+            created_by=cls.admin,
+            tournament_name="T",
+            tournament_league=cls.league_a1,
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def test_swap_to_same_org_league_succeeds(self):
+        resp = self.client.patch(
+            f"/api/events/{self.event.pk}/",
+            {"tournament_league": self.league_a2.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.tournament_league_id, self.league_a2.pk)
+
+    def test_swap_to_different_org_league_returns_400(self):
+        resp = self.client.patch(
+            f"/api/events/{self.event.pk}/",
+            {"tournament_league": self.league_b.pk},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+        body = resp.json()
+        self.assertIn("tournament_league", body)
+        self.assertIn(
+            "must belong to the event's organization",
+            str(body["tournament_league"]),
+        )
+
+    def test_set_tournament_league_to_null_succeeds(self):
+        resp = self.client.patch(
+            f"/api/events/{self.event.pk}/",
+            {"tournament_league": None},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.event.refresh_from_db()
+        self.assertIsNone(self.event.tournament_league_id)
+
+
+class EventPatchTournamentLeagueCacheTest(TransactionTestCase):
+    """Cache round-trip regression — uses TransactionTestCase so on_commit fires.
+
+    `EventViewSet.perform_update` calls `invalidate_after_commit(event)` which
+    registers a `transaction.on_commit` hook. Under the standard `TestCase`,
+    the outer transaction never commits during the test, so on_commit never
+    fires and a cache round-trip test would pass for the wrong reason.
+    `TransactionTestCase` runs without that wrapper, so the invalidation
+    actually executes between PATCH and GET.
+    """
+
+    def setUp(self):
+        # cacheops Redis cache is NOT auto-flushed between TransactionTestCase runs.
+        # Stale entries from prior tests in the module could pollute the assertion.
+        from cacheops import invalidate_all
+        invalidate_all()
+
+        self.admin = CustomUser.objects.create_user(username="eptlc_admin", password="x")
+        self.admin.positions = PositionsModel.objects.create()
+        self.admin.save()
+        self.org = Organization.objects.create(name="EPTLC Org", owner=self.admin)
+        self.org.staff.add(self.admin)
+        self.league_a1 = League.objects.create(
+            name="A1", organization=self.org, steam_league_id=41001
+        )
+        self.league_a2 = League.objects.create(
+            name="A2", organization=self.org, steam_league_id=41002
+        )
+        self.event = Event.objects.create(
+            organization=self.org,
+            name="Cache Event",
+            scheduled_at=tz.now() + timedelta(days=1),
+            state=EventState.SIGNUPS_OPEN,
+            created_by=self.admin,
+            tournament_name="T",
+            tournament_league=self.league_a1,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin)
+
+    def test_get_after_patch_returns_new_league(self):
+        # Prime the cache
+        prime = self.client.get(f"/api/events/{self.event.pk}/")
+        self.assertEqual(prime.status_code, 200)
+        # Mutate — on_commit hooks fire because we're under TransactionTestCase
+        patch_resp = self.client.patch(
+            f"/api/events/{self.event.pk}/",
+            {"tournament_league": self.league_a2.pk},
+            format="json",
+        )
+        self.assertEqual(patch_resp.status_code, 200)
+        # Read through cache — must be fresh
+        get_resp = self.client.get(f"/api/events/{self.event.pk}/")
+        self.assertEqual(get_resp.status_code, 200)
+        self.assertEqual(get_resp.json()["tournament_league"], self.league_a2.pk)
