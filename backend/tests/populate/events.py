@@ -25,6 +25,7 @@ from tests.data import (
     ADMIN_USER,
     EVENT_ADMIN_USER,
     EVENTS_LEAGUE,
+    EVENTS_LEAGUE_ALT,
     EVENTS_ORG,
     EVENTS_USERS,
 )
@@ -52,6 +53,16 @@ def populate_events_data(force=False):
         defaults={
             "pk": EVENTS_LEAGUE.pk,
             "name": EVENTS_LEAGUE.name,
+            "organization": org,
+        },
+    )
+
+    # 2b. Create alt league (used by edit-league-and-event-fields tests for same-org swap target)
+    League.objects.update_or_create(
+        steam_league_id=EVENTS_LEAGUE_ALT.steam_league_id,
+        defaults={
+            "pk": EVENTS_LEAGUE_ALT.pk,
+            "name": EVENTS_LEAGUE_ALT.name,
             "organization": org,
         },
     )
