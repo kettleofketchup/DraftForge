@@ -252,7 +252,7 @@ class EventRepeater(
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     frequency = models.CharField(max_length=20, choices=RepeatFrequency.choices)
-    day_of_week = models.IntegerField(null=True, blank=True)
+    day_of_week = models.IntegerField(null=True, blank=True)  # 0=Sunday, 6=Saturday
     time_of_day = models.TimeField()
     starts_at = models.DateField()
     ends_at = models.DateField(null=True, blank=True)

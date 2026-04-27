@@ -48,8 +48,9 @@ class DiscordTournamentConfigFieldsTest(TestCase):
 
         t = Tournament()
         self.assertFalse(t.auto_create_hero_drafts)
-        self.assertFalse(t.discord_send_draft_link)
-        self.assertFalse(t.discord_send_herodraft_link)
+        # Draft/herodraft DM defaults flipped to True in 81af2454
+        self.assertTrue(t.discord_send_draft_link)
+        self.assertTrue(t.discord_send_herodraft_link)
 
     def test_event_has_tournament_discord_fields(self):
         from events.models import Event

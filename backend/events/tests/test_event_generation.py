@@ -17,7 +17,7 @@ class EventGenerationTests(EventTestCase):
             organization=self.org,
             name="Weekly Event",
             frequency=RepeatFrequency.WEEKLY,
-            day_of_week=1,
+            day_of_week=2,  # Tuesday (Sunday=0 convention)
             time_of_day=time(19, 0),
             starts_at=date(2026, 3, 1),
             generate_days_ahead=7,
@@ -119,6 +119,65 @@ class EventGenerationTests(EventTestCase):
         if len(events) >= 2:
             diff = (events[1].scheduled_at - events[0].scheduled_at).days
             self.assertEqual(diff, 14)
+
+
+class WeekdayConventionTests(EventTestCase):
+    """day_of_week uses Sunday=0 convention (matches frontend DAY_LABELS)."""
+
+    def _create_repeater(self, **kwargs):
+        defaults = dict(
+            organization=self.org,
+            name="Convention Test",
+            frequency=RepeatFrequency.WEEKLY,
+            day_of_week=0,
+            time_of_day=time(19, 0),
+            starts_at=date(2026, 3, 1),
+            generate_days_ahead=7,
+            is_active=True,
+            created_by=self.admin,
+            tournament_name="Convention Tourney",
+            tournament_league=self.league,
+            people_per_team=5,
+            number_of_teams=2,
+        )
+        defaults.update(kwargs)
+        return EventRepeater.objects.create(**defaults)
+
+    def test_python_weekday_helper(self):
+        from events.services import _python_weekday
+
+        # Sunday=0 → Python weekday 6
+        self.assertEqual(_python_weekday(0), 6)
+        # Monday=1 → Python weekday 0
+        self.assertEqual(_python_weekday(1), 0)
+        # Tuesday=2 → Python weekday 1
+        self.assertEqual(_python_weekday(2), 1)
+        # Saturday=6 → Python weekday 5
+        self.assertEqual(_python_weekday(6), 5)
+
+    @patch(PATCH_TODAY, return_value=date(2026, 3, 2))
+    def test_day_of_week_zero_generates_sunday(self, mock_today):
+        from zoneinfo import ZoneInfo
+
+        from events.services import generate_events_for_repeater
+
+        repeater = self._create_repeater(day_of_week=0)
+        events = generate_events_for_repeater(repeater)
+        self.assertEqual(len(events), 1)
+        local = events[0].scheduled_at.astimezone(ZoneInfo(repeater.timezone))
+        self.assertEqual(local.weekday(), 6, f"expected Sunday, got {local:%A %Y-%m-%d}")
+
+    @patch(PATCH_TODAY, return_value=date(2026, 3, 2))
+    def test_day_of_week_two_generates_tuesday(self, mock_today):
+        from zoneinfo import ZoneInfo
+
+        from events.services import generate_events_for_repeater
+
+        repeater = self._create_repeater(day_of_week=2)
+        events = generate_events_for_repeater(repeater)
+        self.assertEqual(len(events), 1)
+        local = events[0].scheduled_at.astimezone(ZoneInfo(repeater.timezone))
+        self.assertEqual(local.weekday(), 1, f"expected Tuesday, got {local:%A %Y-%m-%d}")
 
 
 class DSTTests(EventTestCase):

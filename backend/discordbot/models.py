@@ -41,7 +41,7 @@ class ScheduledEvent(models.Model):
 
     # Scheduling
     is_recurring = models.BooleanField(default=False)
-    day_of_week = models.IntegerField(null=True, blank=True)  # 0=Monday, 6=Sunday
+    day_of_week = models.IntegerField(null=True, blank=True)  # 0=Sunday, 6=Saturday
     time_of_day = models.TimeField(null=True, blank=True)
     next_post_at = models.DateTimeField()
 

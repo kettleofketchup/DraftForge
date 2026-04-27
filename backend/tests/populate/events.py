@@ -207,7 +207,7 @@ def populate_events_data(force=False):
         defaults={
             "description": "Weekly inhouse event for E2E tests.",
             "frequency": RepeatFrequency.WEEKLY,
-            "day_of_week": 2,  # Wednesday
+            "day_of_week": 3,  # Wednesday (Sunday=0 convention)
             "time_of_day": time(20, 0),
             "starts_at": tz.now().date(),
             "generate_days_ahead": 7,
