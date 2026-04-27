@@ -1,5 +1,6 @@
 .claude/settings.local.json
 docs/plans/
+docs/superpowers/
 test-results/
 .last-run.json
 .venv
