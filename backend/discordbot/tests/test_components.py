@@ -80,31 +80,47 @@ class EventSignupViewTest(TestCase):
 
 
 class EventSignupModalTest(TestCase):
-    def test_dota_modal_has_text_inputs_not_selects(self):
-        """Modals must only use TextInput — NOT Select."""
+    def test_dota_modal_components_are_textinput_or_label(self):
+        """Modal items must be TextInput or Label (Label wraps Select for components-v2)."""
 
         async def _test():
             from discordbot.components import EventSignupModal
 
             modal = EventSignupModal(event_id=42, game_type=1, prefill={})
+            allowed = (discord.ui.TextInput, discord.ui.Label)
             for item in modal.children:
                 self.assertIsInstance(
                     item,
-                    discord.ui.TextInput,
-                    f"Modal contains non-TextInput: {type(item)}",
+                    allowed,
+                    f"Modal contains unsupported item: {type(item)}",
                 )
 
         run_async(_test())
 
-    def test_dota_modal_has_steam_positions_rank(self):
+    def test_dota_modal_has_friend_id_and_rank_status(self):
+        """Dota modal collects friend_id (when missing) and rank_status; positions
+        are gathered in a follow-up ephemeral, not in the modal."""
+
         async def _test():
             from discordbot.components import EventSignupModal
 
             modal = EventSignupModal(event_id=42, game_type=1, prefill={})
-            custom_ids = [item.custom_id for item in modal.children]
-            self.assertTrue(any("steam" in cid for cid in custom_ids))
-            self.assertTrue(any("positions" in cid for cid in custom_ids))
-            self.assertTrue(any("rank_status" in cid for cid in custom_ids))
+            custom_ids = []
+            for item in modal.children:
+                if hasattr(item, "custom_id") and item.custom_id:
+                    custom_ids.append(item.custom_id)
+                # Label wraps a component (e.g. Select) where the custom_id lives
+                wrapped = getattr(item, "component", None)
+                if wrapped is not None and getattr(wrapped, "custom_id", None):
+                    custom_ids.append(wrapped.custom_id)
+            self.assertTrue(
+                any("friend_id" in cid for cid in custom_ids),
+                f"missing friend_id in {custom_ids}",
+            )
+            self.assertTrue(
+                any("rank_status" in cid for cid in custom_ids),
+                f"missing rank_status in {custom_ids}",
+            )
 
         run_async(_test())
 
@@ -155,22 +171,22 @@ class RankDetailsViewTest(TestCase):
 
         run_async(_test())
 
-    def test_previous_rank_has_button(self):
+    def test_previous_rank_has_medal_select(self):
+        # RankDetailsView is now all-selects (medal+star for active/previous,
+        # battle-cup tier for never).
         async def _test():
             from discordbot.components import RankDetailsView
 
             view = RankDetailsView(event_id=42, rank_status="previous")
-            has_button = any(isinstance(c, discord.ui.Button) for c in view.children)
-            self.assertTrue(has_button)
+            self.assertTrue(any(isinstance(c, discord.ui.Select) for c in view.children))
 
         run_async(_test())
 
-    def test_never_rank_has_button(self):
+    def test_never_rank_has_battlecup_select(self):
         async def _test():
             from discordbot.components import RankDetailsView
 
             view = RankDetailsView(event_id=42, rank_status="never")
-            has_button = any(isinstance(c, discord.ui.Button) for c in view.children)
-            self.assertTrue(has_button)
+            self.assertTrue(any(isinstance(c, discord.ui.Select) for c in view.children))
 
         run_async(_test())
