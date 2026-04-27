@@ -446,6 +446,23 @@ class LeagueSerializer(serializers.ModelSerializer):
         first_org = obj.organization
         return first_org.name if first_org else None
 
+    def validate_steam_league_id(self, value):
+        if value is None or value <= 0:
+            raise serializers.ValidationError(
+                "Steam league ID must be a positive integer."
+            )
+        # .nocache() ensures the collision check sees the live row (not a stale
+        # cacheops snapshot) — important after a recent PATCH renames an ID.
+        qs = League.objects.filter(steam_league_id=value).nocache()
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        other = qs.first()
+        if other is not None:
+            raise serializers.ValidationError(
+                f"Steam league ID {value} is already in use by '{other.name}'."
+            )
+        return value
+
     def validate_description(self, value):
         if value:
             return nh3.clean(value)
