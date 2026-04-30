@@ -46,6 +46,16 @@ const editEventSchema = z.object({
   people_per_team: z.number().int().min(1),
   number_of_teams: z.number().int().min(2).nullable(),
   timezone: z.string().min(1, 'Timezone is required'),
+  // The backend allows None, but the UI requires a league on edit.
+  // To clear the league, use the Django admin or a direct API call.
+  // `.nullable()` accommodates the brief flash before useEffect populates from
+  // the loaded event; `.refine()` enforces non-null at submit time.
+  tournament_league: z
+    .number()
+    .nullable()
+    .refine((v) => v !== null && v >= 1, {
+      message: 'League is required',
+    }),
 }).merge(discordConfigSchema);
 
 type EditEventInput = z.infer<typeof editEventSchema>;
@@ -83,6 +93,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
       people_per_team: 5,
       number_of_teams: null,
       timezone: '',
+      tournament_league: null,  // overridden by useEffect when event loads
       ...DISCORD_CONFIG_DEFAULTS,
     },
   });
@@ -105,6 +116,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
         lobby_steam_league_id: event.lobby_steam_league_id,
         people_per_team: event.people_per_team,
         number_of_teams: event.number_of_teams || null,
+        tournament_league: event.tournament_league,
         discord_create_event: event.discord_create_event,
         discord_sync_signups: event.discord_sync_signups,
         discord_event_title: event.discord_event_title,
