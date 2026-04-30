@@ -11,7 +11,7 @@ Replace the current ad-hoc reminder polling with a small declarative registry of
 This is delivered as **three PRs across three releases** (deploy ordering matters — see Risks and rollout):
 
 1. **PR-0 — Frontend Zod loosen.** One-file frontend change that makes `discord_subscriber_dm*` `.optional()` in Zod schemas. Ships first, isolates the frontend from PR-1's column drop. Sits on production one release cycle before PR-1.
-2. **PR-1 — Registry + dead-field cleanup + idempotency guard.** Backend architectural change. Migrates the four wired reminders into a declarative registry (string task names, `current_app.send_task`); wires the announcement reminder (currently a dead field) as scheduled rather than immediate; drops the duplicate `discord_subscriber_dm*` fields (destructive migration); adds a Postgres partial unique index on `DiscordMessageLog(source, source_id) WHERE success = TRUE` to prevent polling-overlap double-fires; adds `invalidate_after_commit` calls in `sync_future_events` and `EventRepeaterViewSet.perform_update`; adds a CI test that fails when a `discord_*_hours` field has no consumer or when the slim serializer omits a registered field.
+2. **PR-1 — Registry + dead-field cleanup + idempotency guard.** Backend architectural change. Migrates the four wired reminders into a declarative registry (string task names, `current_app.send_task`); wires the announcement reminder (currently a dead field) as scheduled rather than immediate; drops the duplicate `discord_subscriber_dm*` fields (destructive migration); adds a pre-send lease pattern on `DiscordMessageLog` (full unique index on `(source, source_id)`, nullable `success`, `claimed_at` timestamp, plus a 5-min sweeper task) to prevent duplicate Discord sends under concurrent-task races; adds `invalidate_after_commit` calls in `sync_future_events` and `EventRepeaterViewSet.perform_update`; adds a CI test that fails when a `discord_*_hours` field has no consumer or when the slim serializer omits a registered field.
 3. **PR-2 — Series row-level fixes + frontend cleanup.** `sync_future_events` recomputes `scheduled_at` on day/time/timezone edits (eliminates duplicate occurrences); frontend conditional rendering of signup-reminder fields on single events with Zod discriminated union; modal `defaultValues` cleanup; Playwright spec fix; TanStack Query invalidation gap closed.
 
 **Edit-cascade policy:** **once fired, sticky.** Edits to reminder timing fields are honored on the next poll *only if the reminder has not already fired*. Already-fired reminders are never re-fired — preserves the "no double-DM" guarantee. Recovery from a wrongly-fired reminder is a manual admin action (delete the `DiscordMessageLog` row); the row-level fix in PR-2 prevents the most common cause (stale `scheduled_at` after series edits) from happening in the first place.
@@ -154,16 +154,80 @@ The existing `check_event_reminders` shared task name is preserved (still schedu
 
 ### Concurrency and idempotency (preventing double-fires)
 
-The 30-second beat cadence creates an overlap window: if any per-event work in `fire_due_reminders` exceeds 30s — and the existing inline synchronous Discord HTTP calls (e.g., `tasks.py:816` in the attendance branch) can — then beat will queue a second `check_event_reminders` while the first is still running. Both will pass `check_message_log_exists` before either writes the log row, and both will dispatch the task. This double-fire is latent in the current code and would be inherited by the registry refactor unchanged.
+The 30-second beat cadence creates an overlap window: if any per-event work in `fire_due_reminders` exceeds 30s — and the existing inline synchronous Discord HTTP calls (e.g., `tasks.py:816` in the attendance branch) can — then beat will queue a second `check_event_reminders` while the first is still running. Both will pass `check_message_log_exists` before either dispatches reminder tasks, and both dispatched tasks will send to Discord *before* either has written its log row. The unique-constraint-after-send pattern audit-dedups but does NOT prevent the duplicate Discord HTTP send: the message has already gone out by the time the second task hits `IntegrityError`.
 
-**Fix in PR-1:** add a database-level idempotency guard so `DiscordMessageLog` writes serialize:
+**Fix in PR-1: pre-send "lease" pattern.** The dispatched reminder task acquires a lease row in `DiscordMessageLog` *before* sending to Discord. The unique constraint serializes the lease acquisition, so only one worker reaches the send step.
 
-1. Add a unique constraint on `DiscordMessageLog(source, source_id)` filtered to `success=True` (Postgres partial index). The actual reminder tasks already write a `DiscordMessageLog` row on completion; the constraint forces a second concurrent task to fail with `IntegrityError` rather than silently sending a second message.
-2. The reminder tasks (`send_event_announcement`, `send_subscriber_notifications`, `send_attendance_reminder`, `send_profile_reminder`) wrap their "send + log" sequence in `@transaction.atomic` and use `DiscordMessageLog.objects.create(...)` — on `IntegrityError`, the task catches it and exits cleanly (the other worker won the race; nothing more to do).
-3. In `fire_due_reminders` itself, do not pre-create a log row. The dispatch is cheap; the constraint is what prevents duplicate side effects.
-4. Add Celery worker config for the `check_event_reminders` task: `task_acks_late=True` and `task_reject_on_worker_lost=True`. A worker that crashes mid-loop should requeue the task; without these flags, in-flight tasks vanish on worker SIGKILL.
+**Schema changes to `DiscordMessageLog`:**
 
-The unique constraint is the source of truth; the in-process `check_message_log_exists` check at the top of the fire loop is an optimization to avoid pointless dispatches, not a correctness primitive.
+1. **Make `success` nullable.** Three states: `NULL` = lease held, send in flight; `True` = sent successfully; `False` = send attempted and failed. Add a data migration to leave existing rows as-is (existing values are `True` or `False`).
+2. **Full unique index on `(source, source_id)`.** Not partial. The constraint applies regardless of `success` value, so a pending lease, a successful send, or a failed send all block re-claim equally. A row with `success=False` from a prior failure intentionally blocks future fires until manually cleared — failed Discord sends are usually recoverable only by admin intervention anyway.
+3. **Add `claimed_at = DateTimeField(null=True, db_index=True)`** so a sweeper can reclaim leases stuck in `NULL` state from worker crashes.
+
+**Worker-side flow (each reminder task):**
+
+```python
+@shared_task
+def send_event_announcement(event_id):
+    event = get_event_for_task(event_id)
+    if not event or not (event.discord_announcement and event.discord_announcement_channel_id):
+        return f"event {event_id} not announceable"
+
+    # Claim the lease BEFORE the Discord HTTP send.
+    log_id = claim_discord_message_log(source="event_announcement", source_id=event.pk)
+    if log_id is None:
+        return f"event {event_id} announcement: lease held by another worker"
+
+    try:
+        result = build_announcement_v2(event)
+        response = sync_send_embed_with_components_no_log(
+            channel_id=event.discord_announcement_channel_id,
+            embed=result["embed"],
+            components=result.get("components"),
+        )
+        finalize_discord_message_log(log_id, success=True, message_id=response.get("id"))
+    except Exception as e:
+        finalize_discord_message_log(log_id, success=False, error=str(e))
+        raise
+
+    return f"sent announcement for event {event_id}"
+```
+
+**Two new helpers in `app.internal_client` (and corresponding internal API endpoints):**
+
+- `claim_discord_message_log(source, source_id) -> int | None` — POSTs to `/api/internal/discord/message-log/claim/`. The Django-side handler does `DiscordMessageLog.objects.create(source=source, source_id=source_id, success=None, claimed_at=now())` inside a `try/except IntegrityError`. Returns the new log row's PK on success or `None` on conflict (lease already exists).
+- `finalize_discord_message_log(log_id, *, success, message_id=None, error=None)` — POSTs to `/api/internal/discord/message-log/{log_id}/finalize/`. Updates the row to `success=True/False` plus the `message_id` or `error` payload.
+
+**Refactor `sync_send_embed_with_components`:** split into:
+- `sync_send_embed_with_components_no_log(...)` — does the Discord HTTP send only, returns the response. No logging side effect.
+- The existing `sync_send_embed_with_components(..., source=..., source_id=...)` becomes a thin wrapper that calls `claim_discord_message_log`, then `_no_log`, then `finalize_discord_message_log`. Existing callers that don't use the lease pattern (one-off admin notifications, etc.) continue to work but get the lease semantics implicitly.
+
+**Stale-lease sweeper (Celery beat task):**
+
+A new beat task `sweep_stale_discord_leases` runs every 5 minutes:
+
+```python
+@shared_task
+def sweep_stale_discord_leases():
+    """Delete DiscordMessageLog rows stuck in NULL state for >5 minutes —
+    almost always from a worker crash between claim and finalize."""
+    threshold = timezone.now() - timedelta(minutes=5)
+    deleted, _ = DiscordMessageLog.objects.filter(
+        success__isnull=True, claimed_at__lt=threshold,
+    ).delete()
+    if deleted:
+        logger.warning("Swept %d stale Discord leases", deleted)
+    return deleted
+```
+
+This is added to `_beat_schedule` in `config/celery.py`.
+
+**Worker safety configuration:**
+
+- `task_acks_late=True` and `task_reject_on_worker_lost=True` on `check_event_reminders` — a worker that crashes mid-loop requeues the polling task instead of dropping it.
+- Same flags on each reminder task. A worker crash between `claim_discord_message_log` and `finalize_discord_message_log` leaves a stale lease that the sweeper handles within 5 minutes.
+
+**The `check_message_log_exists` short-circuit in `fire_due_reminders` stays.** It's a load-shedder — most polls hit it and skip dispatch entirely. The DB constraint is the correctness primitive; the cached-exists check is the optimization.
 
 ### How edits take effect
 
@@ -249,9 +313,13 @@ PR-0 deploys, sits on production for one release cycle, then PR-1 ships.
 - **Modified:** `backend/events/tasks.py` —
     - `check_event_reminders` body becomes `fire_due_reminders()`
     - Extract inline `attendance_reminder` and `profile_reminder` blocks into top-level shared tasks `send_attendance_reminder(event_id)` and `send_profile_reminder(event_id)` so they're registry-callable
-    - Wrap each reminder task's "send + log" sequence in `@transaction.atomic` and catch `IntegrityError` from `DiscordMessageLog` unique-constraint violations as a clean "lost the race; exit" path
-    - Update the stale comment at lines 742-743 to reflect that `DiscordMessageLog` IS cached by cacheops and that the unique constraint is the actual idempotency primitive
-    - Add `task_acks_late=True` and `task_reject_on_worker_lost=True` to `@shared_task` decorator on `check_event_reminders`
+    - Refactor each reminder task to use the lease pattern: `claim_discord_message_log(...)` before the Discord send; `finalize_discord_message_log(log_id, success=...)` after. None-return from claim means another worker has the lease — exit cleanly.
+    - Update the stale comment at lines 742-743 to reflect that `DiscordMessageLog` IS cached by cacheops and that the lease pattern (not a partial index) is the idempotency primitive
+    - Add `task_acks_late=True` and `task_reject_on_worker_lost=True` to `@shared_task` decorator on `check_event_reminders` and on each reminder task
+- **Modified:** `backend/discordbot/utils.py` — split `sync_send_embed_with_components` into `_no_log` (Discord HTTP only) and the existing wrapper that adds claim/finalize around it. The wrapper signature stays the same so most callers don't need updates.
+- **New:** `backend/app/internal_client.py` helpers — `claim_discord_message_log(source, source_id) -> int | None` and `finalize_discord_message_log(log_id, *, success, message_id=None, error=None)`.
+- **Modified:** `backend/app/views/internal.py` — split the existing `create_discord_message_log` endpoint into `claim` (POST `/api/internal/discord/message-log/claim/`) and `finalize` (POST `/api/internal/discord/message-log/{id}/finalize/`). The claim endpoint catches `IntegrityError` and returns 409 Conflict; the worker helper returns `None` on 409.
+- **New:** `sweep_stale_discord_leases` shared task in `backend/discordbot/tasks.py` (or wherever beat tasks live) — deletes `DiscordMessageLog` rows with `success IS NULL` and `claimed_at < now() - 5min`. Added to `_beat_schedule` in `backend/config/celery.py` at a 5-minute cadence.
 - **Modified:** `backend/events/views.py` —
     - Remove the three `notify_event_announced(event)` call sites (lines ~376, ~420, ~551); the scheduled fire path replaces them
     - `EventRepeaterViewSet.perform_update` (lines ~190-195): after `sync_future_events` returns, call `invalidate_after_commit(*future_events)` so cascaded child events are not served stale from cacheops
@@ -263,7 +331,7 @@ PR-0 deploys, sits on production for one release cycle, then PR-1 ships.
 - **Modified or deleted:** `backend/events/discord/dispatch.py` — `notify_event_announced` has no remaining callers; either delete or leave for future use
 - **Migrations:**
     - `0XXX_remove_subscriber_dm_fields.py` (destructive — drops `discord_subscriber_dm` and `discord_subscriber_dm_hours` from both `Event` and `EventRepeater`)
-    - `0XXY_discord_message_log_unique_success.py` (additive — Postgres partial unique index on `DiscordMessageLog(source, source_id) WHERE success = TRUE`)
+    - `0XXY_discord_message_log_lease_schema.py` — three operations: (1) `success` becomes nullable; (2) add `claimed_at = DateTimeField(null=True, db_index=True)`; (3) add full unique constraint on `(source, source_id)`. Use `CREATE UNIQUE INDEX CONCURRENTLY` if available to avoid blocking writes during deploy. Existing rows have `success` set to True/False and `claimed_at=NULL` — a one-line data migration is acceptable but not required since old rows already satisfy the new schema.
 - **Modified:** `backend/events/serializers.py`, `backend/events/schemas.py` — remove the dropped subscriber-DM fields from all serializers and schema definitions; verify `EventSlimSerializer` exposes every `hours_field` and `enabled_field` referenced in `REMINDERS`
 - **Modified:** `backend/config/celery.py` — confirm or add `task_acks_late` / `task_reject_on_worker_lost` defaults for the reminder queue (currently neither is set)
 - **Deploy step (not a code file):** run `cacheops.invalidate_model(Event)` and `invalidate_model(EventRepeater)` post-migration to flush cached pre-migration model instances that contain the dropped fields. Add to deploy script or release runbook.
@@ -294,7 +362,7 @@ PR-0 deploys, sits on production for one release cycle, then PR-1 ships.
 | Q8 | `hours_field <= 0 or None` | Skip in fire path — treats as "this reminder is disabled for this event." |
 | Q9 | Announcement: immediate vs scheduled | **Scheduled** (Y). Remove immediate-dispatch `notify_event_announced` calls; the registry fires the announcement `discord_announcement_hours` before `scheduled_at`. The separate "new event notice" (`event_notice` log source) keeps its immediate dispatch — different concept. |
 | Q10 | "Message interested users" UI binding | Verified. The toggle in `DiscordConfigSection.tsx:317` writes to `discord_notify_new_events` (a live, working field). PR-1 dropping `discord_subscriber_dm*` is correct — those fields really are dead. |
-| Q11 | Idempotency primitive against polling overlap | **DB-level partial unique index** on `DiscordMessageLog(source, source_id) WHERE success = TRUE`. Tasks catch `IntegrityError` as a "lost the race; clean exit" path. Chosen over `select_for_update` (more invasive, requires changing every reminder task to acquire and hold a row lock for the duration of the Discord HTTP call) and over Redis `SET NX EX` (adds Redis-failure failure mode). DB-only, fail-loud. |
+| Q11 | Idempotency primitive against polling overlap | **Pre-send lease pattern** (Option A). Full unique index on `DiscordMessageLog(source, source_id)`; `success` becomes nullable (`NULL` = lease held); reminder tasks `INSERT` the lease *before* the Discord HTTP send. The unique constraint serializes claim attempts, so only one worker reaches the send step — preventing duplicate Discord messages, not just duplicate audit rows. Stale leases (NULL >5 min, from worker crashes) are reaped by a beat-scheduled sweeper. Chosen over partial-index-after-send (which only audit-dedups), Redis distributed lock (adds Redis as correctness dependency), and `select_for_update` (would hold a row lock across the Discord HTTP call). |
 | Q12 | Frontend deploy ordering for column drop | **PR-0 ships first**, loosens Zod schemas to `.optional()` for `discord_subscriber_dm*`. PR-1 ships one release later, drops the columns. Avoids the brief window where backend has dropped the field but frontend bundles still validate it as required. |
 | Q13 | Cacheops invalidation on destructive migration | Post-deploy step: `invalidate_model(Event)` + `invalidate_model(EventRepeater)` to flush cached pre-migration model instances that contain the dropped fields. Added to PR-1 release runbook. |
 
@@ -303,19 +371,19 @@ PR-0 deploys, sits on production for one release cycle, then PR-1 ships.
 **Deploy ordering (three releases):**
 
 1. **Release N — PR-0 (frontend Zod loosen).** Make `discord_subscriber_dm*` `.optional()` in Zod schemas. No backend changes. Risk: zero. Sits on production for one release cycle minimum to ensure all clients have the new bundle.
-2. **Release N+1 — PR-1 (registry + dead-field drop + idempotency guard).** Backend-only. Adds the Postgres partial unique index migration (additive, safe under concurrent writes; Postgres `CREATE UNIQUE INDEX CONCURRENTLY` if necessary). Drops the `discord_subscriber_dm*` columns (destructive — backups required). Removes synchronous `notify_event_announced` dispatch.
+2. **Release N+1 — PR-1 (registry + dead-field drop + idempotency guard).** Backend-only. Adds the lease-pattern migration on `DiscordMessageLog` (full unique index via `CREATE UNIQUE INDEX CONCURRENTLY`, nullable `success`, `claimed_at` timestamp). Drops the `discord_subscriber_dm*` columns (destructive — backups required). Removes synchronous `notify_event_announced` dispatch. Adds the stale-lease sweeper to celery beat at 5-minute cadence.
 3. **Release N+2 — PR-2 (row-level series fixes).** Backend `sync_future_events` recompute, frontend `DiscordConfigSection` conditional render, schema discriminated union, modal default cleanup, Playwright fix, query invalidation.
 
 **Risks per release:**
 
 - **PR-1 destructive migration** drops two columns each from `Event` and `EventRepeater`. Pre-deploy backup. No data loss since nothing reads these.
-- **PR-1 unique index** is additive but the `WHERE success = TRUE` predicate must match exactly the field name on `DiscordMessageLog`. Verify the column name (`success` vs `delivered` vs `succeeded`) before writing the migration.
+- **PR-1 schema migration on `DiscordMessageLog`** does three things: makes `success` nullable, adds `claimed_at`, and adds a full unique index on `(source, source_id)`. Each operation is additive or relaxing — safe under concurrent writes if `CREATE UNIQUE INDEX CONCURRENTLY` is used for the index step. Verify column name `success` is correct (it's confirmed at `discordbot/models.py:96`; note that other models like `DiscordTournamentLog` and `DiscordEventLog` also have `success` columns — the migration must explicitly target `discordbot.discordmessagelog`).
 - **PR-1 worker config change** (`task_acks_late`, `task_reject_on_worker_lost`) — these are worker-level options, applied via `@shared_task(acks_late=True, reject_on_worker_lost=True)` decoration on `check_event_reminders`. Restart workers as part of deploy so the new options take effect.
 - **PR-1 cacheops post-deploy step:** run `invalidate_model(Event)` + `invalidate_model(EventRepeater)` after migration to flush cached pre-migration instances. Add to deploy runbook.
 - **Wiring up `discord_announcement_hours`** is a behavior change with two facets:
     - **The field becomes live** — production events with non-default values will fire announcements at the new timing. Worth a quick `SELECT id, discord_announcement_hours FROM events_event WHERE discord_announcement_hours <> 24 AND state IN ('upcoming', 'signups_open')` before deploy.
     - **Announcements no longer post immediately on save.** Anyone who relied on "I save the event, the announcement appears in Discord seconds later" will see a delay equal to `scheduled_at - discord_announcement_hours`. Worth a one-line note in the release announcement and a Discord ping to admin users. The "new event notice" (different message, different channel pattern) is unaffected — it still fires immediately.
-- **In-flight task name coexistence.** Old workers will still process the inline `attendance_reminder` and `profile_reminder` branches in `check_event_reminders` while new beat enqueues calls to `events.tasks.send_attendance_reminder` / `send_profile_reminder`. Solution: deploy new beat config last, after all workers are running new task definitions. Standard rolling-deploy hygiene.
+- **In-flight task name coexistence.** Beat config is static in `config/celery.py` and deploys atomically with worker code. The risk window is rolling-deploy: new beat schedule loaded but some workers still running pre-PR-1 code that doesn't have `send_attendance_reminder` / `send_profile_reminder` registered. The mitigation is deploy ordering: **deploy workers across the full fleet first, then restart beat last.** With `task_acks_late=True` on the polling task, queued reminder tasks sit in the broker until *some* worker can pick them up — so a partial-fleet old-worker window gets the tasks consumed by new workers as soon as they're up. Confirm broker has sufficient `visibility_timeout` (default 1h on Redis) to bridge the rolling window. Recommended explicit assertion: set `broker_transport_options = {'visibility_timeout': 3600}` in `config/celery.py` if not already set.
 - **Recovery for already-stuck reminders is manual.** PR-2 prevents new wrong-day fires; events whose reminders fired wrongly *before* this ships need admin intervention to clear the `DiscordMessageLog` row. This is acceptable scope per the chosen edit policy (Option B).
 
 ## Open questions
