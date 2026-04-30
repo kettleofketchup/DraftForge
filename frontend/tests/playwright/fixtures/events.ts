@@ -67,6 +67,12 @@ export interface EventInfo {
   leaguePk: number;
   name: string;
   state: string;
+  /** Stable PK of the events test league (pk=7) — does not change even if the seeded event swaps leagues. */
+  eventsLeaguePk: number;
+  /** PK of the secondary "Events Test League B" (pk=8) — used as the same-org swap target. */
+  altLeaguePk: number;
+  /** Name of the secondary league. */
+  altLeagueName: string;
 }
 
 /** Look up the Events Test Org and E2E Signup Event by name. */
@@ -89,6 +95,9 @@ export async function getEventsTestData(context: BrowserContext): Promise<EventI
     leaguePk: signupEvent.tournament_league,
     name: signupEvent.name,
     state: signupEvent.state,
+    eventsLeaguePk: 7,
+    altLeaguePk: 8,
+    altLeagueName: 'Events Test League B',
   };
 }
 
