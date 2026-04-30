@@ -147,9 +147,13 @@ export function UserEditModal({ user, scope, fields }: UserEditModalProps) {
   });
 
   // Re-seed when modal opens or the underlying user changes.
-  // Deps narrowed to identity keys (not the scope object literal) to avoid
-  // re-firing on every parent render — caller-side `useMemo` of scope is
-  // recommended but not required by this effect.
+  // Deps are narrowed to identity keys (not the scope object literal) to
+  // avoid re-firing on every parent render. Cross-entity transitions within
+  // the same scope.kind (e.g. switching the modal target from org A to
+  // org B without scope.kind changing) are covered by the `open` toggle:
+  // the modal must close between users, so the next open re-runs reset
+  // with the new user/scope. Caller-side `useMemo` of scope is recommended
+  // for stability but not required by this effect.
   useEffect(() => {
     if (open) form.reset(buildDefaults(user, scope));
   }, [open, user.pk, user.orgUserPk, scope.kind, form]);
@@ -232,7 +236,8 @@ function scopeToContext(scope: EditUserScope) {
 
 - **No `memo()` wrapper.** Reference modals (`EditLeagueModal`, `EditEventModal`) don't use it; React Compiler handles re-render minimization, and RHF's `Controller`/`FormField` already isolate field re-renders. The legacy `memo()` is dropped.
 - **`form.formState.isSubmitting` over redundant `useState`.** This is intentional and improves on both reference modals (which keep a parallel `useState` flag).
-- **Trigger is rendered via `FormDialog`'s built-in `trigger` slot** if exposed, or as a sibling controlled by the `open` state. Confirm during implementation against `FormDialog`'s actual prop surface; the `EditIconButton` with `data-testid="edit-user-btn"` is preserved either way.
+- **Trigger is rendered as a sibling controlled by the `open` state.** `FormDialog` does not expose a `trigger` prop — confirmed by reading `frontend/app/components/ui/dialogs/FormDialog.tsx`. The `<EditIconButton>` with `data-testid="edit-user-btn"` lives outside the `<FormDialog>` and calls `setOpen(true)`. Implementation must verify `<EditIconButton>` is a brand-canonical wrapper (preferably built on `<EditButton>` which is the documented purple + 3D edit affordance per `docs/THEMING-GUIDE.md`) and not a daisyUI relic — if it is, swap to `<EditButton>` in the same PR.
+- **`FormDialog` brand inheritance.** `FormDialog` wraps shadcn `<Dialog>`/`<DialogContent>`, so it inherits `brandBg` automatically. Its submit button is a `<SubmitButton>` (gradient + 3D per the theming guide) and its cancel button is a `<CancelButton>` — do not pass these manually, and do not bypass them with shadcn `<Button>` directly.
 - **Empty-PATCH guard** is the `formState.isDirty` early return. Without this, the org backend at `admin_team.py:768-771` returns 400 for an empty body. The earlier draft incorrectly claimed empty PATCH would 200; this is the fix.
 
 ### Form body (`editForm.tsx`)
@@ -315,7 +320,11 @@ The legacy `editForm.tsx` mixes daisyUI utility classes (`input input-bordered`,
 | Submit / Cancel buttons | Provided by `<FormDialog>` — do not pass `<SubmitButton>` / `<CancelButton>` manually |
 
 **Forbidden classes in the new form** (carried-forward technical debt — explicitly listed so reviewers can grep):
-`bg-gray-800`, `bg-gray-900`, `card-compact`, `input-bordered`, `select-bordered`, `input-error`, `form-control`, `label` (the daisyUI version), any `slate-*` / `gray-*` raw tokens.
+
+- Raw color utilities: `bg-gray-800`, `bg-gray-900`, any `slate-*` / `gray-*` tokens, manual `bg-base-300` overrides on shadcn primitives.
+- daisyUI form tokens: bare `input`, `input input-bordered`, `input-error`, bare `select`, `select select-bordered`, `form-control`, daisyUI `label` (use `<FormLabel>`), `card-compact`.
+- Bogus / non-Tailwind classes from the legacy file: `align-center`, `align-middle` on flex/grid containers (these are not real Tailwind utilities), `md:cols-2`, `xl:cols-3` (use `md:grid-cols-N` / `xl:grid-cols-N` on a `grid` parent), trailing/duplicated `w-full`.
+- Inline overrides on shadcn components: manual `font-semibold` on `<Label>` / `<FormLabel>` (the component already styles itself); `text-error` *as a form-state class* is forbidden — use `<FormMessage>` instead. `text-error` for non-form inline text is acceptable per `THEMING-GUIDE.md`.
 
 The trigger button (`<EditIconButton>` with `data-testid="edit-user-btn"`) is unchanged — already inherits brand styling. The dialog title tone (`Edit {nickname || username}` / `Update this user's profile.`) matches `EditLeagueModal`'s register; no change needed.
 
@@ -341,7 +350,18 @@ The two PATCH paths return structurally different payloads. This is pre-existing
 | `PATCH /organizations/:orgPk/users/:orgUserPk/` | `OrgUserSerializer` | slim: org-scoped fields, no `email` / `is_staff` / `is_superuser` / `discordId` |
 | `PATCH /users/:pk/` | `UserSerializer` | full user record |
 
-`useUserCacheStore.upsert` in `frontend/app/store/userCacheStore.ts:151` already does its own merge loop using `toUserEntry(raw, context, existing)` and explicitly bypasses the adapter's `upsertMany` precisely to handle scope-divergent payloads (see comment at line 146-150). **No change needed in the cache store**, but the implementation plan should add a unit test pinning the merge: after an `OrgUserSerializer`-shaped PATCH response is upserted, the cached entry must still expose `email`, `is_staff`, `discordId`, etc. from the prior cache state, not return `undefined`.
+`useUserCacheStore.upsert` in `frontend/app/store/userCacheStore.ts:151` already does its own merge loop using `toUserEntry(raw, context, existing)` and explicitly bypasses the adapter's `upsertMany` precisely to handle scope-divergent payloads (see comment at line 146-150). The merge is safe because `pick()` in that file (lines 22-33) only copies keys that satisfy `key in obj` — fields *absent* from the slim `OrgUserSerializer` payload (e.g. `email`, `is_staff`, `is_superuser`, `discordId`) are not copied, so existing values survive. **No change needed in the cache store**, but the implementation plan adds `10-cache-merge.spec.ts` to pin the behavior — guards against a future serializer change adding `email: null` (which *would* overwrite).
+
+### Server-side cache invalidation
+
+Two backend invalidation paths matter:
+
+| PATCH path | Invalidation today | Status |
+|---|---|---|
+| `update_org_user` (org scope) | Calls `invalidate_after_commit(org_user, org, *user.tournaments, *league_users, *(lu.league for lu in league_users))` at `admin_team.py:773-789`. | ✅ Org/league user lists invalidate correctly. |
+| `UserSerializer.update` (global scope) | Cacheops auto-invalidates on `CustomUser.save()`, but `@cached_as(OrgUser, ...)` views keyed on related `OrgUser` rows only invalidate if `OrgUser` is in the cache key deps. | ⚠️ Verify during implementation. If global edits to `nickname` / `positions` / `steam_account_id` leave org-page lists stale until 1h TTL, harden by adding an equivalent `invalidate_after_commit` for related `OrgUser` rows in `UserSerializer.update`, or by ensuring the relevant `cached_as` decorators include `CustomUser` in their model deps. |
+
+The implementation plan must include a verification step (Django shell: edit a user globally, then GET an org user list endpoint, confirm the change appears immediately) before the PR is merged. If verification reveals stale caches, the fix lands in this PR.
 
 ## Testing
 
@@ -433,6 +453,7 @@ Documented as a checklist for the implementer to run on a dev environment after 
 | Cache store merges scope-divergent payloads incorrectly, dropping fields | `useUserCacheStore.upsert` already bypasses the adapter's `upsertMany` and merges via `toUserEntry` (`userCacheStore.ts:146-178`). The new `10-cache-merge.spec.ts` pins the behavior. |
 | Empty-PATCH client guard regression (someone removes the `isDirty` check) | `07-sequential-multi-user.spec.ts` includes a sub-step that opens the modal, immediately clicks Save, and asserts no PATCH request fired. |
 | `FormDialog` migration loses `data-testid="edit-user-btn"` on the trigger | Trigger remains a separate `<EditIconButton>` wired to the dialog's `open` state — not an internal `FormDialog` slot. Verified by re-running `01-org-edit.spec.ts` which clicks `edit-user-btn`. |
+| Global `/users/:pk/` PATCH leaves org-page user list caches stale until TTL | Verified during implementation per the "Server-side cache invalidation" section. If stale, fix by adding `invalidate_after_commit` for related `OrgUser` rows in `UserSerializer.update`. |
 
 ## Out of scope (for a follow-up)
 
