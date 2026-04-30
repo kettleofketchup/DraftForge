@@ -20,6 +20,7 @@ import { useBracketQuery } from '~/hooks/useBracket';
 import { useUserStore } from '~/store/userStore';
 import { useTournamentStore } from '~/store/tournamentStore';
 import { useCanEditTournament } from '~/hooks/usePermissions';
+import { useOrganization } from '~/components/organization';
 import { useElkLayout, type MatchNodeType } from './hooks/useElkLayout';
 import { MatchNode } from './nodes/MatchNode';
 import { EmptySlotNode } from './nodes/EmptySlotNode';
@@ -123,9 +124,13 @@ function BracketFlowInner({ tournamentId }: BracketViewProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tournament = useUserStore((state) => state.tournament);
+  // Fetch the full org so org-staff membership flows into useCanEditTournament —
+  // tournament.league is LeagueMinimalSchema (no .organization field), so we
+  // fetch the org separately via useOrganization and pass it as the second arg.
+  const { organization } = useOrganization(tournament?.organization_pk ?? undefined);
   // Mirrors the backend's can_edit_tournament cascade — covers site staff,
   // org admin/staff, league admin, and league staff for the tournament's league.
-  const canEdit = useCanEditTournament(tournament?.league, tournament?.league?.organization);
+  const canEdit = useCanEditTournament(tournament?.league, organization);
   const pendingDraftId = useTournamentStore((state) => state.pendingDraftId);
   const setPendingDraftId = useTournamentStore((state) => state.setPendingDraftId);
   const pendingMatchId = useTournamentStore((state) => state.pendingMatchId);
