@@ -160,26 +160,35 @@ The 30-second beat cadence creates an overlap window: if any per-event work in `
 
 **Schema changes to `DiscordMessageLog`:**
 
-1. **Make `success` nullable.** Three states: `NULL` = lease held, send in flight; `True` = sent successfully; `False` = send attempted and failed. Add a data migration to leave existing rows as-is (existing values are `True` or `False`).
-2. **Full unique index on `(source, source_id)`.** Not partial. The constraint applies regardless of `success` value, so a pending lease, a successful send, or a failed send all block re-claim equally. A row with `success=False` from a prior failure intentionally blocks future fires until manually cleared — failed Discord sends are usually recoverable only by admin intervention anyway.
-3. **Add `claimed_at = DateTimeField(null=True, db_index=True)`** so a sweeper can reclaim leases stuck in `NULL` state from worker crashes.
+1. **Make `success` nullable.** Three states: `NULL` = lease held, send in flight; `True` = sent successfully; `False` = send attempted and failed. Existing rows with `success=True/False` survive the migration unchanged.
+2. **Partial unique index on `(source, source_id) WHERE success IS NOT FALSE`.** The constraint blocks re-claim while a pending lease (`NULL`) or successful row (`True`) exists, but DOES allow re-fire after a failed send (`False`). Failed Discord sends are typically recoverable (transient 5xx, rate-limit) and the next poll's threshold check is the right re-fire trigger. The sweeper (below) ages out `False` rows older than 1 hour to bound the retry budget.
+3. **Add `claimed_at = DateTimeField(null=True, db_index=True)`** so the sweeper can reap leases stuck in `NULL` state from worker crashes.
+
+**Lease payload — Option B (worker passes channel_id + embed_data at claim time).** The existing `DiscordMessageLog` model requires `channel_id` (CharField, non-null) and `embed_data` (JSONField, non-null). Rather than make those nullable just to support the lease, the worker passes the values it already has at claim time. The lease row is fully populated from creation; finalize just flips `success` and adds `message_id`/`error`.
 
 **Worker-side flow (each reminder task):**
 
 ```python
-@shared_task
+@shared_task(acks_late=True, reject_on_worker_lost=True)
 def send_event_announcement(event_id):
     event = get_event_for_task(event_id)
     if not event or not (event.discord_announcement and event.discord_announcement_channel_id):
         return f"event {event_id} not announceable"
 
-    # Claim the lease BEFORE the Discord HTTP send.
-    log_id = claim_discord_message_log(source="event_announcement", source_id=event.pk)
+    result = build_announcement_v2(event)  # build embed first
+
+    # Claim the lease BEFORE the Discord HTTP send. Pass channel_id + embed_data
+    # because the row's required fields need values at INSERT time.
+    log_id = claim_discord_message_log(
+        source="event_announcement",
+        source_id=event.pk,
+        channel_id=event.discord_announcement_channel_id,
+        embed_data=result["embed"],
+    )
     if log_id is None:
         return f"event {event_id} announcement: lease held by another worker"
 
     try:
-        result = build_announcement_v2(event)
         response = sync_send_embed_with_components_no_log(
             channel_id=event.discord_announcement_channel_id,
             embed=result["embed"],
@@ -193,48 +202,62 @@ def send_event_announcement(event_id):
     return f"sent announcement for event {event_id}"
 ```
 
-**Two new helpers in `app.internal_client` (and corresponding internal API endpoints):**
+**Two new helpers in `app.internal_client` (and corresponding internal API endpoints under the existing `_auth`/`_perm` decorators):**
 
-- `claim_discord_message_log(source, source_id) -> int | None` — POSTs to `/api/internal/discord/message-log/claim/`. The Django-side handler does `DiscordMessageLog.objects.create(source=source, source_id=source_id, success=None, claimed_at=now())` inside a `try/except IntegrityError`. Returns the new log row's PK on success or `None` on conflict (lease already exists).
-- `finalize_discord_message_log(log_id, *, success, message_id=None, error=None)` — POSTs to `/api/internal/discord/message-log/{log_id}/finalize/`. Updates the row to `success=True/False` plus the `message_id` or `error` payload.
+- `claim_discord_message_log(*, source, source_id, channel_id, embed_data) -> int | None` — POSTs to `/api/internal/discord/message-log/claim/`. The Django-side handler does `DiscordMessageLog.objects.create(...)` with `success=None`, `claimed_at=now()`, plus the worker-supplied `channel_id` and `embed_data`. Wrapped in `try/except IntegrityError`; returns the new log row's PK on success, `None` on conflict (lease already held). Endpoint uses the same auth as the existing `create_discord_message_log` (`@authentication_classes(_auth) @permission_classes(_perm)`) — NOT `@csrf_exempt`.
+- `finalize_discord_message_log(log_id, *, success, message_id=None, error=None)` — POSTs to `/api/internal/discord/message-log/{log_id}/finalize/`. Updates the row to `success=True/False` plus `message_id` or `error`. Returns 200 on update, or 410 Gone if the row was already swept (no-op for the worker).
 
-**Refactor `sync_send_embed_with_components`:** split into:
+**Refactor `sync_send_embed_with_components` for callers that want lease semantics:** split into:
 - `sync_send_embed_with_components_no_log(...)` — does the Discord HTTP send only, returns the response. No logging side effect.
-- The existing `sync_send_embed_with_components(..., source=..., source_id=...)` becomes a thin wrapper that calls `claim_discord_message_log`, then `_no_log`, then `finalize_discord_message_log`. Existing callers that don't use the lease pattern (one-off admin notifications, etc.) continue to work but get the lease semantics implicitly.
+- The existing `sync_send_embed_with_components(..., source=..., source_id=...)` becomes a thin wrapper that calls `claim_discord_message_log`, then `_no_log`, then `finalize_discord_message_log`. Existing callers continue to work and get lease semantics implicitly.
+
+**`send_subscriber_notifications` is special.** It iterates subscribers and sends a DM each via `sync_send_dm` (per-DiscordEventDM row), then writes a summary `create_message_log` at the end. It does NOT use `sync_send_embed_with_components`. PR-1 wires the lease pattern at the function bounds: claim at the top (passing the loop's intended channel_id/embed_data — the latter being the embed used for each DM), iterate subscribers, finalize at the bottom. This guarantees the whole subscriber loop runs at most once across concurrent dispatches.
 
 **Stale-lease sweeper (Celery beat task):**
 
-A new beat task `sweep_stale_discord_leases` runs every 5 minutes:
+A new beat task `sweep_stale_discord_leases` runs every 60 seconds and handles two recovery cases:
 
 ```python
 @shared_task
 def sweep_stale_discord_leases():
-    """Delete DiscordMessageLog rows stuck in NULL state for >5 minutes —
-    almost always from a worker crash between claim and finalize."""
-    threshold = timezone.now() - timedelta(minutes=5)
-    deleted, _ = DiscordMessageLog.objects.filter(
-        success__isnull=True, claimed_at__lt=threshold,
+    """Two recoveries:
+    - NULL leases >5 min old: worker crashed between claim and finalize. Delete.
+    - False rows >1 hour old: failed Discord send, transient cause likely passed.
+      Delete so the next poll can retry.
+    """
+    now = timezone.now()
+    pending_threshold = now - timedelta(minutes=5)
+    failed_threshold = now - timedelta(hours=1)
+
+    pending_swept, _ = DiscordMessageLog.objects.filter(
+        success__isnull=True, claimed_at__lt=pending_threshold,
     ).delete()
-    if deleted:
-        logger.warning("Swept %d stale Discord leases", deleted)
-    return deleted
+    failed_swept, _ = DiscordMessageLog.objects.filter(
+        success=False, claimed_at__lt=failed_threshold,
+    ).delete()
+
+    if pending_swept or failed_swept:
+        logger.warning(
+            "Swept %d stale leases, %d aged-out failures",
+            pending_swept, failed_swept,
+        )
+    return pending_swept + failed_swept
 ```
 
-This is added to `_beat_schedule` in `config/celery.py`.
+The 60-second cadence (vs 5-minute) keeps the worker-crash recovery window short — total max delay is sweeper-cadence + next-poll-cadence ≈ 1.5 min. Failed-send retry budget is 1 hour: a transient 5xx cluster won't generate cascading retries within the burst, but persistent failure (bad channel ID, missing permission) will be reaped after an hour and re-attempt — admins should investigate via the failed log row before the sweeper reaps.
 
 **Worker safety configuration:**
 
-- `task_acks_late=True` and `task_reject_on_worker_lost=True` on `check_event_reminders` — a worker that crashes mid-loop requeues the polling task instead of dropping it.
-- Same flags on each reminder task. A worker crash between `claim_discord_message_log` and `finalize_discord_message_log` leaves a stale lease that the sweeper handles within 5 minutes.
+- `task_acks_late=True` and `task_reject_on_worker_lost=True` on `check_event_reminders` AND on each reminder task — a crashed worker requeues; the redelivered task hits the lease (returns "held"), and the sweeper reaps the orphan within 1 minute.
 
-**The `check_message_log_exists` short-circuit in `fire_due_reminders` stays.** It's a load-shedder — most polls hit it and skip dispatch entirely. The DB constraint is the correctness primitive; the cached-exists check is the optimization.
+**The `check_message_log_exists` short-circuit in `fire_due_reminders` stays, but its semantics update.** Previously checked `success=True`. After the lease pattern, it must check `success IS NOT FALSE` — i.e., a `NULL` lease or a `True` row both block dispatch (correctly), while a `False` row does not (allowing retry). The DB constraint is the correctness primitive; the cached-exists check is a load-shedder that avoids dispatching tasks that would all immediately exit on lease conflict.
 
 ### How edits take effect
 
 There is no separate sync function. Edits propagate naturally:
 
 - **Direct event edit** (`EventViewSet.perform_update`): `serializer.save()` writes the new field values to the DB row. If the reminder has not yet fired, the next 30-second poll reads the new `discord_*_hours` / `enabled_field` / `scheduled_at` and evaluates the new threshold. If the reminder has already fired (`DiscordMessageLog` row exists), the poll skips it — no change.
-- **Series repeater edit** (`EventRepeaterViewSet.perform_update` → `sync_future_events`): the existing cascade copies repeater fields onto upcoming Event rows. To make this generic and prevent the "missed cascade" trap, `sync_future_events` is updated to copy **the union of all `hours_field` and `enabled_field` values across `REMINDERS`** rather than the current hand-coded list. Adding a new reminder = adding to `REMINDERS`; the cascade picks it up automatically.
+- **Series repeater edit** (`EventRepeaterViewSet.perform_update` → `sync_future_events`): the existing cascade is *already* generic — it iterates `DISCORD_CONFIG_FIELDS`, which is auto-built from `DiscordEventConfigMixin._meta.get_fields()` (`services.py:536-538`). Any reminder field defined on the mixin is automatically cascaded. PR-1's CI guardrail asserts every `ScheduledReminder.hours_field` and `enabled_field` is a real field on `DiscordEventConfigMixin` — so the cascade can't silently miss a registered reminder. The original "leaky cascade" framing in the motivation section was inaccurate for discord fields specifically; the real risk was only that a reminder field could be added *outside* the mixin, and the CI guardrail closes that.
 - **New occurrences from `generate_upcoming_events`**: inherit current repeater fields at generation time. No special handling needed.
 
 The `DiscordMessageLog` table is unchanged. No new columns. No new helpers.
@@ -331,7 +354,7 @@ PR-0 deploys, sits on production for one release cycle, then PR-1 ships.
 - **Modified or deleted:** `backend/events/discord/dispatch.py` — `notify_event_announced` has no remaining callers; either delete or leave for future use
 - **Migrations:**
     - `0XXX_remove_subscriber_dm_fields.py` (destructive — drops `discord_subscriber_dm` and `discord_subscriber_dm_hours` from both `Event` and `EventRepeater`)
-    - `0XXY_discord_message_log_lease_schema.py` — three operations: (1) `success` becomes nullable; (2) add `claimed_at = DateTimeField(null=True, db_index=True)`; (3) add full unique constraint on `(source, source_id)`. Use `CREATE UNIQUE INDEX CONCURRENTLY` if available to avoid blocking writes during deploy. Existing rows have `success` set to True/False and `claimed_at=NULL` — a one-line data migration is acceptable but not required since old rows already satisfy the new schema.
+    - `0XXY_discord_message_log_lease_schema.py` — three operations: (1) `success` becomes nullable; (2) add `claimed_at = DateTimeField(null=True, db_index=True)`; (3) add **partial** unique constraint on `(source, source_id) WHERE success IS NOT FALSE`. Use `CREATE UNIQUE INDEX CONCURRENTLY` (Postgres) to avoid blocking writes during deploy. Existing rows have `success` set to True/False and `claimed_at=NULL` — they already satisfy the new schema; no data migration needed.
 - **Modified:** `backend/events/serializers.py`, `backend/events/schemas.py` — remove the dropped subscriber-DM fields from all serializers and schema definitions; verify `EventSlimSerializer` exposes every `hours_field` and `enabled_field` referenced in `REMINDERS`
 - **Modified:** `backend/config/celery.py` — confirm or add `task_acks_late` / `task_reject_on_worker_lost` defaults for the reminder queue (currently neither is set)
 - **Deploy step (not a code file):** run `cacheops.invalidate_model(Event)` and `invalidate_model(EventRepeater)` post-migration to flush cached pre-migration model instances that contain the dropped fields. Add to deploy script or release runbook.
@@ -362,7 +385,7 @@ PR-0 deploys, sits on production for one release cycle, then PR-1 ships.
 | Q8 | `hours_field <= 0 or None` | Skip in fire path — treats as "this reminder is disabled for this event." |
 | Q9 | Announcement: immediate vs scheduled | **Scheduled** (Y). Remove immediate-dispatch `notify_event_announced` calls; the registry fires the announcement `discord_announcement_hours` before `scheduled_at`. The separate "new event notice" (`event_notice` log source) keeps its immediate dispatch — different concept. |
 | Q10 | "Message interested users" UI binding | Verified. The toggle in `DiscordConfigSection.tsx:317` writes to `discord_notify_new_events` (a live, working field). PR-1 dropping `discord_subscriber_dm*` is correct — those fields really are dead. |
-| Q11 | Idempotency primitive against polling overlap | **Pre-send lease pattern** (Option A). Full unique index on `DiscordMessageLog(source, source_id)`; `success` becomes nullable (`NULL` = lease held); reminder tasks `INSERT` the lease *before* the Discord HTTP send. The unique constraint serializes claim attempts, so only one worker reaches the send step — preventing duplicate Discord messages, not just duplicate audit rows. Stale leases (NULL >5 min, from worker crashes) are reaped by a beat-scheduled sweeper. Chosen over partial-index-after-send (which only audit-dedups), Redis distributed lock (adds Redis as correctness dependency), and `select_for_update` (would hold a row lock across the Discord HTTP call). |
+| Q11 | Idempotency primitive against polling overlap | **Pre-send lease pattern, Option B** (worker passes `channel_id` + `embed_data` at claim time). Partial unique index on `DiscordMessageLog(source, source_id) WHERE success IS NOT FALSE`; `success` becomes nullable (`NULL` = lease held); reminder tasks `INSERT` the lease *before* the Discord HTTP send, populated with the values the worker already has. The unique constraint serializes claim attempts, so only one worker reaches the send step — preventing duplicate Discord messages, not just duplicate audit rows. Stale leases (NULL >5 min from worker crashes) and aged-out failures (False >1 hour) are both reaped by a 60-second sweeper to keep recovery latency bounded and allow retries. Chosen over Option A (would require making `channel_id`/`embed_data` nullable just for the lease) and over Redis distributed locks (adds Redis as correctness dependency). |
 | Q12 | Frontend deploy ordering for column drop | **PR-0 ships first**, loosens Zod schemas to `.optional()` for `discord_subscriber_dm*`. PR-1 ships one release later, drops the columns. Avoids the brief window where backend has dropped the field but frontend bundles still validate it as required. |
 | Q13 | Cacheops invalidation on destructive migration | Post-deploy step: `invalidate_model(Event)` + `invalidate_model(EventRepeater)` to flush cached pre-migration model instances that contain the dropped fields. Added to PR-1 release runbook. |
 
