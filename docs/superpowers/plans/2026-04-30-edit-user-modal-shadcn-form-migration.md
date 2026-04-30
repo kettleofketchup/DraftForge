@@ -106,16 +106,21 @@ Tests pinning partial-PATCH semantics for both the org-scoped and global
 user-update endpoints. The edit-user modal sends only dirty fields, so
 both endpoints must treat partial nested 'positions' objects as
 "update-only-listed-slots", not "replace-whole-positions".
+
+We use TestCase (not TransactionTestCase) here because cacheops auto-
+invalidation on post_save fires inside the test's transaction wrapper,
+which is fine for these assertions. The optional cache-commit
+verification test in Task 2 uses TransactionTestCase because it relies
+on transaction.on_commit hooks fired by invalidate_after_commit.
 """
 
-from django.test import TransactionTestCase
-from django.urls import reverse
+from django.test import TestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser, Organization, OrgUser, PositionsModel
 
 
-class PartialUserPatchTests(TransactionTestCase):
+class PartialUserPatchTests(TestCase):
     def setUp(self):
         self.admin = CustomUser.objects.create_superuser(
             username="patch-admin", password="pw"
@@ -214,69 +219,104 @@ grep -n "class UserSerializer\|def update\|invalidate_after_commit\|invalidate_o
 
 Note where `UserSerializer.update` ends and what it does after `instance.save()`.
 
-- [ ] **Step 2: Empirical verification via the test client**
+- [ ] **Step 2: Read the existing invalidation logic in `UserSerializer.update`**
 
-Add a temporary test to `backend/app/tests/test_user_partial_patch.py` (you'll remove it before commit):
+```bash
+sed -n '1075,1115p' backend/app/serializers.py
+```
+
+The existing code already calls `invalidate_after_commit(*instance.org_memberships.all(), ...)` and same for `league_memberships`. **Note the correct reverse-manager names:**
+- `OrgUser.user` declares `related_name="org_memberships"` (`backend/org/models.py:14`).
+- `LeagueUser.user` declares `related_name="league_memberships"` (`backend/league/models.py:10`).
+
+Do NOT use `instance.orguser_set` / `instance.leagueuser_set` — those reverse names do not exist and an `AttributeError` will fire at runtime.
+
+- [ ] **Step 3: Empirical verification via a separate `TransactionTestCase`**
+
+Append a verification class to `backend/app/tests/test_user_partial_patch.py` (this is a one-time check; the class will be removed before commit if it passes on first run):
 
 ```python
-def test_global_patch_invalidates_org_user_list_cache(self):
-    """When a user's nickname is edited globally, the org's users endpoint
-    must reflect the change on the next GET (no stale cache)."""
-    list_url = f"/api/organizations/{self.org.pk}/users/"
-    # Prime the cache
-    resp1 = self.client.get(list_url)
-    self.assertEqual(resp1.status_code, 200)
-    initial_nickname = next(
-        u for u in resp1.json() if u.get("pk") == self.target.pk
-    )["nickname"]
-    self.assertEqual(initial_nickname, "Target")
-    # Edit globally
-    patch_url = f"/api/users/{self.target.pk}/"
-    self.client.patch(patch_url, {"nickname": "TargetRenamed"}, format="json")
-    # Second GET must reflect the change
-    resp2 = self.client.get(list_url)
-    after_nickname = next(
-        u for u in resp2.json() if u.get("pk") == self.target.pk
-    )["nickname"]
-    self.assertEqual(after_nickname, "TargetRenamed")
+from django.test import TransactionTestCase
+
+
+class GlobalPatchInvalidationVerification(TransactionTestCase):
+    """One-shot check: does the global /users/:pk/ PATCH path correctly
+    invalidate cached org-user-list responses? Uses TransactionTestCase
+    because invalidate_after_commit fires via transaction.on_commit, which
+    only runs when the outer transaction commits (TestCase wraps everything
+    in a rollback-only transaction)."""
+
+    def setUp(self):
+        self.admin = CustomUser.objects.create_superuser(
+            username="cache-verify-admin", password="pw"
+        )
+        self.target = CustomUser.objects.create(
+            username="cache-target", nickname="OriginalNick"
+        )
+        self.org = Organization.objects.create(name="Cache Verify Org")
+        self.org.admins.add(self.admin)
+        OrgUser.objects.create(user=self.target, organization=self.org, mmr=4000)
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+
+    def test_global_patch_invalidates_org_user_list_cache(self):
+        list_url = f"/api/organizations/{self.org.pk}/users/"
+        resp1 = self.client.get(list_url).json()
+        initial = next(u for u in resp1 if u.get("pk") == self.target.pk)["nickname"]
+        self.assertEqual(initial, "OriginalNick")
+
+        self.client.patch(
+            f"/api/users/{self.target.pk}/",
+            {"nickname": "RenamedNick"},
+            format="json",
+        )
+
+        resp2 = self.client.get(list_url).json()
+        after = next(u for u in resp2 if u.get("pk") == self.target.pk)["nickname"]
+        self.assertEqual(after, "RenamedNick")
 ```
 
 ```bash
-just test::run 'python manage.py test app.tests.test_user_partial_patch.PartialUserPatchTests.test_global_patch_invalidates_org_user_list_cache -v 2'
+just test::run 'python manage.py test app.tests.test_user_partial_patch.GlobalPatchInvalidationVerification -v 2'
 ```
 
-- [ ] **Step 3: Interpret the result**
+- [ ] **Step 4: Interpret the result**
 
-- **If the test PASSES:** cacheops auto-invalidation on `CustomUser.save()` is sufficient. Delete the temporary test (it's a one-time verification, not a permanent regression test, since cacheops behavior is library-level). Skip to Step 5.
-- **If the test FAILS:** add explicit invalidation. Proceed to Step 4.
+- **If the test PASSES:** the existing invalidation in `UserSerializer.update` is sufficient. Delete `GlobalPatchInvalidationVerification` from the file (it's a one-time check, not a permanent regression test, since cacheops behavior is library-level). Skip to Step 6.
+- **If the test FAILS:** the existing `org_memberships` / `league_memberships` invalidation is firing but missing some downstream cache key. Proceed to Step 5.
 
-- [ ] **Step 4: (Conditional) Add explicit invalidation**
+- [ ] **Step 5: (Conditional) Diagnose and patch the gap**
 
-Edit `backend/app/views_main.py` `UserSerializer.update`. After `instance.save()` and after the existing post-save logic, add:
+Re-read `UserSerializer.update` (`backend/app/serializers.py:1075-1115`) and the affected `@cached_as` views (`UserView.list` / `UserView.retrieve` at `views_main.py:190, 205`; `OrganizationView.users` at `views_main.py:1101`). Compare the cache key dependencies (`@cached_as(OrgUser, CustomUser, ...)`) against what `invalidate_after_commit` is being called with.
+
+Most likely causes (in order of probability):
+1. The view uses `keep_fresh=True` (`views_main.py:193`) which has stricter invalidation requirements.
+2. The serializer doesn't include the *organization* row in the invalidation set (only the OrgUser rows).
+3. A custom `_serialize_users_with_mmr` cache helper isn't keyed on `CustomUser` save.
+
+Apply the surgical fix that resolves the gap. Example for case (2) — add the organization invalidation:
 
 ```python
+# In UserSerializer.update, immediately after the existing org_memberships block:
 from cacheops import invalidate_obj
-
-# Invalidate downstream caches that key on related OrgUser / LeagueUser rows
-for org_user in instance.orguser_set.all():
-    invalidate_obj(org_user)
-    invalidate_obj(org_user.organization)
-for league_user in instance.leagueuser_set.all():
-    invalidate_obj(league_user)
-    invalidate_obj(league_user.league)
+# ... existing code that calls invalidate_after_commit(*instance.org_memberships.all()) ...
+for org_user in instance.org_memberships.all():
+    invalidate_obj(org_user.organization)  # CORRECT: reverse name is org_memberships
 ```
 
 Re-run the verification test. Expected: PASS.
 
-- [ ] **Step 5: Remove the temporary verification test, commit**
+- [ ] **Step 6: Remove the verification class, commit**
 
 ```bash
-# Remove test_global_patch_invalidates_org_user_list_cache from test_user_partial_patch.py
+# Remove GlobalPatchInvalidationVerification from test_user_partial_patch.py
 git add backend/app/tests/test_user_partial_patch.py
-# If Step 4 was needed:
-# git add backend/app/views_main.py
+# If Step 5 was needed:
+# git add backend/app/serializers.py
 git commit -m "fix(cache): invalidate org/league user lists on global user PATCH"
-# If Step 4 was NOT needed (test passed on first run), there is nothing to commit; skip the commit step.
+# If Step 5 was NOT needed (test passed on first run), there is nothing to commit beyond
+# the cleanup of the verification class — make a small docs commit instead:
+# git commit -m "test(cache): verify global PATCH invalidation already works"
 ```
 
 ---
@@ -500,7 +540,7 @@ export function buildDefaults(
   return scope.kind === 'global' ? base : { ...base, mmr: user.mmr ?? null };
 }
 
-type DirtyMap = Partial<FieldNamesMarkedBoolean<EditUserInput>>;
+type DirtyMap = Partial<Readonly<FieldNamesMarkedBoolean<EditUserInput>>>;
 
 export function pickDirty(
   data: EditUserInput,
@@ -610,8 +650,6 @@ Replace the entire contents of `frontend/app/components/user/userCard/editForm.t
 ```tsx
 import React from 'react';
 import type { UseFormReturn } from 'react-hook-form';
-import { ScrollArea } from '@radix-ui/react-scroll-area';
-import { SCROLLAREA_CSS_SMALL } from '~/components/reusable/modal';
 import {
   FormControl,
   FormField,
@@ -620,7 +658,6 @@ import {
   FormMessage,
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
-import { ScrollBar } from '~/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -695,16 +732,14 @@ function PositionSelect({
   );
 }
 
-function TextField({
+function StringField({
   form,
   fieldKey,
   label,
-  type = 'text',
 }: {
   form: UseFormReturn<EditUserInput>;
-  fieldKey: 'nickname' | 'steam_account_id' | 'guildNickname' | 'mmr';
+  fieldKey: 'nickname' | 'guildNickname';
   label: string;
-  type?: 'text' | 'number';
 }) {
   return (
     <FormField
@@ -715,9 +750,58 @@ function TextField({
           <FormLabel>{label}</FormLabel>
           <FormControl>
             <Input
-              {...field}
-              type={type}
+              ref={field.ref}
+              name={field.name}
+              onBlur={field.onBlur}
               value={field.value ?? ''}
+              onChange={(e) =>
+                field.onChange(e.target.value === '' ? null : e.target.value)
+              }
+              data-testid={`edit-user-${fieldKey}`}
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
+function NumberField({
+  form,
+  fieldKey,
+  label,
+}: {
+  form: UseFormReturn<EditUserInput>;
+  fieldKey: 'mmr' | 'steam_account_id';
+  label: string;
+}) {
+  return (
+    <FormField
+      control={form.control}
+      name={fieldKey}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <FormControl>
+            <Input
+              ref={field.ref}
+              name={field.name}
+              onBlur={field.onBlur}
+              type="number"
+              value={field.value ?? ''}
+              onChange={(e) => {
+                // Coerce to number on each keystroke so dirtyFields compares
+                // numeric-to-numeric (defaultValues are numbers from buildDefaults).
+                // Empty input → null (matches Zod's .nullable()).
+                const raw = e.target.value;
+                if (raw === '') {
+                  field.onChange(null);
+                } else {
+                  const n = Number(raw);
+                  field.onChange(Number.isFinite(n) ? n : raw);
+                }
+              }}
               data-testid={`edit-user-${fieldKey}`}
             />
           </FormControl>
@@ -729,39 +813,44 @@ function TextField({
 }
 
 export const UserEditForm: React.FC<Props> = ({ form, showMmr, mmrLabel }) => {
+  // No outer <ScrollArea> — FormDialog already wraps its children in one.
   return (
-    <ScrollArea className={SCROLLAREA_CSS_SMALL}>
-      <div className="flex flex-col w-full gap-4">
-        <TextField form={form} fieldKey="nickname" label="Nickname" />
-        {showMmr && (
-          <TextField form={form} fieldKey="mmr" label={mmrLabel} type="number" />
-        )}
-        <div className="bg-base-300 border border-border rounded-lg p-4">
-          <FormLabel className="block text-center mb-3">Positions</FormLabel>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-            {POSITION_FIELDS.map(({ key, label }) => (
-              <PositionSelect key={key} form={form} fieldKey={key} label={label} />
-            ))}
-          </div>
+    <div className="flex flex-col w-full gap-4">
+      <StringField form={form} fieldKey="nickname" label="Nickname" />
+      {showMmr && (
+        <NumberField form={form} fieldKey="mmr" label={mmrLabel} />
+      )}
+      <div className="bg-base-300 border border-border rounded-lg p-4">
+        <h3 className="text-foreground text-center text-sm font-medium mb-3">
+          Positions
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          {POSITION_FIELDS.map(({ key, label }) => (
+            <PositionSelect key={key} form={form} fieldKey={key} label={label} />
+          ))}
         </div>
-        <TextField
-          form={form}
-          fieldKey="steam_account_id"
-          label="Friend ID"
-          type="number"
-        />
-        <TextField
-          form={form}
-          fieldKey="guildNickname"
-          label="Discord Guild Nickname"
-        />
       </div>
-      <ScrollBar orientation="vertical" />
-      <ScrollBar orientation="horizontal" />
-    </ScrollArea>
+      <NumberField
+        form={form}
+        fieldKey="steam_account_id"
+        label="Friend ID"
+      />
+      <StringField
+        form={form}
+        fieldKey="guildNickname"
+        label="Discord Guild Nickname"
+      />
+    </div>
   );
 };
 ```
+
+**Notes on the changes (consolidated from review):**
+
+- Section header is `<h3>`, not `<FormLabel>` — `<FormLabel>` calls `useFormField()` which requires `<FormItem>` + `<FormField>` context. Outside that context it produces broken aria.
+- Outer `<ScrollArea>` removed — `FormDialog` wraps its children in a `<ScrollArea>` already (see `FormDialog.tsx:131`); nesting two scroll containers is redundant and the legacy raw `@radix-ui/react-scroll-area` `Root` (without a `Viewport`) didn't actually scroll anyway.
+- `StringField` and `NumberField` are split because RHF's `dirtyFields` deep-compares to `defaultValues` — if a number input writes a string while defaults are numeric, every touch stays "dirty" until the input is cleared. The explicit numeric `onChange` keeps form state numeric end-to-end. This pattern matches `EditEventModal.tsx:331-339`.
+- Position grid breakpoints: `grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5` covers the 1024-1279px range cleanly (3+2 instead of 2+2+1).
 
 - [ ] **Step 2: Rewrite `editModal.tsx`**
 
@@ -808,13 +897,21 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
     defaultValues: buildDefaults(user, scope),
   });
 
-  // Re-seed when modal opens or the underlying user changes.
-  // Cross-entity transitions within the same scope.kind (e.g. org A → org B)
-  // are covered by the `open` toggle: the modal must close between users,
-  // so the next open re-runs reset.
+  // Re-seed when modal opens or the underlying user/scope target changes.
+  // Including the entity pk (not the whole scope object literal) lets us
+  // detect cross-entity transitions like org A → org B without trusting that
+  // callers always close the modal between users.
+  const scopeOrgPk =
+    scope.kind === 'org'
+      ? scope.organization.pk
+      : scope.kind === 'league'
+        ? (scope.organization?.pk ?? scope.league.organization?.pk ?? null)
+        : null;
+  const scopeLeaguePk = scope.kind === 'league' ? scope.league.pk : null;
   useEffect(() => {
     if (open) form.reset(buildDefaults(user, scope));
-  }, [open, user.pk, user.orgUserPk, scope.kind, form]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scope is read inline; deps cover its identity keys
+  }, [open, user.pk, user.orgUserPk, scope.kind, scopeOrgPk, scopeLeaguePk, form]);
 
   async function onSubmit(data: EditUserInput) {
     if (!form.formState.isDirty) {
@@ -1176,46 +1273,69 @@ The existing `PlayerModalContext` has `leagueId?: number` and `organizationId?: 
 
 - [ ] **Step 2: Edit `PlayerModal.tsx` to derive scope from context**
 
+The org/league stores expose **single-entity selectors** (`currentOrg`, `currentLeague`) — there is no `orgs` array or `leagues` array. Confirm by:
+
+```bash
+grep -n "currentOrg\b\|currentLeague\b\|interface OrgState\|interface LeagueState" frontend/app/store/orgStore.ts frontend/app/store/leagueStore.ts
+```
+
+The popover context carries numeric IDs (`organizationId?`, `leagueId?`). We derive scope by matching those IDs against the singletons; if the stored entity doesn't match (e.g., user opened the modal from a different page than the one currently in the store), fall back to global scope.
+
 Inside `PlayerModal`, alongside existing context reads:
 
 ```tsx
 import React from 'react';
 import { useOrgStore } from '~/store/orgStore';
 import { useLeagueStore } from '~/store/leagueStore';
+import { useSharedPopover } from '~/components/ui/shared-popover-context';
 import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
 // ...
 
 // Inside the component:
 const { playerModalState } = useSharedPopover();
 const ctx = playerModalState.context;
-const orgs = useOrgStore((s) => s.orgs);
-const leagues = useLeagueStore((s) => s.leagues);
+const currentOrg = useOrgStore((s) => s.currentOrg);
+const currentLeague = useLeagueStore((s) => s.currentLeague);
 
 const editScope = React.useMemo<EditUserScope>(() => {
-  if (ctx?.organizationId) {
-    const org = orgs.find((o) => o.pk === ctx.organizationId);
-    if (org) return { kind: 'org', organization: org };
+  // Org context: only trust currentOrg if its pk matches the popover's request.
+  if (ctx?.organizationId && currentOrg?.pk === ctx.organizationId) {
+    return { kind: 'org', organization: currentOrg };
   }
-  if (ctx?.leagueId) {
-    const league = leagues.find((l) => l.pk === ctx.leagueId);
-    if (league) {
-      const org = league.organization
-        ? orgs.find((o) => o.pk === league.organization?.pk)
-        : undefined;
-      return { kind: 'league', league, organization: org };
-    }
+  // League context: same pk-match guard. Carry the parent organization
+  // through if it's available on the league.
+  if (ctx?.leagueId && currentLeague?.pk === ctx.leagueId) {
+    return {
+      kind: 'league',
+      league: currentLeague,
+      organization:
+        currentOrg && currentLeague.organization?.pk === currentOrg.pk
+          ? currentOrg
+          : undefined,
+    };
   }
   return { kind: 'global' };
-}, [ctx?.organizationId, ctx?.leagueId, orgs, leagues]);
+}, [
+  ctx?.organizationId,
+  ctx?.leagueId,
+  currentOrg?.pk,
+  currentLeague?.pk,
+  currentLeague?.organization?.pk,
+  // Entity refs included so the memo recomputes if Zustand returns a new
+  // object with the same pk (the returned scope embeds the entity reference,
+  // and a stale closure here would feed a stale ref to FormDialog).
+  currentOrg,
+  currentLeague,
+]);
 ```
-
-If `useOrgStore` / `useLeagueStore` selectors named `orgs` / `leagues` don't exist, use whatever the equivalent is in those stores (`useOrgStore.getState()` access during render is acceptable as a fallback). Verify by reading the store files first.
 
 Then change the `<UserEditModal user={...} />` call to:
 
 ```tsx
 <UserEditModal user={new User(fullUserData || displayPlayer)} scope={editScope} />
 ```
+
+**Tradeoff to be aware of:** if the popover is opened from a page whose store doesn't currently hold the relevant entity (e.g. opening a player popover from a search result that bypasses the org-page store hydration), `editScope` falls back to `global` and the edit button hides for non-superusers. This is the safe default. If a future caller needs richer behavior, extend `PlayerModalContext` to carry the full `organization` / `league` objects (the callers in Step 3 below all have access to those objects already).
 
 - [ ] **Step 3: Update `openPlayerModal` call sites that should grant edit access**
 
@@ -1398,76 +1518,53 @@ git commit -m "test(user-edit): add position-persistence regression spec + readP
 
 ---
 
-### Task 9: Add non-superuser-org-admin populate fixture + 09 scope-permissions spec
+### Task 9: Wire existing non-staff org admin into User Edit Org + 09 scope-permissions spec
 
 **Files:**
-- Modify: `backend/tests/data/users.py` — declare a non-staff org-admin user
-- Modify: `backend/tests/populate/user_edit.py` — add the user to `User Edit Org` admins
+- Modify: `backend/tests/populate/user_edit.py` — add existing `ORG_ADMIN_USER` (pk=1020) to `User Edit Org` admins
 - Create: `frontend/tests/playwright/e2e/15-edit-user/09-scope-permissions.spec.ts`
 
-- [ ] **Step 1: Declare the new user in `backend/tests/data/users.py`**
+**Why:** The repo already has `ORG_ADMIN_USER` (`backend/tests/data/users.py:77`, pk=1020, no `is_staff`/`is_superuser`) and a `loginOrgAdmin` Playwright fixture (`frontend/tests/playwright/fixtures/auth.ts:289`) that hits the existing `login_org_admin` view (`backend/tests/test_auth.py:475`). We just need to make that user an admin of `User Edit Org` so the 09-spec can verify scope-aware permission gating without inventing a new user, login endpoint, or auth helper.
 
-Find the existing `USER_EDIT_USERS` block (around the `is_staff=False, is_superuser=False` users). Add a new module-level dataclass or dict (matching the existing pattern):
+- [ ] **Step 1: Update `backend/tests/populate/user_edit.py` to add `ORG_ADMIN_USER` to the org admins**
 
-```python
-ORG_ADMIN_NON_STAFF_USER = UserData(
-    pk=2090,
-    username="org-admin-non-staff",
-    nickname="OrgAdminNonStaff",
-    discord_id="2090090909",
-    steam_id=None,
-    is_staff=False,
-    is_superuser=False,
-    mmr=4000,
-)
-```
-
-Use whatever fields the existing `UserData` definition requires. Verify by reading the file.
-
-- [ ] **Step 2: Update `backend/tests/populate/user_edit.py` to seed and grant org-admin**
-
-Add to the imports:
+Edit the imports:
 
 ```python
-from tests.data.users import ADMIN_USER, ORG_ADMIN_NON_STAFF_USER, USER_EDIT_USERS
+from tests.data.users import ADMIN_USER, ORG_ADMIN_USER, USER_EDIT_USERS
 ```
 
 After step 4 ("Add admin user as org admin"), add:
 
 ```python
-# 4b. Create a non-superuser org admin so 09-scope-permissions.spec can verify
-#     scope-aware permission gating.
-oa_user, oa_created = CustomUser.objects.update_or_create(
-    pk=ORG_ADMIN_NON_STAFF_USER.pk,
-    defaults={
-        "username": ORG_ADMIN_NON_STAFF_USER.username,
-        "nickname": ORG_ADMIN_NON_STAFF_USER.nickname,
-        "discordId": ORG_ADMIN_NON_STAFF_USER.discord_id,
-        "is_staff": False,
-        "is_superuser": False,
-    },
-)
-if oa_created:
-    oa_user.set_unusable_password()
-    oa_user.save()
-if oa_user not in edit_org.admins.all():
-    edit_org.admins.add(oa_user)
-    print(f"  Added {oa_user.username} as non-staff admin of {USER_EDIT_ORG.name}")
+# 4b. Add the existing non-staff org-admin test user (pk=1020) as admin of
+#     User Edit Org so 09-scope-permissions.spec can verify the scope-aware
+#     permission gate (org admin can edit on org page, cannot on profile page).
+org_admin_user = CustomUser.objects.filter(pk=ORG_ADMIN_USER.pk).first()
+if org_admin_user and org_admin_user not in edit_org.admins.all():
+    edit_org.admins.add(org_admin_user)
+    print(f"  Added {org_admin_user.username} as admin of {USER_EDIT_ORG.name}")
 ```
 
-- [ ] **Step 3: Repopulate the test DB**
+`ORG_ADMIN_USER` itself is created by an earlier populate function — verify by reading `backend/tests/populate/users.py` (or wherever `populate_auth_users` lives) to confirm pk=1020 exists by the time `populate_user_edit_data` runs. If it doesn't, add an earlier-populate dependency note in the docstring; do not duplicate the user creation here.
+
+- [ ] **Step 2: Repopulate the test DB**
 
 ```bash
 just db::populate::all
 ```
 
-Expected output includes "Added org-admin-non-staff as non-staff admin of User Edit Org".
+Expected output includes "Added org_admin_tester as admin of User Edit Org".
 
-- [ ] **Step 4: Add a Playwright login fixture for this user (if not already present)**
+- [ ] **Step 3: Confirm the existing Playwright login helper works**
 
-Read `frontend/tests/playwright/fixtures/` to find the existing `loginAdmin` helper. Add a parallel `loginOrgAdminNonStaff` that authenticates as `org-admin-non-staff` (pk=2090). Pattern match the existing helper exactly — same auth flow, just different credentials.
+```bash
+grep -n "loginOrgAdmin\b" frontend/tests/playwright/fixtures/auth.ts | head -5
+```
 
-- [ ] **Step 5: Write the 09 spec**
+Expected: `loginOrgAdmin` is exported and registered as a fixture. No new helper or backend endpoint needed.
+
+- [ ] **Step 4: Write the 09 spec**
 
 Create `frontend/tests/playwright/e2e/15-edit-user/09-scope-permissions.spec.ts`:
 
@@ -1501,15 +1598,21 @@ test.describe('Scope permissions (@cicd)', () => {
     orgPk = editOrg.pk;
     const usersResp = await context.request.get(`${API_URL}/organizations/${orgPk}/users/`);
     const users = await usersResp.json();
-    targetUserPk = users.find((u: any) => u.username !== 'org-admin-non-staff').pk;
+    // Pick a target user that is neither the test actor (pk=1020 / org_admin_tester)
+    // nor the global admin (pk=1, who has is_superuser=true and would render the
+    // edit button regardless of scope, defeating the assertion).
+    targetUserPk = users.find(
+      (u: any) =>
+        u.pk !== 1020 && u.pk !== 1 && u.username !== 'org_admin_tester'
+    ).pk;
     await context.close();
   });
 
   test('org admin (non-superuser) sees edit button on org page', async ({
     page,
-    loginOrgAdminNonStaff,
+    loginOrgAdmin,
   }) => {
-    await loginOrgAdminNonStaff();
+    await loginOrgAdmin();
     await visitAndWaitForHydration(page, `/organizations/${orgPk}`);
     await page.locator('[data-testid="org-tab-users"]').click();
     const card = page.locator('[data-testid^="usercard-"]').first();
@@ -1519,9 +1622,9 @@ test.describe('Scope permissions (@cicd)', () => {
 
   test('org admin (non-superuser) does NOT see edit button on /users/:pk profile page', async ({
     page,
-    loginOrgAdminNonStaff,
+    loginOrgAdmin,
   }) => {
-    await loginOrgAdminNonStaff();
+    await loginOrgAdmin();
     await visitAndWaitForHydration(page, `/users/${targetUserPk}`);
     await expect(page.locator('h1, [data-testid="user-profile-heading"]').first()).toBeVisible({
       timeout: 10000,
@@ -1544,7 +1647,7 @@ test.describe('Scope permissions (@cicd)', () => {
 });
 ```
 
-- [ ] **Step 6: Run**
+- [ ] **Step 5: Run**
 
 ```bash
 just test::pw::spec 15-edit-user/09
@@ -1552,14 +1655,12 @@ just test::pw::spec 15-edit-user/09
 
 Expected: 3 tests, all green.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add backend/tests/data/users.py \
-        backend/tests/populate/user_edit.py \
-        frontend/tests/playwright/fixtures \
+git add backend/tests/populate/user_edit.py \
         frontend/tests/playwright/e2e/15-edit-user/09-scope-permissions.spec.ts
-git commit -m "test(user-edit): add scope-permissions spec with non-staff org admin fixture"
+git commit -m "test(user-edit): add scope-permissions spec via existing org admin fixture"
 ```
 
 ---
