@@ -114,7 +114,7 @@ test.describe('Events - Create Event (@cicd)', () => {
 
     // Select league
     await page.getByTestId('event-league-select').click();
-    await page.getByRole('option', { name: 'Events Test League' }).click();
+    await page.getByRole('option', { name: 'Events Test League', exact: true }).click();
 
     // Set scheduled date (tomorrow)
     const tomorrow = new Date();
@@ -140,7 +140,7 @@ test.describe('Events - Create Event (@cicd)', () => {
     await page.getByTestId('event-tournament-name-input').fill('DE Tournament');
 
     await page.getByTestId('event-league-select').click();
-    await page.getByRole('option', { name: 'Events Test League' }).click();
+    await page.getByRole('option', { name: 'Events Test League', exact: true }).click();
 
     // Select Double Elimination bracket type
     await page.getByTestId('event-bracket-select').click();
@@ -199,7 +199,7 @@ test.describe('Events - Create Event (@cicd)', () => {
 
     // Select league
     await page.getByTestId('event-league-select').click();
-    await page.getByRole('option', { name: 'Events Test League' }).click();
+    await page.getByRole('option', { name: 'Events Test League', exact: true }).click();
 
     // Toggle recurring
     await page.getByTestId('event-recurring-checkbox').check();
