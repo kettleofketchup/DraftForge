@@ -112,6 +112,25 @@ class LeaguePatchSteamLeagueIdTest(TestCase):
         )
         self.assertEqual(resp.status_code, 403)
 
+    def test_collision_returns_custom_validator_message(self):
+        """Custom validator must not be shadowed by DRF UniqueValidator."""
+        # Create a second league with a known steam_league_id
+        other = League.objects.create(
+            organization=self.org,
+            name="Conflicting League",
+            steam_league_id=30100,
+        )
+        self.client.force_authenticate(self.admin)
+        resp = self.client.patch(
+            f"/api/leagues/{self.league.pk}/",
+            {"steam_league_id": 30100},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        body = resp.json()
+        self.assertIn("steam_league_id", body)
+        self.assertIn("already in use by 'Conflicting League'", str(body["steam_league_id"]))
+
 
 class LeaguePatchSteamLeagueIdCacheTest(TransactionTestCase):
     """Cache round-trip regression for League.

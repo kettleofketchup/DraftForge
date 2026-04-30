@@ -408,6 +408,11 @@ class LeagueSerializer(serializers.ModelSerializer):
     users_count = serializers.IntegerField(read_only=True)
     # For backwards compatibility, return first org name
     organization_name = serializers.SerializerMethodField()
+    # Explicit declaration overrides DRF's auto-generated field, which would
+    # otherwise attach a UniqueValidator that shadows validate_steam_league_id
+    # and produces a generic "already exists" message instead of our custom
+    # "already in use by '<name>'" collision message.
+    steam_league_id = serializers.IntegerField()
 
     class Meta:
         model = League

@@ -90,12 +90,12 @@ test.describe.serial('Edit league + event fields @cicd', () => {
     await page.getByTestId('edit-league-modal').getByTestId('form-dialog-submit').click();
 
     // Toast surfaces the colliding-league error from extractApiError → DRF field-level shape.
-    // Backend may emit either the custom validator ("already in use by '<name>'") or the
-    // ModelSerializer's default UniqueValidator ("already exists") — accept either.
+    // The custom validator on LeagueSerializer must fire (not the auto-UniqueValidator),
+    // producing the named-collision message.
     await expect(
       page
         .locator('[data-sonner-toast][data-type="error"]')
-        .filter({ hasText: /already (in use by|exists)/i }),
+        .filter({ hasText: /already in use by/i }),
     ).toBeVisible();
   });
 
