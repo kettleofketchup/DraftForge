@@ -486,6 +486,19 @@ class LeaguesSerializer(serializers.ModelSerializer):
     users_count = serializers.IntegerField(read_only=True)
     organization = OrganizationsSerializer(read_only=True)
     organization_name = serializers.SerializerMethodField()
+    # Expose admin/staff membership IDs so the frontend permission hook
+    # (useIsLeagueStaff / useCanEditTournament) can recognize league-level
+    # admins and staff when this serializer is embedded inside a tournament
+    # payload (TournamentSerializer.league). Without these the hook can only
+    # see org-level membership and would deny league-staff users edit access
+    # to bracket controls. PrimaryKeyRelatedField with many=True is read-only
+    # by default for the GET path here.
+    admin_ids = serializers.PrimaryKeyRelatedField(
+        source="admins", many=True, read_only=True
+    )
+    staff_ids = serializers.PrimaryKeyRelatedField(
+        source="staff", many=True, read_only=True
+    )
 
     class Meta:
         model = League
@@ -497,6 +510,8 @@ class LeaguesSerializer(serializers.ModelSerializer):
             "name",
             "tournament_count",
             "users_count",
+            "admin_ids",
+            "staff_ids",
         )
         read_only_fields = (
             "pk",
@@ -504,6 +519,8 @@ class LeaguesSerializer(serializers.ModelSerializer):
             "users_count",
             "organization_name",
             "organization",
+            "admin_ids",
+            "staff_ids",
         )
 
     def get_organization_name(self, obj):
