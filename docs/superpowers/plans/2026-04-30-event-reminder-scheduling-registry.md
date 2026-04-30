@@ -22,12 +22,12 @@ Each phase produces deployable, testable software on its own.
 
 ## Phase 0 — Frontend Zod loosen (PR-0)
 
-### Task 0.1: Loosen Zod schemas + clean up TS interfaces and modal defaults for `discord_subscriber_dm*`
+### Task 0.1: Loosen Zod schemas + clean up TS interfaces, DISCORD_CONFIG_DEFAULTS, and modal `reset()` for `discord_subscriber_dm*`
 
 **Files:**
-- Modify: `frontend/app/components/events/schemas.ts` (lines ~84-85, ~260-261) — make Zod fields optional
-- Modify: `frontend/app/api/eventsAPI.ts` (lines ~183-184, ~263-264) — make TS interface fields optional
-- Modify: `frontend/app/components/events/EditEventModal.tsx`, `CreateEventModal.tsx`, `EditOrgDefaultsModal.tsx`, `EditRepeaterModal.tsx` — remove `discord_subscriber_dm{,_hours}` from `defaultValues` and `reset()` calls
+- Modify: `frontend/app/components/events/schemas.ts` — Zod schemas at lines ~84-85 and ~260-261 (make optional), AND the `DISCORD_CONFIG_DEFAULTS` constant at lines ~270-298 (delete the two lines for the dropped fields)
+- Modify: `frontend/app/components/api/eventsAPI.ts` — `EventRepeaterType` interface at lines ~183-184 and `OrgEventDefaultsType` interface at lines ~263-264 (make optional). Note the file path is `components/api/`, not `app/api/`. There is no `Event` interface in this file (`EventType` is exported from Zod via the schemas).
+- Modify: `frontend/app/components/events/EditEventModal.tsx`, `CreateEventModal.tsx`, `EditOrgDefaultsModal.tsx`, `EditRepeaterModal.tsx` — remove `discord_subscriber_dm{,_hours}` from each `reset()` call inside `useEffect`. The modals' `defaultValues` use `...DISCORD_CONFIG_DEFAULTS` (already cleaned in `schemas.ts`), so the only modal-side cleanup is the `reset()` calls.
 - Test: `frontend/app/components/events/__tests__/schemas.test.ts` (new — co-located)
 
 **Why:** PR-1 will drop `discord_subscriber_dm` and `discord_subscriber_dm_hours` from backend Event/EventRepeater. The Zod schemas, TS interfaces, and modal defaultValues all reference these fields as required. Loosening only Zod (without the TS + modal cleanup) makes `event.discord_subscriber_dm` typed `boolean | undefined` while consumers still treat it as `boolean` — `tsc` breaks. PR-0 ships all four together so the frontend tolerates the missing fields cleanly *and* compiles.
@@ -51,10 +51,10 @@ Expected: `~/*` mapped to `app/*` (DraftForge convention). Use `~/components/...
 - [ ] **Step 3: Read the current schema and consumer surface**
 
 ```bash
-grep -n "discord_subscriber_dm" frontend/app/components/events/schemas.ts frontend/app/api/eventsAPI.ts frontend/app/components/events/*.tsx
+grep -rn "discord_subscriber_dm" frontend/app/components/events/schemas.ts frontend/app/components/api/eventsAPI.ts frontend/app/components/events/*.tsx
 ```
 
-Expected: 4 lines in `schemas.ts`, 4 lines in `eventsAPI.ts`, 8 lines across the four modal files.
+Expected: **6 lines in `schemas.ts`** (4 for the Zod schemas at 84-85 and 260-261, 2 for DISCORD_CONFIG_DEFAULTS at 290-291); **4 lines in `eventsAPI.ts`** (`EventRepeaterType` 183-184, `OrgEventDefaultsType` 263-264); **4 lines across the four modal `reset()` calls**.
 
 - [ ] **Step 4: Write the failing parse test**
 
@@ -117,38 +117,51 @@ discord_subscriber_dm_hours: z.number().int().min(1).optional(),
 
 Same change at lines ~260-261 (discordConfigSchema).
 
-- [ ] **Step 7: Update the TS interfaces in eventsAPI.ts**
+- [ ] **Step 7: Clean up `DISCORD_CONFIG_DEFAULTS` constant**
 
-Edit `frontend/app/api/eventsAPI.ts`. At lines ~183-184 (Event interface):
+Edit `frontend/app/components/events/schemas.ts` at lines ~270-298. The constant is spread into every modal's `defaultValues`. Delete the two lines:
+
+```typescript
+discord_subscriber_dm: false,            // delete
+discord_subscriber_dm_hours: 24,          // delete
+```
+
+- [ ] **Step 8: Update the TS interfaces in `frontend/app/components/api/eventsAPI.ts`**
+
+At lines ~183-184 (`EventRepeaterType` interface):
 
 ```typescript
 // before
-discord_subscriber_dm: boolean
-discord_subscriber_dm_hours: number
+discord_subscriber_dm: boolean;
+discord_subscriber_dm_hours: number;
 
 // after
-discord_subscriber_dm?: boolean
-discord_subscriber_dm_hours?: number
+discord_subscriber_dm?: boolean;
+discord_subscriber_dm_hours?: number;
 ```
 
-Same change at lines ~263-264 (EventRepeater interface).
+Same change at lines ~263-264 (`OrgEventDefaultsType` interface).
 
-- [ ] **Step 8: Remove from modal defaultValues**
+(There is no `Event` interface in this file — `EventType` is exported from Zod by `schemas.ts`. Loosening the Zod schema in Step 6 already updated `EventType`'s inferred shape.)
 
-For each of the four files, find the `defaultValues` object (or the `reset(...)` call inside `useEffect`) and delete the two lines:
+- [ ] **Step 9: Remove from modal `reset()` calls**
+
+The modals get their initial values from `...DISCORD_CONFIG_DEFAULTS` (already cleaned in Step 7), so `defaultValues` doesn't need a manual edit. The `reset(...)` calls inside `useEffect` DO mention the dropped fields directly — those are what need editing.
+
+For each modal, find the `reset({ ... })` call inside `useEffect` and delete the two lines:
 
 ```typescript
-discord_subscriber_dm: ...,
-discord_subscriber_dm_hours: ...,
+discord_subscriber_dm: event.discord_subscriber_dm,
+discord_subscriber_dm_hours: event.discord_subscriber_dm_hours,
 ```
 
-Files and approximate lines:
-- `frontend/app/components/events/EditEventModal.tsx:113-114, 125-126`
-- `frontend/app/components/events/CreateEventModal.tsx:112-113, 124-125`
-- `frontend/app/components/events/EditOrgDefaultsModal.tsx:105-106, 117-118`
-- `frontend/app/components/events/EditRepeaterModal.tsx:118-119, 131-132`
+Files and approximate lines (the `reset()` call line range, not the `defaultValues` range):
+- `frontend/app/components/events/EditEventModal.tsx:125-126`
+- `frontend/app/components/events/CreateEventModal.tsx:124-125`
+- `frontend/app/components/events/EditOrgDefaultsModal.tsx:117-118`
+- `frontend/app/components/events/EditRepeaterModal.tsx:131-132`
 
-- [ ] **Step 9: Run the test — confirm it passes**
+- [ ] **Step 10: Run the test — confirm it passes**
 
 ```bash
 cd frontend && npx vitest run app/components/events/__tests__/schemas.test.ts
@@ -156,15 +169,15 @@ cd frontend && npx vitest run app/components/events/__tests__/schemas.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 10: Run TypeScript type-check across the frontend**
+- [ ] **Step 11: Run TypeScript type-check across the frontend**
 
 ```bash
 cd frontend && npx tsc --noEmit
 ```
 
-Expected: zero errors. If errors surface for `event.discord_subscriber_dm` access in any other component, those consumers must be updated to handle `undefined` (typically a `?? false` fallback).
+Expected: zero errors. If errors surface for `event.discord_subscriber_dm` access in any component (the fields' new type is `boolean | undefined`), update those consumers with a `?? false` fallback.
 
-- [ ] **Step 11: Run the full Playwright event-form suite**
+- [ ] **Step 12: Run the full Playwright event-form suite**
 
 ```bash
 just test::pw::spec event-form
@@ -172,15 +185,16 @@ just test::pw::spec event-form
 
 Expected: all existing tests pass — making fields optional and removing them from defaults is strictly more permissive.
 
-- [ ] **Step 12: Commit**
+- [ ] **Step 13: Commit**
 
 ```bash
-git add frontend/app/components/events/schemas.ts frontend/app/api/eventsAPI.ts frontend/app/components/events/EditEventModal.tsx frontend/app/components/events/CreateEventModal.tsx frontend/app/components/events/EditOrgDefaultsModal.tsx frontend/app/components/events/EditRepeaterModal.tsx frontend/app/components/events/__tests__/schemas.test.ts
+git add frontend/app/components/events/schemas.ts frontend/app/components/api/eventsAPI.ts frontend/app/components/events/EditEventModal.tsx frontend/app/components/events/CreateEventModal.tsx frontend/app/components/events/EditOrgDefaultsModal.tsx frontend/app/components/events/EditRepeaterModal.tsx frontend/app/components/events/__tests__/schemas.test.ts
 git commit -m "feat(events): drop discord_subscriber_dm from frontend surface
 
-Zod schemas, TS interfaces, and modal defaultValues all become tolerant
-of these fields' absence. Prep for PR-1's backend column drop. Sits one
-release cycle on production before PR-1."
+Zod schemas, TS interfaces, DISCORD_CONFIG_DEFAULTS constant, and the
+four modals' reset() calls all become tolerant of these fields'
+absence. Prep for PR-1's backend column drop. Sits one release cycle
+on production before PR-1."
 ```
 
 ---
@@ -287,18 +301,19 @@ Test asserts every fire-path field is present so additions stay in sync."
 ### Task 1.2: `DiscordMessageLog` lease-pattern schema migration
 
 **Files:**
+- Modify: `backend/discordbot/models.py` — `DiscordMessageLog` (line ~85)
 - Create: `backend/discordbot/migrations/0XXX_discord_message_log_lease_schema.py`
 - Test: `backend/events/tests/test_idempotency.py` (new file)
 
-**Why:** The lease pattern (Q11) requires three schema changes: `success` becomes nullable (NULL = pending lease), a new `claimed_at` timestamp lets a sweeper reap stale leases, and a full unique index on `(source, source_id)` serializes claim attempts. The unique constraint catches the second worker's claim BEFORE the Discord HTTP send — preventing duplicate messages, not just duplicate audit rows.
+**Why:** The lease pattern (Q11, Option B) requires three schema changes: `success` becomes nullable (NULL = pending lease), a new `claimed_at` timestamp lets a sweeper reap stuck leases, and a **partial** unique index on `(source, source_id) WHERE success IS NOT FALSE` serializes claim attempts while leaving `success=False` rows reclaimable for retry. The constraint catches the second worker's claim BEFORE the Discord HTTP send — preventing duplicate messages, not just duplicate audit rows.
 
-- [ ] **Step 1: Verify column names on `DiscordMessageLog`**
+- [ ] **Step 1: Confirm `DiscordMessageLog` field shape**
 
 ```bash
-grep -n "class DiscordMessageLog\|^    \(source\|source_id\|success\|message_id\|claimed_at\)" backend/discordbot/models.py
+sed -n '85,135p' backend/discordbot/models.py
 ```
 
-Expected: `source`, `source_id`, `success` (currently a `BooleanField` not nullable), `message_id`. No `claimed_at` yet — we'll add it.
+Expected: model has `source`, `source_id`, `success` (BooleanField, currently non-nullable at line 96), plus required `channel_id` (CharField) and `embed_data` (JSONField). No `claimed_at` yet. The required `channel_id` and `embed_data` are exactly the fields the worker passes at claim time (Option B), so the lease row is fully populated from creation.
 
 - [ ] **Step 2: Write the failing schema-shape test**
 
@@ -311,50 +326,51 @@ from django.utils import timezone
 from discordbot.models import DiscordMessageLog
 
 
+def _row(**overrides):
+    """Helper — DiscordMessageLog requires channel_id and embed_data."""
+    defaults = dict(
+        channel_id="ch_1",
+        embed_data={"title": "test"},
+        success=None,
+        claimed_at=timezone.now(),
+    )
+    defaults.update(overrides)
+    return DiscordMessageLog.objects.create(**defaults)
+
+
 class DiscordMessageLogLeaseSchemaTest(TransactionTestCase):
     def test_success_field_is_nullable(self):
-        # Pending lease — success=None
-        row = DiscordMessageLog.objects.create(
-            source="signup_reminder",
-            source_id=1,
-            success=None,
-            claimed_at=timezone.now(),
-        )
+        row = _row(source="signup_reminder", source_id=1, success=None)
         self.assertIsNone(row.success)
 
     def test_claimed_at_field_exists(self):
-        row = DiscordMessageLog.objects.create(
-            source="signup_reminder",
-            source_id=2,
-            success=None,
-            claimed_at=timezone.now(),
-        )
+        row = _row(source="signup_reminder", source_id=2)
         self.assertIsNotNone(row.claimed_at)
 
-    def test_full_unique_index_blocks_second_claim_regardless_of_success(self):
-        DiscordMessageLog.objects.create(
-            source="signup_reminder", source_id=3, success=None,
-            claimed_at=timezone.now(),
-        )
-        # Second claim collides whether the existing row is pending, success, or failed
+    def test_partial_unique_blocks_second_claim_when_pending(self):
+        _row(source="signup_reminder", source_id=3, success=None)
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                DiscordMessageLog.objects.create(
-                    source="signup_reminder", source_id=3, success=True,
-                )
+                _row(source="signup_reminder", source_id=3, success=None)
+
+    def test_partial_unique_blocks_second_claim_when_successful(self):
+        _row(source="signup_reminder", source_id=4, success=True)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                _row(source="signup_reminder", source_id=4, success=None)
+
+    def test_partial_unique_DOES_NOT_block_after_failed_send(self):
+        # Failed sends are reclaimable so transient errors don't permanently brick reminders
+        _row(source="signup_reminder", source_id=5, success=False)
+        # Re-claim should succeed
+        _row(source="signup_reminder", source_id=5, success=None)
 
     def test_unique_is_per_source_and_event(self):
-        DiscordMessageLog.objects.create(
-            source="signup_reminder", source_id=4, success=True,
-        )
+        _row(source="signup_reminder", source_id=6, success=True)
         # Different source_id — fine
-        DiscordMessageLog.objects.create(
-            source="signup_reminder", source_id=5, success=True,
-        )
+        _row(source="signup_reminder", source_id=7, success=True)
         # Different source — fine
-        DiscordMessageLog.objects.create(
-            source="attendance_reminder", source_id=4, success=True,
-        )
+        _row(source="attendance_reminder", source_id=6, success=True)
 ```
 
 - [ ] **Step 3: Run — confirm failure**
@@ -363,7 +379,7 @@ class DiscordMessageLogLeaseSchemaTest(TransactionTestCase):
 just test::run 'python manage.py test events.tests.test_idempotency -v 2'
 ```
 
-Expected: FAIL — `success` is non-nullable, no `claimed_at` field, no unique constraint.
+Expected: FAIL — `success` is non-nullable, no `claimed_at` field, no constraint.
 
 - [ ] **Step 4: Update the model**
 
@@ -371,20 +387,22 @@ Edit `backend/discordbot/models.py` `DiscordMessageLog`:
 
 ```python
 class DiscordMessageLog(models.Model):
-    source = models.CharField(max_length=64)
-    source_id = models.IntegerField()
-    success = models.BooleanField(null=True, blank=True)  # was non-nullable
+    # ... existing fields (channel_id, embed_data, source, source_id, message_id, etc.) ...
+    success = models.BooleanField(null=True, blank=True)  # was non-nullable; NULL = lease held
     claimed_at = models.DateTimeField(null=True, blank=True, db_index=True)  # NEW
-    # ... existing fields (message_id, error, created_at, etc.) ...
+    # ... rest unchanged ...
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
                 fields=["source", "source_id"],
-                name="uniq_discord_message_log_source_event",
+                condition=models.Q(success__isnull=True) | models.Q(success=True),
+                name="uniq_discord_message_log_source_event_when_pending_or_success",
             ),
         ]
 ```
+
+The `Q(success__isnull=True) | Q(success=True)` predicate is logically equivalent to `success IS NOT FALSE`. Django renders this as a partial index in Postgres.
 
 - [ ] **Step 5: Generate the migration**
 
@@ -392,11 +410,11 @@ class DiscordMessageLog(models.Model):
 just dev::exec backend python manage.py makemigrations discordbot --name discord_message_log_lease_schema
 ```
 
-Expected: migration file with three operations — `AlterField` (success nullable), `AddField` (claimed_at), `AddConstraint` (unique).
+Expected: migration file with three operations — `AlterField` (success nullable), `AddField` (claimed_at), `AddConstraint` (partial unique).
 
-- [ ] **Step 6: For Postgres in production, edit the migration to use CONCURRENTLY for the index**
+- [ ] **Step 6: Edit the migration for production deploy safety**
 
-Open the new migration file. Replace the auto-generated `AddConstraint` with a `RunPython` or `RunSQL` that uses `CREATE UNIQUE INDEX CONCURRENTLY` — this avoids a long write lock during deploy. The constraint must be wrapped in a separate transaction (Django migrations are atomic by default; set `atomic = False`):
+Open the new migration file. Set `atomic = False` and use `CREATE UNIQUE INDEX CONCURRENTLY` for the partial index — this avoids blocking writes during deploy:
 
 ```python
 from django.db import migrations, models
@@ -423,44 +441,70 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             sql=(
                 "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS "
-                "uniq_discord_message_log_source_event "
-                "ON discordbot_discordmessagelog (source, source_id);"
+                "uniq_discord_message_log_source_event_when_pending_or_success "
+                "ON discordbot_discordmessagelog (source, source_id) "
+                "WHERE success IS NOT FALSE;"
             ),
             reverse_sql=(
-                "DROP INDEX IF EXISTS uniq_discord_message_log_source_event;"
+                "DROP INDEX IF EXISTS uniq_discord_message_log_source_event_when_pending_or_success;"
             ),
+            state_operations=[
+                # Mirror the constraint in Django's model state so tests/ORM see it
+                migrations.AddConstraint(
+                    model_name="discordmessagelog",
+                    constraint=models.UniqueConstraint(
+                        fields=["source", "source_id"],
+                        condition=models.Q(success__isnull=True) | models.Q(success=True),
+                        name="uniq_discord_message_log_source_event_when_pending_or_success",
+                    ),
+                ),
+            ],
         ),
     ]
 ```
 
-For SQLite (test/dev), the standard `AddConstraint` works — but `CONCURRENTLY` is a no-op there. The `RunSQL` form is portable. Do not bake the `state_operations` part — Django sees the constraint via the model's `Meta.constraints` declaration, which is what makes `IntegrityError` raise in tests.
+For SQLite (test/dev), `CONCURRENTLY` is silently ignored. The `state_operations` ensures Django ORM enforces the constraint in tests via `IntegrityError`.
 
-- [ ] **Step 7: Apply the migration**
+- [ ] **Step 7: Pre-flight check for duplicate rows in production data**
+
+Before applying in prod, check no existing rows already violate the new constraint:
+
+```sql
+SELECT source, source_id, COUNT(*)
+FROM discordbot_discordmessagelog
+WHERE success IS NOT FALSE
+GROUP BY source, source_id
+HAVING COUNT(*) > 1;
+```
+
+Expected: zero rows. If non-empty, deduplicate manually before migrating (older successful row wins; delete duplicates).
+
+- [ ] **Step 8: Apply the migration**
 
 ```bash
 just db::migrate::all
 ```
 
-Expected: applied to dev/test/prod local DBs.
-
-- [ ] **Step 8: Run — confirm test passes**
+- [ ] **Step 9: Run — confirm test passes**
 
 ```bash
 just test::run 'python manage.py test events.tests.test_idempotency -v 2'
 ```
 
-Expected: all 4 tests pass.
+Expected: all 6 tests pass.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add backend/discordbot/models.py backend/discordbot/migrations/ backend/events/tests/test_idempotency.py
-git commit -m "feat(discord): DiscordMessageLog lease schema
+git commit -m "feat(discord): DiscordMessageLog lease schema (Option B)
 
 success is now nullable (NULL = lease held). New claimed_at timestamp
-lets a sweeper reclaim leases stuck from worker crashes. Full unique
-index on (source, source_id) — catches the second worker's claim
-BEFORE the Discord HTTP send, preventing duplicate messages."
+lets the sweeper reclaim crashed-worker leases. Partial unique index
+on (source, source_id) WHERE success IS NOT FALSE: blocks duplicate
+sends while a pending or successful row exists, but allows retry
+after a failed send. The full row (including required channel_id +
+embed_data) is supplied by the worker at claim time."
 ```
 
 ### Task 1.2.5: Claim/finalize helpers + internal API endpoints
@@ -495,52 +539,75 @@ from app.internal_client import (
 )
 
 
+CLAIM_PAYLOAD = dict(channel_id="ch_1", embed_data={"title": "test"})
+
+
 class LeaseHelpersTest(TestCase):
     def test_claim_returns_log_id(self):
         log_id = claim_discord_message_log(
-            source="event_announcement", source_id=10
+            source="event_announcement", source_id=10, **CLAIM_PAYLOAD,
         )
         self.assertIsNotNone(log_id)
         row = DiscordMessageLog.objects.get(pk=log_id)
         self.assertIsNone(row.success)
         self.assertIsNotNone(row.claimed_at)
+        self.assertEqual(row.channel_id, "ch_1")
+        self.assertEqual(row.embed_data, {"title": "test"})
 
-    def test_claim_returns_none_when_already_held(self):
+    def test_claim_returns_none_when_pending_lease_held(self):
         DiscordMessageLog.objects.create(
             source="event_announcement", source_id=11,
             success=None, claimed_at=timezone.now(),
+            channel_id="ch_1", embed_data={"title": "prior"},
         )
         result = claim_discord_message_log(
-            source="event_announcement", source_id=11
+            source="event_announcement", source_id=11, **CLAIM_PAYLOAD,
         )
         self.assertIsNone(result)
 
-    def test_claim_returns_none_when_already_finalized_success(self):
+    def test_claim_returns_none_when_already_succeeded(self):
         DiscordMessageLog.objects.create(
             source="event_announcement", source_id=12, success=True,
+            channel_id="ch_1", embed_data={"title": "prior"},
         )
         result = claim_discord_message_log(
-            source="event_announcement", source_id=12
+            source="event_announcement", source_id=12, **CLAIM_PAYLOAD,
         )
         self.assertIsNone(result)
+
+    def test_claim_succeeds_after_failed_send(self):
+        # Failed sends do NOT block re-claim — partial unique excludes success=False
+        DiscordMessageLog.objects.create(
+            source="event_announcement", source_id=13, success=False,
+            channel_id="ch_1", embed_data={"title": "prior"},
+        )
+        log_id = claim_discord_message_log(
+            source="event_announcement", source_id=13, **CLAIM_PAYLOAD,
+        )
+        self.assertIsNotNone(log_id)
 
     def test_finalize_marks_success_true(self):
         log_id = claim_discord_message_log(
-            source="event_announcement", source_id=13
+            source="event_announcement", source_id=14, **CLAIM_PAYLOAD,
         )
         finalize_discord_message_log(log_id, success=True, message_id="msg_1")
         row = DiscordMessageLog.objects.get(pk=log_id)
         self.assertTrue(row.success)
-        self.assertEqual(row.message_id, "msg_1")
+        self.assertEqual(row.discord_message_id, "msg_1")
 
-    def test_finalize_marks_success_false_with_error(self):
+    def test_finalize_marks_success_false(self):
         log_id = claim_discord_message_log(
-            source="event_announcement", source_id=14
+            source="event_announcement", source_id=15, **CLAIM_PAYLOAD,
         )
         finalize_discord_message_log(log_id, success=False, error="HTTP 500")
         row = DiscordMessageLog.objects.get(pk=log_id)
         self.assertFalse(row.success)
-        self.assertIn("500", row.error or "")
+
+    def test_finalize_on_swept_row_returns_silently(self):
+        # The sweeper may have deleted the row between claim and finalize.
+        # finalize must not raise — it's a no-op.
+        finalize_discord_message_log(99999, success=True, message_id="msg_1")
+        # No assertion needed — should not raise
 ```
 
 - [ ] **Step 3: Run — confirm failure**
@@ -551,73 +618,115 @@ just test::run 'python manage.py test discordbot.tests.test_lease_helpers -v 2'
 
 Expected: FAIL — helpers don't exist.
 
-- [ ] **Step 4: Add the internal API endpoints**
+- [ ] **Step 4: Add the internal API endpoints (using existing auth pattern)**
 
-Edit `backend/app/views/internal.py`. Add two new endpoints:
+Edit `backend/app/views/internal.py`. Add two new endpoints AFTER the existing `create_discord_message_log` function. Use the SAME decorator stack (`@api_view`, `@authentication_classes(_auth)`, `@permission_classes(_perm)`) — these endpoints are NOT csrf_exempt; they go through the project's existing internal-service auth:
 
 ```python
 from django.db import IntegrityError, transaction
-from django.http import JsonResponse
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
-import json
 
 
-@csrf_exempt
-@require_POST
-def claim_discord_message_log(request):
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def claim_discord_message_log_view(request):
     """POST /api/internal/discord/message-log/claim/
 
-    Body: {"source": "...", "source_id": <int>}
-    Returns: 201 {"id": <pk>} on success, 409 {} on conflict.
+    Body: {"source": str, "source_id": int, "channel_id": str, "embed_data": dict,
+           "fired_by_user_id": int?, "tournament_log_id": int?}
+    Returns: 201 {"id": <pk>} on success, 409 {} on conflict (lease held).
     """
-    data = json.loads(request.body)
+    from discordbot.models import DiscordMessageLog
+
+    err = _validate_required(
+        request.data, ["source", "source_id", "channel_id", "embed_data"]
+    )
+    if err:
+        return err
+
+    create_kwargs = {
+        "source": request.data["source"],
+        "source_id": request.data["source_id"],
+        "channel_id": request.data["channel_id"],
+        "embed_data": request.data["embed_data"],
+        "success": None,
+        "claimed_at": timezone.now(),
+    }
+    if "fired_by_user_id" in request.data:
+        create_kwargs["fired_by_id"] = request.data["fired_by_user_id"]
+    if "tournament_log_id" in request.data:
+        create_kwargs["tournament_log_id"] = request.data["tournament_log_id"]
+
     try:
         with transaction.atomic():
-            row = DiscordMessageLog.objects.create(
-                source=data["source"],
-                source_id=data["source_id"],
-                success=None,
-                claimed_at=timezone.now(),
-            )
-        return JsonResponse({"id": row.pk}, status=201)
+            row = DiscordMessageLog.objects.create(**create_kwargs)
+        return Response({"id": row.pk}, status=status.HTTP_201_CREATED)
     except IntegrityError:
-        return JsonResponse({}, status=409)
+        return Response({}, status=status.HTTP_409_CONFLICT)
 
 
-@csrf_exempt
-@require_POST
-def finalize_discord_message_log(request, log_id):
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def finalize_discord_message_log_view(request, log_id):
     """POST /api/internal/discord/message-log/<log_id>/finalize/
 
-    Body: {"success": <bool>, "message_id": <str?>, "error": <str?>}
+    Body: {"success": bool, "discord_message_id": str?, "error": str?,
+           "status_code": int?, "response_data": dict?}
+    Returns: 200 on update, 410 Gone if the row was already swept.
     """
-    data = json.loads(request.body)
-    DiscordMessageLog.objects.filter(pk=log_id).update(
-        success=data["success"],
-        message_id=data.get("message_id") or "",
-        error=data.get("error") or "",
-    )
-    return JsonResponse({}, status=200)
+    from discordbot.models import DiscordMessageLog
+
+    err = _validate_required(request.data, ["success"])
+    if err:
+        return err
+
+    update_fields = {"success": request.data["success"]}
+    for k in ("discord_message_id", "status_code", "response_data"):
+        if k in request.data:
+            update_fields[k] = request.data[k]
+
+    updated = DiscordMessageLog.objects.filter(pk=log_id).update(**update_fields)
+    if updated == 0:
+        # Sweeper got there first, or the log_id was bogus
+        return Response(
+            {"detail": "log row not found (likely swept)"},
+            status=status.HTTP_410_GONE,
+        )
+    return Response({}, status=status.HTTP_200_OK)
 ```
 
-Add the URL routes in the same internal-API URL config (find via `grep -rn 'internal/discord' backend/app/urls*.py`).
+Add URL routes alongside the existing `create_discord_message_log` route in the internal API urlconf. Find via `grep -rn 'create_discord_message_log\|message-log' backend/app/urls*.py backend/backend/urls.py`. The pattern matches the existing internal route shape.
 
 - [ ] **Step 5: Add the worker-side helpers**
 
-Edit `backend/app/internal_client.py`:
+Edit `backend/app/internal_client.py`. Use whichever `_post` helper the file already follows (it has its own auth-header pattern):
 
 ```python
-def claim_discord_message_log(*, source: str, source_id: int) -> int | None:
-    """Acquire a lease for a (source, source_id) Discord message.
+def claim_discord_message_log(
+    *, source: str, source_id: int, channel_id: str, embed_data: dict,
+    fired_by_user_id: int | None = None, tournament_log_id: int | None = None,
+) -> int | None:
+    """Acquire a pre-send lease.
 
-    Returns the new DiscordMessageLog PK, or None if a row already exists
-    (lease held by another worker, or message already sent / failed).
+    The claim row is fully populated (channel_id + embed_data are required
+    DiscordMessageLog fields). Returns the new row's PK on success, or None
+    on 409 (lease held by another worker, or row already in pending/success
+    state for this source/source_id).
     """
-    response = _post("/discord/message-log/claim/", json={
-        "source": source, "source_id": source_id,
-    })
+    payload = {
+        "source": source,
+        "source_id": source_id,
+        "channel_id": channel_id,
+        "embed_data": embed_data,
+    }
+    if fired_by_user_id is not None:
+        payload["fired_by_user_id"] = fired_by_user_id
+    if tournament_log_id is not None:
+        payload["tournament_log_id"] = tournament_log_id
+
+    response = _post("/discord/message-log/claim/", json=payload)
     if response.status_code == 409:
         return None
     response.raise_for_status()
@@ -625,17 +734,34 @@ def claim_discord_message_log(*, source: str, source_id: int) -> int | None:
 
 
 def finalize_discord_message_log(
-    log_id: int, *, success: bool, message_id: str | None = None, error: str | None = None,
+    log_id: int,
+    *,
+    success: bool,
+    message_id: str | None = None,
+    error: str | None = None,
+    status_code: int | None = None,
+    response_data: dict | None = None,
 ) -> None:
-    """Update the lease row to its final state."""
-    _post(f"/discord/message-log/{log_id}/finalize/", json={
-        "success": success,
-        "message_id": message_id,
-        "error": error,
-    })
-```
+    """Update the lease row to its final state. Silently no-ops on 410 Gone
+    (sweeper reaped the row before finalize landed)."""
+    payload = {"success": success}
+    if message_id is not None:
+        payload["discord_message_id"] = message_id
+    if error is not None:
+        # Stash the error string in response_data for visibility
+        payload["response_data"] = {"error": error}
+    if status_code is not None:
+        payload["status_code"] = status_code
+    if response_data is not None:
+        existing = payload.get("response_data") or {}
+        existing.update(response_data)
+        payload["response_data"] = existing
 
-(Use whatever `_post` / `_get` helper convention the file already follows.)
+    response = _post(f"/discord/message-log/{log_id}/finalize/", json=payload)
+    if response.status_code == 410:
+        return  # row was swept; nothing to do
+    response.raise_for_status()
+```
 
 - [ ] **Step 6: Run — confirm test passes**
 
@@ -643,48 +769,64 @@ def finalize_discord_message_log(
 just test::run 'python manage.py test discordbot.tests.test_lease_helpers -v 2'
 ```
 
-Expected: all 5 tests pass.
+Expected: all 7 tests pass.
 
 - [ ] **Step 7: Refactor `sync_send_embed_with_components`**
 
-Edit `backend/discordbot/utils.py`:
+Edit `backend/discordbot/utils.py`. The existing function calls `_log_discord_message` AFTER the send; refactor so the lease bracketsthe send. Existing wrapper signature stays the same — callers don't need updates.
 
 ```python
 def sync_send_embed_with_components_no_log(
     *, channel_id, embed, components=None,
 ):
     """Discord HTTP send only. Caller is responsible for logging."""
-    # ... existing send logic from sync_send_embed_with_components,
-    #     minus the _log_discord_message call at the end ...
+    # ... copy the existing send logic from sync_send_embed_with_components,
+    # MINUS the _log_discord_message call at the end. Return the Discord
+    # API response dict (or whatever the existing function returns). ...
 
 
 def sync_send_embed_with_components(
     *, channel_id, embed, components=None, source, source_id,
+    fired_by_user_id=None, tournament_log_id=None,
 ):
-    """Backward-compatible wrapper that adds claim/finalize around the send.
+    """Backward-compatible wrapper. Adds pre-send lease around _no_log.
 
     Returns:
         - The Discord API response dict on a successful send
         - None if the lease was already held (another worker won the race)
+        - None if the lease was held but in a False (failed) state — caller
+          will retry on the next poll cycle
     """
     from app.internal_client import claim_discord_message_log, finalize_discord_message_log
 
-    log_id = claim_discord_message_log(source=source, source_id=source_id)
+    log_id = claim_discord_message_log(
+        source=source,
+        source_id=source_id,
+        channel_id=channel_id,
+        embed_data=embed,
+        fired_by_user_id=fired_by_user_id,
+        tournament_log_id=tournament_log_id,
+    )
     if log_id is None:
-        return None  # another worker has the lease
+        return None  # lease held by another worker
 
     try:
         response = sync_send_embed_with_components_no_log(
             channel_id=channel_id, embed=embed, components=components,
         )
         finalize_discord_message_log(
-            log_id, success=True, message_id=response.get("id") if response else None,
+            log_id,
+            success=True,
+            message_id=response.get("id") if response else None,
+            response_data=response,
         )
         return response
     except Exception as e:
         finalize_discord_message_log(log_id, success=False, error=str(e))
         raise
 ```
+
+The previous `_log_discord_message` helper at `discordbot/utils.py:110-148` is no longer called from `sync_send_embed_with_components`. Audit other callers via `grep -rn '_log_discord_message' backend/`. If only this function used it, delete it; otherwise leave for non-lease callers.
 
 - [ ] **Step 8: Run the full discord+events test suite**
 
@@ -788,9 +930,71 @@ def send_event_announcement(event_id):
     return f"Sent announcement for event {event_id}"
 ```
 
-Apply the same `acks_late=True` decorator change AND the `if response is None: return ...` short-circuit to `send_subscriber_notifications` (line ~858).
+- [ ] **Step 4: Update `send_subscriber_notifications` to wrap the entire DM loop in a lease**
 
-- [ ] **Step 4: Run — confirm pass**
+`send_subscriber_notifications` does NOT use `sync_send_embed_with_components`. It iterates subscribers and sends a DM each via `sync_send_dm` (per-`DiscordEventDM` row), then writes a summary `create_message_log` at the end. The lease pattern needs to be applied at the function bounds — claim BEFORE the loop, finalize AFTER, so concurrent dispatches can't double-DM the entire subscriber set.
+
+Edit `backend/events/tasks.py:858`. Add lease bracketing around the existing loop:
+
+```python
+@shared_task(acks_late=True, reject_on_worker_lost=True)
+def send_subscriber_notifications(event_id):
+    """Send signup reminder DMs to repeater subscribers...
+
+    Wrapped in a lease so concurrent dispatches don't iterate the
+    subscriber set twice. The 'embed' payload at claim time is the
+    common embed used for each DM (built once below); channel_id
+    is N/A for DMs but the field is required, so we use a sentinel.
+    """
+    from app.internal_client import (
+        claim_discord_message_log,
+        finalize_discord_message_log,
+        get_event_for_task,
+        get_repeater_subscribers,
+    )
+    # ... other existing imports unchanged ...
+
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Event {event_id} not found"
+    if not event.event_repeater_id:
+        return "No repeater"
+
+    # Build the DM embed once (used for the lease payload AND each subscriber)
+    dm_data = build_subscriber_dm_embed(event)
+
+    # Claim the lease BEFORE iterating subscribers
+    log_id = claim_discord_message_log(
+        source="signup_reminder",
+        source_id=event_id,
+        channel_id="dm",  # sentinel — DMs are not per-channel
+        embed_data=dm_data["embed"],
+    )
+    if log_id is None:
+        return f"Signup reminder for event {event_id}: lease held by another worker"
+
+    sent = skipped = failed = 0
+    try:
+        # ... existing subscriber loop body, unchanged ...
+        # (build subscriber list, iterate, sync_send_dm per subscriber,
+        #  track sent/skipped/failed counters)
+        pass
+    except Exception as e:
+        finalize_discord_message_log(log_id, success=False, error=str(e))
+        raise
+
+    finalize_discord_message_log(
+        log_id, success=True,
+        response_data={"sent": sent, "skipped": skipped, "failed": failed},
+    )
+    return f"Subscriber DMs for event {event_id}: {sent} sent, {skipped} skipped, {failed} failed"
+```
+
+Important: the subscriber loop's *existing* `create_message_log` call at the end of the function is REPLACED by `finalize_discord_message_log` (the lease row is the audit log). Per-subscriber `DiscordEventDM` records are unaffected — they remain a separate per-recipient log.
+
+The `channel_id="dm"` sentinel works because the partial unique index keys on `(source, source_id)` only — `channel_id` doesn't participate in the constraint. Worth a code comment so future maintainers don't get confused.
+
+- [ ] **Step 5: Run — confirm pass**
 
 ```bash
 just test::run 'python manage.py test events.tests.test_reminder_lease_flow -v 2'
@@ -798,24 +1002,26 @@ just test::run 'python manage.py test events.tests.test_reminder_lease_flow -v 2
 
 Expected: PASS.
 
-- [ ] **Step 5: Run the broader event-task suite**
+- [ ] **Step 6: Run the broader event-task suite**
 
 ```bash
 just test::run 'python manage.py test events.tests.test_discord_tasks events.tests.test_discord_integration -v 2'
 ```
 
-Expected: PASS — public signature unchanged.
+Expected: PASS — public signatures of both reminder tasks unchanged.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add backend/events/tasks.py backend/events/tests/test_reminder_lease_flow.py
 git commit -m "feat(events): reminder tasks respect lease semantics
 
-Tasks short-circuit when sync_send_embed_with_components returns None
-(lease already held). acks_late + reject_on_worker_lost ensure a
-worker crash leaves a pending lease that the sweeper reaps within
-5 minutes."
+send_event_announcement uses the lease via sync_send_embed_with_components.
+send_subscriber_notifications wraps its subscriber-DM loop in an
+explicit claim/finalize pair (it doesn't go through sync_send_embed,
+so the wrapper alone wouldn't protect it). acks_late + reject_on_worker_lost
+ensure a worker crash leaves a pending lease that the sweeper reaps
+within 1 minute."
 ```
 
 ### Task 1.4: Extract `attendance_reminder` into a top-level shared task
@@ -1215,13 +1421,9 @@ REMINDERS: list[ScheduledReminder] = [
         log_source="profile_reminder",
     ),
 ]
-
-
-def reminder_field_union() -> set[str]:
-    """All hours/enabled fields used by any reminder. Used by sync_future_events
-    to cascade reminder fields onto upcoming Event rows generically."""
-    return {r.hours_field for r in REMINDERS} | {r.enabled_field for r in REMINDERS}
 ```
+
+(No `reminder_field_union` helper is needed — `DISCORD_CONFIG_FIELDS` in `services.py:536` is already auto-built from `DiscordEventConfigMixin._meta.get_fields()` and catches every reminder field. The CI guardrail in Task 1.10 enforces that registry fields stay on the mixin.)
 
 - [ ] **Step 5: Run the tests — confirm they pass**
 
@@ -1480,7 +1682,12 @@ from events.tasks import check_event_reminders
 
 
 class CheckEventRemindersDelegateTest(TestCase):
-    @patch("events.tasks.fire_due_reminders")
+    # Patch the SOURCE module of fire_due_reminders, not events.tasks.
+    # The new check_event_reminders body does `from events.scheduling.fire
+    # import fire_due_reminders` *inside* the function, so the lookup
+    # happens at call time against events.scheduling.fire's namespace.
+    # Patching events.tasks.fire_due_reminders would not intercept it.
+    @patch("events.scheduling.fire.fire_due_reminders")
     def test_delegates_to_fire_due_reminders(self, mock_fire):
         mock_fire.return_value = "ok"
         check_event_reminders()
@@ -1510,10 +1717,12 @@ def check_event_reminders():
     """Beat-scheduled every 30s. Delegates to the registry-driven fire path.
 
     Note (2026-04-30): DiscordMessageLog IS cached by cacheops (60-min TTL,
-    invalidated on insert). The unique partial index on (source, source_id)
-    WHERE success=TRUE is the actual idempotency primitive — concurrent
-    polls would race past the in-process exists() check, but the DB
-    constraint serializes the writes.
+    invalidated on insert). Idempotency is enforced by the pre-send lease
+    pattern: each reminder task INSERTs a NULL-success row before the
+    Discord HTTP send, and the partial unique index on (source, source_id)
+    WHERE success IS NOT FALSE makes the second worker's claim raise
+    IntegrityError — preventing duplicate Discord messages, not just
+    duplicate audit rows. See sweep_stale_discord_leases for crash recovery.
     """
     from events.scheduling.fire import fire_due_reminders
     return fire_due_reminders()
@@ -1547,14 +1756,24 @@ the poll instead of dropping it. Stale comment about DiscordMessageLog
 caching is corrected."
 ```
 
-### Task 1.9: Remove immediate `notify_event_announced` dispatch
+### Task 1.9: Remove immediate `notify_event_announced` dispatch + audit other call sites of `send_event_announcement`
 
 **Files:**
-- Modify: `backend/events/views.py` (lines ~376, ~420, ~551)
-- Modify: `backend/events/services.py` (line ~651)
+- Modify: `backend/events/views.py` (lines ~376, ~420, ~551 — `notify_event_announced(event)` calls)
+- Modify: `backend/events/services.py` (line ~651 — `notify_event_announced(event)` call)
 - Test: `backend/events/tests/test_announcement_scheduled.py` (new)
 
-**Why:** With the announcement now in `REMINDERS`, the immediate `.delay()` dispatch on save would race the scheduled fire and create a guaranteed duplicate (or, worse, supersede the scheduled fire by writing the log row first). Remove all four call sites.
+**Why:** With the announcement now in `REMINDERS`, the immediate `.delay()` dispatch on save would race the scheduled fire and could result in either an early send or a wasted scheduled task hitting an existing lease. Remove all four `notify_event_announced(event)` call sites.
+
+**Other call sites of `send_event_announcement` are intentionally preserved.** Two more references exist that we are NOT removing:
+- `backend/events/views.py:1184-1185` — TASK_MAP in the admin "fire now" / manual-trigger viewset (lets a site admin manually re-fire an announcement). Manual trigger semantics: admin acknowledges they're forcing a send. The lease pattern protects this — a manual re-fire after a successful send hits the unique constraint and returns "lease held," which is the right behavior. Document this in a code comment.
+- `backend/events/tasks.py:150` — likely a synchronous helper or admin entry point. Verify its purpose with `git blame` and a grep of its callers; if it's also a manual-trigger, leave it. If it's another auto-dispatch we missed, remove it.
+
+```bash
+grep -rn "send_event_announcement" backend/ --include="*.py" | grep -v migrations
+```
+
+Expected after this task: 4 call sites removed (3 in views.py, 1 in services.py); 2 call sites remain (TASK_MAP at views.py:1184-1185, and tasks.py:150 if confirmed manual-trigger).
 
 - [ ] **Step 1: Write the failing scheduled-not-immediate test**
 
@@ -1644,22 +1863,27 @@ Behavioral change: announcements no longer post seconds after save —
 they post discord_announcement_hours before scheduled_at (default 24h)."
 ```
 
-### Task 1.10: Generic cascade in `sync_future_events` + cacheops invalidation
+### Task 1.10: `sync_future_events` returns touched events + post-commit invalidation; mixin-coverage CI guardrail
 
 **Files:**
-- Modify: `backend/events/services.py:662-691`
-- Modify: `backend/events/views.py:190-195` (EventRepeaterViewSet.perform_update)
+- Modify: `backend/events/services.py:661-691` (`sync_future_events` — change return value, add `invalidate_after_commit`)
+- Modify: `backend/events/views.py:190-195` (`EventRepeaterViewSet.perform_update`)
 - Test: `backend/events/tests/test_sync_future_events_cascade.py` (new)
 
-**Why:** Currently `sync_future_events` cascades a hand-coded list of fields. Replacing this with the union of `REMINDERS` field names means future reminder additions cascade automatically. The `invalidate_after_commit` calls close the cacheops staleness gap that otherwise delays edited values reaching the fire path.
+**Why:** Reading the actual `sync_future_events` at `services.py:661-691` reveals the cascade is *already* generic — it iterates `DISCORD_CONFIG_FIELDS` (auto-built from `DiscordEventConfigMixin._meta.get_fields()` at line 536-538). Any reminder field defined on the mixin is automatically cascaded. The original spec's "leaky cascade" framing was inaccurate. What the function DOES need:
+
+1. Return the list of touched events (currently returns just a count) so callers can pass them to `invalidate_after_commit`.
+2. Skip the redundant inner `with transaction.atomic()` (function is already `@transaction.atomic`-decorated at line 661).
+3. Add a CI guardrail asserting every `ScheduledReminder.hours_field` and `enabled_field` is on the `DiscordEventConfigMixin` (extending Task 1.6's registry test) — so a future reminder can't be added outside the mixin and silently miss the cascade.
 
 - [ ] **Step 1: Read the current cascade**
 
 ```bash
-sed -n '662,695p' backend/events/services.py
+sed -n '526,545p' backend/events/services.py    # the *_FIELDS constants
+sed -n '661,695p' backend/events/services.py    # sync_future_events itself
 ```
 
-Note the current `update_fields` list in the per-row save.
+Confirmed: `DISCORD_CONFIG_FIELDS = [f.name for f in DiscordEventConfigMixin._meta.get_fields() if hasattr(f, "column")]` (line 536). The cascade already covers every field on the mixin.
 
 - [ ] **Step 2: Write the failing cascade-coverage test**
 
@@ -1667,7 +1891,6 @@ Create `backend/events/tests/test_sync_future_events_cascade.py`:
 
 ```python
 from django.test import TestCase
-from events.scheduling.registry import reminder_field_union
 from events.services import sync_future_events
 from events.tests.factories import EventFactory, EventRepeaterFactory
 
@@ -1732,47 +1955,89 @@ Expected: `test_returns_list_of_synced_events` and possibly the cascade-all test
 
 - [ ] **Step 4: Update `sync_future_events`**
 
-The function is *already* `@transaction.atomic`-decorated at the function level (`services.py:661`). Do not add a second `with transaction.atomic()` inside — that's a redundant savepoint. Use the project's existing `invalidate_after_commit` helper from `app.cache_utils`, NOT raw `invalidate_obj` (the project convention reserves `invalidate_obj` for M2M paths; `invalidate_after_commit` is what views/services use, and it correctly defers invalidation until commit).
+The function is *already* `@transaction.atomic`-decorated at the function level (`services.py:661`). Do not add a second `with transaction.atomic()` inside. Use `invalidate_after_commit` from `app.cache_utils`, NOT raw `invalidate_obj` — project convention reserves `invalidate_obj` for M2M paths.
 
-Replace `backend/events/services.py` `sync_future_events` body with:
+The existing function body uses `_copy_mixin_fields` plus three `*_FIELDS` constants. Keep that structure exactly; only change the return value and add the post-commit invalidation. Replace the body with:
 
 ```python
+@transaction.atomic
 def sync_future_events(repeater):
-    """Cascade repeater field changes to upcoming Event rows.
+    """Propagate repeater changes to all upcoming events in the series.
+
+    Only updates events still in EventState.UPCOMING (i.e. signups
+    haven't opened yet), so in-progress events are untouched.
 
     Returns the list of touched Event instances so callers can chain
     a single invalidate_after_commit at the end of the request.
     """
     from app.cache_utils import invalidate_after_commit
-    from events.scheduling.registry import reminder_field_union
 
-    reminder_fields = sorted(reminder_field_union())
-    base_fields = [
-        # ... existing tournament template fields the cascade always copied —
-        # COPY VERBATIM from the pre-PR-1 sync_future_events function body.
-        # Do not invent new fields. Examples: "tournament_name",
-        # "tournament_type", "draft_type", "people_per_team", etc.
-    ]
-    update_fields = base_fields + reminder_fields
-
-    touched = []
-    future_events = repeater.event_set.filter(state="upcoming").select_for_update()
+    future_events = list(
+        Event.objects.filter(
+            event_repeater=repeater,
+            state=EventState.UPCOMING,
+        )
+        .select_related("tournament")
+        .select_for_update()
+    )
+    shared_fields = ["name", "description"]
+    update_fields = (
+        shared_fields
+        + TOURNAMENT_TEMPLATE_FIELDS
+        + EVENT_CONFIG_FIELDS
+        + DISCORD_CONFIG_FIELDS
+    )
     for event in future_events:
-        for f in update_fields:
-            setattr(event, f, getattr(repeater, f))
-        event.save(update_fields=update_fields + ["updated_at"])
-        touched.append(event)
+        for field_name in shared_fields:
+            setattr(event, field_name, getattr(repeater, field_name))
+        _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
+        _copy_mixin_fields(repeater, event, EVENT_CONFIG_FIELDS)
+        _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
+        event.tournament_date = event.scheduled_at
+        event.save(update_fields=update_fields + ["tournament_date", "updated_at"])
+        sync_tournament_from_event(event)
 
-    # Single batched invalidation post-commit — fires after the @transaction.atomic
-    # decorator's commit point, avoiding the cacheops "stale read by another tx"
-    # gotcha that raw invalidate_obj inside a transaction would create.
-    if touched:
-        invalidate_after_commit(*touched)
+    # Single batched invalidation post-commit. Outside the loop so
+    # all rows are committed before invalidation hooks fire.
+    if future_events:
+        invalidate_after_commit(*future_events)
 
-    return touched
+    logger.info("Synced %d upcoming events for repeater %s", len(future_events), repeater.pk)
+    return future_events  # CHANGED: was `updated` (an int)
 ```
 
-(Confirm `base_fields` matches the existing cascade list before this PR — copy from the original function. Do not invent new fields.)
+This matches the existing function structure verbatim except: (1) `select_for_update()` added; (2) explicit `list(...)` so iteration completes before the cacheops post-commit hooks try to evaluate the queryset again; (3) `invalidate_after_commit(*future_events)` post-loop; (4) returns the list instead of an int. Callers that previously used the return value as a count (if any — search via `grep -rn 'sync_future_events' backend/`) get `len(future_events)` instead.
+
+- [ ] **Step 4.5: Extend the registry CI guardrail to assert mixin coverage**
+
+Append to `backend/events/tests/test_scheduling_registry.py`:
+
+```python
+class RegistryMixinCoverageTest(TestCase):
+    """Ensure every reminder field is on DiscordEventConfigMixin so the
+    existing sync_future_events cascade catches it."""
+
+    def test_every_reminder_field_is_on_discord_event_config_mixin(self):
+        from events.mixins import DiscordEventConfigMixin  # adapt import path
+        mixin_field_names = {
+            f.name for f in DiscordEventConfigMixin._meta.get_fields()
+            if hasattr(f, "name")
+        }
+        for r in REMINDERS:
+            self.assertIn(
+                r.hours_field, mixin_field_names,
+                f"Reminder {r.key!r} hours_field {r.hours_field!r} not on "
+                f"DiscordEventConfigMixin — sync_future_events cascade would "
+                f"silently miss it."
+            )
+            self.assertIn(
+                r.enabled_field, mixin_field_names,
+                f"Reminder {r.key!r} enabled_field {r.enabled_field!r} not "
+                f"on DiscordEventConfigMixin."
+            )
+```
+
+Run via `just test::run 'python manage.py test events.tests.test_scheduling_registry.RegistryMixinCoverageTest -v 2'`. Expected: PASS — all four reminder fields are already on the mixin.
 
 - [ ] **Step 5: Update `EventRepeaterViewSet.perform_update` to consume the return**
 
@@ -2057,14 +2322,19 @@ HTTP send and one success row. The lost-the-race task short-circuits
 with 'lease held' and never calls Discord."
 ```
 
-### Task 1.13.5: Stale-lease sweeper
+### Task 1.13.5: Stale-lease sweeper (handles both pending and aged-out failures)
 
 **Files:**
-- Modify: `backend/discordbot/tasks.py` (or wherever celery tasks for the discordbot app live; create the file if missing) — add `sweep_stale_discord_leases` shared task
-- Modify: `backend/config/celery.py` — add to `_beat_schedule` at 5-minute cadence
+- Modify: `backend/discordbot/tasks.py` (file already exists per `grep` of the repo — adds `sweep_stale_discord_leases` alongside the existing tasks)
+- Modify: `backend/config/celery.py` — add to `_beat_schedule` at 60-second cadence
 - Test: `backend/discordbot/tests/test_sweep_stale_leases.py` (new)
 
-**Why:** A worker that crashes between `claim_discord_message_log` and `finalize_discord_message_log` leaves a row with `success=NULL` and `claimed_at` in the past. Without recovery, that row blocks all future fires for that (source, source_id) due to the unique constraint. The sweeper deletes such rows after 5 minutes — well past any reasonable Discord HTTP timeout.
+**Why:** Two recovery cases:
+
+1. **Pending leases (`success=NULL`) older than 5 minutes** — almost always from a worker crash between claim and finalize. Without recovery, the partial unique constraint blocks all future fires for that (source, source_id).
+2. **Failed leases (`success=False`) older than 1 hour** — Discord transient 5xx, rate-limit, or temporary auth issue. The next reminder poll's threshold check is the right re-fire trigger; aging out the failure row lets the partial unique index allow the re-claim. 1 hour is the retry budget — long enough that admins can investigate the failure log first; short enough to limit user-visible impact.
+
+The 60-second cadence (vs 5 minutes) keeps total recovery latency to < ~1.5 min for crashed workers.
 
 - [ ] **Step 1: Write the failing sweeper test**
 
@@ -2078,44 +2348,49 @@ from discordbot.models import DiscordMessageLog
 from discordbot.tasks import sweep_stale_discord_leases
 
 
+def _row(**overrides):
+    defaults = dict(
+        channel_id="ch_1",
+        embed_data={"title": "test"},
+    )
+    defaults.update(overrides)
+    return DiscordMessageLog.objects.create(**defaults)
+
+
 class SweepStaleLeasesTest(TestCase):
     def test_deletes_pending_lease_older_than_5_min(self):
-        DiscordMessageLog.objects.create(
-            source="event_announcement", source_id=1,
-            success=None,
-            claimed_at=timezone.now() - timedelta(minutes=10),
-        )
+        _row(source="event_announcement", source_id=1, success=None,
+             claimed_at=timezone.now() - timedelta(minutes=10))
         deleted = sweep_stale_discord_leases()
         self.assertEqual(deleted, 1)
-        self.assertFalse(
-            DiscordMessageLog.objects.filter(source_id=1).exists()
-        )
+        self.assertFalse(DiscordMessageLog.objects.filter(source_id=1).exists())
 
     def test_does_not_delete_recent_pending_lease(self):
-        DiscordMessageLog.objects.create(
-            source="event_announcement", source_id=2,
-            success=None,
-            claimed_at=timezone.now() - timedelta(minutes=2),
-        )
+        _row(source="event_announcement", source_id=2, success=None,
+             claimed_at=timezone.now() - timedelta(minutes=2))
         sweep_stale_discord_leases()
-        self.assertTrue(
-            DiscordMessageLog.objects.filter(source_id=2).exists()
-        )
+        self.assertTrue(DiscordMessageLog.objects.filter(source_id=2).exists())
 
-    def test_does_not_delete_finalized_rows(self):
-        DiscordMessageLog.objects.create(
-            source="event_announcement", source_id=3, success=True,
-            claimed_at=timezone.now() - timedelta(hours=1),
-        )
-        DiscordMessageLog.objects.create(
-            source="event_announcement", source_id=4, success=False,
-            claimed_at=timezone.now() - timedelta(hours=1),
-        )
+    def test_does_not_delete_recent_failed_row(self):
+        # Recent failures (within the 1-hour budget) stay so admins can investigate
+        _row(source="event_announcement", source_id=3, success=False,
+             claimed_at=timezone.now() - timedelta(minutes=30))
         sweep_stale_discord_leases()
-        self.assertEqual(
-            DiscordMessageLog.objects.filter(source_id__in=[3, 4]).count(),
-            2,
-        )
+        self.assertTrue(DiscordMessageLog.objects.filter(source_id=3).exists())
+
+    def test_deletes_aged_out_failed_row(self):
+        # Failures older than 1 hour are reaped so the next poll can retry
+        _row(source="event_announcement", source_id=4, success=False,
+             claimed_at=timezone.now() - timedelta(hours=2))
+        deleted = sweep_stale_discord_leases()
+        self.assertEqual(deleted, 1)
+        self.assertFalse(DiscordMessageLog.objects.filter(source_id=4).exists())
+
+    def test_does_not_delete_successful_rows(self):
+        _row(source="event_announcement", source_id=5, success=True,
+             claimed_at=timezone.now() - timedelta(days=30))
+        sweep_stale_discord_leases()
+        self.assertTrue(DiscordMessageLog.objects.filter(source_id=5).exists())
 ```
 
 - [ ] **Step 2: Run — confirm failure**
@@ -2128,35 +2403,40 @@ Expected: FAIL — task doesn't exist.
 
 - [ ] **Step 3: Add the sweeper task**
 
-Edit `backend/discordbot/tasks.py` (create if it doesn't exist):
+Edit `backend/discordbot/tasks.py` (file already exists; append):
 
 ```python
-import logging
-from datetime import timedelta
-from celery import shared_task
-from django.utils import timezone
-
-from discordbot.models import DiscordMessageLog
-
-logger = logging.getLogger(__name__)
-
-
 @shared_task
 def sweep_stale_discord_leases():
-    """Delete DiscordMessageLog rows stuck in NULL state for >5 minutes.
+    """Two recoveries:
 
-    Almost always from a worker crash between claim and finalize. The
-    unique constraint would otherwise permanently block re-fires for
-    the affected (source, source_id) pair.
+    - NULL pending leases >5 min old: worker crashed between claim and
+      finalize. Delete so the next poll can re-claim.
+    - False failed rows >1 hour old: transient Discord error has likely
+      passed. Delete so the next poll can retry. Admins should investigate
+      via the original failed log row before it ages out.
     """
-    threshold = timezone.now() - timedelta(minutes=5)
-    deleted, _ = DiscordMessageLog.objects.filter(
-        success__isnull=True,
-        claimed_at__lt=threshold,
+    from datetime import timedelta
+    from django.utils import timezone
+
+    now = timezone.now()
+    pending_threshold = now - timedelta(minutes=5)
+    failed_threshold = now - timedelta(hours=1)
+
+    pending_swept, _ = DiscordMessageLog.objects.filter(
+        success__isnull=True, claimed_at__lt=pending_threshold,
     ).delete()
-    if deleted:
-        logger.warning("Swept %d stale Discord leases", deleted)
-    return deleted
+    failed_swept, _ = DiscordMessageLog.objects.filter(
+        success=False, claimed_at__lt=failed_threshold,
+    ).delete()
+
+    total = pending_swept + failed_swept
+    if total:
+        logger.warning(
+            "Swept %d stale leases, %d aged-out failures",
+            pending_swept, failed_swept,
+        )
+    return total
 ```
 
 - [ ] **Step 4: Add to beat schedule**
@@ -2166,7 +2446,7 @@ Edit `backend/config/celery.py` `_beat_schedule`:
 ```python
 "sweep-stale-discord-leases": {
     "task": "discordbot.tasks.sweep_stale_discord_leases",
-    "schedule": 300.0,  # every 5 minutes
+    "schedule": 60.0,  # every 60 seconds — keeps worker-crash recovery <1.5 min
 },
 ```
 
@@ -2176,13 +2456,13 @@ Edit `backend/config/celery.py` `_beat_schedule`:
 just test::run 'python manage.py test discordbot.tests.test_sweep_stale_leases -v 2'
 ```
 
-Expected: PASS (all 3 tests).
+Expected: PASS (all 5 tests).
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add backend/discordbot/tasks.py backend/config/celery.py backend/discordbot/tests/test_sweep_stale_leases.py
-git commit -m "feat(discord): stale-lease sweeper task (5-min cadence)
+git commit -m "feat(discord): stale-lease sweeper task (60s cadence)
 
 Reaps DiscordMessageLog rows stuck with success=NULL for >5 minutes,
 caused by worker crashes between claim and finalize. Without this,
@@ -2288,198 +2568,194 @@ EOF
 
 ## Phase 2 — Series row-level fixes + frontend cleanup (PR-2)
 
-### Task 2.1: `sync_future_events` recomputes `scheduled_at`
+### Task 2.1: Realign UPCOMING occurrences after schedule edits (delete-and-regenerate via `_get_next_occurrences`)
 
 **Files:**
-- Modify: `backend/events/services.py:662-691` (extend the function from Task 1.10)
+- Modify: `backend/events/services.py:661-691` (`sync_future_events` — add schedule-input detection + realignment branch)
 - Test: `backend/events/tests/test_sync_future_events_recompute.py` (new)
 
-**Why:** When a repeater's `day_of_week`/`time_of_day`/`timezone`/`starts_at` is edited, existing upcoming Event rows currently keep their stale `scheduled_at`. The next hourly `generate_upcoming_events` task creates *new* rows at the new schedule — duplicates. Recomputing eliminates the duplicate set.
+**Why:** When a repeater's `day_of_week`/`time_of_day`/`timezone`/`starts_at`/`frequency` is edited, existing UPCOMING Event rows keep their stale `scheduled_at`. The hourly `generate_upcoming_events` task (which uses `_get_next_occurrences` at `services.py:551`) then creates new rows at the new schedule — admins see duplicates. The fix: when a schedule input changes, REGENERATE the upcoming-occurrence set via the same `_get_next_occurrences` helper. Delete-and-regenerate is cleaner than per-row recompute because the new schedule may have a different occurrence count (DAILY → WEEKLY changes the count).
 
-- [ ] **Step 1: Write the failing recompute test**
+**Approach:**
+
+1. Detect "schedule input changed" by capturing the repeater's pre-save schedule values in `EventRepeaterViewSet.perform_update` and passing them through.
+2. If unchanged → existing field-cascade behavior (Task 1.10).
+3. If changed → delete UPCOMING rows whose `scheduled_at` is NOT in the new occurrence set; insert new occurrences from the new set that don't already exist. Subsequent `generate_upcoming_events` calls become no-ops because the rows are now aligned.
+
+- [ ] **Step 1: Capture pre-save schedule values in the viewset**
+
+Edit `backend/events/views.py` `EventRepeaterViewSet.perform_update` (line ~190). Before `serializer.save()`, snapshot the schedule fields off `serializer.instance`:
+
+```python
+SCHEDULE_FIELDS = ("day_of_week", "time_of_day", "timezone", "starts_at", "frequency")
+
+def perform_update(self, serializer):
+    pre_save_schedule = {
+        f: getattr(serializer.instance, f) for f in SCHEDULE_FIELDS
+    }
+    repeater = serializer.save()
+    schedule_changed = any(
+        pre_save_schedule[f] != getattr(repeater, f) for f in SCHEDULE_FIELDS
+    )
+    future_events = sync_future_events(repeater, realign_schedule=schedule_changed)
+    invalidate_after_commit(repeater, *future_events)
+```
+
+- [ ] **Step 2: Write the failing realignment test**
 
 Create `backend/events/tests/test_sync_future_events_recompute.py`:
 
 ```python
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timezone as dt_tz
 from django.test import TestCase
-from django.utils import timezone
+from events.models import Event
 from events.services import sync_future_events
 from events.tests.factories import EventFactory, EventRepeaterFactory
 
 
-class SyncFutureEventsRecomputeTest(TestCase):
-    def test_day_of_week_change_recomputes_scheduled_at(self):
+class SyncFutureEventsRealignTest(TestCase):
+    def test_day_of_week_change_realigns_upcoming_occurrences(self):
         repeater = EventRepeaterFactory(
             day_of_week=1,  # Monday (Sunday=0 convention)
             time_of_day=time(20, 0),
             timezone="UTC",
+            generate_days_ahead=14,
         )
-        # Create an upcoming event scheduled for next Monday at 20:00 UTC
-        event = EventFactory(
-            event_repeater=repeater,
-            state="upcoming",
-            scheduled_at=_next_weekday_at(1, time(20, 0), tz="UTC"),
+        # Pre-populate with a stale Monday occurrence
+        stale_event = EventFactory(
+            event_repeater=repeater, state="upcoming",
+            scheduled_at=datetime(2026, 5, 4, 20, 0, tzinfo=dt_tz.utc),  # Monday
         )
 
-        # Edit repeater to Tuesday (day_of_week=2)
+        # Edit repeater to Tuesday
         repeater.day_of_week = 2
         repeater.save()
 
-        sync_future_events(repeater)
-        event.refresh_from_db()
+        sync_future_events(repeater, realign_schedule=True)
 
-        # The same row should now be on Tuesday at 20:00, not Monday
-        self.assertEqual(event.scheduled_at.weekday(), 1)  # Python: Mon=0, Tue=1
-        # ... or whatever assertion matches the project's day_of_week convention
+        # The stale Monday row is gone
+        self.assertFalse(Event.objects.filter(pk=stale_event.pk).exists())
+        # New Tuesday occurrences exist
+        new_count = Event.objects.filter(
+            event_repeater=repeater, state="upcoming",
+        ).count()
+        self.assertGreater(new_count, 0)
+        # All on Tuesdays (Python weekday=1)
+        for ev in Event.objects.filter(event_repeater=repeater, state="upcoming"):
+            self.assertEqual(ev.scheduled_at.weekday(), 1)
 
-    def test_time_of_day_change_recomputes(self):
-        repeater = EventRepeaterFactory(time_of_day=time(20, 0))
+    def test_no_realignment_when_schedule_unchanged(self):
+        """When realign_schedule=False, existing scheduled_at values are preserved."""
+        repeater = EventRepeaterFactory(day_of_week=1, time_of_day=time(20, 0))
+        original_at = datetime(2026, 5, 4, 20, 0, tzinfo=dt_tz.utc)
         event = EventFactory(
-            event_repeater=repeater,
-            state="upcoming",
-            scheduled_at=_next_weekday_at(repeater.day_of_week, time(20, 0)),
+            event_repeater=repeater, state="upcoming",
+            scheduled_at=original_at,
         )
-        repeater.time_of_day = time(22, 30)
-        repeater.save()
-        sync_future_events(repeater)
+        sync_future_events(repeater, realign_schedule=False)
         event.refresh_from_db()
-        self.assertEqual(event.scheduled_at.hour, 22)
-        self.assertEqual(event.scheduled_at.minute, 30)
-
-    def test_collision_deletes_stale_row(self):
-        """If recomputed scheduled_at collides with an existing row,
-        the stale one is deleted and the existing kept."""
-        repeater = EventRepeaterFactory(day_of_week=1)
-        # Upcoming event A on Monday (about to be recomputed to Tuesday)
-        event_a = EventFactory(event_repeater=repeater, state="upcoming")
-        original_a_id = event_a.pk
-
-        # Pre-existing event B on Tuesday (the new target)
-        target_at = _next_weekday_at(2, repeater.time_of_day)
-        EventFactory(
-            event_repeater=repeater, state="upcoming", scheduled_at=target_at
-        )
-
-        repeater.day_of_week = 2
-        repeater.save()
-        sync_future_events(repeater)
-
-        # Either A or B remains — but not both. A is the "stale" row, so
-        # it should be the one deleted.
-        from events.models import Event
-        self.assertFalse(Event.objects.filter(pk=original_a_id).exists())
-
-
-def _next_weekday_at(day_of_week, time_of_day, tz="UTC"):
-    """Helper — finds the next datetime matching day_of_week + time_of_day."""
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    now = timezone.now().astimezone(ZoneInfo(tz))
-    # Convert Sunday=0 convention to Python's Monday=0 if needed
-    target_python_dow = (day_of_week - 1) % 7  # Sunday=0 -> 6
-    days_ahead = (target_python_dow - now.weekday()) % 7
-    if days_ahead == 0:
-        days_ahead = 7
-    candidate = (now + timedelta(days=days_ahead)).replace(
-        hour=time_of_day.hour,
-        minute=time_of_day.minute,
-        second=0,
-        microsecond=0,
-    )
-    return candidate
+        self.assertEqual(event.scheduled_at, original_at)
 ```
 
-- [ ] **Step 2: Run the test — confirm it fails**
+- [ ] **Step 3: Run — confirm failure**
 
 ```bash
 just test::run 'python manage.py test events.tests.test_sync_future_events_recompute -v 2'
 ```
 
-Expected: FAIL on all three tests.
+Expected: FAIL — `realign_schedule` parameter doesn't exist; no realignment logic.
 
-- [ ] **Step 3: Add `scheduled_at` recompute to `sync_future_events`**
+- [ ] **Step 4: Add the `realign_schedule` branch to `sync_future_events`**
 
-Edit `backend/events/services.py` `sync_future_events`. Before the per-row save, compute the new `scheduled_at`:
+Edit `backend/events/services.py:661`. Reuse the existing `_get_next_occurrences` helper (already at line 551) plus `generate_events_for_repeater` (already at line 617) — no new helper to write. Add a `realign_schedule` keyword parameter:
 
 ```python
-def sync_future_events(repeater):
-    """..."""
+@transaction.atomic
+def sync_future_events(repeater, *, realign_schedule=False):
+    """Propagate repeater changes to all upcoming events in the series.
+
+    If realign_schedule=True (caller detected a day_of_week / time_of_day /
+    timezone / starts_at / frequency change), delete UPCOMING rows whose
+    scheduled_at no longer matches the repeater's new occurrence set, then
+    generate any missing occurrences. This eliminates the "stale Mondays
+    plus new Tuesdays" duplicate problem.
+
+    Returns the list of touched Event instances.
+    """
     from app.cache_utils import invalidate_after_commit
-    from events.scheduling.registry import reminder_field_union
-    from events.models import Event
 
-    reminder_fields = sorted(reminder_field_union())
-    base_fields = [
-        # ... existing tournament template fields ...
-    ]
-    schedule_fields = ["day_of_week", "time_of_day", "timezone", "starts_at"]
-    update_fields = base_fields + reminder_fields
+    if realign_schedule:
+        # Same helper that generate_events_for_repeater uses — guarantees
+        # timestamp equality between regenerated and pre-existing rows.
+        today = _today()
+        to_date = today + timedelta(days=repeater.generate_days_ahead)
+        new_occurrences = set(_get_next_occurrences(repeater, today, to_date))
 
-    touched = []
-    deleted_ids = []
+        # Delete UPCOMING rows that don't match the new occurrence set
+        Event.objects.filter(
+            event_repeater=repeater, state=EventState.UPCOMING,
+        ).exclude(scheduled_at__in=new_occurrences).delete()
 
-    # Note: sync_future_events is already @transaction.atomic-decorated
-    # at the function level. Do NOT add another `with transaction.atomic`
-    # block inside.
-    future_events = repeater.event_set.filter(
-        state="upcoming"
-    ).select_for_update().order_by("scheduled_at")
+        # Generate missing occurrences (existing helper handles the
+        # "row already exists" check via Event.objects.filter(...).exists())
+        generate_events_for_repeater(repeater)
 
-    for event in future_events:
-        for f in update_fields:
-            setattr(event, f, getattr(repeater, f))
-
-        # Recompute scheduled_at if any schedule input changed
-        new_scheduled_at = _compute_occurrence_datetime(
-            repeater,
-            base_date=event.scheduled_at.date(),
+    # Cascade field updates onto the (possibly realigned) UPCOMING rowset
+    future_events = list(
+        Event.objects.filter(
+            event_repeater=repeater, state=EventState.UPCOMING,
         )
-        if new_scheduled_at != event.scheduled_at:
-            # Check for collision with another upcoming row
-            collision = Event.objects.filter(
-                event_repeater=repeater,
-                scheduled_at=new_scheduled_at,
-                state="upcoming",
-            ).exclude(pk=event.pk).first()
-            if collision is not None:
-                # Existing row at the new slot; delete the stale one
-                deleted_ids.append(event.pk)
-                event.delete()
-                continue
-            event.scheduled_at = new_scheduled_at
+        .select_related("tournament")
+        .select_for_update()
+    )
+    shared_fields = ["name", "description"]
+    update_fields = (
+        shared_fields
+        + TOURNAMENT_TEMPLATE_FIELDS
+        + EVENT_CONFIG_FIELDS
+        + DISCORD_CONFIG_FIELDS
+    )
+    for event in future_events:
+        for field_name in shared_fields:
+            setattr(event, field_name, getattr(repeater, field_name))
+        _copy_mixin_fields(repeater, event, TOURNAMENT_TEMPLATE_FIELDS)
+        _copy_mixin_fields(repeater, event, EVENT_CONFIG_FIELDS)
+        _copy_mixin_fields(repeater, event, DISCORD_CONFIG_FIELDS)
+        event.tournament_date = event.scheduled_at
+        event.save(update_fields=update_fields + ["tournament_date", "updated_at"])
+        sync_tournament_from_event(event)
 
-        event.save(update_fields=update_fields + ["scheduled_at", "updated_at"])
-        touched.append(event)
+    if future_events:
+        invalidate_after_commit(*future_events)
 
-    # Single batched post-commit invalidation
-    if touched:
-        invalidate_after_commit(*touched)
-
-    return touched
-
-
-def _compute_occurrence_datetime(repeater, base_date):
-    """Translate the repeater's day_of_week + time_of_day + timezone into
-    an absolute datetime anchored on or near base_date. Replicate the
-    logic that generate_events_for_repeater uses so that recomputed
-    timestamps match newly-generated ones."""
-    # ... use the same helper (or extract the existing one from
-    # generate_events_for_repeater) ...
+    logger.info(
+        "Synced %d upcoming events for repeater %s (realign=%s)",
+        len(future_events), repeater.pk, realign_schedule,
+    )
+    return future_events
 ```
 
-(Locate the existing day-of-week → datetime helper used by `generate_events_for_repeater` and reuse it.)
+The existing unique constraint on `(event_repeater, scheduled_at)` (already enforced via `generate_events_for_repeater`'s pre-insert check at line 630) prevents duplicates within the regeneration step.
 
-- [ ] **Step 4: Run the tests — confirm they pass**
+- [ ] **Step 5: Update other callers of `sync_future_events`**
+
+The function gained a keyword-only parameter. Existing callers that pass no value get `False` (no behavior change). Confirm via:
+
+```bash
+grep -rn "sync_future_events(" backend/ --include="*.py"
+```
+
+The viewset (Step 1) is the primary caller. Any others (e.g. signal handlers) likely don't change schedule and can keep the default.
+
+- [ ] **Step 6: Run the tests — confirm they pass**
 
 ```bash
 just test::run 'python manage.py test events.tests.test_sync_future_events_recompute -v 2'
 ```
 
-Expected: PASS (all 3 tests).
+Expected: PASS.
 
-- [ ] **Step 5: Run broader event tests for regressions**
+- [ ] **Step 7: Run broader event tests for regressions**
 
 ```bash
 just test::run 'python manage.py test events.tests -v 2'
@@ -2487,16 +2763,19 @@ just test::run 'python manage.py test events.tests -v 2'
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add backend/events/services.py backend/events/tests/test_sync_future_events_recompute.py
-git commit -m "feat(events): sync_future_events recomputes scheduled_at on series edit
+git add backend/events/services.py backend/events/views.py backend/events/tests/test_sync_future_events_recompute.py
+git commit -m "feat(events): sync_future_events realigns occurrences on schedule edit
 
-When repeater day_of_week/time_of_day/timezone changes, existing
-upcoming events now move to the new slot rather than staying stale
-and being duplicated by generate_upcoming_events. Collision with an
-already-existing row at the new slot deletes the stale row."
+When repeater day_of_week/time_of_day/timezone/starts_at/frequency
+changes, EventRepeaterViewSet detects the diff and passes
+realign_schedule=True. sync_future_events deletes UPCOMING rows whose
+scheduled_at is no longer in the repeater's occurrence set, then
+generate_events_for_repeater fills any gaps. Eliminates duplicate
+occurrences after schedule edits via the same _get_next_occurrences
+helper that generates new occurrences in the first place."
 ```
 
 ### Task 2.2: Reject `discord_signup_reminder*` for single events at the serializer
@@ -2629,21 +2908,43 @@ Edit `DiscordConfigSection.tsx`. Find the existing signup-reminder UI block (the
 )}
 ```
 
-The `isRepeater` prop already exists on this component (`EditEventModal.tsx:422` passes `false`, `EditRepeaterModal.tsx:504` passes `true`).
+- [ ] **Step 5: Fix `EditEventModal.tsx:422` — `isRepeater` is hardcoded `false`**
 
-- [ ] **Step 5: Run the test — confirm it passes**
+The component already accepts an `isRepeater` prop, but `EditEventModal.tsx:422` passes `false` unconditionally:
+
+```bash
+grep -n "isRepeater=" frontend/app/components/events/EditEventModal.tsx
+```
+
+Expected output: `isRepeater={false}`. This means the gated block from Step 4 will be hidden even when editing an event that IS part of a repeater (legitimate signup-reminder UX). Replace with the actual condition:
+
+```tsx
+// before
+isRepeater={false}
+
+// after
+isRepeater={event?.event_repeater != null}
+```
+
+(`CreateEventModal.tsx` likely has the same pattern with whatever boolean drives "is this a repeater?" — check and align.)
+
+- [ ] **Step 6: Run the test — confirm it passes**
 
 ```bash
 just test::pw::spec 16-events/05
 ```
 
-Expected: PASS.
+Expected: PASS — fields hidden when the event has no repeater, visible when it does.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add frontend/app/components/events/DiscordConfigSection.tsx frontend/tests/playwright/e2e/16-events/05-event-form-validation.spec.ts
-git commit -m "feat(events): hide signup-reminder fields on single-event forms"
+git add frontend/app/components/events/DiscordConfigSection.tsx frontend/app/components/events/EditEventModal.tsx frontend/app/components/events/CreateEventModal.tsx frontend/tests/playwright/e2e/16-events/05-event-form-validation.spec.ts
+git commit -m "feat(events): conditionally render signup-reminder fields on event forms
+
+Gate signup_reminder + signup_reminder_hours UI on isRepeater. Fix
+EditEventModal's hardcoded isRepeater={false} so repeater-occurrence
+events show the fields correctly."
 ```
 
 ### Task 2.4: Zod cross-field rule for single-vs-repeater event schemas (`superRefine`)
@@ -2976,7 +3277,7 @@ EOF
 - Q8 hours <= 0 skip → Task 1.7 (`if hours <= 0: continue`)
 - Q9 announcement scheduled not immediate → Task 1.9
 - Q10 UI binding verified → no task; pre-implementation finding documented in spec
-- Q11 lease pattern (Option A) → Tasks 1.2 (schema), 1.2.5 (helpers + sync_send refactor), 1.3/1.4/1.5 (reminder tasks), 1.13 (concurrency test), 1.13.5 (sweeper)
+- Q11 lease pattern (Option B — worker passes channel_id + embed_data at claim time) → Tasks 1.2 (schema with partial unique on `success IS NOT FALSE`), 1.2.5 (claim/finalize helpers + sync_send_embed refactor with auth via existing `_auth`/`_perm` decorators), 1.3 (reminder tasks; `send_subscriber_notifications` gets explicit lease bracketing since it uses `sync_send_dm` not `sync_send_embed`), 1.4/1.5 (extracted reminder tasks), 1.13 (concurrency test), 1.13.5 (60s sweeper handling both NULL pending AND aged-out failures)
 - Q12 frontend deploy ordering → Phase 0 (expanded Task 0.1) ships before Phase 1
 - Q13 cacheops invalidate_model → Task 1.14 (runbook)
 
@@ -3002,7 +3303,26 @@ EOF
 **Severity 4 (deploy):**
 - Runbook reordered: migrate → invalidate_model → restart workers → restart beat (Task 1.14)
 - Beat-vs-worker rolling-deploy guidance explicit (Task 1.14)
-- Stale-lease sweeper added at 5-min cadence (Task 1.13.5)
+- Stale-lease sweeper added at 60s cadence with dual-mode handling (Task 1.13.5)
+
+**Third-pass review-finding coverage:**
+- C1 (lease INSERT violates non-null fields): Resolved by Option B — worker passes `channel_id` + `embed_data` at claim time (Tasks 1.2, 1.2.5). `_row()` test helper supplies both.
+- `send_subscriber_notifications` not lease-protected: Task 1.3 Step 4 wraps the entire DM loop in explicit claim/finalize.
+- `@csrf_exempt` regression: Task 1.2.5 Step 4 uses the project's existing `@authentication_classes(_auth) @permission_classes(_perm)` decorator stack.
+- `base_fields` placeholder: Task 1.10 enumerates the actual `["name", "description"]` shared fields plus the three mixin-introspected `*_FIELDS` constants from `services.py:530-538`.
+- `_compute_occurrence_datetime` TODO: Task 2.1 reuses the existing `_get_next_occurrences` helper at `services.py:551`. No new helper needed.
+- Task 1.10 cascade reframed: `DISCORD_CONFIG_FIELDS` is auto-built from `DiscordEventConfigMixin._meta.get_fields()` (line 536-538), so the cascade was always automatic. Task 1.10 just adds `invalidate_after_commit` and a list return; new mixin-coverage CI test ensures registry fields stay on the mixin.
+- Task 1.6 registry test imports `events.tasks` explicitly to avoid vacuous pass under `current_app.tasks.get` lookups.
+- Task 1.8 mock target corrected: `events.scheduling.fire.fire_due_reminders` (where the lookup happens at call time), not `events.tasks.fire_due_reminders`.
+- Task 1.8 stale-comment text rewritten to reference the lease pattern, not the rejected partial-index-after-send design.
+- Task 1.9 explicitly addresses other call sites of `send_event_announcement` (TASK_MAP at views.py:1184, tasks.py:150) — preserved as manual-trigger paths protected by the lease.
+- Task 0.1 cleans `DISCORD_CONFIG_DEFAULTS` constant in `schemas.ts` (the spread source for all 4 modals' `defaultValues`).
+- Task 0.1 path corrected: `frontend/app/components/api/eventsAPI.ts`. Interfaces are `EventRepeaterType` and `OrgEventDefaultsType` (no `Event` interface in this file).
+- Task 2.3 fixes hardcoded `isRepeater={false}` on EditEventModal:422.
+- Task 2.6 path is `frontend/app/hooks/useEvent.ts:185` (verified — code-reviewer was wrong on this one; v3 path was correct).
+- Task 1.2 unique constraint is now PARTIAL on `success IS NOT FALSE`, so transient Discord failures don't permanently brick reminders. The 1-hour failure-aging in the sweeper bounds the retry budget.
+- Task 1.2 Step 7 adds a pre-flight check for pre-existing duplicates that would block the migration.
+- Task 1.13.5 cadence reduced to 60s (vs 5min) to keep total worker-crash recovery latency <1.5 min.
 
 **Placeholder scan:** No "TBD" / "implement later" / generic "add error handling" found. Each task code block is complete and self-contained.
 
