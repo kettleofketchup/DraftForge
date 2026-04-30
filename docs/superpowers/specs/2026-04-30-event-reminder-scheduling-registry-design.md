@@ -8,10 +8,11 @@
 
 Replace the current ad-hoc reminder polling with a small declarative registry of `ScheduledReminder` entries so dead fields become impossible, edits to un-fired reminders are honored automatically, and adding a fifth reminder type is a one-line registry entry. Pair it with a row-level fix in `sync_future_events` that recomputes `scheduled_at` on series day/time edits to eliminate duplicate occurrences and "reminder posts on the wrong day" symptoms.
 
-This is delivered as **two PRs**:
+This is delivered as **three PRs across three releases** (deploy ordering matters — see Risks and rollout):
 
-1. **PR-1 — Registry + dead-field cleanup.** Architectural change. Migrates the four wired reminders into a registry, wires the announcement reminder (currently a dead field), drops the duplicate `discord_subscriber_dm*` fields, and adds a CI test that fails when a `discord_*_hours` field has no consumer.
-2. **PR-2 — Series row-level fixes.** `sync_future_events` recomputes `scheduled_at` (or deletes-and-regenerates) on day/time/timezone edits; `discord_signup_reminder*` fields hidden on single events.
+1. **PR-0 — Frontend Zod loosen.** One-file frontend change that makes `discord_subscriber_dm*` `.optional()` in Zod schemas. Ships first, isolates the frontend from PR-1's column drop. Sits on production one release cycle before PR-1.
+2. **PR-1 — Registry + dead-field cleanup + idempotency guard.** Backend architectural change. Migrates the four wired reminders into a declarative registry (string task names, `current_app.send_task`); wires the announcement reminder (currently a dead field) as scheduled rather than immediate; drops the duplicate `discord_subscriber_dm*` fields (destructive migration); adds a Postgres partial unique index on `DiscordMessageLog(source, source_id) WHERE success = TRUE` to prevent polling-overlap double-fires; adds `invalidate_after_commit` calls in `sync_future_events` and `EventRepeaterViewSet.perform_update`; adds a CI test that fails when a `discord_*_hours` field has no consumer or when the slim serializer omits a registered field.
+3. **PR-2 — Series row-level fixes + frontend cleanup.** `sync_future_events` recomputes `scheduled_at` on day/time/timezone edits (eliminates duplicate occurrences); frontend conditional rendering of signup-reminder fields on single events with Zod discriminated union; modal `defaultValues` cleanup; Playwright spec fix; TanStack Query invalidation gap closed.
 
 **Edit-cascade policy:** **once fired, sticky.** Edits to reminder timing fields are honored on the next poll *only if the reminder has not already fired*. Already-fired reminders are never re-fired — preserves the "no double-DM" guarantee. Recovery from a wrongly-fired reminder is a manual admin action (delete the `DiscordMessageLog` row); the row-level fix in PR-2 prevents the most common cause (stale `scheduled_at` after series edits) from happening in the first place.
 
@@ -54,7 +55,8 @@ events/scheduling/
 @dataclass(frozen=True)
 class ScheduledReminder:
     key: str                            # unique id, e.g. "announcement"
-    task: Callable                      # the celery task to .delay()
+    task_name: str                      # full dotted celery task name,
+                                        # e.g. "events.tasks.send_event_announcement"
     hours_field: str                    # "discord_announcement_hours"
     enabled_field: str                  # "discord_announcement"
     required_states: frozenset[str]     # {"upcoming", "signups_open"}
@@ -62,13 +64,15 @@ class ScheduledReminder:
     requires_repeater: bool = False     # signup_reminder=True, others=False
 ```
 
+**Why `task_name: str` and not `task: Callable`:** Celery dispatches by string name through its task registry, not by Python reference. Storing a callable risks circular imports (the registry module gets imported by `events.tasks`, which would re-import the registry) and silently breaks if the callable is referenced before it's been `@shared_task`-decorated. The fire path uses `current_app.send_task(reminder.task_name, args=[event_id])`, and a module-level validator in `registry.py` runs `current_app.tasks.get(name)` for every entry at import time and fails loud on missing task registrations.
+
 The full `REMINDERS` list (PR-1):
 
 ```python
 REMINDERS: list[ScheduledReminder] = [
     ScheduledReminder(
         key="announcement",
-        task=send_event_announcement,
+        task_name="events.tasks.send_event_announcement",
         hours_field="discord_announcement_hours",
         enabled_field="discord_announcement",
         required_states=frozenset({"upcoming", "signups_open"}),
@@ -76,7 +80,7 @@ REMINDERS: list[ScheduledReminder] = [
     ),
     ScheduledReminder(
         key="signup_reminder",
-        task=send_subscriber_notifications,
+        task_name="events.tasks.send_subscriber_notifications",
         hours_field="discord_signup_reminder_hours",
         enabled_field="discord_signup_reminder",
         required_states=frozenset({"signups_open"}),
@@ -85,7 +89,7 @@ REMINDERS: list[ScheduledReminder] = [
     ),
     ScheduledReminder(
         key="attendance_reminder",
-        task=send_attendance_reminder,  # extracted from inline code in check_event_reminders
+        task_name="events.tasks.send_attendance_reminder",  # extracted from inline code
         hours_field="discord_confirm_attendance_hours",
         enabled_field="discord_confirm_attendance",
         required_states=frozenset({"signups_open", "roll_call"}),
@@ -93,7 +97,7 @@ REMINDERS: list[ScheduledReminder] = [
     ),
     ScheduledReminder(
         key="profile_reminder",
-        task=send_profile_reminder,  # extracted from inline code
+        task_name="events.tasks.send_profile_reminder",  # extracted from inline code
         hours_field="discord_profile_reminder_hours",
         enabled_field="discord_profile_reminder",
         required_states=frozenset({"signups_open"}),
@@ -125,6 +129,8 @@ The "Discord notice" code path (`source="event_notice"`, fired separately by `se
 `fire.py:fire_due_reminders()` replaces the body of `check_event_reminders`:
 
 ```python
+from celery import current_app
+
 def fire_due_reminders():
     now = datetime.now(tz.utc)
     for reminder in REMINDERS:
@@ -139,12 +145,25 @@ def fire_due_reminders():
                 continue
             threshold = ev.scheduled_at - timedelta(hours=hours)
             if now >= threshold:
-                reminder.task.delay(ev.id)
+                current_app.send_task(reminder.task_name, args=[ev.id])
 ```
 
 `_candidates_for(reminder)` builds the `get_events_list(...)` filter from the reminder's `required_states` and `requires_repeater`. The shape of the existing `get_events_list` API stays the same.
 
 The existing `check_event_reminders` shared task name is preserved (still scheduled by celery beat at 30s), but its body becomes `fire_due_reminders()`. No celery beat schedule changes.
+
+### Concurrency and idempotency (preventing double-fires)
+
+The 30-second beat cadence creates an overlap window: if any per-event work in `fire_due_reminders` exceeds 30s — and the existing inline synchronous Discord HTTP calls (e.g., `tasks.py:816` in the attendance branch) can — then beat will queue a second `check_event_reminders` while the first is still running. Both will pass `check_message_log_exists` before either writes the log row, and both will dispatch the task. This double-fire is latent in the current code and would be inherited by the registry refactor unchanged.
+
+**Fix in PR-1:** add a database-level idempotency guard so `DiscordMessageLog` writes serialize:
+
+1. Add a unique constraint on `DiscordMessageLog(source, source_id)` filtered to `success=True` (Postgres partial index). The actual reminder tasks already write a `DiscordMessageLog` row on completion; the constraint forces a second concurrent task to fail with `IntegrityError` rather than silently sending a second message.
+2. The reminder tasks (`send_event_announcement`, `send_subscriber_notifications`, `send_attendance_reminder`, `send_profile_reminder`) wrap their "send + log" sequence in `@transaction.atomic` and use `DiscordMessageLog.objects.create(...)` — on `IntegrityError`, the task catches it and exits cleanly (the other worker won the race; nothing more to do).
+3. In `fire_due_reminders` itself, do not pre-create a log row. The dispatch is cheap; the constraint is what prevents duplicate side effects.
+4. Add Celery worker config for the `check_event_reminders` task: `task_acks_late=True` and `task_reject_on_worker_lost=True`. A worker that crashes mid-loop should requeue the task; without these flags, in-flight tasks vanish on worker SIGKILL.
+
+The unique constraint is the source of truth; the in-process `check_message_log_exists` check at the top of the fire loop is an optimization to avoid pointless dispatches, not a correctness primitive.
 
 ### How edits take effect
 
@@ -156,6 +175,17 @@ There is no separate sync function. Edits propagate naturally:
 
 The `DiscordMessageLog` table is unchanged. No new columns. No new helpers.
 
+### Cache invalidation
+
+`Event` and `EventRepeater` are cached by django-cacheops with a 60-minute TTL (`backend/backend/settings.py` `CACHEOPS` config). Cacheops auto-invalidates on `Model.save()` via post_save signals, but inside a `transaction.atomic()` block invalidation is deferred until commit, and there's a documented gotcha: bulk paths or paths that bypass the model's `save()` skip the signal entirely.
+
+**Two specific fixes required in PR-1:**
+
+1. **`sync_future_events` must call `invalidate_after_commit(event)` inside its per-row loop.** It currently uses `event.save(update_fields=[...])` inside `@transaction.atomic` with no explicit invalidation. With PR-1 expanding the cascade to the union of all `hours_field`/`enabled_field` values, a missed invalidation is exactly the stale-cache bug this spec is trying to prevent — the fire path would read pre-edit hours from a cached Event row.
+2. **`EventRepeaterViewSet.perform_update` must call `invalidate_after_commit(*future_events)` after `sync_future_events` returns.** Currently it only invalidates the repeater itself; the cascaded child events keep their old cached representation until the 60-min TTL expires.
+
+**Stale comment to fix:** the comment at `backend/events/tasks.py:742-743` says "DiscordMessageLog is NOT cached by cacheops, so queries always hit the DB." This is wrong — `discordbot.discordmessagelog` is in `CACHEOPS` with a 60-minute TTL. The comment misleads anyone reasoning about idempotency. Update the comment to: "DiscordMessageLog is cached by cacheops (60-min TTL); cacheops invalidates on insert, so the first successful write flips `exists=False` to `exists=True` immediately for all subsequent polls. Concurrent polls can still race — see DB unique constraint in the reminder tasks for the actual idempotency guarantee."
+
 ### Recovery from a wrongly-fired reminder
 
 When PR-2's row-level fix is in place, the most common cause of wrong-day fires (stale `scheduled_at` after series day/time edits) is gone. For events where a reminder fired wrongly *before* PR-2 ships, recovery is manual: a site admin deletes the relevant `DiscordMessageLog` row in Django admin (`source=<reminder_log_source>, source_id=<event_id>`) and the next poll re-evaluates against the current threshold.
@@ -164,11 +194,14 @@ If admin-action recovery becomes a frequent ask, a follow-up PR can add a "Re-ar
 
 ### CI guardrail — kills the bug class
 
-A test in `events/tests/test_scheduling_registry.py` enumerates every model field on `Event` (and `EventRepeater`) matching the regex `^discord_.*_hours$` and asserts that each appears as some `ScheduledReminder.hours_field`. Adding a new reminder field without a registry entry fails CI.
+A test in `events/tests/test_scheduling_registry.py` enforces three layered assertions:
 
-Symmetric assertion: every `enabled_field` referenced in `REMINDERS` resolves to a real boolean field on `Event`. Catches typos.
+1. **Model coverage:** every field on `Event` and `EventRepeater` matching `^discord_.*_hours$` appears as some `ScheduledReminder.hours_field`. Adding a new reminder field without a registry entry fails CI.
+2. **Symmetric resolution:** every `enabled_field` referenced in `REMINDERS` resolves to a real boolean field on `Event`. Catches typos.
+3. **Serializer round-trip:** every `hours_field` and `enabled_field` in `REMINDERS` is exposed by `EventSlimSerializer` (the serializer used by `get_events_list`, which the fire path consumes). Without this assertion, the registry could declare a reminder whose timing field is silently omitted from the slim serializer payload — `getattr(ev, hours_field)` would return the model default rather than the edited value, and the fire path would compute a threshold against the wrong number. This guardrail closes that gap.
+4. **Task-name validity:** every `task_name` in `REMINDERS` resolves via `current_app.tasks.get(name)` at import time. Catches typos and missing `@shared_task` decorations before deploy.
 
-This single test would have prevented the `discord_announcement_hours` and `discord_subscriber_dm_hours` dead-field incidents.
+This combined test would have prevented the `discord_announcement_hours` and `discord_subscriber_dm_hours` dead-field incidents and would prevent the slim-serializer trap that the registry refactor newly introduces.
 
 ### Edit-cascade policy
 
@@ -183,32 +216,68 @@ The rule reduces to: **once fired, sticky** and **edits affect un-fired reminder
 
 ### Series row-level fixes (PR-2)
 
-PR-2 is independent of the registry but fixes the third bug class:
+PR-2 is independent of the registry but fixes the third bug class. Frontend scope is non-trivial — the spec previously understated it.
 
-1. In `sync_future_events`, before saving each upcoming occurrence, recompute `scheduled_at` from the repeater's `day_of_week`/`time_of_day`/`timezone`/`starts_at` if any of those changed. Keep the (`event_repeater`, `scheduled_at`) unique constraint to detect collisions, and on collision delete the old row and regenerate. This eliminates duplicates.
-2. Hide `discord_signup_reminder` and `discord_signup_reminder_hours` from single-event forms (frontend `EventForm` conditional on `event_repeater_id`) and reject them in `EventSerializer.validate` for single events. Single events have no subscriber list; the field has no honest meaning.
-3. (`discord_subscriber_dm*` fields are dropped in PR-1, so no UI work is needed for them in PR-2.)
+**Backend:**
 
-PR-2 does not touch the registry. The registry's `requires_repeater=True` on `signup_reminder` already excludes single events from the fire path; PR-2 is purely about not lying to the user via the form.
+1. In `sync_future_events`, before saving each upcoming occurrence, recompute `scheduled_at` from the repeater's `day_of_week`/`time_of_day`/`timezone`/`starts_at` if any of those changed. Keep the (`event_repeater`, `scheduled_at`) unique constraint to detect collisions; on collision delete the old row and regenerate. This eliminates duplicates.
+2. Reject `discord_signup_reminder` / `discord_signup_reminder_hours` in `EventSerializer.validate` for single events (no `event_repeater`). Single events have no subscriber list; the field has no honest meaning.
+
+**Frontend (expanded per review):**
+
+3. **Conditional rendering** of the signup-reminder fields in `frontend/app/components/events/DiscordConfigSection.tsx` — gate the existing UI block on `isRepeater === true`. Unmount (don't `display: none`) for accessibility correctness. The component already accepts an `isRepeater` prop (`EditEventModal.tsx:422` passes `false`, `EditRepeaterModal.tsx:504` passes `true`) — extend the existing prop, no new prop needed.
+4. **Zod schema refinement** in `frontend/app/components/events/schemas.ts:246-247` — `discord_signup_reminder_hours` is currently `z.number().int().min(1)` unconditionally. Convert the relevant subset of `discordConfigSchema` to a discriminated union keyed on `event_repeater` (or use `superRefine`), so single events don't fail validation when the field is absent.
+5. **`defaultValues` cleanup** in the four modal components that currently set the dropped/conditional fields: `EditEventModal.tsx:113-114`, `CreateEventModal.tsx:112-113`, `EditOrgDefaultsModal.tsx:105-106`, `EditRepeaterModal.tsx:118-119`. The dropped `discord_subscriber_dm*` keys (PR-1) come out entirely; the `discord_signup_reminder*` keys stay only in the repeater modals.
+6. **Playwright spec update** at `frontend/tests/playwright/e2e/16-events/07-notification-dm.spec.ts:69-70` — currently references the dropped `discord_subscriber_dm[_hours]` fields and will fail once PR-1 ships. Either delete those assertions or rewrite to test `discord_notify_new_events` (the actual subscriber DM toggle).
+7. **TanStack Query invalidation** in `useUpdateEventMutation` (`frontend/app/components/events/useEvent.ts:185-194`) — currently invalidates `['events']` and `['event', eventId]` but not `['event-discord', eventId]` (consumed at `DiscordLogSection.tsx:38` with 15s polling) or `['event-task-schedule', eventId]` (`TaskScheduleSection.tsx:35`). After the registry refactor, edits that change reminder timing should invalidate both keys so the new fires_at appears in the UI immediately rather than waiting for the next 15s poll.
+
+PR-2 does not touch the registry. The registry's `requires_repeater=True` on `signup_reminder` already excludes single events from the fire path; PR-2 is about not lying to the user via the form and ensuring the UI reflects edits without a stale-data window.
 
 ## Files touched
 
-### PR-1 (registry + dead-field cleanup)
+### PR-0 (frontend Zod loosen — coordination prep)
+
+Ships *before* PR-1 and isolates the frontend from PR-1's destructive migration. Without it, the moment PR-1 deploys, every `getEvent`/`getEventRepeaters` call fails Zod parse and the form/list explode.
+
+- **Modified:** `frontend/app/components/events/schemas.ts` — make `discord_subscriber_dm` and `discord_subscriber_dm_hours` `.optional()` in `discordConfigSchema` (lines ~260-261) and `eventSchema` (lines ~84-85). Frontend tolerates either presence or absence.
+
+PR-0 deploys, sits on production for one release cycle, then PR-1 ships.
+
+### PR-1 (registry + dead-field cleanup + idempotency guard)
 
 - **New:** `backend/events/scheduling/__init__.py`, `registry.py`, `fire.py`
-- **Modified:** `backend/events/tasks.py` — `check_event_reminders` body becomes `fire_due_reminders()`; extract inline `attendance_reminder` and `profile_reminder` blocks into top-level shared tasks `send_attendance_reminder(event_id)` and `send_profile_reminder(event_id)` so they're registry-callable
-- **Modified:** `backend/events/views.py` — remove the three `notify_event_announced(event)` call sites (lines ~376, ~420, ~551). The scheduled fire path replaces them.
-- **Modified:** `backend/events/services.py` — remove the `notify_event_announced(event)` call in `generate_events_for_repeater` (line ~651); update `sync_future_events` to cascade the union of `REMINDERS` `hours_field` and `enabled_field` values rather than a hand-coded list
+- **Modified:** `backend/events/tasks.py` —
+    - `check_event_reminders` body becomes `fire_due_reminders()`
+    - Extract inline `attendance_reminder` and `profile_reminder` blocks into top-level shared tasks `send_attendance_reminder(event_id)` and `send_profile_reminder(event_id)` so they're registry-callable
+    - Wrap each reminder task's "send + log" sequence in `@transaction.atomic` and catch `IntegrityError` from `DiscordMessageLog` unique-constraint violations as a clean "lost the race; exit" path
+    - Update the stale comment at lines 742-743 to reflect that `DiscordMessageLog` IS cached by cacheops and that the unique constraint is the actual idempotency primitive
+    - Add `task_acks_late=True` and `task_reject_on_worker_lost=True` to `@shared_task` decorator on `check_event_reminders`
+- **Modified:** `backend/events/views.py` —
+    - Remove the three `notify_event_announced(event)` call sites (lines ~376, ~420, ~551); the scheduled fire path replaces them
+    - `EventRepeaterViewSet.perform_update` (lines ~190-195): after `sync_future_events` returns, call `invalidate_after_commit(*future_events)` so cascaded child events are not served stale from cacheops
+- **Modified:** `backend/events/services.py` —
+    - Remove the `notify_event_announced(event)` call in `generate_events_for_repeater` (line ~651)
+    - Update `sync_future_events` (line ~662) to cascade the union of `REMINDERS` `hours_field` and `enabled_field` values rather than a hand-coded list
+    - Add `invalidate_after_commit(event)` inside the per-row loop in `sync_future_events`
+    - `sync_future_events` returns the list of touched events so callers can chain `invalidate_after_commit(*future_events)`
 - **Modified or deleted:** `backend/events/discord/dispatch.py` — `notify_event_announced` has no remaining callers; either delete or leave for future use
-- **Migration:** `0XXX_remove_subscriber_dm_fields.py` (destructive — drops `discord_subscriber_dm` and `discord_subscriber_dm_hours` from both `Event` and `EventRepeater`)
-- **Modified:** `backend/events/serializers.py`, `backend/events/schemas.py` — remove the dropped subscriber-DM fields from all serializers and schema definitions
-- **New tests:** `backend/events/tests/test_scheduling_registry.py` — registry coverage assertion (every `discord_*_hours` field on `Event`/`EventRepeater` is in some `ScheduledReminder`); fire-path integration tests for each reminder type, including the new scheduled-announcement behavior
+- **Migrations:**
+    - `0XXX_remove_subscriber_dm_fields.py` (destructive — drops `discord_subscriber_dm` and `discord_subscriber_dm_hours` from both `Event` and `EventRepeater`)
+    - `0XXY_discord_message_log_unique_success.py` (additive — Postgres partial unique index on `DiscordMessageLog(source, source_id) WHERE success = TRUE`)
+- **Modified:** `backend/events/serializers.py`, `backend/events/schemas.py` — remove the dropped subscriber-DM fields from all serializers and schema definitions; verify `EventSlimSerializer` exposes every `hours_field` and `enabled_field` referenced in `REMINDERS`
+- **Modified:** `backend/config/celery.py` — confirm or add `task_acks_late` / `task_reject_on_worker_lost` defaults for the reminder queue (currently neither is set)
+- **Deploy step (not a code file):** run `cacheops.invalidate_model(Event)` and `invalidate_model(EventRepeater)` post-migration to flush cached pre-migration model instances that contain the dropped fields. Add to deploy script or release runbook.
+- **New tests:** `backend/events/tests/test_scheduling_registry.py` — model-coverage, symmetric-resolution, slim-serializer round-trip, and task-name validity assertions; fire-path integration tests for each reminder type including the new scheduled-announcement behavior; concurrency test that two parallel `fire_due_reminders` invocations result in exactly one `DiscordMessageLog` row (asserts the unique-constraint guard works)
 
 ### PR-2 (row-level fixes)
 
 - **Modified:** `backend/events/services.py` — `sync_future_events` recomputes `scheduled_at` on day/time/timezone changes; collision handling
-- **Modified:** `backend/events/serializers.py` — single-event validation rejecting `discord_signup_reminder*`
-- **Modified:** `frontend/app/components/events/EventForm/*` — hide signup-reminder fields on single events
+- **Modified:** `backend/events/serializers.py` — single-event validation rejecting `discord_signup_reminder*` when `event_repeater is None`
+- **Modified:** `frontend/app/components/events/DiscordConfigSection.tsx` — gate the signup-reminder UI block on the existing `isRepeater` prop; unmount rather than `display: none`
+- **Modified:** `frontend/app/components/events/schemas.ts` — convert `discordConfigSchema` to a discriminated union (or `superRefine`) keyed on `event_repeater` so single events validate without `discord_signup_reminder*`
+- **Modified:** `frontend/app/components/events/EditEventModal.tsx`, `CreateEventModal.tsx`, `EditOrgDefaultsModal.tsx`, `EditRepeaterModal.tsx` — `defaultValues` cleanup so `discord_signup_reminder*` is only present in repeater paths
+- **Modified:** `frontend/app/components/events/useEvent.ts` — `useUpdateEventMutation` invalidates `['event-discord', eventId]` and `['event-task-schedule', eventId]` in addition to existing keys
+- **Modified:** `frontend/tests/playwright/e2e/16-events/07-notification-dm.spec.ts` — remove or rewrite assertions that reference the dropped `discord_subscriber_dm[_hours]` fields
 - **New tests:** `backend/events/tests/test_sync_future_events_recompute.py`
 
 ## Decisions made
@@ -224,14 +293,29 @@ PR-2 does not touch the registry. The registry's `requires_repeater=True` on `si
 | Q7 | Edit policy | **Once fired, sticky.** Edits take effect on the next poll *only* for un-fired reminders. Already-fired reminders never re-fire. Recovery from wrong fires is manual admin cleanup of the `DiscordMessageLog` row. |
 | Q8 | `hours_field <= 0 or None` | Skip in fire path — treats as "this reminder is disabled for this event." |
 | Q9 | Announcement: immediate vs scheduled | **Scheduled** (Y). Remove immediate-dispatch `notify_event_announced` calls; the registry fires the announcement `discord_announcement_hours` before `scheduled_at`. The separate "new event notice" (`event_notice` log source) keeps its immediate dispatch — different concept. |
+| Q10 | "Message interested users" UI binding | Verified. The toggle in `DiscordConfigSection.tsx:317` writes to `discord_notify_new_events` (a live, working field). PR-1 dropping `discord_subscriber_dm*` is correct — those fields really are dead. |
+| Q11 | Idempotency primitive against polling overlap | **DB-level partial unique index** on `DiscordMessageLog(source, source_id) WHERE success = TRUE`. Tasks catch `IntegrityError` as a "lost the race; clean exit" path. Chosen over `select_for_update` (more invasive, requires changing every reminder task to acquire and hold a row lock for the duration of the Discord HTTP call) and over Redis `SET NX EX` (adds Redis-failure failure mode). DB-only, fail-loud. |
+| Q12 | Frontend deploy ordering for column drop | **PR-0 ships first**, loosens Zod schemas to `.optional()` for `discord_subscriber_dm*`. PR-1 ships one release later, drops the columns. Avoids the brief window where backend has dropped the field but frontend bundles still validate it as required. |
+| Q13 | Cacheops invalidation on destructive migration | Post-deploy step: `invalidate_model(Event)` + `invalidate_model(EventRepeater)` to flush cached pre-migration model instances that contain the dropped fields. Added to PR-1 release runbook. |
 
 ## Risks and rollout
 
-- **Subscriber-DM field removal** is destructive — the migration drops two columns each from `Event` and `EventRepeater`. Backups + a "deploy-time release notes" check, but no data loss since nothing reads these.
+**Deploy ordering (three releases):**
+
+1. **Release N — PR-0 (frontend Zod loosen).** Make `discord_subscriber_dm*` `.optional()` in Zod schemas. No backend changes. Risk: zero. Sits on production for one release cycle minimum to ensure all clients have the new bundle.
+2. **Release N+1 — PR-1 (registry + dead-field drop + idempotency guard).** Backend-only. Adds the Postgres partial unique index migration (additive, safe under concurrent writes; Postgres `CREATE UNIQUE INDEX CONCURRENTLY` if necessary). Drops the `discord_subscriber_dm*` columns (destructive — backups required). Removes synchronous `notify_event_announced` dispatch.
+3. **Release N+2 — PR-2 (row-level series fixes).** Backend `sync_future_events` recompute, frontend `DiscordConfigSection` conditional render, schema discriminated union, modal default cleanup, Playwright fix, query invalidation.
+
+**Risks per release:**
+
+- **PR-1 destructive migration** drops two columns each from `Event` and `EventRepeater`. Pre-deploy backup. No data loss since nothing reads these.
+- **PR-1 unique index** is additive but the `WHERE success = TRUE` predicate must match exactly the field name on `DiscordMessageLog`. Verify the column name (`success` vs `delivered` vs `succeeded`) before writing the migration.
+- **PR-1 worker config change** (`task_acks_late`, `task_reject_on_worker_lost`) — these are worker-level options, applied via `@shared_task(acks_late=True, reject_on_worker_lost=True)` decoration on `check_event_reminders`. Restart workers as part of deploy so the new options take effect.
+- **PR-1 cacheops post-deploy step:** run `invalidate_model(Event)` + `invalidate_model(EventRepeater)` after migration to flush cached pre-migration instances. Add to deploy runbook.
 - **Wiring up `discord_announcement_hours`** is a behavior change with two facets:
     - **The field becomes live** — production events with non-default values will fire announcements at the new timing. Worth a quick `SELECT id, discord_announcement_hours FROM events_event WHERE discord_announcement_hours <> 24 AND state IN ('upcoming', 'signups_open')` before deploy.
-    - **Announcements no longer post immediately on save.** Anyone who relied on the timing of "I save the event, the announcement appears in Discord seconds later" will see a delay equal to `scheduled_at - discord_announcement_hours`. Worth a one-line note in the release announcement and possibly a Discord ping to admin users. The "new event notice" (different message, different channel pattern) is unaffected — it still fires immediately.
-- **No `DiscordMessageLog` schema changes.** No worker-coordination risk.
+    - **Announcements no longer post immediately on save.** Anyone who relied on "I save the event, the announcement appears in Discord seconds later" will see a delay equal to `scheduled_at - discord_announcement_hours`. Worth a one-line note in the release announcement and a Discord ping to admin users. The "new event notice" (different message, different channel pattern) is unaffected — it still fires immediately.
+- **In-flight task name coexistence.** Old workers will still process the inline `attendance_reminder` and `profile_reminder` branches in `check_event_reminders` while new beat enqueues calls to `events.tasks.send_attendance_reminder` / `send_profile_reminder`. Solution: deploy new beat config last, after all workers are running new task definitions. Standard rolling-deploy hygiene.
 - **Recovery for already-stuck reminders is manual.** PR-2 prevents new wrong-day fires; events whose reminders fired wrongly *before* this ships need admin intervention to clear the `DiscordMessageLog` row. This is acceptable scope per the chosen edit policy (Option B).
 
 ## Open questions
