@@ -24,6 +24,7 @@ import {
 import { Textarea } from '~/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { ShieldCheck } from 'lucide-react';
+import { useLeagues } from '~/components/league/hooks/useLeagues';
 import { useUpdateEventMutation } from '~/hooks/useEvent';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
@@ -75,6 +76,7 @@ function toDatetimeLocal(iso: string): string {
 export function EditEventModal({ event, open, onOpenChange }: EditEventModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const mutation = useUpdateEventMutation(event?.id ?? 0);
+  const { leagues, isLoading: isLoadingLeagues } = useLeagues(event?.organization);
 
   const form = useForm<EditEventInput>({
     resolver: zodResolver(editEventSchema),
@@ -178,6 +180,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
       isSubmitting={isSubmitting}
       onSubmit={form.handleSubmit(onSubmit)}
       size="lg"
+      data-testid="edit-event-modal"
     >
       <Form {...form}>
         <Tabs defaultValue="event">
@@ -273,6 +276,50 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
               <FormMessage />
             </FormItem>
           )}
+        />
+
+        <FormField
+          control={form.control}
+          name="tournament_league"
+          render={({ field }) => {
+            const noLeagues = !isLoadingLeagues && leagues.length === 0;
+            return (
+              <FormItem>
+                <FormLabel>League</FormLabel>
+                <FormControl>
+                  <Select
+                    value={field.value ? String(field.value) : ''}
+                    onValueChange={(v) => field.onChange(parseInt(v, 10))}
+                    disabled={isLoadingLeagues || noLeagues}
+                  >
+                    <SelectTrigger data-testid="edit-event-tournament-league">
+                      <SelectValue
+                        placeholder={
+                          isLoadingLeagues
+                            ? 'Loading…'
+                            : noLeagues
+                            ? 'No leagues for this organization — create one first.'
+                            : 'Select a league'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {leagues.map((league) => (
+                        <SelectItem
+                          key={league.pk}
+                          value={String(league.pk)}
+                          data-testid={`league-option-${league.pk}`}
+                        >
+                          {league.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
