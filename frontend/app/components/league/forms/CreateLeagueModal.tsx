@@ -35,7 +35,7 @@ export function CreateLeagueModal({
     resolver: zodResolver(CreateLeagueSchema),
     defaultValues: {
       organization_id: organizationId,
-      steam_league_id: undefined as number | undefined,
+      steam_league_id: null as number | null,
       name: '',
       description: '',
       rules: '',
@@ -74,15 +74,16 @@ export function CreateLeagueModal({
           name="steam_league_id"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Steam League ID</FormLabel>
+              <FormLabel>Steam League ID (optional)</FormLabel>
               <FormControl>
                 <Input
                   type="number"
-                  placeholder="12345"
+                  placeholder="Leave blank if this league has no Steam ID"
                   {...field}
+                  value={field.value ?? ''}
                   onChange={(e) =>
                     field.onChange(
-                      e.target.value ? parseInt(e.target.value, 10) : undefined
+                      e.target.value ? parseInt(e.target.value, 10) : null
                     )
                   }
                 />
