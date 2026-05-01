@@ -16,10 +16,12 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { getLogger } from '~/lib/logger';
 import { isUserEntry } from '~/store/userCacheTypes';
 import { PlayerRemoveButton } from '~/pages/tournament/tabs/players/playerRemoveButton';
+import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 import { RolePositions } from './positions';
 import { UserRemoveButton } from './userCard/deleteButton';
 import UserEditModal from './userCard/editModal';
+import type { EditUserScope } from './userCard/editUserSchema';
 import { LoginAsUserButton } from './userCard/LoginAsUserButton';
 const log = getLogger('UserCard');
 
@@ -40,12 +42,21 @@ export const UserCard: React.FC<Props> = memo(
   ({ user, saveFunc = 'save', compact, deleteButtonType, animationIndex = 0, leagueId, organizationId }) => {
     const currentUser: UserType = useUserStore((state) => state.currentUser);
     const getUsers = useUserStore((state) => state.getUsers);
+    const currentOrg = useOrgStore((state) => state.currentOrg);
     const { openPlayerModal } = useSharedPopover();
 
     const orgEntry = isUserEntry(user) && organizationId ? user.orgData[organizationId] : undefined;
     const mmr = isUserEntry(user)
       ? (organizationId ? orgEntry?.mmr : undefined)
       : user.mmr;
+
+    const editScope = React.useMemo<EditUserScope>(
+      () =>
+        orgEntry && currentOrg
+          ? { kind: 'org', organization: currentOrg }
+          : { kind: 'global' },
+      [orgEntry?.id, currentOrg?.pk],
+    );
 
     const handleViewProfile = () => {
       openPlayerModal(user, { leagueId, organizationId });
@@ -200,11 +211,16 @@ export const UserCard: React.FC<Props> = memo(
             <CardAction className="flex items-center gap-1">
               <LoginAsUserButton user={user} />
               {(currentUser.is_staff || currentUser.is_superuser) && (
-                <UserEditModal user={new User(
-                  isUserEntry(user) && orgEntry
-                    ? { ...user, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
-                    : user
-                )} />
+                <UserEditModal
+                  user={
+                    new User(
+                      isUserEntry(user) && orgEntry
+                        ? { ...user, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
+                        : user,
+                    )
+                  }
+                  scope={editScope}
+                />
               )}
               <ViewIconButton
                 onClick={handleViewProfile}
