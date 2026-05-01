@@ -128,14 +128,14 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
             )}
           </DialogHeader>
 
-          <ScrollArea className="max-h-[calc(100vh-10rem)] sm:max-h-[60vh] pr-4">
+          <ScrollArea className="max-h-[calc(100svh-10rem)] sm:max-h-[60vh] pr-4">
             <form onSubmit={handleSubmit} className="space-y-4">
               {children}
             </form>
           </ScrollArea>
 
           {showFooter && (
-            <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <DialogFooter className="flex-row justify-end gap-2">
               <Button
                 type="button"
                 onClick={() => onOpenChange(false)}
