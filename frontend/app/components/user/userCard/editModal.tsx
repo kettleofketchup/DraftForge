@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { UserClassType } from '~/components/user/types';
 import { EditIconButton } from '~/components/ui/buttons';
@@ -30,6 +31,7 @@ interface Props {
 
 export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Props) {
   const canEdit = useScopedEditPermission(scope);
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const showMmr = scope.kind !== 'global' && (fields?.mmr ?? true);
 
@@ -71,6 +73,13 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
       const payload = pickDirty(data, dirtyFields);
       const updated = await dispatchPatch(user, scope, payload);
       useUserCacheStore.getState().upsert([updated], scopeToContext(scope));
+      // Invalidate any TanStack Query subscribers (e.g. UserProfilePage's
+      // useQuery({ queryKey: ['user', pk] })) that don't read from the
+      // Zustand user cache. Without this, profile pages serve stale data
+      // until a manual refetch / page reload.
+      if (user.pk) {
+        queryClient.invalidateQueries({ queryKey: ['user', user.pk] });
+      }
       toast.success(`${user.username} updated`);
       setOpen(false);
     } catch (err) {
