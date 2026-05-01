@@ -310,9 +310,11 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     // 11. Click the confirm button
     await dialog.getByTestId('mmr-modal-approve').click();
 
-    // 12. Verify the modal closed and the signup status changed to approved
+    // 12. Verify the modal closed and the signup status changed to approved.
+    // The success toast also contains "Approved", so use .first() to pick the
+    // signup status badge (Playwright strict mode flags the duplicate match).
     await expect(dialog).not.toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('approved')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('approved').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('Discord tab shows empty state for fresh event', async ({ context, page }) => {
