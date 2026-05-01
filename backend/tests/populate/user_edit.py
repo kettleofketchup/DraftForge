@@ -17,7 +17,7 @@ from app.models import CustomUser, League, Organization, PositionsModel, Tournam
 from tests.data.leagues import USER_EDIT_LEAGUE
 from tests.data.organizations import USER_EDIT_ORG
 from tests.data.tournaments import USER_EDIT_TOURNAMENT
-from tests.data.users import ADMIN_USER, USER_EDIT_USERS
+from tests.data.users import ADMIN_USER, ORG_ADMIN_USER, USER_EDIT_USERS
 from tests.populate.utils import ensure_league_user, ensure_org_user
 
 
@@ -86,6 +86,15 @@ def populate_user_edit_data(force=False):
     if admin_user and admin_user not in edit_org.admins.all():
         edit_org.admins.add(admin_user)
         print(f"  Added {admin_user.username} as admin of {USER_EDIT_ORG.name}")
+
+    # 4b. Add the existing non-staff org-admin test user (pk=1020) as admin of
+    #     User Edit Org so 09-scope-permissions.spec can verify the scope-aware
+    #     permission gate (org admin can edit on org page, cannot on profile page).
+    #     ORG_ADMIN_USER is created by populate.users.populate_users_data().
+    org_admin_user = CustomUser.objects.filter(pk=ORG_ADMIN_USER.pk).first()
+    if org_admin_user and org_admin_user not in edit_org.admins.all():
+        edit_org.admins.add(org_admin_user)
+        print(f"  Added {org_admin_user.username} as admin of {USER_EDIT_ORG.name}")
 
     # 5. Create edit test users and add to org/league/tournament
     for user_data in USER_EDIT_USERS:

@@ -11,10 +11,12 @@ import { Badge } from '~/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
 import { Skeleton } from '~/components/ui/skeleton';
-import type { UserType } from '~/components/user/types';
+import type { UserClassType, UserType } from '~/components/user/types';
+import { User } from '~/components/user/user';
 import { useUserStore } from '~/store/userStore';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { RolePositions } from '~/components/user/positions';
+import UserEditModal from '~/components/user/userCard/editModal';
 import { EditProfileModal } from './EditProfileModal';
 import { getLogger } from '~/lib/logger';
 
@@ -104,6 +106,15 @@ export function UserProfilePage() {
                       onClick={() => setEditModalOpen(true)}
                       tooltip="Edit Profile"
                       className="self-center sm:self-auto"
+                    />
+                  )}
+                  {!isOwnProfile && (
+                    // Global-scope edit modal: only renders the edit button
+                    // for superusers (useScopedEditPermission returns true on
+                    // 'global' kind only when is_superuser).
+                    <UserEditModal
+                      user={new User(user as UserClassType)}
+                      scope={{ kind: 'global' }}
                     />
                   )}
                 </div>

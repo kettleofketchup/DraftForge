@@ -210,18 +210,19 @@ export const UserCard: React.FC<Props> = memo(
             )}
             <CardAction className="flex items-center gap-1">
               <LoginAsUserButton user={user} />
-              {(currentUser.is_staff || currentUser.is_superuser) && (
-                <UserEditModal
-                  user={
-                    new User(
-                      isUserEntry(user) && orgEntry
-                        ? { ...user, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
-                        : user,
-                    )
-                  }
-                  scope={editScope}
-                />
-              )}
+              {/* UserEditModal performs its own scope-aware permission check
+                  via useScopedEditPermission and renders null when the current
+                  user lacks edit rights for the resolved scope. */}
+              <UserEditModal
+                user={
+                  new User(
+                    isUserEntry(user) && orgEntry
+                      ? { ...user, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
+                      : user,
+                  )
+                }
+                scope={editScope}
+              />
               <ViewIconButton
                 onClick={handleViewProfile}
                 tooltip="View Profile"
