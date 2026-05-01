@@ -182,6 +182,19 @@ class EventSlimSerializer(serializers.ModelSerializer):
             "signup_count",
             "confirmed_count",
             "event_repeater",
+            # Reminder fields needed by fire_due_reminders — see
+            # events/scheduling/registry.py REMINDERS list. Test
+            # tests/test_serializers.py::EventSlimSerializerReminderFieldsTest
+            # asserts these stay in sync with the registry.
+            "discord_announcement",
+            "discord_announcement_hours",
+            "discord_announcement_channel_id",
+            "discord_signup_reminder",
+            "discord_signup_reminder_hours",
+            "discord_confirm_attendance",
+            "discord_confirm_attendance_hours",
+            "discord_profile_reminder",
+            "discord_profile_reminder_hours",
         ]
 
 
