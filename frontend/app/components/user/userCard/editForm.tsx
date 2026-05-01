@@ -174,7 +174,7 @@ export const UserEditForm: React.FC<Props> = ({ form, showMmr, mmrLabel }) => {
         <h3 className="text-foreground text-center text-sm font-medium mb-3">
           Positions
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {POSITION_FIELDS.map(({ key, label }) => (
             <PositionSelect key={key} form={form} fieldKey={key} label={label} />
           ))}
