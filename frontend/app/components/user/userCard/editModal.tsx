@@ -97,7 +97,7 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
         submitLabel="Save Changes"
         isSubmitting={isSubmitting}
         onSubmit={form.handleSubmit(onSubmit)}
-        size="lg"
+        size="xl"
         data-testid="edit-user-modal"
       >
         <Form {...form}>
