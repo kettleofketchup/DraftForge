@@ -1101,6 +1101,7 @@ class UserSerializer(serializers.ModelSerializer):
             "pk",
             "username",
             "nickname",
+            "guildNickname",
             "is_staff",
             "is_active",
             "is_superuser",
@@ -1109,7 +1110,6 @@ class UserSerializer(serializers.ModelSerializer):
             "steam_account_id",
             "avatarUrl",
             "email",
-            "username",
             "date_joined",
             "teams",  # Include associated teams
             "positions",
