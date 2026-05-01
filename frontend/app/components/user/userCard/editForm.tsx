@@ -1,17 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import type { UserClassType, UserType } from '~/components/user/types';
-
-import { User } from '~/components/user';
-
-import { useUserStore } from '~/store/userStore';
-
-import { ScrollArea } from '@radix-ui/react-scroll-area';
-import { UserRoundPlusIcon } from 'lucide-react';
-import { toast } from 'sonner';
-import { SCROLLAREA_CSS_SMALL } from '~/components/reusable/modal';
+import React from 'react';
+import type { UseFormReturn } from 'react-hook-form';
+import {
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
-import { Label } from '~/components/ui/label';
-import { ScrollBar } from '~/components/ui/scroll-area';
 import {
   Select,
   SelectContent,
@@ -19,234 +15,181 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import { getLogger } from '~/lib/logger';
-const log = getLogger('editForm');
+import type { EditUserInput } from './editUserSchema';
 
 interface Props {
-  user: UserClassType; // Accepts both UserClassType and UserType
-  form: UserType;
-  setForm: React.Dispatch<React.SetStateAction<UserType>>;
-  setDiscordUser?: React.Dispatch<React.SetStateAction<User>>;
+  form: UseFormReturn<EditUserInput>;
+  showMmr: boolean;
+  mmrLabel: string;
 }
-export const UserToast = (title: string) => {
-  const toastTitle = () => {
-    return (
-      <div>
-        <UserRoundPlusIcon className="mr-2 h-4 w-4 inline-block" />
-        <span className="font-semibold">{title}</span>
-      </div>
-    );
-  };
-  toast(toastTitle(), {
-    description: 'Sunday, December 03, 2023 at 9:00 AM',
-  });
-};
-export const UserEditForm: React.FC<Props> = ({ user, form, setForm }) => {
-  const currentUser: UserType = useUserStore((state) => state.currentUser); // Zustand setter
-  const [errorMessage, setErrorMessage] = useState<
-    Partial<Record<keyof UserType, string>>
-  >({});
-  const isStaff = useUserStore((state) => state.isStaff);
 
-  const [statusMsg, setStatusMsg] = useState<string | null>('null');
+const POSITION_OPTIONS: Array<[number, string]> = [
+  [0, "0: Don't show this role"],
+  [1, '1: Favorite'],
+  [2, '2: Can play'],
+  [3, '3: If the team needs'],
+  [4, '4: I would rather not but I guess'],
+  [5, '5: Least Favorite'],
+];
 
-  const handleChange = (field: string, value: any) => {
-    log.debug('User form field changed:', field, value);
-    setForm((prev) => {
-      const newForm = { ...prev };
-      const fields = field.split('.');
-      if (fields.length > 1) {
-        // Handle nested properties
-        let current: any = newForm;
-        for (let i = 0; i < fields.length - 1; i++) {
-          if (!current[fields[i]]) {
-            current[fields[i]] = {};
-          }
-          current = current[fields[i]];
-        }
-        current[fields[fields.length - 1]] = value;
-        return newForm;
-      } else {
-        return { ...prev, [field]: value };
-      }
-    });
-  };
+type PositionKey = keyof EditUserInput['positions'];
 
-  // Note: Form state is initialized by the parent component (UserEditModal)
-  // Only reset if the user pk changes (different user being edited)
-  useEffect(() => {
-    if (user.pk && user.pk !== form.pk) {
-      log.debug('User changed, resetting form to new user data');
-      setForm(user as UserType);
-    }
-  }, [user.pk]);
+const POSITION_FIELDS: Array<{ key: PositionKey; label: string }> = [
+  { key: 'carry', label: 'Carry' },
+  { key: 'mid', label: 'Mid' },
+  { key: 'offlane', label: 'Offlane' },
+  { key: 'soft_support', label: 'Soft Support' },
+  { key: 'hard_support', label: 'Hard Support' },
+];
 
-  useEffect(() => {}, [user]);
-  if (!currentUser || (!currentUser.is_staff && !currentUser.is_superuser)) {
-    return (
-      <div className="text-error">
-        You do not have permission to edit users.
-      </div>
-    );
-  }
-
-  const inputView = (key: string & keyof UserClassType, label: string, type: string = 'text') => {
-    return (
-      <div className="w-full">
-        <Label className="font-semibold">{label}</Label>
-        <Input
-          data-testid={`edit-user-${key}`}
-          type={type}
-          placeholder={String(user[key] ?? '')}
-          value={String(form[key as keyof UserType] ?? '')}
-          onFocus={() => handleChange(key, user[key])}
-          disabled={!isStaff}
-          onChange={(e) =>
-            handleChange(key, e.target.value)
-          }
-          className={`input input-bordered w-full mt-1 ${errorMessage[key as keyof UserType] ? 'input-error' : ''}`}
-        />
-        {errorMessage[key as keyof UserType] && (
-          <p className="text-error text-sm mt-1">{errorMessage[key as keyof UserType]}</p>
-        )}
-      </div>
-    );
-  };
-  const positionChoices = () => {
-    return (
-      <SelectContent>
-        <SelectItem value="0">0: Don't show this role </SelectItem>
-        <SelectItem value="1">1: Favorite</SelectItem>
-        <SelectItem value="2">2: Can play</SelectItem>
-        <SelectItem value="3">3: If the team needs</SelectItem>
-        <SelectItem value="4">4: I would rather not but I guess</SelectItem>
-        <SelectItem value="5">5: Least Favorite </SelectItem>
-      </SelectContent>
-    );
-  };
-
-  const positionSelection = () => {
-    return (
-      <div className="form-control mt-5 align-center text-center mb-5 shadow-md p-4 rounded-lg bg-gray-800 hover:shadow-lg hover:shadow-gray-500/50 p-4 rounded-lg">
-        <label className="label font-bold">Positions</label>
-        <div className="flex flex-col md:flex-row md:cols-2 xl:cols-3 flex-wrap w-full items-center align-middle w-full gap-6 justify-center mt-2 ">
-          <div className="flex flex-col align-center items-center justify-center gap-2  ">
-            <Label className="carry-select font-semibold">Carry</Label>
-            <Select
-              onValueChange={(value) =>
-                handleChange('positions.carry', parseInt(value, 10))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={form.positions?.carry?.toString()}
-                  id="carry-select"
-                  className={`select select-bordered w-full mt-1 `}
-                />
-              </SelectTrigger>
-              {positionChoices()}
-            </Select>
-          </div>
-          <div className="flex flex-col align-center items-center justify-center gap-2  ">
-            <Label className="offlane-select font-semibold">Mid</Label>
-            <Select
-              onValueChange={(value) =>
-                handleChange('positions.mid', parseInt(value, 10))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={form.positions?.mid?.toString()}
-                  id="mid-select"
-                  className={`select select-bordered w-full mt-1`}
-                />
-              </SelectTrigger>
-              {positionChoices()}
-            </Select>
-          </div>
-          <div className="flex flex-col align-center items-center justify-center gap-2  ">
-            <Label className="mid-select font-semibold">Offlane</Label>
-            <Select
-              onValueChange={(value) =>
-                handleChange('positions.offlane', parseInt(value, 10))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={form.positions?.offlane?.toString()}
-                  id="offlane-select"
-                  className={`select select-bordered w-full mt-1 `}
-                />
-              </SelectTrigger>
-              {positionChoices()}
-            </Select>
-          </div>
-          <div className="flex flex-col align-center items-center justify-center gap-2  ">
-            <Label className="mid-select font-semibold">Soft Support</Label>
-            <Select
-              onValueChange={(value) =>
-                handleChange('positions.soft_support', parseInt(value, 10))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={form.positions?.soft_support?.toString()}
-                  id="soft-support-select"
-                  className={`select select-bordered w-full mt-1 `}
-                />
-              </SelectTrigger>
-              {positionChoices()}
-            </Select>
-          </div>
-          <div className="flex flex-col align-center items-center justify-center gap-2  ">
-            <Label className="mid-select font-semibold">Hard Support</Label>
-            <Select
-              onValueChange={(value) =>
-                handleChange('positions.hard_support', parseInt(value, 10))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue
-                  placeholder={form.positions?.hard_support?.toString()}
-                  id="hard-support-select"
-                  className={`select select-bordered w-full mt-1 `}
-                />
-              </SelectTrigger>
-              {positionChoices()}
-            </Select>
-          </div>
-        </div>
-      </div>
-    );
-  };
-  const title = () => {
-    var msg = 'Status: ';
-
-    if (statusMsg && statusMsg !== null && statusMsg !== 'null')
-      msg = statusMsg;
-    else {
-      msg += 'Editing ...';
-    }
-    log.debug('title', msg);
-
-    return msg;
-  };
-
+function PositionSelect({
+  form,
+  fieldKey,
+  label,
+}: {
+  form: UseFormReturn<EditUserInput>;
+  fieldKey: PositionKey;
+  label: string;
+}) {
   return (
-    <>
-      <ScrollArea className={`${SCROLLAREA_CSS_SMALL}`}>
-        <div className="flex flex-col justify-center align-center items-center w-full gap-4">
-          {inputView('nickname', 'Nickname: ')}
-          {inputView('mmr', 'MMR: ', 'number')}
-          {/* Position selection using checkboxes for PositionEnum */}
-          {positionSelection()}
-          {inputView('steam_account_id', 'Friend ID: ', 'number')}
-          {/* {inputView('discordId', 'Discord ID: ', 'number')} */}
-          {inputView('guildNickname', 'Discord Guild Nickname: ')}
+    <FormField
+      control={form.control}
+      name={`positions.${fieldKey}` as const}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <Select
+            value={String(field.value)}
+            onValueChange={(v) => field.onChange(parseInt(v, 10))}
+          >
+            <FormControl>
+              <SelectTrigger data-testid={`edit-user-${fieldKey}`}>
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              {POSITION_OPTIONS.map(([value, text]) => (
+                <SelectItem key={value} value={String(value)}>
+                  {text}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
+function StringField({
+  form,
+  fieldKey,
+  label,
+}: {
+  form: UseFormReturn<EditUserInput>;
+  fieldKey: 'nickname' | 'guildNickname';
+  label: string;
+}) {
+  return (
+    <FormField
+      control={form.control}
+      name={fieldKey}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <FormControl>
+            <Input
+              ref={field.ref}
+              name={field.name}
+              onBlur={field.onBlur}
+              value={field.value ?? ''}
+              onChange={(e) =>
+                field.onChange(e.target.value === '' ? null : e.target.value)
+              }
+              data-testid={`edit-user-${fieldKey}`}
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
+function NumberField({
+  form,
+  fieldKey,
+  label,
+}: {
+  form: UseFormReturn<EditUserInput>;
+  fieldKey: 'mmr' | 'steam_account_id';
+  label: string;
+}) {
+  return (
+    <FormField
+      control={form.control}
+      name={fieldKey}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <FormControl>
+            <Input
+              ref={field.ref}
+              name={field.name}
+              onBlur={field.onBlur}
+              type="number"
+              value={field.value ?? ''}
+              onChange={(e) => {
+                // Coerce to number on each keystroke so dirtyFields compares
+                // numeric-to-numeric (defaultValues are numbers from buildDefaults).
+                // Empty input → null (matches Zod's .nullable()).
+                const raw = e.target.value;
+                if (raw === '') {
+                  field.onChange(null);
+                } else {
+                  const n = Number(raw);
+                  field.onChange(Number.isFinite(n) ? n : raw);
+                }
+              }}
+              data-testid={`edit-user-${fieldKey}`}
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
+export const UserEditForm: React.FC<Props> = ({ form, showMmr, mmrLabel }) => {
+  // No outer <ScrollArea> — FormDialog already wraps its children in one.
+  return (
+    <div className="flex flex-col w-full gap-4">
+      <StringField form={form} fieldKey="nickname" label="Nickname" />
+      {showMmr && (
+        <NumberField form={form} fieldKey="mmr" label={mmrLabel} />
+      )}
+      <div className="bg-base-300 border border-border rounded-lg p-4">
+        <h3 className="text-foreground text-center text-sm font-medium mb-3">
+          Positions
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          {POSITION_FIELDS.map(({ key, label }) => (
+            <PositionSelect key={key} form={form} fieldKey={key} label={label} />
+          ))}
         </div>
-        <ScrollBar orientation="vertical" />
-        <ScrollBar orientation="horizontal" />
-      </ScrollArea>
-    </>
+      </div>
+      <NumberField
+        form={form}
+        fieldKey="steam_account_id"
+        label="Friend ID"
+      />
+      <StringField
+        form={form}
+        fieldKey="guildNickname"
+        label="Discord Guild Nickname"
+      />
+    </div>
   );
 };

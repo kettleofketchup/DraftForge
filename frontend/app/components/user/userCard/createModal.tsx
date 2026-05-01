@@ -31,7 +31,6 @@ import { User } from '~/components/user/user';
 
 import { DIALOG_CSS_SMALL } from '~/components/reusable/modal';
 import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
-import { UserEditForm } from '~/components/user/userCard/editForm';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { getLogger } from '~/lib/logger';
 import { handleSave } from './handleSaveHook';
@@ -128,11 +127,11 @@ export const UserCreateModal: React.FC<Props> = ({ query, setQuery }) => {
               />
             </div>
 
-            <UserEditForm
-              user={selectedDiscordUser}
-              form={form}
-              setForm={setForm}
-            />
+            {/* TODO(edit-user-migration): Restore field editor for new
+                user form. UserEditForm now requires a
+                UseFormReturn<EditUserInput>; the create flow needs its
+                own RHF setup, not addressed in Task 4. The user is still
+                created from the selected Discord user defaults below. */}
           </form>
 
           <DialogFooter>

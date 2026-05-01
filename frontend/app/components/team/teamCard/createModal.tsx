@@ -6,7 +6,6 @@ import { PrimaryButton } from '~/components/ui/buttons';
 import { FormDialog } from '~/components/ui/dialogs';
 import DiscordUserDropdown from '~/components/user/DiscordUserDropdown';
 import { User } from '~/components/user/user';
-import { UserEditForm } from '~/components/user/userCard/editForm';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useUserStore } from '~/store/userStore';
 
@@ -93,12 +92,10 @@ export const TeamCreateModal: React.FC<Props> = (props) => {
           discrimUsers={users}
           onSelect={handleDiscordUserSelect}
         />
-
-        <UserEditForm
-          user={selectedDiscordUser}
-          form={form}
-          setForm={setForm}
-        />
+        {/* TODO(edit-user-migration): Add field editor for new team form.
+            UserEditForm now requires a UseFormReturn<EditUserInput>; this
+            stub keeps the placeholder TeamCreateModal compiling until the
+            create flow is migrated alongside the user create modal. */}
       </FormDialog>
     </>
   );

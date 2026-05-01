@@ -36,14 +36,22 @@ export type EditUserScope =
 
 export type EditableField = keyof EditUserInput;
 
+// Coerce missing-or-empty string fields to null so Zod's `.nullable()`
+// branch accepts them (an empty string would otherwise hit the .min(2)
+// validator and block submission for users with no Discord nickname).
+function emptyToNull(v: string | null | undefined): string | null {
+  if (v == null) return null;
+  return v === '' ? null : v;
+}
+
 export function buildDefaults(
   user: UserClassType,
   scope: EditUserScope,
 ): EditUserInput {
   const base: Omit<EditUserInput, 'mmr'> = {
-    nickname: user.nickname ?? null,
+    nickname: emptyToNull(user.nickname),
     steam_account_id: user.steam_account_id ?? null,
-    guildNickname: user.guildNickname ?? null,
+    guildNickname: emptyToNull(user.guildNickname),
     positions: {
       carry: user.positions?.carry ?? 0,
       mid: user.positions?.mid ?? 0,
