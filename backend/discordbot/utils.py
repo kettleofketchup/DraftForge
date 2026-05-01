@@ -333,37 +333,19 @@ def sync_send_results_posted(tournament, channel_id=None):
     )
 
 
-def sync_send_embed_with_components(
+def sync_send_embed_with_components_no_log(
     channel_id,
     embed,
     components=None,
-    source=None,
-    source_id=None,
     forum_thread_name=None,
     content=None,
     allowed_mentions=None,
-    fired_by_user_id=None,
 ):
-    """Send an embed with components to a Discord channel.
+    """Discord HTTP send only — no logging side effect.
 
-    If forum_thread_name is provided, creates a forum thread instead of a regular
-    message. Falls back to regular message if forum thread creation fails.
-
-    For forum threads:
-    - The response contains the thread object with thread["id"] (thread channel ID)
-    - The initial message ID is at response["message"]["id"]
-    - Both are stored in DiscordMessageLog for later edits
-
-    Args:
-        channel_id: Discord channel ID (text or forum)
-        embed: Embed dict
-        components: Optional action row components
-        source: Log source identifier
-        source_id: Log source PK
-        forum_thread_name: If set, create a forum thread with this title
-
-    Returns:
-        dict: API response or None on error
+    Caller is responsible for the lease (claim before, finalize after).
+    Returns (response_data, status_code) on success; raises RequestException
+    on Discord error so caller can finalize with success=False.
     """
     embeds = embed if isinstance(embed, list) else [embed]
     message_content = {"embeds": embeds}
@@ -385,39 +367,153 @@ def sync_send_embed_with_components(
         url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages"
         payload = message_content
 
+    response = _rate_limited_request(
+        "POST", url, json=payload, headers=_get_headers()
+    )
+    response_data = response.json()
+    response.raise_for_status()
+    return response_data, response.status_code
+
+
+def sync_send_embed_with_components(
+    channel_id,
+    embed,
+    components=None,
+    source=None,
+    source_id=None,
+    forum_thread_name=None,
+    content=None,
+    allowed_mentions=None,
+    fired_by_user_id=None,
+):
+    """Lease-wrapped Discord embed send.
+
+    Acquires a pre-send lease via claim_discord_message_log (which writes a
+    success=None row to DiscordMessageLog). The partial unique index on
+    (source, source_id) WHERE success IS NOT FALSE serializes claim attempts
+    so only one worker reaches the Discord HTTP send. After the send,
+    finalize_discord_message_log flips success to True/False.
+
+    For source_id=None (anonymous sends, no dedup target), falls back to the
+    legacy post-send logging path — the lease pattern requires both source
+    and source_id to be meaningful for dedup.
+
+    Returns:
+        dict: API response with _message_log_id key on success
+        None: lease held by another worker, OR Discord send failed
+    """
+    from app.internal_client import (
+        claim_discord_message_log,
+        finalize_discord_message_log,
+    )
+
+    embeds = embed if isinstance(embed, list) else [embed]
     embed_data = embeds[0] if embeds else {}
 
-    try:
-        response = _rate_limited_request(
-            "POST", url, json=payload, headers=_get_headers()
+    # source_id=None can't participate in the lease (unique constraint
+    # bypasses NULL); fall back to the legacy post-send log path.
+    if source_id is None:
+        return _legacy_send_with_post_log(
+            channel_id, embed, components, source, source_id,
+            forum_thread_name, content, allowed_mentions, fired_by_user_id,
         )
-        response_data = response.json()
-        response.raise_for_status()
 
+    log_pk = claim_discord_message_log(
+        source=source or "unknown",
+        source_id=source_id,
+        channel_id=str(channel_id),
+        embed_data=embed_data,
+        fired_by_user_id=fired_by_user_id,
+    )
+    if log_pk is None:
+        log.info(
+            "Lease already held for %s:%s — skipping Discord send",
+            source, source_id,
+        )
+        return None
+
+    try:
+        response_data, status_code = sync_send_embed_with_components_no_log(
+            channel_id=channel_id,
+            embed=embed,
+            components=components,
+            forum_thread_name=forum_thread_name,
+            content=content,
+            allowed_mentions=allowed_mentions,
+        )
         if forum_thread_name and response_data.get("message"):
             msg_id = response_data["message"].get("id")
             log.info(
                 "Created forum thread '%s' in channel %s (source=%s, thread_id=%s)",
-                forum_thread_name,
-                channel_id,
-                source,
-                response_data.get("id"),
+                forum_thread_name, channel_id, source, response_data.get("id"),
             )
         else:
             msg_id = response_data.get("id")
             log.info(
                 "Sent embed to channel %s (source=%s, source_id=%s)",
-                channel_id,
-                source,
-                source_id,
+                channel_id, source, source_id,
             )
 
+        finalize_discord_message_log(
+            log_pk,
+            success=True,
+            discord_message_id=msg_id,
+            status_code=status_code,
+            response_data=response_data,
+        )
+        response_data["_message_log_id"] = log_pk
+        return response_data
+    except requests.RequestException as e:
+        status_code = (
+            getattr(e.response, "status_code", None)
+            if hasattr(e, "response") and e.response
+            else None
+        )
+        resp_data = None
+        try:
+            resp_data = (
+                e.response.json() if hasattr(e, "response") and e.response else None
+            )
+        except Exception:
+            pass
+        finalize_discord_message_log(
+            log_pk,
+            success=False,
+            status_code=status_code,
+            response_data=resp_data,
+        )
+        log.error("Failed to send to channel %s: %s", channel_id, e)
+        return None
+
+
+def _legacy_send_with_post_log(
+    channel_id, embed, components, source, source_id,
+    forum_thread_name, content, allowed_mentions, fired_by_user_id,
+):
+    """Pre-lease send + post-log path for callers without a meaningful source_id.
+
+    Used by anonymous/admin sends that can't participate in the lease
+    pattern. Same shape as the original sync_send_embed_with_components
+    pre-PR-1.
+    """
+    embeds = embed if isinstance(embed, list) else [embed]
+    embed_data = embeds[0] if embeds else {}
+    try:
+        response_data, status_code = sync_send_embed_with_components_no_log(
+            channel_id=channel_id, embed=embed, components=components,
+            forum_thread_name=forum_thread_name, content=content,
+            allowed_mentions=allowed_mentions,
+        )
+        if forum_thread_name and response_data.get("message"):
+            msg_id = response_data["message"].get("id")
+        else:
+            msg_id = response_data.get("id")
         log_pk = _log_discord_message(
             channel_id=channel_id,
             embed_data=embed_data,
             source=source,
             source_id=source_id,
-            status_code=response.status_code,
+            status_code=status_code,
             response_data=response_data,
             discord_message_id=msg_id,
             success=True,

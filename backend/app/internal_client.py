@@ -88,6 +88,67 @@ def create_message_log(**data):
     return _post("/discord/message-log/", data)
 
 
+def claim_discord_message_log(
+    *,
+    source: str,
+    source_id: int,
+    channel_id: str,
+    embed_data: dict,
+    fired_by_user_id: int | None = None,
+    tournament_log_id: int | None = None,
+):
+    """Acquire a pre-send lease for (source, source_id).
+
+    Returns the new DiscordMessageLog PK on success, or None if a row
+    already exists in pending or successful state for this (source, source_id).
+    Workers MUST call this BEFORE the Discord HTTP send so the partial
+    unique constraint can serialize concurrent claim attempts.
+    """
+    payload = {
+        "source": source,
+        "source_id": source_id,
+        "channel_id": channel_id,
+        "embed_data": embed_data,
+    }
+    if fired_by_user_id is not None:
+        payload["fired_by_user_id"] = fired_by_user_id
+    if tournament_log_id is not None:
+        payload["tournament_log_id"] = tournament_log_id
+
+    resp = _post("/discord/message-log/claim/", payload)
+    if resp is None:
+        return None  # network error — already logged
+    if resp.status_code == 409:
+        return None  # lease already held by another worker
+    if not resp.ok:
+        return None
+    return resp.json().get("id")
+
+
+def finalize_discord_message_log(
+    log_id: int,
+    *,
+    success: bool,
+    discord_message_id: str | None = None,
+    status_code: int | None = None,
+    response_data: dict | None = None,
+):
+    """Update the lease row to its final state after the Discord HTTP send.
+
+    Silently no-ops on 410 Gone — that means sweep_stale_discord_leases
+    reaped the row before finalize landed (rare, only on slow workers).
+    """
+    payload = {"success": success}
+    if discord_message_id is not None:
+        payload["discord_message_id"] = discord_message_id
+    if status_code is not None:
+        payload["status_code"] = status_code
+    if response_data is not None:
+        payload["response_data"] = response_data
+
+    return _post(f"/discord/message-log/{log_id}/finalize/", payload)
+
+
 def create_event_log(**data):
     """Create DiscordEventLog audit entry."""
     return _post("/discord/event-log/", data)
