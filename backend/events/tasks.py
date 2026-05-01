@@ -839,98 +839,27 @@ def fire_event_reminder(event_id, reminder_type, fired_by_user_id=None):
     return f"Fired {reminder_type} for event {event_id}"
 
 
-@shared_task
+@shared_task(acks_late=True, reject_on_worker_lost=True)
 def check_event_reminders():
-    """Check for events needing reminders. Runs every 30 seconds.
+    """Beat-scheduled every 30s. Delegates to the registry-driven fire path.
 
-    Idempotency: checks DiscordMessageLog for existing entries. DiscordMessageLog
-    is NOT cached by cacheops, so queries always hit the DB.
-    All reminders post to discord_announcement_channel_id (v1).
+    All reminder dispatch logic now lives in events.scheduling.fire — the
+    polling task is a thin wrapper so beat re-uses its existing schedule
+    name and cadence.
+
+    Idempotency:
+        DiscordMessageLog IS cached by cacheops (60-min TTL, invalidated
+        on insert). The check_message_log_exists short-circuit in
+        fire_due_reminders is a load-shedder — most polls hit it and skip
+        dispatch entirely. The actual correctness primitive is the partial
+        unique index on (source, source_id) WHERE success IS NOT FALSE,
+        which raises IntegrityError if two workers race past the cached
+        exists() check. Stale leases (NULL >5min, False >1hr) are reaped
+        by sweep_stale_discord_leases.
     """
-    from datetime import timedelta
+    from events.scheduling.fire import fire_due_reminders
 
-    from app.internal_client import (
-        check_message_log_exists,
-        create_event_log,
-        get_or_create_discord_event,
-    )
-    from events.discord import (
-        build_attendance_reminder_embed,
-        build_profile_reminder_embed,
-        build_signup_reminder_embed,
-    )
-
-    now = datetime.now(tz.utc)
-
-    def _log_reminder(event, source, response):
-        """Log reminder to DiscordEventLog for the Activity Log tab."""
-        guild_id = getattr(event.organization, "discord_server_id", None)
-        if not guild_id:
-            return
-        de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
-        if de_resp and de_resp.ok:
-            msg_log_id = response.get("_message_log_id") if response else None
-            create_event_log(
-                discord_event_id=de_resp.json().get("id"),
-                action=source,
-                target_type="DiscordMessageLog",
-                message_id=response.get("id") if response else None,
-                message_log_id=msg_log_id,
-                success=bool(response),
-            )
-
-    from app.internal_client import get_event_for_task, get_events_list
-
-    # 1. Signup reminders — DM subscribers who haven't signed up yet
-    signup_candidates = get_events_list(states="signups_open", has_repeater="true")
-    for ev in signup_candidates:
-        if not ev.get("discord_signup_reminder"):
-            continue
-        if check_message_log_exists("signup_reminder", ev["id"]):
-            continue
-        from dateutil.parser import isoparse
-
-        threshold = isoparse(ev["scheduled_at"]) - timedelta(
-            hours=ev.get("discord_signup_reminder_hours", 24)
-        )
-        if now >= threshold:
-            send_subscriber_notifications.delay(ev["id"])
-
-    # 2. Attendance confirmation reminders
-    attendance_candidates = get_events_list(
-        states="signups_open,roll_call", has_announcement_channel="true"
-    )
-    for ev in attendance_candidates:
-        if not ev.get("discord_confirm_attendance"):
-            continue
-        if check_message_log_exists("attendance_reminder", ev["id"]):
-            continue
-        from dateutil.parser import isoparse
-
-        threshold = isoparse(ev["scheduled_at"]) - timedelta(
-            hours=ev.get("discord_confirm_attendance_hours", 2)
-        )
-        if now >= threshold:
-            send_attendance_reminder.delay(ev["id"])
-
-    # 3. Profile completion reminders
-    profile_candidates = get_events_list(
-        states="signups_open", has_announcement_channel="true"
-    )
-    for ev in profile_candidates:
-        if not ev.get("discord_profile_reminder"):
-            continue
-        if check_message_log_exists("profile_reminder", ev["id"]):
-            continue
-        from dateutil.parser import isoparse
-
-        threshold = isoparse(ev["scheduled_at"]) - timedelta(
-            hours=ev.get("discord_profile_reminder_hours", 24)
-        )
-        if now >= threshold:
-            send_profile_reminder.delay(ev["id"])
-
-    return "Checked reminders"
+    return fire_due_reminders()
 
 
 @shared_task(acks_late=True, reject_on_worker_lost=True)
