@@ -215,6 +215,13 @@ export default function LeaguePage() {
           onOpenChange={setEditModalOpen}
           league={league}
           onSuccess={refetch}
+          onDeleted={() => {
+            const orgPk =
+              typeof league.organization === 'object'
+                ? league.organization?.pk
+                : null;
+            navigate(orgPk ? `/organizations/${orgPk}` : '/leagues');
+          }}
         />
       )}
     </div>

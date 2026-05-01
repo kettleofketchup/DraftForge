@@ -183,8 +183,14 @@ def process_rsvp(event, user, event_team=None):
 
 def staff_add_signup(event, user, event_team=None):
     """Staff-path signup. Allowed during SIGNUPS_OPEN or ROLL_CALL."""
+    from org.models import OrgUser
+
     if event.state not in (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL):
         raise ValueError("Event is not accepting signups.")
+    # Admin-added users join the organization so per-org data (MMR, history)
+    # has somewhere to live before they're approved.
+    if event.organization_id:
+        OrgUser.objects.get_or_create(user=user, organization=event.organization)
     return _create_signup(event, user, event_team=event_team)
 
 
@@ -207,12 +213,11 @@ def approve_signup(signup, mmr_override=None):
 
     # Apply MMR override when provided by an admin
     if mmr_override is not None:
-        try:
-            org_user = OrgUser.objects.get(
-                user=signup.user, organization=signup.event.organization
-            )
-        except OrgUser.DoesNotExist:
-            raise ValueError("User is not a member of this organization.")
+        if signup.event.organization_id is None:
+            raise ValueError("Cannot set MMR for an event without an organization.")
+        org_user, _ = OrgUser.objects.get_or_create(
+            user=signup.user, organization=signup.event.organization
+        )
         org_user.mmr = mmr_override
         org_user.has_active_dota_mmr = True
         org_user.dota_mmr_last_verified = tz.now()

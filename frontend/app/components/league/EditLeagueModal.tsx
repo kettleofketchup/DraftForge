@@ -4,7 +4,10 @@ import { Controller, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 
 import { AdminTeamSection } from '~/components/admin-team';
+import { DeleteLeagueDialog } from '~/components/league/DeleteLeagueDialog';
 import { useUpdateLeagueMutation } from '~/components/league/hooks/useUpdateLeagueMutation';
+import { useOrganization } from '~/components/organization';
+import { TrashIconButton } from '~/components/ui/buttons';
 import { FormDialog } from '~/components/ui/dialogs';
 import {
   Form,
@@ -16,7 +19,7 @@ import {
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { Textarea } from '~/components/ui/textarea';
-import { useIsLeagueAdmin } from '~/hooks/usePermissions';
+import { useIsLeagueAdmin, useIsOrganizationAdmin } from '~/hooks/usePermissions';
 import { extractApiError } from '~/lib/apiError';
 import { EditLeagueSchema, type EditLeagueInput, type LeagueType } from './schemas';
 
@@ -25,6 +28,7 @@ interface EditLeagueModalProps {
   onOpenChange: (open: boolean) => void;
   league: LeagueType;
   onSuccess?: () => void;
+  onDeleted?: () => void;
 }
 
 export function EditLeagueModal({
@@ -32,9 +36,15 @@ export function EditLeagueModal({
   onOpenChange,
   league,
   onSuccess,
+  onDeleted,
 }: EditLeagueModalProps) {
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isLeagueAdmin = useIsLeagueAdmin(league);
+  const orgPk =
+    typeof league.organization === 'object' ? league.organization?.pk : undefined;
+  const { organization: parentOrg } = useOrganization(orgPk);
+  const isOrgAdmin = useIsOrganizationAdmin(parentOrg);
 
   const form = useForm<EditLeagueInput>({
     resolver: zodResolver(EditLeagueSchema),
@@ -203,6 +213,37 @@ export function EditLeagueModal({
           league={league}
           onUpdate={onSuccess}
         />
+      )}
+
+      {isOrgAdmin && league.pk != null && (
+        <>
+          <div className="border-t border-border/60 pt-4 mt-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium">Danger zone</p>
+                <p className="text-xs text-muted-foreground">
+                  Deleting a league is permanent and cannot be undone.
+                </p>
+              </div>
+              <TrashIconButton
+                size="sm"
+                tooltip="Delete league"
+                onClick={() => setDeleteDialogOpen(true)}
+                data-testid="open-delete-league-dialog"
+              />
+            </div>
+          </div>
+
+          <DeleteLeagueDialog
+            open={deleteDialogOpen}
+            onOpenChange={setDeleteDialogOpen}
+            league={league}
+            onDeleted={() => {
+              onOpenChange(false);
+              onDeleted?.();
+            }}
+          />
+        </>
       )}
     </FormDialog>
   );

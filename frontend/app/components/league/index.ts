@@ -9,4 +9,5 @@ export { LeaguePopover } from './LeaguePopover';
 export { LeagueTabs } from './LeagueTabs';
 export { CreateLeagueModal } from './forms/CreateLeagueModal';
 export { EditLeagueModal } from './EditLeagueModal';
+export { DeleteLeagueDialog } from './DeleteLeagueDialog';
 export { InfoTab, TournamentsTab, MatchesTab } from './tabs';

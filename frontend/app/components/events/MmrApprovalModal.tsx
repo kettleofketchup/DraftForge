@@ -21,7 +21,11 @@ import {
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { Badge } from '~/components/ui/badge';
-import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
+import {
+  ConfirmButton,
+  SecondaryButton,
+} from '~/components/ui/buttons';
+import { cn } from '~/lib/utils';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
 import { RolePositions } from '~/components/user/positions';
@@ -67,7 +71,9 @@ interface MmrApprovalModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onApprove: (signupId: number, mmr: number) => void;
+  onReject?: (signupId: number) => void;
   isApproving?: boolean;
+  isRejecting?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +84,9 @@ export function MmrApprovalModal({
   open,
   onOpenChange,
   onApprove,
+  onReject,
   isApproving = false,
+  isRejecting = false,
 }: MmrApprovalModalProps) {
   const form = useForm<MmrFormValues>({
     resolver: zodResolver(mmrSchema),
@@ -97,6 +105,13 @@ export function MmrApprovalModal({
       form.reset({ mmr: defaultMmr });
     }
   }, [signup, open]);
+
+  const watchedMmr = form.watch('mmr');
+  const previousMmr = signup?.org_user_mmr ?? null;
+  const mmrDelta =
+    previousMmr != null && Number.isFinite(watchedMmr)
+      ? watchedMmr - previousMmr
+      : null;
 
   if (!signup) return null;
 
@@ -230,23 +245,77 @@ export function MmrApprovalModal({
                       onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
                     />
                   </FormControl>
+                  {mmrDelta != null && mmrDelta !== 0 && (
+                    <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-border/60 bg-base-300 px-3 py-2">
+                      <span
+                        data-testid="mmr-delta"
+                        className={cn(
+                          'text-xs font-mono',
+                          mmrDelta > 0 ? 'text-emerald-400' : 'text-rose-400',
+                        )}
+                      >
+                        {previousMmr!.toLocaleString()} → {watchedMmr.toLocaleString()} ({mmrDelta > 0 ? '+' : ''}
+                        {mmrDelta.toLocaleString()})
+                      </span>
+                      <div className="flex gap-1.5">
+                        <SecondaryButton
+                          type="button"
+                          size="sm"
+                          color="emerald"
+                          onClick={() => {
+                            // Accept the change — already in form state, just acknowledge.
+                            // No-op visually; included for explicit affordance.
+                          }}
+                          data-testid="accept-mmr-change"
+                        >
+                          Accept change
+                        </SecondaryButton>
+                        <SecondaryButton
+                          type="button"
+                          size="sm"
+                          color="red"
+                          onClick={() => field.onChange(previousMmr ?? 0)}
+                          data-testid="reject-mmr-change"
+                        >
+                          Reject change
+                        </SecondaryButton>
+                      </div>
+                    </div>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
             />
 
             <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
-              <CancelButton
+              <SecondaryButton
                 type="button"
                 onClick={() => onOpenChange(false)}
-                disabled={isApproving}
-              />
+                disabled={isApproving || isRejecting}
+                data-testid="mmr-modal-close"
+              >
+                Close
+              </SecondaryButton>
+              {onReject && (
+                <ConfirmButton
+                  type="button"
+                  variant="destructive"
+                  loading={isRejecting}
+                  disabled={isApproving}
+                  onClick={() => onReject(signup.id)}
+                  data-testid="mmr-modal-reject"
+                >
+                  Reject
+                </ConfirmButton>
+              )}
               <ConfirmButton
                 type="submit"
                 variant="success"
                 loading={isApproving}
+                disabled={isRejecting}
+                data-testid="mmr-modal-approve"
               >
-                Approve & Set MMR
+                Approve
               </ConfirmButton>
             </DialogFooter>
           </form>

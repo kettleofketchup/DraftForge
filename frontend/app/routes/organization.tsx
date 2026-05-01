@@ -591,11 +591,13 @@ export default function OrganizationDetailPage() {
           />
         )}
 
-        <EditEventModal
-          event={editingEvent}
-          open={editingEvent !== null}
-          onOpenChange={(open) => { if (!open) setEditingEvent(null); }}
-        />
+        {editingEvent && (
+          <EditEventModal
+            event={editingEvent}
+            open={true}
+            onOpenChange={(open) => { if (!open) setEditingEvent(null); }}
+          />
+        )}
 
         <EditRepeaterModal
           repeater={repeaters.find((r) => r.id === editingRepeaterId) ?? null}

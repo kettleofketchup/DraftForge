@@ -90,6 +90,7 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useOrganization } from '~/components/organization';
 import { usePageNav } from '~/hooks/usePageNav';
+import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
@@ -712,8 +713,11 @@ function SignupsTab({
   const handleAddUser = useCallback(async (payload: { user_id: number }) => {
     const resp = await adminAddSignup(eventId!, payload.user_id);
     queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+    // Backend now adds the user as an OrgUser when admin signs them up; reset
+    // the org-users cache so the org page reflects the new membership.
+    if (orgId) useOrgStore.getState().clearOrgUsers();
     return resp;
-  }, [eventId, queryClient]);
+  }, [eventId, orgId, queryClient]);
   const checkIsAdded = useCallback((user: { pk: number }) => signupUserPks.has(user.pk), [signupUserPks]);
 
   return (
@@ -853,11 +857,28 @@ function SignupsTab({
         );
 
         if (user) {
+          // Prefer the org-approved MMR (per-organization, set by admins) over
+          // the user's self-reported PlayerDotaProfile mmr — the latter is
+          // commonly unset and shows as 0.
+          const baseProfile = signup.dota_profile as DotaProfileData | null;
+          const stripProfile = baseProfile
+            ? { ...baseProfile, mmr: signup.org_user_mmr ?? baseProfile.mmr }
+            : signup.org_user_mmr != null
+              ? ({
+                  positions: { pos_1: false, pos_2: false, pos_3: false, pos_4: false, pos_5: false },
+                  rank_status: 'never',
+                  rank_medal: null,
+                  mmr: signup.org_user_mmr,
+                  rank_screenshot: null,
+                  battlecup_screenshot: null,
+                  battle_cup_tier: null,
+                } as DotaProfileData)
+              : null;
           return (
             <UserEventStrip
               key={signup.id}
               user={user}
-              dotaProfile={signup.dota_profile as DotaProfileData | null}
+              dotaProfile={stripProfile}
               contextSlot={statusSlot}
               actionSlot={adminActions}
             />
@@ -890,11 +911,43 @@ function SignupsTab({
         open={!!approvalSignup}
         onOpenChange={(open) => { if (!open) setApprovalSignup(null); }}
         onApprove={(signupId, mmr) => {
+          const previousMmr = approvalSignup?.org_user_mmr ?? null;
+          const playerName =
+            approvalSignup?.user_data?.username ??
+            approvalSignup?.username ??
+            `User #${approvalSignup?.user ?? signupId}`;
           signupActions.approve.mutate({ id: signupId, mmr }, {
-            onSuccess: () => setApprovalSignup(null),
+            onSuccess: () => {
+              setApprovalSignup(null);
+              if (orgId) useOrgStore.getState().clearOrgUsers();
+              if (previousMmr != null && previousMmr !== mmr) {
+                const delta = mmr - previousMmr;
+                toast.success(
+                  `Approved ${playerName} — MMR ${previousMmr.toLocaleString()} → ${mmr.toLocaleString()} (${delta > 0 ? '+' : ''}${delta.toLocaleString()})`,
+                );
+              } else if (previousMmr == null) {
+                toast.success(`Approved ${playerName} at MMR ${mmr.toLocaleString()}`);
+              } else {
+                toast.success(`Approved ${playerName} (MMR unchanged at ${mmr.toLocaleString()})`);
+              }
+            },
           });
         }}
         isApproving={signupActions.approve.isPending}
+        isRejecting={signupActions.reject.isPending}
+        onReject={(signupId) => {
+          const playerName =
+            approvalSignup?.user_data?.username ??
+            approvalSignup?.username ??
+            `User #${approvalSignup?.user ?? signupId}`;
+          signupActions.reject.mutate(signupId, {
+            onSuccess: () => {
+              setApprovalSignup(null);
+              toast.success(`Rejected signup for ${playerName}`);
+            },
+            onError: () => toast.error(`Failed to reject ${playerName}`),
+          });
+        }}
       />
       <ConfirmDialog
         open={!!removeSignup}
