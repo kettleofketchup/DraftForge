@@ -23,7 +23,9 @@ import { Input } from '~/components/ui/input';
 import { Badge } from '~/components/ui/badge';
 import {
   ConfirmButton,
+  DestructiveButton,
   SecondaryButton,
+  SubmitButton,
 } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -288,14 +290,14 @@ export function MmrApprovalModal({
             />
 
             <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
-              <SecondaryButton
+              <DestructiveButton
                 type="button"
                 onClick={() => onOpenChange(false)}
                 disabled={isApproving || isRejecting}
                 data-testid="mmr-modal-close"
               >
                 Close
-              </SecondaryButton>
+              </DestructiveButton>
               {onReject && (
                 <ConfirmButton
                   type="button"
@@ -308,15 +310,13 @@ export function MmrApprovalModal({
                   Reject
                 </ConfirmButton>
               )}
-              <ConfirmButton
-                type="submit"
-                variant="success"
+              <SubmitButton
                 loading={isApproving}
                 disabled={isRejecting}
                 data-testid="mmr-modal-approve"
               >
                 Approve
-              </ConfirmButton>
+              </SubmitButton>
             </DialogFooter>
           </form>
         </Form>
