@@ -733,14 +733,14 @@ function SignupsTab({
     <div className="space-y-3">
       {isAdmin && eventId && (state === EventState.SIGNUPS_OPEN || state === EventState.ROLL_CALL) && (
         <div className="flex justify-end">
-          <SecondaryButton
+          <PrimaryButton
             size="sm"
             onClick={() => setAddUserOpen(true)}
             data-testid="admin-add-signup-btn"
           >
             <UserPlus className="h-4 w-4 mr-1" />
             Add User
-          </SecondaryButton>
+          </PrimaryButton>
           {addUserOpen && (
             <AddUserModal
               open={addUserOpen}
