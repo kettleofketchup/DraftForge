@@ -59,7 +59,7 @@ export const UserCard: React.FC<Props> = memo(
     );
 
     const handleViewProfile = () => {
-      openPlayerModal(user, { leagueId, organizationId });
+      openPlayerModal(user, { organizationId: currentOrg?.pk, leagueId });
     };
 
     useEffect(() => {

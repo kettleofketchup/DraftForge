@@ -7,6 +7,8 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { PlayerModal } from '~/components/player/PlayerModal';
 import { TeamModal } from '~/components/team/TeamModal';
 import { TeamPopoverContent } from '~/components/team/TeamPopoverContent';
+import { useLeagueStore } from '~/store/leagueStore';
+import { useOrgStore } from '~/store/orgStore';
 
 // Player popover content
 const PlayerPopoverContent: React.FC<{
@@ -60,6 +62,9 @@ export const SharedPopoverRenderer: React.FC = () => {
     setTeamModalOpen,
   } = useSharedPopover();
 
+  const currentOrg = useOrgStore((s) => s.currentOrg);
+  const currentLeague = useLeagueStore((s) => s.currentLeague);
+
   const popoverRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const isHoveringPopoverRef = useRef(false);
@@ -98,11 +103,14 @@ export const SharedPopoverRenderer: React.FC = () => {
 
   const handleClick = useCallback(() => {
     if (state.type === 'player' && state.player) {
-      openPlayerModal(state.player);
+      openPlayerModal(state.player, {
+        organizationId: currentOrg?.pk,
+        leagueId: currentLeague?.pk,
+      });
     } else if (state.type === 'team' && state.team) {
       openTeamModal(state.team);
     }
-  }, [state, openPlayerModal, openTeamModal]);
+  }, [state, openPlayerModal, openTeamModal, currentOrg?.pk, currentLeague?.pk]);
 
   // Don't render if not open
   if (!state.isOpen) {
