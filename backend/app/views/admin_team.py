@@ -737,6 +737,18 @@ def update_org_user(request, org_id, org_user_id):
             setattr(org_user, field, request.data[field])
             org_updated.append(field)
 
+    # An admin-set MMR should count as an active, verified value so it shows
+    # up wherever org_user_mmr is read (event signups, etc.). approve_signup
+    # already does this; mirror it here.
+    if "mmr" in request.data:
+        from django.utils import timezone as tz
+
+        org_user.has_active_dota_mmr = True
+        org_user.dota_mmr_last_verified = tz.now()
+        for f in ("has_active_dota_mmr", "dota_mmr_last_verified"):
+            if f not in org_updated:
+                org_updated.append(f)
+
     # --- Base CustomUser fields ---
     USER_FIELDS = {"nickname", "steam_account_id", "guildNickname"}
     user = org_user.user

@@ -40,7 +40,7 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   Bell,
   BellOff,
@@ -92,6 +92,7 @@ import { useOrganization } from '~/components/organization';
 import { usePageNav } from '~/hooks/usePageNav';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
+import { isUserEntry } from '~/store/userCacheTypes';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import api from '~/components/api/axios';
@@ -118,6 +119,14 @@ export default function EventPage() {
   const { organization: eventOrg } = useOrganization(event?.organization ?? undefined);
   // Permission check uses backend-derived flag (covers org staff AND league staff).
   const isAdmin = event?.user_can_manage ?? false;
+
+  // Populate the org users cache so signup rows can read per-org MMR via the
+  // user entity adapter (UserEntry.orgData[orgId].mmr).
+  useEffect(() => {
+    if (event?.organization) {
+      useOrgStore.getState().getOrgUsers(event.organization);
+    }
+  }, [event?.organization]);
 
   // Mutations
   const queryClient = useQueryClient();
@@ -857,18 +866,22 @@ function SignupsTab({
         );
 
         if (user) {
-          // Prefer the org-approved MMR (per-organization, set by admins) over
-          // the user's self-reported PlayerDotaProfile mmr — the latter is
-          // commonly unset and shows as 0.
+          // Prefer the org-approved MMR via the user entity adapter
+          // (UserEntry.orgData[orgId].mmr) over self-reported dota_profile.mmr.
+          // Fall back to signup.org_user_mmr from the API if the cache is cold.
           const baseProfile = signup.dota_profile as DotaProfileData | null;
+          const orgMmr =
+            (orgId && isUserEntry(user) ? user.orgData[orgId]?.mmr : undefined) ??
+            signup.org_user_mmr ??
+            null;
           const stripProfile = baseProfile
-            ? { ...baseProfile, mmr: signup.org_user_mmr ?? baseProfile.mmr }
-            : signup.org_user_mmr != null
+            ? { ...baseProfile, mmr: orgMmr ?? baseProfile.mmr }
+            : orgMmr != null
               ? ({
                   positions: { pos_1: false, pos_2: false, pos_3: false, pos_4: false, pos_5: false },
                   rank_status: 'never',
                   rank_medal: null,
-                  mmr: signup.org_user_mmr,
+                  mmr: orgMmr,
                   rank_screenshot: null,
                   battlecup_screenshot: null,
                   battle_cup_tier: null,

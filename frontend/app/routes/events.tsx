@@ -78,22 +78,22 @@ function EventCard({ event }: { event: EventType }) {
     <Link to={`/events/${event.id}`} data-testid={`event-card-${event.id}`}>
       <Card className="hover:border-primary/50 transition-colors cursor-pointer">
         <CardHeader>
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="font-semibold truncate" data-testid="event-card-name">
-              {event.name}
-            </h3>
-            <EventStateBadge state={event.state} />
-          </div>
+          <h3 className="font-semibold truncate" data-testid="event-card-name">
+            {event.name}
+          </h3>
           <p className="text-sm text-muted-foreground">{event.organization_name}</p>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col gap-1 text-sm text-muted-foreground">
-            <span>{formattedDate}</span>
-            <span>
-              {event.signup_count} signup{event.signup_count !== 1 ? 's' : ''}
-              {' / '}
-              {event.confirmed_count} confirmed
-            </span>
+          <div className="flex items-end justify-between gap-2">
+            <div className="flex flex-col gap-1 text-sm text-muted-foreground min-w-0">
+              <span>{formattedDate}</span>
+              <span>
+                {event.signup_count} signup{event.signup_count !== 1 ? 's' : ''}
+                {' / '}
+                {event.confirmed_count} confirmed
+              </span>
+            </div>
+            <EventStateBadge state={event.state} className="shrink-0" />
           </div>
         </CardContent>
       </Card>

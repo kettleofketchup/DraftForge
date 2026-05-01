@@ -414,7 +414,12 @@ class EventSignupSerializer(serializers.ModelSerializer):
             return None
 
     def get_org_user_mmr(self, obj):
-        """Return the previously admin-approved MMR for this user in the event's org."""
+        """Return the OrgUser MMR for this user in the event's org.
+
+        We surface any non-zero MMR for display purposes regardless of the
+        has_active_dota_mmr flag — that flag is for requirements gating
+        (auto-approve), not for whether the value is shown.
+        """
         from org.models import OrgUser
 
         try:
@@ -423,7 +428,7 @@ class EventSignupSerializer(serializers.ModelSerializer):
             )
         except OrgUser.DoesNotExist:
             return None
-        return org_user.mmr if org_user.has_active_dota_mmr else None
+        return org_user.mmr if org_user.mmr else None
 
 
 class OrgEventDefaultsSerializer(serializers.ModelSerializer):
