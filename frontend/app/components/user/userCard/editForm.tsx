@@ -107,7 +107,7 @@ function StringField({
   label,
 }: {
   form: UseFormReturn<EditUserInput>;
-  fieldKey: 'nickname' | 'guildNickname';
+  fieldKey: 'nickname';
   label: string;
 }) {
   return (
@@ -203,11 +203,6 @@ export const UserEditForm: React.FC<Props> = ({ form, showMmr, mmrLabel }) => {
         form={form}
         fieldKey="steam_account_id"
         label="Friend ID"
-      />
-      <StringField
-        form={form}
-        fieldKey="guildNickname"
-        label="Discord Guild Nickname"
       />
     </div>
   );
