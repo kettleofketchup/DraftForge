@@ -668,11 +668,28 @@ def sync_future_events(repeater):
 
     Only updates events that haven't progressed past 'upcoming' state
     (i.e. signups haven't opened yet), so in-progress events are untouched.
+
+    Returns the list of touched Event instances so callers can chain a
+    single invalidate_after_commit at the end of the request — necessary
+    because cacheops post_save signals defer invalidation until commit
+    inside @transaction.atomic, but the explicit batched call ensures
+    the children are invalidated even if signal handlers race.
+
+    The cascade iterates DISCORD_CONFIG_FIELDS, which is auto-built from
+    DiscordEventConfigMixin._meta.get_fields() (services.py:536-538), so
+    every reminder field defined on the mixin is automatically copied.
+    The CI guardrail RegistryMixinCoverageTest enforces that registry
+    fields stay on the mixin — so this function never silently misses a
+    registered reminder.
     """
-    future_events = Event.objects.filter(
-        event_repeater=repeater,
-        state=EventState.UPCOMING,
-    ).select_related("tournament")
+    from app.cache_utils import invalidate_after_commit
+
+    future_events = list(
+        Event.objects.filter(
+            event_repeater=repeater,
+            state=EventState.UPCOMING,
+        ).select_related("tournament")
+    )
     shared_fields = ["name", "description"]
     update_fields = (
         shared_fields
@@ -680,7 +697,6 @@ def sync_future_events(repeater):
         + EVENT_CONFIG_FIELDS
         + DISCORD_CONFIG_FIELDS
     )
-    updated = 0
     for event in future_events:
         for field_name in shared_fields:
             setattr(event, field_name, getattr(repeater, field_name))
@@ -690,6 +706,14 @@ def sync_future_events(repeater):
         event.tournament_date = event.scheduled_at
         event.save(update_fields=update_fields + ["tournament_date", "updated_at"])
         sync_tournament_from_event(event)
-        updated += 1
-    logger.info("Synced %d upcoming events for repeater %s", updated, repeater.pk)
-    return updated
+
+    # Single batched invalidation post-commit
+    if future_events:
+        invalidate_after_commit(*future_events)
+
+    logger.info(
+        "Synced %d upcoming events for repeater %s",
+        len(future_events),
+        repeater.pk,
+    )
+    return future_events

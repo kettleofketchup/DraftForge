@@ -191,8 +191,9 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
         from app.cache_utils import invalidate_after_commit
 
         repeater = serializer.save()
-        invalidate_after_commit(repeater)
-        sync_future_events(repeater)
+        future_events = sync_future_events(repeater)
+        # Single batched invalidation — repeater + every cascaded child
+        invalidate_after_commit(repeater, *future_events)
 
     @action(
         detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated]
