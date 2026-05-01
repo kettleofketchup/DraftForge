@@ -402,6 +402,57 @@ def send_attendance_reminder(event_id):
     return f"Sent attendance reminder for event {event_id}"
 
 
+@shared_task(acks_late=True, reject_on_worker_lost=True)
+def send_profile_reminder(event_id):
+    """Post the profile-completion reminder embed to the announcement channel.
+
+    Mirror of send_attendance_reminder — extracted from the inline block in
+    check_event_reminders for the same reason (keep polling fast, lease pattern
+    handles dedup).
+    """
+    from app.internal_client import (
+        create_event_log,
+        get_event_for_task,
+        get_or_create_discord_event,
+    )
+    from discordbot.utils import sync_send_embed_with_components
+    from events.discord import build_profile_reminder_embed
+
+    event = get_event_for_task(event_id)
+    if not event:
+        return f"Event {event_id} not found"
+    if not event.discord_announcement_channel_id:
+        return f"No channel for event {event_id}"
+    if not event.discord_profile_reminder:
+        return f"Profile reminder disabled for event {event_id}"
+
+    result = build_profile_reminder_embed(event)
+    response = sync_send_embed_with_components(
+        channel_id=event.discord_announcement_channel_id,
+        embed=result["embed"],
+        components=result.get("components"),
+        source="profile_reminder",
+        source_id=event.pk,
+    )
+    if response is None:
+        return f"Profile reminder for event {event_id}: lease held by another worker"
+
+    guild_id = getattr(event.organization, "discord_server_id", None)
+    if guild_id:
+        de_resp = get_or_create_discord_event(event_id=event.pk, guild_id=guild_id)
+        if de_resp and de_resp.ok:
+            create_event_log(
+                discord_event_id=de_resp.json().get("id"),
+                action="profile_reminder",
+                target_type="DiscordMessageLog",
+                message_id=response.get("id"),
+                message_log_id=response.get("_message_log_id"),
+                success=True,
+            )
+
+    return f"Sent profile reminder for event {event_id}"
+
+
 @shared_task
 def send_signup_update(event_id):
     """Edit the original announcement embed with updated signup lists.
@@ -877,20 +928,7 @@ def check_event_reminders():
             hours=ev.get("discord_profile_reminder_hours", 24)
         )
         if now >= threshold:
-            from discordbot.utils import sync_send_embed_with_components
-
-            event = get_event_for_task(ev["id"])
-            if not event:
-                continue
-            result = build_profile_reminder_embed(event)
-            response = sync_send_embed_with_components(
-                channel_id=event.discord_announcement_channel_id,
-                embed=result["embed"],
-                components=result.get("components"),
-                source="profile_reminder",
-                source_id=event.pk,
-            )
-            _log_reminder(event, "profile_reminder", response)
+            send_profile_reminder.delay(ev["id"])
 
     return "Checked reminders"
 
