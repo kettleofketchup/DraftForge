@@ -32,9 +32,10 @@ class ValidateSteamLeagueIdTest(TestCase):
         with self.assertRaises(ValidationError):
             self._validate(-1, instance=self.league)
 
-    def test_rejects_none(self):
-        with self.assertRaises(ValidationError):
-            self._validate(None, instance=self.league)
+    def test_accepts_none(self):
+        # steam_league_id is optional — leagues without a Steam ID are valid.
+        result = self._validate(None, instance=self.league)
+        self.assertIsNone(result)
 
     def test_rejects_collision_with_another_league(self):
         with self.assertRaises(ValidationError) as ctx:
