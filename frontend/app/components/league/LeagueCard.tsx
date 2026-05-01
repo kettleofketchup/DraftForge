@@ -24,7 +24,9 @@ export function LeagueCard({ league }: LeagueCardProps) {
               <Trophy className="w-5 h-5" />
               {league.name}
             </CardTitle>
-            <Badge variant="secondary">#{league.steam_league_id}</Badge>
+            {league.steam_league_id != null && (
+              <Badge variant="secondary">#{league.steam_league_id}</Badge>
+            )}
           </div>
           <CardDescription>
             {league.tournament_count} tournament

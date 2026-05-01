@@ -100,16 +100,16 @@ export function EditLeagueModal({
           name="steam_league_id"
           render={({ field, fieldState }) => (
             <FormItem>
-              <FormLabel>Steam League ID</FormLabel>
+              <FormLabel>Steam League ID (optional)</FormLabel>
               <FormControl>
                 <Input
                   type="number"
-                  placeholder="12345"
+                  placeholder="Leave blank if this league has no Steam ID"
                   data-testid="edit-league-steam-id"
                   value={field.value ?? ''}
                   onChange={(e) =>
                     field.onChange(
-                      e.target.value ? parseInt(e.target.value, 10) : undefined,
+                      e.target.value ? parseInt(e.target.value, 10) : null,
                     )
                   }
                 />

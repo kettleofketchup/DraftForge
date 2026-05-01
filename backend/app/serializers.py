@@ -412,7 +412,9 @@ class LeagueSerializer(serializers.ModelSerializer):
     # otherwise attach a UniqueValidator that shadows validate_steam_league_id
     # and produces a generic "already exists" message instead of our custom
     # "already in use by '<name>'" collision message.
-    steam_league_id = serializers.IntegerField()
+    # allow_null=True permits leagues without a Steam League ID; the unique
+    # constraint on the column ignores NULL (SQL treats NULLs as distinct).
+    steam_league_id = serializers.IntegerField(allow_null=True, required=False)
 
     class Meta:
         model = League
@@ -452,7 +454,9 @@ class LeagueSerializer(serializers.ModelSerializer):
         return first_org.name if first_org else None
 
     def validate_steam_league_id(self, value):
-        if value is None or value <= 0:
+        if value is None:
+            return value
+        if value <= 0:
             raise serializers.ValidationError(
                 "Steam league ID must be a positive integer."
             )

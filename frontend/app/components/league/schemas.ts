@@ -21,7 +21,7 @@ export const LeagueSchema = z.object({
   organization: LeagueOrganizationSchema.nullable().optional(),
   organization_id: z.number().optional(),
   organization_name: z.string().nullable().optional(), // Backwards compatibility
-  steam_league_id: z.number().min(1, 'Steam League ID is required'),
+  steam_league_id: z.number().nullable().optional(),
   name: z.string().min(1, 'Name is required').max(255),
   description: z.string().optional().default(''),
   rules: z.string().optional().default(''),
@@ -38,7 +38,7 @@ export const LeagueSchema = z.object({
 
 export const CreateLeagueSchema = z.object({
   organization_id: z.number().min(1, 'Organization is required'),
-  steam_league_id: z.number().min(1, 'Steam League ID is required'),
+  steam_league_id: z.number().min(1).nullable().optional(),
   name: z.string().min(1, 'Name is required').max(255),
   description: z.string().max(10000),
   rules: z.string().max(50000),
@@ -77,7 +77,7 @@ export type LeagueMatchType = z.infer<typeof LeagueMatchSchema>;
 // so we match that for muscle-memory consistency on the field-validation order
 // (rendering order is set in EditLeagueModal.tsx — Task 8).
 export const EditLeagueSchema = z.object({
-  steam_league_id: z.number().min(1, 'Steam League ID is required'),
+  steam_league_id: z.number().min(1).nullable().optional(),
   name: z.string().min(1, 'League name is required').max(255),
   description: z.string().max(10000),
   rules: z.string().max(50000),

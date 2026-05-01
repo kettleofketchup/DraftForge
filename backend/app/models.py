@@ -370,7 +370,7 @@ class League(models.Model):
         null=True,
         blank=True,
     )
-    steam_league_id = models.IntegerField(unique=True)
+    steam_league_id = models.IntegerField(unique=True, null=True, blank=True)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="", max_length=10000)
     rules = models.TextField(blank=True, default="", max_length=50000)

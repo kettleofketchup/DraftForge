@@ -77,6 +77,27 @@ test.describe.serial('Edit league + event fields @cicd', () => {
     await expect(page.getByText(`Steam ID: ${newId}`).first()).toBeVisible();
   });
 
+  test('edit league steam_league_id can be cleared (null is valid)', async ({ page, context }) => {
+    const eventInfo = await getEventsTestData(context);
+    await loginAdmin(context);
+
+    await visitAndWaitForHydration(page, `/leagues/${eventInfo.eventsLeaguePk}`);
+    await expect(page.getByTestId('edit-league-button')).toBeVisible({ timeout: 15000 });
+    await page.getByTestId('edit-league-button').click();
+
+    // Empty the input — Controller onChange emits null, schema accepts it,
+    // backend validator returns the value through, DB stores NULL (which the
+    // partial unique constraint ignores).
+    await page.getByTestId('edit-league-steam-id').fill('');
+    await page.getByTestId('edit-league-modal').getByTestId('form-dialog-submit').click();
+
+    await expect(
+      page
+        .locator('[data-sonner-toast][data-type="success"]')
+        .filter({ hasText: /updated successfully/i }),
+    ).toBeVisible();
+  });
+
   test('edit league steam_league_id collision', async ({ page, context }) => {
     const eventInfo = await getEventsTestData(context);
     await loginAdmin(context);

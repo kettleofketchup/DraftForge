@@ -56,7 +56,9 @@ export function LeaguePopover({ league, children }: LeaguePopoverProps) {
               <Trophy className="w-5 h-5" />
               <h4 className="font-semibold">{league.name}</h4>
             </div>
-            <Badge variant="secondary">#{league.steam_league_id}</Badge>
+            {league.steam_league_id != null && (
+              <Badge variant="secondary">#{league.steam_league_id}</Badge>
+            )}
           </div>
 
           <p className="text-sm text-muted-foreground">
