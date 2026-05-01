@@ -44,7 +44,7 @@ class ScheduledEventModelTest(TestCase):
         event = ScheduledEvent.objects.create(
             template=self.template,
             is_recurring=True,
-            day_of_week=0,  # Monday
+            day_of_week=0,  # Sunday
             time_of_day=time(19, 0),  # 7 PM
             next_post_at=timezone.now(),
         )

@@ -538,6 +538,16 @@ DISCORD_CONFIG_FIELDS = [
 ]
 
 
+def _python_weekday(sunday_zero_dow):
+    """Convert Sunday=0 day-of-week to Python's datetime.weekday() (Monday=0).
+
+    EventRepeater.day_of_week uses the JS/frontend convention (Sunday=0..Saturday=6)
+    to match `DAY_LABELS` in frontend/app/components/events/schemas.ts. Python's
+    `date.weekday()` returns Monday=0..Sunday=6, so we shift by one.
+    """
+    return (sunday_zero_dow - 1) % 7
+
+
 def _get_next_occurrences(repeater, from_date, to_date):
     """Calculate next occurrence datetimes for a repeater within a date range."""
     tz_info = ZoneInfo(repeater.timezone)
@@ -560,8 +570,9 @@ def _get_next_occurrences(repeater, from_date, to_date):
         RepeatFrequency.EVERY_TWO_WEEKS,
     ):
         step = 7 if repeater.frequency == RepeatFrequency.WEEKLY else 14
+        target_weekday = _python_weekday(repeater.day_of_week)
         current = max(from_date, repeater.starts_at)
-        while current.weekday() != repeater.day_of_week:
+        while current.weekday() != target_weekday:
             current += timedelta(days=1)
         while current <= end:
             dt = datetime.datetime.combine(

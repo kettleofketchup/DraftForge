@@ -229,7 +229,9 @@ export function useIsLeagueStaff(
 
 /**
  * Check if the current user can edit a tournament.
- * Requires league admin access.
+ *
+ * Mirrors the backend's `can_edit_tournament` cascade: site staff →
+ * org admin/staff → league admin/staff. Includes league staff.
  *
  * @param league - The league the tournament belongs to
  * @param organizations - The parent organizations
@@ -239,7 +241,7 @@ export function useCanEditTournament(
   league: LeagueType | null | undefined,
   organizations?: OrganizationType[] | OrganizationType | null
 ): boolean {
-  return useIsLeagueAdmin(league, organizations);
+  return useIsLeagueStaff(league, organizations);
 }
 
 /**

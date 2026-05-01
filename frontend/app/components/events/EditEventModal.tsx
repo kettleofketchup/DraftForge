@@ -24,6 +24,7 @@ import {
 import { Textarea } from '~/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { ShieldCheck } from 'lucide-react';
+import { useLeagues } from '~/components/league/hooks/useLeagues';
 import { useUpdateEventMutation } from '~/hooks/useEvent';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
@@ -46,6 +47,16 @@ const editEventSchema = z.object({
   people_per_team: z.number().int().min(1),
   number_of_teams: z.number().int().min(2).nullable(),
   timezone: z.string().min(1, 'Timezone is required'),
+  // The backend allows None, but the UI requires a league on edit.
+  // To clear the league, use the Django admin or a direct API call.
+  // `.nullable()` accommodates the brief flash before useEffect populates from
+  // the loaded event; `.refine()` enforces non-null at submit time.
+  tournament_league: z
+    .number()
+    .nullable()
+    .refine((v) => v !== null && v >= 1, {
+      message: 'League is required',
+    }),
 }).merge(discordConfigSchema);
 
 type EditEventInput = z.infer<typeof editEventSchema>;
@@ -65,6 +76,7 @@ function toDatetimeLocal(iso: string): string {
 export function EditEventModal({ event, open, onOpenChange }: EditEventModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const mutation = useUpdateEventMutation(event?.id ?? 0);
+  const { leagues, isLoading: isLoadingLeagues } = useLeagues(event?.organization);
 
   const form = useForm<EditEventInput>({
     resolver: zodResolver(editEventSchema),
@@ -83,6 +95,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
       people_per_team: 5,
       number_of_teams: null,
       timezone: '',
+      tournament_league: null,  // overridden by useEffect when event loads
       ...DISCORD_CONFIG_DEFAULTS,
     },
   });
@@ -105,6 +118,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
         lobby_steam_league_id: event.lobby_steam_league_id,
         people_per_team: event.people_per_team,
         number_of_teams: event.number_of_teams || null,
+        tournament_league: event.tournament_league,
         discord_create_event: event.discord_create_event,
         discord_sync_signups: event.discord_sync_signups,
         discord_event_title: event.discord_event_title,
@@ -164,6 +178,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
       isSubmitting={isSubmitting}
       onSubmit={form.handleSubmit(onSubmit)}
       size="lg"
+      data-testid="edit-event-modal"
     >
       <Form {...form}>
         <Tabs defaultValue="event">
@@ -259,6 +274,50 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
               <FormMessage />
             </FormItem>
           )}
+        />
+
+        <FormField
+          control={form.control}
+          name="tournament_league"
+          render={({ field }) => {
+            const noLeagues = !isLoadingLeagues && leagues.length === 0;
+            return (
+              <FormItem>
+                <FormLabel>League</FormLabel>
+                <FormControl>
+                  <Select
+                    value={field.value ? String(field.value) : ''}
+                    onValueChange={(v) => field.onChange(parseInt(v, 10))}
+                    disabled={isLoadingLeagues || noLeagues}
+                  >
+                    <SelectTrigger data-testid="edit-event-tournament-league">
+                      <SelectValue
+                        placeholder={
+                          isLoadingLeagues
+                            ? 'Loading…'
+                            : noLeagues
+                            ? 'No leagues for this organization — create one first.'
+                            : 'Select a league'
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {leagues.map((league) => (
+                        <SelectItem
+                          key={league.pk}
+                          value={String(league.pk)}
+                          data-testid={`league-option-${league.pk}`}
+                        >
+                          {league.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
