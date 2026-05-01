@@ -1,18 +1,22 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { claimUserProfile, fetchUser } from '~/components/api/api';
 import { Badge } from '~/components/ui/badge';
 import { ViewIconButton } from '~/components/ui/buttons';
 import { InfoDialog } from '~/components/ui/dialogs';
+import { useSharedPopover } from '~/components/ui/shared-popover-context';
 import { LeagueStatsCard } from '~/components/user/LeagueStatsCard';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import UserEditModal from '~/components/user/userCard/editModal';
+import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { useUserLeagueStats } from '~/features/leaderboard/queries';
 import { getLogger } from '~/lib/logger';
+import { useLeagueStore } from '~/store/leagueStore';
+import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('PlayerModal');
@@ -36,6 +40,38 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   const currentUser = useUserStore((state) => state.currentUser);
   const setCurrentUser = useUserStore((state) => state.setCurrentUser);
   const canEdit = currentUser?.is_staff || currentUser?.is_superuser;
+
+  const { playerModalState } = useSharedPopover();
+  const ctx = playerModalState.context;
+  const currentOrg = useOrgStore((s) => s.currentOrg);
+  const currentLeague = useLeagueStore((s) => s.currentLeague);
+
+  const editScope = React.useMemo<EditUserScope>(() => {
+    // Org context: only trust currentOrg if its pk matches the popover's request.
+    if (ctx?.organizationId && currentOrg?.pk === ctx.organizationId) {
+      return { kind: 'org', organization: currentOrg };
+    }
+    // League context: pk-match guard. Carry the parent organization through if available.
+    if (ctx?.leagueId && currentLeague?.pk === ctx.leagueId) {
+      return {
+        kind: 'league',
+        league: currentLeague,
+        organization:
+          currentOrg && currentLeague.organization?.pk === currentOrg.pk
+            ? currentOrg
+            : undefined,
+      };
+    }
+    return { kind: 'global' };
+  }, [
+    ctx?.organizationId,
+    ctx?.leagueId,
+    currentOrg?.pk,
+    currentLeague?.pk,
+    currentLeague?.organization?.pk,
+    currentOrg,
+    currentLeague,
+  ]);
 
   // Fetch full user data for editing (player prop may have partial data from herodraft)
   const [fullUserData, setFullUserData] = useState<UserType | null>(null);
@@ -147,7 +183,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
               isLoadingUser ? (
                 <span className="text-xs text-muted-foreground">Loading...</span>
               ) : (
-                <UserEditModal user={new User(fullUserData || displayPlayer)} />
+                <UserEditModal user={new User(fullUserData || displayPlayer)} scope={editScope} />
               )
             )}
             {displayPlayer.pk && (

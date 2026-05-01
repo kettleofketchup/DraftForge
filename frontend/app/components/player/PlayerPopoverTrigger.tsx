@@ -1,6 +1,8 @@
 import React, { useCallback, useRef } from 'react';
 import type { UserType } from '~/components/user/types';
 import { useSharedPopover } from '~/components/ui/shared-popover-context';
+import { useLeagueStore } from '~/store/leagueStore';
+import { useOrgStore } from '~/store/orgStore';
 
 interface PlayerPopoverTriggerProps {
   player: UserType;
@@ -12,6 +14,8 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
   children,
 }) => {
   const { showPlayerPopover, hidePopover, openPlayerModal } = useSharedPopover();
+  const currentOrg = useOrgStore((s) => s.currentOrg);
+  const currentLeague = useLeagueStore((s) => s.currentLeague);
   const triggerRef = useRef<HTMLSpanElement>(null);
   const playerName = player.nickname || player.username || 'Unknown';
 
@@ -28,17 +32,23 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    openPlayerModal(player);
-  }, [player, openPlayerModal]);
+    openPlayerModal(player, {
+      organizationId: currentOrg?.pk,
+      leagueId: currentLeague?.pk,
+    });
+  }, [player, openPlayerModal, currentOrg?.pk, currentLeague?.pk]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      openPlayerModal(player);
+      openPlayerModal(player, {
+        organizationId: currentOrg?.pk,
+        leagueId: currentLeague?.pk,
+      });
     } else if (e.key === 'Escape') {
       hidePopover();
     }
-  }, [player, openPlayerModal, hidePopover]);
+  }, [player, openPlayerModal, hidePopover, currentOrg?.pk, currentLeague?.pk]);
 
   return (
     <span
