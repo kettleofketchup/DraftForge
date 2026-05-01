@@ -2,8 +2,10 @@ import { useMemo } from 'react';
 import type { UserClassType, UserType } from '~/components/user';
 import { brandErrorBg, brandErrorCard } from '~/components/ui/buttons';
 import UserEditModal from '~/components/user/userCard/editModal';
+import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
+import { useLeagueStore } from '~/store/leagueStore';
 import type { UserEntry } from '~/store/userCacheTypes';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
@@ -39,8 +41,17 @@ function hasNoPositions(user: UserEntry): boolean {
 export const hasErrors = () => {
   const tournament = useUserStore((state) => state.tournament);
   const entities = useUserCacheStore((state) => state.entities);
+  const league = useLeagueStore((state) => state.currentLeague);
 
   const orgId = tournament?.organization_pk ?? undefined;
+
+  const editScope = useMemo<EditUserScope>(
+    () =>
+      league
+        ? { kind: 'league', league }
+        : { kind: 'global' },
+    [league?.pk],
+  );
 
   // Resolve users from entity cache — the single source of truth
   const usersWithIssues = useMemo(() => {
@@ -103,6 +114,7 @@ export const hasErrors = () => {
                   <div className="flex justify-center mt-3">
                     <UserEditModal
                       user={user}
+                      scope={editScope}
                       key={`UserEditModal-${user.pk}`}
                     />
                   </div>
