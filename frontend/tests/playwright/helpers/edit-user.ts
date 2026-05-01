@@ -117,3 +117,42 @@ export async function restoreUserField(
   await fillEditField(page, field, originalValue || '0');
   await saveEditModal(page);
 }
+
+/** Position keys matching data-testid="edit-user-{position}" select triggers. */
+export type PositionKey = 'carry' | 'mid' | 'offlane' | 'soft_support' | 'hard_support';
+
+/**
+ * Read the rendered text of a position SelectTrigger.
+ * Used because readEditField only works for <input> elements; positions are
+ * shadcn <Select> components whose visible text lives on the trigger button.
+ */
+export async function readPositionField(page: Page, position: PositionKey): Promise<string> {
+  const trigger = page.locator(`[data-testid="edit-user-${position}"]`);
+  await expect(trigger).toBeVisible({ timeout: 5000 });
+  return (await trigger.innerText()).trim();
+}
+
+/**
+ * Set a position SelectTrigger to a specific numeric value (0-5).
+ *
+ * Uses keyboard-driven interaction (focus + Enter to open, click option) to
+ * sidestep the position grid's tight layout where neighboring SelectTrigger
+ * bounding boxes overlap inside the modal and intercept pointer events.
+ *
+ * Waits for the Radix Select dropdown to close (data-state="closed") before
+ * returning so subsequent setPositionField calls don't hit a still-open
+ * listbox overlay.
+ */
+export async function setPositionField(
+  page: Page,
+  position: PositionKey,
+  value: number,
+): Promise<void> {
+  const trigger = page.locator(`[data-testid="edit-user-${position}"]`);
+  await trigger.scrollIntoViewIfNeeded();
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('data-state', 'open', { timeout: 5000 });
+  await page.getByRole('option').filter({ hasText: new RegExp(`^${value}: `) }).click();
+  await expect(trigger).toHaveAttribute('data-state', 'closed', { timeout: 5000 });
+}

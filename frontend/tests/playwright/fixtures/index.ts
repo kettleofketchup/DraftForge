@@ -103,12 +103,15 @@ export {
 // EditUser modal helpers
 export {
   type EditUserField,
+  type PositionKey,
   openEditModal,
   readEditField,
   fillEditField,
   saveEditModal,
   editUserField,
   restoreUserField,
+  readPositionField,
+  setPositionField,
 } from '../helpers/edit-user';
 
 // Events utilities
