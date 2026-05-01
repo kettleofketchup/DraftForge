@@ -111,8 +111,6 @@ class EventTaskSchema(BaseModel):
     discord_announcement_hours: int = 24
     discord_announcement_role_ids: list = []
     discord_signup_role_ids: list = []
-    discord_subscriber_dm: bool = False
-    discord_subscriber_dm_hours: int = 24
 
     # Config
     timezone: str = "America/New_York"
