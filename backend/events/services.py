@@ -11,7 +11,6 @@ from app.cache_utils import invalidate_after_commit
 from app.models import Tournament
 from events.constants import EventState, RepeatFrequency, SignupStatus, SignupType
 from events.discord import (
-    notify_event_announced,
     notify_mark_interested,
     notify_new_event,
     notify_signup_changed,
@@ -651,9 +650,9 @@ def generate_events_for_repeater(repeater):
         create_tournament_for_event(event)
         ensure_discord_event(event)
         created_events.append(event)
-        # Send Discord signup post + announcement for the new event
-        if event.discord_announcement and event.discord_announcement_channel_id:
-            notify_event_announced(event)
+        # PR-1: announcement is scheduled (fires discord_announcement_hours
+        # before scheduled_at via the registry). Legacy notify_event_announced
+        # immediate-dispatch removed.
         if repeater.discord_notify_new_events:
             notify_new_event(event)
         if event.discord_create_event:

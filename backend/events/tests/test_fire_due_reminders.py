@@ -3,20 +3,22 @@
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.test import TestCase
 from django.utils import timezone
 
 from discordbot.models import DiscordMessageLog
-from events.tests._internal_client_orm import DiscordTestMixin
 from events.tests.test_discord_tasks import _DiscordTaskTestCase
 
 
 class FireDueRemindersTest(_DiscordTaskTestCase):
     """Tests use _DiscordTaskTestCase so internal_client calls go through
-    the ORM-mock map (no HTTP)."""
+    the ORM-mock map (no HTTP).
 
-    @patch("events.scheduling.fire.current_app.send_task")
-    def test_fires_announcement_when_threshold_passed(self, mock_send):
+    The fire path looks up tasks via current_app.tasks.get(name) and calls
+    .delay() — patch the specific task's delay attribute to assert dispatch.
+    """
+
+    @patch("events.tasks.send_event_announcement.delay")
+    def test_fires_announcement_when_threshold_passed(self, mock_delay):
         from events.scheduling.fire import fire_due_reminders
 
         self.event.discord_announcement = True
@@ -27,17 +29,10 @@ class FireDueRemindersTest(_DiscordTaskTestCase):
         self.event.save()
 
         fire_due_reminders()
+        mock_delay.assert_called_once_with(self.event.pk)
 
-        # Assert the announcement task was dispatched by name
-        announcement_calls = [
-            c for c in mock_send.call_args_list
-            if c.args[0] == "events.tasks.send_event_announcement"
-        ]
-        self.assertEqual(len(announcement_calls), 1)
-        self.assertEqual(announcement_calls[0].kwargs["args"], [self.event.pk])
-
-    @patch("events.scheduling.fire.current_app.send_task")
-    def test_does_not_fire_before_threshold(self, mock_send):
+    @patch("events.tasks.send_event_announcement.delay")
+    def test_does_not_fire_before_threshold(self, mock_delay):
         from events.scheduling.fire import fire_due_reminders
 
         self.event.discord_announcement = True
@@ -48,15 +43,10 @@ class FireDueRemindersTest(_DiscordTaskTestCase):
         self.event.save()
 
         fire_due_reminders()
+        mock_delay.assert_not_called()
 
-        announcement_calls = [
-            c for c in mock_send.call_args_list
-            if c.args[0] == "events.tasks.send_event_announcement"
-        ]
-        self.assertEqual(announcement_calls, [])
-
-    @patch("events.scheduling.fire.current_app.send_task")
-    def test_skips_if_already_fired(self, mock_send):
+    @patch("events.tasks.send_event_announcement.delay")
+    def test_skips_if_already_fired(self, mock_delay):
         from events.scheduling.fire import fire_due_reminders
 
         self.event.discord_announcement = True
@@ -75,15 +65,10 @@ class FireDueRemindersTest(_DiscordTaskTestCase):
         )
 
         fire_due_reminders()
+        mock_delay.assert_not_called()
 
-        announcement_calls = [
-            c for c in mock_send.call_args_list
-            if c.args[0] == "events.tasks.send_event_announcement"
-        ]
-        self.assertEqual(announcement_calls, [])
-
-    @patch("events.scheduling.fire.current_app.send_task")
-    def test_skips_if_disabled(self, mock_send):
+    @patch("events.tasks.send_event_announcement.delay")
+    def test_skips_if_disabled(self, mock_delay):
         from events.scheduling.fire import fire_due_reminders
 
         self.event.discord_announcement = False
@@ -93,15 +78,10 @@ class FireDueRemindersTest(_DiscordTaskTestCase):
         self.event.save()
 
         fire_due_reminders()
+        mock_delay.assert_not_called()
 
-        announcement_calls = [
-            c for c in mock_send.call_args_list
-            if c.args[0] == "events.tasks.send_event_announcement"
-        ]
-        self.assertEqual(announcement_calls, [])
-
-    @patch("events.scheduling.fire.current_app.send_task")
-    def test_skips_if_hours_zero_or_unset(self, mock_send):
+    @patch("events.tasks.send_event_announcement.delay")
+    def test_skips_if_hours_zero_or_unset(self, mock_delay):
         from events.scheduling.fire import fire_due_reminders
 
         self.event.discord_announcement = True
@@ -112,9 +92,4 @@ class FireDueRemindersTest(_DiscordTaskTestCase):
         self.event.save()
 
         fire_due_reminders()
-
-        announcement_calls = [
-            c for c in mock_send.call_args_list
-            if c.args[0] == "events.tasks.send_event_announcement"
-        ]
-        self.assertEqual(announcement_calls, [])
+        mock_delay.assert_not_called()
