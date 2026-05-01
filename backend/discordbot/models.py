@@ -83,7 +83,19 @@ class RSVP(models.Model):
 
 
 class DiscordMessageLog(models.Model):
-    """Audit log for all outbound Discord messages."""
+    """Audit log for all outbound Discord messages.
+
+    Lease semantics (PR-1):
+        success = NULL  → lease held; send in flight
+        success = True  → message sent successfully
+        success = False → send attempted and failed (transient or permanent)
+
+    The partial unique index on (source, source_id) WHERE success IS NOT FALSE
+    serializes claim attempts: only one worker can hold a NULL or True row for
+    a given (source, source_id) at a time. Failed (False) rows are reclaimable
+    so transient Discord errors don't permanently brick reminders. The
+    sweep_stale_discord_leases beat task ages out NULL >5min and False >1hr.
+    """
 
     # What was sent
     channel_id = models.CharField(max_length=64)
@@ -93,7 +105,8 @@ class DiscordMessageLog(models.Model):
     discord_message_id = models.CharField(max_length=64, null=True, blank=True)
     status_code = models.IntegerField(null=True, blank=True)
     response_data = models.JSONField(null=True, blank=True)
-    success = models.BooleanField(default=False)
+    success = models.BooleanField(null=True, blank=True)
+    claimed_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
     # Context — what triggered this message
     source = models.CharField(max_length=64, default="unknown")
@@ -125,9 +138,22 @@ class DiscordMessageLog(models.Model):
         indexes = [
             models.Index(fields=["source", "source_id"]),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source", "source_id"],
+                condition=models.Q(success__isnull=True) | models.Q(success=True),
+                name="uniq_discord_message_log_source_event_when_pending_or_success",
+            ),
+        ]
 
     def __str__(self):
-        return f"{self.source}:{self.source_id} → {self.channel_id} ({'ok' if self.success else 'fail'})"
+        if self.success is None:
+            state = "pending"
+        elif self.success:
+            state = "ok"
+        else:
+            state = "fail"
+        return f"{self.source}:{self.source_id} → {self.channel_id} ({state})"
 
 
 # ---------------------------------------------------------------------------
