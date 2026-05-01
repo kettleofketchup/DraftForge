@@ -19,7 +19,7 @@ export const UsersDropdown: React.FC<Props> = ({ users }) => {
           </div>
         </div>
         <Link
-          to={`/users/${user.pk ?? user.username}`}
+          to={`/user/${user.pk ?? user.username}`}
           className="link link-primary"
         >
           {user.nickname || user.username}
