@@ -128,8 +128,6 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
         discord_announcement: repeater.discord_announcement,
         discord_announcement_channel_id: repeater.discord_announcement_channel_id,
         discord_announcement_hours: repeater.discord_announcement_hours,
-        discord_subscriber_dm: repeater.discord_subscriber_dm ?? false,
-        discord_subscriber_dm_hours: repeater.discord_subscriber_dm_hours ?? 24,
         discord_require_rank_screenshot: repeater.discord_require_rank_screenshot ?? false,
         discord_require_battlecup_screenshot: repeater.discord_require_battlecup_screenshot ?? false,
         min_mmr: repeater.min_mmr ?? null,

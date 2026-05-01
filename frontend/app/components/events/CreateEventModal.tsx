@@ -121,8 +121,6 @@ export function CreateEventModal({
         discord_announcement: orgDefaults.discord_announcement,
         discord_announcement_channel_id: orgDefaults.discord_announcement_channel_id,
         discord_announcement_hours: orgDefaults.discord_announcement_hours,
-        discord_subscriber_dm: orgDefaults.discord_subscriber_dm ?? false,
-        discord_subscriber_dm_hours: orgDefaults.discord_subscriber_dm_hours ?? 24,
         discord_require_rank_screenshot: orgDefaults.discord_require_rank_screenshot ?? false,
         discord_require_battlecup_screenshot: orgDefaults.discord_require_battlecup_screenshot ?? false,
         min_mmr: orgDefaults.min_mmr ?? null,
