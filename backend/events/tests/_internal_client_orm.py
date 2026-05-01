@@ -124,11 +124,17 @@ def _get_discord_event_state_orm(event_id):
 
 
 def _check_message_log_exists_orm(source, source_id):
+    """Match the partial unique condition: NULL pending OR True succeeded
+    rows count as 'exists'; False failed rows do not (allowing retry)."""
+    from django.db.models import Q
+
     from discordbot.models import DiscordMessageLog
 
-    return DiscordMessageLog.objects.filter(
-        source=source, source_id=source_id, success=True
-    ).exists()
+    return (
+        DiscordMessageLog.objects.filter(source=source, source_id=source_id)
+        .filter(Q(success__isnull=True) | Q(success=True))
+        .exists()
+    )
 
 
 def _search_message_logs_orm(*args, **kwargs):
@@ -196,6 +202,56 @@ def _create_message_log_orm(**data):
         success=bool(data.get("success", False)),
     )
     return _ResponseLike(201, {"id": log.pk})
+
+
+def _claim_discord_message_log_orm(
+    *, source, source_id, channel_id, embed_data,
+    fired_by_user_id=None, tournament_log_id=None,
+):
+    """ORM-backed lease claim — mirrors the HTTP endpoint."""
+    from django.db import IntegrityError, transaction
+    from django.utils import timezone
+
+    from discordbot.models import DiscordMessageLog
+
+    create_kwargs = {
+        "source": source,
+        "source_id": source_id,
+        "channel_id": str(channel_id),
+        "embed_data": embed_data,
+        "success": None,
+        "claimed_at": timezone.now(),
+    }
+    if fired_by_user_id is not None:
+        create_kwargs["fired_by_id"] = fired_by_user_id
+    if tournament_log_id is not None:
+        create_kwargs["tournament_log_id"] = tournament_log_id
+    try:
+        with transaction.atomic():
+            row = DiscordMessageLog.objects.create(**create_kwargs)
+        return row.pk
+    except IntegrityError:
+        return None
+
+
+def _finalize_discord_message_log_orm(
+    log_id, *, success, discord_message_id=None, status_code=None, response_data=None,
+):
+    """ORM-backed finalize — mirrors the HTTP endpoint."""
+    from discordbot.models import DiscordMessageLog
+
+    update_fields = {"success": bool(success)}
+    if discord_message_id is not None:
+        update_fields["discord_message_id"] = discord_message_id
+    if status_code is not None:
+        update_fields["status_code"] = status_code
+    if response_data is not None:
+        update_fields["response_data"] = response_data
+
+    updated = DiscordMessageLog.objects.filter(pk=log_id).update(**update_fields)
+    if updated == 0:
+        return _ResponseLike(410, {"detail": "log row not found (likely swept)"})
+    return _ResponseLike(200, {})
 
 
 def _create_event_log_orm(**data):
@@ -349,6 +405,8 @@ _PATCH_MAP = {
     "check_message_log_exists": _check_message_log_exists_orm,
     "search_message_logs": _search_message_logs_orm,
     "create_message_log": _create_message_log_orm,
+    "claim_discord_message_log": _claim_discord_message_log_orm,
+    "finalize_discord_message_log": _finalize_discord_message_log_orm,
     "create_event_log": _create_event_log_orm,
     "get_or_create_discord_event": _get_or_create_discord_event_orm,
     "update_discord_event": _update_discord_event_orm,

@@ -188,7 +188,7 @@ def sync_discord_events():
     )
 
 
-@shared_task
+@shared_task(acks_late=True, reject_on_worker_lost=True)
 def send_event_announcement(event_id):
     """Create event signup post + announcement.
 
@@ -855,9 +855,15 @@ def check_event_reminders():
     return "Checked reminders"
 
 
-@shared_task
+@shared_task(acks_late=True, reject_on_worker_lost=True)
 def send_subscriber_notifications(event_id):
     """Send signup reminder DMs to repeater subscribers who haven't signed up.
+
+    Wraps the entire subscriber-DM loop in a lease so concurrent dispatches
+    cannot iterate the subscriber set twice. The lease row uses channel_id="dm"
+    as a sentinel (DMs aren't per-channel) and the common signup-reminder
+    embed as embed_data — the partial unique constraint keys on
+    (source="signup_reminder", source_id=event_id) only.
 
     Filters out subscribers who already have an EventSignup for this event.
     Uses create-first pattern for crash safety:
@@ -870,7 +876,9 @@ def send_subscriber_notifications(event_id):
     import time
 
     from app.internal_client import (
+        claim_discord_message_log,
         create_event_dm,
+        finalize_discord_message_log,
         get_discord_event_state,
         get_event_for_task,
         get_repeater_subscribers,
@@ -892,77 +900,107 @@ def send_subscriber_notifications(event_id):
         return "No Discord event"
     discord_event_pk = discord_state.discord_event_pk
 
+    # Build embed up front (used both as the lease payload AND each subscriber DM)
+    dm_data = build_subscriber_dm_embed(event)
+    embed = dm_data["embed"]
+    components = dm_data.get("components")
+
+    # Claim the lease BEFORE iterating subscribers. Concurrent dispatches
+    # of this task hit the partial unique constraint and return None — exit
+    # cleanly so we don't double-DM the entire subscriber set.
+    log_pk = claim_discord_message_log(
+        source="signup_reminder",
+        source_id=event_id,
+        channel_id="dm",
+        embed_data=embed,
+    )
+    if log_pk is None:
+        logger.info(
+            "Signup reminder lease for event %s held by another worker — skipping",
+            event_id,
+        )
+        return f"Signup reminder for event {event_id}: lease held by another worker"
+
     # Get user PKs who already signed up — skip them
     from app.internal_client import get_event_signups
 
     all_signups = get_event_signups(event_id)
     signed_up_user_pks = {s.user for s in all_signups if s.status != "cancelled"}
 
-    dm_data = build_subscriber_dm_embed(event)
-    embed = dm_data["embed"]
-    components = dm_data.get("components")
     subscribers = get_repeater_subscribers(event.event_repeater_id)
 
     sent = 0
     skipped = 0
     failed = 0
 
-    for sub in subscribers:
-        # Skip subscribers who already signed up
-        if sub.user_pk in signed_up_user_pks:
-            skipped += 1
-            continue
-
-        # Create DM record via internal API (crash safety + idempotency)
-        from discordbot.models import DMType
-
-        dm_pk = None
-        if sub.org_user_pk:
-            dm_resp = create_event_dm(
-                discord_event=discord_event_pk,
-                org_user=sub.org_user_pk,
-                dm_type=DMType.SIGNUP_REMINDER,
-                delivered=False,
-            )
-            if not dm_resp or not dm_resp.ok:
-                # Likely already exists (idempotency) or error
+    try:
+        for sub in subscribers:
+            # Skip subscribers who already signed up
+            if sub.user_pk in signed_up_user_pks:
                 skipped += 1
                 continue
-            dm_pk = dm_resp.json().get("id")
 
-        # Send DM
-        result = sync_send_dm(sub.discord_id, embed=embed, components=components)
+            # Create DM record via internal API (crash safety + idempotency)
+            from discordbot.models import DMType
 
-        # Update delivery status via internal API
-        if result:
-            if dm_pk:
-                update_event_dm(
-                    dm_pk,
-                    message_id=result.get("id", ""),
-                    sent_at=datetime.now(tz.utc).isoformat(),
-                    delivered=True,
+            dm_pk = None
+            if sub.org_user_pk:
+                dm_resp = create_event_dm(
+                    discord_event=discord_event_pk,
+                    org_user=sub.org_user_pk,
+                    dm_type=DMType.SIGNUP_REMINDER,
+                    delivered=False,
                 )
-            sent += 1
-        else:
-            failed += 1
+                if not dm_resp or not dm_resp.ok:
+                    # Likely already exists (idempotency) or error
+                    skipped += 1
+                    continue
+                dm_pk = dm_resp.json().get("id")
 
-    # Log completion so check_event_reminders won't re-dispatch
-    # Only log if we actually sent or attempted DMs (not when all were skipped)
-    if sent > 0 or failed > 0:
-        from app.internal_client import create_message_log
+            # Send DM
+            result = sync_send_dm(sub.discord_id, embed=embed, components=components)
 
-        create_message_log(
-            channel_id="dm",
-            embed_data={
-                "type": "signup_reminder_batch",
+            # Update delivery status via internal API
+            if result:
+                if dm_pk:
+                    update_event_dm(
+                        dm_pk,
+                        message_id=result.get("id", ""),
+                        sent_at=datetime.now(tz.utc).isoformat(),
+                        delivered=True,
+                    )
+                sent += 1
+            else:
+                failed += 1
+    except Exception as exc:
+        # Finalize as failure so the sweeper ages this out and admins can
+        # investigate via the row's response_data
+        finalize_discord_message_log(
+            log_pk,
+            success=False,
+            response_data={
+                "error": str(exc),
                 "sent": sent,
                 "skipped": skipped,
                 "failed": failed,
             },
-            source="signup_reminder",
-            source_id=event_id,
-            success=sent > 0,
         )
+        raise
+
+    # Finalize the lease — replaces the legacy post-loop create_message_log.
+    # success is True only if at least one DM was actually delivered;
+    # all-failed (or all-skipped with no attempts) marks success=False so
+    # the sweeper can age out failures and the next poll can retry.
+    finalize_discord_message_log(
+        log_pk,
+        success=sent > 0,
+        response_data={
+            "type": "signup_reminder_batch",
+            "sent": sent,
+            "skipped": skipped,
+            "failed": failed,
+        },
+    )
 
     logger.info(
         "Signup reminder DMs for event %s: sent=%d, skipped=%d, failed=%d",
