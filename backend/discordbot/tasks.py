@@ -68,3 +68,43 @@ def check_scheduled_events():
         processed += 1
 
     return f"Processed {processed} scheduled events"
+
+
+@shared_task
+def sweep_stale_discord_leases():
+    """Reap stuck DiscordMessageLog rows so the partial unique constraint
+    doesn't permanently brick reminders.
+
+    Two recovery cases:
+    - NULL pending leases >5 min old: worker crashed between claim and
+      finalize. Delete so the next poll can re-claim.
+    - False failed rows >1 hour old: Discord transient 5xx, rate-limit, or
+      auth issue has likely passed. Delete so the next poll can retry.
+      Admins should investigate via the original failed log row before it
+      ages out.
+
+    The 60-second beat cadence keeps total worker-crash recovery latency
+    below ~1.5 min (5min sweep threshold + 30s next poll).
+    """
+    from django.utils import timezone as tz
+
+    from discordbot.models import DiscordMessageLog
+
+    now = tz.now()
+    pending_threshold = now - timedelta(minutes=5)
+    failed_threshold = now - timedelta(hours=1)
+
+    pending_swept, _ = DiscordMessageLog.objects.filter(
+        success__isnull=True, claimed_at__lt=pending_threshold,
+    ).delete()
+    failed_swept, _ = DiscordMessageLog.objects.filter(
+        success=False, claimed_at__lt=failed_threshold,
+    ).delete()
+
+    total = pending_swept + failed_swept
+    if total:
+        log.warning(
+            "Swept %d stale leases, %d aged-out failures",
+            pending_swept, failed_swept,
+        )
+    return total
