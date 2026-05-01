@@ -63,7 +63,10 @@ function PositionSelect({
             onValueChange={(v) => field.onChange(parseInt(v, 10))}
           >
             <FormControl>
-              <SelectTrigger data-testid={`edit-user-${fieldKey}`}>
+              <SelectTrigger
+                data-testid={`edit-user-${fieldKey}`}
+                className="w-full"
+              >
                 <SelectValue placeholder="Select" />
               </SelectTrigger>
             </FormControl>
