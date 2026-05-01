@@ -308,7 +308,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await mmrInput.fill('3500');
 
     // 11. Click the confirm button
-    await dialog.getByRole('button', { name: 'Approve & Set MMR' }).click();
+    await dialog.getByTestId('mmr-modal-approve').click();
 
     // 12. Verify the modal closed and the signup status changed to approved
     await expect(dialog).not.toBeVisible({ timeout: 10000 });

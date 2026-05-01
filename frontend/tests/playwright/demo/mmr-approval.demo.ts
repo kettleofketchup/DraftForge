@@ -249,7 +249,7 @@ test.describe('MMR Approval Demo', () => {
     await page.waitForTimeout(500);
 
     // Click approve button in modal
-    const confirmBtn = modal.getByText('Approve & Set MMR');
+    const confirmBtn = modal.getByTestId('mmr-modal-approve');
     await demoClick(page, confirmBtn, 300);
 
     // Wait for modal to close
