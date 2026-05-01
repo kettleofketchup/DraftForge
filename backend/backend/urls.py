@@ -367,8 +367,10 @@ urlpatterns += [
 # Internal API — celery workers and Discord bot (token auth via X-Internal-Token)
 from app.views.internal import (
     check_message_log_exists,
+    claim_discord_message_log,
     create_discord_event_log,
     create_discord_message_log,
+    finalize_discord_message_log,
     create_event_dm,
     create_herodraft_for_game,
     create_or_update_announcement,
@@ -398,6 +400,11 @@ from app.views.internal import (
 
 urlpatterns += [
     path("api/internal/discord/message-log/", create_discord_message_log),
+    path("api/internal/discord/message-log/claim/", claim_discord_message_log),
+    path(
+        "api/internal/discord/message-log/<int:log_id>/finalize/",
+        finalize_discord_message_log,
+    ),
     path("api/internal/discord/event-log/", create_discord_event_log),
     path("api/internal/discord/tournament-log/", create_tournament_log),
     path("api/internal/discord/tournament-log/<int:pk>/", update_tournament_log),

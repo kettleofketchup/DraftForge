@@ -101,11 +101,92 @@ def create_discord_message_log(request):
     return Response({"id": entry.pk}, status=status.HTTP_201_CREATED)
 
 
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def claim_discord_message_log(request):
+    """Acquire a pre-send lease for a (source, source_id) Discord message.
+
+    Worker passes channel_id + embed_data so the row is fully populated at
+    INSERT time (DiscordMessageLog requires both as non-null fields). The
+    partial unique index on (source, source_id) WHERE success IS NOT FALSE
+    raises IntegrityError if a pending or successful row already exists for
+    this (source, source_id) — we catch it and return 409 so the worker
+    short-circuits before the Discord HTTP send.
+    """
+    from django.db import IntegrityError, transaction
+
+    from discordbot.models import DiscordMessageLog
+
+    err = _validate_required(
+        request.data, ["source", "source_id", "channel_id", "embed_data"]
+    )
+    if err:
+        return err
+
+    create_kwargs = {
+        "source": request.data["source"],
+        "source_id": request.data["source_id"],
+        "channel_id": request.data["channel_id"],
+        "embed_data": request.data["embed_data"],
+        "success": None,
+        "claimed_at": tz.now(),
+    }
+    if "fired_by_user_id" in request.data:
+        create_kwargs["fired_by_id"] = request.data["fired_by_user_id"]
+    if "tournament_log_id" in request.data:
+        create_kwargs["tournament_log_id"] = request.data["tournament_log_id"]
+
+    try:
+        with transaction.atomic():
+            row = DiscordMessageLog.objects.create(**create_kwargs)
+        return Response({"id": row.pk}, status=status.HTTP_201_CREATED)
+    except IntegrityError:
+        return Response({}, status=status.HTTP_409_CONFLICT)
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def finalize_discord_message_log(request, log_id):
+    """Update the lease row to its final state after the Discord HTTP send.
+
+    Returns 200 on update or 410 Gone if the row was already swept by
+    sweep_stale_discord_leases (worker took >5 min between claim and finalize).
+    """
+    from discordbot.models import DiscordMessageLog
+
+    err = _validate_required(request.data, ["success"])
+    if err:
+        return err
+
+    update_fields = {"success": bool(request.data["success"])}
+    for k in ("discord_message_id", "status_code", "response_data"):
+        if k in request.data:
+            update_fields[k] = request.data[k]
+
+    updated = DiscordMessageLog.objects.filter(pk=log_id).update(**update_fields)
+    if updated == 0:
+        return Response(
+            {"detail": "log row not found (likely swept)"},
+            status=status.HTTP_410_GONE,
+        )
+    return Response({}, status=status.HTTP_200_OK)
+
+
 @api_view(["GET"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
 def check_message_log_exists(request):
-    """Check if a successful DiscordMessageLog exists (for celery idempotency)."""
+    """Check if a non-failed DiscordMessageLog row exists (for celery idempotency).
+
+    Matches the partial unique condition: NULL pending or True succeeded
+    rows count as "exists"; False failed rows do not. This is a load-shedder
+    in the fire path — the actual idempotency guarantee is the DB constraint
+    on the claim endpoint above.
+    """
+    from django.db.models import Q
+
     from discordbot.models import DiscordMessageLog
 
     source = request.query_params.get("source")
@@ -115,9 +196,11 @@ def check_message_log_exists(request):
             {"error": "source and source_id required"},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    exists = DiscordMessageLog.objects.filter(
-        source=source, source_id=source_id, success=True
-    ).exists()
+    exists = (
+        DiscordMessageLog.objects.filter(source=source, source_id=source_id)
+        .filter(Q(success__isnull=True) | Q(success=True))
+        .exists()
+    )
     return Response({"exists": exists})
 
 
