@@ -16,7 +16,6 @@ const PositionFieldSchema = z.coerce.number().int().min(0).max(5);
 export const EditUserSchema = z.object({
   nickname: z.string().trim().min(2).max(100).nullable(),
   steam_account_id: z.coerce.number().int().min(0).nullable(),
-  guildNickname: z.string().trim().min(2).max(100).nullable(),
   positions: z.object({
     carry: PositionFieldSchema,
     mid: PositionFieldSchema,
@@ -51,7 +50,6 @@ export function buildDefaults(
   const base: Omit<EditUserInput, 'mmr'> = {
     nickname: emptyToNull(user.nickname),
     steam_account_id: user.steam_account_id ?? null,
-    guildNickname: emptyToNull(user.guildNickname),
     positions: {
       carry: user.positions?.carry ?? 0,
       mid: user.positions?.mid ?? 0,
