@@ -180,8 +180,8 @@ export interface EventRepeaterType {
   discord_announcement: boolean;
   discord_announcement_channel_id: string;
   discord_announcement_hours: number;
-  discord_subscriber_dm: boolean;
-  discord_subscriber_dm_hours: number;
+  discord_subscriber_dm?: boolean;
+  discord_subscriber_dm_hours?: number;
   discord_require_rank_screenshot: boolean;
   discord_require_battlecup_screenshot: boolean;
   min_mmr: number | null;
@@ -260,8 +260,8 @@ export interface OrgEventDefaultsType {
   discord_announcement: boolean;
   discord_announcement_channel_id: string;
   discord_announcement_hours: number;
-  discord_subscriber_dm: boolean;
-  discord_subscriber_dm_hours: number;
+  discord_subscriber_dm?: boolean;
+  discord_subscriber_dm_hours?: number;
   discord_require_rank_screenshot: boolean;
   discord_require_battlecup_screenshot: boolean;
   min_mmr: number | null;

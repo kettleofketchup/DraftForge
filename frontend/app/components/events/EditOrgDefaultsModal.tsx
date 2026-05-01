@@ -114,8 +114,6 @@ export function EditOrgDefaultsModal({
         discord_announcement: defaults.discord_announcement,
         discord_announcement_channel_id: defaults.discord_announcement_channel_id,
         discord_announcement_hours: defaults.discord_announcement_hours,
-        discord_subscriber_dm: defaults.discord_subscriber_dm ?? false,
-        discord_subscriber_dm_hours: defaults.discord_subscriber_dm_hours ?? 24,
         discord_require_rank_screenshot: defaults.discord_require_rank_screenshot ?? false,
         discord_require_battlecup_screenshot: defaults.discord_require_battlecup_screenshot ?? false,
         min_mmr: defaults.min_mmr ?? null,
