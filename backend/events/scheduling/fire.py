@@ -52,7 +52,19 @@ def fire_due_reminders():
                 continue
             threshold = scheduled_at - timedelta(hours=hours)
             if now >= threshold:
-                current_app.send_task(reminder.task_name, args=[event_id])
+                # Look up the task by registered name and dispatch via
+                # .delay(). Equivalent to current_app.send_task(name, args)
+                # but plays better with CELERY_TASK_ALWAYS_EAGER in tests
+                # (send_task goes through the result backend; .delay()
+                # honors eager mode without needing a Redis backend).
+                task = current_app.tasks.get(reminder.task_name)
+                if task is None:
+                    # Caught by RegistryGuardrailsTest.test_every_task_name_is_registered_with_celery
+                    raise RuntimeError(
+                        f"Reminder {reminder.key!r} task_name "
+                        f"{reminder.task_name!r} is not registered with celery"
+                    )
+                task.delay(event_id)
                 dispatched += 1
 
     return f"fire_due_reminders: dispatched={dispatched} reminders={len(REMINDERS)}"
