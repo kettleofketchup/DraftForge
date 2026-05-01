@@ -9,8 +9,8 @@ import {
   useIsSuperuser,
 } from '~/hooks/usePermissions';
 import { updateOrgUser } from '~/components/api/api';
-import { useUserCacheStore } from '~/store/userCacheStore';
 
+// Dota positions use a 0-5 self-rating scale: 0=hidden, 1=favorite, 5=avoid.
 const PositionFieldSchema = z.coerce.number().int().min(0).max(5);
 
 export const EditUserSchema = z.object({
@@ -40,7 +40,7 @@ export function buildDefaults(
   user: UserClassType,
   scope: EditUserScope,
 ): EditUserInput {
-  const base = {
+  const base: Omit<EditUserInput, 'mmr'> = {
     nickname: user.nickname ?? null,
     steam_account_id: user.steam_account_id ?? null,
     guildNickname: user.guildNickname ?? null,
@@ -51,7 +51,7 @@ export function buildDefaults(
       soft_support: user.positions?.soft_support ?? 0,
       hard_support: user.positions?.hard_support ?? 0,
     },
-  } as EditUserInput;
+  };
   return scope.kind === 'global' ? base : { ...base, mmr: user.mmr ?? null };
 }
 
@@ -73,7 +73,12 @@ export function pickDirty(
           nested[slot] = positions[slot];
         }
       }
-      out.positions = nested as EditUserInput['positions'];
+      // Skip writing out.positions for an empty nested map (e.g. flag was {} with no
+      // truthy slots) — otherwise the PATCH body would carry a meaningless
+      // {positions: {}} that the backend has to validate.
+      if (Object.keys(nested).length > 0) {
+        out.positions = nested as EditUserInput['positions'];
+      }
     } else {
       (out as Record<string, unknown>)[key] = data[key];
     }
@@ -108,7 +113,9 @@ export async function dispatchPatch(
   return user.dbUpdate(payload);
 }
 
-export function scopeToContext(scope: EditUserScope) {
+export function scopeToContext(
+  scope: EditUserScope,
+): { orgId?: number } | undefined {
   if (scope.kind === 'org') return { orgId: scope.organization.pk };
   if (scope.kind === 'league')
     return { orgId: scope.organization?.pk ?? scope.league.organization?.pk };
@@ -129,5 +136,3 @@ export function useScopedEditPermission(scope: EditUserScope): boolean {
   return superuser;
 }
 
-// Re-exported helper for callers
-export { useUserCacheStore };
