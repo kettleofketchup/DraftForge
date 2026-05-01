@@ -41,6 +41,10 @@ _beat_schedule = {
         "task": "discordbot.tasks.check_scheduled_events",
         "schedule": 60.0,
     },
+    "sweep-stale-discord-leases": {
+        "task": "discordbot.tasks.sweep_stale_discord_leases",
+        "schedule": 60.0,  # 60s cadence: keeps worker-crash recovery <1.5 min
+    },
     "refresh-discord-avatars": {
         "task": "app.tasks.avatar_refresh.refresh_discord_avatars",
         "schedule": 300.0,
