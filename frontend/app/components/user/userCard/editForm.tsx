@@ -15,6 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
+import {
+  CarrySVG,
+  HardSupportSVG,
+  MidSVG,
+  OfflaneSVG,
+  SoftSupportSVG,
+} from '~/components/user/positions/icons';
 import type { EditUserInput } from './editUserSchema';
 
 interface Props {
@@ -34,22 +41,28 @@ const POSITION_OPTIONS: Array<[number, string]> = [
 
 type PositionKey = keyof EditUserInput['positions'];
 
-const POSITION_FIELDS: Array<{ key: PositionKey; label: string }> = [
-  { key: 'carry', label: 'Carry' },
-  { key: 'mid', label: 'Mid' },
-  { key: 'offlane', label: 'Offlane' },
-  { key: 'soft_support', label: 'Soft Support' },
-  { key: 'hard_support', label: 'Hard Support' },
+const POSITION_FIELDS: Array<{
+  key: PositionKey;
+  label: string;
+  Icon: React.FC<{ className?: string }>;
+}> = [
+  { key: 'carry', label: 'Carry', Icon: CarrySVG },
+  { key: 'mid', label: 'Mid', Icon: MidSVG },
+  { key: 'offlane', label: 'Offlane', Icon: OfflaneSVG },
+  { key: 'soft_support', label: 'Soft Support', Icon: SoftSupportSVG },
+  { key: 'hard_support', label: 'Hard Support', Icon: HardSupportSVG },
 ];
 
 function PositionSelect({
   form,
   fieldKey,
   label,
+  Icon,
 }: {
   form: UseFormReturn<EditUserInput>;
   fieldKey: PositionKey;
   label: string;
+  Icon: React.FC<{ className?: string }>;
 }) {
   return (
     <FormField
@@ -57,7 +70,10 @@ function PositionSelect({
       name={`positions.${fieldKey}` as const}
       render={({ field }) => (
         <FormItem>
-          <FormLabel>{label}</FormLabel>
+          <FormLabel className="flex items-center gap-2">
+            <Icon className="h-4 w-4 shrink-0" />
+            <span>{label}</span>
+          </FormLabel>
           <Select
             value={String(field.value)}
             onValueChange={(v) => field.onChange(parseInt(v, 10))}
@@ -178,8 +194,8 @@ export const UserEditForm: React.FC<Props> = ({ form, showMmr, mmrLabel }) => {
           Positions
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {POSITION_FIELDS.map(({ key, label }) => (
-            <PositionSelect key={key} form={form} fieldKey={key} label={label} />
+          {POSITION_FIELDS.map(({ key, label, Icon }) => (
+            <PositionSelect key={key} form={form} fieldKey={key} label={label} Icon={Icon} />
           ))}
         </div>
       </div>
