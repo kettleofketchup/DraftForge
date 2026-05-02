@@ -1,6 +1,6 @@
 import React, { memo, useEffect } from 'react';
 import { Badge } from '~/components/ui/badge';
-import { ViewIconButton } from '~/components/ui/buttons';
+import { SecondaryButton, ViewIconButton } from '~/components/ui/buttons';
 import {
   CardAction,
   CardDescription,
@@ -106,27 +106,27 @@ export const UserCard: React.FC<Props> = memo(
       if (!user.steam_account_id) return null;
       const url = `https://www.dotabuff.com/players/${user.steam_account_id}`;
       return (
-        <a
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium
-            bg-red-600/15 border border-red-500/40 text-red-200
-            transform-gpu transition-colors duration-150
-            hover:bg-red-600/25 hover:border-red-400/60 hover:text-red-100
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          // Native title — zero React cost (vs. Radix Tooltip which adds
-          // 4 components + a portal mount per hovered card).
-          title="View Dotabuff profile"
-        >
-          <img
-            src="https://cdn.brandfetch.io/idKrze_WBi/w/96/h/96/theme/dark/logo.png?c=1dxbfHSJFAPEGdCLU4o5B"
-            alt=""
-            aria-hidden="true"
-            className="w-4 h-4"
-          />
-          <span className="hidden sm:inline">Dotabuff</span>
-        </a>
+        // Per THEMING-GUIDE: "Supporting/contextual action" -> SecondaryButton
+        // (default = translucent violet brand, on-theme with the rest of the
+        // card). asChild keeps it as <a> so the external link semantics
+        // (target=_blank, rel=...) survive. Native title attr handles the
+        // hover hint without mounting a Radix Tooltip per visible card.
+        <SecondaryButton asChild size="sm">
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="View Dotabuff profile"
+          >
+            <img
+              src="https://cdn.brandfetch.io/idKrze_WBi/w/96/h/96/theme/dark/logo.png?c=1dxbfHSJFAPEGdCLU4o5B"
+              alt=""
+              aria-hidden="true"
+              className="w-4 h-4"
+            />
+            <span className="hidden sm:inline">Dotabuff</span>
+          </a>
+        </SecondaryButton>
       );
     };
 

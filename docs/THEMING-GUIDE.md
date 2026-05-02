@@ -231,7 +231,7 @@ Do **not** use `<Button>` directly for user-facing actions. Reserve `<Button>` f
 | Cancel/back/dismiss | `<SecondaryButton>` or `<CancelButton>` | Translucent violet |
 | Colored contextual action | `<SecondaryButton color="sky">` | Colored background + 3D |
 | Navigation action | `<NavButton>` | Sky blue + 3D |
-| Edit action | `<EditButton>` / `<EditIconButton>` | Toxic violet→fuchsia→lime + 3D |
+| Edit action | `<EditButton>` / `<EditIconButton>` | Toxic violet→emerald cyberpunk blend + 3D |
 | Destructive page action | `<DestructiveButton>` | Red + 3D |
 
 > `PrimaryButton`, `SubmitButton`, and `ConfirmButton variant="success"` share the brand gradient visual. Choose based on HTML semantics and context, not appearance.
