@@ -394,9 +394,9 @@ def sync_send_embed_with_components(
     so only one worker reaches the Discord HTTP send. After the send,
     finalize_discord_message_log flips success to True/False.
 
-    For source_id=None (anonymous sends, no dedup target), falls back to the
-    legacy post-send logging path — the lease pattern requires both source
-    and source_id to be meaningful for dedup.
+    For source_id=None (anonymous sends, no dedup target), uses the
+    post-send logging path instead — the lease pattern requires both source
+    and source_id to be meaningful for the partial unique constraint.
 
     Returns:
         dict: API response with _message_log_id key on success
@@ -410,10 +410,11 @@ def sync_send_embed_with_components(
     embeds = embed if isinstance(embed, list) else [embed]
     embed_data = embeds[0] if embeds else {}
 
-    # source_id=None can't participate in the lease (unique constraint
-    # bypasses NULL); fall back to the legacy post-send log path.
+    # source_id=None can't participate in the lease — SQL NULL != NULL
+    # makes multiple NULL source_id rows allowed by the unique constraint,
+    # so dedup is meaningless.
     if source_id is None:
-        return _legacy_send_with_post_log(
+        return _send_with_post_log(
             channel_id, embed, components, source, source_id,
             forum_thread_name, content, allowed_mentions, fired_by_user_id,
         )
@@ -486,15 +487,15 @@ def sync_send_embed_with_components(
         return None
 
 
-def _legacy_send_with_post_log(
+def _send_with_post_log(
     channel_id, embed, components, source, source_id,
     forum_thread_name, content, allowed_mentions, fired_by_user_id,
 ):
-    """Pre-lease send + post-log path for callers without a meaningful source_id.
+    """Send + post-log path for callers without a meaningful source_id.
 
     Used by anonymous/admin sends that can't participate in the lease
-    pattern. Same shape as the original sync_send_embed_with_components
-    pre-PR-1.
+    pattern (NULL source_id can't be dedup'd by the partial unique
+    constraint). The log row is written AFTER the Discord HTTP send.
     """
     embeds = embed if isinstance(embed, list) else [embed]
     embed_data = embeds[0] if embeds else {}

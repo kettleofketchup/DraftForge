@@ -353,10 +353,8 @@ def send_event_announcement(event_id):
 def send_attendance_reminder(event_id):
     """Post the attendance-confirmation embed to the announcement channel.
 
-    Extracted from the inline block formerly in check_event_reminders so the
-    polling task stays fast (no synchronous Discord HTTP). Idempotency is
-    provided by sync_send_embed_with_components's internal claim/finalize
-    lease pattern.
+    Idempotency is provided by sync_send_embed_with_components's internal
+    claim/finalize lease pattern (one HTTP send per (source, source_id)).
     """
     from app.internal_client import (
         create_event_log,
@@ -406,9 +404,7 @@ def send_attendance_reminder(event_id):
 def send_profile_reminder(event_id):
     """Post the profile-completion reminder embed to the announcement channel.
 
-    Mirror of send_attendance_reminder — extracted from the inline block in
-    check_event_reminders for the same reason (keep polling fast, lease pattern
-    handles dedup).
+    Idempotency via sync_send_embed_with_components's lease pattern.
     """
     from app.internal_client import (
         create_event_log,
@@ -994,10 +990,9 @@ def send_subscriber_notifications(event_id):
         )
         raise
 
-    # Finalize the lease — replaces the legacy post-loop create_message_log.
-    # success is True only if at least one DM was actually delivered;
-    # all-failed (or all-skipped with no attempts) marks success=False so
-    # the sweeper can age out failures and the next poll can retry.
+    # success=True only if at least one DM was actually delivered;
+    # all-failed marks success=False so the sweeper can age it out and
+    # the next poll can retry.
     finalize_discord_message_log(
         log_pk,
         success=sent > 0,

@@ -83,12 +83,12 @@ class RSVP(models.Model):
 
 
 class DiscordMessageLog(models.Model):
-    """Audit log for all outbound Discord messages.
+    """Audit log for all outbound Discord messages, with pre-send lease semantics.
 
-    Lease semantics (PR-1):
-        success = NULL  → lease held; send in flight
-        success = True  → message sent successfully
-        success = False → send attempted and failed (transient or permanent)
+    success states:
+        NULL  → lease held; send in flight
+        True  → message sent successfully
+        False → send attempted and failed (transient or permanent)
 
     The partial unique index on (source, source_id) WHERE success IS NOT FALSE
     serializes claim attempts: only one worker can hold a NULL or True row for

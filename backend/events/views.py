@@ -374,11 +374,6 @@ class EventViewSet(viewsets.ModelViewSet):
         invalidate_after_commit(event)
         from events.discord import notify_create_discord_event
 
-        # PR-1: announcement is now scheduled (fires discord_announcement_hours
-        # before scheduled_at via the registry). The legacy
-        # notify_event_announced(event) immediate-dispatch is removed —
-        # check_event_reminders -> fire_due_reminders dispatches it
-        # at the right time.
         notify_create_discord_event(event)
 
     def perform_update(self, serializer):
@@ -419,7 +414,6 @@ class EventViewSet(viewsets.ModelViewSet):
             if not has_announcement:
                 from events.discord import notify_create_discord_event
 
-                # PR-1: announcement is scheduled now (see perform_create above)
                 notify_create_discord_event(event)
 
     def update(self, request, *args, **kwargs):
@@ -548,8 +542,6 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
             event.transition_state(EventState.SIGNUPS_OPEN)
-            # PR-1: announcement is scheduled by the registry; legacy
-            # notify_event_announced immediate dispatch removed.
             qs = _annotate_event_qs(Event.objects.filter(pk=event.pk))
             data = EventSerializer(qs.first()).data
             _attach_user_can_manage(data, request.user)

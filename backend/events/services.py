@@ -650,9 +650,6 @@ def generate_events_for_repeater(repeater):
         create_tournament_for_event(event)
         ensure_discord_event(event)
         created_events.append(event)
-        # PR-1: announcement is scheduled (fires discord_announcement_hours
-        # before scheduled_at via the registry). Legacy notify_event_announced
-        # immediate-dispatch removed.
         if repeater.discord_notify_new_events:
             notify_new_event(event)
         if event.discord_create_event:
