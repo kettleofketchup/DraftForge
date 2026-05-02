@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { claimUserProfile, fetchUser } from '~/components/api/api';
 import { Badge } from '~/components/ui/badge';
-import { ViewIconButton } from '~/components/ui/buttons';
+import { DotabuffButton, ViewIconButton } from '~/components/ui/buttons';
 import { InfoDialog } from '~/components/ui/dialogs';
 import { useSharedPopover } from '~/components/ui/shared-popover-context';
 import { LeagueStatsCard } from '~/components/user/LeagueStatsCard';
@@ -148,11 +148,6 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
     ).finally(() => setIsClaiming(false));
   };
 
-  const goToDotabuff = () => {
-    if (!displayPlayer.steam_account_id) return '#';
-    return `https://www.dotabuff.com/players/${encodeURIComponent(String(displayPlayer.steam_account_id))}`;
-  };
-
   return (
     <InfoDialog
       open={open}
@@ -253,21 +248,11 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
         {/* Action buttons */}
         <div className="pt-2 flex gap-2">
           {/* Dotabuff link */}
-          {displayPlayer.steam_account_id && (
-            <a
-              className="flex items-center justify-center btn btn-sm btn-outline flex-1 gap-1"
-              href={goToDotabuff()}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <img
-                src="https://cdn.brandfetch.io/idKrze_WBi/w/96/h/96/theme/dark/logo.png?c=1dxbfHSJFAPEGdCLU4o5B"
-                alt="Dotabuff"
-                className="w-4 h-4"
-              />
-              Dotabuff
-            </a>
-          )}
+          <DotabuffButton
+            steamAccountId={displayPlayer.steam_account_id}
+            responsive={false}
+            className="flex-1"
+          />
 
           {/* Claim Profile button */}
           {canClaimProfile && (

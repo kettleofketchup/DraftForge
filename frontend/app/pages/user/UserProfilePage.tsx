@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { ExternalLink, Trophy, Users, Gamepad2, Award } from 'lucide-react';
+import { Trophy, Users, Gamepad2, Award } from 'lucide-react';
 
 import { fetchUser } from '~/components/api/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
-import { EditIconButton } from '~/components/ui/buttons';
+import { DotabuffButton, EditIconButton } from '~/components/ui/buttons';
 import { Badge } from '~/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { ScrollArea, ScrollBar } from '~/components/ui/scroll-area';
@@ -126,15 +126,7 @@ export function UserProfilePage() {
                 {/* Quick Stats */}
                 {user.steam_account_id && (
                   <div className="flex flex-wrap justify-center sm:justify-start gap-4 mt-4">
-                    <a
-                      href={`https://www.dotabuff.com/players/${user.steam_account_id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      Dotabuff
-                    </a>
+                    <DotabuffButton steamAccountId={user.steam_account_id} responsive={false} />
                   </div>
                 )}
               </div>

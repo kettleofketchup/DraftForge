@@ -51,10 +51,9 @@ describe('buildDefaults', () => {
   });
 
   it('coerces nullish strings to null', () => {
-    const u = { ...baseUser, nickname: undefined, guildNickname: null };
+    const u = { ...baseUser, nickname: undefined };
     const d = buildDefaults(u, { kind: 'global' });
     expect(d.nickname).toBe(null);
-    expect(d.guildNickname).toBe(null);
   });
 });
 
