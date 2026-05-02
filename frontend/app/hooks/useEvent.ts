@@ -189,6 +189,11 @@ export function useUpdateEventMutation(eventId: number) {
     onSuccess: (data) => {
       queryClient.setQueryData(['event', eventId], data);
       queryClient.invalidateQueries({ queryKey: ['events'] });
+      // The Activity Log + Task Schedule panels poll on their own
+      // cadences; invalidate them here so reminder-timing edits surface
+      // immediately instead of after the next 15s poll.
+      queryClient.invalidateQueries({ queryKey: ['event-discord', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['event-task-schedule', eventId] });
     },
   });
 }
