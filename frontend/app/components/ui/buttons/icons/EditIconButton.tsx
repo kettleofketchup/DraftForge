@@ -7,7 +7,7 @@ import {
   TooltipTrigger,
 } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
-import { brandDepthColors, brandGradient, button3DBase } from '../styles';
+import { brandToxic, brandToxicDepthColors, button3DBase } from '../styles';
 
 export interface EditIconButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant' | 'size'> {
@@ -35,9 +35,9 @@ const EditIconButton = React.forwardRef<HTMLButtonElement, EditIconButtonProps>(
         data-testid={dataTestId}
         className={cn(
           'rounded-full',
-          brandGradient,
+          brandToxic,
           button3DBase,
-          brandDepthColors,
+          brandToxicDepthColors,
           '[&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]',
           className
         )}

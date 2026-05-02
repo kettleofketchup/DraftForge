@@ -175,6 +175,8 @@ All brand style constants are exported from `~/components/ui/buttons`:
 | `brandSecondaryOpaque` | `bg-violet-950 border border-violet-400/30 text-violet-100 hover:bg-violet-900` | Secondary on colored backgrounds (dialogs) |
 | `brandBg` | `[background-image:var(--brand-bg)]` | Subtle surface background (default on dialogs) |
 | `brandGlow` | `shadow-brand-glow` | Brand glow shadow |
+| `brandToxic` | `bg-gradient-to-br from-violet-700 via-emerald-800 to-emerald-700 hover:from-violet-600 hover:via-emerald-700 hover:to-emerald-600 text-white` | Cyberpunk "toxic ooze" edit affordance — violet-700 → emerald-800 → emerald-700 diagonal blend (same palette family as `brandHighlight`, deeper and smoothly mixed). Used by `<EditButton>` / `<EditIconButton>`. |
+| `brandToxicDepthColors` | `border-b-emerald-900 shadow-emerald-950/60` | 3D depth + shadow tuned to the toxic gradient (deep-emerald glow on press) |
 
 ### Brand Surface Background (`brandBg`)
 
@@ -229,7 +231,7 @@ Do **not** use `<Button>` directly for user-facing actions. Reserve `<Button>` f
 | Cancel/back/dismiss | `<SecondaryButton>` or `<CancelButton>` | Translucent violet |
 | Colored contextual action | `<SecondaryButton color="sky">` | Colored background + 3D |
 | Navigation action | `<NavButton>` | Sky blue + 3D |
-| Edit action | `<EditButton>` | Purple + 3D |
+| Edit action | `<EditButton>` / `<EditIconButton>` | Toxic violet→fuchsia→lime + 3D |
 | Destructive page action | `<DestructiveButton>` | Red + 3D |
 
 > `PrimaryButton`, `SubmitButton`, and `ConfirmButton variant="success"` share the brand gradient visual. Choose based on HTML semantics and context, not appearance.

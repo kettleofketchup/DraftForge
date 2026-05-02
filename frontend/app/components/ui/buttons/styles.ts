@@ -30,6 +30,16 @@ export const brandSuccessBg = '[background-image:var(--brand-success-bg)]';
 export const brandHighlight = 'bg-gradient-to-r from-emerald-900/40 to-violet-900/40 border border-emerald-500/20 hover:from-emerald-900/60 hover:to-violet-900/60';
 export const brandHighlightText = 'bg-gradient-to-r from-emerald-400 to-violet-400 bg-clip-text text-transparent';
 
+// Brand toxic - violet → deep-emerald cyberpunk gradient for edit
+// affordances. Same palette family as `brandHighlight` (emerald + violet)
+// but darker and smoothly blended through a deep-violet/emerald midpoint.
+// Reads as "toxic ooze" — saturated, dark, with no harsh hue line.
+// Used by <EditButton> / <EditIconButton> so every edit affordance pops
+// against the slate base without competing with the primary CTA gradient.
+export const brandToxic =
+  'bg-gradient-to-br from-violet-700 via-emerald-800 to-emerald-700 hover:from-violet-600 hover:via-emerald-700 hover:to-emerald-600 text-white';
+export const brandToxicDepthColors = 'border-b-emerald-900 shadow-emerald-950/60';
+
 // Brand error surfaces - muted deep wine/red tones for error containers.
 // Uses raw Tailwind colors (not semantic --error/--primary) because error surfaces
 // need deep wine/muted tones, not the bright accent status colors.
@@ -71,7 +81,7 @@ export const button3DVariants = {
   primary: `${button3DBase} ${button3DDisabled} bg-primary text-primary-foreground hover:bg-primary/90 border-b-primary/50`,
   secondary: `${brandSecondary3D}`,
   outline: `${button3DBase} ${button3DDisabled} border-b-gray-600`,
-  edit: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} bg-purple-700 text-white hover:bg-purple-600 border-b-purple-900 shadow-purple-900/50`,
+  edit: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} ${brandToxic} ${brandToxicDepthColors}`,
   nav: `${button3DBase} ${button3DDisabled} ${iconWhite} ${iconMuted} bg-sky-700 text-white hover:bg-sky-600 border-b-sky-900 shadow-sky-900/50`,
 } as const;
 
