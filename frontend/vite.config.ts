@@ -31,6 +31,18 @@ export default defineConfig({
   },
   server: {
     allowedHosts: ['localhost', 'dota.kettle.sh', 'nginx'],
+    // HMR: the page is served via nginx at https://localhost (port 443),
+    // but Vite's dev server runs on port 3000 inside the frontend
+    // container. Without an explicit clientPort the HMR client tries to
+    // open a WebSocket back to localhost:3000 which isn't exposed
+    // publicly. Tell the client to use the same protocol/host/port as
+    // the page and route through a dedicated nginx WS location.
+    hmr: {
+      protocol: 'wss',
+      host: 'localhost',
+      clientPort: 443,
+      path: '/__vite_hmr',
+    },
     // Warm up frequently used files for faster initial loads
     warmup: {
       clientFiles: [
