@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion';
 import React, { memo, useEffect } from 'react';
 import { Badge } from '~/components/ui/badge';
 import { ViewIconButton } from '~/components/ui/buttons';
@@ -206,14 +205,17 @@ export const UserCard: React.FC<Props> = memo(
         className="flex w-full min-w-0 py-2 items-stretch overflow-visible
           [contain:layout_style]"
       >
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
-          whileHover={{ scale: 1.02 }}
+        <div
           key={`usercard:${getKeyName()} basediv`}
+          // Pure CSS hover scale (no Framer Motion). transform-gpu promotes
+          // to its own compositor layer so scroll-time hover scaling doesn't
+          // reflow neighbors. transition-transform is short so the hover
+          // feels instant. Replaces the previous motion.div which paid the
+          // full Framer animation-pipeline tax for every visible card on
+          // every scroll-triggered remount.
           className="flex flex-col gap-2 card card-compact bg-base-300 rounded-2xl
-            w-full min-w-0 p-2 overflow-hidden
+            w-full min-w-0 p-2 overflow-hidden transform-gpu
+            transition-transform duration-150 hover:scale-[1.02]
             hover:bg-base-200 focus:outline-2
             focus:outline-offset-2 focus:outline-primary
             active:bg-base-200"
@@ -358,7 +360,7 @@ export const UserCard: React.FC<Props> = memo(
               </div>
             )}
           </div>
-        </motion.div>
+        </div>
       </div>
     );
   },

@@ -64,30 +64,43 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scope is read inline; deps cover its identity keys
   }, [open, user.pk, user.orgUserPk, scope.kind, scopeOrgPk, scopeLeaguePk, form]);
 
-  async function onSubmit(data: EditUserInput) {
-    if (!isDirty) {
-      setOpen(false);
-      return;
-    }
-    try {
-      const payload = pickDirty(data, dirtyFields);
-      const updated = await dispatchPatch(user, scope, payload);
-      useUserCacheStore.getState().upsert([updated], scopeToContext(scope));
-      // Invalidate any TanStack Query subscribers (e.g. UserProfilePage's
-      // useQuery({ queryKey: ['user', pk] })) that don't read from the
-      // Zustand user cache. Without this, profile pages serve stale data
-      // until a manual refetch / page reload.
-      if (user.pk) {
-        queryClient.invalidateQueries({ queryKey: ['user', user.pk] });
+  // useCallback so handleSubmit returns a stable wrapper across renders —
+  // otherwise FormDialog's onSubmit prop changes every render and forces
+  // a re-render of FormDialog (and its dialog content tree) whenever any
+  // unrelated state in this component updates. Read isDirty/dirtyFields
+  // off form.formState inside the callback so the stable reference still
+  // sees the latest RHF state at submit time.
+  const onSubmit = React.useCallback(
+    async (data: EditUserInput) => {
+      const fs = form.formState;
+      if (!fs.isDirty) {
+        setOpen(false);
+        return;
       }
-      toast.success(`${user.username} updated`);
-      setOpen(false);
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : `Failed to update ${user.username}`;
-      toast.error(message);
-    }
-  }
+      try {
+        const payload = pickDirty(data, fs.dirtyFields);
+        const updated = await dispatchPatch(user, scope, payload);
+        useUserCacheStore.getState().upsert([updated], scopeToContext(scope));
+        if (user.pk) {
+          queryClient.invalidateQueries({ queryKey: ['user', user.pk] });
+        }
+        toast.success(`${user.username} updated`);
+        setOpen(false);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : `Failed to update ${user.username}`;
+        toast.error(message);
+      }
+    },
+    [form, user, scope, queryClient],
+  );
+
+  // Stable submit handler for FormDialog. form.handleSubmit returns a new
+  // function each render, so memoize the composed callback.
+  const submitHandler = React.useMemo(
+    () => form.handleSubmit(onSubmit),
+    [form, onSubmit],
+  );
 
   if (!canEdit) return null;
 
@@ -105,7 +118,7 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
         description="Update this user's profile."
         submitLabel="Save Changes"
         isSubmitting={isSubmitting}
-        onSubmit={form.handleSubmit(onSubmit)}
+        onSubmit={submitHandler}
         size="xl"
         data-testid="edit-user-modal"
       >
