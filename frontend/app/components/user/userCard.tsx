@@ -188,7 +188,7 @@ export const UserCard: React.FC<Props> = memo(
           transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
           whileHover={{ scale: 1.02 }}
           key={`usercard:${getKeyName()} basediv`}
-          className="flex flex-col gap-2 card card-compact bg-base-300 rounded-2xl w-fit
+          className="flex flex-col gap-2 card card-compact bg-base-300 rounded-2xl w-full p-2
             hover:bg-base-200 focus:outline-2
             focus:outline-offset-2 focus:outline-primary
             active:bg-base-200"
