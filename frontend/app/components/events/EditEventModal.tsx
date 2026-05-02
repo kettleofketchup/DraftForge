@@ -124,8 +124,15 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
         discord_event_title: event.discord_event_title,
         discord_event_description: event.discord_event_description,
         discord_event_info: event.discord_event_info,
-        discord_signup_reminder: event.discord_signup_reminder,
-        discord_signup_reminder_hours: event.discord_signup_reminder_hours,
+        // Single events have no subscriber list — force signup_reminder off
+        // for them so the superRefine in eventSchema doesn't reject.
+        // Repeater-occurrence events keep the persisted value.
+        discord_signup_reminder:
+          event.event_repeater != null ? event.discord_signup_reminder : false,
+        discord_signup_reminder_hours:
+          event.event_repeater != null
+            ? event.discord_signup_reminder_hours
+            : 24,
         discord_confirm_attendance: event.discord_confirm_attendance,
         discord_confirm_attendance_hours: event.discord_confirm_attendance_hours,
         discord_profile_reminder: event.discord_profile_reminder,
