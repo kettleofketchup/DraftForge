@@ -113,6 +113,11 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
     [form, onSubmit],
   );
 
+  // Stable open-handler. The inline arrow created a fresh closure each
+  // render, which the React Scan trace surfaced as `onClick:16x` on
+  // EditIconButton. setOpen from useState is itself stable.
+  const handleOpen = React.useCallback(() => setOpen(true), []);
+
   if (!canEdit) return null;
 
   return (
@@ -120,7 +125,7 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
       <EditIconButton
         tooltip="Edit User"
         data-testid="edit-user-btn"
-        onClick={() => setOpen(true)}
+        onClick={handleOpen}
       />
       <FormDialog
         open={open}

@@ -8,13 +8,6 @@ import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('deleteButtonTourn');
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '~/components/ui/tooltip';
-
 import { deleteTournament } from '~/components/api/api';
 import type { TournamentType } from '../types';
 
@@ -57,21 +50,13 @@ export const TournamentRemoveButton: React.FC<PropsRemoveButton> = ({
   if (!isStaff()) return <> </>;
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex flex-row items-center gap-4">
-            <TrashIconButton
-              size="sm"
-              disabled={disabled}
-              onClick={() => setOpen(true)}
-            />
-          </div>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>Delete tournament</p>
-        </TooltipContent>
-      </Tooltip>
+    <>
+      <TrashIconButton
+        size="sm"
+        disabled={disabled}
+        tooltip="Delete tournament"
+        onClick={() => setOpen(true)}
+      />
       <ConfirmDialog
         open={open}
         onOpenChange={setOpen}
@@ -81,6 +66,6 @@ export const TournamentRemoveButton: React.FC<PropsRemoveButton> = ({
         variant="destructive"
         onConfirm={handleChange}
       />
-    </TooltipProvider>
+    </>
   );
 };

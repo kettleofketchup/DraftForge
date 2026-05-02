@@ -24,25 +24,59 @@ export interface PlayerModalContext {
   organizationId?: number;
 }
 
-interface SharedPopoverContextValue {
-  state: SharedPopoverState;
+/** Stable callbacks. The value is constructed once and never changes. */
+interface SharedPopoverActionsValue {
   showPlayerPopover: (player: UserType, anchorEl: HTMLElement) => void;
   showTeamPopover: (team: TeamType, anchorEl: HTMLElement) => void;
   hidePopover: () => void;
   openPlayerModal: (player: UserType, context?: PlayerModalContext) => void;
   openTeamModal: (team: TeamType) => void;
-  playerModalState: { player: UserType | null; open: boolean; context?: PlayerModalContext };
-  teamModalState: { team: TeamType | null; open: boolean };
   setPlayerModalOpen: (open: boolean) => void;
   setTeamModalOpen: (open: boolean) => void;
 }
 
+/** Mutable state. The value changes whenever the popover/modal opens or closes. */
+interface SharedPopoverStateValue {
+  state: SharedPopoverState;
+  playerModalState: { player: UserType | null; open: boolean; context?: PlayerModalContext };
+  teamModalState: { team: TeamType | null; open: boolean };
+}
+
+interface SharedPopoverContextValue
+  extends SharedPopoverActionsValue,
+    SharedPopoverStateValue {}
+
 const SharedPopoverContext = createContext<SharedPopoverContextValue | null>(null);
+// Split context: action consumers (UserCard, PopoverTriggers) subscribe to a
+// value that is constructed once and never changes, so popover/modal state
+// transitions don't cascade re-renders down to every grid card on screen.
+// State consumers (PlayerModal, popover renderer) keep using the legacy
+// combined hook.
+const SharedPopoverActionsContext = createContext<SharedPopoverActionsValue | null>(null);
 
 export const useSharedPopover = () => {
   const context = useContext(SharedPopoverContext);
   if (!context) {
     throw new Error('useSharedPopover must be used within SharedPopoverProvider');
+  }
+  return context;
+};
+
+/**
+ * Subscribe to ONLY the popover/modal action callbacks. The returned object
+ * reference is stable across renders — components that use this hook do NOT
+ * re-render when the popover/modal opens, closes, or changes target.
+ *
+ * Use this for any component that just *triggers* a popover/modal but doesn't
+ * need to know whether one is currently open (e.g. cards, list rows, hover
+ * triggers). The full `useSharedPopover()` is for renderers that read state.
+ */
+export const useSharedPopoverActions = () => {
+  const context = useContext(SharedPopoverActionsContext);
+  if (!context) {
+    throw new Error(
+      'useSharedPopoverActions must be used within SharedPopoverProvider',
+    );
   }
   return context;
 };
@@ -138,37 +172,43 @@ export const SharedPopoverProvider: React.FC<SharedPopoverProviderProps> = ({
     setTeamModalState((prev) => ({ ...prev, open }));
   }, []);
 
-  // Memoize the context value to prevent unnecessary re-renders of all consumers
-  const contextValue = useMemo(
+  // Actions value: constructed once. All callbacks above are useCallback with
+  // empty (or [hidePopover]) deps, so this object reference NEVER changes
+  // across renders. Action-only consumers via useSharedPopoverActions()
+  // therefore don't re-render when popover/modal state changes.
+  const actionsValue = useMemo<SharedPopoverActionsValue>(
     () => ({
-      state,
       showPlayerPopover,
       showTeamPopover,
       hidePopover,
       openPlayerModal,
       openTeamModal,
-      playerModalState,
-      teamModalState,
       setPlayerModalOpen,
       setTeamModalOpen,
     }),
     [
-      state,
       showPlayerPopover,
       showTeamPopover,
       hidePopover,
       openPlayerModal,
       openTeamModal,
-      playerModalState,
-      teamModalState,
       setPlayerModalOpen,
       setTeamModalOpen,
     ],
   );
 
+  // Combined value: kept for state-reading consumers (PlayerModal, popover
+  // renderer). Changes whenever any of the state slices change.
+  const contextValue = useMemo<SharedPopoverContextValue>(
+    () => ({ ...actionsValue, state, playerModalState, teamModalState }),
+    [actionsValue, state, playerModalState, teamModalState],
+  );
+
   return (
-    <SharedPopoverContext.Provider value={contextValue}>
-      {children}
-    </SharedPopoverContext.Provider>
+    <SharedPopoverActionsContext.Provider value={actionsValue}>
+      <SharedPopoverContext.Provider value={contextValue}>
+        {children}
+      </SharedPopoverContext.Provider>
+    </SharedPopoverActionsContext.Provider>
   );
 };

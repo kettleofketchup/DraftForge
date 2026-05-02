@@ -1,6 +1,6 @@
 import React, { useCallback, useRef } from 'react';
 import type { TeamType } from '~/components/tournament/types';
-import { useSharedPopover } from '~/components/ui/shared-popover-context';
+import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
 
 interface TeamPopoverTriggerProps {
   team: TeamType;
@@ -11,7 +11,7 @@ export const TeamPopoverTrigger: React.FC<TeamPopoverTriggerProps> = ({
   team,
   children,
 }) => {
-  const { showTeamPopover, hidePopover, openTeamModal } = useSharedPopover();
+  const { showTeamPopover, hidePopover, openTeamModal } = useSharedPopoverActions();
   const triggerRef = useRef<HTMLSpanElement>(null);
   const captain = team.captain;
   const teamName = team.name || `${captain?.nickname || captain?.username || 'Unknown'}'s Team`;

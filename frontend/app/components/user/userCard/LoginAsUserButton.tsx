@@ -13,11 +13,7 @@
 import { LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '~/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '~/components/ui/tooltip';
+import { FastTooltip } from '~/components/ui/tooltip';
 import type { UserClassType } from '~/components/user/types';
 import { loginAsDiscordId, shouldShowTestFeatures } from '~/lib/test-utils';
 
@@ -49,25 +45,20 @@ export function LoginAsUserButton({ user }: Props) {
     }
   };
 
+  const name = user.username || user.nickname;
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 text-red-500 hover:text-red-400 hover:bg-red-500/10"
-          onClick={handleLogin}
-          disabled={isLoading}
-          data-testid={`login-as-user-btn-${user.pk}`}
-        >
-          <LogIn className="h-3.5 w-3.5" />
-          <span className="sr-only">Login as {user.username || user.nickname}</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="bg-red-900 text-white border-red-800">
-        <p className="text-xs">Login as {user.username || user.nickname}</p>
-        <p className="text-xs text-red-300">(Test Only)</p>
-      </TooltipContent>
-    </Tooltip>
+    <FastTooltip content={`Login as ${name} (Test Only)`}>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+        onClick={handleLogin}
+        disabled={isLoading}
+        data-testid={`login-as-user-btn-${user.pk}`}
+      >
+        <LogIn className="h-3.5 w-3.5" />
+        <span className="sr-only">Login as {name}</span>
+      </Button>
+    </FastTooltip>
   );
 }

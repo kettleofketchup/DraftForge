@@ -1,6 +1,6 @@
 import React, { useCallback, useRef } from 'react';
 import type { UserType } from '~/components/user/types';
-import { useSharedPopover } from '~/components/ui/shared-popover-context';
+import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
 
@@ -13,7 +13,7 @@ export const PlayerPopoverTrigger: React.FC<PlayerPopoverTriggerProps> = ({
   player,
   children,
 }) => {
-  const { showPlayerPopover, hidePopover, openPlayerModal } = useSharedPopover();
+  const { showPlayerPopover, hidePopover, openPlayerModal } = useSharedPopoverActions();
   const currentOrg = useOrgStore((s) => s.currentOrg);
   const currentLeague = useLeagueStore((s) => s.currentLeague);
   const triggerRef = useRef<HTMLSpanElement>(null);
