@@ -185,16 +185,18 @@ export function DiscordConfigSection({ control, watch, isRepeater, organizationI
         )}
       </div>
 
-      {/* Signup reminder */}
-      <div className="rounded-md border border-border p-3 space-y-3">
-        <CheckboxField control={control} name="discord_signup_reminder"
-          label="Send signup reminder"
-          description="DM users who haven't signed up yet before the event starts"
-        />
-        {signupReminder && (
-          <HoursSelect control={control} name="discord_signup_reminder_hours" label="Hours before event" />
-        )}
-      </div>
+      {/* Signup reminder — repeater-only (single events have no subscriber list) */}
+      {isRepeater && (
+        <div className="rounded-md border border-border p-3 space-y-3">
+          <CheckboxField control={control} name="discord_signup_reminder"
+            label="Send signup reminder"
+            description="DM users who haven't signed up yet before the event starts"
+          />
+          {signupReminder && (
+            <HoursSelect control={control} name="discord_signup_reminder_hours" label="Hours before event" />
+          )}
+        </div>
+      )}
 
       {/* Profile reminder */}
       <div className="rounded-md border border-border p-3 space-y-3">
