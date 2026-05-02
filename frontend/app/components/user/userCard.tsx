@@ -198,11 +198,13 @@ export const UserCard: React.FC<Props> = memo(
         // on the inner card actually clip overflow.
         // overflow-visible lets the motion.div's hover scale: 1.02 paint
         // beyond the wrapper's box without being clipped.
-        // (Note: dropped [content-visibility:auto] [contain-intrinsic-size:...]
-        // here — content-visibility implies contain: paint which clips the
-        // hover scale transform. Restore those if perf becomes a concern,
-        // but keep them off the cards' direct wrapper.)
-        className="flex w-full min-w-0 py-2 items-stretch overflow-visible"
+        // [contain:layout_style] is CSS containment WITHOUT `paint` or
+        // `size` — the browser isolates this card's layout/style work
+        // (so hover repaints don't ripple through neighbors), without
+        // clipping the hover-scale paint. Replaces the older
+        // [content-visibility:auto] which clipped the transform.
+        className="flex w-full min-w-0 py-2 items-stretch overflow-visible
+          [contain:layout_style]"
       >
         <motion.div
           initial={{ opacity: 0, y: 10 }}
