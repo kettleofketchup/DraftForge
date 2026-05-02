@@ -190,8 +190,26 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         from app.cache_utils import invalidate_after_commit
 
+        # Snapshot schedule fields before save so we can detect a change
+        # and tell sync_future_events to realign occurrences. Without this,
+        # editing day_of_week leaves stale UPCOMING rows on the old day
+        # while generate_events_for_repeater creates new rows on the new
+        # day — admins see duplicates.
+        schedule_fields = (
+            "day_of_week",
+            "time_of_day",
+            "timezone",
+            "starts_at",
+            "frequency",
+        )
+        before = {f: getattr(serializer.instance, f) for f in schedule_fields}
         repeater = serializer.save()
-        future_events = sync_future_events(repeater)
+        schedule_changed = any(
+            before[f] != getattr(repeater, f) for f in schedule_fields
+        )
+        future_events = sync_future_events(
+            repeater, realign_schedule=schedule_changed
+        )
         # Single batched invalidation — repeater + every cascaded child
         invalidate_after_commit(repeater, *future_events)
 

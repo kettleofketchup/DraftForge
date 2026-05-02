@@ -660,26 +660,48 @@ def generate_events_for_repeater(repeater):
 
 
 @transaction.atomic
-def sync_future_events(repeater):
+def sync_future_events(repeater, *, realign_schedule=False):
     """Propagate repeater changes to all upcoming events in the series.
 
     Only updates events that haven't progressed past 'upcoming' state
     (i.e. signups haven't opened yet), so in-progress events are untouched.
 
-    Returns the list of touched Event instances so callers can chain a
-    single invalidate_after_commit at the end of the request — necessary
-    because cacheops post_save signals defer invalidation until commit
-    inside @transaction.atomic, but the explicit batched call ensures
-    the children are invalidated even if signal handlers race.
+    If realign_schedule=True (caller detected a day_of_week / time_of_day /
+    timezone / starts_at / frequency change), UPCOMING rows whose
+    scheduled_at is no longer in the repeater's new occurrence set are
+    DELETED, and any new occurrences not already present are INSERTED via
+    generate_events_for_repeater. This eliminates the duplicate-occurrence
+    problem where the next hourly generation produced new rows at the
+    new schedule alongside the stale ones.
 
-    The cascade iterates DISCORD_CONFIG_FIELDS, which is auto-built from
-    DiscordEventConfigMixin._meta.get_fields() (services.py:536-538), so
-    every reminder field defined on the mixin is automatically copied.
-    The CI guardrail RegistryMixinCoverageTest enforces that registry
-    fields stay on the mixin — so this function never silently misses a
-    registered reminder.
+    Returns the list of touched Event instances so callers can chain a
+    single invalidate_after_commit at the end of the request.
+
+    The field cascade iterates DISCORD_CONFIG_FIELDS, which is auto-built
+    from DiscordEventConfigMixin._meta.get_fields(), so every reminder
+    field defined on the mixin is automatically copied. The CI guardrail
+    RegistryMixinCoverageTest enforces that registry fields stay on the
+    mixin.
     """
     from app.cache_utils import invalidate_after_commit
+
+    if realign_schedule:
+        # Compute the new occurrence set using the same helper that
+        # generate_events_for_repeater uses — guarantees timestamp equality
+        # between regenerated and pre-existing rows.
+        today = _today()
+        to_date = today + timedelta(days=repeater.generate_days_ahead)
+        new_occurrences = set(_get_next_occurrences(repeater, today, to_date))
+
+        # Delete UPCOMING rows that don't match the new occurrence set
+        Event.objects.filter(
+            event_repeater=repeater,
+            state=EventState.UPCOMING,
+        ).exclude(scheduled_at__in=new_occurrences).delete()
+
+        # Generate any missing occurrences. The existing helper handles
+        # the "row already exists" check via its pre-insert filter.
+        generate_events_for_repeater(repeater)
 
     future_events = list(
         Event.objects.filter(
