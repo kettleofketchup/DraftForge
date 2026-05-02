@@ -53,11 +53,14 @@ function TooltipContent({
 }
 
 /**
- * Lazy tooltip - only mounts the full Radix tooltip structure on hover.
- * Use this for performance-critical lists where many tooltips are rendered.
+ * FastTooltip — pure native `title` attribute, NEVER mounts Radix.
  *
- * On initial render, only renders the children with a title attribute as fallback.
- * On hover, mounts the full Radix tooltip for nice styling.
+ * Use this for the most extreme dense displays (e.g. the 125-hero
+ * herodraft grid) where the styled Radix bubble doesn't add value and
+ * any per-item React/Radix cost is too much. Cheapest possible tooltip.
+ *
+ * If you want native fallback PLUS upgrade to the styled Radix bubble on
+ * first hover, use `<LazyTooltip>` instead.
  *
  * @example
  * <FastTooltip content="Hero name">
@@ -87,4 +90,88 @@ function FastTooltip({
   );
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, FastTooltip }
+/**
+ * LazyTooltip — defers mounting the heavy Radix Tooltip subtree
+ * (TooltipContent + TooltipPortal + Popper) until the user actually
+ * interacts with the trigger. The trigger renders immediately with a
+ * native `title` attribute as the pre-hover fallback. The first
+ * pointerenter / focus / touchstart event swaps in the full Radix
+ * Tooltip — same styling as the eager `<Tooltip>` thereafter.
+ *
+ * When to use this instead of `<Tooltip>`:
+ *
+ * - **Dense lists** (user grid, roster, draft picks) where hundreds of
+ *   tooltips would otherwise render eagerly even though only a handful
+ *   are ever opened. The trace was showing 206 Tooltip renders /
+ *   74 TooltipContent renders / 132 TooltipPortal+Popper renders per
+ *   scroll frame on the /users grid — those evaporate with this pattern.
+ *
+ * For one-off tooltips (page header actions, modal buttons), the
+ * regular `<Tooltip>` is fine.
+ *
+ * Pattern modeled after https://github.com/FranciscoMoretti/shadcn-lazy-tooltip
+ *
+ * @example
+ * ```tsx
+ * <LazyTooltip content="Edit user">
+ *   <EditIconButton onClick={handleEdit} />
+ * </LazyTooltip>
+ * ```
+ */
+interface LazyTooltipProps {
+  /** Tooltip body. Strings are also surfaced as the native `title` fallback before lazy mount. */
+  content: React.ReactNode;
+  /** The element that triggers the tooltip. Must accept ref + pointer/focus handlers. */
+  children: React.ReactElement;
+  /** Side of the trigger to render the tooltip. Defaults to Radix default. */
+  side?: 'top' | 'right' | 'bottom' | 'left';
+  /** Override delayDuration for this specific tooltip (otherwise inherits from TooltipProvider). */
+  delayDuration?: number;
+}
+
+function LazyTooltip({ content, children, side, delayDuration }: LazyTooltipProps) {
+  const [armed, setArmed] = React.useState(false);
+
+  // Pre-hover: render the child as-is plus a native `title` so users still
+  // get a hint, plus listeners to arm the lazy mount on first interaction.
+  // Using cloneElement keeps the trigger's existing handlers intact —
+  // composeEventHandlers semantics: if the child already has these, both fire.
+  const childWithArmingHandlers = React.useMemo(() => {
+    if (armed) return children;
+    const existing = (children.props ?? {}) as Record<string, unknown>;
+    const arm = () => setArmed(true);
+    const compose =
+      <E,>(theirs: ((e: E) => void) | undefined) =>
+      (e: E) => {
+        theirs?.(e);
+        arm();
+      };
+    return React.cloneElement(children, {
+      onPointerEnter: compose(existing.onPointerEnter as never),
+      onFocus: compose(existing.onFocus as never),
+      onTouchStart: compose(existing.onTouchStart as never),
+      // Native title is the pre-hover fallback — zero React cost.
+      title:
+        existing.title ??
+        (typeof content === 'string' ? content : undefined),
+    } as Record<string, unknown>);
+  }, [armed, children, content]);
+
+  if (!armed) return childWithArmingHandlers;
+
+  return (
+    <Tooltip defaultOpen delayDuration={delayDuration}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side={side}>{content}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+export {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+  FastTooltip,
+  LazyTooltip,
+}
