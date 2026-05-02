@@ -1,11 +1,7 @@
 import { PlusCircle } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '~/components/ui/tooltip';
+import { LazyTooltip } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
 import { brandDepthColors, brandGradient, button3DBase } from '../styles';
 
@@ -46,12 +42,7 @@ const PlusIconButton = React.forwardRef<HTMLButtonElement, PlusIconButtonProps>(
     );
 
     if (tooltip) {
-      return (
-        <Tooltip>
-          <TooltipTrigger asChild>{button}</TooltipTrigger>
-          <TooltipContent>{tooltip}</TooltipContent>
-        </Tooltip>
-      );
+      return <LazyTooltip content={tooltip}>{button}</LazyTooltip>;
     }
 
     return button;

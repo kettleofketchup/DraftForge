@@ -1,11 +1,7 @@
 import { Edit2 } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '~/components/ui/tooltip';
+import { LazyTooltip } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
 import { brandToxic, brandToxicDepthColors, button3DBase } from '../styles';
 
@@ -49,12 +45,11 @@ const EditIconButton = React.forwardRef<HTMLButtonElement, EditIconButtonProps>(
     );
 
     if (tooltip) {
-      return (
-        <Tooltip>
-          <TooltipTrigger asChild>{button}</TooltipTrigger>
-          <TooltipContent>{tooltip}</TooltipContent>
-        </Tooltip>
-      );
+      // LazyTooltip defers mounting TooltipContent + TooltipPortal + Popper
+      // until the user actually hovers/focuses. On dense card grids this is
+      // the difference between hundreds of eager Radix tooltip subtrees per
+      // scroll frame and zero. Native `title` provides the pre-arm fallback.
+      return <LazyTooltip content={tooltip}>{button}</LazyTooltip>;
     }
 
     return button;
