@@ -125,14 +125,25 @@ export const TournamentEditForm: React.FC<Props> = ({
     }
   }, [leagues, getLeagues]);
 
+  // tourn.league may be a number (id) or an embedded { pk, name, ... } —
+  // the form field expects a numeric league id (or null).
+  const leagueDefault =
+    typeof tourn?.league === 'object' && tourn.league !== null
+      ? tourn.league.pk
+      : (tourn?.league ?? null);
+
   const form = useForm<CreateTournamentInput>({
-    resolver: zodResolver(CreateTournamentSchema),
+    // Cast: zodResolver's TFieldValues generic resolves to `unknown` when
+    // the schema uses z.coerce, so RHF's inferred Resolver doesn't unify
+    // with our explicit CreateTournamentInput. Same workaround as in
+    // editUser/editModal.tsx — the runtime resolver is correct.
+    resolver: zodResolver(CreateTournamentSchema) as unknown as import('react-hook-form').Resolver<CreateTournamentInput>,
     defaultValues: {
       name: tourn?.name || '',
       tournament_type: (tourn?.tournament_type as TournamentTypeValue) || 'double_elimination',
       date_played: combineDateAndTime(initialDateTime.date, initialDateTime.time),
       timezone: (tourn as unknown as { timezone?: string })?.timezone || 'America/New_York',
-      league: tourn?.league || null,
+      league: leagueDefault,
       auto_create_hero_drafts: tourn?.auto_create_hero_drafts ?? false,
       discord_send_draft_link: tourn?.discord_send_draft_link ?? false,
       discord_send_herodraft_link: tourn?.discord_send_herodraft_link ?? false,
