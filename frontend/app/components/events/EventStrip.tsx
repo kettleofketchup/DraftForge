@@ -1,6 +1,7 @@
-import { Pencil, Repeat, Users } from 'lucide-react';
+import { Repeat, Users } from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '~/components/ui/button';
+import { EditIconButton } from '~/components/ui/buttons';
 import {
   Tooltip,
   TooltipContent,
@@ -67,20 +68,11 @@ export function EventStrip({ event, onEdit, onEditSeries, className }: EventStri
       {(onEdit || onEditSeries) && (
         <div className="flex items-center gap-1 shrink-0">
           {onEdit && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(event); }}
-                  data-testid={`event-edit-${event.id}`}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Edit this event</TooltipContent>
-            </Tooltip>
+            <EditIconButton
+              tooltip="Edit this event"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(event); }}
+              data-testid={`event-edit-${event.id}`}
+            />
           )}
           {onEditSeries && event.event_repeater && (
             <Tooltip>
