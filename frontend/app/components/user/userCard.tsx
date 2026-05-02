@@ -107,13 +107,11 @@ export const UserCard: React.FC<Props> = memo(
       const url = `https://www.dotabuff.com/players/${user.steam_account_id}`;
       return (
         <a
-          className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-sm font-medium
-            bg-base-200 border border-border text-foreground
-            shadow-md shadow-black/30 border-b-4 border-b-violet-700/60
-            transform-gpu transition-transform duration-150
-            hover:scale-105 hover:bg-base-100
-            active:translate-y-0.5 active:border-b-0
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium
+            bg-red-600/15 border border-red-500/40 text-red-200
+            transform-gpu transition-colors duration-150
+            hover:bg-red-600/25 hover:border-red-400/60 hover:text-red-100
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
           href={url}
           target="_blank"
           rel="noopener noreferrer"
