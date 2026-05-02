@@ -128,8 +128,8 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
             )}
           </DialogHeader>
 
-          <ScrollArea className="max-h-[calc(100svh-10rem)] sm:max-h-[60vh] pr-4">
-            <form onSubmit={handleSubmit} className="space-y-4">
+          <ScrollArea className="max-h-[calc(100svh-10rem)] sm:max-h-[60vh] px-1 py-1">
+            <form onSubmit={handleSubmit} className="space-y-4 px-3 pb-1">
               {children}
             </form>
           </ScrollArea>
