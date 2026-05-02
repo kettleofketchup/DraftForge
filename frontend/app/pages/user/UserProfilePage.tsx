@@ -124,12 +124,8 @@ export function UserProfilePage() {
                 )}
 
                 {/* Quick Stats */}
-                <div className="flex flex-wrap justify-center sm:justify-start gap-4 mt-4">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-primary">{user.mmr ?? '—'}</p>
-                    <p className="text-xs text-muted-foreground">Base MMR</p>
-                  </div>
-                  {user.steam_account_id && (
+                {user.steam_account_id && (
+                  <div className="flex flex-wrap justify-center sm:justify-start gap-4 mt-4">
                     <a
                       href={`https://www.dotabuff.com/players/${user.steam_account_id}`}
                       target="_blank"
@@ -139,8 +135,8 @@ export function UserProfilePage() {
                       <ExternalLink className="h-4 w-4" />
                       Dotabuff
                     </a>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
@@ -230,10 +226,6 @@ function OverviewTab({ user }: { user: UserType }) {
               <span className="font-medium truncate">{user.nickname}</span>
             </div>
           )}
-          <div className="flex justify-between gap-2">
-            <span className="text-muted-foreground shrink-0">Base MMR</span>
-            <span className="font-medium">{user.mmr ?? 'Not set'}</span>
-          </div>
           {user.steam_account_id && (
             <div className="flex justify-between gap-2">
               <span className="text-muted-foreground shrink-0">Friend ID</span>
