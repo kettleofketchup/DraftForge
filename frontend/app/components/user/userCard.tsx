@@ -1,6 +1,6 @@
 import React, { memo, useEffect } from 'react';
 import { Badge } from '~/components/ui/badge';
-import { SecondaryButton, ViewIconButton } from '~/components/ui/buttons';
+import { DotabuffButton, ViewIconButton } from '~/components/ui/buttons';
 import {
   CardAction,
   CardDescription,
@@ -102,33 +102,12 @@ export const UserCard: React.FC<Props> = memo(
     };
 
 
-    const userDotabuff = () => {
-      if (!user.steam_account_id) return null;
-      const url = `https://www.dotabuff.com/players/${user.steam_account_id}`;
-      return (
-        // Per THEMING-GUIDE: "Supporting/contextual action" -> SecondaryButton
-        // (default = translucent violet brand, on-theme with the rest of the
-        // card). asChild keeps it as <a> so the external link semantics
-        // (target=_blank, rel=...) survive. Native title attr handles the
-        // hover hint without mounting a Radix Tooltip per visible card.
-        <SecondaryButton asChild size="sm">
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="View Dotabuff profile"
-          >
-            <img
-              src="https://cdn.brandfetch.io/idKrze_WBi/w/96/h/96/theme/dark/logo.png?c=1dxbfHSJFAPEGdCLU4o5B"
-              alt=""
-              aria-hidden="true"
-              className="w-4 h-4"
-            />
-            <span className="hidden sm:inline">Dotabuff</span>
-          </a>
-        </SecondaryButton>
-      );
-    };
+    const userDotabuff = () => (
+      // Reusable DotabuffButton handles the missing-steamAccountId no-op,
+      // the icon-only collapse on mobile, the asChild external-link wiring,
+      // and the native-title hover hint.
+      <DotabuffButton steamAccountId={user.steam_account_id} />
+    );
 
     // Show "Claim Profile" button when:
     // - Target user HAS Friend ID (manually added profile with steam identifier)

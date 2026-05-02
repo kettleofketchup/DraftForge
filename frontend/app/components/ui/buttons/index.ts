@@ -62,3 +62,7 @@ export type {
   ZoomAction,
   ZoomIconButtonProps,
 } from './icons';
+
+// User-domain buttons (Dotabuff, etc.) — see ./user/README context note.
+export { DotabuffButton, DotabuffIconButton } from './user';
+export type { DotabuffButtonProps, DotabuffIconButtonProps } from './user';
