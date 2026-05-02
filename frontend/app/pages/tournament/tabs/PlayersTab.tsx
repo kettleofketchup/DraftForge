@@ -66,8 +66,9 @@ export const PlayersTab: React.FC = memo(() => {
   const hasDiscordServer = Boolean(currentOrg?.discord_server_id);
   const canEdit = isStaff() || isLeagueStaff;
 
-  // Grid columns for tournament players
-  const gridCols = 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5';
+  // Grid columns for tournament players (mobile-first ColumnBreakpoints
+  // for the virtualized UserList grid).
+  const cols = { base: 1, sm: 2, lg: 3, xl: 4, '2xl': 5 } as const;
   return (
     <div className="py-5 px-3 mx-auto container">
       {hasErrors()}
@@ -109,7 +110,7 @@ export const PlayersTab: React.FC = memo(() => {
           searchQuery={query}
           compact={true}
           deleteButtonType="tournament"
-          gridCols={gridCols}
+          cols={cols}
           emptyMessage="No players in this tournament"
         />
       </div>

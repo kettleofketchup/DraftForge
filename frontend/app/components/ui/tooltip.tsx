@@ -131,38 +131,29 @@ interface LazyTooltipProps {
 
 function LazyTooltip({ content, children, side, delayDuration }: LazyTooltipProps) {
   const [armed, setArmed] = React.useState(false);
+  const onArm = React.useCallback(() => setArmed(true), []);
 
-  // Pre-hover: render the child as-is plus a native `title` so users still
-  // get a hint, plus listeners to arm the lazy mount on first interaction.
-  // Using cloneElement keeps the trigger's existing handlers intact —
-  // composeEventHandlers semantics: if the child already has these, both fire.
-  const childWithArmingHandlers = React.useMemo(() => {
-    if (armed) return children;
-    const existing = (children.props ?? {}) as Record<string, unknown>;
-    const arm = () => setArmed(true);
-    const compose =
-      <E,>(theirs: ((e: E) => void) | undefined) =>
-      (e: E) => {
-        theirs?.(e);
-        arm();
-      };
-    return React.cloneElement(children, {
-      onPointerEnter: compose(existing.onPointerEnter as never),
-      onFocus: compose(existing.onFocus as never),
-      onTouchStart: compose(existing.onTouchStart as never),
-      // Native title is the pre-hover fallback — zero React cost.
-      title:
-        existing.title ??
-        (typeof content === 'string' ? content : undefined),
-    } as Record<string, unknown>);
-  }, [armed, children, content]);
-
-  if (!armed) return childWithArmingHandlers;
-
+  // Tooltip + TooltipTrigger are mounted from the start so the wrapped
+  // child stays in a stable React tree — critical for buttons whose
+  // onClick opens a modal: replacing the wrapper between renders drops
+  // the in-flight click event during reconciliation. Only the heavy
+  // TooltipContent (Popper + Portal + content tree) is lazy-mounted
+  // on first interaction.
+  //
+  // Radix composes its own pointer/focus handlers with the props we
+  // pass to TooltipTrigger, so onArm fires alongside Radix's internal
+  // open-on-hover logic — both work without contention.
   return (
-    <Tooltip defaultOpen delayDuration={delayDuration}>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side={side}>{content}</TooltipContent>
+    <Tooltip delayDuration={delayDuration}>
+      <TooltipTrigger
+        asChild
+        onPointerEnter={onArm}
+        onFocus={onArm}
+        onTouchStart={onArm}
+      >
+        {children}
+      </TooltipTrigger>
+      {armed && <TooltipContent side={side}>{content}</TooltipContent>}
     </Tooltip>
   );
 }

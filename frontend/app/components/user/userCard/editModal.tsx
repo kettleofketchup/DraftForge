@@ -33,18 +33,17 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
   const canEdit = useScopedEditPermission(scope);
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  // Lazy-mount: FormDialog (and the RHF Form context, Radix Dialog, Dialog
-  // Portal/Content, etc.) doesn't enter the React tree until the user has
-  // clicked Edit at least once. Before that, only the trigger button is
-  // mounted — eliminating ~24 dialog instances on the /users grid that
-  // previously rendered every scroll frame even though they were closed.
-  // After first open, hasOpened stays true so reopens are instant
-  // (no re-mount of the form, no defaultValues reset cost).
-  const [hasOpened, setHasOpened] = useState(false);
-  const handleOpenChange = React.useCallback((next: boolean) => {
-    if (next) setHasOpened(true);
-    setOpen(next);
-  }, []);
+  // FormDialog stays eagerly mounted — Radix Dialog with `open=false`
+  // already hides its DialogContent (it's not in the DOM until the
+  // dialog opens), so the per-card cost of having FormDialog in the
+  // tree is small. An earlier lazy-mount attempt (gating on a
+  // `hasOpened` state) broke Playwright integration tests because
+  // Radix Dialog sometimes skips the open transition when mounted
+  // already-open — DialogContent stayed hidden and the form inputs
+  // weren't visible. The right way to remove the closed-FormDialog
+  // render cost is to memoize FormDialog itself (stable props) or
+  // to extract the dialog tree into its own React.lazy chunk;
+  // tracked as a follow-up.
   const showMmr = scope.kind !== 'global' && (fields?.mmr ?? true);
 
   const form = useForm<EditUserInput>({
@@ -121,29 +120,27 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
       <EditIconButton
         tooltip="Edit User"
         data-testid="edit-user-btn"
-        onClick={() => handleOpenChange(true)}
+        onClick={() => setOpen(true)}
       />
-      {hasOpened && (
-        <FormDialog
-          open={open}
-          onOpenChange={handleOpenChange}
-          title={`Edit ${user.nickname || user.username}`}
-          description="Update this user's profile."
-          submitLabel="Save Changes"
-          isSubmitting={isSubmitting}
-          onSubmit={submitHandler}
-          size="xl"
-          data-testid="edit-user-modal"
-        >
-          <Form {...form}>
-            <UserEditForm
-              form={form}
-              showMmr={showMmr}
-              mmrLabel={scope.kind === 'org' ? 'Org MMR' : 'MMR'}
-            />
-          </Form>
-        </FormDialog>
-      )}
+      <FormDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Edit ${user.nickname || user.username}`}
+        description="Update this user's profile."
+        submitLabel="Save Changes"
+        isSubmitting={isSubmitting}
+        onSubmit={submitHandler}
+        size="xl"
+        data-testid="edit-user-modal"
+      >
+        <Form {...form}>
+          <UserEditForm
+            form={form}
+            showMmr={showMmr}
+            mmrLabel={scope.kind === 'org' ? 'Org MMR' : 'MMR'}
+          />
+        </Form>
+      </FormDialog>
     </>
   );
 }
