@@ -476,7 +476,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
             <DiscordConfigSection
               control={form.control}
               watch={form.watch}
-              isRepeater={false}
+              isRepeater={event?.event_repeater != null}
               organizationId={event?.organization ?? 0}
             />
           </TabsContent>
