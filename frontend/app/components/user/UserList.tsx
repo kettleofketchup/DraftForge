@@ -118,7 +118,7 @@ export const UserGridSkeleton = ({ count = 12 }: { count?: number }) => (
     className="grid grid-flow-row-dense grid-auto-rows
     align-middle content-center justify-center
     grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4
-    mb-0 mt-0 p-0 w-full gap-2 md:gap-3 lg:gap-4"
+    mb-0 mt-0 p-0 w-full gap-4 md:gap-6 lg:gap-8"
   >
     {Array.from({ length: count }).map((_, index) => (
       <UserCardSkeleton key={`skeleton-${index}`} />
@@ -274,7 +274,7 @@ export function UserList({
         className={`grid grid-flow-row-dense grid-auto-rows
         align-middle content-center justify-center
         ${gridCols}
-        mb-0 mt-0 p-0 w-full gap-2 md:gap-3 lg:gap-4`}
+        mb-0 mt-0 p-0 w-full gap-4 md:gap-6 lg:gap-8`}
       >
         {visibleItems.map((u: UserType, index: number) => (
           <UserCardWrapper
