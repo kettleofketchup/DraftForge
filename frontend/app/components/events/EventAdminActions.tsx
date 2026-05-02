@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ConfirmDialog } from '~/components/ui/dialogs/ConfirmDialog';
 import {
   DestructiveButton,
+  EditButton,
   PrimaryButton,
   SecondaryButton,
   WarningButton,
@@ -120,8 +121,7 @@ export function EventAdminActions({
     <>
       {/* Desktop: button group — owns the canonical testids */}
       <div className="hidden md:flex items-center gap-2">
-        <SecondaryButton
-          color="emerald"
+        <EditButton
           size="sm"
           onClick={onEditClick}
           title="Edit settings"
@@ -130,7 +130,7 @@ export function EventAdminActions({
         >
           <Pencil className="h-4 w-4 mr-1.5" />
           Edit
-        </SecondaryButton>
+        </EditButton>
 
         {event.state === EventState.UPCOMING && (
           <SecondaryButton
