@@ -4,7 +4,7 @@ import { Trophy, Users } from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { useSharedPopover } from '~/components/ui/shared-popover-context';
+import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
 import { cn } from '~/lib/utils';
 import { DisplayName } from '~/components/user/avatar';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -55,7 +55,7 @@ function TeamMembersList({ members, captain, organizationId }: { members: UserTy
 }
 
 function TeamCard({ team, rank, organizationId }: TeamCardProps) {
-  const { openTeamModal } = useSharedPopover();
+  const { openTeamModal } = useSharedPopoverActions();
   const captain = team.captain;
   const displayName = captain ? DisplayName(captain) : team.name;
 

@@ -8,7 +8,7 @@ import {
   CardTitle,
 } from '~/components/ui/card';
 import { Item, ItemContent, ItemTitle } from '~/components/ui/item';
-import { useSharedPopover } from '~/components/ui/shared-popover-context';
+import { useSharedPopoverActions } from '~/components/ui/shared-popover-context';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { User } from '~/components/user/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
@@ -53,7 +53,10 @@ export const UserCard: React.FC<Props> = memo(
     const currentUser: UserType = useUserStore((state) => state.currentUser);
     const getUsers = useUserStore((state) => state.getUsers);
     const currentOrg = useOrgStore((state) => state.currentOrg);
-    const { openPlayerModal } = useSharedPopover();
+    // Actions-only subscription: openPlayerModal is referentially stable, and
+    // this hook does NOT re-render UserCard when the popover/modal state
+    // transitions. Avoids cascading every grid card on hover.
+    const { openPlayerModal } = useSharedPopoverActions();
 
     const orgEntry = isUserEntry(user) && organizationId ? user.orgData[organizationId] : undefined;
     const mmr = isUserEntry(user)
@@ -66,6 +69,24 @@ export const UserCard: React.FC<Props> = memo(
           ? { kind: 'org', organization: currentOrg }
           : { kind: 'global' },
       [orgEntry?.id, currentOrg?.pk],
+    );
+
+    // Construct the User instance ONCE per stable input set. Doing this
+    // inline (`user={new User(...)}`) created a fresh reference on every
+    // UserCard render, which forced UserEditModal → onSubmit useCallback →
+    // submitHandler useMemo → FormDialog to all re-run, which cascaded into
+    // the entire Radix Tooltip subtree under every button. That's the
+    // 219-renders-per-Popper hit the React Scan trace was showing.
+    // React Compiler doesn't memoize class instantiations, so this
+    // useMemo is required even with the compiler enabled.
+    const editUser = React.useMemo(
+      () =>
+        new User(
+          isUserEntry(user) && orgEntry
+            ? { ...user, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
+            : user,
+        ),
+      [user, orgEntry?.id, orgEntry?.mmr],
     );
 
     const handleViewProfile = () => {
@@ -224,16 +245,7 @@ export const UserCard: React.FC<Props> = memo(
               {/* UserEditModal performs its own scope-aware permission check
                   via useScopedEditPermission and renders null when the current
                   user lacks edit rights for the resolved scope. */}
-              <UserEditModal
-                user={
-                  new User(
-                    isUserEntry(user) && orgEntry
-                      ? { ...user, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
-                      : user,
-                  )
-                }
-                scope={editScope}
-              />
+              <UserEditModal user={editUser} scope={editScope} />
               <ViewIconButton
                 onClick={handleViewProfile}
                 tooltip="View Profile"

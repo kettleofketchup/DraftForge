@@ -96,6 +96,15 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       await onSubmit();
     };
 
+    // Stable handlers for Radix Dialog's outside-interaction props — these
+    // were inline arrows previously, so each FormDialog re-render handed
+    // DialogContent fresh function refs, which the Scan trace showed as
+    // `onPointerDownOutside:28x onInteractOutside:28x` prop-changes.
+    const preventOutside = React.useCallback(
+      (e: Event) => e.preventDefault(),
+      [],
+    );
+
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
@@ -113,8 +122,8 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
           // Prevent outside-click dismissal: form dialogs should only close via
           // explicit actions (X, Cancel, submit). This also fixes nested dialog
           // issues where an inner dialog's overlay triggers the outer's dismiss.
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onInteractOutside={(e) => e.preventDefault()}
+          onPointerDownOutside={preventOutside}
+          onInteractOutside={preventOutside}
           data-testid={dataTestId}
         >
           <DialogHeader>
@@ -129,7 +138,10 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
           </DialogHeader>
 
           <ScrollArea className="max-h-[calc(100svh-10rem)] sm:max-h-[60vh] pr-4">
-            <form onSubmit={handleSubmit} className="space-y-4">
+            {/* px-1 py-1 leaves room for focus rings (3px box-shadow on
+                shadcn Input/Button) which would otherwise be clipped by
+                Radix Viewport's overflow:hidden. */}
+            <form onSubmit={handleSubmit} className="space-y-4 px-1 py-1">
               {children}
             </form>
           </ScrollArea>

@@ -1,7 +1,7 @@
 import { Eye } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
-import { LazyTooltip } from '~/components/ui/tooltip';
+import { FastTooltip } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
 import { brandDepthColors, brandGradient, button3DBase } from '../styles';
 
@@ -42,7 +42,7 @@ const ViewIconButton = React.forwardRef<HTMLButtonElement, ViewIconButtonProps>(
     );
 
     if (tooltip) {
-      return <LazyTooltip content={tooltip}>{button}</LazyTooltip>;
+      return <FastTooltip content={tooltip}>{button}</FastTooltip>;
     }
 
     return button;
