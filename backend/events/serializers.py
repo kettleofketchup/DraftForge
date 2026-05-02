@@ -325,6 +325,27 @@ class EventSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"game_mode": f"{game_mode} is only available for Dota 2."}
             )
+
+        # Single events have no subscriber list — discord_signup_reminder DMs
+        # subscribed users, which is a series-level concept on EventRepeater.
+        # Reject signup_reminder=True on events without a repeater.
+        repeater = data.get(
+            "event_repeater",
+            self.instance.event_repeater if self.instance else None,
+        )
+        signup_reminder = data.get(
+            "discord_signup_reminder",
+            self.instance.discord_signup_reminder if self.instance else False,
+        )
+        if repeater is None and signup_reminder:
+            raise serializers.ValidationError(
+                {
+                    "discord_signup_reminder": (
+                        "Signup reminder DMs require a recurring event series — "
+                        "single events have no subscribers."
+                    )
+                }
+            )
         return data
 
 
