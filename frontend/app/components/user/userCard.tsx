@@ -190,7 +190,13 @@ export const UserCard: React.FC<Props> = memo(
       <div
         key={`usercard:${getKeyName()} base`}
         data-testid={`usercard-${user.username}`}
-        className="flex w-full py-2 items-stretch
+        // min-w-0 is the critical fix for grid overflow: by default a grid
+        // item's min-width is `auto` (= intrinsic content width), so when
+        // children have content wider than the 1fr track, the cell EXPANDS
+        // past the grid's column width and pushes neighbors / overflows.
+        // min-w-0 forces the cell to respect 1fr, letting overflow-hidden
+        // on the inner card actually clip overflow.
+        className="flex w-full min-w-0 py-2 items-stretch
           [content-visibility:auto] [contain-intrinsic-size:400px_160px]"
       >
         <motion.div
@@ -199,7 +205,8 @@ export const UserCard: React.FC<Props> = memo(
           transition={{ duration: 0.15, delay: Math.min(animationIndex * 0.02, 0.2) }}
           whileHover={{ scale: 1.02 }}
           key={`usercard:${getKeyName()} basediv`}
-          className="flex flex-col gap-2 card card-compact bg-base-300 rounded-2xl w-full p-2
+          className="flex flex-col gap-2 card card-compact bg-base-300 rounded-2xl
+            w-full min-w-0 p-2 overflow-hidden
             hover:bg-base-200 focus:outline-2
             focus:outline-offset-2 focus:outline-primary
             active:bg-base-200"
@@ -260,20 +267,22 @@ export const UserCard: React.FC<Props> = memo(
               )}
               {/* MMR row — only meaningful inside an org or league context.
                   On the global /users grid neither id is provided, so the
-                  whole row is hidden (there's no "base" MMR concept). */}
+                  whole row is hidden (there's no "base" MMR concept).
+                  flex-wrap so a single MMR tile takes the full width when
+                  the other isn't shown. */}
               {(organizationId || leagueId) && (
-                <div className="grid grid-cols-2 gap-1 w-full">
+                <div className="flex flex-wrap gap-1 w-full">
                   {organizationId && (
-                    <Item size="sm" variant="muted" className="!p-1">
-                      <ItemContent className="!gap-0 items-center">
+                    <Item size="sm" variant="muted" className="!p-1 flex-1 min-w-0">
+                      <ItemContent className="!gap-0 items-center min-w-0">
                         <ItemTitle className="!text-xs text-muted-foreground">Org MMR</ItemTitle>
                         <span className="text-sm font-semibold">{mmr ?? '?'}</span>
                       </ItemContent>
                     </Item>
                   )}
                   {leagueId && (
-                    <Item size="sm" variant="muted" className="!p-1">
-                      <ItemContent className="!gap-0 items-center">
+                    <Item size="sm" variant="muted" className="!p-1 flex-1 min-w-0">
+                      <ItemContent className="!gap-0 items-center min-w-0">
                         <ItemTitle className="!text-xs text-muted-foreground">League MMR</ItemTitle>
                         <span className="text-sm font-semibold">?</span>
                       </ItemContent>
@@ -284,29 +293,32 @@ export const UserCard: React.FC<Props> = memo(
             </div>
           </div>
 
-          {/* User info row - 2 items per row */}
-          <div className="grid grid-cols-2 gap-1">
+          {/* User info row — flex-wrap so each tile takes a fair share of
+              the card width: alone it spans full width, two share, three
+              wrap to two rows. flex-1 + min-w-0 lets the inner text
+              truncate cleanly when the card is narrow. */}
+          <div className="flex flex-wrap gap-1">
             {user.username && (
-              <Item size="sm" variant="muted" className="!p-1">
-                <ItemContent className="!gap-0">
+              <Item size="sm" variant="muted" className="!p-1 flex-1 min-w-0 basis-[calc(50%-0.125rem)]">
+                <ItemContent className="!gap-0 min-w-0">
                   <ItemTitle className="!text-xs text-muted-foreground">Username</ItemTitle>
-                  <span className="text-sm">{user.username.length > 8 ? `${user.username.slice(0, 8)}...` : user.username}</span>
+                  <span className="text-sm truncate">{user.username}</span>
                 </ItemContent>
               </Item>
             )}
             {user.nickname && user.nickname !== user.username && (
-              <Item size="sm" variant="muted" className="!p-1">
-                <ItemContent className="!gap-0">
+              <Item size="sm" variant="muted" className="!p-1 flex-1 min-w-0 basis-[calc(50%-0.125rem)]">
+                <ItemContent className="!gap-0 min-w-0">
                   <ItemTitle className="!text-xs text-muted-foreground">Nickname</ItemTitle>
-                  <span className="text-sm">{user.nickname.length > 8 ? `${user.nickname.slice(0, 8)}...` : user.nickname}</span>
+                  <span className="text-sm truncate">{user.nickname}</span>
                 </ItemContent>
               </Item>
             )}
             {user.steam_account_id && (
-              <Item size="sm" variant="muted" className="!p-1">
-                <ItemContent className="!gap-0">
+              <Item size="sm" variant="muted" className="!p-1 flex-1 min-w-0 basis-[calc(50%-0.125rem)]">
+                <ItemContent className="!gap-0 min-w-0">
                   <ItemTitle className="!text-xs text-muted-foreground">Friend ID</ItemTitle>
-                  <span className="text-sm">{String(user.steam_account_id).length > 8 ? `${String(user.steam_account_id).slice(0, 8)}...` : user.steam_account_id}</span>
+                  <span className="text-sm truncate">{user.steam_account_id}</span>
                 </ItemContent>
               </Item>
             )}
