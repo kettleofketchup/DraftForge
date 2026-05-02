@@ -245,21 +245,29 @@ export const UserCard: React.FC<Props> = memo(
                   <RolePositions user={user} compact />
                 </ItemContent>
               </Item>
-              {/* MMR row */}
-              <div className="grid grid-cols-2 gap-1 w-full">
-                <Item size="sm" variant="muted" className="!p-1">
-                  <ItemContent className="!gap-0 items-center">
-                    <ItemTitle className="!text-xs text-muted-foreground">Base MMR</ItemTitle>
-                    <span className="text-sm font-semibold">{mmr ?? '?'}</span>
-                  </ItemContent>
-                </Item>
-                <Item size="sm" variant="muted" className="!p-1">
-                  <ItemContent className="!gap-0 items-center">
-                    <ItemTitle className="!text-xs text-muted-foreground">League MMR</ItemTitle>
-                    <span className="text-sm font-semibold">?</span>
-                  </ItemContent>
-                </Item>
-              </div>
+              {/* MMR row — only meaningful inside an org or league context.
+                  On the global /users grid neither id is provided, so the
+                  whole row is hidden (there's no "base" MMR concept). */}
+              {(organizationId || leagueId) && (
+                <div className="grid grid-cols-2 gap-1 w-full">
+                  {organizationId && (
+                    <Item size="sm" variant="muted" className="!p-1">
+                      <ItemContent className="!gap-0 items-center">
+                        <ItemTitle className="!text-xs text-muted-foreground">Org MMR</ItemTitle>
+                        <span className="text-sm font-semibold">{mmr ?? '?'}</span>
+                      </ItemContent>
+                    </Item>
+                  )}
+                  {leagueId && (
+                    <Item size="sm" variant="muted" className="!p-1">
+                      <ItemContent className="!gap-0 items-center">
+                        <ItemTitle className="!text-xs text-muted-foreground">League MMR</ItemTitle>
+                        <span className="text-sm font-semibold">?</span>
+                      </ItemContent>
+                    </Item>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
