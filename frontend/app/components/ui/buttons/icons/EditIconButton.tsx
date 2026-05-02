@@ -45,10 +45,6 @@ const EditIconButton = React.forwardRef<HTMLButtonElement, EditIconButtonProps>(
     );
 
     if (tooltip) {
-      // LazyTooltip defers mounting TooltipContent + TooltipPortal + Popper
-      // until the user actually hovers/focuses. On dense card grids this is
-      // the difference between hundreds of eager Radix tooltip subtrees per
-      // scroll frame and zero. Native `title` provides the pre-arm fallback.
       return <LazyTooltip content={tooltip}>{button}</LazyTooltip>;
     }
 
