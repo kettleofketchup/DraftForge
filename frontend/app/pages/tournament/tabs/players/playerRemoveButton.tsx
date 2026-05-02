@@ -29,7 +29,7 @@ export const PlayerRemoveButton: React.FC<PropsRemoveButton> = ({
     async (e: FormEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (tournament.pk === undefined) {
+      if (tournament.pk == null) {
         log.error('Tournament primary key is missing');
         return;
       }
