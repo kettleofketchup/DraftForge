@@ -193,13 +193,13 @@ export const UserCard: React.FC<Props> = memo(
           key={`usercard:${getKeyName()} basediv`}
           // Pure CSS hover scale (no Framer Motion). transform-gpu promotes
           // to its own compositor layer so scroll-time hover scaling doesn't
-          // reflow neighbors. transition-transform is short so the hover
-          // feels instant. Replaces the previous motion.div which paid the
-          // full Framer animation-pipeline tax for every visible card on
-          // every scroll-triggered remount.
+          // reflow neighbors. duration-300 matches the button hover feel —
+          // a deliberate ease, not an instant snap. Replaces the previous
+          // motion.div which paid the full Framer animation-pipeline tax
+          // for every visible card on every scroll-triggered remount.
           className="flex flex-col gap-2 card card-compact bg-base-300 rounded-2xl
             w-full min-w-0 p-2 overflow-hidden transform-gpu
-            transition-transform duration-150 hover:scale-[1.02]
+            transition-transform duration-300 hover:scale-[1.02]
             hover:bg-base-200 focus:outline-2
             focus:outline-offset-2 focus:outline-primary
             active:bg-base-200"

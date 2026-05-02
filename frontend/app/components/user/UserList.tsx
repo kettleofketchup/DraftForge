@@ -240,24 +240,29 @@ export function UserList({
   return (
     <>
       {showSearch && (
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder={searchPlaceholder}
-            value={internalQuery}
-            onChange={(e) => setInternalQuery(e.target.value)}
-            className="pl-9 pr-9"
-          />
-          {internalQuery && (
-            <button
-              type="button"
-              onClick={() => setInternalQuery('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+        // Sticky against the nearest scrolling ancestor (the Radix
+        // ScrollArea viewport in root.tsx). bg-background paints over
+        // virtualized cards as they scroll under the bar.
+        <div className="sticky top-0 z-20 bg-background pb-3 mb-1">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder={searchPlaceholder}
+              value={internalQuery}
+              onChange={(e) => setInternalQuery(e.target.value)}
+              className="pl-9 pr-9"
+            />
+            {internalQuery && (
+              <button
+                type="button"
+                onClick={() => setInternalQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
       )}
       <VirtualizedUserGrid

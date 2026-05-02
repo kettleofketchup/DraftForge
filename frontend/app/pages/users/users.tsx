@@ -2,7 +2,6 @@ import { Loader2, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { SearchUserDropdown } from '~/components/user/searchUser';
 import type { UserType } from '~/components/user/types';
-import { UserCreateModal } from '~/components/user/userCard/createModal';
 import { VirtualizedUserGrid } from '~/components/user/VirtualizedUserGrid';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
@@ -77,7 +76,6 @@ export function UsersPage() {
 
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebouncedValue(query, 300);
-  const [createModalQuery, setCreateModalQuery] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -157,38 +155,30 @@ export function UsersPage() {
 
   return (
     <div className="flex flex-col items-start p-4">
-      {/* Page title with user count */}
-      <div className="flex items-center gap-2 mb-4 w-full">
-        <Users className="w-6 h-6 text-primary" />
-        <h1 className="text-xl font-semibold">Users</h1>
-        <span className="text-sm text-muted-foreground">
-          {debouncedQuery ? (
-            <>
-              {filteredUsers.length} of {users.length}
-            </>
-          ) : (
-            <>{users.length} total</>
-          )}
-        </span>
-      </div>
+      {/* Sticky header — title + search pin to the top of the scroll
+          viewport (Radix ScrollArea inside root.tsx) so the search field
+          stays accessible while scrolling through the user grid below.
+          bg-background covers cards scrolling underneath. */}
+      <div className="sticky top-0 z-20 bg-background w-full pb-3 -mx-4 px-4">
+        <div className="flex items-center gap-2 mb-3 w-full">
+          <Users className="w-6 h-6 text-primary" />
+          <h1 className="text-xl font-semibold">Users</h1>
+          <span className="text-sm text-muted-foreground">
+            {debouncedQuery ? (
+              <>
+                {filteredUsers.length} of {users.length}
+              </>
+            ) : (
+              <>{users.length} total</>
+            )}
+          </span>
+        </div>
 
-      {/* Header with search and create button - NOT affected by transitions */}
-      <div
-        className="grid grid-flow-row-dense grid-auto-rows
-        align-middle content-center justify-center
-        grid-cols-4 w-full mb-4"
-      >
-        <div className="flex col-span-2 w-full content-center">
+        <div className="w-full">
           <SearchUserDropdown
             users={users}
             query={query}
             setQuery={setQuery}
-          />
-        </div>
-        <div className="flex col-start-4 align-end content-end justify-end">
-          <UserCreateModal
-            query={createModalQuery}
-            setQuery={setCreateModalQuery}
           />
         </div>
       </div>
