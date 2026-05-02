@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { button3DVariants } from './styles';
+import { brandToxic, button3DVariants } from './styles';
 
 export interface EditButtonProps
   extends Omit<React.ComponentProps<typeof Button>, 'variant'> {
@@ -28,7 +28,7 @@ const EditButton = React.forwardRef<HTMLButtonElement, EditButtonProps>(
       <Button
         ref={ref}
         className={cn(
-          depth ? button3DVariants.edit : 'bg-purple-700 text-white hover:bg-purple-600',
+          depth ? button3DVariants.edit : brandToxic,
           className
         )}
         {...props}

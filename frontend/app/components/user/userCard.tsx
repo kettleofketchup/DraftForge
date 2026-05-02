@@ -23,6 +23,17 @@ import { UserRemoveButton } from './userCard/deleteButton';
 import UserEditModal from './userCard/editModal';
 import type { EditUserScope } from './userCard/editUserSchema';
 import { LoginAsUserButton } from './userCard/LoginAsUserButton';
+
+/** Returns true if the user has rated any role > 0. */
+function hasAnyPosition(user: UserClassType | UserType): boolean {
+  const p = user.positions;
+  if (!p) return false;
+  return (p.carry ?? 0) > 0
+    || (p.mid ?? 0) > 0
+    || (p.offlane ?? 0) > 0
+    || (p.soft_support ?? 0) > 0
+    || (p.hard_support ?? 0) > 0;
+}
 const log = getLogger('UserCard');
 
 interface Props {
@@ -239,12 +250,14 @@ export const UserCard: React.FC<Props> = memo(
 
             {/* Right column - Positions and MMR */}
             <div className="flex flex-col gap-1 w-full">
-              <Item size="sm" variant="muted" className="!p-1.5 w-full">
-                <ItemContent className="!gap-1 items-center w-full">
-                  <ItemTitle className="!text-xs text-muted-foreground">Positions</ItemTitle>
-                  <RolePositions user={user} compact />
-                </ItemContent>
-              </Item>
+              {hasAnyPosition(user) && (
+                <Item size="sm" variant="muted" className="!p-1.5 w-full">
+                  <ItemContent className="!gap-1 items-center w-full">
+                    <ItemTitle className="!text-xs text-muted-foreground">Positions</ItemTitle>
+                    <RolePositions user={user} compact />
+                  </ItemContent>
+                </Item>
+              )}
               {/* MMR row — only meaningful inside an org or league context.
                   On the global /users grid neither id is provided, so the
                   whole row is hidden (there's no "base" MMR concept). */}
