@@ -170,9 +170,15 @@ export function CreateEventModal({
           signupsOpenAt = eventDate.toISOString();
         }
 
+        // Single events have no subscriber list — force signup_reminder
+        // off regardless of org defaults so the backend validator (which
+        // rejects discord_signup_reminder=true on single events) doesn't
+        // 400 a submission whose default carried over from a repeater-
+        // oriented org config.
         await createEvent({
           ...shared,
           scheduled_at,
+          discord_signup_reminder: false,
           ...(signupsOpenAt ? { signups_open_at: signupsOpenAt } : {}),
         }, signup_mode === 'immediate');
 
