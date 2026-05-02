@@ -1,38 +1,12 @@
 import { Loader2, Users } from 'lucide-react';
-import { memo, useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SearchUserDropdown } from '~/components/user/searchUser';
-import type { UserClassType, UserType } from '~/components/user/types';
-import { UserCard } from '~/components/user/userCard';
+import type { UserType } from '~/components/user/types';
 import { UserCreateModal } from '~/components/user/userCard/createModal';
+import { VirtualizedUserGrid } from '~/components/user/VirtualizedUserGrid';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 import { useResolvedUsers } from '~/hooks/useResolvedUsers';
 import { useUserStore } from '~/store/userStore';
-
-/** Hook for progressive/batched rendering of items */
-const useProgressiveRender = (items: UserType[], batchSize = 12, delay = 50) => {
-  const [visibleCount, setVisibleCount] = useState(batchSize);
-
-  useEffect(() => {
-    // Reset when items change
-    setVisibleCount(batchSize);
-  }, [items, batchSize]);
-
-  useEffect(() => {
-    if (visibleCount >= items.length) return;
-
-    const timer = setTimeout(() => {
-      setVisibleCount((prev) => Math.min(prev + batchSize, items.length));
-    }, delay);
-
-    return () => clearTimeout(timer);
-  }, [visibleCount, items.length, batchSize, delay]);
-
-  return {
-    visibleItems: items.slice(0, visibleCount),
-    isLoading: visibleCount < items.length,
-    progress: items.length > 0 ? visibleCount / items.length : 1,
-  };
-};
 
 /** Skeleton loader for user cards */
 const UserCardSkeleton = () => (
@@ -69,25 +43,6 @@ const UserCardSkeleton = () => (
     </div>
   </div>
 );
-
-/** Memoized wrapper for individual user cards */
-const UserCardWrapper = memo(({
-  userData,
-  animationIndex,
-}: {
-  userData: UserType;
-  animationIndex: number;
-}) => {
-  return (
-    <UserCard
-      user={userData as UserClassType}
-      saveFunc={'save'}
-      key={`UserCard-${userData.pk}`}
-      deleteButtonType="normal"
-      animationIndex={animationIndex}
-    />
-  );
-});
 
 /** Grid of skeleton cards for initial loading */
 const UserGridSkeleton = ({ count = 12 }: { count?: number }) => (
@@ -143,13 +98,6 @@ export function UsersPage() {
     );
   }, [users, debouncedQuery]);
 
-  // Progressive render for performance - render in batches
-  const { visibleItems, isLoading: isProgressiveLoading } = useProgressiveRender(
-    filteredUsers,
-    12, // batch size
-    100  // delay between batches in ms
-  );
-
   // Fetch users after hydration
   useEffect(() => {
     if (!hasHydrated) return;
@@ -191,28 +139,10 @@ export function UsersPage() {
       }
 
       return (
-        <>
-          <div
-            className="grid grid-flow-row-dense grid-auto-rows
-            align-middle content-center justify-center
-            grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5
-            mb-0 mt-0 p-0 bg-background w-full gap-6 md:gap-8 lg:gap-10"
-          >
-            {visibleItems.map((u: UserType, index: number) => (
-              <UserCardWrapper
-                userData={u}
-                key={`wrapper-${u.pk}`}
-                animationIndex={index}
-              />
-            ))}
-          </div>
-          {isProgressiveLoading && (
-            <div className="flex items-center justify-center py-4 text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              <span className="text-sm">Loading more users...</span>
-            </div>
-          )}
-        </>
+        <VirtualizedUserGrid
+          users={filteredUsers}
+          cols={{ base: 1, sm: 2, md: 3, lg: 3, xl: 4, '2xl': 5 }}
+        />
       );
     }
 

@@ -10,6 +10,7 @@ import { memo, useEffect, useMemo, useState } from 'react';
 import { Input } from '~/components/ui/input';
 import type { UserClassType, UserType } from '~/components/user/types';
 import { UserCard } from '~/components/user/userCard';
+import { VirtualizedUserGrid, type ColumnBreakpoints } from './VirtualizedUserGrid';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 
 /** Hook for progressive/batched rendering of items */
@@ -139,10 +140,6 @@ interface UserListProps {
   users: UserType[];
   /** Whether data is loading */
   isLoading?: boolean;
-  /** Batch size for progressive rendering */
-  batchSize?: number;
-  /** Delay between batches in ms */
-  batchDelay?: number;
   /** Optional search query for filtering (controlled from parent) */
   searchQuery?: string;
   /** Show built-in search input */
@@ -151,8 +148,8 @@ interface UserListProps {
   searchPlaceholder?: string;
   /** Empty state message */
   emptyMessage?: string;
-  /** Grid columns configuration */
-  gridCols?: string;
+  /** Column count per breakpoint. Defaults to 1/2/3/4 (mobile/md/lg/xl). */
+  cols?: ColumnBreakpoints;
   /** Compact card display */
   compact?: boolean;
   /** Delete button type for cards */
@@ -164,19 +161,19 @@ interface UserListProps {
 }
 
 /**
- * Performant user list with progressive rendering.
- * Renders users in batches to avoid blocking the main thread.
+ * Performant user list with row virtualization.
+ * Uses TanStack Virtual to mount only the rows of cards that intersect the
+ * viewport (plus an overscan buffer), so DOM size stays bounded regardless
+ * of the total user count.
  */
 export function UserList({
   users,
   isLoading = false,
-  batchSize = 12,
-  batchDelay = 100,
   searchQuery: externalSearchQuery = '',
   showSearch = false,
   searchPlaceholder = 'Search by name...',
   emptyMessage = 'No members found',
-  gridCols = 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+  cols,
   compact,
   deleteButtonType,
   organizationId,
@@ -199,13 +196,6 @@ export function UserList({
         person.nickname?.toLowerCase().includes(q)
     );
   }, [users, debouncedQuery]);
-
-  // Progressive render for performance
-  const { visibleItems, isLoading: isProgressiveLoading } = useProgressiveRender(
-    filteredUsers,
-    batchSize,
-    batchDelay
-  );
 
   // Loading state - show skeleton
   if (isLoading && users.length === 0) {
@@ -270,30 +260,14 @@ export function UserList({
           )}
         </div>
       )}
-      <div
-        className={`grid grid-flow-row-dense grid-auto-rows
-        align-middle content-center justify-center
-        ${gridCols}
-        mb-0 mt-0 p-0 w-full gap-6 md:gap-8 lg:gap-10`}
-      >
-        {visibleItems.map((u: UserType, index: number) => (
-          <UserCardWrapper
-            userData={u}
-            key={`wrapper-${u.pk}`}
-            animationIndex={index}
-            compact={compact}
-            deleteButtonType={deleteButtonType}
-            organizationId={organizationId}
-            leagueId={leagueId}
-          />
-        ))}
-      </div>
-      {isProgressiveLoading && (
-        <div className="flex items-center justify-center py-4 text-muted-foreground">
-          <Loader2 className="w-4 h-4 animate-spin mr-2" />
-          <span className="text-sm">Loading more users...</span>
-        </div>
-      )}
+      <VirtualizedUserGrid
+        users={filteredUsers}
+        cols={cols}
+        compact={compact}
+        deleteButtonType={deleteButtonType}
+        organizationId={organizationId}
+        leagueId={leagueId}
+      />
     </>
   );
 }
