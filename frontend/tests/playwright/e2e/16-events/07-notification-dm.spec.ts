@@ -66,8 +66,11 @@ test.describe('Event Notification DM (@cicd)', () => {
       discord_announcement_channel_id: '1482767177063858216',
       discord_post_signups: true,
       discord_post_signups_channel_id: '1482767709279096893',
-      discord_subscriber_dm: true,
-      discord_subscriber_dm_hours: 24,
+      // discord_signup_reminder is the actual subscriber-DM toggle on
+      // EventRepeater. Each subscriber gets a DM signup_reminder_hours
+      // before scheduled_at (default 24).
+      discord_signup_reminder: true,
+      discord_signup_reminder_hours: 24,
     });
     expect(repeaterResp.ok()).toBeTruthy();
 
