@@ -88,6 +88,18 @@ export const eventSchema = z.object({
   min_mmr: z.number().nullable(),
   user_can_manage: z.boolean().default(false),
   _warning: z.string().optional(),
+}).superRefine((val, ctx) => {
+  // Single events have no subscriber list — discord_signup_reminder DMs
+  // subscribed users, which is a series-level concept on EventRepeater.
+  // Mirrors the backend EventSerializer.validate rejection (Task 2.2).
+  if (val.event_repeater === null && val.discord_signup_reminder === true) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['discord_signup_reminder'],
+      message:
+        'Signup reminder DMs require a recurring event series — single events have no subscribers.',
+    });
+  }
 });
 
 export type EventType = z.infer<typeof eventSchema>;
