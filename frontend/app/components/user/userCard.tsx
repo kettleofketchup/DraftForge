@@ -196,8 +196,13 @@ export const UserCard: React.FC<Props> = memo(
         // past the grid's column width and pushes neighbors / overflows.
         // min-w-0 forces the cell to respect 1fr, letting overflow-hidden
         // on the inner card actually clip overflow.
-        className="flex w-full min-w-0 py-2 items-stretch
-          [content-visibility:auto] [contain-intrinsic-size:400px_160px]"
+        // overflow-visible lets the motion.div's hover scale: 1.02 paint
+        // beyond the wrapper's box without being clipped.
+        // (Note: dropped [content-visibility:auto] [contain-intrinsic-size:...]
+        // here — content-visibility implies contain: paint which clips the
+        // hover scale transform. Restore those if perf becomes a concern,
+        // but keep them off the cards' direct wrapper.)
+        className="flex w-full min-w-0 py-2 items-stretch overflow-visible"
       >
         <motion.div
           initial={{ opacity: 0, y: 10 }}
