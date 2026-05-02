@@ -103,21 +103,28 @@ export const UserCard: React.FC<Props> = memo(
 
 
     const userDotabuff = () => {
-      const goToDotabuff = () => {
-        return `https://www.dotabuff.com/players/${user.steam_account_id}`;
-      };
       if (!user.steam_account_id) return null;
+      const url = `https://www.dotabuff.com/players/${user.steam_account_id}`;
       return (
         <a
-          className="btn btn-sm btn-outline gap-1"
-          href={goToDotabuff()}
+          className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-sm font-medium
+            bg-base-200 border border-border text-foreground
+            shadow-md shadow-black/30 border-b-4 border-b-violet-700/60
+            transform-gpu transition-transform duration-150
+            hover:scale-105 hover:bg-base-100
+            active:translate-y-0.5 active:border-b-0
+            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          href={url}
           target="_blank"
           rel="noopener noreferrer"
-          title="View Dotabuff Profile"
+          // Native title — zero React cost (vs. Radix Tooltip which adds
+          // 4 components + a portal mount per hovered card).
+          title="View Dotabuff profile"
         >
           <img
             src="https://cdn.brandfetch.io/idKrze_WBi/w/96/h/96/theme/dark/logo.png?c=1dxbfHSJFAPEGdCLU4o5B"
-            alt="Dotabuff"
+            alt=""
+            aria-hidden="true"
             className="w-4 h-4"
           />
           <span className="hidden sm:inline">Dotabuff</span>
