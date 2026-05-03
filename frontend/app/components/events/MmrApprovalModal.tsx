@@ -30,8 +30,7 @@ import {
 import { cn } from '~/lib/utils';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
-import { RolePositions } from '~/components/user/positions';
-import { dotaProfileToPositions } from '~/components/user/UserEventStrip';
+import { RankSignalsCard } from '~/components/events/RankSignalsCard';
 import type { EventSignupType } from '~/components/events/schemas';
 
 // ---------------------------------------------------------------------------
@@ -41,29 +40,6 @@ const mmrSchema = z.object({
   mmr: z.number({ coerce: true }).int().min(0, 'MMR must be positive').max(20000, 'MMR too high'),
 });
 type MmrFormValues = z.infer<typeof mmrSchema>;
-
-// ---------------------------------------------------------------------------
-// Medal -> estimated MMR
-// ---------------------------------------------------------------------------
-const MEDAL_MMR: Record<string, number> = {
-  Herald: 200,
-  Guardian: 800,
-  Crusader: 1400,
-  Archon: 2200,
-  Legend: 3000,
-  Ancient: 3800,
-  Divine: 4600,
-  Immortal: 5500,
-};
-
-function estimateMmr(medal: string | null): number {
-  if (!medal) return 0;
-  const [name, starStr] = medal.split(' ');
-  const base = MEDAL_MMR[name] ?? 0;
-  const star = parseInt(starStr) || 1;
-  return base + (star - 1) * 140;
-}
-
 
 // ---------------------------------------------------------------------------
 // Props
@@ -95,16 +71,10 @@ export function MmrApprovalModal({
     defaultValues: { mmr: 0 },
   });
 
-  // Reset form when signup changes. Prefer the previously admin-approved MMR
-  // (org_user_mmr) over the user's self-reported PlayerDotaProfile.mmr.
+  // Reset form when signup changes. Use the serializer-computed suggested_mmr.
   useEffect(() => {
     if (signup && open) {
-      const profile = signup.dota_profile;
-      const defaultMmr =
-        signup.org_user_mmr ??
-        profile?.mmr ??
-        (profile ? estimateMmr(profile.rank_medal) : 0);
-      form.reset({ mmr: defaultMmr });
+      form.reset({ mmr: signup.suggested_mmr });
     }
   }, [signup, open]);
 
@@ -123,11 +93,6 @@ export function MmrApprovalModal({
 
   // Screenshot URL (rank or battlecup)
   const screenshotUrl = profile?.rank_screenshot ?? profile?.battlecup_screenshot ?? null;
-
-  // Build positions-compatible user for RolePositions
-  const positionsUser = profile?.positions
-    ? { ...({} as import('~/components/user/types').UserType), positions: dotaProfileToPositions(profile.positions) }
-    : null;
 
   // Rank status badge
   const rankStatusBadge = profile ? (
@@ -165,56 +130,8 @@ export function MmrApprovalModal({
           </div>
         </DialogHeader>
 
-        {/* Previously approved MMR (admin-set on OrgUser). Shown even when no
-            PlayerDotaProfile exists, so admins can re-approve at the prior value. */}
-        {signup.org_user_mmr != null && (
-          <div className="bg-base-300 border border-border rounded-lg p-4 text-sm flex justify-between">
-            <span className="text-muted-foreground">Previously Approved MMR</span>
-            <span className="font-mono">{signup.org_user_mmr.toLocaleString()}</span>
-          </div>
-        )}
-
-        {/* Profile summary (read-only) */}
-        {profile && (
-          <div className="bg-base-300 border border-border rounded-lg p-4 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Rank Status</span>
-              <span className="capitalize">{profile.rank_status}</span>
-            </div>
-
-            {profile.rank_medal && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Medal</span>
-                <Badge variant="outline" className="px-1.5 py-0 text-xs font-medium text-amber-300 border-amber-500/30">
-                  {profile.rank_medal}
-                </Badge>
-              </div>
-            )}
-
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Self-reported MMR</span>
-              <span className="font-mono">
-                {profile.mmr != null ? profile.mmr.toLocaleString() : '\u2014'}
-              </span>
-            </div>
-
-            {positionsUser?.positions && (
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Positions</span>
-                <RolePositions user={positionsUser as import('~/components/user/types').UserType} compact disableTooltips />
-              </div>
-            )}
-
-            {profile.rank_status === 'never' && profile.battle_cup_tier != null && (
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Battle Cup Tier</span>
-                <Badge variant="outline" className="px-1.5 py-0 text-xs font-medium text-blue-300 border-blue-500/30">
-                  Tier {profile.battle_cup_tier}
-                </Badge>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Rank signals — replaces the two prior inline blocks. */}
+        <RankSignalsCard signup={signup} />
 
         {/* Screenshot section */}
         {screenshotUrl && (
@@ -243,10 +160,26 @@ export function MmrApprovalModal({
                     <Input
                       type="number"
                       placeholder="e.g. 3000"
+                      data-testid="mmr-input"
                       {...field}
                       onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
                     />
                   </FormControl>
+                  <p
+                    data-testid="suggested-range-helper"
+                    className="text-xs text-muted-foreground font-mono mt-1"
+                  >
+                    Suggested range:{' '}
+                    {signup.suggested_mmr_range[0].toLocaleString()}&ndash;
+                    {signup.suggested_mmr_range[1].toLocaleString()}
+                    <span className="ml-1 text-muted-foreground/80">
+                      (from{' '}
+                      {signup.suggested_mmr_range_source === 'battle_cup'
+                        ? 'battle cup'
+                        : signup.suggested_mmr_range_source}
+                      )
+                    </span>
+                  </p>
                   {mmrDelta != null && mmrDelta !== 0 && (
                     <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-border/60 bg-base-300 px-3 py-2">
                       <span
