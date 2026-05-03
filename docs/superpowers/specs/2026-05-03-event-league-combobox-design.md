@@ -1,6 +1,6 @@
 # Event League Combobox
 
-**Status:** Draft
+**Status:** Approved
 **Date:** 2026-05-03
 **Branch:** `feature/event-league-combobox`
 
