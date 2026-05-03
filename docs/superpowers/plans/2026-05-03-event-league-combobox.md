@@ -4,7 +4,9 @@
 
 **Goal:** Replace the plain `<Select>` league field in `CreateEventModal` and `EditEventModal` with a searchable shadcn `LeagueCombobox` (desktop) plus a `<Select>` fallback (mobile), and align the form schema so league is optional in both modals.
 
-**Architecture:** A new domain wrapper component `LeagueCombobox` lives at `frontend/app/components/league/LeagueCombobox.tsx`. It internally calls `useLeagues(organizationId)`, branches on `useMediaQuery('(min-width: 768px)')`, and renders Popover+Command on desktop or Select on mobile. Both event modals consume it via react-hook-form's `<FormField>` render prop. Existing data-testids (`event-league-select`, `event-league-option-{pk}`, `edit-event-tournament-league`, `league-option-{pk}`) are preserved on the new trigger and item elements so existing Playwright specs keep working.
+**Architecture:** A new domain wrapper component `LeagueCombobox` lives at `frontend/app/components/league/LeagueCombobox.tsx`. It internally calls `useLeagues(organizationId)`, branches on `useMediaQuery('(min-width: 768px)')`, and renders Popover+Command on desktop or Select on mobile. Both event modals consume it via react-hook-form's `<FormField>` render prop. Existing data-testids (`event-league-select`, `event-league-option-{pk}`, `edit-event-tournament-league`, `league-option-{pk}`) are preserved on the new trigger and item elements so existing Playwright specs keep working. Per the project's testing skill ("Always use `data-testid` selectors; never `getByPlaceholder`/`getByRole('option')` for interaction"), the component also exposes `searchTestId` and `clearTestId` props so the new search input and clear-sentinel items are addressable by test-id.
+
+**Form composition:** This component is consumed via the project's existing react-hook-form `FormField` / `FormItem` / `FormControl` / `FormMessage` pattern (verified in `DiscordConfigSection.tsx`). We do **not** migrate to shadcn's newer `FieldGroup` / `Field` primitives — that would be a project-wide refactor outside this PR's scope.
 
 **Tech Stack:** React 19, TypeScript, react-hook-form, Zod, shadcn/ui (Command, Popover, Select), cmdk, Tailwind, Playwright. Vite SPA (no Next.js).
 
@@ -107,7 +109,7 @@ test('league combobox: search filters and selects on create', async ({ page }) =
   await trigger.click();
 
   // Type into the cmdk search input — first 3 chars of the seeded league name
-  await page.getByPlaceholder('Search leagues…').fill('Eve');
+  await page.getByTestId('event-league-search').fill('Eve');
 
   // Pick the seeded events league via its preserved per-item data-testid
   await page.getByTestId(`event-league-option-${eventInfo.leaguePk}`).click();
@@ -123,7 +125,7 @@ test('league combobox: search filters and selects on create', async ({ page }) =
 just test::pw::spec 02-create-event -g "search filters and selects"
 ```
 
-Expected: FAIL. Most likely error: `getByPlaceholder('Search leagues')` times out because the current `<SelectTrigger>` does not open a `CommandInput`. Note the failure mode in the test output — that's our red baseline.
+Expected: FAIL. Most likely error: `getByTestId('event-league-search')` times out because the current `<SelectTrigger>` does not open a `CommandInput` and the `event-league-search` test-id doesn't exist yet. Note the failure mode in the test output — that's our red baseline.
 
 - [ ] **Step 3: Commit the failing test**
 
@@ -180,6 +182,10 @@ export interface LeagueComboboxProps {
   triggerTestId?: string;
   /** prefix for per-item data-testids: `${itemTestIdPrefix}${leagueId}` */
   itemTestIdPrefix?: string;
+  /** data-testid for the search input (desktop only) */
+  searchTestId?: string;
+  /** data-testid for the Clear-selection item (desktop) and No-league sentinel (mobile) */
+  clearTestId?: string;
 }
 
 export const LeagueCombobox: React.FC<LeagueComboboxProps> = ({
@@ -193,6 +199,8 @@ export const LeagueCombobox: React.FC<LeagueComboboxProps> = ({
   invalid,
   triggerTestId,
   itemTestIdPrefix,
+  searchTestId,
+  clearTestId,
 }) => {
   const [open, setOpen] = React.useState(false);
   const { leagues, isLoading } = useLeagues(organizationId);
@@ -212,17 +220,24 @@ export const LeagueCombobox: React.FC<LeagueComboboxProps> = ({
           aria-invalid={invalid || undefined}
           disabled={triggerDisabled}
           data-testid={triggerTestId}
-          className={cn('w-full justify-between', className)}
+          className={cn(
+            'w-full justify-between aria-invalid:border-destructive',
+            className,
+          )}
         >
           <span className="truncate">
             {selected ? selected.name : placeholder}
           </span>
-          <ChevronsUpDown className="opacity-50" />
+          <ChevronsUpDown data-icon="inline-end" className="opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
         <Command>
-          <CommandInput placeholder="Search leagues…" className="h-9" />
+          <CommandInput
+            placeholder="Search leagues…"
+            className="h-9"
+            data-testid={searchTestId}
+          />
           <CommandList>
             <CommandEmpty>
               {isLoading
@@ -260,6 +275,7 @@ export const LeagueCombobox: React.FC<LeagueComboboxProps> = ({
               <CommandGroup>
                 <CommandItem
                   value="__clear__"
+                  data-testid={clearTestId}
                   onSelect={() => {
                     onChange(null);
                     setOpen(false);
@@ -306,6 +322,8 @@ Then replace lines 272-298 (the entire `<FormField name="tournament_league" ...>
           invalid={!!fieldState.error}
           triggerTestId="event-league-select"
           itemTestIdPrefix="event-league-option-"
+          searchTestId="event-league-search"
+          clearTestId="event-league-clear"
         />
       </FormControl>
       <FormMessage />
@@ -369,7 +387,7 @@ test('league combobox: clear selection on create submits null', async ({ page })
 
   // Reopen and clear
   await page.getByTestId('event-league-select').click();
-  await page.getByRole('option', { name: /clear selection/i }).click();
+  await page.getByTestId('event-league-clear').click();
 
   // Trigger should show the placeholder again
   await expect(page.getByTestId('event-league-select')).toContainText(/select league/i);
@@ -485,6 +503,8 @@ Replace the entire `<FormField name="tournament_league" ...>` block (starting at
           invalid={!!fieldState.error}
           triggerTestId="edit-event-tournament-league"
           itemTestIdPrefix="league-option-"
+          searchTestId="edit-event-league-search"
+          clearTestId="edit-event-league-clear"
         />
       </FormControl>
       <FormMessage />
@@ -542,7 +562,7 @@ test('edit event tournament_league: clear via combobox', async ({ page, context 
 
   // Open combobox and pick Clear
   await page.getByTestId('edit-event-tournament-league').click();
-  await page.getByRole('option', { name: /clear selection/i }).click();
+  await page.getByTestId('edit-event-league-clear').click();
 
   // Trigger shows the placeholder
   await expect(page.getByTestId('edit-event-tournament-league')).toContainText(/select/i);
@@ -624,12 +644,12 @@ test('league combobox: mobile renders a Select fallback with clear sentinel', as
 
   const trigger = page.getByTestId('event-league-select');
 
-  // Mobile branch uses shadcn Select — there should be no CommandInput.
+  // Mobile branch uses shadcn Select — there should be no cmdk search input.
   await trigger.click();
-  await expect(page.getByPlaceholder('Search leagues…')).toHaveCount(0);
+  await expect(page.getByTestId('event-league-search')).toHaveCount(0);
 
-  // The "— No league —" item should be present and round-trip to null in the form.
-  await page.getByRole('option', { name: /no league/i }).click();
+  // The "— No league —" sentinel should round-trip to null in the form.
+  await page.getByTestId('event-league-clear').click();
   await expect(trigger).toContainText(/select league/i);
 
   // Picking a real league still works
@@ -645,7 +665,7 @@ test('league combobox: mobile renders a Select fallback with clear sentinel', as
 just test::pw::spec 02-create-event -g "mobile renders a Select fallback"
 ```
 
-Expected: FAIL. The desktop branch will render a `CommandInput` even at small viewport widths because we haven't added the mobile branch yet.
+Expected: FAIL. The assertion `toHaveCount(0)` on `event-league-search` will fail because the desktop branch (with the `CommandInput`) renders even at small viewport widths until the mobile branch is added. Or the test fails on the next step because `event-league-clear` doesn't exist as a Select item. Either failure mode is the red baseline.
 
 - [ ] **Step 3: Commit the failing test**
 
@@ -720,7 +740,9 @@ if (!isDesktop) {
         />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="__clear__">— No league —</SelectItem>
+        <SelectItem value="__clear__" data-testid={clearTestId}>
+          — No league —
+        </SelectItem>
         {leagues.map((league) => (
           <SelectItem
             key={league.pk}
