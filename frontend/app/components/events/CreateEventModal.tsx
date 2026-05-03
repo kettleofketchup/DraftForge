@@ -88,7 +88,7 @@ export function CreateEventModal({
         scheduled_at: '',
         organization: organizationId,
         tournament_name: orgDefaults.tournament_name || '',
-        tournament_league: orgDefaults.tournament_league ?? undefined,
+        tournament_league: orgDefaults.tournament_league ?? null,
         tournament_type: orgDefaults.tournament_type,
         game_type: orgDefaults.game_type,
         draft_type: orgDefaults.draft_type,
@@ -279,7 +279,7 @@ export function CreateEventModal({
                   <LeagueCombobox
                     organizationId={organizationId}
                     value={field.value ?? null}
-                    onChange={(v) => field.onChange(v ?? undefined)}
+                    onChange={(v) => field.onChange(v)}
                     invalid={!!fieldState.error}
                     triggerTestId="event-league-select"
                     itemTestIdPrefix="event-league-option-"
