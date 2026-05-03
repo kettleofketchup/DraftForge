@@ -332,11 +332,18 @@ test.describe('Two Captains Full Draft', () => {
     // running. The retry budget rides out that gap without papering over real
     // captain-went-dark failures.
     const assertCaptainsConnected = async (step: string) => {
+      // Polls the regular GET /api/herodraft/<pk>/ endpoint, NOT the test
+      // setup endpoint /api/tests/herodraft-by-key/<key>/. The setup
+      // endpoint calls _setup_draft_state() on every hit, which resets
+      // is_connected=False on every team — so polling it would race with
+      // itself: read → reset → read → reset → never see True. The regular
+      // read endpoint just returns the current state via HeroDraftSerializer
+      // (which includes draft_teams[].is_connected via DraftTeamSerializerFull).
       await expect
         .poll(
           async () => {
             const res = await captainA.context.request.get(
-              `${API_URL}/tests/herodraft-by-key/two_captain_test/`,
+              `${API_URL}/herodraft/${testInfo.pk}/`,
               { failOnStatusCode: false, timeout: 5000 },
             );
             if (!res.ok()) return false;

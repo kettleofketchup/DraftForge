@@ -338,10 +338,6 @@ def get_herodraft_by_key(request, key: str):
             "is_ready": dt.is_ready,
             "is_radiant": dt.is_radiant,
             "is_first_pick": dt.is_first_pick,
-            # Exposed so Playwright specs can poll the live captain
-            # connection state from the server's perspective (e.g.
-            # two-captains-full-draft.spec.ts assertCaptainsConnected).
-            "is_connected": dt.is_connected,
         }
         for dt in draft.draft_teams.all()
     ]
