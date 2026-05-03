@@ -39,6 +39,12 @@
 - `backend/events/discord/embeds.py` — replace `getattr(event, "signup_count", 0)` with `_signup_counts(event)` in `_build_reminder_embed` (line 434) and `build_signup_reminder_embed` (line 523).
 - `backend/events/tests/test_reminder_embeds.py` (new) — regression test asserting reminder embeds show the real active signup count.
 
+**Modified files (Position rank display fix — Phase 6):**
+- `frontend/app/components/user/positions/index.tsx` — add `unranked?: boolean` to `BadgeProps` and `RolePositionsProps`; suppress the inner numeric Badge when `unranked` (5 role badges).
+- `frontend/app/components/events/RankSignalsCard.tsx` (created in Task 7) — pass `unranked` to `<RolePositions>`.
+- `frontend/app/components/user/UserEventStrip.tsx` — pass `unranked` at every `<RolePositions>` whose user came from `dotaProfileToPositions`.
+- `frontend/tests/playwright/e2e/16-events/04-discord-integration.spec.ts` — assert positions row doesn't render "1 1 1" rank labels.
+
 ---
 
 ## Test data we'll reuse
@@ -1545,9 +1551,171 @@ git commit -m "fix(discord): reminder embed shows real signup count (issue #188)
 
 ---
 
-## Phase 6 — Verification
+## Phase 6 — Position rank display fix (Discord positions ≠ ranked preferences)
 
-### Task 15: Full backend + frontend verification pass
+### Task 15: Add `unranked` mode to position badges + `RolePositions`
+
+**Files:**
+- Modify: `frontend/app/components/user/positions/index.tsx`
+
+**Why:** `dotaProfileToPositions` (`frontend/app/components/user/UserEventStrip.tsx:50-62`) assigns `1` to every selected position — its own comment says "DotaProfile doesn't track preference order". The five role badges (`CarryBadge`, `MidBadge`, `OfflaneBadge`, `SoftSupportBadge`, `HardSupportBadge`) render that integer inside the badge (e.g., `index.tsx:100` shows `{user.positions.carry}`), so admins see "1" for every position and read it as "this player's #1 favorite" — which it isn't. The Discord signup flow only captures booleans ("I can play this role"), no preference rank. Render the badges without the inner numeric badge when the source is a DotaProfile selection.
+
+- [ ] **Step 1: Read the existing types and props on the badges**
+
+Run: `sed -n '60,80p;330,365p' frontend/app/components/user/positions/index.tsx`
+
+Identify the exact `BadgeProps` interface (around line 60-80) and `RolePositionsProps` interface (around line 333-345). Both interfaces gain one new optional prop.
+
+- [ ] **Step 2: Add `unranked?: boolean` to `BadgeProps` and `RolePositionsProps`**
+
+Find the `BadgeProps` interface (the props shared by `CarryBadge` / `MidBadge` / etc.). Add `unranked?: boolean` alongside the existing `compact` and `disableTooltips` props.
+
+Find the `RolePositionsProps` interface. Add `unranked?: boolean`.
+
+- [ ] **Step 3: Update each of the five role badges to suppress the inner number when `unranked`**
+
+For each of `CarryBadge`, `MidBadge`, `OfflaneBadge`, `SoftSupportBadge`, `HardSupportBadge`, locate the `<Badge className={...}>{user.positions.<role>}</Badge>` block (the inner numeric Badge). Wrap it in `{!unranked && (...)}` so the role icon stays but the rank number is omitted.
+
+For example, in `CarryBadge` (around line 96–101), replace:
+
+```tsx
+        <Badge className={cn(
+          "!bg-rose-800",
+          forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
+        )}>
+          {user.positions.carry}
+        </Badge>
+```
+
+with:
+
+```tsx
+        {!unranked && (
+          <Badge className={cn(
+            "!bg-rose-800",
+            forceCompact ? compactNumberClasses : isResponsive ? cn(compactNumberClasses, "sm:h-4 sm:w-4 sm:text-xs") : numberClasses
+          )}>
+            {user.positions.carry}
+          </Badge>
+        )}
+```
+
+Apply the same wrap in `MidBadge`, `OfflaneBadge`, `SoftSupportBadge`, `HardSupportBadge`. Each badge has its own `numberClasses` Badge that needs the same `{!unranked && (...)}` guard.
+
+Also update each badge's destructured props: `({ user, compact, disableTooltips })` → `({ user, compact, disableTooltips, unranked })`.
+
+- [ ] **Step 4: Pipe `unranked` through `RolePositions`**
+
+In `RolePositions` (around line 333+), accept `unranked` from props and forward it to each child badge:
+
+```tsx
+<CarryBadge user={user} compact={compact} disableTooltips={disableTooltips} unranked={unranked} />
+<MidBadge user={user} compact={compact} disableTooltips={disableTooltips} unranked={unranked} />
+... // and so on for the other three
+```
+
+- [ ] **Step 5: Update tooltip copy when `unranked`**
+
+In each badge, the Tooltip and `title` strings currently read like `"Position 1: Carry - ${getRankLabel(user.positions.carry)}"`. When `unranked`, the rank label is meaningless. Adjust to:
+
+```tsx
+title={
+  disableTooltips
+    ? unranked
+      ? `Carry`
+      : `Position 1: Carry - ${getRankLabel(user.positions.carry)}`
+    : undefined
+}
+```
+
+And the TooltipContent (when `disableTooltips` is false):
+
+```tsx
+<TooltipContent className="bg-rose-900 text-white">
+  <p className="font-semibold">Carry</p>
+  {!unranked && <p className="text-rose-200">{getRankLabel(user.positions.carry)}</p>}
+</TooltipContent>
+```
+
+Apply the same pattern to all five badges.
+
+- [ ] **Step 6: TypeScript check**
+
+Run: `cd frontend && npx tsc --noEmit 2>&1 | grep -E "positions/index|RolePositions|CarryBadge|MidBadge|OfflaneBadge|SoftSupportBadge|HardSupportBadge" | head -20`
+Expected: No errors.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add frontend/app/components/user/positions/index.tsx
+git commit -m "feat(positions): unranked mode hides rank number on role badges"
+```
+
+---
+
+### Task 16: Apply `unranked` at all DotaProfile-derived call sites
+
+**Files:**
+- Modify: `frontend/app/components/events/RankSignalsCard.tsx` (created in Task 7)
+- Modify: `frontend/app/components/user/UserEventStrip.tsx`
+
+- [ ] **Step 1: Pass `unranked` from `RankSignalsCard`**
+
+In `RankSignalsCard.tsx` (Task 7's component), find:
+
+```tsx
+          <RolePositions user={positionsUser} compact disableTooltips />
+```
+
+Replace with:
+
+```tsx
+          <RolePositions user={positionsUser} compact disableTooltips unranked />
+```
+
+- [ ] **Step 2: Pass `unranked` from `UserEventStrip`**
+
+In `UserEventStrip.tsx`, locate every `<RolePositions ... />` whose `user` prop's positions came from `dotaProfileToPositions(...)`. Add the `unranked` prop to those call sites.
+
+Run: `grep -n "RolePositions\|dotaProfileToPositions" frontend/app/components/user/UserEventStrip.tsx` to enumerate. Each `<RolePositions ... />` whose user object was derived via `dotaProfileToPositions` gets `unranked` added.
+
+> **Important:** Do NOT add `unranked` to call sites whose user object's positions came from the *real* `User.positions` (the rank-based `PositionsModel`). Those should still display rank numbers — that's the whole point of `PositionsModel`. The `unranked` prop is only for sources where the data is boolean selection (DotaProfile).
+
+- [ ] **Step 3: Augment Playwright assertion in Task 10's existing test**
+
+In `frontend/tests/playwright/e2e/16-events/04-discord-integration.spec.ts`, inside the existing "approve via MMR modal" test, add an assertion right after `dialog.getByTestId('rank-signals-medal')` checks (the block added in Task 10 step 1):
+
+```typescript
+    // Positions row must not show a "1" rank number — DotaProfile booleans aren't ranked preferences.
+    const positionsRow = dialog.getByTestId('rank-signals-positions');
+    await expect(positionsRow).toBeVisible();
+    // event_player_1 has pos_1, pos_3, pos_5 — three role icons should render.
+    // None of them should display "1" inside (the rank number Badge is suppressed).
+    await expect(positionsRow).not.toContainText(/^1\s*1\s*1$/);
+```
+
+(The regex catches the specific "1 1 1" rendering reported in the bug report.)
+
+- [ ] **Step 4: TypeScript + Playwright check**
+
+Run: `cd frontend && npx tsc --noEmit`
+Expected: No errors.
+
+Run: `just test::pw::headless --grep "approve via MMR modal"` (the existing single test in 04-discord-integration.spec.ts).
+Expected: Passes — the new positions-row assertion is satisfied.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add frontend/app/components/events/RankSignalsCard.tsx frontend/app/components/user/UserEventStrip.tsx frontend/tests/playwright/e2e/16-events/04-discord-integration.spec.ts
+git commit -m "fix(events): suppress fake rank-1 on DotaProfile-derived position badges" -m "dotaProfileToPositions assigns 1 to every selected position because DotaProfile only tracks booleans, not preference order. The badges then render '1' inside, which admins read as 'rank 1 favorite' — wrong. RankSignalsCard and the DotaProfile call sites in UserEventStrip now pass unranked to RolePositions, suppressing the inner numeric badge while keeping the role icons. Real PositionsModel-driven displays elsewhere are unaffected."
+```
+
+---
+
+## Phase 7 — Verification
+
+### Task 17: Full backend + frontend verification pass
 
 - [ ] **Step 1: Backend unit tests**
 
@@ -1575,7 +1743,10 @@ Run: `just dev::debug`. Open the approval modal for any Dota event signup. Confi
 - Rank Signals card replaces the two old blocks (no duplicate "Previously Approved MMR" / profile summary).
 - Theming matches existing modal (slate background, muted labels, monospace numerics).
 - Helper text reads "Suggested range: low–high (from medal | battle cup | fallback)".
+- **Positions row shows role icons WITHOUT a "1" rank number inside each badge** (the Phase 6 fix — bug report described "Positions 1 1 1").
 - Approve/Reject still work; success toast appears.
+
+Repeat the visual check on a signup card / `UserEventStrip` rendering: ensure DotaProfile-derived positions render as icon-only, but on a profile page where the user has a real `PositionsModel` set, the rank numbers still appear.
 
 - [ ] **Step 6: Manual Discord smoke (Phase 4 medal-select fix)**
 
@@ -1635,6 +1806,12 @@ If steps 1–6 surfaced regressions, fix and commit. Otherwise no commit needed.
 - `_build_reminder_embed` uses real signup count, not stale `getattr` default → Task 14 step 4 ✓
 - `build_signup_reminder_embed` description string also uses real count → Task 14 step 5 ✓
 - Regression test for both code paths and exclusion of cancelled/waitlisted → Task 14 step 2 ✓
+
+**Bug fix coverage (Position rank display — Phase 6):**
+- `unranked` prop on all five role badges + `RolePositions` parent → Task 15 ✓
+- DotaProfile-derived call sites (RankSignalsCard, UserEventStrip) pass `unranked` → Task 16 steps 1-2 ✓
+- Real PositionsModel-driven displays unchanged → Task 16 step 2 (explicit warning) ✓
+- Playwright assertion catches the `^1\s*1\s*1$` regression pattern → Task 16 step 3 ✓
 
 **Placeholder scan:** No "TBD", no "implement later", every code step has a complete code block.
 
