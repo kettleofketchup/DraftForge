@@ -177,30 +177,82 @@ The `OrgUser` and `PlayerDotaProfile` queries duplicate the work `get_dota_profi
 
 ## Modal UX
 
-`frontend/app/components/events/MmrApprovalModal.tsx`:
+### Component changes
+
+The existing `MmrApprovalModal.tsx` has **two** separate cards today: a `Previously Approved MMR` row (lines 170–175) and a `Profile summary` block (lines 178–217). These are **replaced by one consolidated `<RankSignalsCard>` component** so admins always see all four signals together in a single visual unit, regardless of which signals exist.
+
+Changes to `frontend/app/components/events/MmrApprovalModal.tsx`:
 
 1. Delete the local `MEDAL_MMR` constant and `estimateMmr()` function.
 2. Read the form default from `signup.suggested_mmr`.
-3. Add a "Rank Signals" block above the existing screenshot section, always visible whenever the modal is open:
+3. **Remove** the two existing inline blocks (lines 170–175 and 178–217). The Positions row currently inside the Profile block moves into the new `<RankSignalsCard>` to preserve that information.
+4. Render `<RankSignalsCard signup={signup} />` in their place — always visible whenever the modal is open.
+5. Render `suggested_mmr_range` as helper text below the MMR input via a new `<SuggestedRangeHelper />` element.
+
+### New component: `<RankSignalsCard>`
+
+Per the component-first rule from the ui-styling skill, extract this as a standalone component at `frontend/app/components/events/RankSignalsCard.tsx`. The modal stays a thin composer; the signals card is reusable (e.g., future admin team page, debug views).
 
 ```
-┌─ Rank Signals ─────────────────────────────────┐
-│ Previously Approved MMR        2,400           │
-│ Self-Reported MMR              3,500           │
-│ Rank                Crusader 4  (1,540–2,310)  │
-│ Battle Cup Tier              —                 │
-└────────────────────────────────────────────────┘
-
-Approved MMR: [ 2,400 ]
-Suggested range: 1,540–2,310 (from medal)
+Rank Signals
+─────────────────────────────────────────────────
+Previously Approved MMR              2,400
+Self-Reported MMR                    3,500
+Rank                          [Crusader 4]  1,540–2,310
+Battle Cup Tier                      —
+Positions                       [pos-icons]
 ```
 
 Row rules:
-- Each row shows the value or `—` if missing.
-- The medal row appends the medal-wide range in muted text when a medal is present.
-- The battle-cup row shows `Tier N (low–high)` when `rank_status="never"` and a tier is set; otherwise `—`.
-- For `rank_status="previous"` + medal, append `(previous)` to the medal row label so admins know it's stale.
-- Helper text under the input: `Suggested range: low–high (from medal | battle cup | fallback)`.
+- All four signal rows always render. When the value is missing, show `—` in `text-muted-foreground`.
+- The Rank row pairs the medal Badge with the medal-wide range to its right (muted, monospace).
+- The Battle Cup row shows `Tier N (low–high)` as a Badge when `rank_status="never"` and a tier is set; otherwise `—`.
+- For `rank_status="previous"` + medal, append `(previous)` after the range in muted text so admins know it's stale.
+- The Positions row only renders when positions exist (preserved from the existing Profile block).
+
+### Theming & styling
+
+Match the patterns already used by `MmrApprovalModal.tsx` and described in `docs/THEMING-GUIDE.md`. Concrete classes:
+
+| Element | Classes |
+|---|---|
+| Card container | `bg-base-300 border border-border rounded-lg p-4 space-y-2 text-sm` |
+| Card title (`Rank Signals` heading) | `text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1` |
+| Row layout | `flex justify-between items-center` |
+| Row label | `text-muted-foreground` |
+| Numeric value | `font-mono` |
+| Em-dash placeholder | `text-muted-foreground` (renders `—`) |
+| Medal Badge | `<Badge variant="outline" className="px-1.5 py-0 text-xs font-medium text-amber-300 border-amber-500/30">` (matches existing line 188) |
+| Battle Cup Badge | `<Badge variant="outline" className="px-1.5 py-0 text-xs font-medium text-blue-300 border-blue-500/30">` (matches existing line 211) |
+| Range text on Rank row | `text-xs text-muted-foreground font-mono ml-2` |
+| Suggested range helper text under input | `text-xs text-muted-foreground font-mono mt-1` |
+| Source parenthetical (`from medal`) | `text-muted-foreground` (no extra emphasis) |
+
+No new buttons, dialogs, or status-color usage — the card is read-only display, so the brand button system from `THEMING-GUIDE.md` doesn't apply here. The existing `<ConfirmButton>`, `<DestructiveButton>`, `<SubmitButton>`, `<SecondaryButton>` in the modal footer stay untouched.
+
+### Component contract
+
+```typescript
+// frontend/app/components/events/RankSignalsCard.tsx
+'use client';
+
+import { Badge } from '~/components/ui/badge';
+import { RolePositions } from '~/components/user/positions';
+import { dotaProfileToPositions } from '~/components/user/UserEventStrip';
+import type { EventSignupType } from '~/components/events/schemas';
+
+interface RankSignalsCardProps {
+  signup: EventSignupType;
+}
+
+export function RankSignalsCard({ signup }: RankSignalsCardProps) {
+  // Renders four-row card per spec; pure read-only display.
+}
+```
+
+### React 19 patterns
+
+The modal and the new `RankSignalsCard` are both client components (`'use client'`). The modal is already a client component today (uses `useForm`, `useEffect`). No new async/Suspense boundaries — the data flows in via the parent's `signup` prop, which is already populated by the existing TanStack Query hook that powers the signups list. No `use()`, no `useTransition`, no `useOptimistic` needed for this read-only display.
 
 ### `data-testid` contract
 
@@ -210,10 +262,11 @@ rank-signals-prior-mmr
 rank-signals-self-report
 rank-signals-medal
 rank-signals-battle-cup
+rank-signals-positions
 suggested-range-helper
 ```
 
-These selectors are the test contract for the new block. Existing testids on the modal (`mmr-modal-approve`, `mmr-modal-reject`, `mmr-modal-close`) stay unchanged.
+These are the test contract for the new card and helper. Existing testids on the modal (`mmr-modal-approve`, `mmr-modal-reject`, `mmr-modal-close`) stay unchanged.
 
 ### Schema additions
 
@@ -312,14 +365,15 @@ Use `postWithCsrf` from the test fixture when calling this endpoint.
 ## File list
 
 **New files:**
-- `backend/events/mmr_suggestions.py`
-- `backend/events/tests/test_mmr_suggestions.py`
+- `backend/events/mmr_suggestions.py` — `suggest_mmr()` and helpers.
+- `backend/events/tests/test_mmr_suggestions.py` — pytest unit tests.
+- `frontend/app/components/events/RankSignalsCard.tsx` — read-only signals card extracted per the component-first rule.
 - `docs/superpowers/specs/2026-05-03-discord-dota-mmr-range-design.md` (this file)
 
 **Modified files:**
 - `backend/backend/settings.py` — add the three settings constants.
-- `backend/events/serializers.py` — add `suggested_mmr` and `suggested_mmr_range` fields to `EventSignupSerializer`.
-- `frontend/app/components/events/MmrApprovalModal.tsx` — remove `MEDAL_MMR`/`estimateMmr`, add Rank Signals block, switch default to `signup.suggested_mmr`, add helper text.
+- `backend/events/serializers.py` — add `suggested_mmr` and `suggested_mmr_range` to `EventSignupSerializer`.
+- `frontend/app/components/events/MmrApprovalModal.tsx` — remove `MEDAL_MMR`/`estimateMmr` and the two existing display blocks; render `<RankSignalsCard>` and the suggested-range helper; switch default to `signup.suggested_mmr`.
 - `frontend/app/components/events/schemas.ts` — add `suggested_mmr` and `suggested_mmr_range` to `EventSignupType`.
 - `frontend/tests/playwright/e2e/16-events/04-discord-integration.spec.ts` — augment existing test, add two siblings.
 - `frontend/tests/playwright/fixtures/auth.ts` — add `loginEventPlayer2()`.
