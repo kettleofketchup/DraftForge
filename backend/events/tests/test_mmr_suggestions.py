@@ -2,7 +2,6 @@
 from types import SimpleNamespace
 
 import pytest
-from django.test import override_settings
 
 from events.mmr_suggestions import suggest_mmr, _parse_medal
 
