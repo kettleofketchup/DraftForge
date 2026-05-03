@@ -241,15 +241,17 @@ test.describe('Events - Create Event (@cicd)', () => {
   });
 
   test('league combobox: mobile renders a Select fallback with clear sentinel', async ({ page }) => {
-    // Navigate at desktop width — the org page's mobile nav uses a different
-    // tab control that isn't testid-addressable. We only need the modal-level
-    // viewport to be mobile so the combobox's useMediaQuery flips branches.
-    await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
-    await page.getByTestId('org-tab-events').click();
-    await page.getByTestId('create-event-btn').click();
-
-    // Now flip to mobile width — useMediaQuery in LeagueCombobox re-evaluates.
+    // Set mobile viewport before navigation so the page renders its mobile-nav
+    // layout (a `MobileNavDropdown` instead of a horizontal tablist).
     await page.setViewportSize({ width: 375, height: 812 }); // iPhone 13-ish
+
+    await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
+
+    // The desktop `org-tab-events` button is hidden by `md:block`/`md:hidden`
+    // at this width — switch tabs via the mobile dropdown instead.
+    await page.getByTestId('page-nav-trigger').click();
+    await page.getByTestId('page-nav-events').click();
+    await page.getByTestId('create-event-btn').click();
 
     const trigger = page.getByTestId('event-league-select');
 

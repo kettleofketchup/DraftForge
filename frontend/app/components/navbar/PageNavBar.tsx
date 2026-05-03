@@ -14,6 +14,8 @@ export function PageNavBar() {
       value={value}
       onValueChange={onValueChange}
       className="md:hidden mx-2 my-1"
+      triggerTestId="page-nav-trigger"
+      itemTestIdPrefix="page-nav-"
     />
   );
 }
