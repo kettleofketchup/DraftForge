@@ -350,15 +350,16 @@ test.describe('Two Captains Full Draft', () => {
             );
           },
           {
-            // Budget covers a legit close+reconnect cycle. Backend logs from
-            // a real run showed Captain disconnect with close_code: 1001
-            // ("Going Away") followed by reconnect ~6.6s later — the 5s
-            // budget I started with couldn't bridge that gap. 15s is
-            // conservative; if an assertion takes >15s the captain is
-            // genuinely dark, not transiting.
-            message: `[${step}] Captains not all server-side connected within 15s — at least one draft_team.is_connected=false`,
-            timeout: 15000,
-            intervals: [200, 500, 1000, 2000],
+            // 5s is generous now that the test endpoint actually returns
+            // is_connected (it was missing from the manual draft_teams
+            // dict in test_herodraft.py — `t.is_connected` was always
+            // undefined, so this poll could never pass regardless of
+            // budget). With the field populated, the captain's connection
+            // state is visible immediately after the consumer's
+            // on_captain_state_change commits.
+            message: `[${step}] Captains not all server-side connected within 5s — at least one draft_team.is_connected=false`,
+            timeout: 5000,
+            intervals: [200, 500, 1000],
           },
         )
         .toBe(true);
