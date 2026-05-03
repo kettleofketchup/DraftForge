@@ -137,13 +137,90 @@ The `waitForEvent` is registered before the force-close, so it's not a listener-
    Verify `frontend/app/lib/wsManager.ts` (or similar) actually pushes every
    live WS into `(window).__wsInstances`.
 
-## Cause C — unknown, chromium project (covers #4)
+## Cause C — slow tournament page load + tight test timeout (covers #4)
 
-`08-shuffle-draft/01-full-draft.spec.ts:410` retry-passed for the first time on
-run 2. Outside the herodraft project entirely. Trace + screenshot live in
-`frontend/test-results/e2e-08-shuffle-draft-01-fu-b5b02-ter-a-pick-in-shuffle-draft-chromium-retry1/`.
-Needs its own first-pass investigation before deciding whether it lands in this
-spin-off or a separate one. **Don't dismiss as flaky.**
+**Diagnosis from existing artifacts** (`frontend/test-results/e2e-08-shuffle-draft-01-fu-b5b02-ter-a-pick-in-shuffle-draft-chromium/`):
+
+- `test-failed-1.png`: navbar rendered, but the rest of the page is just the
+  centered DaisyUI loading spinner. Nothing else has hydrated.
+- `error-context.md`: page snapshot at the moment of timeout shows ONLY the
+  navbar — no main content tree, no tournament title, no tabs.
+- `video.webm` exists but isn't easy to inspect from CLI.
+
+The screenshot's spinner is rendered by `TournamentDetailPage.tsx:214-220`:
+
+```tsx
+if (isLoading) {
+  return (
+    <div className="flex justify-center items-center h-screen">
+      <span className="loading loading-spinner loading-lg"></span>
+    </div>
+  );
+}
+```
+
+`isLoading` comes from `useTournament(pk)` (`frontend/app/hooks/useTournament.ts:5-12`):
+
+```ts
+return useQuery({
+  queryKey: ['tournament', pk],
+  queryFn: () => fetchTournament(pk!),
+  enabled: !!pk,
+  refetchInterval: 10_000,
+});
+```
+
+So the test's view of the world at the moment of failure: `useQuery` was still
+`isLoading: true`, meaning the `fetchTournament(pk)` API call hadn't resolved
+within the test's effective budget.
+
+Test budget breakdown (`01-full-draft.spec.ts:410-425`):
+1. `await loginAdmin()` — variable
+2. `await visitAndWaitForHydration(page, ...)` — `page.goto` + `1500ms` hard
+   wait (`helpers/utils.ts:62`)
+3. `await expect(page.locator('h1')).toContainText(name, { timeout: 10000 })`
+
+So `1500ms + 10000ms = 11.5s` total of post-goto budget for the data fetch
+to land. On a cold worker (first attempt of a chromium-project test run, with
+no warm cacheops cache + ORM compilation costs on first hit), this can fall
+short — the retry passed because the second attempt hit a warm backend.
+
+**Why this isn't a banner/herodraft issue:** the chromium project's spec doesn't
+touch herodraft at all. It's the standard tournament detail page, slow on cold
+fetch.
+
+**Fix options (in order of cleanness):**
+
+1. **Use `page.waitForResponse(...)` for the tournament fetch.** Deterministic
+   — wait for the actual API call to complete, not a wall-clock timer:
+
+   ```ts
+   const tournamentResponse = page.waitForResponse(
+     (r) => r.url().includes(`/api/tournaments/${tournamentData.pk}/`) && r.ok(),
+   );
+   await visitAndWaitForHydration(page, `/tournament/${tournamentData.pk}`);
+   await tournamentResponse;
+   ```
+
+2. **Bump the `h1` timeout to 30s.** Defensive — catches cold-start slowness
+   without changing test shape. Doesn't address why the fetch is slow.
+
+3. **Refactor the page to `useSuspenseQuery` + a `<Suspense>` boundary.**
+   Hydration would then suspend until the data arrives; `page.goto` would not
+   resolve until the page is renderable. Bigger lift, touches React 19 patterns,
+   not the right fix for this spin-off.
+
+4. **Refactor `visitAndWaitForHydration` to wait for a stable signal.** The
+   1500ms hard wait at `utils.ts:62` is a code smell — it assumes hydration
+   completes in a fixed time. Better to wait for `body[data-hydrated]` (an
+   explicit marker the app sets after hydration) or the absence of a known
+   loading testid. This affects every test using the helper, so it's a wider
+   change — schedule separately.
+
+**Recommendation for this spin-off:** apply fix (1) — the explicit
+`waitForResponse`. It's narrow, deterministic, and caps the test's success on
+the actual API resolution rather than a wall clock. Fixes (2) and (3) are
+follow-ups; (2) is a safety net we may want anyway.
 
 ## Per-test rudimentary spec
 
