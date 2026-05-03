@@ -46,11 +46,17 @@ export function CreateEventModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [defaultsApplied, setDefaultsApplied] = useState(false);
 
-  const { data: orgDefaults } = useQuery({
+  const { data: orgDefaults, isLoading: orgDefaultsLoading } = useQuery({
     queryKey: ['org-event-defaults', organizationId],
     queryFn: () => getOrgEventDefaults(organizationId),
     staleTime: 5 * 60 * 1000,
   });
+
+  // Hide form fields until orgDefaults are applied so the user can't start
+  // typing before form.reset() fires and clobbers their input. The query
+  // may also fail (network down, 5xx); in that case defaults stay at the
+  // hardcoded useForm values and we show the form anyway after isLoading clears.
+  const formReady = !orgDefaultsLoading && (orgDefaults == null || defaultsApplied);
 
   const form = useForm<CreateEventInput>({
     resolver: zodResolver(createEventInputSchema),
@@ -207,10 +213,15 @@ export function CreateEventModal({
       onOpenChange={onOpenChange}
       title={isRecurring ? 'Create Recurring Event' : 'Create Event'}
       submitLabel="Create"
-      isSubmitting={isSubmitting}
+      isSubmitting={isSubmitting || !formReady}
       onSubmit={form.handleSubmit(onSubmit)}
       size="lg"
     >
+      {!formReady ? (
+        <div className="py-12 text-center text-muted-foreground" data-testid="create-event-loading">
+          Loading defaults…
+        </div>
+      ) : (
       <Form {...form}>
         <Tabs defaultValue="event">
           <TabsList className="w-full">
@@ -719,6 +730,7 @@ export function CreateEventModal({
           </TabsContent>
         </Tabs>
       </Form>
+      )}
     </FormDialog>
   );
 }
