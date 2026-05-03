@@ -504,3 +504,35 @@ LEAGUE_CHOICES = app_config.league_choices
 from telemetry.config import init_telemetry
 
 init_telemetry()
+
+# ============================================================================
+# Dota 2 medal / battle cup → MMR range mappings
+# ----------------------------------------------------------------------------
+# Drives the suggestion shown in MmrApprovalModal. Edit + redeploy to update.
+# Range is medal-wide (stars do not narrow). Battle cup tier 1 = lowest, 8 =
+# Immortal-tier.
+# ============================================================================
+
+DOTA_MEDAL_MMR_RANGES = {
+    "Herald":   (0,    770),
+    "Guardian": (770,  1540),
+    "Crusader": (1540, 2310),
+    "Archon":   (2310, 3080),
+    "Legend":   (3080, 3850),
+    "Ancient":  (3850, 4620),
+    "Divine":   (4620, 5420),
+    "Immortal": (5420, 8000),
+}
+
+DOTA_BATTLE_CUP_MMR_RANGES = {
+    1: (0,    500),
+    2: (500,  1000),
+    3: (1000, 2000),
+    4: (2000, 3000),
+    5: (3000, 4000),
+    6: (4000, 5000),
+    7: (5000, 6000),
+    8: (6000, 8000),
+}
+
+DOTA_DEFAULT_MMR_RANGE = (0, 2000)
