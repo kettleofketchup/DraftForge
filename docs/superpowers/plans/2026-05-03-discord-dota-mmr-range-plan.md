@@ -45,6 +45,10 @@
 - `frontend/app/components/user/UserEventStrip.tsx` — pass `unranked` at every `<RolePositions>` whose user came from `dotaProfileToPositions`.
 - `frontend/tests/playwright/e2e/16-events/04-discord-integration.spec.ts` — assert positions row doesn't render "1 1 1" rank labels.
 
+**Modified files (PlayerModal org-scope fix — Phase 7):**
+- `frontend/app/components/player/PlayerModal.tsx` — look up cached orgEntry and inject `orgUserPk: orgEntry.id` into the `User` instance handed to `UserEditModal` so `dispatchPatch` doesn't throw `Org scope requires user.orgUserPk`.
+- `frontend/tests/playwright/e2e/16-events/04-discord-integration.spec.ts` — Playwright regression test that opens PlayerModal → Edit → Save and asserts the org-scoped PATCH succeeds with no error toast.
+
 ---
 
 ## Test data we'll reuse
@@ -1713,9 +1717,195 @@ git commit -m "fix(events): suppress fake rank-1 on DotaProfile-derived position
 
 ---
 
-## Phase 7 — Verification
+## Phase 7 — PlayerModal org-scope fix ("Org scope requires user.orgUserPk" toast)
 
-### Task 17: Full backend + frontend verification pass
+### Task 17: Inject `orgUserPk` into PlayerModal's UserEditModal
+
+**Files:**
+- Modify: `frontend/app/components/player/PlayerModal.tsx`
+
+**Why:** On the event page, clicking a signup user opens the `PlayerPopoverTrigger` → `PlayerModal`. The popover passes `organizationId` via context, so `editScope` becomes `{ kind: 'org', organization: currentOrg }`. PlayerModal then renders `<UserEditModal user={new User(fullUserData || displayPlayer)} scope={editScope} />` (line 181). Neither `fullUserData` (returned by `fetchUser(pk)` from `/users/{pk}/`) nor `displayPlayer` carries `orgUserPk`. When the admin clicks Save, `dispatchPatch` (`editUserSchema.ts:104`) throws `Error('Org scope requires user.orgUserPk')` and the change never persists.
+
+The exact same pattern is already solved in `userCard.tsx:82-90`: look up the `orgEntry` from the user cache (`UserEntry.orgData[organizationId]`) and inject `orgUserPk: orgEntry.id` into the `User` instance.
+
+- [ ] **Step 1: Read the existing fix pattern**
+
+```bash
+sed -n '70,95p' /home/kettle/git_repos/draftforge/.worktrees/discord-dota-mmr-range/frontend/app/components/user/userCard.tsx
+```
+
+The relevant block:
+```typescript
+const orgEntry = isUserEntry(user) && organizationId ? user.orgData[organizationId] : undefined;
+// ...
+const editUser = React.useMemo(
+  () =>
+    new User(
+      isUserEntry(user) && orgEntry
+        ? { ...user, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
+        : user,
+    ),
+  [user, orgEntry?.id, orgEntry?.mmr],
+);
+```
+
+- [ ] **Step 2: Apply the same pattern in `PlayerModal.tsx`**
+
+Update imports near the top of `frontend/app/components/player/PlayerModal.tsx`:
+
+```typescript
+import { isUserEntry } from '~/store/userCacheTypes';
+import { useUserCacheStore } from '~/store/userCacheStore';
+```
+
+Inside the `PlayerModal` component, after the `editScope` `useMemo` and before the `<UserEditModal ...>` render, look up the cached user entry to grab the org membership:
+
+```typescript
+  // PlayerModal can be opened with a `player` prop that lacks orgUserPk
+  // (it comes from a signup list, a leaderboard row, or a draft seat).
+  // For org-scoped edits, dispatchPatch() requires user.orgUserPk; without
+  // it the Save button throws "Org scope requires user.orgUserPk". Look the
+  // OrgUser pk up from the user cache the same way userCard.tsx does.
+  const cachedUserEntry = useUserCacheStore((s) =>
+    player.pk ? s.users[player.pk] : undefined,
+  );
+  const orgEntry =
+    cachedUserEntry &&
+    isUserEntry(cachedUserEntry) &&
+    editScope.kind === 'org' &&
+    editScope.organization.pk
+      ? cachedUserEntry.orgData[editScope.organization.pk]
+      : undefined;
+
+  const editUser = React.useMemo(() => {
+    const base = (fullUserData || displayPlayer) as UserType;
+    const merged =
+      orgEntry !== undefined
+        ? { ...base, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
+        : base;
+    return new User(merged);
+  }, [fullUserData, displayPlayer, orgEntry?.id, orgEntry?.mmr]);
+```
+
+Then change the existing render (around line 181):
+
+```tsx
+                <UserEditModal user={new User(fullUserData || displayPlayer)} scope={editScope} />
+```
+
+to:
+
+```tsx
+                <UserEditModal user={editUser} scope={editScope} />
+```
+
+> **Important:** Do NOT change the `editScope` logic — its current branching (org > league > global) is correct. The fix only injects the missing `orgUserPk` when org scope is in play. League scope already routes through the parent org's OrgUser endpoint and uses the same `user.orgUserPk` lookup, so the same fix covers it (the check `editScope.kind === 'org'` could be widened to `'org' | 'league'` if league-scope clicks are reachable from PlayerModal — confirm in step 3).
+
+- [ ] **Step 3: Decide whether to also handle `editScope.kind === 'league'`**
+
+Look at when `editScope` resolves to `league`:
+
+```bash
+grep -n "kind: 'league'\|league.organization" /home/kettle/git_repos/draftforge/.worktrees/discord-dota-mmr-range/frontend/app/components/player/PlayerModal.tsx
+```
+
+If `editScope` can become `league` from PlayerModal call sites, widen the orgEntry lookup so it also runs for league scope (the league's parent org pk is `editScope.organization?.pk ?? editScope.league.organization?.pk`). If league scope isn't reachable from any current PlayerModal entry point, document that and skip.
+
+- [ ] **Step 4: TypeScript check**
+
+```bash
+cd /home/kettle/git_repos/draftforge/.worktrees/discord-dota-mmr-range/frontend && npx tsc --noEmit 2>&1 | grep -E "PlayerModal\.tsx" | head -10
+```
+
+Expected: no errors on `PlayerModal.tsx`.
+
+- [ ] **Step 5: Manual smoke**
+
+```bash
+cd /home/kettle/git_repos/draftforge/.worktrees/discord-dota-mmr-range && just dev::debug
+```
+
+In a browser:
+1. Log in as event admin.
+2. Open an event page with signups.
+3. Click a signup user → PlayerModal opens.
+4. Click the Edit pencil → UserEditModal opens.
+5. Change the nickname or any field, click Save.
+6. **Expected:** Toast says "<username> updated", modal closes, no "Org scope requires user.orgUserPk" toast.
+
+- [ ] **Step 6: Add Playwright regression test**
+
+Append to `frontend/tests/playwright/e2e/16-events/04-discord-integration.spec.ts` inside the existing `Events - Discord Integration` describe block:
+
+```typescript
+  test('PlayerModal edit on event page persists org-scoped change without orgUserPk error', async ({
+    context,
+    page,
+  }) => {
+    // Ensures the fix at PlayerModal.tsx for the bug
+    // "Org scope requires user.orgUserPk" — admin opens a signup user's
+    // PlayerModal, clicks Edit, saves, and the PATCH must succeed.
+    const createResp = await postWithCsrf(context, `${API_URL}/events/?open_signups=true`, {
+      organization: eventInfo.orgPk,
+      name: 'Player Modal Edit Event',
+      description: 'Tests org-scoped edit from PlayerModal',
+      scheduled_at: new Date(Date.now() + 86400000).toISOString(),
+      tournament_name: 'PM Edit Tournament',
+      tournament_league: eventInfo.leaguePk,
+      tournament_type: 'single_elimination',
+      timezone: 'America/New_York',
+    });
+    expect(createResp.ok()).toBeTruthy();
+    const event = await createResp.json();
+
+    await loginEventPlayer(context);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
+    expect(rsvpResp.ok()).toBeTruthy();
+
+    await loginEventAdmin(context);
+    await visitAndWaitForHydration(page, `/events/${event.id}`);
+    await page.getByTestId('event-tab-signups').click();
+    await expect(page.getByText('EventPlayer1')).toBeVisible({ timeout: 10000 });
+
+    // Open the PlayerModal by clicking the user name/avatar in the signup row.
+    await page.getByText('EventPlayer1').first().click();
+
+    // Click the edit-user pencil button inside PlayerModal.
+    await page.getByTestId('edit-user-btn').click();
+
+    // The edit modal opens — change the nickname and save.
+    const editDialog = page.getByTestId('edit-user-modal');
+    await expect(editDialog).toBeVisible({ timeout: 5000 });
+    const nicknameInput = editDialog.locator('input[name="nickname"]').first();
+    await nicknameInput.fill('EventPlayer1-edited');
+
+    // Listen for the PATCH request to confirm it goes to the org-scoped URL.
+    const patchPromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'PATCH' && /\/orgs\/\d+\/users\/\d+\/?$/.test(resp.url()),
+      { timeout: 10000 },
+    );
+    await editDialog.getByRole('button', { name: 'Save Changes' }).click();
+    const patchResp = await patchPromise;
+    expect(patchResp.ok()).toBeTruthy();
+
+    // No error toast about orgUserPk.
+    await expect(page.getByText('Org scope requires user.orgUserPk')).not.toBeVisible();
+  });
+```
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /home/kettle/git_repos/draftforge/.worktrees/discord-dota-mmr-range
+git add frontend/app/components/player/PlayerModal.tsx frontend/tests/playwright/e2e/16-events/04-discord-integration.spec.ts
+git commit -m "fix(player): inject orgUserPk into PlayerModal UserEditModal" -m "PlayerModal opens UserEditModal with a User instance built from fetchUser(pk) result, which never includes orgUserPk. When the popover context provides organizationId, editScope becomes 'org' and dispatchPatch throws 'Org scope requires user.orgUserPk' on Save. Mirror the userCard.tsx pattern: look up the OrgUser entry from the user cache and merge orgUserPk: orgEntry.id into the User passed to UserEditModal. Adds Playwright regression test on the event signups page."
+```
+
+---
+
+## Phase 8 — Verification
+
+### Task 18: Full backend + frontend verification pass
 
 - [ ] **Step 1: Backend unit tests**
 
@@ -1812,6 +2002,11 @@ If steps 1–6 surfaced regressions, fix and commit. Otherwise no commit needed.
 - DotaProfile-derived call sites (RankSignalsCard, UserEventStrip) pass `unranked` → Task 16 steps 1-2 ✓
 - Real PositionsModel-driven displays unchanged → Task 16 step 2 (explicit warning) ✓
 - Playwright assertion catches the `^1\s*1\s*1$` regression pattern → Task 16 step 3 ✓
+
+**Bug fix coverage (PlayerModal org-scope — Phase 7):**
+- PlayerModal injects `orgUserPk` into UserEditModal's `User` instance → Task 17 step 2 ✓
+- League-scope edge case audited → Task 17 step 3 ✓
+- Playwright regression test on event signups page (PlayerModal → Edit → Save → org-scoped PATCH) → Task 17 step 6 ✓
 
 **Placeholder scan:** No "TBD", no "implement later", every code step has a complete code block.
 
