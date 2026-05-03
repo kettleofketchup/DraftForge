@@ -130,18 +130,15 @@ export const LeagueCombobox: React.FC<LeagueComboboxProps> = ({
           aria-invalid={invalid || undefined}
           disabled={triggerDisabled}
           data-testid={triggerTestId}
-          className={cn(
-            'w-full justify-between aria-invalid:border-destructive',
-            className,
-          )}
+          className={cn('w-full justify-between', className)}
         >
           <span className="truncate">
             {selected ? selected.name : placeholder}
           </span>
-          <ChevronsUpDown data-icon="inline-end" className="opacity-50" />
+          <ChevronsUpDown className="opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+      <PopoverContent className="w-(--radix-popover-trigger-width) p-0">
         <Command>
           <CommandInput
             placeholder="Search leagues…"
