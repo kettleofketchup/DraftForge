@@ -138,7 +138,7 @@ export interface EventRepeaterType {
   created_at: string;
   updated_at: string;
   tournament_name: string;
-  tournament_league: number;
+  tournament_league: number | null;
   tournament_type: string;
   game_type: number;
   draft_type: string;

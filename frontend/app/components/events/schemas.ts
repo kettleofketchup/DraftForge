@@ -35,7 +35,7 @@ export const eventSchema = z.object({
   signup_count: z.number(),
   confirmed_count: z.number(),
   tournament_name: z.string(),
-  tournament_league: z.number(),
+  tournament_league: z.number().nullable(),
   tournament_type: z.string(),
   game_type: z.number(),
   draft_type: z.string(),
