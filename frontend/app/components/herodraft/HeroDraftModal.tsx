@@ -125,9 +125,22 @@ export function HeroDraftModal({ draftId, open, onClose }: HeroDraftModalProps) 
       case "captain_ready":
         toast(<CaptainToast captain={captain} message="is ready" messageClassName="text-blue-400 font-semibold" />);
         break;
-      case "captain_connected":
-        toast(<CaptainToast captain={captain} message="connected" messageClassName="text-green-500 font-semibold" />);
+      case "captain_connected": {
+        // Server tags `is_reconnect: true` on subsequent connects (it knows
+        // because it's the source of truth on draft_team.is_connected and the
+        // HeroDraftEvent history). First connect for a captain in this draft
+        // shows "joined"; later connects show "reconnected".
+        const isReconnect =
+          (lastEvent.metadata as { is_reconnect?: boolean })?.is_reconnect === true;
+        toast(
+          <CaptainToast
+            captain={captain}
+            message={isReconnect ? "reconnected" : "joined"}
+            messageClassName="text-green-500 font-semibold"
+          />,
+        );
         break;
+      }
       case "captain_disconnected":
         toast(<CaptainToast captain={captain} message="disconnected" messageClassName="text-red-500 font-semibold" />);
         break;

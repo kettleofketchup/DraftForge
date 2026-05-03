@@ -262,8 +262,17 @@ test.describe('Two Captains Full Draft', () => {
     let wsConnectionA: { url: string; closed: boolean } | null = null;
     let wsConnectionB: { url: string; closed: boolean } | null = null;
 
+    // Each `websocket` event hands us a fresh handle. Capture per-WS state in a
+    // closure so the close handler only marks ITS OWN connection closed —
+    // wsConnectionA/B always points at the latest live WS, so a stale ws.on('close')
+    // from a kicked or stale-replaced previous WS doesn't wrongly mark the live
+    // one as closed. Without this, any legitimate reconnect during the test
+    // (server kick when the same captain reconnects, stale-detector cycle,
+    // even React StrictMode dev-time remount race) would race with the next
+    // assertWebSocketsOpen() and throw spuriously.
     captainA.page.on('websocket', ws => {
-      wsConnectionA = { url: ws.url(), closed: false };
+      const conn = { url: ws.url(), closed: false };
+      wsConnectionA = conn;
       console.log(`   [WS-A] Connected to: ${ws.url()}`);
       ws.on('framereceived', frame => {
         try {
@@ -280,12 +289,13 @@ test.describe('Two Captains Full Draft', () => {
       });
       ws.on('close', () => {
         console.log('   [WS-A] CLOSED');
-        if (wsConnectionA) wsConnectionA.closed = true;
+        conn.closed = true;
       });
     });
 
     captainB.page.on('websocket', ws => {
-      wsConnectionB = { url: ws.url(), closed: false };
+      const conn = { url: ws.url(), closed: false };
+      wsConnectionB = conn;
       console.log(`   [WS-B] Connected to: ${ws.url()}`);
       ws.on('framereceived', frame => {
         try {
@@ -302,18 +312,50 @@ test.describe('Two Captains Full Draft', () => {
       });
       ws.on('close', () => {
         console.log('   [WS-B] CLOSED');
-        if (wsConnectionB) wsConnectionB.closed = true;
+        conn.closed = true;
       });
     });
 
-    // Helper to check WebSocket connection health
-    const assertWebSocketsOpen = (step: string) => {
-      if (wsConnectionA?.closed) {
-        throw new Error(`[${step}] Captain A WebSocket closed unexpectedly`);
-      }
-      if (wsConnectionB?.closed) {
-        throw new Error(`[${step}] Captain B WebSocket closed unexpectedly`);
-      }
+    // Helper to assert both captains are connected from the server's perspective.
+    //
+    // Why this isn't `wsConnectionA?.closed`: the WS instance the test holds a
+    // reference to can legitimately go through a close→reconnect cycle (server
+    // kick when the same captain's session reconnects, stale-detector cycle,
+    // dev-time StrictMode race). In all those cases the *captain* is healthy —
+    // a new WS opens within ~1s, the in-flight send queue drains, the user sees
+    // a brief "Reconnecting…" indicator. The assertion should reflect what the
+    // SERVER thinks (its `draft_team.is_connected` flag is the source of truth)
+    // not the test's per-instance WS bookkeeping.
+    //
+    // We poll because the server momentarily flips `is_connected=False` between
+    // the old WS's disconnect handler firing and the new WS's connect handler
+    // running. The retry budget rides out that gap without papering over real
+    // captain-went-dark failures.
+    const assertCaptainsConnected = async (step: string) => {
+      await expect
+        .poll(
+          async () => {
+            const res = await captainA.context.request.get(
+              `${API_URL}/tests/herodraft-by-key/two_captain_test/`,
+              { failOnStatusCode: false, timeout: 5000 },
+            );
+            if (!res.ok()) return false;
+            const data = await res.json();
+            return (
+              Array.isArray(data.draft_teams) &&
+              data.draft_teams.length > 0 &&
+              data.draft_teams.every(
+                (t: { is_connected: boolean }) => t.is_connected,
+              )
+            );
+          },
+          {
+            message: `[${step}] Captains not all server-side connected within 5s — at least one draft_team.is_connected=false`,
+            timeout: 5000,
+            intervals: [200, 500, 1000],
+          },
+        )
+        .toBe(true);
     };
 
     // =========================================================================
@@ -382,7 +424,7 @@ test.describe('Two Captains Full Draft', () => {
     console.log(`   Current state - Captain A: ${stateA}, Captain B: ${stateB}`);
 
     // Captain A clicks ready
-    assertWebSocketsOpen('before Captain A ready');
+    await assertCaptainsConnected('before Captain A ready');
     await captainA.draftPage.clickReady();
     console.log(`   Captain A (${captainA.username}) clicked Ready`);
 
@@ -394,14 +436,14 @@ test.describe('Two Captains Full Draft', () => {
     console.log('   Captain B sees Captain A is ready');
 
     // Verify WebSockets still open
-    assertWebSocketsOpen('after Captain A ready propagated');
+    await assertCaptainsConnected('after Captain A ready propagated');
 
     // Captain B clicks ready
     await captainB.draftPage.clickReady();
     console.log(`   Captain B (${captainB.username}) clicked Ready`);
 
     // Verify WebSockets still open
-    assertWebSocketsOpen('after Captain B ready');
+    await assertCaptainsConnected('after Captain B ready');
 
     // Wait for transition to rolling phase - both should receive state update via WebSocket
     console.log('   Waiting for rolling phase on both captains...');
@@ -411,7 +453,7 @@ test.describe('Two Captains Full Draft', () => {
     ]);
 
     // Verify both received the state update
-    assertWebSocketsOpen('after rolling transition');
+    await assertCaptainsConnected('after rolling transition');
     const stateAfterA = await captainA.draftPage.getCurrentState();
     const stateAfterB = await captainB.draftPage.getCurrentState();
     console.log(`   UI State after ready - Captain A: ${stateAfterA}, Captain B: ${stateAfterB}`);
@@ -425,7 +467,7 @@ test.describe('Two Captains Full Draft', () => {
     console.log('Step 3: Rolling Phase - coin flip...');
 
     // Verify WebSockets still open
-    assertWebSocketsOpen('before coin flip');
+    await assertCaptainsConnected('before coin flip');
 
     // Wait for flip button to be available
     await captainA.draftPage.flipCoinButton.waitFor({ state: 'visible', timeout: 15000 });
@@ -442,7 +484,7 @@ test.describe('Two Captains Full Draft', () => {
     ]);
 
     // Verify WebSockets still open and check states
-    assertWebSocketsOpen('after coin flip');
+    await assertCaptainsConnected('after coin flip');
     const stateAfterFlipA = await captainA.draftPage.getCurrentState();
     const stateAfterFlipB = await captainB.draftPage.getCurrentState();
     console.log(`   UI State after flip - Captain A: ${stateAfterFlipA}, Captain B: ${stateAfterFlipB}`);
@@ -456,7 +498,7 @@ test.describe('Two Captains Full Draft', () => {
     console.log('Step 4: Choosing Phase - selecting pick order and side...');
 
     // Verify WebSockets still open
-    assertWebSocketsOpen('before choosing phase');
+    await assertCaptainsConnected('before choosing phase');
 
     // Check which captain is the winner
     const winnerChoices = captainA.page.locator(
@@ -477,7 +519,7 @@ test.describe('Two Captains Full Draft', () => {
       // Wait for loser choice to become available via WebSocket
       const loserChoices = captainB.page.locator('[data-testid="herodraft-loser-choices"]');
       await loserChoices.waitFor({ state: 'visible', timeout: 10000 });
-      assertWebSocketsOpen('after winner choice');
+      await assertCaptainsConnected('after winner choice');
 
       // Captain B chooses side
       await captainB.draftPage.selectLoserChoice('radiant');
@@ -492,7 +534,7 @@ test.describe('Two Captains Full Draft', () => {
       // Wait for loser choice to become available via WebSocket
       const loserChoices = captainA.page.locator('[data-testid="herodraft-loser-choices"]');
       await loserChoices.waitFor({ state: 'visible', timeout: 10000 });
-      assertWebSocketsOpen('after winner choice');
+      await assertCaptainsConnected('after winner choice');
 
       // Captain A chooses side
       await captainA.draftPage.selectLoserChoice('radiant');
@@ -507,7 +549,7 @@ test.describe('Two Captains Full Draft', () => {
     ]);
 
     // Verify WebSockets still open and check states
-    assertWebSocketsOpen('after drafting transition');
+    await assertCaptainsConnected('after drafting transition');
     const stateAfterChoicesA = await captainA.draftPage.getCurrentState();
     const stateAfterChoicesB = await captainB.draftPage.getCurrentState();
     console.log(`   UI State after choices - Captain A: ${stateAfterChoicesA}, Captain B: ${stateAfterChoicesB}`);
