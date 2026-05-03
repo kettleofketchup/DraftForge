@@ -30,6 +30,7 @@ import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
 import { createEventInputSchema, GameType, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC, type CreateEventInput } from './schemas';
 import type { LeagueType } from '~/components/league';
+import { LeagueCombobox } from '~/components/league/LeagueCombobox';
 
 interface CreateEventModalProps {
   open: boolean;
@@ -272,26 +273,21 @@ export function CreateEventModal({
           <FormField
             control={form.control}
             name="tournament_league"
-            render={({ field }) => (
+            render={({ field, fieldState }) => (
               <FormItem>
                 <FormLabel>League</FormLabel>
-                <Select
-                  onValueChange={(val) => field.onChange(parseInt(val, 10))}
-                  value={field.value?.toString()}
-                >
-                  <FormControl>
-                    <SelectTrigger data-testid="event-league-select" className="w-full">
-                      <SelectValue placeholder="Select league" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {leagues.map((league) => (
-                      <SelectItem key={league.pk} value={String(league.pk)} data-testid={`event-league-option-${league.pk}`}>
-                        {league.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <LeagueCombobox
+                    organizationId={organizationId}
+                    value={field.value ?? null}
+                    onChange={(v) => field.onChange(v ?? undefined)}
+                    invalid={!!fieldState.error}
+                    triggerTestId="event-league-select"
+                    itemTestIdPrefix="event-league-option-"
+                    searchTestId="event-league-search"
+                    clearTestId="event-league-clear"
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
