@@ -35,6 +35,10 @@
 - `backend/discordbot/bot.py` — remove the `rank_medal:` branch from `bot.on_interaction` (lines 268–285).
 - `backend/discordbot/tests/test_components.py` — append `TestMedalSelectRebuildsView` regression tests.
 
+**Modified/new files (Discord reminder count fix — Phase 5, issue #188):**
+- `backend/events/discord/embeds.py` — replace `getattr(event, "signup_count", 0)` with `_signup_counts(event)` in `_build_reminder_embed` (line 434) and `build_signup_reminder_embed` (line 523).
+- `backend/events/tests/test_reminder_embeds.py` (new) — regression test asserting reminder embeds show the real active signup count.
+
 ---
 
 ## Test data we'll reuse
@@ -1409,9 +1413,141 @@ git commit -m "test(discord): regression test for MedalSelect medal-encoding reb
 
 ---
 
-## Phase 5 — Verification
+## Phase 5 — Discord event reminder signup count fix (issue #188)
 
-### Task 14: Full backend + frontend verification pass
+### Task 14: Fix `build_signup_reminder_embed` showing `0/∞` instead of real count
+
+**Files:**
+- Modify: `backend/events/discord/embeds.py` (`_build_reminder_embed` line ~434, `build_signup_reminder_embed` line ~523)
+- Modify: `backend/events/tests/test_services.py` (or appropriate existing embed-test file — verify in step 1)
+
+**Why:** Issue [#188](https://github.com/kettleofketchup/DraftForge/issues/188) — the Discord event reminder shows `Signups 0/∞ players` even when 13+ players are signed up. Both reminder builders read `active = getattr(event, "signup_count", 0)`. `signup_count` is a *serializer-computed* field (`backend/events/serializers.py:161`), NOT a model attribute on `Event`. When `tasks.py` and the Discord post helpers call these builders with a raw ORM `Event` instance, `getattr` falls through to the default `0` every time. The same module already defines `_signup_counts(event)` at line 40 (used at line 383 in `build_announcement_embeds`) — the reminder builders should call it too.
+
+- [ ] **Step 1: Find the existing reminder-embed test (if any) for the test location**
+
+Run: `grep -rn "build_signup_reminder_embed\|build_attendance_reminder_embed\|_build_reminder_embed\|signup_reminder" backend/events/tests/ backend/tests/ 2>/dev/null | head -10`
+
+Pick the file already containing the closest neighbor; if no test exists, create `backend/events/tests/test_reminder_embeds.py`.
+
+- [ ] **Step 2: Write the failing test**
+
+If creating a new file, add this content. If extending an existing test file, append the test class:
+
+```python
+"""Regression test for issue #188 — reminder embed showed 0/∞ instead of actual count."""
+from django.test import TestCase
+
+from events.discord.embeds import (
+    build_signup_reminder_embed,
+    _build_reminder_embed,
+)
+from events.models import Event, EventSignup
+from events.tests.factories import (
+    create_test_event,
+    create_test_signup,  # adapt to whatever factory helpers exist; otherwise inline-create
+)
+
+
+class TestReminderEmbedSignupCount(TestCase):
+    def test_signup_reminder_shows_active_signup_count(self):
+        """Issue #188: build_signup_reminder_embed must show real signup count."""
+        event = create_test_event(max_players=None)  # max_players=None → ∞ display
+        for _ in range(13):
+            create_test_signup(event=event, status="approved")  # active status
+
+        result = build_signup_reminder_embed(event)
+
+        # The Signups field value should be **13/∞** players
+        signups_field = next(
+            f for f in result["embed"]["fields"] if f["name"] == "Signups"
+        )
+        self.assertEqual(signups_field["value"], "**13/∞** players")
+
+        # The description text used by build_signup_reminder_embed itself
+        # also shows the count — this catches the second getattr at line 523.
+        self.assertIn("13/∞", result["embed"]["description"])
+
+    def test_reminder_embed_excludes_cancelled_and_waitlisted(self):
+        """Active count must exclude cancelled, rejected, waitlisted signups."""
+        event = create_test_event(max_players=10)
+        for _ in range(5):
+            create_test_signup(event=event, status="approved")
+        create_test_signup(event=event, status="cancelled")
+        create_test_signup(event=event, status="rejected")
+        create_test_signup(event=event, status="waitlisted")
+
+        result = build_signup_reminder_embed(event)
+        signups_field = next(
+            f for f in result["embed"]["fields"] if f["name"] == "Signups"
+        )
+        self.assertEqual(signups_field["value"], "**5/10** players")
+```
+
+> **Adapt the factory helpers** to whatever the events test suite already provides. Look at one of the existing tests in `backend/events/tests/test_services.py` for the pattern. If no factory helpers exist, inline-create the `Organization`, `Event`, and `EventSignup` rows directly in `setUp` — the goal is just having an event with N active signups.
+
+- [ ] **Step 3: Run the new tests to confirm they fail with the current (buggy) code**
+
+Run: `just test::run 'python -m pytest events/tests/test_reminder_embeds.py -v'` (adjust path if you appended to an existing file).
+Expected: Both tests FAIL with assertion errors showing `**0/...** players` rather than `**13/...**` / `**5/10**`.
+
+- [ ] **Step 4: Apply the fix in `_build_reminder_embed`**
+
+Find `backend/events/discord/embeds.py` line 434:
+
+```python
+    url = _event_url(event)
+    active = getattr(event, "signup_count", 0)
+    max_display = str(event.max_players) if event.max_players else "∞"
+```
+
+Replace with:
+
+```python
+    url = _event_url(event)
+    active, _confirmed = _signup_counts(event)
+    max_display = str(event.max_players) if event.max_players else "∞"
+```
+
+- [ ] **Step 5: Apply the same fix in `build_signup_reminder_embed`**
+
+Find line 523:
+
+```python
+def build_signup_reminder_embed(event):
+    active = getattr(event, "signup_count", 0)
+    max_display = str(event.max_players) if event.max_players else "∞"
+```
+
+Replace with:
+
+```python
+def build_signup_reminder_embed(event):
+    active, _confirmed = _signup_counts(event)
+    max_display = str(event.max_players) if event.max_players else "∞"
+```
+
+- [ ] **Step 6: Re-run the new tests — they should now pass**
+
+Run: `just test::run 'python -m pytest events/tests/test_reminder_embeds.py -v'`
+Expected: Both tests PASS.
+
+- [ ] **Step 7: Run the full events test suite to confirm no regressions**
+
+Run: `just test::run 'python -m pytest events/ -v'`
+Expected: All tests pass.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add backend/events/discord/embeds.py backend/events/tests/test_reminder_embeds.py
+git commit -m "fix(discord): reminder embed shows real signup count (issue #188)" -m "Both _build_reminder_embed and build_signup_reminder_embed read event.signup_count via getattr with a default of 0 — but signup_count is a serializer-computed field, not a model attribute. On a raw ORM Event the getattr always returned 0, producing 'Signups 0/∞ players' regardless of actual signups. Switch to the existing _signup_counts(event) helper that queries EventSignup.status directly and excludes cancelled/rejected/waitlisted."
+```
+
+---
+
+## Phase 6 — Verification
+
+### Task 15: Full backend + frontend verification pass
 
 - [ ] **Step 1: Backend unit tests**
 
@@ -1441,7 +1577,7 @@ Run: `just dev::debug`. Open the approval modal for any Dota event signup. Confi
 - Helper text reads "Suggested range: low–high (from medal | battle cup | fallback)".
 - Approve/Reject still work; success toast appears.
 
-- [ ] **Step 6: Manual Discord smoke (bug fix)**
+- [ ] **Step 6: Manual Discord smoke (Phase 4 medal-select fix)**
 
 In a Discord server with the bot installed, run a Dota signup flow end-to-end:
 1. Click signup, fill the modal (friend ID + rank_status="active").
@@ -1451,7 +1587,24 @@ In a Discord server with the bot installed, run a Dota signup flow end-to-end:
 
 Repeat with rank_status="previous" + medal **Divine** + star **3**: confirm `Divine 3` (not Herald 3) and that the prompt label says "Previous rank" rather than "Rank".
 
-- [ ] **Step 7: Final commit if any fixes were needed**
+- [ ] **Step 7: Manual Discord smoke (Phase 5 reminder count fix, issue #188)**
+
+In a test Discord server, create an event with a signup reminder configured, RSVP a few accounts, then trigger the reminder (either by waiting or by manually invoking the celery task). Confirm the embed shows the actual signup count (e.g., `**3/∞** players`) — not `**0/∞** players`.
+
+Faster alternative: in a Django shell, build the embed directly and inspect:
+
+```bash
+just dev::run 'python manage.py shell -c "
+from events.discord.embeds import build_signup_reminder_embed
+from events.models import Event
+e = Event.objects.exclude(signups=None).first()
+print(build_signup_reminder_embed(e)[\"embed\"][\"fields\"][1][\"value\"])
+"'
+```
+
+The output should match `**N/...** players` where N is the actual active signup count.
+
+- [ ] **Step 8: Final commit if any fixes were needed**
 
 If steps 1–6 surfaced regressions, fix and commit. Otherwise no commit needed.
 
@@ -1477,6 +1630,11 @@ If steps 1–6 surfaced regressions, fix and commit. Otherwise no commit needed.
 - Remove the now-dead `rank_medal:` branch from bot.on_interaction → Task 12 step 2 ✓
 - Regression test that `MedalSelect.callback` produces a `StarSelect` whose `custom_id` encodes the picked medal (not "Herald") → Task 13 ✓
 - Preserve "previous" rank_status through the rebuild → Task 13 second test ✓
+
+**Bug fix coverage (issue #188 reminder embed — Phase 5):**
+- `_build_reminder_embed` uses real signup count, not stale `getattr` default → Task 14 step 4 ✓
+- `build_signup_reminder_embed` description string also uses real count → Task 14 step 5 ✓
+- Regression test for both code paths and exclusion of cancelled/waitlisted → Task 14 step 2 ✓
 
 **Placeholder scan:** No "TBD", no "implement later", every code step has a complete code block.
 
