@@ -312,7 +312,7 @@ export const createEventInputSchema = z.object({
   description: z.string(),
   scheduled_at: z.string(),
   organization: z.number(),
-  tournament_league: z.number({ error: 'League is required' }),
+  tournament_league: z.number().nullable().optional(),
   tournament_name: z.string().min(1, 'Tournament name is required'),
   tournament_type: z.string(),
   game_type: z.number(),
