@@ -47,7 +47,7 @@ Admins configure default settings per organization. When creating new events, th
 | Mark as interested | Players who sign up are marked interested on Discord |
 | Signup channel | Post an embed to a channel for reaction-based signups |
 | Pre-day announcement | Post a reminder in a channel before the event |
-| Signup reminder | DM users who haven't signed up |
+| Signup reminder | DM subscribers who haven't signed up (recurring series only) |
 | Profile reminder | DM users to complete their profile (Steam ID, MMR) |
 | Confirm attendance | Require Discord reply to confirm attendance on event day |
 

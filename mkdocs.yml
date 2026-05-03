@@ -104,6 +104,7 @@ nav:
       - Backend: architecture/backend.md
       - Frontend: architecture/frontend.md
       - User Entity Cache: architecture/user-entity-cache.md
+      - Event Reminder Scheduling: architecture/event-reminder-scheduling.md
   - Development:
       - Backend Quickstart: development/backend-quickstart.md
       - Just Commands: development/just-commands.md
