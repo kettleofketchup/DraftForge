@@ -16,12 +16,12 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import {
-  CarrySVG,
-  HardSupportSVG,
-  MidSVG,
-  OfflaneSVG,
-  SoftSupportSVG,
-} from '~/components/user/positions/icons';
+  POSITION_LABELS,
+  POSITION_OPTIONS,
+  positionIcons,
+  positionKeys,
+  type PositionKey,
+} from '~/components/user/positions/positionEdit';
 import type { EditUserInput } from './editUserSchema';
 
 interface Props {
@@ -29,29 +29,6 @@ interface Props {
   showMmr: boolean;
   mmrLabel: string;
 }
-
-const POSITION_OPTIONS: Array<[number, string]> = [
-  [0, "0: Don't show this role"],
-  [1, '1: Favorite'],
-  [2, '2: Can play'],
-  [3, '3: If the team needs'],
-  [4, '4: I would rather not but I guess'],
-  [5, '5: Least Favorite'],
-];
-
-type PositionKey = keyof EditUserInput['positions'];
-
-const POSITION_FIELDS: Array<{
-  key: PositionKey;
-  label: string;
-  Icon: React.FC<{ className?: string }>;
-}> = [
-  { key: 'carry', label: 'Carry', Icon: CarrySVG },
-  { key: 'mid', label: 'Mid', Icon: MidSVG },
-  { key: 'offlane', label: 'Offlane', Icon: OfflaneSVG },
-  { key: 'soft_support', label: 'Soft Support', Icon: SoftSupportSVG },
-  { key: 'hard_support', label: 'Hard Support', Icon: HardSupportSVG },
-];
 
 function PositionSelect({
   form,
@@ -194,8 +171,14 @@ export const UserEditForm: React.FC<Props> = ({ form, showMmr, mmrLabel }) => {
           Positions
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {POSITION_FIELDS.map(({ key, label, Icon }) => (
-            <PositionSelect key={key} form={form} fieldKey={key} label={label} Icon={Icon} />
+          {positionKeys.map((key) => (
+            <PositionSelect
+              key={key}
+              form={form}
+              fieldKey={key}
+              label={POSITION_LABELS[key]}
+              Icon={positionIcons[key]}
+            />
           ))}
         </div>
       </div>
