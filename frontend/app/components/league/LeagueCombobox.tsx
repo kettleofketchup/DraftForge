@@ -163,7 +163,7 @@ export const LeagueCombobox: React.FC<LeagueComboboxProps> = ({
                       itemTestIdPrefix ? `${itemTestIdPrefix}${league.pk}` : undefined
                     }
                     onSelect={() => {
-                      onChange(league.pk);
+                      onChange(league.pk ?? null);
                       setOpen(false);
                     }}
                   >
