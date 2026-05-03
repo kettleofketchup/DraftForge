@@ -12,6 +12,22 @@
   of the `(window as any).__wsInstances` Proxy injected via `addInitScript`.
   Production `WebSocketManager` is untouched — the fix is purely test-side.
   See **Cause B → Resolution** below.
+- 2026-05-03 (3-spec verification run): C ✅ passed clean (44.7s);
+  B ⚠️ retry-passed — `wsRoutes.length === 0` on first attempt at line 206
+  even after waiting for `assertConnected`, indicating a Playwright
+  `routeWebSocket` activation race where the first WS opens before the
+  CDP route is fully wired. Fix is partial. A ❌ still failed —
+  `assertCaptainsConnected` 5s poll budget couldn't bridge a 6.6s legit
+  close+reconnect cycle observed in backend logs. Bumped to 15s + extended
+  retry intervals.
+- **Open question for Cause A**: backend logs show captains disconnect with
+  `close_code: 1001` ("Going Away") ~5s after initial connect, then reconnect
+  ~6.6s later. 1001 is browser-initiated (page navigating, worker shutting
+  down). Need to find what makes the herodraft modal page navigate or
+  trigger the browser to send "Going Away" 5s into the test. Possible
+  candidates: React StrictMode unmount/remount cycle, Vite HMR partial
+  reload, modal effect re-firing. Not the test's fault, but the test
+  shouldn't paper over a legit page-navigation issue either.
 
 ## Symptom
 

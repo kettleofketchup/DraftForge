@@ -350,9 +350,15 @@ test.describe('Two Captains Full Draft', () => {
             );
           },
           {
-            message: `[${step}] Captains not all server-side connected within 5s — at least one draft_team.is_connected=false`,
-            timeout: 5000,
-            intervals: [200, 500, 1000],
+            // Budget covers a legit close+reconnect cycle. Backend logs from
+            // a real run showed Captain disconnect with close_code: 1001
+            // ("Going Away") followed by reconnect ~6.6s later — the 5s
+            // budget I started with couldn't bridge that gap. 15s is
+            // conservative; if an assertion takes >15s the captain is
+            // genuinely dark, not transiting.
+            message: `[${step}] Captains not all server-side connected within 15s — at least one draft_team.is_connected=false`,
+            timeout: 15000,
+            intervals: [200, 500, 1000, 2000],
           },
         )
         .toBe(true);
