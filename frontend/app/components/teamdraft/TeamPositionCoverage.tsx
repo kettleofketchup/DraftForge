@@ -7,20 +7,18 @@ import {
 } from '~/components/ui/hover-card';
 import { InfoDialog } from '~/components/ui/dialogs';
 import {
-  CarrySVG,
-  MidSVG,
-  OfflaneSVG,
-  SoftSupportSVG,
-  HardSupportSVG,
-} from '~/components/user/positions/icons';
+  positionIcons,
+  positionKeys,
+  type PositionKey,
+} from '~/components/user/positions/positionEdit';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { PlayerPopover } from '~/components/player';
 import { cn } from '~/lib/utils';
 import type { TeamType } from '~/components/tournament/types';
 import type { UserType } from '~/components/user/types';
 
-// Position keys
-export type PositionKey = 'carry' | 'mid' | 'offlane' | 'soft_support' | 'hard_support';
+export type { PositionKey };
+export { positionKeys, positionIcons };
 
 export interface PlayerWithRank {
   user: UserType;
@@ -44,16 +42,6 @@ export interface TeamPositionCoverageResult {
   /** Map of position -> assigned player pk (for display ordering) */
   positionAssignments: Map<PositionKey, number>;
 }
-
-export const positionKeys: PositionKey[] = ['carry', 'mid', 'offlane', 'soft_support', 'hard_support'];
-
-export const positionIcons: Record<PositionKey, React.FC<{className?: string}>> = {
-  carry: CarrySVG,
-  mid: MidSVG,
-  offlane: OfflaneSVG,
-  soft_support: SoftSupportSVG,
-  hard_support: HardSupportSVG,
-};
 
 const positionLabels: Record<PositionKey, string> = {
   carry: 'Pos 1',

@@ -7,7 +7,7 @@ import {
   pickDirty,
   type EditUserInput,
   type EditUserScope,
-} from './editUserSchema';
+} from '~/components/user/userCard/editUserSchema';
 
 const baseUser = {
   pk: 42,
