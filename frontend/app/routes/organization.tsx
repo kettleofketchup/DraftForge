@@ -587,7 +587,6 @@ export default function OrganizationDetailPage() {
             open={createEventOpen}
             onOpenChange={setCreateEventOpen}
             organizationId={pk}
-            leagues={leagues}
           />
         )}
 

@@ -29,21 +29,18 @@ import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
 import { createEventInputSchema, GameType, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC, type CreateEventInput } from './schemas';
-import type { LeagueType } from '~/components/league';
 import { LeagueCombobox } from '~/components/league/LeagueCombobox';
 
 interface CreateEventModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   organizationId: number;
-  leagues: LeagueType[];
 }
 
 export function CreateEventModal({
   open,
   onOpenChange,
   organizationId,
-  leagues,
 }: CreateEventModalProps) {
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
