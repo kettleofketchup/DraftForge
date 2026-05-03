@@ -402,9 +402,10 @@ Replace with:
     org_user_mmr = serializers.SerializerMethodField()
     suggested_mmr = serializers.SerializerMethodField()
     suggested_mmr_range = serializers.SerializerMethodField()
+    suggested_mmr_range_source = serializers.SerializerMethodField()
 ```
 
-- [ ] **Step 3: Add the two new field names to `Meta.fields`**
+- [ ] **Step 3: Add the three new field names to `Meta.fields`**
 
 In the `Meta.fields` list (around line 388–389), find:
 
@@ -413,13 +414,14 @@ In the `Meta.fields` list (around line 388–389), find:
             "org_user_mmr",
 ```
 
-Add the two new field names immediately after:
+Add the three new field names immediately after:
 
 ```python
             "dota_profile",
             "org_user_mmr",
             "suggested_mmr",
             "suggested_mmr_range",
+            "suggested_mmr_range_source",
 ```
 
 - [ ] **Step 4: Add the getter methods at the end of the serializer class**
@@ -432,6 +434,9 @@ Insert these methods right after `get_org_user_mmr` (line 446-461), before the n
 
     def get_suggested_mmr_range(self, obj):
         return self._mmr_suggestion(obj)["range"]
+
+    def get_suggested_mmr_range_source(self, obj):
+        return self._mmr_suggestion(obj)["range_source"]
 
     def _mmr_suggestion(self, obj):
         """Memoize the suggest_mmr result per signup instance."""
@@ -581,17 +586,24 @@ git commit -m "test(events): add set_org_user_approved_mmr test endpoint"
 
 Run: `grep -n "EventSignupType\|export const eventSignupSchema\|org_user_mmr" frontend/app/components/events/schemas.ts | head -10`
 
-- [ ] **Step 2: Add the two fields**
+- [ ] **Step 2: Add the three fields**
 
-In the `eventSignupSchema` z-object, add the new fields next to `org_user_mmr` (preserve the file's existing import structure — `z` is already imported):
+In the `eventSignupSchema` z-object (around line 145), find:
 
 ```typescript
-  org_user_mmr: z.number().int().nullable(),
-  suggested_mmr: z.number().int(),
-  suggested_mmr_range: z.tuple([z.number().int(), z.number().int()]),
+  org_user_mmr: z.number().nullable().default(null),
 ```
 
-The `EventSignupType` type alias (`type EventSignupType = z.infer<typeof eventSignupSchema>`) updates automatically.
+Replace with:
+
+```typescript
+  org_user_mmr: z.number().nullable().default(null),
+  suggested_mmr: z.number().int(),
+  suggested_mmr_range: z.tuple([z.number().int(), z.number().int()]),
+  suggested_mmr_range_source: z.enum(['medal', 'battle_cup', 'fallback']),
+```
+
+The `EventSignupType` type alias (line 154) updates automatically.
 
 - [ ] **Step 3: Run TypeScript check to verify no breakage in importers**
 
@@ -797,7 +809,26 @@ Immediately before that block, add:
                     Suggested range:{' '}
                     {signup.suggested_mmr_range[0].toLocaleString()}&ndash;
                     {signup.suggested_mmr_range[1].toLocaleString()}
+                    <span className="ml-1 text-muted-foreground/80">
+                      (from{' '}
+                      {signup.suggested_mmr_range_source === 'battle_cup'
+                        ? 'battle cup'
+                        : signup.suggested_mmr_range_source}
+                      )
+                    </span>
                   </p>
+```
+
+Also locate the `<Input type="number" ...>` element inside the same `FormField` (around line 244). Add a `data-testid` attribute so Playwright can select it without falling back to a CSS attribute selector (per the testing skill's data-testid rule):
+
+```tsx
+                    <Input
+                      type="number"
+                      placeholder="e.g. 3000"
+                      data-testid="mmr-input"
+                      {...field}
+                      onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
+                    />
 ```
 
 - [ ] **Step 6: Remove `positionsUser` and `screenshotUrl` derivations that were used only by the deleted blocks**
@@ -930,10 +961,15 @@ Find the existing test that ends at line 318 (the one that approves an `event_pl
     await expect(dialog.getByTestId('suggested-range-helper')).toContainText(
       '3,080–3,850',
     );
+    await expect(dialog.getByTestId('suggested-range-helper')).toContainText(
+      'from medal',
+    );
 
     // 8c. The MMR input should pre-fill with self-report (3200) since
-    // event_player_1 has no prior approved MMR.
-    await expect(mmrInput).toHaveValue('3200');
+    // event_player_1 has no prior approved MMR. Use the new data-testid
+    // (mmr-input) instead of the [type=number] CSS locator the prior version
+    // of this test used.
+    await expect(dialog.getByTestId('mmr-input')).toHaveValue('3200');
 ```
 
 - [ ] **Step 2: Update the import block at the top of the file**
@@ -1004,8 +1040,7 @@ Inside the same `test.describe(...)` block as the existing approval test, append
     );
 
     // Input pre-fills with prior (2,400), not self-report (3,200).
-    const mmrInput = dialog.locator('input[type="number"]');
-    await expect(mmrInput).toHaveValue('2400');
+    await expect(dialog.getByTestId('mmr-input')).toHaveValue('2400');
 
     await dialog.getByTestId('mmr-modal-close').click();
   });
@@ -1051,14 +1086,16 @@ Append a third test inside the same `test.describe(...)` block:
     await expect(dialog.getByTestId('rank-signals-medal')).toContainText('—');
     await expect(dialog.getByTestId('rank-signals-battle-cup')).toContainText('Tier 5');
 
-    // Helper text reflects BC range 3,000–4,000.
+    // Helper text reflects BC range 3,000–4,000 with source label.
     await expect(dialog.getByTestId('suggested-range-helper')).toContainText(
       '3,000–4,000',
     );
+    await expect(dialog.getByTestId('suggested-range-helper')).toContainText(
+      'from battle cup',
+    );
 
     // Input pre-fills with BC midpoint (3,500) since no prior + no self-report.
-    const mmrInput = dialog.locator('input[type="number"]');
-    await expect(mmrInput).toHaveValue('3500');
+    await expect(dialog.getByTestId('mmr-input')).toHaveValue('3500');
 
     await dialog.getByTestId('mmr-modal-close').click();
   });
@@ -1135,10 +1172,14 @@ If steps 1–5 surfaced regressions, fix and commit. Otherwise no commit needed.
 **Placeholder scan:** No "TBD", no "implement later", every code step has a complete code block.
 
 **Type/symbol consistency:**
-- `suggest_mmr` returns dict with keys `default`, `default_source`, `range`, `range_source` — used consistently in Task 3 (impl), Task 4 (serializer), Task 8 (frontend reads `signup.suggested_mmr` and `signup.suggested_mmr_range`).
+- `suggest_mmr` returns dict with keys `default`, `default_source`, `range`, `range_source` — used consistently in Task 3 (impl), Task 4 (serializer exposes `range_source` via `get_suggested_mmr_range_source`), Task 6 (schema field `suggested_mmr_range_source`), Task 8 step 5 (helper-text `from ${source}` label).
 - `loginEventPlayer4` (Task 9) used in Task 10 ✓
 - `setApprovedMmr(context, orgPk, userPk, mmr)` signature consistent between Tasks 9 and 10 ✓
-- `data-testid` selectors (`rank-signals`, `rank-signals-prior-mmr`, `rank-signals-self-report`, `rank-signals-medal`, `rank-signals-battle-cup`, `rank-signals-positions`, `suggested-range-helper`) match between Task 7 (component) and Task 10 (assertions) ✓
+- `data-testid` selectors (`rank-signals`, `rank-signals-prior-mmr`, `rank-signals-self-report`, `rank-signals-medal`, `rank-signals-battle-cup`, `rank-signals-positions`, `suggested-range-helper`, `mmr-input`) match between Task 7 (component), Task 8 step 5 (input testid), and Task 10 (assertions) ✓
 - Test data: `event_player_1` (pk=5001, Legend 3, MMR 3200) and `event_player_4` (pk=5004, BC tier 5) match the actual `populate_events_data` ✓
+
+**Skill-driven adjustments from review:**
+- **Spec UX section says** the helper reads `Suggested range: low–high (from medal | battle cup | fallback)`. Plan exposes `suggested_mmr_range_source` through Tasks 4/6 and renders the source parenthetical in Task 8 step 5; Task 10 asserts `'from medal'` and `'from battle cup'` text in helper.
+- **Testing skill rule:** "Always use data-testid for element interaction." Task 8 step 5 adds `data-testid="mmr-input"` to the existing `<Input>`; Task 10 uses `dialog.getByTestId('mmr-input')` instead of the legacy `dialog.locator('input[type="number"]')` CSS selector.
 
 **Out-of-spec deviation:** Spec said add new `event_player_2` with battle_cup_tier=4. Plan reuses existing `event_player_4` with tier 5 (range 3,000–4,000) instead — same code path exercised, no populate changes needed. Adjust assertions accordingly (Task 10 step 4).
