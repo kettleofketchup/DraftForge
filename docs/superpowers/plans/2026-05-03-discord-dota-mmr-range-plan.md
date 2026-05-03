@@ -19,16 +19,21 @@
 - `backend/events/tests/test_mmr_suggestions.py` — pytest unit tests.
 - `frontend/app/components/events/RankSignalsCard.tsx` — read-only signals card.
 
-**Modified files:**
+**Modified files (MMR range feature):**
 - `backend/backend/settings.py` — three settings constants.
-- `backend/events/serializers.py` — two computed fields on `EventSignupSerializer`.
+- `backend/events/serializers.py` — three computed fields on `EventSignupSerializer`.
 - `backend/tests/test_events_discord.py` — new `set_org_user_approved_mmr` test endpoint.
 - `backend/tests/urls.py` — register the new endpoint URL.
-- `frontend/app/components/events/MmrApprovalModal.tsx` — remove old constants + two inline blocks; render new card + helper.
+- `frontend/app/components/events/MmrApprovalModal.tsx` — remove old constants + two inline blocks; render new card + helper; add `data-testid="mmr-input"`.
 - `frontend/app/components/events/schemas.ts` — extend `EventSignupType`.
 - `frontend/tests/playwright/fixtures/events.ts` — add `loginEventPlayer4` and `setApprovedMmr` helpers.
 - `frontend/tests/playwright/fixtures/index.ts` — re-export the new helpers.
 - `frontend/tests/playwright/e2e/16-events/04-discord-integration.spec.ts` — augment one test, add two siblings.
+
+**Modified files (Discord MedalSelect race fix — Phase 4):**
+- `backend/discordbot/components.py` — `MedalSelect.__init__` accepts `rank_status` + `require_screenshot`; `MedalSelect.callback` rebuilds the view directly.
+- `backend/discordbot/bot.py` — remove the `rank_medal:` branch from `bot.on_interaction` (lines 268–285).
+- `backend/discordbot/tests/test_components.py` — append `TestMedalSelectRebuildsView` regression tests.
 
 ---
 
@@ -1118,19 +1123,305 @@ git commit -m "test(events): cover Rank Signals card + range helper across 3 pat
 
 ---
 
-## Phase 4 — Verification
+## Phase 4 — Discord MedalSelect race fix (Crusader 4 → Herald 4 bug)
 
-### Task 11: Full backend + frontend verification pass
+### Task 11: Plumb `rank_status` through `MedalSelect`
+
+**Files:**
+- Modify: `backend/discordbot/components.py`
+
+**Why:** When `MedalSelect.callback` rebuilds the view (Task 12), it must reconstruct `RankDetailsView` with the correct `rank_status` ("active" vs "previous"). Today `MedalSelect` doesn't carry that field, so the bot.py handler hardcoded `rank_status="active"` — losing the "previous" branch. We move the rebuild into the callback and need rank_status accessible on `self`.
+
+- [ ] **Step 1: Add constructor params to `MedalSelect`**
+
+Find `class MedalSelect` at line 719:
+
+```python
+class MedalSelect(ui.Select):
+    """Select menu for rank medal."""
+
+    def __init__(self, event_id):
+        super().__init__(
+            placeholder="Select your medal",
+            custom_id=f"rank_medal:{event_id}",
+            min_values=1,
+            max_values=1,
+            options=_medal_options(),
+        )
+        self.event_id = event_id
+```
+
+Replace with:
+
+```python
+class MedalSelect(ui.Select):
+    """Select menu for rank medal."""
+
+    def __init__(self, event_id, rank_status="active", require_screenshot=False):
+        super().__init__(
+            placeholder="Select your medal",
+            custom_id=f"rank_medal:{event_id}",
+            min_values=1,
+            max_values=1,
+            options=_medal_options(),
+        )
+        self.event_id = event_id
+        self.rank_status = rank_status
+        self.require_screenshot = require_screenshot
+```
+
+- [ ] **Step 2: Pass `rank_status` and `require_screenshot` from `RankDetailsView`**
+
+Find `RankDetailsView.__init__` body (around lines 703–712). Replace:
+
+```python
+        if rank_status in ("active", "previous"):
+            self.add_item(MedalSelect(event_id))
+            self.add_item(
+                StarSelect(
+                    event_id,
+                    rank_status,
+                    require_screenshot=require_screenshot,
+                    selected_medal=selected_medal,
+                )
+            )
+```
+
+with:
+
+```python
+        if rank_status in ("active", "previous"):
+            self.add_item(
+                MedalSelect(
+                    event_id,
+                    rank_status=rank_status,
+                    require_screenshot=require_screenshot,
+                )
+            )
+            self.add_item(
+                StarSelect(
+                    event_id,
+                    rank_status,
+                    require_screenshot=require_screenshot,
+                    selected_medal=selected_medal,
+                )
+            )
+```
+
+- [ ] **Step 3: Verify nothing imports/calls `MedalSelect(event_id)` positionally**
+
+Run: `grep -rn "MedalSelect(" backend/discordbot/ backend/events/ backend/tests/ 2>/dev/null`
+Expected: All call sites pass keyword args (or zero call sites outside `RankDetailsView`). New positional-only signature `MedalSelect(event_id)` still works because the new params have defaults.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add backend/discordbot/components.py
+git commit -m "fix(discord): plumb rank_status + require_screenshot through MedalSelect"
+```
+
+---
+
+### Task 12: Move view-rebuild from bot.py into `MedalSelect.callback`
+
+**Files:**
+- Modify: `backend/discordbot/components.py` (`MedalSelect.callback`)
+- Modify: `backend/discordbot/bot.py` (remove the `rank_medal:` handler branch)
+
+**Why (the race):** When the user picks a medal, two paths fire on the same interaction:
+1. `MedalSelect.callback` (line 732): `await interaction.response.defer()`.
+2. `bot.on_interaction` `rank_medal:` branch (`bot.py` lines 268–285): tries to rebuild the view via `interaction.response.edit_message`.
+
+The component callback runs first and `defer()` marks the interaction as already responded. The bot.py `edit_message` then either errors silently or no-ops. The view never gets rebuilt with the new medal in `StarSelect.custom_id`. When the user picks a star, `StarSelect.callback` reads `parts[2]="Herald"` (the initial default), falls back to scanning `MedalSelect.values` from `self.view.children` — but `Select.values` is per-interaction and is empty in a *different* interaction context. Result: every signup gets "Herald N".
+
+The fix collapses the two paths into one: `MedalSelect.callback` itself does the rebuild, and the bot.py handler goes away.
+
+- [ ] **Step 1: Rewrite `MedalSelect.callback`**
+
+Find at `backend/discordbot/components.py` line 732–733:
+
+```python
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+```
+
+Replace with:
+
+```python
+    async def callback(self, interaction: discord.Interaction):
+        """Rebuild RankDetailsView so StarSelect.custom_id encodes the picked medal.
+
+        Without this, the bug at b/discordbot/bot.py:268-285 (rank_medal: handler)
+        races with this callback — defer() wins, bot.py never gets to edit_message,
+        and StarSelect keeps custom_id=rank_star:{event_id}:Herald. Doing the rebuild
+        here removes the race.
+        """
+        medal = self.values[0] if self.values else "Herald"
+        view = RankDetailsView(
+            self.event_id,
+            rank_status=self.rank_status,
+            require_screenshot=self.require_screenshot,
+            selected_medal=medal,
+        )
+        label = "Rank" if self.rank_status == "active" else "Previous rank"
+        await interaction.response.edit_message(
+            content=f"\U0001f3c5 {label}: **{medal}** — now pick your star:",
+            view=view,
+        )
+```
+
+- [ ] **Step 2: Remove the `rank_medal:` branch from `bot.on_interaction`**
+
+In `backend/discordbot/bot.py`, find lines 268–285:
+
+```python
+            elif custom_id.startswith("rank_medal:"):
+                # Medal selected — update the star select custom_id to encode the medal
+                event_id = int(custom_id.split(":")[1])
+                medal_values = interaction.data.get("values", [])
+                medal = medal_values[0] if medal_values else "Herald"
+
+                from discordbot.components import RankDetailsView
+
+                # Rebuild the view with the medal encoded in star select
+                view = RankDetailsView(
+                    event_id,
+                    rank_status="active",
+                    selected_medal=medal,
+                )
+                await interaction.response.edit_message(
+                    content=f"\U0001f3c5 Selected **{medal}** — now pick your star:",
+                    view=view,
+                )
+```
+
+Delete the entire `elif` block. The next branch (`elif custom_id.startswith("rank_star:"):` at line 286) becomes the new branch following the previous `elif`.
+
+- [ ] **Step 3: Verify the bot still loads**
+
+Run: `just test::run 'python -c "from discordbot import bot; print(\"ok\")"'`
+Expected: `ok` (no import errors).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add backend/discordbot/components.py backend/discordbot/bot.py
+git commit -m "fix(discord): MedalSelect rebuilds view directly, removes Herald race"
+```
+
+---
+
+### Task 13: Unit test the medal-encoding fix
+
+**Files:**
+- Modify: `backend/discordbot/tests/test_components.py`
+
+- [ ] **Step 1: Read the existing test file to follow its mock conventions**
+
+Run: `grep -n "^def\|^class\|MedalSelect\|StarSelect\|AsyncMock\|MagicMock" backend/discordbot/tests/test_components.py | head -30`
+
+Use the same mocking style (probably `unittest.mock.AsyncMock` / `MagicMock`).
+
+- [ ] **Step 2: Append the test class**
+
+```python
+"""Regression test for the MedalSelect → StarSelect medal-encoding race.
+
+Verifies that picking "Crusader" in MedalSelect rebuilds the view such that
+StarSelect.custom_id is `rank_star:{event_id}:Crusader` — NOT the initial
+default of `rank_star:{event_id}:Herald`. Without the fix in
+backend/discordbot/components.py:MedalSelect.callback, this test would fail.
+"""
+
+from unittest import IsolatedAsyncioTestCase
+from unittest.mock import AsyncMock, MagicMock
+
+from discordbot.components import MedalSelect, RankDetailsView, StarSelect
+
+
+class TestMedalSelectRebuildsView(IsolatedAsyncioTestCase):
+    async def test_callback_rebuilds_view_with_medal_in_star_custom_id(self):
+        event_id = 42
+        medal = MedalSelect(
+            event_id, rank_status="active", require_screenshot=False
+        )
+        # discord.py populates `values` from the user's selection before callback fires
+        medal._values = ["Crusader"]  # private attr used by ui.Select
+
+        # Mock the interaction.response.edit_message
+        interaction = MagicMock()
+        interaction.response.edit_message = AsyncMock()
+
+        await medal.callback(interaction)
+
+        # edit_message must have been called once
+        interaction.response.edit_message.assert_awaited_once()
+        kwargs = interaction.response.edit_message.call_args.kwargs
+
+        # The new view must contain a StarSelect with custom_id encoding "Crusader"
+        view = kwargs["view"]
+        star_selects = [c for c in view.children if isinstance(c, StarSelect)]
+        self.assertEqual(len(star_selects), 1)
+        self.assertEqual(
+            star_selects[0].custom_id, f"rank_star:{event_id}:Crusader"
+        )
+
+        # Content includes the medal name
+        self.assertIn("Crusader", kwargs["content"])
+
+    async def test_callback_preserves_previous_rank_status(self):
+        event_id = 99
+        medal = MedalSelect(
+            event_id, rank_status="previous", require_screenshot=False
+        )
+        medal._values = ["Divine"]
+
+        interaction = MagicMock()
+        interaction.response.edit_message = AsyncMock()
+
+        await medal.callback(interaction)
+
+        kwargs = interaction.response.edit_message.call_args.kwargs
+        # Label should say "Previous rank", not "Rank"
+        self.assertIn("Previous rank", kwargs["content"])
+        # Rebuilt view's StarSelect should still be in active/previous mode
+        view = kwargs["view"]
+        star = next(c for c in view.children if isinstance(c, StarSelect))
+        self.assertEqual(star.rank_status, "previous")
+```
+
+- [ ] **Step 3: Run the test to confirm it passes against the fix**
+
+Run: `just test::run 'python -m pytest discordbot/tests/test_components.py::TestMedalSelectRebuildsView -v'`
+Expected: Both tests PASS.
+
+- [ ] **Step 4: Sanity check — run the full discordbot test suite**
+
+Run: `just test::run 'python -m pytest discordbot/tests/ -v'`
+Expected: No regressions.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/discordbot/tests/test_components.py
+git commit -m "test(discord): regression test for MedalSelect medal-encoding rebuild"
+```
+
+---
+
+## Phase 5 — Verification
+
+### Task 14: Full backend + frontend verification pass
 
 - [ ] **Step 1: Backend unit tests**
 
 Run: `just test::run 'python -m pytest events/tests/test_mmr_suggestions.py -v'`
 Expected: All tests PASS.
 
-- [ ] **Step 2: Backend full events test suite**
+- [ ] **Step 2: Backend full events + discordbot test suite**
 
-Run: `just test::run 'python -m pytest events/ -v'`
-Expected: No regressions in existing tests.
+Run: `just test::run 'python -m pytest events/ discordbot/ -v'`
+Expected: No regressions in existing tests; new MedalSelect tests from Task 13 pass.
 
 - [ ] **Step 3: Playwright events suite**
 
@@ -1142,32 +1433,50 @@ Expected: All passing.
 Run: `cd frontend && npx tsc --noEmit`
 Expected: No new errors compared to baseline.
 
-- [ ] **Step 5: Manual visual smoke**
+- [ ] **Step 5: Manual visual smoke (admin modal)**
 
 Run: `just dev::debug`. Open the approval modal for any Dota event signup. Confirm:
 - Rank Signals card replaces the two old blocks (no duplicate "Previously Approved MMR" / profile summary).
 - Theming matches existing modal (slate background, muted labels, monospace numerics).
+- Helper text reads "Suggested range: low–high (from medal | battle cup | fallback)".
 - Approve/Reject still work; success toast appears.
 
-- [ ] **Step 6: Final commit if any fixes were needed**
+- [ ] **Step 6: Manual Discord smoke (bug fix)**
 
-If steps 1–5 surfaced regressions, fix and commit. Otherwise no commit needed.
+In a Discord server with the bot installed, run a Dota signup flow end-to-end:
+1. Click signup, fill the modal (friend ID + rank_status="active").
+2. Pick **Crusader** in the medal dropdown.
+3. Pick **4** in the star dropdown.
+4. Confirm the resulting profile shows `Crusader 4`, NOT `Herald 4`.
+
+Repeat with rank_status="previous" + medal **Divine** + star **3**: confirm `Divine 3` (not Herald 3) and that the prompt label says "Previous rank" rather than "Rank".
+
+- [ ] **Step 7: Final commit if any fixes were needed**
+
+If steps 1–6 surfaced regressions, fix and commit. Otherwise no commit needed.
 
 ---
 
 ## Self-review
 
-**Spec coverage:**
+**Spec coverage (MMR range feature):**
 - Settings constants → Task 1 ✓
 - `suggest_mmr` precedence + range → Tasks 2–3 ✓
 - Serializer fields → Task 4 ✓
 - Test endpoint with cacheops invalidation → Task 5 ✓
 - Schema additions → Task 6 ✓
 - `<RankSignalsCard>` extracted component with theming classes → Task 7 ✓
-- Modal refactor (delete two blocks, add card + helper) → Task 8 ✓
+- Modal refactor (delete two blocks, add card + helper, add mmr-input testid) → Task 8 ✓
 - Playwright fixtures → Task 9 ✓
 - Augment existing test + 2 sibling tests → Task 10 ✓
 - Backend unit tests for all precedence + range paths → Task 2 (parametric coverage) ✓
+
+**Bug fix coverage (Discord MedalSelect race — Phase 4):**
+- Plumb `rank_status` through MedalSelect → Task 11 ✓
+- Move view-rebuild from bot.py into MedalSelect.callback (eliminates the defer/edit_message race) → Task 12 ✓
+- Remove the now-dead `rank_medal:` branch from bot.on_interaction → Task 12 step 2 ✓
+- Regression test that `MedalSelect.callback` produces a `StarSelect` whose `custom_id` encodes the picked medal (not "Herald") → Task 13 ✓
+- Preserve "previous" rank_status through the rebuild → Task 13 second test ✓
 
 **Placeholder scan:** No "TBD", no "implement later", every code step has a complete code block.
 
