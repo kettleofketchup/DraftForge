@@ -153,6 +153,7 @@ export function CreateEventModal({
       if (is_recurring) {
         await createEventRepeater({
           ...shared,
+          tournament_league: shared.tournament_league ?? null,
           discord_notify_new_events: discord_notify_new_events ?? false,
           frequency,
           day_of_week: day_of_week ?? null,
@@ -178,6 +179,7 @@ export function CreateEventModal({
         // oriented org config.
         await createEvent({
           ...shared,
+          tournament_league: shared.tournament_league ?? null,
           scheduled_at,
           discord_signup_reminder: false,
           ...(signupsOpenAt ? { signups_open_at: signupsOpenAt } : {}),
