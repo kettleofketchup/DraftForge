@@ -375,6 +375,9 @@ class EventSignupSerializer(serializers.ModelSerializer):
     user_data = serializers.SerializerMethodField()
     dota_profile = serializers.SerializerMethodField()
     org_user_mmr = serializers.SerializerMethodField()
+    suggested_mmr = serializers.SerializerMethodField()
+    suggested_mmr_range = serializers.SerializerMethodField()
+    suggested_mmr_range_source = serializers.SerializerMethodField()
 
     class Meta:
         model = EventSignup
@@ -387,6 +390,9 @@ class EventSignupSerializer(serializers.ModelSerializer):
             "user_data",
             "dota_profile",
             "org_user_mmr",
+            "suggested_mmr",
+            "suggested_mmr_range",
+            "suggested_mmr_range_source",
             "event_team",
             "signup_type",
             "status",
@@ -459,6 +465,41 @@ class EventSignupSerializer(serializers.ModelSerializer):
         except OrgUser.DoesNotExist:
             return None
         return org_user.mmr if org_user.mmr else None
+
+    def get_suggested_mmr(self, obj):
+        return self._mmr_suggestion(obj)["default"]
+
+    def get_suggested_mmr_range(self, obj):
+        return self._mmr_suggestion(obj)["range"]
+
+    def get_suggested_mmr_range_source(self, obj):
+        return self._mmr_suggestion(obj)["range_source"]
+
+    def _mmr_suggestion(self, obj):
+        """Memoize the suggest_mmr result per signup instance."""
+        if hasattr(obj, "_mmr_suggestion_cache"):
+            return obj._mmr_suggestion_cache
+
+        from events.mmr_suggestions import suggest_mmr
+        from org.models import OrgUser
+        from org.models_profiles import PlayerDotaProfile
+
+        profile = None
+        prior_mmr = None
+        try:
+            org_user = OrgUser.objects.get(
+                user=obj.user, organization=obj.event.organization
+            )
+            prior_mmr = org_user.mmr if org_user.mmr else None
+            try:
+                profile = PlayerDotaProfile.objects.get(org_user=org_user)
+            except PlayerDotaProfile.DoesNotExist:
+                profile = None
+        except OrgUser.DoesNotExist:
+            pass
+
+        obj._mmr_suggestion_cache = suggest_mmr(profile, prior_mmr)
+        return obj._mmr_suggestion_cache
 
 
 class OrgEventDefaultsSerializer(serializers.ModelSerializer):
