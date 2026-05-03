@@ -1,8 +1,17 @@
 # HeroDraft test isolation — fix flaky-recovered E2E specs
 
-**Status:** scaffold / planning
+**Status:** Cause B fixed in spec form; Cause A and C need live observation
 **Branch:** `fix/herodraft-test-isolation`
 **Discovered:** 2026-05-03 during local Playwright runs on PR #185
+
+## Progress log
+
+- 2026-05-03 (`30dd3556`) — Cause B addressed: `stale-connection.spec.ts:174`
+  rewritten to use `page.routeWebSocket('**/api/herodraft/**', ...)` + the
+  captured `WebSocketRoute.close({ code: 4001 })` to simulate the kill, instead
+  of the `(window as any).__wsInstances` Proxy injected via `addInitScript`.
+  Production `WebSocketManager` is untouched — the fix is purely test-side.
+  See **Cause B → Resolution** below.
 
 ## Symptom
 
@@ -20,38 +29,90 @@ Treating retry-passes as defects, not noise.
 
 There are **two distinct root causes**, and the spin-off needs to address each:
 
-## Cause A — captain-leftover-draft banner blocks `view-draft-btn` (covers #2, #3)
+## Cause A — `view-draft-btn` click times out on captain login (covers #2, #3)
 
-The captain user lands on the match page (`/tournament/<pk>/bracket/match/<gpk>`)
-but the page renders the global "active hero draft" banner instead of the
-start-draft button:
+**Re-evaluating: the original "banner blocks the button" hypothesis is shaky.**
 
-```yaml
-- generic:
-  - img
-  - link:
-    - /url: /herodraft/3
-    - text: You have an active hero draft - Click to join
-  - button: ...
+The page snapshot in `frontend/test-results/e2e-herodraft-two-captains-a5374--captains-via-tournament-UI-herodraft/error-context.md` shows the active-draft banner on the page, but:
+
+1. `<ActiveDraftBanner>` (`frontend/app/components/teamdraft/ActiveDraftBanner.tsx`) is small (`py-2`, ~32px) and sits below the navbar, above main content. It would push layout down by 32px, not hide a button.
+2. It's `hidden md:flex` — desktop only — and the test runs at desktop width.
+3. It's a static `<div>`, not absolutely positioned, so it can't *cover* `view-draft-btn`.
+
+So the banner being on the page is a *symptom* of the captain having a leftover
+active draft, but probably isn't *what causes the click to time out*.
+
+**More likely candidates** (need live observation to confirm — none of these
+are settled):
+
+a. The match-stats modal that contains `view-draft-btn`
+   (`MatchStatsModal.tsx:275`) doesn't auto-open from the URL params alone.
+   Navigating to `/tournament/<tpk>/bracket/match/<gpk>` may need an additional
+   route trigger that worked once and then regressed.
+b. Hydration race: on retry, the page is warm and hydrates before the click;
+   on a fresh Playwright worker, a ResizeObserver/AnimationFrame layout shift
+   pushes the click into a brief unstable window.
+c. The captain's user state hasn't fully rehydrated when `view-draft-btn` is
+   clicked — `match.herodraft_id` is briefly undefined, so the button renders
+   "Start Draft" with `disabled={createDraftMutation.isPending}` and the click
+   waits for it to become enabled.
+
+**Investigation steps before writing a fix:**
+
+1. Run `just test::pw::headed --grep "two captains"` and watch the failed
+   workers in DevTools. Specifically: is `view-draft-btn` ever in the DOM, and
+   if so, why isn't it clickable when the click fires?
+2. Add a `getAttribute('disabled')` log line right before the click to
+   distinguish "button not in DOM" from "button disabled".
+3. If the captain *does* need draft state cleared between tests, the right
+   shape is a `POST /tests/herodraft/clear-user/<userPk>/` endpoint that
+   nukes any drafts the user is a captain of, called from the spec's `beforeEach`.
+
+## Cause B — RESOLVED via `page.routeWebSocket` (covers #1)
+
+**Resolution shipped in commit `30dd3556`.**
+
+The original spec used `(window as any).__wsInstances` (a Proxy installed by
+`context.addInitScript` over `window.WebSocket`) to enumerate live WebSockets
+and call `ws.close(4001)`. Two reasons that path was wrong:
+
+1. The Proxy was installed at the *context* level even though only one of the
+   three tests in the file needed force-close. Other tests inherit the swap
+   for no reason.
+2. There were timing scenarios where the close-and-reconnect sequence didn't
+   propagate cleanly into the app's `WebSocketManager.scheduleReconnect`
+   loop — between two consecutive runs on the same SHA, the test went from
+   retry-pass to hard-fail, which means the assertion was racing.
+
+The refactor uses `page.routeWebSocket('**/api/herodraft/**', handler)`
+(Playwright 1.48+, this repo runs 1.58):
+
+```ts
+const wsRoutes: WebSocketRoute[] = [];
+await page.routeWebSocket('**/api/herodraft/**', (ws) => {
+  ws.connectToServer();        // proxy to real server — app behavior unchanged
+  wsRoutes.push(ws);
+});
+// ... navigate, establish initial connection ...
+await wsRoutes[0].close({ code: 4001, reason: 'Simulated stale connection' });
+// ... wait for wsRoutes.length to grow (reconnect) ...
 ```
 
-`page.getByTestId('view-draft-btn').click()` then times out at 15s.
+**Why this is right:**
 
-This banner renders when the captain user has a herodraft in
-`pending` / `paused` / `drafting` state on their account — leftover from a prior
-test or run that didn't clean up. The reset endpoint exists and
-`stale-connection.spec.ts:190` already calls it
-(`POST /tests/herodraft/<draftPk>/reset/`), but the setup helpers in
-`two-captains-full-draft.spec.ts` and `websocket-reconnect-fuzz.spec.ts` don't.
+- Closing one side of a routed WS closes the other (per Playwright docs), so
+  the page sees a normal `close` event with code 4001 — same observable
+  signal as a Cloudflare/nginx kill, but driven from the test instead of the
+  network.
+- No production code changes. The WebSocketManager hot path is untouched.
+- The route handler proxies via `connectToServer()` so the app's WS lifecycle
+  (open, message flow, close, reconnect) runs against a real server — we
+  test the actual reconnect dispatcher, not a mock.
+- A timeout in the new spec produces a concrete diagnostic naming the suspect
+  app code paths (`intentionalClose`, attempt count, `onclose` handler) instead
+  of a generic 15s timeout.
 
-**Confirmed evidence:** `frontend/test-results/e2e-herodraft-two-captains-a5374--captains-via-tournament-UI-herodraft/error-context.md` shows the banner DOM at the moment of the click timeout.
-
-## Cause B — `waitForEvent('websocket')` doesn't fire after `ws.close(4001)` (covers #1)
-
-Different mechanism. The spec at `stale-connection.spec.ts:174` arms a
-`page.waitForEvent('websocket')` listener BEFORE force-closing the existing WS
-via `ws.close(4001, 'Simulated stale connection')`, then waits up to 15s for the
-client to open a *new* WebSocket. On run 2 that listener never fired:
+**Original failure context kept for posterity:**
 
 ```
 TimeoutError: page.waitForEvent: Timeout 15000ms exceeded
