@@ -2,6 +2,78 @@
 
 from django.conf import settings
 from django.db import migrations, models
+from django.db.models import Count, Q
+
+
+def dedupe_message_log_for_partial_unique(apps, schema_editor):
+    """Resolve any rows that violate the partial unique index that's about to
+    be added. The constraint is `UNIQUE(source, source_id) WHERE success IS NULL
+    OR success = TRUE`, so the only conflicts are among non-False rows.
+
+    Strategy: for each (source, source_id) group with multiple non-False rows,
+    keep the most recent row as-is and mark the older duplicates as
+    `success=False`. That moves them outside the partial-index condition while
+    preserving the audit trail. Failed rows pre-existing in the table are
+    untouched.
+
+    Idempotent: if no duplicates exist (fresh DB), this is a no-op.
+    """
+    DiscordMessageLog = apps.get_model('discordbot', 'DiscordMessageLog')
+
+    qualifying = DiscordMessageLog.objects.filter(
+        Q(success__isnull=True) | Q(success=True)
+    )
+
+    duplicate_groups = (
+        qualifying
+        .values('source', 'source_id')
+        .annotate(cnt=Count('id'))
+        .filter(cnt__gt=1)
+    )
+
+    total_demoted = 0
+    for group in duplicate_groups:
+        rows = qualifying.filter(
+            source=group['source'],
+            source_id=group['source_id'],
+        ).order_by('-created_at', '-id')
+        # rows[0] is the keeper; everything else gets demoted to success=False
+        loser_ids = list(rows.values_list('id', flat=True)[1:])
+        if loser_ids:
+            DiscordMessageLog.objects.filter(id__in=loser_ids).update(success=False)
+            total_demoted += len(loser_ids)
+
+    if total_demoted:
+        # Visible in `manage.py migrate` output; not a logger to avoid pulling
+        # the project logger into a data migration.
+        print(
+            f"  -> Demoted {total_demoted} duplicate non-False DiscordMessageLog "
+            f"rows to success=False to satisfy partial unique index."
+        )
+
+
+def invalidate_message_log_cache(apps, schema_editor):
+    """The dedup .update() above bypassed cacheops invalidation because it
+    operated on the historical model returned by `apps.get_model(...)`,
+    not the live one cacheops registers signals against.
+
+    `DiscordMessageLog` IS cached (see `CACHEOPS` in settings.py — the
+    `discordbot.discordmessagelog` entry uses `ops: "all"`), so any cached
+    queryset that included a now-demoted row would otherwise return stale
+    `success` values until the per-row TTL expired.
+
+    Importing the live model from a one-shot release migration is intentional:
+    the usual "don't import live models in migrations" rule is about
+    forward-portability across many schema versions, not one-shot fixes.
+    """
+    try:
+        from cacheops import invalidate_model
+        from discordbot.models import DiscordMessageLog
+    except ImportError:
+        # cacheops disabled (DISABLE_CACHE=true or test envs without redis) —
+        # nothing to invalidate; fall through quietly.
+        return
+    invalidate_model(DiscordMessageLog)
 
 
 class Migration(migrations.Migration):
@@ -22,8 +94,23 @@ class Migration(migrations.Migration):
             name='success',
             field=models.BooleanField(blank=True, null=True),
         ),
+        # Resolve pre-existing duplicates BEFORE adding the partial unique
+        # index. Without this, prod databases with ambient duplicates from
+        # before the lease scheme existed will fail at AddConstraint with
+        # IntegrityError.
+        migrations.RunPython(
+            dedupe_message_log_for_partial_unique,
+            reverse_code=migrations.RunPython.noop,
+        ),
         migrations.AddConstraint(
             model_name='discordmessagelog',
             constraint=models.UniqueConstraint(condition=models.Q(('success__isnull', True), ('success', True), _connector='OR'), fields=('source', 'source_id'), name='uniq_discord_message_log_source_event_when_pending_or_success'),
+        ),
+        # Defensive: the dedup above bypassed cacheops because it ran against
+        # the historical model. Flush the per-model cache so reads after the
+        # release see the corrected success values.
+        migrations.RunPython(
+            invalidate_message_log_cache,
+            reverse_code=migrations.RunPython.noop,
         ),
     ]
