@@ -155,6 +155,39 @@ test.describe.serial('Edit league + event fields @cicd', () => {
     });
   });
 
+  test('edit event tournament_league: clear via combobox', async ({ page, context }) => {
+    const eventInfo = await getEventsTestData(context);
+    await loginAdmin(context);
+
+    await visitAndWaitForHydration(page, `/events/${eventInfo.pk}`);
+    await expect(page.getByTestId('event-edit-btn')).toBeVisible({ timeout: 15000 });
+    await page.getByTestId('event-edit-btn').click();
+
+    // Open combobox and pick Clear
+    await page.getByTestId('edit-event-tournament-league').click();
+    await page.getByTestId('edit-event-league-clear').click();
+
+    // Trigger shows the placeholder
+    await expect(page.getByTestId('edit-event-tournament-league')).toContainText(/select/i);
+
+    // Save (the modal uses form-dialog-submit, scoped to the edit-event-modal)
+    await page.getByTestId('edit-event-modal').getByTestId('form-dialog-submit').click();
+
+    // Wait for the modal to close — confirms the PATCH completed
+    await expect(page.getByTestId('edit-event-modal')).not.toBeVisible({ timeout: 10000 });
+
+    // API sanity-check
+    const apiResp = await context.request.get(`/api/events/${eventInfo.pk}/`);
+    expect(apiResp.status()).toBe(200);
+    const body = await apiResp.json();
+    expect(body.tournament_league).toBeNull();
+
+    // Revert so subsequent tests in the suite see the canonical league
+    await patchWithCsrf(context, `/api/events/${eventInfo.pk}/`, {
+      tournament_league: eventInfo.eventsLeaguePk,
+    });
+  });
+
   test('edit event tournament_league org-scope guard (API-level)', async ({
     context,
   }) => {
