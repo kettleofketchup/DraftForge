@@ -315,6 +315,21 @@ class HeroDraftConsumer(BaseDraftConsumer):
                 ).first()
 
                 if draft_team:
+                    # Determine before-mutation whether this is a reconnect
+                    # (i.e., the captain has connected at least once before in
+                    # this draft session). The frontend uses this to render
+                    # "joined" vs "reconnected" toast text without doing its
+                    # own session-tracking — server is the source of truth on
+                    # connection history.
+                    is_reconnect = (
+                        is_connected
+                        and HeroDraftEvent.objects.filter(
+                            draft=draft,
+                            draft_team=draft_team,
+                            event_type="captain_connected",
+                        ).exists()
+                    )
+
                     draft_team.is_connected = is_connected
                     draft_team.save()
 
@@ -325,7 +340,11 @@ class HeroDraftConsumer(BaseDraftConsumer):
                         draft=draft,
                         event_type=event_type,
                         draft_team=draft_team,
-                        metadata={"user_id": user.id, "username": user.username},
+                        metadata={
+                            "user_id": user.id,
+                            "username": user.username,
+                            "is_reconnect": is_reconnect,
+                        },
                     )
                     log.info(
                         "captain_state_changed",

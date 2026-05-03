@@ -1,4 +1,4 @@
-import { test, expect, chromium, BrowserContext, Page, WebSocket as PWWebSocket } from '@playwright/test';
+import { test, expect, chromium, BrowserContext, Page, WebSocket as PWWebSocket, WebSocketRoute } from '@playwright/test';
 import { loginAsDiscordId, loginUser, waitForHydration } from '../../fixtures/auth';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 
@@ -25,20 +25,7 @@ test.describe('HeroDraft Stale Connection Detection', () => {
   async function createContext(
     browser: Awaited<ReturnType<typeof chromium.launch>>,
   ): Promise<BrowserContext> {
-    const context = await browser.newContext({ ignoreHTTPSErrors: true });
-    // Track all WebSocket instances so tests can force-close them
-    await context.addInitScript(() => {
-      const OriginalWebSocket = window.WebSocket;
-      (window as any).__wsInstances = [] as WebSocket[];
-      (window as any).WebSocket = new Proxy(OriginalWebSocket, {
-        construct(target, args) {
-          const ws = new target(...(args as [string, string | string[] | undefined]));
-          (window as any).__wsInstances.push(ws);
-          return ws;
-        },
-      });
-    });
-    return context;
+    return browser.newContext({ ignoreHTTPSErrors: true });
   }
 
   async function getTestDraft(context: BrowserContext) {
@@ -189,49 +176,70 @@ test.describe('HeroDraft Stale Connection Detection', () => {
 
       await context.request.post(`${API_URL}/tests/herodraft/${draftPk}/reset/`);
 
-      const { page, draftPage } = await setupSpectator(context, matchUrl);
+      // Inline the spectator setup so we can install the WebSocket route
+      // BEFORE navigating. page.routeWebSocket only intercepts WebSockets
+      // opened *after* the route is installed, so it has to be in place
+      // before page.goto triggers the app's connect.
+      //
+      // The route handler proxies to the real server (connectToServer),
+      // so app behavior is identical to a direct connection. The handle
+      // we capture is what we'll use later to force-close mid-test.
+      await loginUser(context);
+      const page = await context.newPage();
 
-      // Verify initial connection is working
+      const wsRoutes: WebSocketRoute[] = [];
+      await page.routeWebSocket('**/api/herodraft/**', (ws) => {
+        ws.connectToServer();
+        wsRoutes.push(ws);
+      });
+
+      await page.goto(matchUrl);
+      await waitForHydration(page);
+      await page.getByTestId('view-draft-btn').click();
+
+      const draftPage = new HeroDraftPage(page);
+      await draftPage.waitForModal();
+      await draftPage.waitForConnection();
       await draftPage.assertConnected();
 
-      // Set up a promise to capture the reconnection WebSocket BEFORE force-closing.
-      // Using waitForEvent instead of page.on avoids the race condition where
-      // reconnection completes before the listener is registered.
-      const reconnectPromise = page.waitForEvent('websocket', {
-        predicate: (ws) => ws.url().includes('/api/herodraft/'),
-        timeout: 15000,
-      });
+      // Initial connection should now be in wsRoutes[0].
+      expect(wsRoutes.length).toBeGreaterThanOrEqual(1);
+      const initialRouteCount = wsRoutes.length;
+      const initialRoute = wsRoutes[0];
 
-      // Force-close the raw WebSocket to simulate a network-level kill.
-      // This mimics what happens when Cloudflare/Nginx silently drops the connection,
-      // or what the stale detector does when it calls ws.close(4001).
-      // The close is NOT through the manager's disconnect(), so intentionalClose stays false,
-      // triggering scheduleReconnect in the onclose handler.
-      console.log('Force-closing WebSocket to simulate network kill...');
-      await page.evaluate(() => {
-        const instances = (window as any).__wsInstances || [];
-        for (const ws of instances) {
-          if (
-            ws.url.includes('/api/herodraft/') &&
-            ws.readyState === WebSocket.OPEN
-          ) {
-            ws.close(4001, 'Simulated stale connection');
+      // Watch wsRoutes for a NEW entry (the reconnection). routeWebSocket
+      // pushes a fresh handle for each new WebSocket the page opens, so a
+      // length increase = the app constructed a reconnection WebSocket.
+      const reconnectStart = Date.now();
+      const waitForReconnectRoute = (async () => {
+        while (Date.now() - reconnectStart < 15000) {
+          if (wsRoutes.length > initialRouteCount) {
+            return wsRoutes[initialRouteCount];
           }
+          await new Promise((r) => setTimeout(r, 100));
         }
-      });
+        throw new Error(
+          `Reconnection WebSocket never opened within 15s — wsRoutes.length stayed at ${initialRouteCount}. ` +
+            `App's WebSocketManager.scheduleReconnect either did not fire or did not reach new WebSocket(...). ` +
+            `Likely causes: intentionalClose got set true, attempt count exceeded, or the close event handler ` +
+            `did not run.`,
+        );
+      })();
 
-      // Wait for the new WebSocket connection (reconnection)
-      const reconnectedWs = await reconnectPromise;
-      console.log('New WebSocket connection created (reconnection)');
+      // Force-close the original WebSocket via the Playwright route handle.
+      // Closing one side closes the other (per Playwright docs), so the page
+      // sees a normal close event with code 4001 — same observable signal as
+      // what Cloudflare/nginx would send during a stale-connection kill.
+      // No app code changes, no test-only globals on window.
+      console.log('Force-closing WebSocket via routeWebSocket handle...');
+      await initialRoute.close({ code: 4001, reason: 'Simulated stale connection' });
 
-      // Wait for reconnection to fully establish
+      const reconnectedRoute = await waitForReconnectRoute;
+      expect(reconnectedRoute).toBeDefined();
+      console.log(`Reconnection WebSocket opened: ${reconnectedRoute.url()}`);
+
+      // Wait for the app to mark the new connection as established.
       await draftPage.waitForConnection(15000);
-      console.log('Reconnected successfully');
-
-      // Verify a new WebSocket was created
-      expect(reconnectedWs).not.toBeNull();
-
-      // Verify the draft UI is still functional after reconnection
       await draftPage.assertConnected();
       await draftPage.waitForModal();
 
