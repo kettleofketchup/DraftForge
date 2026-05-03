@@ -216,3 +216,41 @@ def send_test_notification(request, event_pk):
         {"success": False, "error": "Failed to send DM. User may have DMs disabled."},
         status=500,
     )
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def set_org_user_approved_mmr(request, org_pk: int, user_pk: int):
+    """TEST ONLY: Set OrgUser.mmr for (org_pk, user_pk) and invalidate cacheops.
+
+    Body: {"mmr": int}
+    """
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    from cacheops import invalidate_obj
+    from org.models import OrgUser
+
+    try:
+        mmr = int(request.data.get("mmr"))
+    except (TypeError, ValueError):
+        return Response(
+            {"detail": "mmr must be an integer"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        org_user = OrgUser.objects.get(organization_id=org_pk, user_id=user_pk)
+    except OrgUser.DoesNotExist:
+        return Response(
+            {"detail": f"OrgUser org={org_pk} user={user_pk} not found"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    org_user.mmr = mmr
+    org_user.save(update_fields=["mmr"])
+    invalidate_obj(org_user)
+
+    return Response({"org_pk": org_pk, "user_pk": user_pk, "mmr": mmr})
