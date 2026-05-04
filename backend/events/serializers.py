@@ -328,24 +328,40 @@ class EventSerializer(serializers.ModelSerializer):
 
         # Single events have no subscriber list — discord_signup_reminder DMs
         # subscribed users, which is a series-level concept on EventRepeater.
-        # Reject signup_reminder=True on events without a repeater.
-        repeater = data.get(
-            "event_repeater",
-            self.instance.event_repeater if self.instance else None,
+        # Reject signup_reminder=True on events without a repeater. Only run
+        # this check when the request actually touches one of those fields
+        # (or on create) — otherwise pre-existing invalid state would block
+        # every unrelated PATCH on the event, even one that just changes the
+        # name.
+        is_create = self.instance is None
+        touches_relevant_fields = (
+            "discord_signup_reminder" in data or "event_repeater" in data
         )
-        signup_reminder = data.get(
-            "discord_signup_reminder",
-            self.instance.discord_signup_reminder if self.instance else False,
-        )
-        if repeater is None and signup_reminder:
-            raise serializers.ValidationError(
-                {
-                    "discord_signup_reminder": (
-                        "Signup reminder DMs require a recurring event series — "
-                        "single events have no subscribers."
-                    )
-                }
+        if is_create or touches_relevant_fields:
+            repeater = data.get(
+                "event_repeater",
+                self.instance.event_repeater if self.instance else None,
             )
+            # On create, the model default for discord_signup_reminder is True.
+            # Use that as the fallback so create-time validation matches what
+            # would actually persist after .save().
+            default_reminder = (
+                self.instance.discord_signup_reminder
+                if self.instance
+                else True
+            )
+            signup_reminder = data.get(
+                "discord_signup_reminder", default_reminder
+            )
+            if repeater is None and signup_reminder:
+                raise serializers.ValidationError(
+                    {
+                        "discord_signup_reminder": (
+                            "Signup reminder DMs require a recurring event series — "
+                            "single events have no subscribers."
+                        )
+                    }
+                )
         return data
 
 
