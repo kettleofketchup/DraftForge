@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-export const GameType = { DOTA2: 1, DEADLOCK: 2 } as const;
-
 export const EventState = {
   UPCOMING: 'upcoming', SIGNUPS_OPEN: 'signups_open', ROLL_CALL: 'roll_call',
   IN_PROGRESS: 'in_progress', COMPLETED: 'completed', CANCELLED: 'cancelled',

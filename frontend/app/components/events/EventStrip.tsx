@@ -9,11 +9,12 @@ import {
 } from '~/components/ui/tooltip';
 import { cn } from '~/lib/utils';
 import { EventStateBadge } from './EventStateBadge';
-import { GameType, type EventType } from './schemas';
+import { type EventType } from './schemas';
+import { GAME_TYPE } from '~/components/game/constants';
 
 const GAME_LABELS: Record<number, string> = {
-  [GameType.DOTA2]: 'Dota 2',
-  [GameType.DEADLOCK]: 'Deadlock',
+  [GAME_TYPE.DOTA2]: 'Dota 2',
+  [GAME_TYPE.DEADLOCK]: 'Deadlock',
 };
 
 interface EventStripProps {

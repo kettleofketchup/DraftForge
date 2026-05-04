@@ -14,7 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '~/components/ui/select';
-import { GameMode, GameType } from './schemas';
+import { GameMode } from './schemas';
+import { GAME_TYPE } from '~/components/game/constants';
 
 interface LobbyConfigSectionProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -35,7 +36,7 @@ const DOTA_ONLY_MODES: Set<string> = new Set([GameMode.CAPTAINS_MODE, GameMode.T
 export function LobbyConfigSection({ control, watch }: LobbyConfigSectionProps) {
   const gameType = watch('game_type');
   const gameMode = watch('game_mode');
-  const isDota = gameType === GameType.DOTA2;
+  const isDota = gameType === GAME_TYPE.DOTA2;
 
   return (
     <div className="space-y-4">
