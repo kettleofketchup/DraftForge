@@ -141,10 +141,11 @@ class SignupButton(ui.Button):
         )
 
         if result["action"] == "signed_up":
-            await interaction.response.defer()
-            await interaction.followup.send(
-                f"\u2705 You're signed up! Status: **{result['status']}**",
-                delete_after=60,
+            from discordbot.signup_responses import respond_to_signup_user
+
+            await respond_to_signup_user(
+                interaction,
+                content=f"\u2705 You're signed up! Status: **{result['status']}**",
             )
         elif result["action"] == "needs_modal":
             modal = EventSignupModal(
@@ -232,10 +233,11 @@ class TentativeButton(ui.Button):
         )
 
         if result["action"] == "tentative":
-            await interaction.response.defer()
-            await interaction.followup.send(
-                "\u2753 Marked as tentative. We'll count you as interested!",
-                delete_after=60,
+            from discordbot.signup_responses import respond_to_signup_user
+
+            await respond_to_signup_user(
+                interaction,
+                content="\u2753 Marked as tentative. We'll count you as interested!",
             )
         elif result["action"] == "error":
             await interaction.response.send_message(
@@ -266,10 +268,11 @@ class DeclineButton(ui.Button):
         )
 
         if result["action"] == "declined":
-            await interaction.response.defer()
-            await interaction.followup.send(
-                "You've declined the event.",
-                delete_after=60,
+            from discordbot.signup_responses import respond_to_signup_user
+
+            await respond_to_signup_user(
+                interaction,
+                content="You've declined the event.",
             )
         elif result["action"] == "not_signed_up":
             await interaction.response.send_message(
@@ -467,9 +470,11 @@ class EventSignupModal(ui.Modal):
                 ephemeral=True,
             )
         elif result["action"] == "signed_up":
-            await interaction.response.send_message(
-                f"\u2705 You're signed up! Status: **{result['status']}**",
-                ephemeral=True,
+            from discordbot.signup_responses import respond_to_signup_user
+
+            await respond_to_signup_user(
+                interaction,
+                content=f"\u2705 You're signed up! Status: **{result['status']}**",
             )
         elif result["action"] == "error":
             await interaction.response.send_message(
@@ -975,15 +980,17 @@ class ScreenshotUploadModal(ui.Modal):
         )
 
         if result.get("success"):
+            from discordbot.signup_responses import respond_to_signup_user
+
             if result.get("signed_up"):
-                await interaction.response.send_message(
-                    f"\u2705 {result.get('message', 'Screenshot uploaded! You are signed up.')}",
-                    ephemeral=True,
+                await respond_to_signup_user(
+                    interaction,
+                    content=f"\u2705 {result.get('message', 'Screenshot uploaded! You are signed up.')}",
                 )
             else:
-                await interaction.response.send_message(
-                    f"\u2705 {result.get('message', 'Screenshot saved.')}",
-                    ephemeral=True,
+                await respond_to_signup_user(
+                    interaction,
+                    content=f"\u2705 {result.get('message', 'Screenshot saved.')}",
                 )
         else:
             await interaction.response.send_message(
