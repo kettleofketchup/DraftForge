@@ -87,7 +87,7 @@ export function RankSignalsCard({ signup }: RankSignalsCardProps) {
           data-testid="rank-signals-positions"
         >
           <span className="text-muted-foreground">Positions</span>
-          <RolePositions user={positionsUser} compact disableTooltips />
+          <RolePositions user={positionsUser} compact disableTooltips unranked />
         </div>
       )}
     </div>

@@ -183,7 +183,7 @@ export const UserEventStrip = memo(
           </PlayerPopover>
           {userWithPositions && (
             <div className="mt-0.5">
-              <RolePositions user={userWithPositions} compact disableTooltips />
+              <RolePositions user={userWithPositions} compact disableTooltips unranked />
             </div>
           )}
         </div>

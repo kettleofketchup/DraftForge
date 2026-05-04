@@ -322,6 +322,13 @@ test.describe('Events - Discord Integration (@cicd)', () => {
       'from medal',
     );
 
+    // Positions row must not show a "1" rank number — DotaProfile booleans aren't ranked preferences.
+    const positionsRow = dialog.getByTestId('rank-signals-positions');
+    await expect(positionsRow).toBeVisible();
+    // event_player_1 has pos_1, pos_3, pos_5 — three role icons should render.
+    // None of them should display "1" inside (the rank number Badge is suppressed).
+    await expect(positionsRow).not.toContainText(/^1\s*1\s*1$/);
+
     // 8c. The MMR input should pre-fill with self-report (3200) since
     // event_player_1 has no prior approved MMR. Use the new data-testid
     // (mmr-input) instead of the [type=number] CSS locator the prior version
