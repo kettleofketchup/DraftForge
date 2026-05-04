@@ -30,7 +30,7 @@ import {
 import { cn } from '~/lib/utils';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { DisplayName } from '~/components/user/avatar';
-import { RankSignalsCard } from '~/components/events/RankSignalsCard';
+import { RankSignalsCard } from '~/components/events/games/RankSignalsCard';
 import type { EventSignupType } from '~/components/events/schemas';
 
 // ---------------------------------------------------------------------------

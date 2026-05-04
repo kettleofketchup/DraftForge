@@ -4,11 +4,11 @@ import { dotaProfileToPositions } from '~/components/user/UserEventStrip';
 import type { UserType } from '~/components/user/types';
 import type { EventSignupType } from '~/components/events/schemas';
 
-interface RankSignalsCardProps {
+interface Dota2RankSignalsCardProps {
   signup: EventSignupType;
 }
 
-export function RankSignalsCard({ signup }: RankSignalsCardProps) {
+export function Dota2RankSignalsCard({ signup }: Dota2RankSignalsCardProps) {
   const profile = signup.dota_profile;
   const priorMmr = signup.org_user_mmr;
   const [rangeLow, rangeHigh] = signup.suggested_mmr_range;
