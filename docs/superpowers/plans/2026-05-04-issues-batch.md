@@ -305,14 +305,23 @@ Expected: fail with `deriveEditScope is not exported from './hasErrors'` or simi
 **Files:**
 - Modify: `frontend/app/pages/tournament/hasErrors.tsx`
 
-- [ ] **Step 1: Add the `useOrgStore` import and helper export**
+- [ ] **Step 1: Add the `useOrgStore`, `OrganizationType`, and `LeagueType` imports**
 
-At the top of the file, add the import alongside the existing imports:
+At the top of the file, add these imports alongside the existing imports. `LeagueType` is needed because the new exported helper signature references it; the file currently imports `useLeagueStore` (the hook) but not the type:
 
 ```tsx
 import { useOrgStore } from '~/store/orgStore';
 import type { OrganizationType } from '~/components/organization/schemas';
+import type { LeagueType } from '~/components/league/types';
 ```
+
+Verify the exact path for `LeagueType` at task time by running:
+
+```bash
+grep -rn "export.*LeagueType\b" frontend/app/components/league/ frontend/app/store/leagueStore.ts 2>/dev/null | head -3
+```
+
+If `LeagueType` isn't exported from `~/components/league/types`, locate the actual export and use that path.
 
 - [ ] **Step 2: Export a pure helper above `hasErrors`**
 
@@ -337,8 +346,6 @@ export function deriveEditScope({
   return { kind: 'global' };
 }
 ```
-
-`LeagueType` is already imported via the existing `useLeagueStore`. If TypeScript complains about the type, add an explicit `import type { LeagueType } from '~/components/league/types';` (verify exact path during execution).
 
 - [ ] **Step 3: Replace inline derivation with the helper**
 
@@ -693,6 +700,32 @@ class SignupWritethroughInvariantsTest(SignupWritethroughTest):
         self.user.refresh_from_db()
         # No partial state survived
         self.assertEqual(self.user.positions.pos_1, False)
+
+    def test_signup_create_rolls_back_when_writethrough_fails(self):
+        """Spec invariant: signup save + writethrough share one transaction.atomic.
+
+        When a caller wraps EventSignup.objects.create + apply_signup_writethrough in
+        the same atomic block, a writethrough failure must roll back the signup too.
+        """
+        from unittest.mock import patch
+        from events.services import apply_signup_writethrough
+
+        initial_signup_count = EventSignup.objects.filter(event=self.event).count()
+
+        with self.assertRaises(RuntimeError):
+            with transaction.atomic():
+                signup = EventSignup.objects.create(event=self.event, user=self.user)
+                with patch(
+                    "app.models.PositionsModel.save",
+                    side_effect=RuntimeError("boom"),
+                ):
+                    apply_signup_writethrough(signup)
+
+        # Signup AND writethrough rolled back as a unit
+        self.assertEqual(
+            EventSignup.objects.filter(event=self.event).count(),
+            initial_signup_count,
+        )
 ```
 
 - [ ] **Step 2: Run them to verify expected outcomes**
@@ -1154,7 +1187,11 @@ async def respond_to_signup_user(
     try:
         dm_channel = await interaction.user.create_dm()
         await dm_channel.send(content=content, embed=embed, view=view)
-        await interaction.delete_original_response()
+        try:
+            await interaction.delete_original_response()
+        except (discord.NotFound, discord.HTTPException):
+            # Cleanup is best-effort; the DM already landed.
+            pass
         channel = ResponseChannel.DM
     except discord.Forbidden as e:
         if getattr(e, "code", None) == 50007:
@@ -1363,28 +1400,22 @@ class EnsureTournamentWithSignupsTest(TestCase):
         self.assertEqual(self.event.tournament.pk, existing_pk)
         self.assertEqual(self.event.tournament.users.count(), 1)
 
-    def test_invalidates_cacheops_on_m2m_add(self):
-        """M2M add does not auto-invalidate cacheops; ensure_tournament_with_signups must."""
-        from cacheops import cached_as
-        from events.models import Event as EventModel
+    def test_invalidates_cacheops_after_m2m_add(self):
+        """M2M add does not auto-invalidate cacheops; ensure_tournament_with_signups must.
+
+        Mock invalidate_after_commit and assert it's called with the tournament and event
+        after the M2M add. This is more deterministic than measuring a live cache state,
+        and captures the actual invariant we care about: 'the M2M path goes through
+        invalidate_after_commit'.
+        """
+        from unittest.mock import patch
 
         self._make_signup(self.users[0], "approved")
-        ensure_tournament_with_signups(self.event)
+        with patch("events.services.invalidate_after_commit") as mock_inv:
+            ensure_tournament_with_signups(self.event)
 
-        # Read tournament via cached path to populate cache
-        @cached_as(EventModel, timeout=60)
-        def cached_user_count(event_pk):
-            return Event.objects.get(pk=event_pk).tournament.users.count()
-
-        first = cached_user_count(self.event.pk)
-        self.assertEqual(first, 1)
-
-        # Add another approved user and re-run — cache should be invalidated
-        self._make_signup(self.users[1], "approved")
-        ensure_tournament_with_signups(self.event)
-        # Direct DB count, then bust the cached_as wrapper assumption by reading fresh
         self.event.refresh_from_db()
-        self.assertEqual(self.event.tournament.users.count(), 2)
+        mock_inv.assert_called_with(self.event.tournament, self.event)
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -1560,15 +1591,27 @@ grep -rn "loginEventAdmin\|edit-user-modal\|mmr-input" frontend/tests/playwright
 
 Pick the spec that already exercises the event-admin tournament view AND uses `loginEventAdmin()`. If none does both, extend the spec with the most overlap.
 
-- [ ] **Step 2: Add the assertion**
+- [ ] **Step 2: Resolve the test fixture pk**
 
-Append a test like:
+Run:
+
+```bash
+grep -rnE "league\s*=\s*None\|tournament.*org.*=.*7|TestTournament.*organization" backend/tests/data/ 2>/dev/null | head -10
+```
+
+Read the tournaments populate file (most likely `backend/tests/data/tournaments.py` or `backend/tests/populate/tournaments.py`). Find — or add — a tournament whose `organization_pk=7` AND `league=None`. Record its pk; you'll substitute it in Step 3.
+
+If no such tournament exists, add one to the populate fixture (e.g., name `"Issue 195 — Org Tournament No League"`, `organization=org_pk_7`, `league=None`) and reseed test data via `just db::populate::all`. Commit the populate addition before the test addition.
+
+- [ ] **Step 3: Add the assertion**
+
+Append a test (substituting the resolved pk for `<TOURNAMENT_PK>`):
 
 ```typescript
 test('Org MMR field visible in EditUserModal for org-scoped tournament without league (#195)', async ({ page }) => {
   await loginEventAdmin(page);
-  // Navigate to a tournament whose org is set but league is null
-  await page.goto('/tournament/<TOURNAMENT_PK>');  // verify pk from test data
+  // Tournament pk resolved in Step 2 from backend/tests/data/tournaments.py
+  await page.goto('/tournament/<TOURNAMENT_PK>');
   // Open the edit-user modal from the incomplete-profile panel
   await page.locator('[data-testid="edit-user-btn"]').first().click();
   // The MMR input should now be visible (was hidden when scope fell back to 'global')
@@ -1576,9 +1619,7 @@ test('Org MMR field visible in EditUserModal for org-scoped tournament without l
 });
 ```
 
-Verify the tournament fixture pk by reading `backend/tests/data/tournaments.py` (or equivalent). If no org-scoped-no-league tournament exists in the populate fixture, add one — it's a small populate addition that exercises the exact bug condition.
-
-- [ ] **Step 3: Run the new Playwright test**
+- [ ] **Step 4: Run the new Playwright test**
 
 ```bash
 just test::pw::spec 195-org-mmr
@@ -1588,7 +1629,7 @@ just test::pw::spec 195-org-mmr
 
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add frontend/tests/playwright/
