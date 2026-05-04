@@ -7,7 +7,7 @@ class TournamentEmbedBuildersTest(TestCase):
         from events.discord.tournament_embeds import build_draft_link_embed
 
         embed = build_draft_link_embed("Monday Night Dota", "Snake", 100)
-        self.assertNotIn("title", embed)
+        self.assertEqual(embed["title"], "Team Draft Started")
         self.assertIn("Monday Night Dota", embed["description"])
         self.assertIn("button below", embed["description"])
         self.assertEqual(embed["author"]["name"], "DraftForge")
@@ -63,7 +63,7 @@ class TournamentEmbedBuildersTest(TestCase):
         embed = build_herodraft_link_embed(
             "Monday Night Dota", 99, "Team Alpha", "Team Bravo"
         )
-        self.assertNotIn("title", embed)
+        self.assertEqual(embed["title"], "Hero Draft Ready")
         self.assertIn("Monday Night Dota", embed["description"])
         self.assertIn("Team Alpha", embed["description"])
         self.assertIn("Team Bravo", embed["description"])
