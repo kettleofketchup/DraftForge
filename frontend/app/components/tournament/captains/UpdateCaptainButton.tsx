@@ -58,7 +58,7 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
     });
   };
   const dialogBG = () => (isCaptain ? 'bg-red-900' : 'bg-green-900');
-  if (!isStaff()) return <AdminOnlyButton buttonTxt="Change Cpatain" />;
+  if (!isStaff()) return <AdminOnlyButton buttonTxt="Change Captain" />;
 
   return (
     <div
