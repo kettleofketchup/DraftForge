@@ -84,16 +84,51 @@ async def respond_to_signup_user(
     content: str | None = None,
     embed: discord.Embed | None = None,
     view: discord.ui.View | None = None,
+    event=None,  # for logging context
 ) -> ResponseChannel:  # DM | EPHEMERAL
     """Try DM → fall back to ephemeral with <@user_id> prefix on Forbidden(50007)."""
 ```
 
-Behavior:
+**Behavior — must respect Discord's interaction lifecycle:**
 
-1. `dm = await interaction.user.create_dm(); await dm.send(...)`.
-2. On `discord.Forbidden` with `code == 50007` ("Cannot send messages to this user"): send ephemeral with `<@{user.id}>` prefix in `content` so the user gets a notification badge. No `delete_after`.
-3. On other `discord.Forbidden`: log + re-raise. Don't swallow real permission errors.
-4. Always emit a structured log line (`channel`, `fallback_to_ephemeral`) following the project's `logging` skill conventions.
+```python
+if not interaction.response.is_done():
+    await interaction.response.defer(ephemeral=True)  # extends 3s window to 15min
+
+try:
+    dm = await interaction.user.create_dm()
+    await dm.send(content=content, embed=embed, view=view)
+    await interaction.delete_original_response()  # silent ack — no visible ephemeral
+    channel = ResponseChannel.DM
+except discord.Forbidden as e:
+    if e.code == 50007:  # "Cannot send messages to this user"
+        await interaction.followup.send(
+            content=f"<@{interaction.user.id}> {content or ''}".strip(),
+            embed=embed, view=view, ephemeral=True,
+        )
+        channel = ResponseChannel.EPHEMERAL
+    else:
+        log.error("signup_response_failed", system="events", subsystem="discord",
+                  user_id=interaction.user.id,
+                  event_id=getattr(event, "pk", None),
+                  error=str(e))
+        raise
+
+log.info("signup_response_sent", system="events", subsystem="discord",
+         channel=channel.value,
+         fallback_to_ephemeral=(channel == ResponseChannel.EPHEMERAL),
+         user_id=interaction.user.id,
+         event_id=getattr(event, "pk", None))
+return channel
+```
+
+Three correctness points the simpler version misses:
+
+1. **Defer first.** Discord interactions must be acknowledged within 3 seconds, but `create_dm` + `send` can exceed that under load. `interaction.response.defer(ephemeral=True)` extends the window to 15 minutes; the deferral isn't visible to the user once we delete the original response.
+2. **Silent-ack on DM success.** After a successful DM send, the deferred ephemeral placeholder must be deleted via `delete_original_response()`, otherwise the user sees an empty "thinking" state on the originating button.
+3. **Logging taxonomy.** `system="events", subsystem="discord"` matches the project's existing event-Discord logging table. Event names are `signup_response_sent` (info, every call) and `signup_response_failed` (error, non-50007 Forbidden). Required fields per the logging skill: `system`, `subsystem`, `user_id`, `event_id`, plus `channel` / `fallback_to_ephemeral` for this helper, `error` on failure.
+
+**On other `discord.Forbidden`:** log + re-raise. Don't swallow real permission errors (e.g., bot lacks Send Messages in the channel).
 
 **Callsite refactor:** ~20 ephemeral responses in `backend/discordbot/components.py` belong to signup flows (signup confirmations, MMR/medal/position prompts and their results). Each becomes one call to `respond_to_signup_user`. Non-signup ephemerals (admin errors, validation) keep their shape but lose `delete_after=60` per #191B.
 
@@ -165,7 +200,7 @@ The CLAUDE.md and testing skill both call this out as the recommended path; do n
 | `events/tests/test_signup_writethrough.py` (new) | last-write-wins positions; first-write-wins steam_id (no overwrite when set); MMR not touched on save; one transaction (rollback test); `invalidate_after_commit` fires on success |
 | `events/tests/test_start_tournament_idempotent.py` (new) | `event.tournament=None` → tournament created; APPROVED+CONFIRMED users added; second call no-ops; mixed-status signups (REJECTED/CANCELLED excluded); **cacheops invalidation asserted after M2M add** (call to GET tournament returns fresh user count, not stale empty) |
 | `events/tests/test_embeds_user_list.py` (extend existing) | 40-user cap; auto-split at 1024 chars; counts in field names match split; 0/1/exactly-40 boundary cases |
-| `discordbot/tests/test_signup_responses.py` (new) | DM happy path; `Forbidden(50007)` → ephemeral with `<@user_id>` prefix; other `Forbidden` re-raised; structured log emitted; ResponseChannel return value |
+| `discordbot/tests/test_signup_responses.py` (new) | interaction deferred before DM attempt; DM happy path → `delete_original_response` called; `Forbidden(50007)` → ephemeral followup with `<@user_id>` prefix; other `Forbidden` re-raised + `signup_response_failed` log emitted; `signup_response_sent` log emitted on every success path with correct `system`/`subsystem`/`channel` fields; ResponseChannel return value |
 | `events/tests/test_add_user_discord_nick.py` (new) | guild nick → `User.nickname` on create; fallback chain (`nick`→`global_name`→`username`); existing user not overwritten |
 
 **Frontend tests.** Frontend test runner verification deferred to plan-time (`cat frontend/package.json | grep -E '"(test|vitest|jest)"'` resolves it in one line). Assuming Vitest:
