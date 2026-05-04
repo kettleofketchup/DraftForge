@@ -329,6 +329,9 @@ class EventSerializer(serializers.ModelSerializer):
         # Single events have no subscriber list — discord_signup_reminder DMs
         # subscribed users, which is a series-level concept on EventRepeater.
         # Reject signup_reminder=True on events without a repeater.
+        # Only validate when the field is explicitly present in the request body;
+        # PATCH partial-updates should not re-validate untouched fields whose
+        # instance value happens to be True (the field default).
         repeater = data.get(
             "event_repeater",
             self.instance.event_repeater if self.instance else None,
@@ -337,7 +340,11 @@ class EventSerializer(serializers.ModelSerializer):
             "discord_signup_reminder",
             self.instance.discord_signup_reminder if self.instance else False,
         )
-        if repeater is None and signup_reminder:
+        if (
+            repeater is None
+            and signup_reminder
+            and "discord_signup_reminder" in self.initial_data
+        ):
             raise serializers.ValidationError(
                 {
                     "discord_signup_reminder": (
