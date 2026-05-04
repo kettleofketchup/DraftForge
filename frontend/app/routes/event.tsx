@@ -64,7 +64,8 @@ import { Badge } from '~/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
 import { EventStateBadge } from '~/components/events';
 import { SubscriberList } from '~/components/events/SubscriberList';
-import { EventState, GameType } from '~/components/events/schemas';
+import { EventState } from '~/components/events/schemas';
+import { GAME_TYPE } from '~/components/game/constants';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
 import { DiscordLogSection } from '~/components/events/DiscordLogSection';
 import { EditEventModal } from '~/components/events/EditEventModal';
@@ -785,7 +786,7 @@ function SignupsTab({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SecondaryButton color="green" size="sm"
-                      onClick={() => gameType === GameType.DOTA2 ? setApprovalSignup(signup) : signupActions.approve.mutate({ id: signup.id })}
+                      onClick={() => gameType === GAME_TYPE.DOTA2 ? setApprovalSignup(signup) : signupActions.approve.mutate({ id: signup.id })}
                       disabled={signupActions.approve.isPending}
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
@@ -842,7 +843,7 @@ function SignupsTab({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <SecondaryButton color="green" size="sm"
-                    onClick={() => gameType === GameType.DOTA2 ? setApprovalSignup(signup) : signupActions.approve.mutate({ id: signup.id })}
+                    onClick={() => gameType === GAME_TYPE.DOTA2 ? setApprovalSignup(signup) : signupActions.approve.mutate({ id: signup.id })}
                     disabled={signupActions.approve.isPending}
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" />

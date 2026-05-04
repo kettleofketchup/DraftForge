@@ -36,7 +36,8 @@ import { Badge } from '~/components/ui/badge';
 import { PrimaryButton, SecondaryButton, DestructiveButton } from '~/components/ui/buttons';
 import { Button } from '~/components/ui/button';
 import { EventStateBadge, MmrApprovalModal } from '~/components/events';
-import { EventState, GameType, SignupStatus } from '~/components/events/schemas';
+import { EventState, SignupStatus } from '~/components/events/schemas';
+import { GAME_TYPE } from '~/components/game/constants';
 import type { EventSignupType } from '~/components/events/schemas';
 import { UserStrip } from '~/components/user';
 import {
@@ -314,7 +315,7 @@ function SignupStrip({
     signup.status === SignupStatus.WAITLISTED;
 
   const handleApprove = () => {
-    if (gameType === GameType.DOTA2) {
+    if (gameType === GAME_TYPE.DOTA2) {
       onRequestApproval(signup);
     } else {
       signupActions.approve.mutate({ id: signup.id });
