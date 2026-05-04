@@ -17,20 +17,24 @@ from django.conf import settings
 def suggest_mmr(profile, prior_approved_mmr: Optional[int]) -> dict:
     """Compute the values the approval modal needs.
 
+    Default precedence: self-reported MMR (player just told us a number) →
+    prior approved (org's stored rating) → midpoint of the suggested range.
+    The 20%-confirm UI in the modal anchors against this default.
+
     Returns:
         {
             "default": int,         # form pre-fill
-            "default_source": str,  # "prior" | "self_report" | "medal" | "battle_cup" | "fallback"
+            "default_source": str,  # "self_report" | "prior" | "medal" | "battle_cup" | "fallback"
             "range": [low, high],   # always shown as helper text
             "range_source": str,    # "medal" | "battle_cup" | "fallback"
         }
     """
     range_low, range_high, range_source = _compute_range(profile)
 
-    if prior_approved_mmr is not None:
-        default, default_source = prior_approved_mmr, "prior"
-    elif profile is not None and profile.mmr is not None:
+    if profile is not None and profile.mmr is not None:
         default, default_source = profile.mmr, "self_report"
+    elif prior_approved_mmr is not None:
+        default, default_source = prior_approved_mmr, "prior"
     else:
         default, default_source = (range_low + range_high) // 2, range_source
 
@@ -44,10 +48,9 @@ def suggest_mmr(profile, prior_approved_mmr: Optional[int]) -> dict:
 
 def _compute_range(profile) -> tuple[int, int, str]:
     if profile is not None and profile.rank_medal:
-        medal_name, _star = _parse_medal(profile.rank_medal)
         ranges = settings.DOTA_MEDAL_MMR_RANGES
-        if medal_name in ranges:
-            low, high = ranges[medal_name]
+        if profile.rank_medal in ranges:
+            low, high = ranges[profile.rank_medal]
             return low, high, "medal"
 
     if (
@@ -62,11 +65,3 @@ def _compute_range(profile) -> tuple[int, int, str]:
 
     low, high = settings.DOTA_DEFAULT_MMR_RANGE
     return low, high, "fallback"
-
-
-def _parse_medal(medal: str) -> tuple[str, int]:
-    """'Crusader 3' → ('Crusader', 3); 'Immortal' → ('Immortal', 1)."""
-    parts = medal.strip().split(" ", 1)
-    name = parts[0]
-    star = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
-    return name, star

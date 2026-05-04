@@ -312,11 +312,11 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await expect(dialog.getByTestId('rank-signals')).toBeVisible();
     await expect(dialog.getByTestId('rank-signals-self-report')).toContainText('3,200');
     await expect(dialog.getByTestId('rank-signals-medal')).toContainText('Legend 3');
-    await expect(dialog.getByTestId('rank-signals-medal')).toContainText('3,080');
-    await expect(dialog.getByTestId('rank-signals-medal')).toContainText('3,850');
+    await expect(dialog.getByTestId('rank-signals-medal')).toContainText('3,388');
+    await expect(dialog.getByTestId('rank-signals-medal')).toContainText('3,542');
     await expect(dialog.getByTestId('rank-signals-battle-cup')).toContainText('—');
     await expect(dialog.getByTestId('suggested-range-helper')).toContainText(
-      '3,080–3,850',
+      '3,388–3,542',
     );
     await expect(dialog.getByTestId('suggested-range-helper')).toContainText(
       'from medal',
@@ -352,18 +352,20 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await expect(page.getByText('approved').first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('approval modal — prior-approved MMR pre-fills input over self-report', async ({
+  test('approval modal — self-reported MMR pre-fills input over prior-approved', async ({
     context,
     page,
   }) => {
     // Setup: create a fresh Dota event, RSVP as player 1, then set their
-    // OrgUser.mmr=2400 BEFORE the admin opens the approval modal.
+    // OrgUser.mmr=2400 BEFORE the admin opens the approval modal. Player 1
+    // also has self_report=3200 from populate, so the autofill must pick the
+    // self-report (player just told us a number > admin gates the override).
     const createResp = await postWithCsrf(context, `${API_URL}/events/?open_signups=true`, {
       organization: eventInfo.orgPk,
-      name: 'Prior MMR Precedence Event',
-      description: 'Tests prior-approved MMR pre-fills',
+      name: 'Self-Report Precedence Event',
+      description: 'Tests self-reported MMR pre-fills over prior',
       scheduled_at: new Date(Date.now() + 86400000).toISOString(),
-      tournament_name: 'Prior MMR Tournament',
+      tournament_name: 'Self-Report MMR Tournament',
       tournament_league: eventInfo.leaguePk,
       tournament_type: 'single_elimination',
       timezone: 'America/New_York',
@@ -387,15 +389,16 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
 
-    // Prior-approved row shows 2,400; medal range still shows alongside.
+    // Prior-approved row still surfaces the stored 2,400; per-star medal range
+    // shows alongside.
     await expect(dialog.getByTestId('rank-signals-prior-mmr')).toContainText('2,400');
     await expect(dialog.getByTestId('rank-signals-medal')).toContainText('Legend 3');
     await expect(dialog.getByTestId('suggested-range-helper')).toContainText(
-      '3,080–3,850',
+      '3,388–3,542',
     );
 
-    // Input pre-fills with prior (2,400), not self-report (3,200).
-    await expect(dialog.getByTestId('mmr-input')).toHaveValue('2400');
+    // Input pre-fills with self-report (3,200), not prior approved (2,400).
+    await expect(dialog.getByTestId('mmr-input')).toHaveValue('3200');
 
     await dialog.getByTestId('mmr-modal-close').click();
   });
@@ -449,6 +452,79 @@ test.describe('Events - Discord Integration (@cicd)', () => {
 
     // Input pre-fills with BC midpoint (3,500) since no prior + no self-report.
     await expect(dialog.getByTestId('mmr-input')).toHaveValue('3500');
+
+    await dialog.getByTestId('mmr-modal-close').click();
+  });
+
+  test('approval modal — 20%+ override locks Approve until admin confirms', async ({
+    context,
+    page,
+  }) => {
+    // Player 1 self-reports 3,200. Admin types a value >20% off (e.g. 4,500 →
+    // ~41% delta). The confirm panel surfaces, the Approve button locks, and
+    // clicking "Accept change" unlocks it. "Reject change" snaps back to the
+    // autofill default and re-locks Approve.
+    const createResp = await postWithCsrf(context, `${API_URL}/events/?open_signups=true`, {
+      organization: eventInfo.orgPk,
+      name: 'Override Confirm Event',
+      description: 'Tests 20% override-confirm gating',
+      scheduled_at: new Date(Date.now() + 86400000).toISOString(),
+      tournament_name: 'Override Confirm Tournament',
+      tournament_league: eventInfo.leaguePk,
+      tournament_type: 'single_elimination',
+      timezone: 'America/New_York',
+    });
+    expect(createResp.ok()).toBeTruthy();
+    const event = await createResp.json();
+
+    await loginEventPlayer(context);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
+    expect(rsvpResp.ok()).toBeTruthy();
+
+    // Clear prior so suggested_mmr falls cleanly to self-report (3,200)
+    await setApprovedMmr(context, eventInfo.orgPk, 5001, 0);
+
+    await loginEventAdmin(context);
+    await visitAndWaitForHydration(page, `/events/${event.id}`);
+    await page.getByTestId('event-tab-signups').click();
+    await expect(page.getByText('EventPlayer1')).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Approve' }).first().click();
+
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+    const mmrInput = dialog.getByTestId('mmr-input');
+    const approveBtn = dialog.getByTestId('mmr-modal-approve');
+
+    // Default state: 3,200 autofill, no panel, Approve enabled.
+    await expect(mmrInput).toHaveValue('3200');
+    await expect(dialog.getByTestId('mmr-override-confirm')).toHaveCount(0);
+    await expect(approveBtn).toBeEnabled();
+
+    // Enter a value 41% above autofill — confirm panel appears, Approve locks.
+    await mmrInput.fill('4500');
+    await expect(dialog.getByTestId('mmr-override-confirm')).toBeVisible();
+    await expect(dialog.getByTestId('mmr-override-delta')).toContainText('3,200 → 4,500');
+    await expect(dialog.getByTestId('mmr-override-delta')).toContainText('41%');
+    await expect(approveBtn).toBeDisabled();
+
+    // Accept change unlocks Approve.
+    await dialog.getByTestId('accept-mmr-change').click();
+    await expect(approveBtn).toBeEnabled();
+
+    // Reject change snaps back to autofill default and dismisses the panel.
+    // Re-trigger the panel first so reject has something to revert.
+    await mmrInput.fill('5000');
+    await expect(dialog.getByTestId('mmr-override-confirm')).toBeVisible();
+    await expect(approveBtn).toBeDisabled();
+    await dialog.getByTestId('reject-mmr-change').click();
+    await expect(mmrInput).toHaveValue('3200');
+    await expect(dialog.getByTestId('mmr-override-confirm')).toHaveCount(0);
+    await expect(approveBtn).toBeEnabled();
+
+    // Within-threshold change does not show the panel.
+    await mmrInput.fill('3500'); // ~9% delta
+    await expect(dialog.getByTestId('mmr-override-confirm')).toHaveCount(0);
+    await expect(approveBtn).toBeEnabled();
 
     await dialog.getByTestId('mmr-modal-close').click();
   });
