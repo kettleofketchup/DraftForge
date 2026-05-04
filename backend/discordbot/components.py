@@ -701,7 +701,13 @@ class RankDetailsView(ui.View):
         self.min_mmr = min_mmr
 
         if rank_status in ("active", "previous"):
-            self.add_item(MedalSelect(event_id))
+            self.add_item(
+                MedalSelect(
+                    event_id,
+                    rank_status=rank_status,
+                    require_screenshot=require_screenshot,
+                )
+            )
             self.add_item(
                 StarSelect(
                     event_id,
@@ -719,7 +725,7 @@ class RankDetailsView(ui.View):
 class MedalSelect(ui.Select):
     """Select menu for rank medal."""
 
-    def __init__(self, event_id):
+    def __init__(self, event_id, rank_status="active", require_screenshot=False):
         super().__init__(
             placeholder="Select your medal",
             custom_id=f"rank_medal:{event_id}",
@@ -728,6 +734,8 @@ class MedalSelect(ui.Select):
             options=_medal_options(),
         )
         self.event_id = event_id
+        self.rank_status = rank_status
+        self.require_screenshot = require_screenshot
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.defer()
