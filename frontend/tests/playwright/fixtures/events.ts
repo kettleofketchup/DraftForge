@@ -139,6 +139,36 @@ export async function loginEventPlayer(context: BrowserContext) {
   return resp.json();
 }
 
+/** Login as event_player_4 (pk=5004) — rank_status="never", battle_cup_tier=5. */
+export async function loginEventPlayer4(context: BrowserContext) {
+  const resp = await context.request.post(`${API_URL}/tests/login-as/`, {
+    data: { user_pk: 5004 },
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!resp.ok()) throw new Error(`Login event player 4 failed: ${resp.status()}`);
+  return resp.json();
+}
+
+/** TEST: Set OrgUser.mmr for a given (orgPk, userPk). Invalidates cacheops. */
+export async function setApprovedMmr(
+  context: BrowserContext,
+  orgPk: number,
+  userPk: number,
+  mmr: number,
+) {
+  const resp = await context.request.post(
+    `${API_URL}/tests/org/${orgPk}/user/${userPk}/set-approved-mmr/`,
+    {
+      data: { mmr },
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+  if (!resp.ok()) {
+    throw new Error(`setApprovedMmr failed: ${resp.status()} ${await resp.text()}`);
+  }
+  return resp.json();
+}
+
 /** Trigger sync_discord_events synchronously. */
 export async function syncDiscordEvents(context: BrowserContext): Promise<string> {
   const resp = await context.request.post(`${API_URL}/tests/events/sync-discord/`);
