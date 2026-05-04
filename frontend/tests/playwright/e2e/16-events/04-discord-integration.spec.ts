@@ -16,6 +16,8 @@ import {
   resetEventsData,
   loginEventAdmin,
   loginEventPlayer,
+  loginEventPlayer4,
+  setApprovedMmr,
   type EventInfo,
 } from '../../fixtures';
 
@@ -300,6 +302,26 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await expect(dialog.getByText('Legend 3')).toBeVisible();
     await expect(dialog.getByText('3,200')).toBeVisible(); // Self-reported MMR
 
+    // 8b. Verify the new Rank Signals card renders all four signal rows
+    await expect(dialog.getByTestId('rank-signals')).toBeVisible();
+    await expect(dialog.getByTestId('rank-signals-self-report')).toContainText('3,200');
+    await expect(dialog.getByTestId('rank-signals-medal')).toContainText('Legend 3');
+    await expect(dialog.getByTestId('rank-signals-medal')).toContainText('3,080');
+    await expect(dialog.getByTestId('rank-signals-medal')).toContainText('3,850');
+    await expect(dialog.getByTestId('rank-signals-battle-cup')).toContainText('—');
+    await expect(dialog.getByTestId('suggested-range-helper')).toContainText(
+      '3,080–3,850',
+    );
+    await expect(dialog.getByTestId('suggested-range-helper')).toContainText(
+      'from medal',
+    );
+
+    // 8c. The MMR input should pre-fill with self-report (3200) since
+    // event_player_1 has no prior approved MMR. Use the new data-testid
+    // (mmr-input) instead of the [type=number] CSS locator the prior version
+    // of this test used.
+    await expect(dialog.getByTestId('mmr-input')).toHaveValue('3200');
+
     // 9. Check the MMR input exists and has a default value
     const mmrInput = dialog.locator('input[type="number"]');
     await expect(mmrInput).toBeVisible();
@@ -315,6 +337,103 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     // signup status badge (Playwright strict mode flags the duplicate match).
     await expect(dialog).not.toBeVisible({ timeout: 10000 });
     await expect(page.getByText('approved').first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('approval modal — prior-approved MMR pre-fills input over self-report', async ({
+    context,
+    page,
+  }) => {
+    // Setup: create a fresh Dota event, RSVP as player 1, then set their
+    // OrgUser.mmr=2400 BEFORE the admin opens the approval modal.
+    const createResp = await postWithCsrf(context, `${API_URL}/events/?open_signups=true`, {
+      organization: eventInfo.orgPk,
+      name: 'Prior MMR Precedence Event',
+      description: 'Tests prior-approved MMR pre-fills',
+      scheduled_at: new Date(Date.now() + 86400000).toISOString(),
+      tournament_name: 'Prior MMR Tournament',
+      tournament_league: eventInfo.leaguePk,
+      tournament_type: 'single_elimination',
+      timezone: 'America/New_York',
+    });
+    expect(createResp.ok()).toBeTruthy();
+    const event = await createResp.json();
+
+    await loginEventPlayer(context);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
+    expect(rsvpResp.ok()).toBeTruthy();
+
+    // Set prior approved MMR before opening modal
+    await setApprovedMmr(context, eventInfo.orgPk, 5001, 2400);
+
+    await loginEventAdmin(context);
+    await visitAndWaitForHydration(page, `/events/${event.id}`);
+    await page.getByTestId('event-tab-signups').click();
+    await expect(page.getByText('EventPlayer1')).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Approve' }).first().click();
+
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+
+    // Prior-approved row shows 2,400; medal range still shows alongside.
+    await expect(dialog.getByTestId('rank-signals-prior-mmr')).toContainText('2,400');
+    await expect(dialog.getByTestId('rank-signals-medal')).toContainText('Legend 3');
+    await expect(dialog.getByTestId('suggested-range-helper')).toContainText(
+      '3,080–3,850',
+    );
+
+    // Input pre-fills with prior (2,400), not self-report (3,200).
+    await expect(dialog.getByTestId('mmr-input')).toHaveValue('2400');
+
+    await dialog.getByTestId('mmr-modal-close').click();
+  });
+
+  test('approval modal — battle cup tier path shows BC range, no medal', async ({
+    context,
+    page,
+  }) => {
+    // event_player_4 has rank_status="never" + battle_cup_tier=5 from populate.
+    const createResp = await postWithCsrf(context, `${API_URL}/events/?open_signups=true`, {
+      organization: eventInfo.orgPk,
+      name: 'Battle Cup Path Event',
+      description: 'Tests battle-cup MMR range surface',
+      scheduled_at: new Date(Date.now() + 86400000).toISOString(),
+      tournament_name: 'BC Path Tournament',
+      tournament_league: eventInfo.leaguePk,
+      tournament_type: 'single_elimination',
+      timezone: 'America/New_York',
+    });
+    expect(createResp.ok()).toBeTruthy();
+    const event = await createResp.json();
+
+    await loginEventPlayer4(context);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
+    expect(rsvpResp.ok()).toBeTruthy();
+
+    await loginEventAdmin(context);
+    await visitAndWaitForHydration(page, `/events/${event.id}`);
+    await page.getByTestId('event-tab-signups').click();
+    await expect(page.getByText('EventPlayer4')).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Approve' }).first().click();
+
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 5000 });
+
+    // Medal row is em-dash (no medal), BC row shows Tier 5.
+    await expect(dialog.getByTestId('rank-signals-medal')).toContainText('—');
+    await expect(dialog.getByTestId('rank-signals-battle-cup')).toContainText('Tier 5');
+
+    // Helper text reflects BC range 3,000–4,000 with source label.
+    await expect(dialog.getByTestId('suggested-range-helper')).toContainText(
+      '3,000–4,000',
+    );
+    await expect(dialog.getByTestId('suggested-range-helper')).toContainText(
+      'from battle cup',
+    );
+
+    // Input pre-fills with BC midpoint (3,500) since no prior + no self-report.
+    await expect(dialog.getByTestId('mmr-input')).toHaveValue('3500');
+
+    await dialog.getByTestId('mmr-modal-close').click();
   });
 
   test('Discord tab shows empty state for fresh event', async ({ context, page }) => {
