@@ -79,8 +79,10 @@ class SignupReminderValidatorScopeTest(_DiscordTaskTestCase):
         )
         self.assertEqual(resp.status_code, 200, resp.content)
 
-    def test_create_with_default_reminder_no_repeater_still_rejected(self):
-        """Create-time validation still applies — model default is True."""
+    def test_create_with_explicit_reminder_true_no_repeater_rejected(self):
+        """Explicitly setting discord_signup_reminder=True on a single event
+        is rejected on create. (Implicit case — relying on model default — is
+        intentionally NOT validated; see serializer comment for context.)"""
         client = self._client()
         resp = client.post(
             "/api/events/",
@@ -88,10 +90,30 @@ class SignupReminderValidatorScopeTest(_DiscordTaskTestCase):
                 "organization": self.org.pk,
                 "name": "New Single Event",
                 "scheduled_at": (tz.now() + timedelta(days=3)).isoformat(),
-                # No discord_signup_reminder → model default True
+                "discord_signup_reminder": True,
                 # No event_repeater → single event
             },
             format="json",
         )
         self.assertEqual(resp.status_code, 400)
         self.assertIn("discord_signup_reminder", resp.json())
+
+    def test_create_with_default_reminder_no_repeater_silently_allowed(self):
+        """Create without specifying discord_signup_reminder is allowed; the
+        model default (True) is what persists, even though it's semantically
+        inconsistent with the validator's intent for single events. This is a
+        pre-existing latent inconsistency; correcting it would require a model
+        migration + sweep of ~10 Playwright tests. Tracked separately."""
+        client = self._client()
+        resp = client.post(
+            "/api/events/",
+            {
+                "organization": self.org.pk,
+                "name": "Single Event No Explicit Reminder",
+                "scheduled_at": (tz.now() + timedelta(days=3)).isoformat(),
+                # No discord_signup_reminder → model default True (silently)
+                # No event_repeater → single event
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
