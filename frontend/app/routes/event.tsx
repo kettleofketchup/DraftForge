@@ -93,6 +93,8 @@ import { usePageNav } from '~/hooks/usePageNav';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 import { isUserEntry } from '~/store/userCacheTypes';
+import { useGameTypeStore } from '~/store/gameTypeStore';
+import type { GameTypeValue } from '~/components/game/constants';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import api from '~/components/api/axios';
@@ -127,6 +129,17 @@ export default function EventPage() {
       useOrgStore.getState().getOrgUsers(event.organization);
     }
   }, [event?.organization]);
+
+  // Set the current game type in the game type store for context-aware components
+  const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);
+  useEffect(() => {
+    if (event?.game_type) {
+      setCurrentGameType(event.game_type as GameTypeValue);
+    }
+    return () => {
+      setCurrentGameType(null);
+    };
+  }, [event?.game_type, setCurrentGameType]);
 
   // Mutations
   const queryClient = useQueryClient();
