@@ -17,6 +17,8 @@ import { useUserLeagueStats } from '~/features/leaderboard/queries';
 import { getLogger } from '~/lib/logger';
 import { useLeagueStore } from '~/store/leagueStore';
 import { useOrgStore } from '~/store/orgStore';
+import { isUserEntry } from '~/store/userCacheTypes';
+import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 
 const log = getLogger('PlayerModal');
@@ -77,6 +79,39 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
   const [fullUserData, setFullUserData] = useState<UserType | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
+
+  // PlayerModal can be opened with a `player` prop that lacks orgUserPk
+  // (it comes from a signup list, a leaderboard row, or a draft seat).
+  // For org-scoped edits, dispatchPatch() requires user.orgUserPk; without
+  // it the Save button throws "Org scope requires user.orgUserPk". Look the
+  // OrgUser pk up from the user cache the same way userCard.tsx does.
+  //
+  // League scope is also reachable from PlayerModal (editUserSchema.ts:112-116
+  // requires orgUserPk for league-scoped edits too), so we widen the lookup to
+  // cover both cases using the parent org pk.
+  const cachedUserEntry = useUserCacheStore((s) =>
+    player.pk != null ? s.entities[player.pk] : undefined,
+  );
+  const orgLookupPk =
+    editScope.kind === 'org'
+      ? editScope.organization.pk
+      : editScope.kind === 'league'
+        ? (editScope.organization?.pk ?? editScope.league.organization?.pk)
+        : undefined;
+  const orgEntry =
+    cachedUserEntry && isUserEntry(cachedUserEntry) && orgLookupPk != null
+      ? cachedUserEntry.orgData[orgLookupPk]
+      : undefined;
+
+  const editUser = React.useMemo(() => {
+    const base = (fullUserData || player) as UserType;
+    const merged =
+      orgEntry !== undefined
+        ? { ...base, mmr: orgEntry.mmr, orgUserPk: orgEntry.id }
+        : base;
+    return new User(merged);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullUserData, player, orgEntry?.id, orgEntry?.mmr]);
 
   // Can claim if: target HAS steam_account_id (manually added profile with steam identifier),
   // target has NO discordId (can't log in), and current user HAS discordId (can log in).
@@ -178,7 +213,7 @@ export const PlayerModal: React.FC<PlayerModalProps> = ({
               isLoadingUser ? (
                 <span className="text-xs text-muted-foreground">Loading...</span>
               ) : (
-                <UserEditModal user={new User(fullUserData || displayPlayer)} scope={editScope} />
+                <UserEditModal user={editUser} scope={editScope} />
               )
             )}
             {displayPlayer.pk && (

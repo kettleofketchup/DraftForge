@@ -453,6 +453,79 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await dialog.getByTestId('mmr-modal-close').click();
   });
 
+  test('PlayerModal edit on event page persists org-scoped change without orgUserPk error', async ({
+    context,
+    page,
+  }) => {
+    // Ensures the fix at PlayerModal.tsx for the bug
+    // "Org scope requires user.orgUserPk" — admin opens a signup user's
+    // PlayerModal, clicks Edit, saves, and the PATCH must succeed.
+    //
+    // Uses the site superuser (pk=1001) for this test because PlayerModal's
+    // edit button is only rendered when currentUser.is_staff or is_superuser.
+    // EventAdmin (pk=5000) is an org admin without site-level staff status.
+    const createResp = await postWithCsrf(context, `${API_URL}/events/?open_signups=true`, {
+      organization: eventInfo.orgPk,
+      name: 'Player Modal Edit Event',
+      description: 'Tests org-scoped edit from PlayerModal',
+      scheduled_at: new Date(Date.now() + 86400000).toISOString(),
+      tournament_name: 'PM Edit Tournament',
+      tournament_league: eventInfo.leaguePk,
+      tournament_type: 'single_elimination',
+      timezone: 'America/New_York',
+    });
+    expect(createResp.ok()).toBeTruthy();
+    const event = await createResp.json();
+
+    await loginEventPlayer(context);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
+    expect(rsvpResp.ok()).toBeTruthy();
+
+    // Login as the site superuser (is_superuser=True) so PlayerModal shows
+    // the edit button (canEdit = is_staff || is_superuser).
+    const loginResp = await context.request.post(`${API_URL}/tests/login-as/`, {
+      data: { user_pk: 1001 },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(loginResp.ok()).toBeTruthy();
+
+    // Wait for org users to load — this populates UserCacheStore.entities[5001].orgData[7]
+    // which our PlayerModal fix uses to look up orgUserPk for the org-scoped PATCH.
+    const orgUsersLoaded = page.waitForResponse(
+      (resp) => resp.request().method() === 'GET' && /\/organizations\/\d+\/users\//.test(resp.url()),
+      { timeout: 15000 },
+    );
+    await visitAndWaitForHydration(page, `/events/${event.id}`);
+    await orgUsersLoaded;
+
+    await page.getByTestId('event-tab-signups').click();
+    await expect(page.getByText('EventPlayer1')).toBeVisible({ timeout: 10000 });
+
+    // Open the PlayerModal by clicking the user name in the signup row.
+    await page.getByText('EventPlayer1').first().click();
+
+    // Click the edit-user pencil button inside PlayerModal.
+    await page.getByTestId('edit-user-btn').click();
+
+    // The edit modal opens — change the nickname and save.
+    const editDialog = page.getByTestId('edit-user-modal');
+    await expect(editDialog).toBeVisible({ timeout: 5000 });
+    const nicknameInput = editDialog.getByTestId('edit-user-nickname');
+    await nicknameInput.fill('EventPlayer1-edited');
+
+    // Click Save Changes — with the orgUserPk fix, dispatchPatch receives a
+    // User instance that has orgUserPk populated from the cache, so the org-
+    // scoped PATCH succeeds. Without the fix, dispatchPatch throws
+    // "Org scope requires user.orgUserPk" and a toast.error is shown.
+    await editDialog.getByRole('button', { name: 'Save Changes' }).click();
+
+    // The dialog should close on success.
+    await expect(editDialog).not.toBeVisible({ timeout: 10000 });
+
+    // No error toast about orgUserPk — the save succeeded.
+    await expect(page.getByText('Org scope requires user.orgUserPk')).not.toBeVisible();
+  });
+
   test('Discord tab shows empty state for fresh event', async ({ context, page }) => {
     // Create a fresh event — DiscordEvent auto-created since org has discord_server_id
     const createResp = await postWithCsrf(context, `${API_URL}/events/?open_signups=true`, {
