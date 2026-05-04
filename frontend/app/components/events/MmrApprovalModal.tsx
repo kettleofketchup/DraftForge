@@ -3,6 +3,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
+import { GAME_TYPE } from '~/components/game/constants';
+import { useGameType } from '~/hooks/useGameType';
 import {
   Dialog,
   DialogContent,
@@ -66,6 +68,7 @@ export function MmrApprovalModal({
   isApproving = false,
   isRejecting = false,
 }: MmrApprovalModalProps) {
+  const gameType = useGameType();
   const form = useForm<MmrFormValues>({
     resolver: zodResolver(mmrSchema),
     defaultValues: { mmr: 0 },
@@ -165,21 +168,23 @@ export function MmrApprovalModal({
                       onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
                     />
                   </FormControl>
-                  <p
-                    data-testid="suggested-range-helper"
-                    className="text-xs text-muted-foreground font-mono mt-1"
-                  >
-                    Suggested range:{' '}
-                    {signup.suggested_mmr_range[0].toLocaleString()}&ndash;
-                    {signup.suggested_mmr_range[1].toLocaleString()}
-                    <span className="ml-1 text-muted-foreground/80">
-                      (from{' '}
-                      {signup.suggested_mmr_range_source === 'battle_cup'
-                        ? 'battle cup'
-                        : signup.suggested_mmr_range_source}
-                      )
-                    </span>
-                  </p>
+                  {gameType === GAME_TYPE.DOTA2 && (
+                    <p
+                      data-testid="suggested-range-helper"
+                      className="text-xs text-muted-foreground font-mono mt-1"
+                    >
+                      Suggested range:{' '}
+                      {signup.suggested_mmr_range[0].toLocaleString()}&ndash;
+                      {signup.suggested_mmr_range[1].toLocaleString()}
+                      <span className="ml-1 text-muted-foreground/80">
+                        (from{' '}
+                        {signup.suggested_mmr_range_source === 'battle_cup'
+                          ? 'battle cup'
+                          : signup.suggested_mmr_range_source}
+                        )
+                      </span>
+                    </p>
+                  )}
                   {mmrDelta != null && mmrDelta !== 0 && (
                     <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-border/60 bg-base-300 px-3 py-2">
                       <span
