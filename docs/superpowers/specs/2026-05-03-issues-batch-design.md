@@ -19,7 +19,25 @@ Bundle seven open issues into a single PR. Three Discord-bot ergonomic fixes (DM
 
 `frontend/app/pages/tournament/hasErrors.tsx:48-54` derives `editScope` as `'league'` if a league is present, otherwise `'global'`. `frontend/app/components/user/userCard/editModal.tsx:47` hides the MMR field when scope is `'global'`. Result: a tournament that belongs to an **org but no league** never shows the MMR field — staff cannot fix the very condition (`No MMR`) that the panel flags.
 
-**Fix:** add an `'org'` branch. When `tournament.organization_pk` exists and no league applies, scope becomes `{ kind: 'org', organization }`. The `showMmr` gate already permits org scope, so the field appears with the existing `mmrLabel="Org MMR"` treatment. We do *not* relax `showMmr` itself — keeping it gated preserves the global-edit semantics for non-tournament call sites (e.g., user profile page).
+**Fix:** add an `'org'` branch. The full `OrganizationType` object is sourced from `useOrgStore.currentOrg` (`frontend/app/store/orgStore.ts`) — that store is already the canonical org context for the tournament view, so no extra fetch is needed. New scope derivation order: `league` → `org` → `global`:
+
+```tsx
+const currentOrg = useOrgStore((state) => state.currentOrg);
+
+const editScope = useMemo<EditUserScope>(
+  () =>
+    league
+      ? { kind: 'league', league }
+      : currentOrg
+        ? { kind: 'org', organization: currentOrg }
+        : { kind: 'global' },
+  [league?.pk, currentOrg?.pk],
+);
+```
+
+The `showMmr` gate already permits org scope, so the field appears with the existing `mmrLabel="Org MMR"` treatment. We do *not* relax `showMmr` itself — keeping it gated preserves the global-edit semantics for non-tournament call sites (e.g., user profile page).
+
+**Plan-time verification:** confirm the tournament view populates `useOrgStore.currentOrg` *before* `hasErrors` renders. If not (race on first paint), `currentOrg` will be `null` and the scope falls back to `'global'` — i.e., the original bug. The fix is to either await org load before rendering `hasErrors`, or to read `tournament.organization_pk` and trigger a `getOrganization(orgPk)` call when `currentOrg` is missing/mismatched.
 
 ### 3. Signup data not propagating to user (#196a)
 
@@ -37,11 +55,15 @@ Rationale: positions express intent and self-correct as the user resubmits. Stea
 
 **Atomicity:** signup save and user writethrough share one `transaction.atomic`. A user-update failure (e.g., a colliding `steam_account_id` from another account) rolls the signup back too. This keeps invariants clean: the user never sees their signup recorded with the User-side fields silently ignored.
 
+**Cache invalidation:** the writethrough mutates `User`, `OrgUser` (when MMR is later approved), and the linked `PositionsModel`. Inside the `transaction.atomic`, end with `invalidate_after_commit(user, org_user, tournament)` so the tournament-view "incomplete profile" panel reflects the writethrough on the next render rather than after the 1-hour TTL. Without this, the fix appears broken to users.
+
 ### 4. Discord guild nickname not seeded for new site users (#196b)
 
 When `AddUser` creates a brand-new `User` from a Discord member, `User.nickname` is left blank. Setting it from the guild nick provides a familiar identifier the user already recognizes from Discord.
 
 **Fix:** at the user-creation call site only, set `User.nickname = member.nick or member.global_name or member.username`. Never touches existing site users on subsequent links — this is one-time seeding, not a sync.
+
+**Cache invalidation:** `app.customuser` is in the cacheops `CACHEOPS` map, so `.save()` on a freshly created user auto-invalidates per cacheops conventions. No extra `invalidate_after_commit` needed for this path.
 
 ### 5. Discord embed user list capped at 20 (#194)
 
@@ -89,6 +111,8 @@ Behavior:
 
 Extract steps 1+2 into a new `services.ensure_tournament_with_signups(event)` so the view stays thin and the logic is unit-testable.
 
+**Cache invalidation:** Django M2M `add()` does *not* trigger cacheops auto-invalidation (called out in the testing skill as a flake source). After the `tournament.users.add(...)` loop and the state transition, end with `invalidate_after_commit(tournament, event)` inside the same transaction. Without this, the tournament UI shows zero users until the 1-hour cacheops TTL expires.
+
 ## Non-goals
 
 - DB schema changes, data migrations.
@@ -124,23 +148,33 @@ Extract steps 1+2 into a new `services.ensure_tournament_with_signups(event)` so
 
 ## Test strategy
 
-**Backend**
+**Test data origin.** Reuse the existing **Events Test Org** fixture (org pk=7, league pk=7) populated by `backend/tests/populate/`. Login fixtures: `loginEventAdmin()` (pk=1080, org-admin in org 7) for staff actions; `loginEventPlayer()` (pk=1081) for signup actions. Adding new top-level orgs is unnecessary — the seven issues all fit within Events Test Org's domain.
+
+**Backend invocation pattern.** All backend tests run via Docker per project convention (avoids the local-pytest Redis-hang issue):
+
+```bash
+just test::run 'python manage.py test events.tests.test_signup_writethrough -v 2'
+```
+
+The CLAUDE.md and testing skill both call this out as the recommended path; do not run `pytest` locally for these.
+
+**Backend tests**
 
 | File | Coverage |
 |---|---|
-| `events/tests/test_signup_writethrough.py` (new) | last-write-wins positions; first-write-wins steam_id (no overwrite when set); MMR not touched on save; one transaction (rollback test) |
-| `events/tests/test_start_tournament_idempotent.py` (new) | `event.tournament=None` → tournament created; APPROVED+CONFIRMED users added; second call no-ops; mixed-status signups (REJECTED/CANCELLED excluded) |
+| `events/tests/test_signup_writethrough.py` (new) | last-write-wins positions; first-write-wins steam_id (no overwrite when set); MMR not touched on save; one transaction (rollback test); `invalidate_after_commit` fires on success |
+| `events/tests/test_start_tournament_idempotent.py` (new) | `event.tournament=None` → tournament created; APPROVED+CONFIRMED users added; second call no-ops; mixed-status signups (REJECTED/CANCELLED excluded); **cacheops invalidation asserted after M2M add** (call to GET tournament returns fresh user count, not stale empty) |
 | `events/tests/test_embeds_user_list.py` (extend existing) | 40-user cap; auto-split at 1024 chars; counts in field names match split; 0/1/exactly-40 boundary cases |
 | `discordbot/tests/test_signup_responses.py` (new) | DM happy path; `Forbidden(50007)` → ephemeral with `<@user_id>` prefix; other `Forbidden` re-raised; structured log emitted; ResponseChannel return value |
 | `events/tests/test_add_user_discord_nick.py` (new) | guild nick → `User.nickname` on create; fallback chain (`nick`→`global_name`→`username`); existing user not overwritten |
 
-**Frontend (Vitest)**
+**Frontend tests.** Frontend test runner verification deferred to plan-time (`cat frontend/package.json | grep -E '"(test|vitest|jest)"'` resolves it in one line). Assuming Vitest:
 
 - `editModal.test.tsx` — extend: org-scope shows MMR even with no league.
-- `hasErrors.test.tsx` (new or extend) — `tournament.organization_pk` set without league → editScope kind === `'org'`.
+- `hasErrors.test.tsx` (new or extend) — `useOrgStore.currentOrg` set + no league → editScope kind === `'org'`.
 - `UpdateCaptainButton.test.tsx` — assertion on the non-staff button text.
 
-**Playwright E2E** — skipped for this batch. Backend invariants and one-line frontend changes are adequately covered by unit tests; a Playwright run for "captain typo" or "org MMR field renders" is low-value vs. cost.
+**Playwright E2E.** Mostly skipped, with one targeted exception: extend an existing event-admin Playwright spec to assert `[data-testid="mmr-input"]` is visible in the edit-user modal opened from a tournament whose org is set but league is absent. The MMR-range plan already wires `data-testid="mmr-input"` so the testid exists. Use `data-testid` selectors per the testing skill's mandatory selector policy. No new spec file — extend an existing one to keep feature isolation.
 
 **TDD discipline** — per `superpowers:test-driven-development`, each new test file lands as failing tests first; implementation in the next commit.
 
