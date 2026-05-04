@@ -37,6 +37,7 @@ from events.services import (
     create_tournament_for_event,
     demote_to_waitlist,
     ensure_discord_event,
+    ensure_tournament_with_signups,
     finalize_event_tournament,
     process_rsvp,
     reinstate_signup,
@@ -606,20 +607,21 @@ class EventViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def start_tournament(self, request, pk=None):
-        """Start the tournament (after roll call or directly)."""
+        """Start the tournament (after roll call or directly).
+
+        Self-heals legacy events whose tournament is missing or empty (#200).
+        """
         event = self.get_object()
         if not has_event_staff_access(request.user, event):
             return Response(status=status.HTTP_403_FORBIDDEN)
         try:
-            if event.state == EventState.ROLL_CALL:
-                event.transition_state(EventState.IN_PROGRESS)
-            elif event.state == EventState.SIGNUPS_OPEN:
-                event.transition_state(EventState.IN_PROGRESS)
-            else:
+            if event.state not in (EventState.ROLL_CALL, EventState.SIGNUPS_OPEN):
                 return Response(
                     {"error": f"Cannot start tournament from '{event.state}' state."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            ensure_tournament_with_signups(event)
+            event.transition_state(EventState.IN_PROGRESS)
             finalize_event_tournament(event)
             # Start auto-create herodrafts polling if enabled
             if event.tournament and event.tournament.auto_create_hero_drafts:
