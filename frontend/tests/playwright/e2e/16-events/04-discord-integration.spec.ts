@@ -279,6 +279,12 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
     expect(rsvpResp.ok()).toBeTruthy();
 
+    // Clear event_player_1's prior approved MMR so the test exercises the
+    // self-report → range fallback (populate seeds an org-user MMR of 3500
+    // by default; 0 makes the serializer's `if org_user.mmr` falsy and
+    // surfaces self_report as the default).
+    await setApprovedMmr(context, eventInfo.orgPk, 5001, 0);
+
     // 3. Login as admin and navigate to event
     await loginEventAdmin(context);
     await visitAndWaitForHydration(page, `/events/${event.id}`);
@@ -408,6 +414,10 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await loginEventPlayer4(context);
     const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
     expect(rsvpResp.ok()).toBeTruthy();
+
+    // Clear event_player_4's prior approved MMR so the test exercises the
+    // battle-cup midpoint fallback rather than the populate-seeded prior.
+    await setApprovedMmr(context, eventInfo.orgPk, 5004, 0);
 
     await loginEventAdmin(context);
     await visitAndWaitForHydration(page, `/events/${event.id}`);
