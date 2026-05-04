@@ -342,10 +342,17 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     // 10. Clear and set MMR to 3500
     await mmrInput.fill('3500');
 
-    // 11. Click the confirm button
+    // 11. Click Approve — opens the confirmation alert-dialog (always shown
+    // before submission, so admins see a recap + the value being committed).
     await dialog.getByTestId('mmr-modal-approve').click();
 
-    // 12. Verify the modal closed and the signup status changed to approved.
+    // 12. Confirm in the alert-dialog (role="alertdialog", separate from the
+    // main modal's role="dialog").
+    const confirmBox = page.locator('[role="alertdialog"]');
+    await expect(confirmBox).toBeVisible({ timeout: 5000 });
+    await confirmBox.getByTestId('mmr-confirm-approve').click();
+
+    // 13. Verify the modal closed and the signup status changed to approved.
     // The success toast also contains "Approved", so use .first() to pick the
     // signup status badge (Playwright strict mode flags the duplicate match).
     await expect(dialog).not.toBeVisible({ timeout: 10000 });
@@ -456,20 +463,22 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     await dialog.getByTestId('mmr-modal-close').click();
   });
 
-  test('approval modal — 20%+ override locks Approve until admin confirms', async ({
+  test('approval modal — large change vs prior surfaces warning + alert-dialog confirm', async ({
     context,
     page,
   }) => {
-    // Player 1 self-reports 3,200. Admin types a value >20% off (e.g. 4,500 →
-    // ~41% delta). The confirm panel surfaces, the Approve button locks, and
-    // clicking "Accept change" unlocks it. "Reject change" snaps back to the
-    // autofill default and re-locks Approve.
+    // Player 1 self-reports 3,200; we set prior approved = 2,400. Autofill
+    // lands on the self-report (3,200) → that's already a 33% jump from the
+    // prior, so the in-modal delta strip switches to amber + warning copy.
+    // Clicking Approve opens an alert-dialog with the "Confirm large MMR
+    // change" / "Approve anyway" copy. Cancelling does NOT submit; confirming
+    // does.
     const createResp = await postWithCsrf(context, `${API_URL}/events/?open_signups=true`, {
       organization: eventInfo.orgPk,
-      name: 'Override Confirm Event',
-      description: 'Tests 20% override-confirm gating',
+      name: 'Large Change Confirm Event',
+      description: 'Tests 20% large-change confirm dialog',
       scheduled_at: new Date(Date.now() + 86400000).toISOString(),
-      tournament_name: 'Override Confirm Tournament',
+      tournament_name: 'Large Change Tournament',
       tournament_league: eventInfo.leaguePk,
       tournament_type: 'single_elimination',
       timezone: 'America/New_York',
@@ -481,8 +490,8 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
     expect(rsvpResp.ok()).toBeTruthy();
 
-    // Clear prior so suggested_mmr falls cleanly to self-report (3,200)
-    await setApprovedMmr(context, eventInfo.orgPk, 5001, 0);
+    // 33% delta scenario: prior 2,400 vs autofill 3,200 (self-report).
+    await setApprovedMmr(context, eventInfo.orgPk, 5001, 2400);
 
     await loginEventAdmin(context);
     await visitAndWaitForHydration(page, `/events/${event.id}`);
@@ -493,40 +502,45 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 5000 });
     const mmrInput = dialog.getByTestId('mmr-input');
-    const approveBtn = dialog.getByTestId('mmr-modal-approve');
 
-    // Default state: 3,200 autofill, no panel, Approve enabled.
+    // Autofill = 3,200 (self-report wins over prior).
     await expect(mmrInput).toHaveValue('3200');
-    await expect(dialog.getByTestId('mmr-override-confirm')).toHaveCount(0);
-    await expect(approveBtn).toBeEnabled();
 
-    // Enter a value 41% above autofill — confirm panel appears, Approve locks.
-    await mmrInput.fill('4500');
-    await expect(dialog.getByTestId('mmr-override-confirm')).toBeVisible();
-    await expect(dialog.getByTestId('mmr-override-delta')).toContainText('3,200 → 4,500');
-    await expect(dialog.getByTestId('mmr-override-delta')).toContainText('41%');
-    await expect(approveBtn).toBeDisabled();
+    // Delta strip is visible at modal open with prior → autofill diff.
+    await expect(dialog.getByTestId('mmr-delta')).toBeVisible();
+    await expect(dialog.getByTestId('mmr-delta-text')).toContainText('2,400 → 3,200');
+    await expect(dialog.getByTestId('mmr-delta-text')).toContainText('33%');
 
-    // Accept change unlocks Approve.
-    await dialog.getByTestId('accept-mmr-change').click();
-    await expect(approveBtn).toBeEnabled();
+    // Click Approve → alert-dialog (separate role) confirms with warning copy.
+    await dialog.getByTestId('mmr-modal-approve').click();
+    const confirmBox = page.locator('[role="alertdialog"]');
+    await expect(confirmBox).toBeVisible({ timeout: 5000 });
+    await expect(confirmBox).toContainText('Confirm large MMR change');
+    await expect(confirmBox).toContainText('3,200 MMR');
+    await expect(confirmBox).toContainText('2,400');
+    await expect(confirmBox).toContainText('+800');
+    await expect(confirmBox).toContainText('33%');
 
-    // Reject change snaps back to autofill default and dismisses the panel.
-    // Re-trigger the panel first so reject has something to revert.
-    await mmrInput.fill('5000');
-    await expect(dialog.getByTestId('mmr-override-confirm')).toBeVisible();
-    await expect(approveBtn).toBeDisabled();
-    await dialog.getByTestId('reject-mmr-change').click();
-    await expect(mmrInput).toHaveValue('3200');
-    await expect(dialog.getByTestId('mmr-override-confirm')).toHaveCount(0);
-    await expect(approveBtn).toBeEnabled();
+    // Cancel: alert-dialog closes, main modal stays, no approval submitted.
+    await confirmBox.getByTestId('mmr-confirm-cancel').click();
+    await expect(confirmBox).not.toBeVisible({ timeout: 5000 });
+    await expect(dialog).toBeVisible();
 
-    // Within-threshold change does not show the panel.
-    await mmrInput.fill('3500'); // ~9% delta
-    await expect(dialog.getByTestId('mmr-override-confirm')).toHaveCount(0);
-    await expect(approveBtn).toBeEnabled();
+    // Type a within-threshold value (3,000 → +25% which is still over, so
+    // pick 2,800 → ~17%). Delta strip switches to neutral, no warning copy.
+    await mmrInput.fill('2800');
+    await expect(dialog.getByTestId('mmr-delta-text')).toContainText('17%');
 
-    await dialog.getByTestId('mmr-modal-close').click();
+    // Approving the small-change value: alert-dialog uses the default
+    // (non-warning) variant.
+    await dialog.getByTestId('mmr-modal-approve').click();
+    await expect(confirmBox).toBeVisible({ timeout: 5000 });
+    await expect(confirmBox).toContainText('Confirm approval');
+    await expect(confirmBox).not.toContainText('Confirm large MMR change');
+
+    // Confirm — submission proceeds and main modal closes.
+    await confirmBox.getByTestId('mmr-confirm-approve').click();
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
   });
 
   test('PlayerModal edit on event page persists org-scoped change without orgUserPk error', async ({

@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import {
   Form,
   FormControl,
@@ -27,7 +28,6 @@ import {
   ConfirmButton,
   DestructiveButton,
   DotabuffButton,
-  SecondaryButton,
   SubmitButton,
 } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
@@ -36,19 +36,13 @@ import { DisplayName } from '~/components/user/avatar';
 import { RankSignalsCard } from '~/components/events/games/RankSignalsCard';
 import type { EventSignupType } from '~/components/events/schemas';
 
-const OVERRIDE_THRESHOLD = 0.2;
+const LARGE_CHANGE_THRESHOLD = 0.2;
 
-// ---------------------------------------------------------------------------
-// MMR schema
-// ---------------------------------------------------------------------------
 const mmrSchema = z.object({
   mmr: z.number({ coerce: true }).int().min(0, 'MMR must be positive').max(20000, 'MMR too high'),
 });
 type MmrFormValues = z.infer<typeof mmrSchema>;
 
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
 interface MmrApprovalModalProps {
   signup: EventSignupType | null;
   open: boolean;
@@ -59,9 +53,6 @@ interface MmrApprovalModalProps {
   isRejecting?: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 export function MmrApprovalModal({
   signup,
   open,
@@ -72,36 +63,31 @@ export function MmrApprovalModal({
   isRejecting = false,
 }: MmrApprovalModalProps) {
   const gameType = useGameType();
-  const [overrideConfirmed, setOverrideConfirmed] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const form = useForm<MmrFormValues>({
     resolver: zodResolver(mmrSchema),
     defaultValues: { mmr: 0 },
   });
 
-  // Reset form when signup changes. Use the serializer-computed suggested_mmr
-  // (now self-report-first per the suggest_mmr precedence change).
+  // Reset form when signup changes. suggested_mmr is now self-report-first
+  // (see backend events.mmr_suggestions.suggest_mmr).
   useEffect(() => {
     if (signup && open) {
       form.reset({ mmr: signup.suggested_mmr });
-      setOverrideConfirmed(false);
+      setConfirmOpen(false);
     }
   }, [signup, open]);
 
   const watchedMmr = form.watch('mmr');
-  const autofillDefault = signup?.suggested_mmr ?? null;
-  const overrideDeltaPct =
-    autofillDefault != null && autofillDefault > 0 && Number.isFinite(watchedMmr)
-      ? Math.abs(watchedMmr - autofillDefault) / autofillDefault
+  const priorMmr = signup?.org_user_mmr ?? null;
+  const hasDelta =
+    priorMmr != null && Number.isFinite(watchedMmr) && watchedMmr !== priorMmr;
+  const deltaAmount = hasDelta ? watchedMmr - priorMmr! : 0;
+  const deltaPct =
+    priorMmr != null && priorMmr > 0 && Number.isFinite(watchedMmr)
+      ? Math.abs(watchedMmr - priorMmr) / priorMmr
       : 0;
-  const needsConfirm = overrideDeltaPct >= OVERRIDE_THRESHOLD;
-
-  // Re-arm confirmation on every input change. Keying off needsConfirm alone
-  // misses the case where an admin confirms one over-threshold value (e.g.
-  // 4,500), then keeps typing another over-threshold value (5,000): the
-  // confirm flag would stay set since needsConfirm never flipped.
-  useEffect(() => {
-    setOverrideConfirmed(false);
-  }, [watchedMmr]);
+  const isLargeChange = hasDelta && deltaPct >= LARGE_CHANGE_THRESHOLD;
 
   if (!signup) return null;
 
@@ -109,11 +95,12 @@ export function MmrApprovalModal({
   const user = signup.user_data;
   const playerName = user ? DisplayName(user) : signup.username ?? `User #${signup.user}`;
 
-  // Screenshot URL (rank or battlecup)
   const screenshotUrl = profile?.rank_screenshot ?? profile?.battlecup_screenshot ?? null;
 
-  // Rank status badge — values come from PlayerDotaProfile.rank_status:
-  // 'active' | 'previous' | 'never'.
+  // Rank-status badge — values come from PlayerDotaProfile.rank_status:
+  // 'active' | 'previous' | 'never'. Earlier mapping checked for 'ranked' /
+  // 'expired' (never set anywhere) and fell every profile through to "Never
+  // Ranked" — including active and previously-ranked players.
   const rankStatusBadge = profile ? (
     profile.rank_status === 'active' ? (
       <Badge variant="outline" className="px-1.5 py-0 text-xs font-medium text-amber-300 border-amber-500/30">
@@ -130,172 +117,183 @@ export function MmrApprovalModal({
     )
   ) : null;
 
-  const handleSubmit = (values: MmrFormValues) => {
-    onApprove(signup.id, values.mmr);
+  // Form submit opens the confirm dialog rather than approving directly.
+  // Final approval is always preceded by an explicit "yes I mean it" step,
+  // which doubles as a recap (player + MMR + delta) for the admin.
+  const handleSubmit = (_values: MmrFormValues) => {
+    setConfirmOpen(true);
   };
 
+  const handleConfirmApproval = () => {
+    onApprove(signup.id, form.getValues('mmr'));
+    setConfirmOpen(false);
+  };
+
+  const confirmDescription = (() => {
+    const mmrText = `${watchedMmr.toLocaleString()} MMR`;
+    if (priorMmr == null) {
+      return `Approve ${playerName} with ${mmrText}? No prior MMR is on file for this org.`;
+    }
+    if (!hasDelta) {
+      return `Approve ${playerName} with ${mmrText}? Same as the previously approved MMR.`;
+    }
+    const deltaSign = deltaAmount > 0 ? '+' : '';
+    const pctText = priorMmr > 0 ? `, ${Math.round(deltaPct * 100)}%` : '';
+    return (
+      `Approve ${playerName} with ${mmrText}? ` +
+      `Previously approved was ${priorMmr.toLocaleString()} ` +
+      `(${deltaSign}${deltaAmount.toLocaleString()}${pctText}).` +
+      (isLargeChange
+        ? ` This is more than ${Math.round(LARGE_CHANGE_THRESHOLD * 100)}% off the prior MMR — confirm this is intentional.`
+        : '')
+    );
+  })();
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <div className="flex items-center gap-3">
-            <UserAvatar user={user ?? undefined} src={signup.user_avatar ?? undefined} size="lg" />
-            <div className="min-w-0 flex-1">
-              <DialogTitle className="text-lg truncate">{playerName}</DialogTitle>
-              <DialogDescription className="flex items-center gap-1.5 mt-0.5">
-                {rankStatusBadge ?? 'No Dota profile'}
-              </DialogDescription>
-            </div>
-            <DotabuffButton
-              steamAccountId={user?.steam_account_id}
-              responsive={false}
-              size="sm"
-            />
-          </div>
-        </DialogHeader>
-
-        {/* Rank signals — replaces the two prior inline blocks. */}
-        <RankSignalsCard signup={signup} />
-
-        {/* Screenshot section */}
-        {screenshotUrl && (
-          <div className="rounded-lg border border-border overflow-hidden bg-base-800">
-            <a href={screenshotUrl} target="_blank" rel="noopener noreferrer">
-              <img
-                src={screenshotUrl}
-                alt="Rank verification screenshot"
-                className="w-full max-h-[300px] object-contain"
-                loading="lazy"
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <UserAvatar user={user ?? undefined} src={signup.user_avatar ?? undefined} size="lg" />
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-lg truncate">{playerName}</DialogTitle>
+                <DialogDescription className="flex items-center gap-1.5 mt-0.5">
+                  {rankStatusBadge ?? 'No Dota profile'}
+                </DialogDescription>
+              </div>
+              <DotabuffButton
+                steamAccountId={user?.steam_account_id}
+                responsive={false}
+                size="sm"
               />
-            </a>
-          </div>
-        )}
+            </div>
+          </DialogHeader>
 
-        {/* MMR input form */}
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="mmr"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Approved MMR</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      placeholder="e.g. 3000"
-                      data-testid="mmr-input"
-                      {...field}
-                      onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
-                    />
-                  </FormControl>
-                  {gameType === GAME_TYPE.DOTA2 && (
-                    <p
-                      data-testid="suggested-range-helper"
-                      className="text-xs text-muted-foreground font-mono mt-1"
-                    >
-                      Suggested range:{' '}
-                      {signup.suggested_mmr_range[0].toLocaleString()}&ndash;
-                      {signup.suggested_mmr_range[1].toLocaleString()}
-                      <span className="ml-1 text-muted-foreground/80">
-                        (from{' '}
-                        {signup.suggested_mmr_range_source === 'battle_cup'
-                          ? 'battle cup'
-                          : signup.suggested_mmr_range_source}
-                        )
-                      </span>
-                    </p>
-                  )}
-                  {needsConfirm && autofillDefault != null && (
-                    <div
-                      data-testid="mmr-override-confirm"
-                      className={cn(
-                        'mt-2 rounded-md border px-3 py-2',
-                        overrideConfirmed
-                          ? 'border-emerald-500/40 bg-emerald-500/5'
-                          : 'border-amber-500/40 bg-amber-500/5',
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span
-                          data-testid="mmr-override-delta"
-                          className="text-xs font-mono text-amber-200"
-                        >
-                          {autofillDefault.toLocaleString()} → {watchedMmr.toLocaleString()} (
-                          {watchedMmr > autofillDefault ? '+' : ''}
-                          {(watchedMmr - autofillDefault).toLocaleString()},{' '}
-                          {Math.round(overrideDeltaPct * 100)}%)
+          <RankSignalsCard signup={signup} />
+
+          {screenshotUrl && (
+            <div className="rounded-lg border border-border overflow-hidden bg-base-800">
+              <a href={screenshotUrl} target="_blank" rel="noopener noreferrer">
+                <img
+                  src={screenshotUrl}
+                  alt="Rank verification screenshot"
+                  className="w-full max-h-[300px] object-contain"
+                  loading="lazy"
+                />
+              </a>
+            </div>
+          )}
+
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="mmr"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Approved MMR</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="e.g. 3000"
+                        data-testid="mmr-input"
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
+                      />
+                    </FormControl>
+                    {gameType === GAME_TYPE.DOTA2 && (
+                      <p
+                        data-testid="suggested-range-helper"
+                        className="text-xs text-muted-foreground font-mono mt-1"
+                      >
+                        Suggested range:{' '}
+                        {signup.suggested_mmr_range[0].toLocaleString()}&ndash;
+                        {signup.suggested_mmr_range[1].toLocaleString()}
+                        <span className="ml-1 text-muted-foreground/80">
+                          (from{' '}
+                          {signup.suggested_mmr_range_source === 'battle_cup'
+                            ? 'battle cup'
+                            : signup.suggested_mmr_range_source}
+                          )
                         </span>
-                        <div className="flex gap-1.5">
-                          <SecondaryButton
-                            type="button"
-                            size="sm"
-                            color="emerald"
-                            onClick={() => setOverrideConfirmed(true)}
-                            disabled={overrideConfirmed}
-                            data-testid="accept-mmr-change"
-                          >
-                            {overrideConfirmed ? 'Confirmed' : 'Accept change'}
-                          </SecondaryButton>
-                          <SecondaryButton
-                            type="button"
-                            size="sm"
-                            color="red"
-                            onClick={() => {
-                              field.onChange(autofillDefault);
-                              setOverrideConfirmed(false);
-                            }}
-                            data-testid="reject-mmr-change"
-                          >
-                            Reject change
-                          </SecondaryButton>
-                        </div>
+                      </p>
+                    )}
+                    {hasDelta && (
+                      <div
+                        data-testid="mmr-delta"
+                        className={cn(
+                          'mt-2 rounded-md border px-3 py-2 text-xs font-mono',
+                          isLargeChange
+                            ? 'border-amber-500/40 bg-amber-500/5 text-amber-200'
+                            : 'border-border/60 bg-base-300 text-muted-foreground',
+                        )}
+                      >
+                        <span data-testid="mmr-delta-text">
+                          {priorMmr!.toLocaleString()} → {watchedMmr.toLocaleString()} (
+                          {deltaAmount > 0 ? '+' : ''}
+                          {deltaAmount.toLocaleString()}
+                          {priorMmr! > 0 ? `, ${Math.round(deltaPct * 100)}%` : ''})
+                        </span>
+                        {isLargeChange && (
+                          <p className="mt-1 text-[11px] text-amber-300/80">
+                            This is more than {Math.round(LARGE_CHANGE_THRESHOLD * 100)}% off
+                            the previously approved MMR — you'll be asked to confirm.
+                          </p>
+                        )}
                       </div>
-                      {!overrideConfirmed && (
-                        <p className="mt-1 text-[11px] text-amber-300/80">
-                          Approval is locked until you confirm — this is more than{' '}
-                          {Math.round(OVERRIDE_THRESHOLD * 100)}% off the autofilled MMR.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
-              <DestructiveButton
-                type="button"
-                onClick={() => onOpenChange(false)}
-                disabled={isApproving || isRejecting}
-                data-testid="mmr-modal-close"
-              >
-                Close
-              </DestructiveButton>
-              {onReject && (
-                <ConfirmButton
+              <DialogFooter className="flex-col-reverse sm:flex-row gap-2">
+                <DestructiveButton
                   type="button"
-                  variant="destructive"
-                  loading={isRejecting}
-                  disabled={isApproving}
-                  onClick={() => onReject(signup.id)}
-                  data-testid="mmr-modal-reject"
+                  onClick={() => onOpenChange(false)}
+                  disabled={isApproving || isRejecting}
+                  data-testid="mmr-modal-close"
                 >
-                  Reject
-                </ConfirmButton>
-              )}
-              <SubmitButton
-                loading={isApproving}
-                disabled={isRejecting || (needsConfirm && !overrideConfirmed)}
-                data-testid="mmr-modal-approve"
-              >
-                Approve
-              </SubmitButton>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+                  Close
+                </DestructiveButton>
+                {onReject && (
+                  <ConfirmButton
+                    type="button"
+                    variant="destructive"
+                    loading={isRejecting}
+                    disabled={isApproving}
+                    onClick={() => onReject(signup.id)}
+                    data-testid="mmr-modal-reject"
+                  >
+                    Reject
+                  </ConfirmButton>
+                )}
+                <SubmitButton
+                  loading={isApproving}
+                  disabled={isRejecting}
+                  data-testid="mmr-modal-approve"
+                >
+                  Approve
+                </SubmitButton>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={isLargeChange ? 'Confirm large MMR change' : 'Confirm approval'}
+        description={confirmDescription}
+        confirmLabel={isLargeChange ? 'Approve anyway' : 'Approve'}
+        variant={isLargeChange ? 'warning' : 'default'}
+        isLoading={isApproving}
+        onConfirm={handleConfirmApproval}
+        confirmTestId="mmr-confirm-approve"
+        cancelTestId="mmr-confirm-cancel"
+      />
+    </>
   );
 }
