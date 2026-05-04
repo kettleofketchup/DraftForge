@@ -738,7 +738,25 @@ class MedalSelect(ui.Select):
         self.require_screenshot = require_screenshot
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
+        """Rebuild RankDetailsView so StarSelect.custom_id encodes the picked medal.
+
+        Without this, the bug at b/discordbot/bot.py:268-285 (rank_medal: handler)
+        races with this callback — defer() wins, bot.py never gets to edit_message,
+        and StarSelect keeps custom_id=rank_star:{event_id}:Herald. Doing the rebuild
+        here removes the race.
+        """
+        medal = self.values[0] if self.values else "Herald"
+        view = RankDetailsView(
+            self.event_id,
+            rank_status=self.rank_status,
+            require_screenshot=self.require_screenshot,
+            selected_medal=medal,
+        )
+        label = "Rank" if self.rank_status == "active" else "Previous rank"
+        await interaction.response.edit_message(
+            content=f"\U0001f3c5 {label}: **{medal}** — now pick your star:",
+            view=view,
+        )
 
 
 class StarSelect(ui.Select):

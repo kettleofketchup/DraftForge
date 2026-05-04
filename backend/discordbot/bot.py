@@ -265,24 +265,6 @@ class KettleBot(discord.Client):
                     await interaction.response.send_message(
                         "\u274c User not found.", ephemeral=True
                     )
-            elif custom_id.startswith("rank_medal:"):
-                # Medal selected — update the star select custom_id to encode the medal
-                event_id = int(custom_id.split(":")[1])
-                medal_values = interaction.data.get("values", [])
-                medal = medal_values[0] if medal_values else "Herald"
-
-                from discordbot.components import RankDetailsView
-
-                # Rebuild the view with the medal encoded in star select
-                view = RankDetailsView(
-                    event_id,
-                    rank_status="active",
-                    selected_medal=medal,
-                )
-                await interaction.response.edit_message(
-                    content=f"\U0001f3c5 Selected **{medal}** — now pick your star:",
-                    view=view,
-                )
             elif custom_id.startswith("rank_star:"):
                 # custom_id format: rank_star:{event_id}:{medal}
                 parts = custom_id.split(":")
