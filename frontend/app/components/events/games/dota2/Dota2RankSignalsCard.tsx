@@ -4,13 +4,20 @@ import { dotaProfileToPositions } from '~/components/user/UserEventStrip';
 import type { UserType } from '~/components/user/types';
 import type { EventSignupType } from '~/components/events/schemas';
 
+import { BaseRankSignalsCard } from '../BaseRankSignalsCard';
+
 interface Dota2RankSignalsCardProps {
   signup: EventSignupType;
 }
 
+/**
+ * Dota 2-specific rank signals — composes the universal `BaseRankSignalsCard`
+ * (which renders the prior approved MMR row) and adds Dota-specific rows on
+ * top: self-reported MMR, medal + suggested range, battle-cup tier, and
+ * positions.
+ */
 export function Dota2RankSignalsCard({ signup }: Dota2RankSignalsCardProps) {
   const profile = signup.dota_profile;
-  const priorMmr = signup.org_user_mmr;
   const [rangeLow, rangeHigh] = signup.suggested_mmr_range;
 
   const positionsUser = profile?.positions
@@ -20,23 +27,8 @@ export function Dota2RankSignalsCard({ signup }: Dota2RankSignalsCardProps) {
   const isPrevious = profile?.rank_status === 'previous';
 
   return (
-    <div
-      data-testid="rank-signals"
-      className="bg-base-300 border border-border rounded-lg p-4 space-y-2 text-sm"
-    >
-      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-        Rank Signals
-      </div>
-
-      {/* Previously Approved MMR */}
-      <div className="flex justify-between items-center" data-testid="rank-signals-prior-mmr">
-        <span className="text-muted-foreground">Previously Approved MMR</span>
-        <span className={priorMmr != null ? 'font-mono' : 'text-muted-foreground'}>
-          {priorMmr != null ? priorMmr.toLocaleString() : '—'}
-        </span>
-      </div>
-
-      {/* Self-Reported MMR */}
+    <BaseRankSignalsCard signup={signup}>
+      {/* Self-Reported MMR (Dota — pulled from PlayerDotaProfile.mmr) */}
       <div className="flex justify-between items-center" data-testid="rank-signals-self-report">
         <span className="text-muted-foreground">Self-Reported MMR</span>
         <span className={profile?.mmr != null ? 'font-mono' : 'text-muted-foreground'}>
@@ -90,6 +82,6 @@ export function Dota2RankSignalsCard({ signup }: Dota2RankSignalsCardProps) {
           <RolePositions user={positionsUser} compact disableTooltips unranked />
         </div>
       )}
-    </div>
+    </BaseRankSignalsCard>
   );
 }
