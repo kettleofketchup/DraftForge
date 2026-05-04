@@ -149,6 +149,12 @@ CELERY_RESULT_BACKEND = "redis://redis:6379/1"
 |------|----------|-------------|
 | `sync_league_matches_task` | Every 60s | Fetch new league matches from Steam API |
 | `check_scheduled_events` | Every 60s | Check Discord scheduled events |
+| `check_event_reminders` | Every 30s | Walk the reminder registry and dispatch due reminders ([details](event-reminder-scheduling.md)) |
+| `sweep_stale_discord_leases` | Every 60s | Reap stuck `DiscordMessageLog` lease rows ([details](event-reminder-scheduling.md#stale-lease-sweeper)) |
+| `sync_discord_events` | Every 60s | Sync Discord scheduled-event state into `Event` rows |
+| `open_scheduled_signups` | Every 60s | Transition events to `signups_open` at scheduled times |
+| `generate_upcoming_events` | Hourly | Generate next-window occurrences for active repeaters |
+| `cleanup_stale_events` | Hourly | Drop abandoned event rows past their window |
 | `refresh_discord_avatars` | Every 5 min | Batch refresh Discord avatars (50 users) |
 | `refresh_all_discord_data` | Daily at 4 AM | Full Discord data refresh for all users |
 

@@ -187,6 +187,88 @@ test.describe('Events - Create Event (@cicd)', () => {
     await expect(page.getByTestId('event-people-per-team-input')).toHaveValue('5');
   });
 
+  test('league combobox: search filters and selects on create', async ({ page }) => {
+    await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
+    await page.getByTestId('org-tab-events').click();
+    await page.getByTestId('create-event-btn').click();
+
+    // Open the combobox trigger
+    const trigger = page.getByTestId('event-league-select');
+    await trigger.click();
+
+    // Type into the cmdk search input — first 3 chars of the seeded league name
+    await page.getByTestId('event-league-search').fill('Eve');
+
+    // Pick the seeded events league via its preserved per-item data-testid
+    await page.getByTestId(`event-league-option-${eventInfo.leaguePk}`).click();
+
+    // Trigger should now show the selected league name
+    await expect(trigger).toContainText('Events Test League');
+  });
+
+  test('league combobox: clear selection on create submits null', async ({ page }) => {
+    await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
+    await page.getByTestId('org-tab-events').click();
+    await page.getByTestId('create-event-btn').click();
+
+    // Pick a league
+    await page.getByTestId('event-league-select').click();
+    await page.getByTestId(`event-league-option-${eventInfo.leaguePk}`).click();
+
+    // Reopen and clear
+    await page.getByTestId('event-league-select').click();
+    await page.getByTestId('event-league-clear').click();
+
+    // Trigger should show the placeholder again
+    await expect(page.getByTestId('event-league-select')).toContainText(/select league/i);
+
+    // Fill the rest of the required fields (mirroring the one-off-event test)
+    await page.getByTestId('event-name-input').fill('E2E Clear-League Test');
+    await page.getByTestId('event-tournament-name-input').fill('E2E Tournament');
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    await page.getByTestId('event-scheduled-input').fill(tomorrow.toISOString().slice(0, 16));
+
+    // Capture the POST payload as the form submits
+    const createReqPromise = page.waitForRequest(
+      (req) => req.url().includes('/api/events') && req.method() === 'POST',
+    );
+    await page.getByTestId('form-dialog-submit').click();
+    const createReq = await createReqPromise;
+
+    const body = createReq.postDataJSON();
+    expect(body.tournament_league ?? null).toBeNull();
+  });
+
+  test('league combobox: mobile renders a Select fallback with clear sentinel', async ({ page }) => {
+    // Set mobile viewport before navigation so the page renders its mobile-nav
+    // layout (a `MobileNavDropdown` instead of a horizontal tablist).
+    await page.setViewportSize({ width: 375, height: 812 }); // iPhone 13-ish
+
+    await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
+
+    // The desktop `org-tab-events` button is hidden by `md:block`/`md:hidden`
+    // at this width — switch tabs via the mobile dropdown instead.
+    await page.getByTestId('page-nav-trigger').click();
+    await page.getByTestId('page-nav-events').click();
+    await page.getByTestId('create-event-btn').click();
+
+    const trigger = page.getByTestId('event-league-select');
+
+    // Mobile branch uses shadcn Select — there should be no cmdk search input.
+    await trigger.click();
+    await expect(page.getByTestId('event-league-search')).toHaveCount(0);
+
+    // The "— No league —" sentinel should round-trip to null in the form.
+    await page.getByTestId('event-league-clear').click();
+    await expect(trigger).toContainText(/select league/i);
+
+    // Picking a real league still works
+    await trigger.click();
+    await page.getByTestId(`event-league-option-${eventInfo.leaguePk}`).click();
+    await expect(trigger).toContainText('Events Test League');
+  });
+
   test('creates a recurring event (event repeater) via modal', async ({ page }) => {
     await visitAndWaitForHydration(page, `/organizations/${eventInfo.orgPk}`);
 

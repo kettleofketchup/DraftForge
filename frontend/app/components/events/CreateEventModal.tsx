@@ -30,30 +30,34 @@ import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
 import { createEventInputSchema, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC, type CreateEventInput } from './schemas';
 import { GAME_TYPE } from '~/components/game/constants';
-import type { LeagueType } from '~/components/league';
+import { LeagueCombobox } from '~/components/league/LeagueCombobox';
 
 interface CreateEventModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   organizationId: number;
-  leagues: LeagueType[];
 }
 
 export function CreateEventModal({
   open,
   onOpenChange,
   organizationId,
-  leagues,
 }: CreateEventModalProps) {
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [defaultsApplied, setDefaultsApplied] = useState(false);
 
-  const { data: orgDefaults } = useQuery({
+  const { data: orgDefaults, isLoading: orgDefaultsLoading } = useQuery({
     queryKey: ['org-event-defaults', organizationId],
     queryFn: () => getOrgEventDefaults(organizationId),
     staleTime: 5 * 60 * 1000,
   });
+
+  // Hide form fields until orgDefaults are applied so the user can't start
+  // typing before form.reset() fires and clobbers their input. The query
+  // may also fail (network down, 5xx); in that case defaults stay at the
+  // hardcoded useForm values and we show the form anyway after isLoading clears.
+  const formReady = !orgDefaultsLoading && (orgDefaults == null || defaultsApplied);
 
   const form = useForm<CreateEventInput>({
     resolver: zodResolver(createEventInputSchema),
@@ -91,7 +95,7 @@ export function CreateEventModal({
         scheduled_at: '',
         organization: organizationId,
         tournament_name: orgDefaults.tournament_name || '',
-        tournament_league: orgDefaults.tournament_league ?? undefined,
+        tournament_league: orgDefaults.tournament_league ?? null,
         tournament_type: orgDefaults.tournament_type,
         game_type: orgDefaults.game_type,
         draft_type: orgDefaults.draft_type,
@@ -153,6 +157,7 @@ export function CreateEventModal({
       if (is_recurring) {
         await createEventRepeater({
           ...shared,
+          tournament_league: shared.tournament_league ?? null,
           discord_notify_new_events: discord_notify_new_events ?? false,
           frequency,
           day_of_week: day_of_week ?? null,
@@ -178,6 +183,7 @@ export function CreateEventModal({
         // oriented org config.
         await createEvent({
           ...shared,
+          tournament_league: shared.tournament_league ?? null,
           scheduled_at,
           discord_signup_reminder: false,
           ...(signupsOpenAt ? { signups_open_at: signupsOpenAt } : {}),
@@ -208,10 +214,15 @@ export function CreateEventModal({
       onOpenChange={onOpenChange}
       title={isRecurring ? 'Create Recurring Event' : 'Create Event'}
       submitLabel="Create"
-      isSubmitting={isSubmitting}
+      isSubmitting={isSubmitting || !formReady}
       onSubmit={form.handleSubmit(onSubmit)}
       size="lg"
     >
+      {!formReady ? (
+        <div className="py-12 text-center text-muted-foreground" data-testid="create-event-loading">
+          Loading defaults…
+        </div>
+      ) : (
       <Form {...form}>
         <Tabs defaultValue="event">
           <TabsList className="w-full">
@@ -273,26 +284,21 @@ export function CreateEventModal({
           <FormField
             control={form.control}
             name="tournament_league"
-            render={({ field }) => (
+            render={({ field, fieldState }) => (
               <FormItem>
                 <FormLabel>League</FormLabel>
-                <Select
-                  onValueChange={(val) => field.onChange(parseInt(val, 10))}
-                  value={field.value?.toString()}
-                >
-                  <FormControl>
-                    <SelectTrigger data-testid="event-league-select" className="w-full">
-                      <SelectValue placeholder="Select league" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {leagues.map((league) => (
-                      <SelectItem key={league.pk} value={String(league.pk)} data-testid={`event-league-option-${league.pk}`}>
-                        {league.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FormControl>
+                  <LeagueCombobox
+                    organizationId={organizationId}
+                    value={field.value ?? null}
+                    onChange={(v) => field.onChange(v)}
+                    invalid={!!fieldState.error}
+                    triggerTestId="event-league-select"
+                    itemTestIdPrefix="event-league-option-"
+                    searchTestId="event-league-search"
+                    clearTestId="event-league-clear"
+                  />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -725,6 +731,7 @@ export function CreateEventModal({
           </TabsContent>
         </Tabs>
       </Form>
+      )}
     </FormDialog>
   );
 }

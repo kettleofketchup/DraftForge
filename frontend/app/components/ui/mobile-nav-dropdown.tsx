@@ -22,7 +22,12 @@ interface MobileNavDropdownProps {
   className?: string;
   /** "primary" (bold gradient) for navbar, "secondary" (subtle) for in-page */
   variant?: 'primary' | 'secondary';
+  /** data-testid on the wrapper (kept for backwards compatibility) */
   'data-testid'?: string;
+  /** data-testid on the SelectTrigger so tests can open the dropdown */
+  triggerTestId?: string;
+  /** prefix for per-option SelectItem data-testids: `${prefix}${option.value}` */
+  itemTestIdPrefix?: string;
 }
 
 /**
@@ -38,6 +43,8 @@ export function MobileNavDropdown({
   className,
   variant = 'primary',
   'data-testid': testId,
+  triggerTestId,
+  itemTestIdPrefix,
 }: MobileNavDropdownProps) {
   const isPrimary = variant === 'primary';
 
@@ -61,7 +68,10 @@ export function MobileNavDropdown({
 
       {/* Dropdown trigger with chevron indicator */}
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger className="w-full h-10 border-0 rounded-none bg-transparent px-3 text-base font-semibold text-white text-left justify-start focus-visible:ring-0 focus-visible:ring-offset-0 [&>svg:last-child]:text-white [&>svg:last-child]:h-5 [&>svg:last-child]:w-5">
+        <SelectTrigger
+          data-testid={triggerTestId}
+          className="w-full h-10 border-0 rounded-none bg-transparent px-3 text-base font-semibold text-white text-left justify-start focus-visible:ring-0 focus-visible:ring-offset-0 [&>svg:last-child]:text-white [&>svg:last-child]:h-5 [&>svg:last-child]:w-5"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent className="border-primary/30">
@@ -69,6 +79,9 @@ export function MobileNavDropdown({
             <SelectItem
               key={option.value}
               value={option.value}
+              data-testid={
+                itemTestIdPrefix ? `${itemTestIdPrefix}${option.value}` : undefined
+              }
               className={cn(
                 'min-h-[44px] flex items-center text-base cursor-pointer',
                 option.value === value &&

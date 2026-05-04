@@ -416,8 +416,21 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     await loginAdmin();
 
-    // Visit the tournament page
+    // Visit the tournament page. Wait deterministically for the
+    // `/api/tournaments/<pk>/` response to land instead of relying on
+    // visitAndWaitForHydration's 1500ms hard wait + h1 polling — useTournament
+    // uses useQuery (not useSuspenseQuery), so the page renders a loading
+    // spinner until the fetch resolves, and the spinner has no text content
+    // for the h1 assertion to grab. On cold workers (first hit, no warm
+    // cacheops cache) the fetch can take >10s, which makes the previous
+    // pattern fail spuriously.
+    const tournamentResponse = page.waitForResponse(
+      (r) =>
+        r.url().includes(`/api/tournaments/${tournamentData.pk}/`) && r.ok(),
+      { timeout: 30000 },
+    );
     await visitAndWaitForHydration(page, `/tournament/${tournamentData.pk}`);
+    await tournamentResponse;
 
     // Wait for page to load
     await expect(page.locator('h1')).toContainText(tournamentData.name, {
