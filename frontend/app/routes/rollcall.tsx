@@ -37,7 +37,6 @@ import { PrimaryButton, SecondaryButton, DestructiveButton } from '~/components/
 import { Button } from '~/components/ui/button';
 import { EventStateBadge, MmrApprovalModal } from '~/components/events';
 import { EventState, SignupStatus } from '~/components/events/schemas';
-import { GAME_TYPE } from '~/components/game/constants';
 import type { EventSignupType } from '~/components/events/schemas';
 import { UserStrip } from '~/components/user';
 import {
@@ -315,11 +314,10 @@ function SignupStrip({
     signup.status === SignupStatus.WAITLISTED;
 
   const handleApprove = () => {
-    if (gameType === GAME_TYPE.DOTA2) {
-      onRequestApproval(signup);
-    } else {
-      signupActions.approve.mutate({ id: signup.id });
-    }
+    // All games have an MMR concept — always open the approval modal so the
+    // admin can confirm/edit the prior approved MMR. Game-specific UI inside
+    // the modal (medal/range helper for Dota) gates itself via useGameType.
+    onRequestApproval(signup);
   };
 
   const actionSlot = isAdmin ? (
