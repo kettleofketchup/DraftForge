@@ -24,6 +24,17 @@ import {
 } from '~/components/user/positions/positionEdit';
 import type { EditUserInput } from './editUserSchema';
 
+// Mnemonic-ish row of bottom-row keys mapping to the five Dota positions.
+// Z X C V B aligns with the QWERTY layout's bottom row, easy to remember
+// since the carry/mid/offlane/sup4/sup5 ordering goes left-to-right.
+export const POSITION_HOTKEYS: Record<PositionKey, string> = {
+  carry: 'Z',
+  mid: 'X',
+  offlane: 'C',
+  soft_support: 'V',
+  hard_support: 'B',
+};
+
 interface Props {
   form: UseFormReturn<EditUserInput>;
   showMmr: boolean;
@@ -35,11 +46,13 @@ function PositionSelect({
   fieldKey,
   label,
   Icon,
+  hotkey,
 }: {
   form: UseFormReturn<EditUserInput>;
   fieldKey: PositionKey;
   label: string;
   Icon: React.FC<{ className?: string }>;
+  hotkey?: string;
 }) {
   return (
     <FormField
@@ -47,7 +60,7 @@ function PositionSelect({
       name={`positions.${fieldKey}` as const}
       render={({ field }) => (
         <FormItem>
-          <FormLabel className="flex items-center gap-2">
+          <FormLabel className="flex items-center gap-2" hotkey={hotkey}>
             <Icon className="h-4 w-4 shrink-0" />
             <span>{label}</span>
           </FormLabel>
@@ -82,10 +95,14 @@ function StringField({
   form,
   fieldKey,
   label,
+  hotkey,
 }: {
   form: UseFormReturn<EditUserInput>;
   fieldKey: 'nickname';
   label: string;
+  /** Optional keycap hint surfaced inline with the label (visual only — the
+   * focus-handler lives in the parent modal). */
+  hotkey?: string;
 }) {
   return (
     <FormField
@@ -93,7 +110,7 @@ function StringField({
       name={fieldKey}
       render={({ field }) => (
         <FormItem>
-          <FormLabel>{label}</FormLabel>
+          <FormLabel hotkey={hotkey}>{label}</FormLabel>
           <FormControl>
             <Input
               ref={field.ref}
@@ -117,10 +134,12 @@ function NumberField({
   form,
   fieldKey,
   label,
+  hotkey,
 }: {
   form: UseFormReturn<EditUserInput>;
   fieldKey: 'mmr' | 'steam_account_id';
   label: string;
+  hotkey?: string;
 }) {
   return (
     <FormField
@@ -128,7 +147,7 @@ function NumberField({
       name={fieldKey}
       render={({ field }) => (
         <FormItem>
-          <FormLabel>{label}</FormLabel>
+          <FormLabel hotkey={hotkey}>{label}</FormLabel>
           <FormControl>
             <Input
               ref={field.ref}
@@ -162,9 +181,9 @@ export const UserEditForm: React.FC<Props> = ({ form, showMmr, mmrLabel }) => {
   // No outer <ScrollArea> — FormDialog already wraps its children in one.
   return (
     <div className="flex flex-col w-full gap-4">
-      <StringField form={form} fieldKey="nickname" label="Nickname" />
+      <StringField form={form} fieldKey="nickname" label="Nickname" hotkey="N" />
       {showMmr && (
-        <NumberField form={form} fieldKey="mmr" label={mmrLabel} />
+        <NumberField form={form} fieldKey="mmr" label={mmrLabel} hotkey="R" />
       )}
       <div className="bg-base-300 border border-border rounded-lg p-4">
         <h3 className="text-foreground text-center text-sm font-medium mb-3">
@@ -178,6 +197,7 @@ export const UserEditForm: React.FC<Props> = ({ form, showMmr, mmrLabel }) => {
               fieldKey={key}
               label={POSITION_LABELS[key]}
               Icon={positionIcons[key]}
+              hotkey={POSITION_HOTKEYS[key]}
             />
           ))}
         </div>
@@ -186,6 +206,7 @@ export const UserEditForm: React.FC<Props> = ({ form, showMmr, mmrLabel }) => {
         form={form}
         fieldKey="steam_account_id"
         label="Friend ID"
+        hotkey="F"
       />
     </div>
   );

@@ -29,12 +29,15 @@ import {
   DestructiveButton,
   DotabuffButton,
   SubmitButton,
+  brandDialogPanel,
 } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 import { UserAvatar } from '~/components/user/UserAvatar';
+import { UserStrip } from '~/components/user/UserStrip';
 import { DisplayName } from '~/components/user/avatar';
 import { RankSignalsCard } from '~/components/events/games/RankSignalsCard';
 import type { EventSignupType } from '~/components/events/schemas';
+import type { UserType } from '~/components/user/types';
 
 const LARGE_CHANGE_THRESHOLD = 0.2;
 
@@ -129,25 +132,46 @@ export function MmrApprovalModal({
     setConfirmOpen(false);
   };
 
-  const confirmDescription = (() => {
+  const deltaSummary = (() => {
     const mmrText = `${watchedMmr.toLocaleString()} MMR`;
     if (priorMmr == null) {
-      return `Approve ${playerName} with ${mmrText}? No prior MMR is on file for this org.`;
+      return `Approving with ${mmrText}. No prior MMR is on file for this org.`;
     }
     if (!hasDelta) {
-      return `Approve ${playerName} with ${mmrText}? Same as the previously approved MMR.`;
+      return `Approving with ${mmrText}. Same as the previously approved MMR.`;
     }
     const deltaSign = deltaAmount > 0 ? '+' : '';
     const pctText = priorMmr > 0 ? `, ${Math.round(deltaPct * 100)}%` : '';
-    return (
-      `Approve ${playerName} with ${mmrText}? ` +
+    const base =
+      `Approving with ${mmrText}. ` +
       `Previously approved was ${priorMmr.toLocaleString()} ` +
-      `(${deltaSign}${deltaAmount.toLocaleString()}${pctText}).` +
-      (isLargeChange
-        ? ` This is more than ${Math.round(LARGE_CHANGE_THRESHOLD * 100)}% off the prior MMR — confirm this is intentional.`
-        : '')
-    );
+      `(${deltaSign}${deltaAmount.toLocaleString()}${pctText}).`;
+    if (isLargeChange) {
+      return (
+        base +
+        ` This is more than ${Math.round(LARGE_CHANGE_THRESHOLD * 100)}% off the prior MMR — confirm this is intentional.`
+      );
+    }
+    return base;
   })();
+
+  // Show the MMR being approved on the strip's badge — acts as a visual
+  // recap alongside the textual summary below.
+  const stripUser = user ? ({ ...user, mmr: watchedMmr } as UserType) : null;
+
+  const confirmDescription = (
+    <div className="flex flex-col gap-3">
+      {stripUser ? (
+        <UserStrip
+          user={stripUser}
+          showBorder={false}
+          className={brandDialogPanel}
+          data-testid="mmr-confirm-user-strip"
+        />
+      ) : null}
+      <p data-testid="mmr-confirm-summary">{deltaSummary}</p>
+    </div>
+  );
 
   return (
     <>
@@ -202,23 +226,24 @@ export function MmrApprovalModal({
                         onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
                       />
                     </FormControl>
-                    {gameType === GAME_TYPE.DOTA2 && (
-                      <p
-                        data-testid="suggested-range-helper"
-                        className="text-xs text-muted-foreground font-mono mt-1"
-                      >
-                        Suggested range:{' '}
-                        {signup.suggested_mmr_range[0].toLocaleString()}&ndash;
-                        {signup.suggested_mmr_range[1].toLocaleString()}
-                        <span className="ml-1 text-muted-foreground/80">
-                          (from{' '}
-                          {signup.suggested_mmr_range_source === 'battle_cup'
-                            ? 'battle cup'
-                            : signup.suggested_mmr_range_source}
-                          )
-                        </span>
-                      </p>
-                    )}
+                    {gameType === GAME_TYPE.DOTA2 &&
+                      signup.suggested_mmr_range_source !== 'fallback' && (
+                        <p
+                          data-testid="suggested-range-helper"
+                          className="text-xs text-muted-foreground font-mono mt-1"
+                        >
+                          Suggested range:{' '}
+                          {signup.suggested_mmr_range[0].toLocaleString()}&ndash;
+                          {signup.suggested_mmr_range[1].toLocaleString()}
+                          <span className="ml-1 text-muted-foreground/80">
+                            (from{' '}
+                            {signup.suggested_mmr_range_source === 'battle_cup'
+                              ? 'battle cup'
+                              : signup.suggested_mmr_range_source}
+                            )
+                          </span>
+                        </p>
+                      )}
                     {hasDelta && (
                       <div
                         data-testid="mmr-delta"

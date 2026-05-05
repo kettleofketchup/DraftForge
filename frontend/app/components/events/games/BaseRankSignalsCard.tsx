@@ -6,6 +6,8 @@ interface BaseRankSignalsCardProps {
   signup: EventSignupType;
   /** Game-specific rows rendered after the universal Previously Approved MMR row. */
   children?: ReactNode;
+  /** Optional warning banner rendered after children — for game-specific signal mismatches. */
+  warning?: ReactNode;
 }
 
 /**
@@ -16,7 +18,7 @@ interface BaseRankSignalsCardProps {
  *
  * The dispatcher (`./RankSignalsCard`) returns this directly for non-Dota games.
  */
-export function BaseRankSignalsCard({ signup, children }: BaseRankSignalsCardProps) {
+export function BaseRankSignalsCard({ signup, children, warning }: BaseRankSignalsCardProps) {
   const priorMmr = signup.org_user_mmr;
 
   return (
@@ -37,6 +39,8 @@ export function BaseRankSignalsCard({ signup, children }: BaseRankSignalsCardPro
       </div>
 
       {children}
+
+      {warning}
     </div>
   );
 }

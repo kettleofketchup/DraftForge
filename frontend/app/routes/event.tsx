@@ -237,6 +237,10 @@ export default function EventPage() {
     () => (signups ?? []).filter((s) => s.status === 'waitlisted'),
     [signups],
   );
+  const removedSignups = useMemo(
+    () => (signups ?? []).filter((s) => s.status === 'cancelled' || s.status === 'rejected'),
+    [signups],
+  );
 
   const handleTabChange = useCallback(
     (newTab: string) => {
@@ -254,9 +258,10 @@ export default function EventPage() {
       { value: 'signups', label: `${activeSignups.length} Signups` },
       ...(tentativeSignups.length > 0 ? [{ value: 'tentative', label: `${tentativeSignups.length} Tentative` }] : []),
       { value: 'waitlist', label: `${waitlistedSignups.length} Waitlist` },
+      ...(removedSignups.length > 0 ? [{ value: 'removed', label: `${removedSignups.length} Removed` }] : []),
       { value: 'discord', label: 'Discord' },
     ],
-    [activeSignups.length, tentativeSignups.length, waitlistedSignups.length, isAdmin],
+    [activeSignups.length, tentativeSignups.length, waitlistedSignups.length, removedSignups.length, isAdmin],
   );
 
   usePageNav(event ? pageNavOptions : null, activeTab, handleTabChange);
@@ -488,6 +493,11 @@ export default function EventPage() {
             <TabsTrigger value="waitlist" data-testid="event-tab-waitlist">
               Waitlist ({waitlistedSignups.length})
             </TabsTrigger>
+            {removedSignups.length > 0 && (
+              <TabsTrigger value="removed" data-testid="event-tab-removed">
+                Removed ({removedSignups.length})
+              </TabsTrigger>
+            )}
             <TabsTrigger value="discord" data-testid="event-tab-discord">
               Discord
             </TabsTrigger>
@@ -528,6 +538,16 @@ export default function EventPage() {
           <TabsContent value="waitlist">
             <SignupsTab
               signups={waitlistedSignups}
+              isAdmin={isAdmin}
+              signupActions={signupActions}
+              gameType={event.game_type}
+              state={event.state}
+            />
+          </TabsContent>
+
+          <TabsContent value="removed">
+            <SignupsTab
+              signups={removedSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
@@ -852,7 +872,22 @@ function SignupsTab({
                 <TooltipContent className="lg:hidden">Approve</TooltipContent>
               </Tooltip>
             )}
-            {signup.status !== 'cancelled' && (
+            {(signup.status === 'cancelled' || signup.status === 'rejected') && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SecondaryButton size="sm"
+                    data-testid="event-restore-btn"
+                    onClick={() => signupActions.reinstate.mutate(signup.id)}
+                    disabled={signupActions.reinstate.isPending}
+                  >
+                    <Undo2 className="h-3.5 w-3.5" />
+                    <span className="hidden lg:inline ml-1">Restore</span>
+                  </SecondaryButton>
+                </TooltipTrigger>
+                <TooltipContent className="lg:hidden">Restore signup</TooltipContent>
+              </Tooltip>
+            )}
+            {signup.status !== 'cancelled' && signup.status !== 'rejected' && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DestructiveButton size="sm" depth={false}

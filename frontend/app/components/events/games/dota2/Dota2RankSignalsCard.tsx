@@ -10,6 +10,26 @@ interface Dota2RankSignalsCardProps {
   signup: EventSignupType;
 }
 
+function rangeSourceLabel(source: EventSignupType['suggested_mmr_range_source']) {
+  if (source === 'medal') return 'medal';
+  if (source === 'battle_cup') return 'battle cup';
+  return null;
+}
+
+// Flag whenever prior approved MMR sits outside the rank-derived range
+// (medal or battle-cup). Fallback ranges aren't trustworthy enough to flag.
+function computeRangeDiscrepancy(signup: EventSignupType) {
+  const prior = signup.org_user_mmr;
+  const [low, high] = signup.suggested_mmr_range;
+  const sourceLabel = rangeSourceLabel(signup.suggested_mmr_range_source);
+  if (prior == null || prior <= 0 || sourceLabel == null) return null;
+  if (prior >= low && prior <= high) return null;
+
+  const gap = prior < low ? low - prior : prior - high;
+  const pct = gap / prior;
+  return { prior, low, high, sourceLabel, direction: prior < low ? 'below' : 'above', pct };
+}
+
 /**
  * Dota 2-specific rank signals — composes the universal `BaseRankSignalsCard`
  * (which renders the prior approved MMR row) and adds Dota-specific rows on
@@ -25,9 +45,23 @@ export function Dota2RankSignalsCard({ signup }: Dota2RankSignalsCardProps) {
     : null;
 
   const isPrevious = profile?.rank_status === 'previous';
+  const discrepancy = computeRangeDiscrepancy(signup);
+
+  const warning = discrepancy ? (
+    <div
+      data-testid="rank-signals-discrepancy"
+      className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-200"
+    >
+      <span className="font-semibold">Possible discrepancy: </span>
+      previously approved MMR ({discrepancy.prior.toLocaleString()}) is{' '}
+      {Math.round(discrepancy.pct * 100)}% {discrepancy.direction} the {discrepancy.sourceLabel}{' '}
+      range ({discrepancy.low.toLocaleString()}&ndash;{discrepancy.high.toLocaleString()}).
+      Verify before approving.
+    </div>
+  ) : null;
 
   return (
-    <BaseRankSignalsCard signup={signup}>
+    <BaseRankSignalsCard signup={signup} warning={warning}>
       {/* Self-Reported MMR (Dota — pulled from PlayerDotaProfile.mmr) */}
       <div className="flex justify-between items-center" data-testid="rank-signals-self-report">
         <span className="text-muted-foreground">Self-Reported MMR</span>

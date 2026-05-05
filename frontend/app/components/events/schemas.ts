@@ -141,6 +141,8 @@ export const eventSignupSchema = z.object({
     battle_cup_tier: z.number().nullable(),
   }).nullable(),
   org_user_mmr: z.number().nullable().default(null),
+  org_user_pk: z.number().nullable().default(null),
+  organization: z.number().nullable().default(null),
   suggested_mmr: z.number().int(),
   suggested_mmr_range: z.tuple([z.number().int(), z.number().int()]),
   suggested_mmr_range_source: z.enum(['medal', 'battle_cup', 'fallback']),
