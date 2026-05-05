@@ -41,12 +41,18 @@ export function HotkeyBadge({ hotkey, tooltip, className }: HotkeyBadgeProps) {
   // `pointer-events-none`, which would block tooltip hover detection).
   // LazyTooltip uses asChild on TooltipTrigger, so its ref / handlers attach
   // to this span — the Kbd inside is purely visual.
+  //
+  // The badge is `aria-hidden` so it doesn't pollute the parent button's
+  // accessible name (a button labeled "Reopen Signups" should NOT announce
+  // as "Reopen Signups Keyboard shortcut: ↵"). The hover/focus tooltip
+  // already wires the shortcut into the button's accessible description
+  // via aria-describedby — that's the right vehicle for screen readers.
   const badge = (
     <span
       className={cn(
         'absolute -top-1.5 -left-1.5 z-10 inline-flex cursor-help',
       )}
-      aria-label={`Keyboard shortcut: ${hotkey}`}
+      aria-hidden="true"
     >
       <Kbd
         className={cn(
