@@ -73,16 +73,22 @@ class EnsureTournamentWithSignupsTest(TestCase):
     def test_invalidates_cacheops_after_m2m_add(self):
         """M2M add does not auto-invalidate cacheops; ensure_tournament_with_signups must.
 
-        Mock invalidate_after_commit and assert it's called with the tournament
-        and event after the M2M add. This is more deterministic than measuring a
-        live cache state, and captures the actual invariant we care about: 'the
-        M2M path goes through invalidate_after_commit'.
+        The M2M change affects both sides of the relation — tournament.users.all()
+        AND user.tournament_set.all() — so we invalidate the tournament, the event,
+        AND every user we added. Mocking invalidate_after_commit is more deterministic
+        than measuring live cache state and captures the actual invariant.
         """
         from unittest.mock import patch
 
         self._make_signup(self.users[0], "approved")
+        self._make_signup(self.users[1], "confirmed")
         with patch("events.services.invalidate_after_commit") as mock_inv:
             ensure_tournament_with_signups(self.event)
 
         self.event.refresh_from_db()
-        mock_inv.assert_called_with(self.event.tournament, self.event)
+        mock_inv.assert_called_once()
+        args = mock_inv.call_args.args
+        self.assertEqual(args[0], self.event.tournament)
+        self.assertEqual(args[1], self.event)
+        # Both added users must be in the invalidation set
+        self.assertEqual(set(args[2:]), {self.users[0], self.users[1]})

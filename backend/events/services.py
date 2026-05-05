@@ -549,10 +549,14 @@ def ensure_tournament_with_signups(event):
         status__in=[SignupStatus.APPROVED, SignupStatus.CONFIRMED],
     ).select_related("user")
 
+    added_users = []
     for signup in confirmed_or_approved:
         tournament.users.add(signup.user)
+        added_users.append(signup.user)
 
-    invalidate_after_commit(tournament, event)
+    # M2M change invalidates both sides: tournament.users.all() AND user.tournament_set.all().
+    # cacheops doesn't auto-track M2M, so we invalidate every user we touched.
+    invalidate_after_commit(tournament, event, *added_users)
     return tournament
 
 
