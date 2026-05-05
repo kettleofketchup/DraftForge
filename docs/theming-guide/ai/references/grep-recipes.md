@@ -110,6 +110,24 @@ for primitive in DialogContent AlertDialogContent; do
     | rg -B1 -A20 "<$primitive" \
     | rg -L "${primitive%Content}Title"
 done
+
+# Hand-rolled <AlertDialog> confirm flows (should be <ConfirmDialog>)
+# Manual review: any AlertDialog whose body is just title/desc/yes-no buttons
+# is a candidate for ConfirmDialog (which adds Enter/Backspace + <Kbd> hints).
+rg -n '<AlertDialog\b' "$SCOPE" --glob '!**/components/ui/**'
+```
+
+## Keyboard hints
+
+```bash
+# Raw <kbd> elements — should be <Kbd> from ~/components/ui/kbd
+rg -n '<kbd[\s>]' "$SCOPE" --glob '!**/components/ui/kbd.tsx'
+
+# <Kbd> rendered as a child of a brand button — should be the `hotkey` prop
+# instead so the standardized HotkeyBadge (corner pill + LazyTooltip) is used.
+rg -nB1 -A4 '<(Primary|Secondary|Destructive|Confirm|Cancel)Button\b' "$SCOPE" \
+  --glob '!**/components/ui/buttons/**' \
+  | rg -B4 -A1 '<Kbd\b'
 ```
 
 ## Component placement

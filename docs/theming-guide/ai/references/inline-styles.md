@@ -131,6 +131,53 @@ import { brandGlow } from '~/components/ui/buttons/styles';
 
 For text glow, use `text-glow`, `text-glow-violet`, `text-glow-cyan`. For radial backgrounds, use `gradient-glow-violet` / `gradient-glow-cyan`. These all live in `app.css`.
 
+### Body text on a colored brand surface
+
+```tsx
+// WRONG — muted-foreground / text-slate-* fades into the success/warning gradients
+<AlertDialogDescription className="text-muted-foreground">...</AlertDialogDescription>
+
+// WRONG — text-shadow outlines on body copy muddy sub-pixel rendering
+<p className="text-violet-200 [text-shadow:_-1px_-1px_0_#000,...]">...</p>
+
+// RIGHT — use the variant-matched brand readable
+import { brandReadableSuccess } from '~/components/ui/buttons';
+<AlertDialogDescription className={brandReadableSuccess}>...</AlertDialogDescription>
+```
+
+Three tonal-harmony constants, one per surface family:
+
+| Constant | Use over | Foreground |
+|---|---|---|
+| `brandReadableSuccess` | `brandSuccessBg`, emerald gradients, success callouts | `text-emerald-50 font-medium tracking-[0.005em]` |
+| `brandReadableWarning` | warning surfaces, orange/amber gradients | `text-orange-50 font-medium tracking-[0.005em]` |
+| `brandReadableDestructive` | destructive surfaces, red gradients | `text-rose-50 font-medium tracking-[0.005em]` |
+
+Each picks up the hue family of its surface without competing — the near-white
+foreground keeps high contrast while the medium weight + `tracking-[0.005em]`
+gives glyphs presence on top of color. **Body copy only** — for display/title
+text on colored surfaces use `text-outline-black` instead, and never combine a
+text-shadow outline with body copy (paragraph text-shadow is a `block` review
+finding because it destroys sub-pixel rendering).
+
+### Inner panels (e.g. UserStrip) on a colored dialog surface
+
+```tsx
+// WRONG — UserStrip's default bg-muted/25 vanishes on dark destructive surfaces
+<UserStrip user={user} showBorder={false} />
+
+// RIGHT — compose the brand panel constant via the strip's className
+import { brandDialogPanel, UserStrip } from '~/components/ui/buttons';
+<UserStrip user={user} showBorder={false} className={brandDialogPanel} />
+```
+
+`brandDialogPanel` (`bg-black/40 ring-1 ring-white/10`) gives any nested block
+(UserStrip, recap rows, info cards) enough contrast against either a darker
+destructive/red or lighter success/emerald gradient. Reach for it any time a
+component is rendered *inside* a colored brand dialog — UserStrip, info rows,
+key/value recaps, etc. The constant is composable: it merges via cn() so the
+inner component can still receive caller-specific styling.
+
 ## What's NOT an inline-style violation
 
 - `style={{ width: `${pct}%` }}` for a computed progress bar.

@@ -57,6 +57,18 @@ Required breadcrumb pages: `/organizations/:id`, `/leagues/:id`, `/events/:id`, 
 | Custom `<div role="dialog">` | shadcn `<Dialog>` / `<AlertDialog>` | Brand surface (`brandBg`) is automatic. |
 | `<DialogContent className="bg-gradient-to-r ...">` | Don't override the surface | Tailwind-merge will strip `bg-background` and the dialog goes translucent. Use `[background-image:var(--brand-bg)]` arbitrary property if a custom overlay is genuinely needed. |
 | `<Dialog>` without `<DialogTitle>` | Always include title | Use `className="sr-only"` if visually hidden — required for a11y. |
+| Hand-rolled `<AlertDialog>` for yes/no confirmation | `<ConfirmDialog>` from `~/components/ui/dialogs` | Bundles the brand `<ConfirmButton>` / `<CancelButton>`, Enter→confirm + Backspace→cancel hotkeys, and `<Kbd>` keycap hints on each button. Hand-rolled confirms drop these for free. |
+| `<AlertDialog>` confirm without keyboard hotkey support | `<ConfirmDialog>` | Power users (rollcall, draft, admin) operate by keyboard; every confirm should bind Enter/Backspace and surface the binding via `<Kbd>` so the hint is visible. |
+
+## Keyboard Hints
+
+| Anti-pattern | Replace with | Notes |
+|---|---|---|
+| `<kbd>Enter</kbd>` raw | `<Kbd>Enter</Kbd>` from `~/components/ui/kbd` | Brand keycap styling (mono background, rounded). Raw `<kbd>` inherits browser defaults. Reserve direct `<Kbd>` use for *prose* (docs, help panes) and tooltip bodies — for buttons, use the `hotkey` prop below. |
+| Inline keyboard hint without `<Kbd>` (e.g. `(press Enter)` plain text) | Wrap the symbol/key name in `<Kbd>` | Keeps the visual rhythm with hotkey-aware surfaces. |
+| Brand button (`<PrimaryButton>` / `<SecondaryButton>` / `<DestructiveButton>` / `<ConfirmButton>` / `<CancelButton>`) with a hand-rolled `<Kbd>` child for a shortcut | Pass the `hotkey` prop instead | The brand button renders `<HotkeyBadge>` (a `<Kbd>` anchored top-left as a corner pill, plus a `LazyTooltip` saying "Press X for keyboard shortcut") and adds `relative` for you. Inline `<Kbd>` next to the label is a `block` review finding because it skips the tooltip + breaks the standardized corner-pill pattern. |
+| `<ConfirmDialog>` confirm/cancel buttons rendered with inline keyboard hints | The dialog already wires `hotkey="↵"` / `hotkey="⌫"` for you | Use `<ConfirmDialog>` directly — never re-implement Enter/Backspace + corner badges by hand. |
+| `<FormLabel>` with a hand-rolled `<Kbd>` keycap next to the label text | Pass the `hotkey` prop on `<FormLabel>` | `<FormLabel hotkey="N">Nickname</FormLabel>` renders the Kbd inline for you and applies the right flex layout. Wire the actual focus handler in the parent (e.g. modal `useEffect` listening for the matching `keydown`). |
 
 ## Status / Win-Loss Indicators
 
