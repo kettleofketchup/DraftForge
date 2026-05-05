@@ -328,31 +328,46 @@ class EventSerializer(serializers.ModelSerializer):
 
         # Single events have no subscriber list — discord_signup_reminder DMs
         # subscribed users, which is a series-level concept on EventRepeater.
-        # Reject signup_reminder=True on events without a repeater.
-        # Only validate when the field is explicitly present in the request body;
-        # PATCH partial-updates should not re-validate untouched fields whose
-        # instance value happens to be True (the field default).
-        repeater = data.get(
-            "event_repeater",
-            self.instance.event_repeater if self.instance else None,
+        # Reject signup_reminder=True on events without a repeater. Only run
+        # this check when the request actually touches one of those fields
+        # (or on create) — otherwise pre-existing invalid state would block
+        # every unrelated PATCH on the event, even one that just changes the
+        # name.
+        is_create = self.instance is None
+        touches_relevant_fields = (
+            "discord_signup_reminder" in data or "event_repeater" in data
         )
-        signup_reminder = data.get(
-            "discord_signup_reminder",
-            self.instance.discord_signup_reminder if self.instance else False,
-        )
-        if (
-            repeater is None
-            and signup_reminder
-            and "discord_signup_reminder" in self.initial_data
-        ):
-            raise serializers.ValidationError(
-                {
-                    "discord_signup_reminder": (
-                        "Signup reminder DMs require a recurring event series — "
-                        "single events have no subscribers."
-                    )
-                }
+        if is_create or touches_relevant_fields:
+            repeater = data.get(
+                "event_repeater",
+                self.instance.event_repeater if self.instance else None,
             )
+            # On create, fall back to False when the field is absent — matches
+            # original behavior so callers that don't explicitly set this field
+            # aren't surprised. The model default of True remains a latent
+            # inconsistency (events get saved with reminder=True but the
+            # validator silently allows it on create); fix is out of scope here
+            # since correcting it would require a model migration + sweep of
+            # ~10 Playwright tests that don't pass this field. Tracked
+            # separately. The validator still rejects explicit signup_reminder=True
+            # on a single event.
+            default_reminder = (
+                self.instance.discord_signup_reminder
+                if self.instance
+                else False
+            )
+            signup_reminder = data.get(
+                "discord_signup_reminder", default_reminder
+            )
+            if repeater is None and signup_reminder:
+                raise serializers.ValidationError(
+                    {
+                        "discord_signup_reminder": (
+                            "Signup reminder DMs require a recurring event series — "
+                            "single events have no subscribers."
+                        )
+                    }
+                )
         return data
 
 

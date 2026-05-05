@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import type { LeagueType } from '~/components/league/schemas';
+import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType, UserType } from '~/components/user';
 import { brandErrorBg, brandErrorCard } from '~/components/ui/buttons';
 import UserEditModal from '~/components/user/userCard/editModal';
@@ -6,10 +8,29 @@ import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
 import { useLeagueStore } from '~/store/leagueStore';
+import { useOrgStore } from '~/store/orgStore';
 import type { UserEntry } from '~/store/userCacheTypes';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 const log = getLogger('hasErrors');
+
+/**
+ * Derive the EditUserModal scope for the tournament-edit panel.
+ * Order: league > org > global. Falls back to global only when neither
+ * is loaded — callers should ensure currentOrg is populated before render
+ * (TournamentDetailPage calls getOrganization in a useEffect on mount).
+ */
+export function deriveEditScope({
+  league,
+  currentOrg,
+}: {
+  league: LeagueType | null;
+  currentOrg: OrganizationType | null;
+}): EditUserScope {
+  if (league) return { kind: 'league', league };
+  if (currentOrg) return { kind: 'org', organization: currentOrg };
+  return { kind: 'global' };
+}
 
 interface UserIssue {
   user: UserClassType;
@@ -45,12 +66,11 @@ export const hasErrors = () => {
 
   const orgId = tournament?.organization_pk ?? undefined;
 
+  const currentOrg = useOrgStore((state) => state.currentOrg);
+
   const editScope = useMemo<EditUserScope>(
-    () =>
-      league
-        ? { kind: 'league', league }
-        : { kind: 'global' },
-    [league?.pk],
+    () => deriveEditScope({ league, currentOrg }),
+    [league?.pk, currentOrg?.pk],
   );
 
   // Resolve users from entity cache — the single source of truth

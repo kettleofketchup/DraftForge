@@ -142,6 +142,7 @@ def _create_signup(event, user, event_team=None):
             status=SignupStatus.WAITLISTED,
             waitlist_position=max_pos + 1,
         )
+        apply_signup_writethrough(signup)
         invalidate_after_commit(event)
         transaction.on_commit(lambda: notify_signup_changed(event))
         return signup
@@ -162,6 +163,7 @@ def _create_signup(event, user, event_team=None):
         signup_type=signup_type,
         status=status,
     )
+    apply_signup_writethrough(signup)
     if status == SignupStatus.CONFIRMED:
         add_user_to_tournament(event, user)
     elif status == SignupStatus.APPROVED and not event.roll_call_enabled:
@@ -274,6 +276,74 @@ def cancel_signup(signup):
     _promote_from_waitlist(signup.event)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
+    return signup
+
+
+@transaction.atomic
+def apply_signup_writethrough(signup):
+    """Mirror signup-submitted PlayerDotaProfile fields to the User-level fields.
+
+    Issue #196a — positions are last-write-wins on User.positions, steam_account_id
+    is first-write-wins on User.steam_account_id (sourced from
+    PlayerDotaProfile.unverified_friend_id — a CharField of digits on
+    PlayerProfileMixin), MMR is NOT touched here (it routes through approve_signup).
+    Cache invalidation is deferred to commit so the 'incomplete profile' panel
+    reflects the writethrough on the next render rather than after the cacheops
+    1-hour TTL.
+    """
+    from app.models import PositionsModel
+    from org.models import OrgUser
+    from org.models_profiles import PlayerDotaProfile
+
+    user = signup.user
+    org = signup.event.organization
+    if org is None:
+        return signup
+
+    try:
+        org_user = OrgUser.objects.get(user=user, organization=org)
+    except OrgUser.DoesNotExist:
+        return signup
+
+    try:
+        profile = PlayerDotaProfile.objects.get(org_user=org_user)
+    except PlayerDotaProfile.DoesNotExist:
+        return signup
+
+    # Positions: last-write-wins on the linked PositionsModel.
+    # Mapping: PlayerDotaProfile.pos_N (bool) → PositionsModel fields (IntegerField).
+    # pos_1=carry, pos_2=mid, pos_3=offlane, pos_4=soft_support, pos_5=hard_support.
+    # True → 1 (plays it), False → 0 (does not play it).
+    user_positions = user.positions
+    if user_positions is None:
+        user_positions = PositionsModel.objects.create()
+        user.positions = user_positions
+        user.save(update_fields=["positions"])
+    user_positions.carry = 1 if profile.pos_1 else 0
+    user_positions.mid = 1 if profile.pos_2 else 0
+    user_positions.offlane = 1 if profile.pos_3 else 0
+    user_positions.soft_support = 1 if profile.pos_4 else 0
+    user_positions.hard_support = 1 if profile.pos_5 else 0
+    user_positions.save(
+        update_fields=["carry", "mid", "offlane", "soft_support", "hard_support"]
+    )
+
+    # steam_account_id: first-write-wins on User.steam_account_id (unique=True).
+    # Source: profile.unverified_friend_id (CharField of digits; empty string = none).
+    profile_friend_id = profile.unverified_friend_id
+    if profile_friend_id and not user.steam_account_id:
+        try:
+            user.steam_account_id = int(profile_friend_id)
+            user.save(update_fields=["steam_account_id", "steamid"])
+        except (ValueError, Exception):
+            # Non-numeric or integrity conflict; skip silently.
+            pass
+
+    tournament = signup.event.tournament
+    objs_to_invalidate = [user, org_user]
+    if tournament is not None:
+        objs_to_invalidate.append(tournament)
+    invalidate_after_commit(*objs_to_invalidate)
     return signup
 
 

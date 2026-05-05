@@ -60,7 +60,7 @@ INTERNAL_SERVICE_TOKEN = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
 # In TEST mode we still need this for the matching TEST_DISCORD_USER_ID path,
 # and in production for real DMs from Celery tasks. Read the same env var
 # the Daphne backend uses.
-DISCORD_BOT_TOKEN = os.environ.get("discord_token", "")
+DISCORD_BOT_TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "")
 
 # Public site URL used by Discord embed builders to construct links
 # (e.g. /herodraft/<id>, /tournament/<id>/teams/draft). Without this,
