@@ -26,6 +26,39 @@ export const brandGlow = 'shadow-brand-glow';
 // tailwind-merge conflicts with bg-* (background-color).
 export const brandSuccessBg = '[background-image:var(--brand-success-bg)]';
 
+// Brand panel surface for content blocks placed *inside* a colored dialog
+// (UserStrip, recap rows, etc.). Produces a darker, opaque-enough backdrop
+// with a subtle hairline so the inner block reads as its own panel against
+// the parent dialog's gradient — works on both lighter (success/emerald)
+// and darker (destructive/red) surfaces. Compose via the caller's className
+// so the inner component (e.g. <UserStrip>) merges via cn() / tailwind-merge.
+export const brandDialogPanel = 'bg-black/40 ring-1 ring-white/10';
+
+// Brand body text on colored surfaces — tonal harmony per variant. Each
+// constant is a near-white tinted toward its surface's hue family, with a
+// medium weight for presence and a hair of letter-spacing for sub-pixel
+// sharpness on top of gradients. Use inside ConfirmDialog/AlertDialog
+// descriptions, success/warning callouts, and any body copy that sits on a
+// branded surface where the muted-foreground default fades.
+//
+//  brandReadableSuccess     → over brandSuccessBg / emerald gradients
+//  brandReadableWarning     → over warning / orange gradients
+//  brandReadableDestructive → over destructive / red gradients
+//
+// The color uses Tailwind's `!` modifier because shadcn primitives like
+// AlertDialogDescription apply their own `text-muted-foreground` via Radix
+// Slot, which concatenates classNames (no tailwind-merge) — without `!` the
+// two text-color rules collide in source order.
+//
+// Body copy only — never use these for headlines, and never pair with a
+// text-shadow outline (use `text-outline-black` on display type instead).
+export const brandReadableSuccess =
+  '!text-emerald-50 font-medium tracking-[0.005em]';
+export const brandReadableWarning =
+  '!text-orange-50 font-medium tracking-[0.005em]';
+export const brandReadableDestructive =
+  '!text-rose-50 font-medium tracking-[0.005em]';
+
 // Brand highlight - emerald-to-violet cyberpunk gradient for featured info (org links, stats, callouts).
 export const brandHighlight = 'bg-gradient-to-r from-emerald-900/40 to-violet-900/40 border border-emerald-500/20 hover:from-emerald-900/60 hover:to-violet-900/60';
 export const brandHighlightText = 'bg-gradient-to-r from-emerald-400 to-violet-400 bg-clip-text text-transparent';

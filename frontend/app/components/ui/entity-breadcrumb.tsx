@@ -28,17 +28,34 @@ export interface BreadcrumbSegment {
 
 interface EntityBreadcrumbProps {
   segments: BreadcrumbSegment[];
+  /**
+   * When set, every `segments` item renders as a link (using its `href`) and
+   * `currentLabel` is appended as the trailing non-clickable BreadcrumbPage.
+   * Use this on sub-pages of an entity (e.g. rollcall is a sub-page of an
+   * event — pass the event in `segments` and `currentLabel="Roll Call"` so
+   * the event remains clickable).
+   *
+   * When omitted, the last `segments` item is treated as the current page and
+   * rendered non-clickable — the original behavior used by entity detail pages.
+   */
+  currentLabel?: string;
   className?: string;
 }
 
-export function EntityBreadcrumb({ segments, className }: EntityBreadcrumbProps) {
-  if (segments.length === 0) return null;
+export function EntityBreadcrumb({ segments, currentLabel, className }: EntityBreadcrumbProps) {
+  if (segments.length === 0 && !currentLabel) return null;
+
+  // When currentLabel is set, every segment is a link; otherwise the last
+  // segment is the current page (non-clickable).
+  const treatLastAsCurrent = !currentLabel;
 
   return (
     <Breadcrumb className={cn('mb-2', className)}>
       <BreadcrumbList>
         {segments.map((segment, index) => {
-          const isLast = index === segments.length - 1;
+          const isLastSegment = index === segments.length - 1;
+          const renderAsCurrent = treatLastAsCurrent && isLastSegment;
+          const showSeparator = !isLastSegment || !!currentLabel;
           return (
             <span key={`${segment.type}-${index}`} className="contents">
               <BreadcrumbItem className="flex flex-col items-start gap-0">
@@ -51,7 +68,7 @@ export function EntityBreadcrumb({ segments, className }: EntityBreadcrumbProps)
                     {TYPE_CONFIG[segment.type].label}
                   </Link>
                 </BreadcrumbLink>
-                {isLast || !segment.href ? (
+                {renderAsCurrent || !segment.href ? (
                   <BreadcrumbPage className="text-sm font-medium">
                     {segment.label}
                   </BreadcrumbPage>
@@ -63,10 +80,20 @@ export function EntityBreadcrumb({ segments, className }: EntityBreadcrumbProps)
                   </BreadcrumbLink>
                 )}
               </BreadcrumbItem>
-              {!isLast && <BreadcrumbSeparator />}
+              {showSeparator && <BreadcrumbSeparator />}
             </span>
           );
         })}
+        {currentLabel && (
+          <BreadcrumbItem className="flex flex-col items-start gap-0">
+            <span className="text-[10px] uppercase tracking-wider font-medium leading-none text-muted-foreground">
+              Page
+            </span>
+            <BreadcrumbPage className="text-sm font-medium">
+              {currentLabel}
+            </BreadcrumbPage>
+          </BreadcrumbItem>
+        )}
       </BreadcrumbList>
     </Breadcrumb>
   );

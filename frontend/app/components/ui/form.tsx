@@ -14,6 +14,7 @@ import {
 
 import { cn } from "~/lib/utils"
 import { Label } from "~/components/ui/label"
+import { Kbd } from "~/components/ui/kbd"
 
 const Form = FormProvider
 
@@ -86,19 +87,37 @@ const FormItem = React.forwardRef<
 })
 FormItem.displayName = "FormItem"
 
+type FormLabelProps = React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root> & {
+  /**
+   * Optional keyboard shortcut hint rendered as a `<Kbd>` keycap inline with
+   * the label text. Visual only — wire the actual focus-handler in the form's
+   * parent (e.g. a `useEffect` that listens for `keydown` and calls
+   * `input.focus()` when matched). Pairs with the `hotkey` prop on brand
+   * buttons so the keyboard pattern is consistent across forms and dialogs.
+   */
+  hotkey?: string
+}
+
 const FormLabel = React.forwardRef<
   React.ElementRef<typeof LabelPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>
->(({ className, ...props }, ref) => {
+  FormLabelProps
+>(({ className, hotkey, children, ...props }, ref) => {
   const { error, formItemId } = useFormField()
 
   return (
     <Label
       ref={ref}
-      className={cn(error && "text-destructive", className)}
+      className={cn(
+        error && "text-destructive",
+        hotkey && "inline-flex items-center gap-2",
+        className,
+      )}
       htmlFor={formItemId}
       {...props}
-    />
+    >
+      {children}
+      {hotkey && <Kbd aria-hidden>{hotkey}</Kbd>}
+    </Label>
   )
 })
 FormLabel.displayName = "FormLabel"

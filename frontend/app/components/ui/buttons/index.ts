@@ -1,6 +1,10 @@
 // Shared styles
-export { brandBg, brandDepthColors, brandErrorBg, brandErrorCard, brandErrorPrimary, brandGlow, brandGradient, brandHighlight, brandHighlightText, brandSecondary, brandSecondary3D, brandSecondaryOpaque, brandSecondaryOpaque3D, brandSuccessBg, button3DBase, button3DDisabled, button3DVariants } from './styles';
+export { brandBg, brandDepthColors, brandDialogPanel, brandErrorBg, brandErrorCard, brandErrorPrimary, brandGlow, brandGradient, brandHighlight, brandHighlightText, brandReadableDestructive, brandReadableSuccess, brandReadableWarning, brandSecondary, brandSecondary3D, brandSecondaryOpaque, brandSecondaryOpaque3D, brandSuccessBg, button3DBase, button3DDisabled, button3DVariants } from './styles';
 export type { Button3DVariant } from './styles';
+
+// Shared affordances
+export { HotkeyBadge } from './HotkeyBadge';
+export type { HotkeyBadgeProps } from './HotkeyBadge';
 
 // Base Buttons
 export { AddDiscordBotButton } from './AddDiscordBotButton';
