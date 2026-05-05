@@ -382,6 +382,8 @@ class EventSignupSerializer(serializers.ModelSerializer):
     user_data = serializers.SerializerMethodField()
     dota_profile = serializers.SerializerMethodField()
     org_user_mmr = serializers.SerializerMethodField()
+    org_user_pk = serializers.SerializerMethodField()
+    organization = serializers.IntegerField(source="event.organization_id", read_only=True)
     suggested_mmr = serializers.SerializerMethodField()
     suggested_mmr_range = serializers.SerializerMethodField()
     suggested_mmr_range_source = serializers.SerializerMethodField()
@@ -391,12 +393,14 @@ class EventSignupSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "event",
+            "organization",
             "user",
             "username",
             "user_avatar",
             "user_data",
             "dota_profile",
             "org_user_mmr",
+            "org_user_pk",
             "suggested_mmr",
             "suggested_mmr_range",
             "suggested_mmr_range_source",
@@ -472,6 +476,21 @@ class EventSignupSerializer(serializers.ModelSerializer):
         except OrgUser.DoesNotExist:
             return None
         return org_user.mmr if org_user.mmr else None
+
+    def get_org_user_pk(self, obj):
+        """Return the OrgUser pk for this user in the event's org.
+
+        Frontend caches this alongside org_user_mmr so the user-cache entry's
+        org-scoped slot can be hydrated without a separate org-users fetch.
+        """
+        from org.models import OrgUser
+
+        try:
+            return OrgUser.objects.get(
+                user=obj.user, organization=obj.event.organization
+            ).pk
+        except OrgUser.DoesNotExist:
+            return None
 
     def get_suggested_mmr(self, obj):
         return self._mmr_suggestion(obj)["default"]
