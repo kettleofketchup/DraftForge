@@ -44,7 +44,7 @@ def _signup_counts(event):
     return len(active), len(confirmed)
 
 
-def _user_list(signups, max_items=20):
+def _user_list(signups, max_items=40):
     """Build a newline-separated list of user display names from signups."""
     lines = []
     for s in signups[:max_items]:
@@ -55,7 +55,7 @@ def _user_list(signups, max_items=20):
     return "\n".join(lines) if lines else "*None yet*"
 
 
-def _user_list_quoted(signups, max_items=20, numbered=True):
+def _user_list_quoted(signups, max_items=40, numbered=True):
     """Build a blockquoted numbered list of user display names from signups."""
     lines = []
     for i, s in enumerate(signups[:max_items], 1):
@@ -68,6 +68,64 @@ def _user_list_quoted(signups, max_items=20, numbered=True):
     if remaining > 0:
         lines.append(f"> *and {remaining} more...*")
     return "\n".join(lines) if lines else "> *—*"
+
+
+EMBED_FIELD_VALUE_LIMIT = 1024  # Discord per-field char limit
+
+
+class _IconStrip:
+    """Wraps a signup object with an icon prefix prepended to display_name."""
+
+    def __init__(self, s, icon):
+        self._s = s
+        self.display_name = f"{icon} {s.display_name}"
+        self.status = s.status
+
+
+def build_user_list_fields(signups, *, name, inline=True, max_items=40, numbered=False):
+    """Build one or more embed fields for a signup list.
+
+    Returns a list of {name, value, inline} dicts. Splits into a 'cont.' field
+    when the joined line set would exceed Discord's 1024-char per-field limit.
+    Empty input returns a single field with '*None yet*'.
+    """
+    if not signups:
+        return [{"name": name, "value": "*None yet*", "inline": inline}]
+
+    capped = signups[:max_items]
+    remaining = len(signups) - max_items
+
+    lines = []
+    for i, s in enumerate(capped, 1):
+        line = f"> {i}. {s.display_name}" if numbered else s.display_name
+        lines.append(line)
+    if remaining > 0:
+        lines.append(f"*and {remaining} more...*")
+
+    fields = []
+    bucket: list = []
+    bucket_len = 0
+    for line in lines:
+        added = len(line) + (1 if bucket else 0)  # +1 for "\n" separator
+        if bucket_len + added > EMBED_FIELD_VALUE_LIMIT:
+            fields.append({
+                "name": name if not fields else f"{name} (cont.)",
+                "value": "\n".join(bucket),
+                "inline": inline,
+            })
+            bucket = [line]
+            bucket_len = len(line)
+        else:
+            bucket.append(line)
+            bucket_len += added
+
+    if bucket:
+        fields.append({
+            "name": name if not fields else f"{name} (cont.)",
+            "value": "\n".join(bucket),
+            "inline": inline,
+        })
+    return fields
 
 
 def build_announcement_embeds(event):
@@ -118,22 +176,19 @@ def build_announcement_embeds(event):
     all_signups = get_event_signups(event.pk)
 
     active = [s for s in all_signups if s.status not in INACTIVE_STATUSES]
-    active_lines = []
-    for s in active[:20]:
-        icon = "\u2705" if s.status in CONFIRMED_STATUSES else "\u23f3"
-        active_lines.append(f"{icon} {s.display_name}")
-    if len(active) > 20:
-        active_lines.append(f"*and {len(active) - 20} more...*")
     count = len(active)
     max_display = str(event.max_players) if event.max_players else "\u221e"
 
-    participant_fields = [
-        {
-            "name": f"\u2705 Signed Up ({count}/{max_display})",
-            "value": "\n".join(active_lines) if active_lines else "*None yet*",
-            "inline": True,
-        },
+    icon_signups = [
+        _IconStrip(s, "\u2705" if s.status in CONFIRMED_STATUSES else "\u23f3")
+        for s in active
     ]
+    participant_fields = build_user_list_fields(
+        icon_signups,
+        name=f"\u2705 Signed Up ({count}/{max_display})",
+        inline=True,
+        numbered=False,
+    )
 
     declined = [s for s in all_signups if s.status in DECLINED_STATUSES]
     participant_fields.append(
@@ -233,23 +288,27 @@ def build_announcement_v2(event):
 
     # Signed Up
     active = [s for s in all_signups if s.status not in INACTIVE_STATUSES]
-    active_lines = []
-    for i, s in enumerate(active[:20], 1):
-        if s.status in CONFIRMED_STATUSES:
-            active_lines.append(f"> {i}. {s.display_name}")
-        else:
-            active_lines.append(f"> {i}. *{s.display_name} (pending)*")
-    if len(active) > 20:
-        active_lines.append(f"> *and {len(active) - 20} more...*")
     count = len(active)
     max_display = str(event.max_players) if event.max_players else "\u221e"
-    fields.append(
-        {
-            "name": f"\u2705 Signed Up ({count}/{max_display})",
-            "value": "\n".join(active_lines) if active_lines else "> *None yet*",
-            "inline": True,
-        }
-    )
+
+    class _PendingStrip:
+        """Wraps signup with blockquote + pending suffix for non-confirmed."""
+
+        def __init__(self, s, idx):
+            self.status = s.status
+            if s.status in CONFIRMED_STATUSES:
+                self.display_name = f"> {idx}. {s.display_name}"
+            else:
+                self.display_name = f"> {idx}. *{s.display_name} (pending)*"
+
+    pending_signups = [_PendingStrip(s, i) for i, s in enumerate(active, 1)]
+    for field in build_user_list_fields(
+        pending_signups,
+        name=f"\u2705 Signed Up ({count}/{max_display})",
+        inline=True,
+        numbered=False,
+    ):
+        fields.append(field)
 
     # Declined
     declined = [s for s in all_signups if s.status in DECLINED_STATUSES]

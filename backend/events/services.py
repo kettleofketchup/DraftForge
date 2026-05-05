@@ -615,6 +615,39 @@ def restart_event_tournament(event):
     return tournament
 
 
+@transaction.atomic
+def ensure_tournament_with_signups(event):
+    """Self-heal: create event.tournament if missing, bulk-add APPROVED + CONFIRMED users.
+
+    Issue #200 — start_tournament previously silently no-op'd when event.tournament
+    was None (legacy events created before perform_create wired create_tournament_for_event).
+    Idempotent: safe to call multiple times; M2M add() is a no-op for existing users.
+
+    Cache invalidation deferred to commit so the tournament UI reflects the bulk-add
+    immediately rather than after the cacheops 1-hour TTL — Django M2M does NOT
+    auto-invalidate cacheops.
+    """
+    if event.tournament is None:
+        create_tournament_for_event(event)
+        event.refresh_from_db()
+
+    tournament = event.tournament
+    confirmed_or_approved = EventSignup.objects.filter(
+        event=event,
+        status__in=[SignupStatus.APPROVED, SignupStatus.CONFIRMED],
+    ).select_related("user")
+
+    added_users = []
+    for signup in confirmed_or_approved:
+        tournament.users.add(signup.user)
+        added_users.append(signup.user)
+
+    # M2M change invalidates both sides: tournament.users.all() AND user.tournament_set.all().
+    # cacheops doesn't auto-track M2M, so we invalidate every user we touched.
+    invalidate_after_commit(tournament, event, *added_users)
+    return tournament
+
+
 # ---------------------------------------------------------------------------
 # Event generation
 # ---------------------------------------------------------------------------
