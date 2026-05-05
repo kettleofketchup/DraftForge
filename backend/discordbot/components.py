@@ -10,6 +10,8 @@ import discord
 from discord import ui
 from django.conf import settings
 
+from discordbot.signup_responses import respond_to_signup_user
+
 log = logging.getLogger(__name__)
 
 SITE_URL = getattr(settings, "SITE_URL", "")
@@ -141,8 +143,6 @@ class SignupButton(ui.Button):
         )
 
         if result["action"] == "signed_up":
-            from discordbot.signup_responses import respond_to_signup_user
-
             await respond_to_signup_user(
                 interaction,
                 content=f"\u2705 You're signed up! Status: **{result['status']}**",
@@ -233,8 +233,6 @@ class TentativeButton(ui.Button):
         )
 
         if result["action"] == "tentative":
-            from discordbot.signup_responses import respond_to_signup_user
-
             await respond_to_signup_user(
                 interaction,
                 content="\u2753 Marked as tentative. We'll count you as interested!",
@@ -268,8 +266,6 @@ class DeclineButton(ui.Button):
         )
 
         if result["action"] == "declined":
-            from discordbot.signup_responses import respond_to_signup_user
-
             await respond_to_signup_user(
                 interaction,
                 content="You've declined the event.",
@@ -470,8 +466,6 @@ class EventSignupModal(ui.Modal):
                 ephemeral=True,
             )
         elif result["action"] == "signed_up":
-            from discordbot.signup_responses import respond_to_signup_user
-
             await respond_to_signup_user(
                 interaction,
                 content=f"\u2705 You're signed up! Status: **{result['status']}**",
@@ -980,8 +974,6 @@ class ScreenshotUploadModal(ui.Modal):
         )
 
         if result.get("success"):
-            from discordbot.signup_responses import respond_to_signup_user
-
             if result.get("signed_up"):
                 await respond_to_signup_user(
                     interaction,
