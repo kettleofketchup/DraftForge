@@ -86,7 +86,7 @@ just test::up
 ### Full Test Setup (with Playwright)
 ```bash
 just test::setup
-just test::pw::headless  # or just test::pw::headed
+just test::pw::headless
 ```
 
 ## Docker Compose Architecture
@@ -221,7 +221,6 @@ just version::tag        # Tag and bump version
 # Tests (Playwright)
 just test::pw::install   # Install Playwright browsers
 just test::pw::headless  # Run all tests headless
-just test::pw::headed    # Run all tests headed
 just test::pw::ui        # Open Playwright UI mode
 just test::pw::debug     # Debug mode with inspector
 just test::pw::spec <pattern>  # Run tests matching pattern
@@ -274,9 +273,6 @@ just py::test
 ```bash
 # Run all Playwright tests headless
 just test::pw::headless
-
-# Run tests in headed mode (visible browser)
-just test::pw::headed
 
 # Open Playwright UI for interactive debugging
 just test::pw::ui

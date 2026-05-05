@@ -98,7 +98,6 @@ just db::reset-test           # Extract cached DB to backend/test.db.sqlite3
 ```bash
 just test::pw::install        # Install Playwright browsers
 just test::pw::headless       # Run all tests headless
-just test::pw::headed         # Run tests with visible browser
 just test::pw::ui             # Open Playwright UI mode
 just test::pw::debug          # Debug mode with inspector
 just test::pw::report         # View HTML test report

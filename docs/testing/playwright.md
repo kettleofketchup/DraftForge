@@ -20,9 +20,6 @@ just test::pw::install
 # Run all tests headless
 just test::pw::headless
 
-# Run tests with visible browser
-just test::pw::headed
-
 # Open Playwright UI for interactive debugging
 just test::pw::ui
 ```

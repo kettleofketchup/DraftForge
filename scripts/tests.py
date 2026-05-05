@@ -151,22 +151,6 @@ def playwright_headless(c, args=""):
 
 
 @task
-def playwright_headed(c, args=""):
-    """Run all Playwright tests headed (visible browser).
-
-    Args:
-        args: Additional arguments to pass to Playwright (e.g., --shard=1/4)
-    """
-    flush_test_redis(c)
-    docker_host = get_docker_host()
-    # Exclude demo project - demos are run separately via inv demo.* commands
-    with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f"DOCKER_HOST={docker_host} npx playwright test --headed --project=chromium --project=herodraft {args}".strip()
-        )
-
-
-@task
 def playwright_ui(c):
     """Open Playwright UI mode for interactive test development."""
     flush_test_redis(c)
@@ -321,20 +305,6 @@ def playwright_herodraft(c, args=""):
 
 
 @task
-def playwright_herodraft_headed(c):
-    """Run Playwright herodraft tests with visible browsers.
-
-    Opens two browser windows side-by-side to watch captains draft simultaneously.
-    """
-    flush_test_redis(c)
-    docker_host = get_docker_host()
-    with c.cd(paths.FRONTEND_PATH):
-        c.run(
-            f"DOCKER_HOST={docker_host} HERODRAFT_HEADED=true npx playwright test tests/playwright/e2e/herodraft/ --project=herodraft"
-        )
-
-
-@task
 def playwright_all(c, args=""):
     """Run all Playwright tests.
 
@@ -368,7 +338,6 @@ def playwright_cicd(c, args=""):
 # Add tasks to playwright collection
 ns_playwright.add_task(playwright_install, "install")
 ns_playwright.add_task(playwright_headless, "headless")
-ns_playwright.add_task(playwright_headed, "headed")
 ns_playwright.add_task(playwright_ui, "ui")
 ns_playwright.add_task(playwright_debug, "debug")
 ns_playwright.add_task(playwright_spec, "spec")
@@ -379,7 +348,6 @@ ns_playwright.add_task(playwright_draft, "draft")
 ns_playwright.add_task(playwright_bracket, "bracket")
 ns_playwright.add_task(playwright_league, "league")
 ns_playwright.add_task(playwright_herodraft, "herodraft")
-ns_playwright.add_task(playwright_herodraft_headed, "herodraft-headed")
 ns_playwright.add_task(playwright_all, "all")
 ns_playwright.add_task(playwright_cicd, "cicd")
 

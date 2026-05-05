@@ -93,7 +93,6 @@ inv db.populate.all         # Reset and populate all
 ```bash
 inv test.playwright.install     # Install Playwright browsers
 inv test.playwright.headless    # Run all tests headless
-inv test.playwright.headed      # Run tests with visible browser
 inv test.playwright.ui          # Open Playwright UI mode
 inv test.playwright.debug       # Debug mode with inspector
 inv test.playwright.report      # View HTML test report

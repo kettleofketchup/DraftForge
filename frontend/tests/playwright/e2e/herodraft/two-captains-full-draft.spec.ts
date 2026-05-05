@@ -95,21 +95,11 @@ test.describe('Two Captains Full Draft', () => {
   let browserB: Browser | null = null;
 
   test.beforeAll(async () => {
-    // Determine headed mode:
-    // - HERODRAFT_HEADED=true forces headed mode
-    // - CI or Docker (PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH) defaults to headless
-    // - Otherwise defaults to headed for local development
-    const isCI = !!process.env.CI;
-    const isDocker = !!process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-    const forceHeaded = process.env.HERODRAFT_HEADED === 'true';
-    const headless = forceHeaded ? false : (isCI || isDocker);
-
-    console.log(`   Browser mode: ${headless ? 'headless' : 'headed'}`);
-
-    // Launch two separate browser instances
+    // Always headless — visible browsers steal user focus during local
+    // runs. For visual debugging, open the trace via
+    // `npx playwright show-trace test-results/.../trace.zip`.
     const browserOptions = {
-      headless,
-      slowMo: headless ? 0 : 50, // Slow down only in headed mode for visibility
+      headless: true,
       args: [
         '--disable-web-security',
         '--ignore-certificate-errors',
@@ -123,8 +113,6 @@ test.describe('Two Captains Full Draft', () => {
     browserA = await chromium.launch(browserOptions);
     browserB = await chromium.launch(browserOptions);
 
-    // Create contexts with different viewports for easy identification
-    // Position windows side-by-side in headed mode (left and right halves)
     const windowWidth = 960;
     const windowHeight = 800;
 

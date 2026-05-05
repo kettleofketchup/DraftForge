@@ -8,10 +8,6 @@ headless *args:
     {{inv}} test.playwright.headless {{ if args != "" { "--args='" + args + "'" } else { "" } }}
 
 [group('test::pw')]
-headed *args:
-    {{inv}} test.playwright.headed {{ if args != "" { "--args='" + args + "'" } else { "" } }}
-
-[group('test::pw')]
 ui:
     {{inv}} test.playwright.ui
 
@@ -58,10 +54,6 @@ league *args:
 [group('test::pw')]
 herodraft *args:
     {{inv}} test.playwright.herodraft {{ if args != "" { "--args='" + args + "'" } else { "" } }}
-
-[group('test::pw')]
-herodraft-headed:
-    {{inv}} test.playwright.herodraft-headed
 
 [group('test::pw')]
 all *args:

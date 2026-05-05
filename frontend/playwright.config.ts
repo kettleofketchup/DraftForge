@@ -86,11 +86,13 @@ export default defineConfig({
       testMatch: /herodraft.*\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
-        // Launch headed by default for visual debugging (disabled in CI/Docker)
-        headless: !!process.env.CI || !!process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+        // Always headless — visible browsers steal user focus during local
+        // runs. For visual debugging, open `test-results/.../trace.zip` via
+        // `npx playwright show-trace` instead.
+        headless: true,
         launchOptions: {
           executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
-          slowMo: process.env.CI ? 0 : 100, // Slow down only for local debugging
+          slowMo: 0,
           args: [
             '--no-sandbox',
             '--disable-web-security',

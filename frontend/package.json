@@ -12,7 +12,6 @@
     "clean:cache": "rm -rf node_modules/.vite node_modules/.cache .react-router",
     "optimize": "vite optimize",
     "test:playwright": "playwright test",
-    "test:playwright:headed": "playwright test --headed",
     "test:playwright:ui": "playwright test --ui",
     "test:playwright:debug": "playwright test --debug",
     "test:playwright:report": "playwright show-report",
