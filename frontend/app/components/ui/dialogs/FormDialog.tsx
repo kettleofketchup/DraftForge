@@ -43,6 +43,14 @@ export interface FormDialogProps {
    * keystrokes until the user blurs out. Default: true.
    */
   autoFocus?: boolean;
+  /**
+   * Two-step Escape behavior for forms with field-level keyboard shortcuts.
+   * When true, the first Escape refocuses the dialog content (releasing
+   * focus from inputs / Select triggers / etc.) and a second Escape closes
+   * the dialog. When false (default), Escape closes the dialog immediately
+   * — matching long-standing convention.
+   */
+  escapeBlursToContent?: boolean;
   /** Additional class name for the dialog content */
   className?: string;
   /** Test ID for testing */
@@ -91,6 +99,7 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       size = 'md',
       showFooter = true,
       autoFocus = true,
+      escapeBlursToContent = false,
       className,
       'data-testid': dataTestId,
       titleTestId,
@@ -149,22 +158,28 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       [onSubmit],
     );
 
-    // Two-step Escape:
-    //   1) If focus is anywhere except the dialog content itself (an input,
-    //      a button, a Select trigger, an open popper item) — we suppress
-    //      Radix's close and refocus the dialog content. This works as the
-    //      catch-all "release me from the current element" gesture.
-    //   2) If focus is already on the dialog content — let Radix close the
-    //      dialog (don't preventDefault).
-    // Side effect: when a Select is open and the user presses Escape,
-    // Radix's per-popper Escape closes the Select while ours catches the
-    // same keystroke at the Dialog level — without this guard the Dialog
-    // would close at the same time the Select dismisses.
+    // Always suppress when a Radix popper (Select / DropdownMenu) is open
+    // inside the dialog — its own Escape handler closes the popper and the
+    // same keystroke would otherwise also close the outer Dialog.
+    //
+    // Then, opt-in two-step Escape via `escapeBlursToContent` (used by
+    // forms with field-level keyboard shortcuts where focus normally lives
+    // in inputs/triggers): first Escape refocuses the dialog content,
+    // second Escape closes. Default mode is the long-standing one-press
+    // close so existing AddUser/Tournament/etc. forms keep their Esc UX.
     const handleEscapeKeyDown = React.useCallback((event: KeyboardEvent) => {
+      const openPopper = document.querySelector(
+        '[data-state="open"][role="listbox"], [data-state="open"][role="menu"]',
+      );
+      if (openPopper) {
+        event.preventDefault();
+        return;
+      }
+      if (!escapeBlursToContent) return;
       if (document.activeElement === contentRef.current) return;
       event.preventDefault();
       contentRef.current?.focus({ preventScroll: true });
-    }, []);
+    }, [escapeBlursToContent]);
 
     // Stable handlers for Radix Dialog's outside-interaction props — these
     // were inline arrows previously, so each FormDialog re-render handed

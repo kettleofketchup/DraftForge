@@ -181,6 +181,7 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
         onSubmit={submitHandler}
         size="xl"
         autoFocus={false}
+        escapeBlursToContent
         data-testid="edit-user-modal"
       >
         <Form {...form}>
