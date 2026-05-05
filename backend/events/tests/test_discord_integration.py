@@ -42,7 +42,7 @@ def setUpModule():
     if not HAS_TOKEN:
         warnings.warn(
             "\n⚠️  DISCORD_BOT_TOKEN not set — all Discord integration tests will be skipped.\n"
-            "   Set discord_token in backend/.env to enable.",
+            "   Set DISCORD_BOT_TOKEN in backend/.env to enable.",
             stacklevel=1,
         )
     elif not HAS_MULTI_USER:
