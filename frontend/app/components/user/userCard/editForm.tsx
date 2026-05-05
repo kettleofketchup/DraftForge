@@ -66,7 +66,22 @@ function PositionSelect({
           </FormLabel>
           <Select
             value={String(field.value)}
-            onValueChange={(v) => field.onChange(parseInt(v, 10))}
+            onValueChange={(v) => {
+              field.onChange(parseInt(v, 10));
+              // After picking, Radix Select returns focus to the trigger
+              // button. The trigger's own keydown handler eats Enter to
+              // re-open the dropdown, which means Enter wouldn't submit
+              // the form. We blur on the next macrotask — when onValueChange
+              // fires, the SelectItem still has focus; Radix moves focus
+              // back to the trigger asynchronously, so an immediate blur
+              // would target the wrong element.
+              setTimeout(() => {
+                const active = document.activeElement as HTMLElement | null;
+                if (active?.getAttribute('aria-haspopup') === 'listbox') {
+                  active.blur();
+                }
+              }, 0);
+            }}
           >
             <FormControl>
               <SelectTrigger

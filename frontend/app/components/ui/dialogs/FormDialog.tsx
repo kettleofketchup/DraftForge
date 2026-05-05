@@ -118,14 +118,15 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
 
     // Submit button lives in <DialogFooter> — outside the <form>. Browser
     // implicit Enter-submit can't reach it, so handle Enter ourselves at
-    // the DialogContent level (catches focus-on-input, focus-on-content-div,
-    // and focus-on-any-non-button descendant). Skip:
+    // the DialogContent level. Skip:
     //   - textarea / contenteditable: Enter inserts a newline
-    //   - button: native Enter triggers click (Cancel/Submit handle themselves)
-    //   - Radix popper items (SelectItem, MenuItem, Combobox option): React
-    //     synthetic events bubble through the React tree even when the popper
-    //     is portaled out of DialogContent in the DOM, so Enter-to-pick would
-    //     otherwise also submit the form.
+    //   - button: native Enter triggers the button's click (Cancel, Submit,
+    //     SelectTrigger). Forms that want focus to leave a popper trigger
+    //     after a pick should blur on onValueChange (see editForm.tsx) so
+    //     subsequent Enter lands on the dialog content where this handler
+    //     fires.
+    //   - Radix popper items (role=option/menuitem) and anything inside an
+    //     open listbox/menu/combobox: skip (Enter is the pick gesture).
     const handleContentKeyDown = React.useCallback(
       (e: React.KeyboardEvent<HTMLDivElement>) => {
         if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -148,22 +149,21 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       [onSubmit],
     );
 
-    // Escape-to-blur via Radix's own onEscapeKeyDown — the sanctioned way to
-    // suppress the dialog's close. Manually stopPropagation on a deeper React
-    // handler doesn't reliably stop Radix because Radix binds at document
-    // level. First Escape blurs the input; second Escape (focus now on body)
-    // lets Radix close the dialog as usual.
+    // Two-step Escape:
+    //   1) If focus is anywhere except the dialog content itself (an input,
+    //      a button, a Select trigger, an open popper item) — we suppress
+    //      Radix's close and refocus the dialog content. This works as the
+    //      catch-all "release me from the current element" gesture.
+    //   2) If focus is already on the dialog content — let Radix close the
+    //      dialog (don't preventDefault).
+    // Side effect: when a Select is open and the user presses Escape,
+    // Radix's per-popper Escape closes the Select while ours catches the
+    // same keystroke at the Dialog level — without this guard the Dialog
+    // would close at the same time the Select dismisses.
     const handleEscapeKeyDown = React.useCallback((event: KeyboardEvent) => {
-      const active = document.activeElement as HTMLElement | null;
-      const tag = active?.tagName;
-      const isEditable =
-        tag === 'INPUT' ||
-        tag === 'TEXTAREA' ||
-        tag === 'SELECT' ||
-        active?.isContentEditable;
-      if (!isEditable || !active) return;
+      if (document.activeElement === contentRef.current) return;
       event.preventDefault();
-      (active as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).blur();
+      contentRef.current?.focus({ preventScroll: true });
     }, []);
 
     // Stable handlers for Radix Dialog's outside-interaction props — these

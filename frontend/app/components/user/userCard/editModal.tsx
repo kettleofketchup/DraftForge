@@ -149,10 +149,13 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || active?.isContentEditable) return;
       e.preventDefault();
       target.focus();
-      // Inputs: select the existing value so typing replaces it. Buttons
-      // (SelectTrigger) have no select() — they just take focus.
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        // Inputs: select the existing value so typing replaces it.
         target.select();
+      } else if (target instanceof HTMLButtonElement) {
+        // SelectTrigger buttons: also click to open the dropdown immediately
+        // (otherwise the user has to press Space/Enter as a second step).
+        target.click();
       }
     };
     window.addEventListener('keydown', handler);
