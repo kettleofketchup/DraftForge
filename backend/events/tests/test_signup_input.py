@@ -145,3 +145,41 @@ class ApplySignupInputTests(TestCase):
         self.assertEqual(ctx.exception.code, "duplicate_friend_id")
         self.assertIn("9999", str(ctx.exception))
         self.assertIn("dota.kettle.sh", str(ctx.exception))
+
+    def test_multi_call_partial_patch_accumulates(self):
+        # Mirror Discord's 4-turn flow: rank_status, then positions, then medal,
+        # then screenshot. Each call commits independently; final state has all writes.
+        apply_signup_input(
+            org_user=self.org_user, event=self.event,
+            patch=SignupInputPatch(rank_status="active"),
+        )
+        apply_signup_input(
+            org_user=self.org_user, event=self.event,
+            patch=SignupInputPatch(positions=[1, 2]),
+        )
+        apply_signup_input(
+            org_user=self.org_user, event=self.event,
+            patch=SignupInputPatch(rank_medal="Legend 4"),
+        )
+        apply_signup_input(
+            org_user=self.org_user, event=self.event,
+            patch=SignupInputPatch(rank_screenshot="https://i.imgur.com/x.png"),
+        )
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertEqual(profile.rank_status, "active")
+        self.assertTrue(profile.pos_1 and profile.pos_2)
+        self.assertFalse(profile.pos_3)
+        self.assertEqual(profile.rank_medal, "Legend 4")
+        self.assertEqual(profile.rank_screenshot, "https://i.imgur.com/x.png")
+
+
+    def test_idempotent_re_application(self):
+        patch = SignupInputPatch(rank_status="active", positions=[3])
+        apply_signup_input(org_user=self.org_user, event=self.event, patch=patch)
+        apply_signup_input(org_user=self.org_user, event=self.event, patch=patch)
+        self.assertEqual(
+            PlayerDotaProfile.objects.filter(org_user=self.org_user).count(), 1
+        )
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertEqual(profile.rank_status, "active")
+        self.assertTrue(profile.pos_3)
