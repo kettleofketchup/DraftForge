@@ -34,6 +34,15 @@ services:
       - redis
     networks:
       - test-network
+    # Bump log retention so an 18+ minute Playwright run fits in the buffer
+    # without rotating mid-run. Default Docker json-file rotation truncates
+    # earlier logs; we need the full window when diagnosing transient
+    # first-attempt timeouts.
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
   nginx:
     image: ghcr.io/kettleofketchup/draftforge/nginx:latest
     container_name: nginx

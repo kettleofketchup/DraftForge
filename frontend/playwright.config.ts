@@ -38,17 +38,24 @@ export default defineConfig({
   // Override with --workers=2 for chromium-only runs, or via PLAYWRIGHT_WORKERS env var.
   workers: process.env.PLAYWRIGHT_WORKERS ? parseInt(process.env.PLAYWRIGHT_WORKERS) : 1,
 
-  // Reporters: html + list locally, add github reporter in CI
+  // Reporters: html + list locally, add github reporter in CI. The
+  // health-probe reporter pings /api/healthz/ after every test and writes a
+  // JSONL timeseries to test-results/run-logs/ — used to correlate transient
+  // first-attempt timeouts with backend pressure across the run.
   reporter: [
     ['html', { open: 'never' }],
     ['list'],
+    ['./tests/playwright/reporters/health-probe-reporter.ts'],
     ...(process.env.CI ? [['github' as const]] : []),
   ],
 
   use: {
     baseURL: 'https://localhost',
-    // Trace only on retry to save resources
-    trace: 'on-first-retry',
+    // Record traces for every test, keep them only when the test fails. This
+    // captures the *failing* attempt itself, not just the retry — critical for
+    // diagnosing first-attempt timeouts that pass on retry. (Was
+    // 'on-first-retry', which gave us only the retry trace.)
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     // Disable video in CI to speed up tests, retain on failure locally
     video: process.env.CI ? 'off' : 'retain-on-failure',

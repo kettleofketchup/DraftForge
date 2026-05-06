@@ -63,3 +63,23 @@ all *args:
 [group('test::pw')]
 cicd *args:
     {{inv}} test.playwright.cicd {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+
+# Run the headless suite while streaming backend logs + health probes to
+# frontend/test-results/run-logs/ for diagnosing transient first-attempt
+# timeouts. Combine with playwright's `trace: 'retain-on-failure'` and the
+# health-probe reporter for full evidence on every failure.
+[group('test::pw')]
+headless-with-logs *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{root}}
+    LOG_DIR="frontend/test-results/run-logs"
+    mkdir -p "$LOG_DIR"
+    STAMP=$(date -u +"%Y%m%dT%H%M%SZ")
+    BACKEND_LOG="$LOG_DIR/backend-$STAMP.log"
+    echo "[run-logs] backend logs streaming to $BACKEND_LOG"
+    docker compose -f docker/docker-compose.test.yaml --project-directory $(pwd) \
+      logs -f --no-log-prefix --tail=0 backend > "$BACKEND_LOG" 2>&1 &
+    LOG_PID=$!
+    trap "kill $LOG_PID 2>/dev/null || true" EXIT
+    just test::pw::headless {{ args }}
