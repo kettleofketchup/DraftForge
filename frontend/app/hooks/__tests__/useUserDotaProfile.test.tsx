@@ -33,6 +33,7 @@ function Probe({ userPk, initialData, onCapture }: ProbeProps) {
 describe('useUserDotaProfile', () => {
   it('uses initialData when provided', () => {
     const initial = {
+      unverified_friend_id: null,
       rank_status: 'active',
       rank_medal: 'Legend 1',
       positions: { pos_1: true, pos_2: false, pos_3: false, pos_4: false, pos_5: false },
