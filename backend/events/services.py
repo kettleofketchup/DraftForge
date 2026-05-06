@@ -227,6 +227,8 @@ def apply_signup_input(*, org_user, event, patch):
         return None
 
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
+    if "unverified_friend_id" in set_fields:
+        profile.unverified_friend_id = set_fields["unverified_friend_id"]
     profile.save()
     invalidate_after_commit(profile, org_user, event)
     return profile
