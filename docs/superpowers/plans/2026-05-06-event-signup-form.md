@@ -62,7 +62,7 @@ All steps after this run from `/home/kettle/git_repos/draftforge/.worktrees/even
 ### Task 1: Add `EVENT_PLAYER_NO_PROFILE` user fixture
 
 **Files:**
-- Modify: `backend/tests/data/users.py` (after `EVENT_PLAYER_18`, ~line 654)
+- Modify: `backend/tests/data/users.py` (after `EVENT_PLAYER_20`, ~line 670, before the `EVENTS_USERS` list at line 671)
 
 The class is `TestUser` (not `UserFixture`) from `backend/tests/data/models.py`. Existing rows use `pk`, `username`, `nickname`, `discord_id`, `steam_id_64`, `mmr`, `positions=TestPositions()`. Match that shape.
 
@@ -80,13 +80,16 @@ EVENT_PLAYER_NO_PROFILE: TestUser = TestUser(
 )
 ```
 
-- [ ] **Step 2: Add to the `EVENTS_USERS` (or equivalent) export so `populate_events_data` picks it up**
+- [ ] **Step 2: Append `EVENT_PLAYER_NO_PROFILE` to the `EVENTS_USERS` list (line 671)**
 
-```bash
-grep -n "EVENT_PLAYER_1\b" backend/tests/data/users.py
+```python
+EVENTS_USERS: list[TestUser] = [
+    EVENT_PLAYER_1,
+    ...
+    EVENT_PLAYER_20,
+    EVENT_PLAYER_NO_PROFILE,  # NEW — populate_events_data Loop 2 ([:4]) skips this naturally.
+]
 ```
-
-Find the list/dict that aggregates `EVENT_PLAYER_*` fixtures and append `EVENT_PLAYER_NO_PROFILE`. If the existing populate loop creates a `PlayerDotaProfile` unconditionally, Task 2 adds the gate (skip when `mmr is None`).
 
 - [ ] **Step 3: Commit**
 
@@ -100,20 +103,23 @@ git commit -m "test(populate): add EVENT_PLAYER_NO_PROFILE fixture"
 **Files:**
 - Modify: `backend/tests/populate/events.py`
 
-- [ ] **Step 1: Make the existing event-player populate loop skip profile creation when `mmr is None`**
+- [ ] **Step 1: Confirm `EVENT_PLAYER_NO_PROFILE` flows naturally through the existing two-loop structure**
 
-Locate the loop in `populate_events_data` that creates `OrgUser` + `PlayerDotaProfile` for each `event_player_*`. Wrap the profile-creation branch:
+`populate_events_data` (events.py around lines 100-185) has TWO loops:
+- Loop 1: `for i, user_data in enumerate(EVENTS_USERS):` — unconditionally creates `OrgUser` (with positional `mmr = 2000 + (i * 200)`, ignoring `user_data.mmr`).
+- Loop 2: `for i, user_data in enumerate(EVENTS_USERS[:4]):` — creates `PlayerDotaProfile` for the first 4 players only.
+
+**No code change needed** in this loop. After Task 1 appends `EVENT_PLAYER_NO_PROFILE` to `EVENTS_USERS` at the end (index 20), Loop 1 creates the `OrgUser` (with computed `mmr = 2000 + 20 * 200 = 6000`, which is fine — Loop 1 always sets some `mmr` regardless), and Loop 2's `[:4]` gate naturally skips profile creation. The end state: `EVENT_PLAYER_NO_PROFILE` has an `OrgUser` but no `PlayerDotaProfile` — exactly what the no-profile fixture needs.
+
+If you want the populate explicit, you can add a comment in `populate_events_data` near Loop 2:
 
 ```python
-if user_data.mmr is not None:
-    PlayerDotaProfile.objects.update_or_create(
-        org_user=org_user,
-        defaults={...},  # existing kwargs unchanged
-    )
-# When mmr is None (EVENT_PLAYER_NO_PROFILE), the OrgUser exists but no profile.
+# Loop 2 only creates profiles for EVENTS_USERS[:4]. Players 5..20 (including
+# EVENT_PLAYER_NO_PROFILE at index 20) intentionally have no PlayerDotaProfile,
+# which is what the website's "incomplete profile" Playwright fixtures rely on.
 ```
 
-This preserves the existing event-player profile creation while letting `EVENT_PLAYER_NO_PROFILE` flow through the same loop with no profile attached.
+No behavior change. Skip this step entirely if you don't want to add the comment.
 
 - [ ] **Step 2: Add a Deadlock event with `require_steam_id=true` to org 7**
 
@@ -308,7 +314,7 @@ git commit -m "feat(events): add SignupInputPatch pydantic model"
 # backend/events/tests/test_resolve_or_create_org_user.py
 from django.test import TestCase
 from app.models import CustomUser
-from app.organization import Organization
+from app.models import Organization
 from org.models import OrgUser
 from events.services import resolve_or_create_org_user
 
@@ -393,7 +399,7 @@ This phase adds the service in TDD slices: one rule at a time, each its own test
 # backend/events/tests/test_signup_input.py
 from django.test import TestCase
 from app.models import CustomUser, GameType
-from app.organization import Organization
+from app.models import Organization
 from events.models import Event, EventState
 from events.services import apply_signup_input, resolve_or_create_org_user
 from events.schemas import SignupInputPatch
@@ -404,8 +410,11 @@ class ApplySignupInputTests(TestCase):
     def setUp(self):
         self.user = CustomUser.objects.create(username="alice")
         self.org = Organization.objects.create(name="Org")
+        from django.utils import timezone
+        from datetime import timedelta
         self.event = Event.objects.create(
             name="Evt", organization=self.org, game_type=GameType.DOTA2,
+            scheduled_at=timezone.now() + timedelta(days=7),
             state=EventState.SIGNUPS_OPEN,
             allow_active_mmr=True, allow_previous_rank=True, allow_battlecup_rating=True,
         )
@@ -956,7 +965,7 @@ git commit -am "test(events): pin invalidate_after_commit not fired on rollback"
 # backend/events/tests/test_create_tentative_signup.py
 from django.test import TestCase
 from app.models import CustomUser, GameType
-from app.organization import Organization
+from app.models import Organization
 from events.models import Event, EventState, EventSignup, SignupStatus
 from events.services import create_tentative_signup
 
@@ -965,8 +974,11 @@ class CreateTentativeSignupTests(TestCase):
     def setUp(self):
         self.user = CustomUser.objects.create(username="alice")
         self.org = Organization.objects.create(name="Org")
+        from django.utils import timezone
+        from datetime import timedelta
         self.event = Event.objects.create(
             name="Evt", organization=self.org, game_type=GameType.DOTA2,
+            scheduled_at=timezone.now() + timedelta(days=7),
             state=EventState.SIGNUPS_OPEN,
         )
 
@@ -1050,7 +1062,7 @@ git commit -m "feat(events): extract create_tentative_signup service"
 from django.test import TestCase
 from rest_framework.test import APIClient
 from app.models import CustomUser, GameType
-from app.organization import Organization
+from app.models import Organization
 from events.models import Event, EventState
 
 
@@ -1058,8 +1070,11 @@ class SignupEndpointAuthTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.org = Organization.objects.create(name="Org")
+        from django.utils import timezone
+        from datetime import timedelta
         self.event = Event.objects.create(
             name="Evt", organization=self.org, game_type=GameType.DOTA2,
+            scheduled_at=timezone.now() + timedelta(days=7),
             state=EventState.SIGNUPS_OPEN,
             allow_active_mmr=True, allow_previous_rank=True, allow_battlecup_rating=True,
         )
@@ -1159,8 +1174,11 @@ class SignupEndpointHappyPathTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.org = Organization.objects.create(name="Org")
+        from django.utils import timezone
+        from datetime import timedelta
         self.event = Event.objects.create(
             name="Evt", organization=self.org, game_type=GameType.DOTA2,
+            scheduled_at=timezone.now() + timedelta(days=7),
             state=EventState.SIGNUPS_OPEN,
             allow_active_mmr=True, allow_previous_rank=True, allow_battlecup_rating=True,
             min_players=2, max_players=10,
@@ -1231,14 +1249,17 @@ from django.test import TransactionTestCase
 class SignupEndpointRollbackTests(TransactionTestCase):
     def test_min_mmr_failure_rolls_back_profile_write(self):
         from app.models import CustomUser, GameType
-        from app.organization import Organization
+        from app.models import Organization
         from events.models import Event, EventState
         from org.models_profiles import PlayerDotaProfile
         from org.models import OrgUser
 
         org = Organization.objects.create(name="Org")
+        from django.utils import timezone
+        from datetime import timedelta
         event = Event.objects.create(
             name="Evt", organization=org, game_type=GameType.DOTA2,
+            scheduled_at=timezone.now() + timedelta(days=7),
             state=EventState.SIGNUPS_OPEN, min_mmr=5000,
             allow_active_mmr=True, allow_previous_rank=True, allow_battlecup_rating=True,
         )
@@ -1281,13 +1302,16 @@ git commit -am "test(events): pin signup endpoint transactional rollback"
 ```python
 def test_notify_signup_changed_fires_once_after_commit(self):
     from app.models import CustomUser, GameType
-    from app.organization import Organization
+    from app.models import Organization
     from events.models import Event, EventState
     from unittest.mock import patch as mock_patch
 
     org = Organization.objects.create(name="Org")
+    from django.utils import timezone
+    from datetime import timedelta
     event = Event.objects.create(
         name="Evt", organization=org, game_type=GameType.DOTA2,
+        scheduled_at=timezone.now() + timedelta(days=7),
         state=EventState.SIGNUPS_OPEN,
         allow_active_mmr=True, allow_previous_rank=True, allow_battlecup_rating=True,
     )
@@ -1326,13 +1350,16 @@ git commit -am "test(events): pin notify_signup_changed fires exactly once after
 ```python
 def test_discord_then_web_idempotent(self):
     from app.models import CustomUser, GameType
-    from app.organization import Organization
+    from app.models import Organization
     from events.models import Event, EventState, EventSignup
     from events.services import process_rsvp
 
     org = Organization.objects.create(name="Org")
+    from django.utils import timezone
+    from datetime import timedelta
     event = Event.objects.create(
         name="Evt", organization=org, game_type=GameType.DOTA2,
+        scheduled_at=timezone.now() + timedelta(days=7),
         state=EventState.SIGNUPS_OPEN,
         allow_active_mmr=True, allow_previous_rank=True, allow_battlecup_rating=True,
     )
@@ -1373,10 +1400,12 @@ Refactor only the Dota 2 branch. The Deadlock branch is **out of scope** for `ap
 
 - [ ] **Step 1: Add a spy assertion to an existing happy-path test in `test_signup_interactions.py`**
 
+The Discord adapter imports `apply_signup_input` *inside* the function (`from events.services import apply_signup_input`) — module-level import is not added. To patch reliably, target the source module: `events.services.apply_signup_input`.
+
 ```python
 from unittest.mock import patch as mock_patch
 
-with mock_patch("events.discord.handlers.apply_signup_input") as spy:
+with mock_patch("events.services.apply_signup_input") as spy:
     result = handle_signup_modal_submit(event_id=..., discord_user_id=..., game_type=1, values={
         "unverified_friend_id": "12345",
         "rank_status": "active",
@@ -1499,13 +1528,15 @@ git commit -m "refactor(discord): PositionConfirmButton calls apply_signup_input
 
 - [ ] **Step 1: Add spy assertions for both handlers**
 
+Same patch-target rule as Task 21 — target `events.services.apply_signup_input` (the import is function-scope inside the adapter):
+
 ```python
-with mock_patch("events.discord.handlers.apply_signup_input") as spy:
+with mock_patch("events.services.apply_signup_input") as spy:
     handle_rank_medal_select(event_id=..., discord_user_id=..., medal="Legend 3")
 spy.assert_called_once()
 self.assertEqual(spy.call_args.kwargs["patch"].rank_medal, "Legend 3")
 
-with mock_patch("events.discord.handlers.apply_signup_input") as spy:
+with mock_patch("events.services.apply_signup_input") as spy:
     handle_battle_cup_submit(event_id=..., discord_user_id=..., tier="5")
 spy.assert_called_once()
 self.assertEqual(spy.call_args.kwargs["patch"].battle_cup_tier, 5)
@@ -1554,7 +1585,7 @@ git commit -am "refactor(discord): rank_medal + battle_cup_tier handlers call ap
 - [ ] **Step 1: Add spy assertion**
 
 ```python
-with mock_patch("events.discord.handlers.apply_signup_input") as spy:
+with mock_patch("events.services.apply_signup_input") as spy:
     handle_screenshot_upload(event_id=..., discord_user_id=...,
                              screenshot_type="rank",
                              attachment_url="https://example.com/a.png")
@@ -2619,7 +2650,8 @@ export function PrefilledSummaryChip({ testId, summary, children }: PrefilledSum
           <Badge variant="secondary">{summary}</Badge>
           <span className="text-xs text-muted-foreground">from your profile</span>
         </div>
-        <Pencil className="size-4 text-muted-foreground" aria-label="Edit" />
+        <Pencil className="size-4 text-muted-foreground" aria-hidden="true" />
+        <span className="sr-only">Edit</span>
       </CollapsibleTrigger>
       <CollapsibleContent className="pt-3">{children}</CollapsibleContent>
     </Collapsible>
@@ -2775,14 +2807,41 @@ export function EventSignupModal({ event, intent, profile, open, onOpenChange }:
     ],
   );
 
+  // Seed defaults from profile so prefilled-chip subcomponents (which mount
+  // inside <CollapsibleContent>) register valid values with RHF immediately.
+  // Without this, an unexpanded prefilled chip leaves the field undefined and
+  // form.formState.isValid stays false, blocking submit.
+  const profilePositions = profile?.positions
+    ? [
+        profile.positions.pos_1 && 1,
+        profile.positions.pos_2 && 2,
+        profile.positions.pos_3 && 3,
+        profile.positions.pos_4 && 4,
+        profile.positions.pos_5 && 5,
+      ].filter((v): v is number => typeof v === 'number')
+    : [];
+  const splitMedal = (() => {
+    const m = profile?.rank_medal ?? '';
+    if (!m) return { medal: '', star: '' };
+    if (m === 'Immortal') return { medal: 'Immortal', star: '' };
+    const parts = m.split(' ');
+    return { medal: parts[0] ?? '', star: parts[1] ?? '' };
+  })();
+
   const form = useForm<SignupInputPatch & { rank_medal_medal?: string; rank_medal_star?: string }>({
     resolver: zodResolver(schema as never),
     mode: 'onChange',
     shouldUnregister: true,
     defaultValues: {
       unverified_friend_id: profile?.unverified_friend_id ?? '',
-      positions: [],
+      positions: profilePositions,
       rank_status: profile?.rank_status ?? undefined,
+      rank_medal_medal: splitMedal.medal,
+      rank_medal_star: splitMedal.star,
+      rank_medal: profile?.rank_medal ?? '',
+      battle_cup_tier: profile?.battle_cup_tier ?? undefined,
+      rank_screenshot: profile?.rank_screenshot ?? '',
+      battlecup_screenshot: profile?.battlecup_screenshot ?? '',
     },
   });
 
@@ -2852,10 +2911,18 @@ export function EventSignupModal({ event, intent, profile, open, onOpenChange }:
 
   const scrollableBody = (
     <div className="flex flex-col gap-4 overflow-y-auto pb-4" data-testid="event-signup-modal-body">
-      <div role="status" aria-live="polite" className="text-sm text-muted-foreground">{banner}</div>
-      <Badge variant={intent === 'rsvp' ? 'default' : 'secondary'} className="w-fit">
-        {intent === 'rsvp' ? 'Sign Up' : 'Tentative'}
-      </Badge>
+      {/* Intent differentiation: Badge variant carries the visual distinction;
+          banner copy carries the meaning. The dialog title ("Sign Up for X" /
+          "Mark Tentative for X") already labels the form, so we don't repeat
+          the verb in the Badge. */}
+      <div className="flex items-center gap-2">
+        <Badge variant={intent === 'rsvp' ? 'default' : 'secondary'} className="shrink-0">
+          {intent === 'rsvp' ? 'Committed' : 'Tentative'}
+        </Badge>
+        <span role="status" aria-live="polite" className="text-sm text-muted-foreground">
+          {banner}
+        </span>
+      </div>
 
       {showFriendId && (
         <section className="flex flex-col gap-2">
@@ -3102,9 +3169,11 @@ onClick={async () => {
       toast.success('Signed up!');
     } catch (err) {
       // 400 with `error: ...` from the server (defense in depth — cached profile
-      // said "complete" but server disagrees). Refetch and re-evaluate.
-      await profileQuery.refetch();
-      const newGap = event ? evaluateSignupGap(event, profileQuery.data) : 'complete';
+      // said "complete" but server disagrees). Refetch and consume the resolved
+      // result directly — `profileQuery.data` in this closure still references
+      // the stale render snapshot until React re-renders.
+      const refreshed = await profileQuery.refetch();
+      const newGap = event ? evaluateSignupGap(event, refreshed.data) : 'complete';
       if (newGap !== 'complete') {
         setSignupModal({ open: true, intent: 'rsvp' });
       } else {
