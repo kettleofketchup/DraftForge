@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { evaluateSignupGap } from '../EventSignupModal/evaluateSignupGap';
-import { GameType } from '../schemas';
+import { GAME_TYPE } from '~/components/game/constants';
 
 const baseEvent = {
   id: 1,
-  game_type: GameType.DOTA2,
+  game_type: GAME_TYPE.DOTA2,
   require_steam_id: false,
   allow_active_mmr: true,
   allow_previous_rank: true,
