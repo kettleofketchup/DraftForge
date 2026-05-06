@@ -127,7 +127,6 @@ urlpatterns = [
     path("api/", include(router.urls)),
     path("api/current_user", current_user),
     path("api/home-stats/", app_views.home_stats, name="home_stats"),
-    path("api/healthz/", app_views.healthz, name="healthz"),
     path("api/user/register", UserCreateView.as_view()),
     path("api/tournament/register", TournamentCreateView.as_view()),
     path("api/team/register", TeamCreateView.as_view()),

@@ -29,6 +29,7 @@ from .test_auth import (
 )
 from .test_csv import reset_csv_import
 from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
+from .test_health import healthz
 from .test_discord import seed_discord_members
 from .test_events_discord import (
     send_test_notification,
@@ -241,4 +242,5 @@ urlpatterns = [
         get_demo_tournament,
         name="test-demo-get",
     ),
+    path("healthz/", healthz, name="test-healthz"),
 ]

@@ -1300,31 +1300,6 @@ def bulk_users(request):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def healthz(request):
-    """Lightweight liveness probe for Playwright runs and ops checks.
-
-    Touches the DB with a single primary-key SELECT (Event.id) so the response
-    time reflects backend health (Daphne + ORM + connection-pool + DB) rather
-    than just network. Intended for the test-suite health-probe reporter,
-    which logs probe latency after each test to surface cumulative pressure.
-    """
-    import time
-    from events.models import Event
-
-    t0 = time.perf_counter()
-    Event.objects.values_list("id", flat=True).first()
-    db_ms = (time.perf_counter() - t0) * 1000
-    return Response(
-        {
-            "ok": True,
-            "ts": timezone.now().isoformat(),
-            "db_ms": round(db_ms, 2),
-        }
-    )
-
-
-@api_view(["GET"])
-@permission_classes([AllowAny])
 def home_stats(request):
     """
     Cached endpoint for home page statistics.

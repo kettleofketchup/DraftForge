@@ -30,7 +30,10 @@ interface ProbeResult {
   error?: string;
 }
 
-const HEALTH_URL = process.env.PLAYWRIGHT_HEALTH_URL ?? 'https://localhost/api/healthz/';
+// Test-only endpoint, gated by `isTestEnvironment()` in backend/urls.py —
+// lives under `api/tests/` alongside the other test-only login + reset
+// helpers. NOT reachable in prod/release.
+const HEALTH_URL = process.env.PLAYWRIGHT_HEALTH_URL ?? 'https://localhost/api/tests/healthz/';
 const HEALTH_TIMEOUT_MS = 5000;
 
 function probeOnce(): Promise<ProbeResult> {
