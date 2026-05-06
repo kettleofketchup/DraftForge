@@ -18,9 +18,9 @@ schema. The Pydantic ValidationError will catch any mismatch immediately.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 if TYPE_CHECKING:
     from app.schemas import TournamentUserSchema
@@ -192,6 +192,41 @@ class ScheduledEventDueSchema(BaseModel):
     template: EventTemplateSchema = EventTemplateSchema()
 
     model_config = {"extra": "ignore"}
+
+
+class SignupInputPatch(BaseModel):
+    """Profile patch sent by web/Discord callers to apply_signup_input.
+
+    All fields optional - callers send only what changed. Validation rules:
+    - rank_status must be one of the allowed literals (event-policy gating
+      lives in apply_signup_input, not here).
+    - positions in {1..5}; deduping happens in the service.
+    - battle_cup_tier in {1..8}.
+    - URL fields are validated for shape + extension in apply_signup_input
+      so message strings stay consistent with the Discord vocabulary.
+
+    `extra="forbid"` rejects unknown keys so the API surface is strict.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    unverified_friend_id: Optional[str] = Field(default=None, max_length=20)
+    positions: Optional[list[int]] = None
+    rank_status: Optional[Literal["active", "previous", "never"]] = None
+    rank_medal: Optional[str] = Field(default=None, max_length=64)
+    battle_cup_tier: Optional[int] = Field(default=None, ge=1, le=8)
+    rank_screenshot: Optional[str] = Field(default=None, max_length=500)
+    battlecup_screenshot: Optional[str] = Field(default=None, max_length=500)
+
+    @field_validator("positions")
+    @classmethod
+    def _validate_positions_range(cls, v):
+        if v is None:
+            return v
+        for p in v:
+            if p < 1 or p > 5:
+                raise ValueError(f"position {p} out of range 1..5")
+        return v
 
 
 def _rebuild_forward_refs() -> None:
