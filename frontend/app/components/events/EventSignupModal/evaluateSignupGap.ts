@@ -9,6 +9,24 @@ function hasAnyPosition(profile: DotaProfileData | null | undefined): boolean {
 }
 
 /**
+ * Returns true if the user has actually picked their rank state, false if the
+ * profile only has the model's default `rank_status="never"` with no
+ * corroborating data (battle_cup_tier or rank_medal). Necessary because
+ * `get_my_dota_profile` auto-creates rows on first read, so "never" comes back
+ * even for users who've never touched their profile.
+ */
+export function rankStatusReallySet(profile: DotaProfileData | null | undefined): boolean {
+  if (!profile?.rank_status) return false;
+  if (profile.rank_status === 'never') {
+    return profile.battle_cup_tier != null;
+  }
+  if (profile.rank_status === 'active' || profile.rank_status === 'previous') {
+    return !!profile.rank_medal;
+  }
+  return false;
+}
+
+/**
  * Returns 'complete' if the profile satisfies all event requirements (skip-the-form
  * fast path), or a list of missing-section keys otherwise. The caller opens the
  * modal when the result is non-empty.
@@ -25,7 +43,7 @@ export function evaluateSignupGap(
   if (event.require_steam_id && !profile?.unverified_friend_id) missing.push('friend_id');
 
   if (event.game_type === GAME_TYPE.DOTA2) {
-    if (!profile?.rank_status) missing.push('rank_status');
+    if (!rankStatusReallySet(profile)) missing.push('rank_status');
     if (!hasAnyPosition(profile)) missing.push('positions');
     if (profile?.rank_status === 'active' || profile?.rank_status === 'previous') {
       if (!profile.rank_medal) missing.push('rank_medal');
