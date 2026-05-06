@@ -525,6 +525,65 @@ class EventViewSet(viewsets.ModelViewSet):
             EventSignupSerializer(signup).data, status=status.HTTP_201_CREATED
         )
 
+    @action(
+        detail=True, methods=["post"],
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def signup(self, request, pk=None):
+        """Single canonical signup endpoint accepting an intent + optional profile patch.
+
+        Body: {"intent": "rsvp" | "tentative", "profile": {...}}
+        Replaces the older /rsvp/ and /tentative/ actions (deleted in Task 29).
+        """
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from django.db import transaction
+        from pydantic import ValidationError as PydanticValidationError
+
+        from events.schemas import SignupInputPatch
+        from events.services import (
+            apply_signup_input,
+            create_tentative_signup,
+            process_rsvp,
+            resolve_or_create_org_user,
+        )
+
+        event = self.get_object()
+        if event.state != EventState.SIGNUPS_OPEN:
+            return Response(
+                {"error": "Event is not accepting signups"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        body = request.data or {}
+        intent = body.get("intent")
+        if intent not in ("rsvp", "tentative"):
+            return Response(
+                {"error": "intent must be 'rsvp' or 'tentative'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            patch = SignupInputPatch(**(body.get("profile") or {}))
+        except PydanticValidationError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        org_user = resolve_or_create_org_user(request.user, event.organization)
+
+        try:
+            with transaction.atomic():
+                apply_signup_input(org_user=org_user, event=event, patch=patch)
+                if intent == "rsvp":
+                    signup = process_rsvp(event, request.user)
+                else:
+                    signup = create_tentative_signup(event, request.user)
+        except DjangoValidationError as exc:
+            msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+            return Response({"error": msg}, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(EventSignupSerializer(signup).data, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=["post"], url_path="admin-signup")
     def admin_signup(self, request, pk=None):
         """Admin adds a user to the event signup list.
