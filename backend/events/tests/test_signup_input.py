@@ -2,6 +2,7 @@ from datetime import timedelta
 from unittest.mock import patch as mock_patch
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
 
@@ -203,3 +204,20 @@ class ApplySignupInputTests(TestCase):
         # Confirm correct objects were passed (profile, org_user, event), in that order.
         self.assertEqual(args[1], self.org_user)
         self.assertEqual(args[2], self.event)
+
+    def test_rollback_does_not_fire_invalidation(self):
+        # Spy on the inner cacheops.invalidate_obj that invalidate_after_commit
+        # eventually calls via on_commit. On rollback, the callback is dropped, so
+        # invalidate_obj is never called.
+        with mock_patch("app.cache_utils.invalidate_obj") as spy:
+            try:
+                with transaction.atomic():
+                    apply_signup_input(
+                        org_user=self.org_user,
+                        event=self.event,
+                        patch=SignupInputPatch(rank_status="active"),
+                    )
+                    raise RuntimeError("boom")
+            except RuntimeError:
+                pass
+        spy.assert_not_called()
