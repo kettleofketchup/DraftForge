@@ -307,7 +307,10 @@ class HandleScreenshotUploadTest(EventTestCase):
             attachment_url="https://cdn.discord.com/test/file.pdf",
         )
         self.assertFalse(result["success"])
-        self.assertIn("Invalid file type", result["message"])
+        self.assertEqual(
+            result["message"],
+            "Screenshot must be a direct .png/.jpg/.jpeg/.webp URL.",
+        )
 
     def test_handle_screenshot_upload_calls_apply_signup_input(self):
         """rank_screenshot write flows through apply_signup_input via SignupInputPatch."""
