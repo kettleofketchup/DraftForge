@@ -136,4 +136,54 @@ print(cache.get('test_key'))  # Should print 'test_value'
 | Static data | 60 * 60 (1h) | Rarely changes |
 | Tournament state | 60 * 10 (10m) | Changes during events |
 | Draft rounds | 60 * 10 (10m) | Active during drafts |
-| External API (Discord) | 15s | Rate limiting, freshness |
+| Discord guild members (`discord_members_<guild_id>`) | 60 * 60 (1h) | Admin-search-driven refreshes; daily avatar task reads from this same cache. See "Discord Member Cache" below. |
+| Other external API short-burst caches | 15-60s | Per-request burst dedup only |
+
+## Discord Member Cache
+
+Single Redis cache for guild members shared by two consumer patterns —
+admin-driven and scheduled. **Don't add a parallel cache for the same
+data; extend the timeout or call `refresh_discord_members` instead.**
+
+**Cache:** `discord_members_<guild_id>` — full paginated member list
+per guild, 1-hour TTL (constant: `DISCORD_MEMBER_CACHE_TTL_S` in
+`backend/discordbot/services/users.py`).
+
+**Populated by:**
+- `discordbot.services.users.get_discord_members_data(guild_id)` —
+  on cache miss, paginates `GET /guilds/{id}/members?limit=1000` via
+  the `after` cursor until the guild is exhausted, then writes the
+  full list back at TTL.
+- `discordbot.services.users.refresh_discord_members(request)` —
+  POST endpoint admins hit when they need to add a user who joined
+  Discord recently. 5-min per-org cooldown. Force-clears + repaves
+  the cache.
+
+**Consumed by:**
+- `search_discord_members` — admin-search-by-name on org pages
+- `get_organization_discord_members` — full org-member list
+- `get_discord_voice_channel_activity` — voice-channel staffing
+- `app.tasks.avatar_refresh.refresh_avatars_batched` — daily Celery
+  beat. Reads the cache, builds a `discord_id → avatar_hash` map,
+  bulk-updates `User.avatar`. Daily cadence works because admin
+  searches keep the cache current within the day.
+
+**Why no separate avatar cache?** Avatars are stored on `User.avatar`
+(DB column), not in Redis. The "avatar cache" IS the DB column; the
+daily Celery task is what refreshes it from the live guild member
+list. No third cache needed.
+
+**When you'd add a NEW cache key for guild members:** never. Use
+`get_discord_members_data`. If a caller needs different semantics
+(e.g. force-refresh), use the `refresh_discord_members` endpoint or
+`cache.delete(...)` the existing key — don't fork.
+
+### Bulk-update + cacheops invariant
+
+When a Celery task writes thousands of rows via
+`Model.objects.bulk_update(...)`, `post_save` doesn't fire and
+cacheops won't auto-invalidate. Pair `bulk_update` with one
+`invalidate_model(Model)` call after the batched write — N
+per-row `invalidate_obj()` calls would defeat the whole point of
+batching. The avatar refresh task uses this pattern; mirror it for
+similar batched-write paths.
