@@ -213,7 +213,7 @@ def handle_signup_modal_submit(event_id, discord_user_id, game_type, values):
     from cacheops import invalidate_obj
 
     from app.models import GameType
-    from org.models_profiles import PlayerDeadlockProfile, PlayerDotaProfile
+    from org.models_profiles import PlayerDeadlockProfile
 
     try:
         event = Event.objects.select_related("organization").get(pk=event_id)
@@ -226,70 +226,42 @@ def handle_signup_modal_submit(event_id, discord_user_id, game_type, values):
 
     friend_id = values.get("unverified_friend_id", "").strip()
 
-    # Check for duplicate friend ID globally
-    if friend_id:
-        duplicate = (
-            PlayerDotaProfile.objects.filter(
-                unverified_friend_id=friend_id,
-            )
-            .exclude(org_user=org_user)
-            .first()
-        )
-        if duplicate:
-            return {
-                "action": "error",
-                "message": (
-                    f"Friend ID {friend_id} is already registered to another account. "
-                    "If this is your account, contact an admin or login to "
-                    "https://dota.kettle.sh to issue a claim."
-                ),
-            }
-
     if game_type == GameType.DOTA2:
-        # Save Dota profile on OrgUser
-        profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        from events.schemas import SignupInputPatch
+        from events.services import apply_signup_input
+
+        # NOTE: positions are collected in the follow-up PositionConfirmButton
+        # flow, not in this modal. Task 22 handles the positions write.
+        rank_status = values.get("rank_status") or None
+        # Coerce legacy non-canonical values to "never" (matches prior behavior).
+        if rank_status and rank_status not in ("active", "previous", "never"):
+            rank_status = "never"
+
+        patch_kwargs = {}
         if friend_id:
-            profile.unverified_friend_id = friend_id
-        positions = values.get("positions", [])
-        profile.pos_1 = "1" in positions
-        profile.pos_2 = "2" in positions
-        profile.pos_3 = "3" in positions
-        profile.pos_4 = "4" in positions
-        profile.pos_5 = "5" in positions
-
-        rank_status = values.get("rank_status")
+            patch_kwargs["unverified_friend_id"] = friend_id
         if rank_status:
-            # Validate rank type is allowed by event config
-            if rank_status == "active" and not event.allow_active_mmr:
-                return {
-                    "action": "error",
-                    "message": "This event does not accept active MMR signups.",
-                }
-            if rank_status == "previous" and not event.allow_previous_rank:
-                return {
-                    "action": "error",
-                    "message": "This event does not accept previously ranked signups.",
-                }
-            if rank_status == "never" and not event.allow_battlecup_rating:
-                return {
-                    "action": "error",
-                    "message": "This event does not accept battle cup signups.",
-                }
+            patch_kwargs["rank_status"] = rank_status
 
-            # Rank status provided (e.g. from legacy text input)
-            if rank_status not in ("active", "previous", "never"):
-                rank_status = "never"
-            profile.rank_status = rank_status
-            profile.save()
-            invalidate_obj(profile)
+        try:
+            apply_signup_input(
+                org_user=org_user,
+                event=event,
+                patch=SignupInputPatch(**patch_kwargs),
+            )
+        except DjangoValidationError as exc:
+            msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+            return {"action": "error", "message": msg}
+
+        if rank_status:
             return {
                 "action": "needs_rank_details",
-                "message": _rank_followup_message(profile.rank_status),
+                "message": _rank_followup_message(rank_status),
             }
 
-        # Rank status not yet selected — save profile, will be set via select
-        profile.save()
-        invalidate_obj(profile)
+        # Rank status not yet selected — will be set via select
         return {"action": "needs_rank_status"}
 
     elif game_type == GameType.DEADLOCK:

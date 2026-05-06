@@ -150,6 +150,30 @@ class HandleSignupModalSubmitTest(EventTestCase):
         self.assertFalse(profile.pos_4)
         self.assertTrue(profile.pos_5)
 
+    def test_modal_submit_calls_apply_signup_input_for_dota(self):
+        """Dota 2 branch routes profile writes through apply_signup_input."""
+        from unittest.mock import patch as mock_patch
+
+        from events.discord import handle_signup_modal_submit
+        from events.schemas import SignupInputPatch
+
+        with mock_patch("events.services.apply_signup_input") as spy:
+            handle_signup_modal_submit(
+                event_id=self.event.pk,
+                discord_user_id="100000000000000001",
+                game_type=GameType.DOTA2,
+                values={
+                    "unverified_friend_id": "12345",
+                    "rank_status": "active",
+                    "positions": [],
+                },
+            )
+        spy.assert_called_once()
+        patch_arg = spy.call_args.kwargs["patch"]
+        self.assertIsInstance(patch_arg, SignupInputPatch)
+        self.assertEqual(patch_arg.unverified_friend_id, "12345")
+        self.assertEqual(patch_arg.rank_status, "active")
+
     def test_deadlock_modal_signs_up_directly(self):
         from events.discord import handle_signup_modal_submit
 
