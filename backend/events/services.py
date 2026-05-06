@@ -214,6 +214,42 @@ def process_rsvp(event, user, event_team=None):
     return _create_signup(event, user, event_team=event_team)
 
 
+def create_tentative_signup(event, user):
+    """Create a TENTATIVE EventSignup.
+
+    Mirrors the inline logic previously in EventViewSet.tentative
+    (views.py:486-525). Both the existing DRF action and the upcoming
+    /signup/ endpoint funnel through this service.
+    """
+    if event.state != EventState.SIGNUPS_OPEN:
+        raise ValueError("Event is not accepting signups")
+
+    existing = (
+        EventSignup.objects.filter(event=event, user=user)
+        .exclude(status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED])
+        .first()
+    )
+    if existing:
+        if existing.status == SignupStatus.TENTATIVE:
+            raise ValueError("Already marked as tentative")
+        raise ValueError(f"Already signed up (status: {existing.status})")
+
+    EventSignup.objects.filter(
+        event=event,
+        user=user,
+        status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED],
+    ).delete()
+
+    signup = EventSignup.objects.create(
+        event=event, user=user, status=SignupStatus.TENTATIVE
+    )
+    # invalidate_after_commit is on_commit-aware internally; do NOT wrap.
+    invalidate_after_commit(signup, event)
+    # notify_signup_changed is NOT on_commit-aware; wrap explicitly.
+    transaction.on_commit(lambda: notify_signup_changed(event))
+    return signup
+
+
 def apply_signup_input(*, org_user, event, patch):
     """Idempotently write any provided fields onto the OrgUser's PlayerDotaProfile.
 
