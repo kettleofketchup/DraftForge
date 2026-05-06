@@ -420,6 +420,59 @@ def populate_events_data(force=False):
 
     print(f"    Created 4 demo events with signups (incl. Demo MMR Approval Event)")
 
+    # 5b-i. Deadlock event with require_steam_id=True (Friend ID universal across game types)
+    Event.objects.update_or_create(
+        organization=org,
+        name="Test Deadlock Event",
+        defaults={
+            "description": "Deadlock event requiring Steam ID for E2E tests.",
+            "scheduled_at": tz.now() + timedelta(days=7),
+            "state": EventState.SIGNUPS_OPEN,
+            "created_by": event_admin or site_admin,
+            "tournament_name": "Test Deadlock Tournament",
+            "tournament_league": league,
+            "tournament_type": "single_elimination",
+            "game_type": GameType.DEADLOCK,
+            "draft_type": "shuffle",
+            "people_per_team": 6,
+            "number_of_teams": 2,
+            "min_players": 2,
+            "max_players": 12,
+            "timezone": EVENTS_ORG.timezone,
+            "auto_approve": True,
+            "require_steam_id": True,
+        },
+    )
+
+    # 5b-ii. Dota 2 event with discord_require_rank_screenshot=True (screenshot-required event)
+    Event.objects.update_or_create(
+        organization=org,
+        name="Test Dota Event With Screenshot",
+        defaults={
+            "description": "Dota 2 event requiring rank screenshot for E2E tests.",
+            "scheduled_at": tz.now() + timedelta(days=7),
+            "state": EventState.SIGNUPS_OPEN,
+            "created_by": event_admin or site_admin,
+            "tournament_name": "Test Dota Screenshot Tournament",
+            "tournament_league": league,
+            "tournament_type": "single_elimination",
+            "game_type": GameType.DOTA2,
+            "draft_type": "shuffle",
+            "people_per_team": 5,
+            "number_of_teams": 2,
+            "min_players": 2,
+            "max_players": 10,
+            "timezone": EVENTS_ORG.timezone,
+            "auto_approve": True,
+            "require_steam_id": True,
+            "discord_require_rank_screenshot": True,
+            "allow_active_mmr": True,
+            "allow_previous_rank": True,
+            "allow_battlecup_rating": True,
+        },
+    )
+    print("    Created Deadlock + Dota screenshot-required events")
+
     # 5c. Draft Test Tournament — ready for draft start, stable PK for browser testing
     from app.models import Team, Tournament
 
