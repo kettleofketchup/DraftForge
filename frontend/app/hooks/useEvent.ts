@@ -21,8 +21,7 @@ import {
   unconfirmSignup as unconfirmSignupAPI,
   demoteSignup as demoteSignupAPI,
   reinstateSignup as reinstateSignupAPI,
-  rsvpForEvent,
-  tentativeForEvent,
+  signupForEvent,
   startRollCall as startRollCallAPI,
   startTournament as startTournamentAPI,
   subscribeToRepeater,
@@ -30,10 +29,12 @@ import {
   updateEvent as updateEventAPI,
   updateOrgEventDefaults,
 } from '~/components/api/api';
-import type { EventRepeaterType } from '~/components/api/api';
+import type { EventRepeaterType, SignupBody } from '~/components/api/api';
 import type { EventSignupType, EventType } from '~/components/events/schemas';
 import type { UserType } from '~/components/user/types';
+import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import { useUserStore } from '~/store/userStore';
 
 export function useEvents(params?: {
   organization?: number;
@@ -66,30 +67,20 @@ export function useEventSignups(eventId: number | null) {
   });
 }
 
-export function useRsvpMutation(eventId: number) {
+export function useSignupMutation(eventId: number) {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => rsvpForEvent(eventId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['event', eventId] });
-      queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-    },
-    onError: () => {
-      queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-    },
-  });
-}
+  // Use a Zustand selector so the hook reactively tracks user changes.
+  const currentUserPk = useUserStore((s) => s.currentUser?.pk ?? null);
 
-export function useTentativeMutation(eventId: number) {
-  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => tentativeForEvent(eventId),
+    mutationFn: (body: SignupBody) => signupForEvent(eventId, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-    },
-    onError: () => {
-      queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
+      if (currentUserPk != null) {
+        queryClient.invalidateQueries({ queryKey: ['user-dota-profile', currentUserPk] });
+      }
+      useOrgStore.getState().clearOrgUsers();
     },
   });
 }

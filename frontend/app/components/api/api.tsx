@@ -132,7 +132,7 @@ export type { AddMemberPayload, AddUserResponse } from './types';
 // Events
 export {
   getEvents, getEvent, createEvent, updateEvent, deleteEvent,
-  rsvpForEvent, openSignups, startRollCall, startTournament, cancelEvent,
+  signupForEvent, openSignups, startRollCall, startTournament, cancelEvent,
   reopenSignups,
   restartTournament,
   getEventSignups, approveSignup, rejectSignup, confirmSignup, cancelSignup,
@@ -142,12 +142,11 @@ export {
   getDiscordChannels,
   getDiscordRoles,
   adminAddSignup,
-  tentativeForEvent,
   subscribeToRepeater, unsubscribeFromRepeater,
   getRepeaterSubscribers,
   getOrgEventDefaults,
   updateOrgEventDefaults,
 } from './eventsAPI';
 
-export type { EventRepeaterType, RepeaterSubscriber, DiscordChannel, DiscordRole, OrgEventDefaultsType } from './eventsAPI';
+export type { EventRepeaterType, RepeaterSubscriber, DiscordChannel, DiscordRole, OrgEventDefaultsType, SignupBody } from './eventsAPI';
 export type { EventType, EventSignupType, EventTeamType } from '~/components/events/schemas';
