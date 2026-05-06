@@ -381,7 +381,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     const event = await createResp.json();
 
     await loginEventPlayer(context);
-    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/signup/`, { intent: "rsvp" });
     expect(rsvpResp.ok()).toBeTruthy();
 
     // Set prior approved MMR before opening modal
@@ -429,7 +429,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     const event = await createResp.json();
 
     await loginEventPlayer4(context);
-    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/signup/`, { intent: "rsvp" });
     expect(rsvpResp.ok()).toBeTruthy();
 
     // Clear event_player_4's prior approved MMR so the test exercises the
@@ -487,7 +487,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     const event = await createResp.json();
 
     await loginEventPlayer(context);
-    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/signup/`, { intent: "rsvp" });
     expect(rsvpResp.ok()).toBeTruthy();
 
     // 33% delta scenario: prior 2,400 vs autofill 3,200 (self-report).
@@ -568,7 +568,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
     const event = await createResp.json();
 
     await loginEventPlayer(context);
-    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/signup/`, { intent: "rsvp" });
     expect(rsvpResp.ok()).toBeTruthy();
 
     // Login as the site superuser (is_superuser=True) so PlayerModal shows
