@@ -1,4 +1,6 @@
 from datetime import timedelta
+from unittest.mock import patch as mock_patch
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.test import TestCase
 from django.utils import timezone
@@ -183,3 +185,21 @@ class ApplySignupInputTests(TestCase):
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
         self.assertEqual(profile.rank_status, "active")
         self.assertTrue(profile.pos_3)
+
+    def test_cacheops_invalidation_after_commit(self):
+        # apply_signup_input calls invalidate_after_commit synchronously
+        # (not wrapped in transaction.on_commit). With the function patched, the
+        # spy receives the call directly under the `with patch(...)` block — no
+        # captureOnCommitCallbacks needed.
+        with mock_patch("events.services.invalidate_after_commit") as spy:
+            apply_signup_input(
+                org_user=self.org_user,
+                event=self.event,
+                patch=SignupInputPatch(rank_status="active"),
+            )
+        spy.assert_called_once()
+        args = spy.call_args.args
+        self.assertEqual(len(args), 3)
+        # Confirm correct objects were passed (profile, org_user, event), in that order.
+        self.assertEqual(args[1], self.org_user)
+        self.assertEqual(args[2], self.event)
