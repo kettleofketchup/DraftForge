@@ -257,6 +257,13 @@ def apply_signup_input(*, org_user, event, patch):
                 code="rank_status_disallowed",
             )
         profile.rank_status = status
+
+    if "rank_medal" in set_fields:
+        profile.rank_medal = set_fields["rank_medal"] or ""
+
+    if "battle_cup_tier" in set_fields:
+        profile.battle_cup_tier = set_fields["battle_cup_tier"]
+
     profile.save()
     invalidate_after_commit(profile, org_user, event)
     return profile
