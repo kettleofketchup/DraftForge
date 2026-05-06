@@ -79,11 +79,13 @@ import {
   useEvent,
   useEventSignups,
   useEventSignupUsers,
-  useRsvpMutation,
-  useTentativeMutation,
+  useSignupMutation,
   useEventActionMutation,
   useSignupActionMutations,
 } from '~/hooks/useEvent';
+import { useUserDotaProfile } from '~/hooks/useUserProfile';
+import { EventSignupModal } from '~/components/events/EventSignupModal';
+import { evaluateSignupGap } from '~/components/events/EventSignupModal/evaluateSignupGap';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminAddSignup, subscribeToRepeater, unsubscribeFromRepeater } from '~/components/api/api';
 import { AddUserModal } from '~/components/user/AddUserModal';
@@ -113,9 +115,12 @@ export default function EventPage() {
   const [activeTab, setActiveTab] = useState(tab || 'details');
   const [showRollCallConfirm, setShowRollCallConfirm] = useState(false);
   const [showReopenConfirm, setShowReopenConfirm] = useState(false);
-  const [showRsvpConfirm, setShowRsvpConfirm] = useState(false);
   const [showCancelRsvpConfirm, setShowCancelRsvpConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [signupModal, setSignupModal] = useState<{ open: boolean; intent: 'rsvp' | 'tentative' }>({
+    open: false,
+    intent: 'rsvp',
+  });
 
   // Fetch the specific org for this event (needed for org logo and discord server id)
   const { organization: eventOrg } = useOrganization(event?.organization ?? undefined);
@@ -143,10 +148,17 @@ export default function EventPage() {
 
   // Mutations
   const queryClient = useQueryClient();
-  const rsvpMutation = useRsvpMutation(id ?? 0);
-  const tentativeMutation = useTentativeMutation(id ?? 0);
+  const signupMutation = useSignupMutation(id ?? 0);
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
+
+  // Fresh dota profile for the skip-the-form fast path. The SSR snapshot doesn't
+  // expose user_data on EventSSR, so seed initialData as null and let the hook
+  // fetch /users/<pk>/dota-profile/. The signup mutation invalidates this query
+  // on success so the next read is fresh.
+  const profileQuery = useUserDotaProfile(currentUser?.pk, { initialData: null });
+  const profile = profileQuery.data;
+  const profileLoaded = profileQuery.status !== 'pending';
 
   // Repeater subscription state
   const repeaterId = event?.event_repeater;
@@ -392,17 +404,57 @@ export default function EventPage() {
               <>
                 <PrimaryButton
                   size="sm"
-                  onClick={() => setShowRsvpConfirm(true)}
-                  disabled={rsvpMutation.isPending}
-                  data-testid="event-rsvp-btn"
+                  onClick={async () => {
+                    if (!event) return;
+                    const gap = evaluateSignupGap(event, profile);
+                    if (gap === 'complete') {
+                      try {
+                        await signupMutation.mutateAsync({ intent: 'rsvp', profile: {} });
+                        toast.success('Signed up!');
+                      } catch (err) {
+                        // Defense in depth: cached profile said "complete" but server disagrees.
+                        // Refetch and re-evaluate; if still complete, surface the error.
+                        const refreshed = await profileQuery.refetch();
+                        const newGap = event ? evaluateSignupGap(event, refreshed.data) : 'complete';
+                        if (newGap !== 'complete') {
+                          setSignupModal({ open: true, intent: 'rsvp' });
+                        } else {
+                          toast.error(extractApiError(err) || 'Failed to sign up');
+                        }
+                      }
+                    } else {
+                      setSignupModal({ open: true, intent: 'rsvp' });
+                    }
+                  }}
+                  disabled={!event || !signups || !profileLoaded || signupMutation.isPending}
+                  data-testid="event-signup-btn"
                 >
                   <CheckCircle2 className="h-4 w-4 mr-1.5" />
                   Sign Up
                 </PrimaryButton>
                 <SecondaryButton
                   size="sm"
-                  onClick={() => tentativeMutation.mutate()}
-                  disabled={tentativeMutation.isPending}
+                  onClick={async () => {
+                    if (!event) return;
+                    const gap = evaluateSignupGap(event, profile);
+                    if (gap === 'complete') {
+                      try {
+                        await signupMutation.mutateAsync({ intent: 'tentative', profile: {} });
+                        toast.success('Marked as tentative!');
+                      } catch (err) {
+                        const refreshed = await profileQuery.refetch();
+                        const newGap = event ? evaluateSignupGap(event, refreshed.data) : 'complete';
+                        if (newGap !== 'complete') {
+                          setSignupModal({ open: true, intent: 'tentative' });
+                        } else {
+                          toast.error(extractApiError(err) || 'Failed to mark tentative');
+                        }
+                      }
+                    } else {
+                      setSignupModal({ open: true, intent: 'tentative' });
+                    }
+                  }}
+                  disabled={!event || !signups || !profileLoaded || signupMutation.isPending}
                   data-testid="event-tentative-btn"
                 >
                   <HelpCircle className="h-4 w-4 mr-1.5" />
@@ -424,8 +476,27 @@ export default function EventPage() {
                 </SecondaryButton>
                 <SecondaryButton
                   size="sm"
-                  onClick={() => tentativeMutation.mutate()}
-                  disabled={tentativeMutation.isPending}
+                  onClick={async () => {
+                    if (!event) return;
+                    const gap = evaluateSignupGap(event, profile);
+                    if (gap === 'complete') {
+                      try {
+                        await signupMutation.mutateAsync({ intent: 'tentative', profile: {} });
+                        toast.success('Marked as tentative!');
+                      } catch (err) {
+                        const refreshed = await profileQuery.refetch();
+                        const newGap = event ? evaluateSignupGap(event, refreshed.data) : 'complete';
+                        if (newGap !== 'complete') {
+                          setSignupModal({ open: true, intent: 'tentative' });
+                        } else {
+                          toast.error(extractApiError(err) || 'Failed to mark tentative');
+                        }
+                      }
+                    } else {
+                      setSignupModal({ open: true, intent: 'tentative' });
+                    }
+                  }}
+                  disabled={!event || !signups || !profileLoaded || signupMutation.isPending}
                   data-testid="event-tentative-btn"
                 >
                   <HelpCircle className="h-4 w-4 mr-1.5" />
@@ -451,8 +522,27 @@ export default function EventPage() {
               <>
                 <PrimaryButton
                   size="sm"
-                  onClick={() => setShowRsvpConfirm(true)}
-                  disabled={rsvpMutation.isPending}
+                  onClick={async () => {
+                    if (!event) return;
+                    const gap = evaluateSignupGap(event, profile);
+                    if (gap === 'complete') {
+                      try {
+                        await signupMutation.mutateAsync({ intent: 'rsvp', profile: {} });
+                        toast.success('Signed up!');
+                      } catch (err) {
+                        const refreshed = await profileQuery.refetch();
+                        const newGap = event ? evaluateSignupGap(event, refreshed.data) : 'complete';
+                        if (newGap !== 'complete') {
+                          setSignupModal({ open: true, intent: 'rsvp' });
+                        } else {
+                          toast.error(extractApiError(err) || 'Failed to sign up');
+                        }
+                      }
+                    } else {
+                      setSignupModal({ open: true, intent: 'rsvp' });
+                    }
+                  }}
+                  disabled={!event || !signups || !profileLoaded || signupMutation.isPending}
                   data-testid="event-upgrade-rsvp-btn"
                 >
                   <CheckCircle2 className="h-4 w-4 mr-1.5" />
@@ -585,23 +675,6 @@ export default function EventPage() {
       />
 
       <ConfirmDialog
-        open={showRsvpConfirm}
-        onOpenChange={setShowRsvpConfirm}
-        title="RSVP for Event"
-        description={`Sign up for "${event.name}"? You'll be added to the signup list.`}
-        confirmLabel="RSVP"
-        onConfirm={async () => {
-          try {
-            await rsvpMutation.mutateAsync();
-            toast.success('RSVP submitted!');
-          } catch (err: unknown) {
-            const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
-            toast.error(message || 'Failed to RSVP');
-          }
-        }}
-      />
-
-      <ConfirmDialog
         open={showCancelRsvpConfirm}
         onOpenChange={setShowCancelRsvpConfirm}
         title="Cancel RSVP"
@@ -637,6 +710,16 @@ export default function EventPage() {
           }
         }}
       />
+
+      {event && (
+        <EventSignupModal
+          event={event}
+          intent={signupModal.intent}
+          profile={profile}
+          open={signupModal.open}
+          onOpenChange={(open) => setSignupModal((s) => ({ ...s, open }))}
+        />
+      )}
     </div>
   );
 }
