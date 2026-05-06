@@ -625,9 +625,12 @@ class PositionConfirmButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
+        from django.core.exceptions import ValidationError as DjangoValidationError
 
         from events.discord import _get_org_user
         from events.models import Event
+        from events.schemas import SignupInputPatch
+        from events.services import apply_signup_input
 
         # Collect positions from sibling selects
         positions = []
@@ -635,7 +638,8 @@ class PositionConfirmButton(ui.Button):
             if isinstance(item, ui.Select) and item.values:
                 positions.extend(item.values)
 
-        # Save positions to profile
+        # Resolve event + org_user, then route the positions write through
+        # apply_signup_input so all signup-input writes share one code path.
         event = await sync_to_async(Event.objects.select_related("organization").get)(
             pk=self.event_id
         )
@@ -644,20 +648,19 @@ class PositionConfirmButton(ui.Button):
         )
 
         if org_user:
-            from cacheops import invalidate_obj
-
-            from org.models_profiles import PlayerDotaProfile
-
-            profile = await sync_to_async(
-                lambda: PlayerDotaProfile.objects.get_or_create(org_user=org_user)[0]
-            )()
-            profile.pos_1 = "1" in positions
-            profile.pos_2 = "2" in positions
-            profile.pos_3 = "3" in positions
-            profile.pos_4 = "4" in positions
-            profile.pos_5 = "5" in positions
-            await sync_to_async(profile.save)()
-            await sync_to_async(invalidate_obj)(profile)
+            positions_int = [int(v) for v in positions]
+            try:
+                await sync_to_async(apply_signup_input)(
+                    org_user=org_user,
+                    event=event,
+                    patch=SignupInputPatch(positions=positions_int),
+                )
+            except DjangoValidationError as exc:
+                msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+                await interaction.response.edit_message(
+                    content=f"❌ {msg}", view=None
+                )
+                return
 
         # Now show rank details
         view = RankDetailsView(
