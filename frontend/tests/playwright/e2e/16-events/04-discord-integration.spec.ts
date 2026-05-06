@@ -158,7 +158,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
 
     // 3. Sign up as a player
     await loginEventPlayer(context);
-    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${eventId}/rsvp/`);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${eventId}/signup/`, { intent: 'rsvp' });
     expect(rsvpResp.ok()).toBeTruthy();
 
     // 4. Trigger sync to update the Discord signup post
@@ -237,7 +237,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
 
     // Login as player and RSVP
     await loginEventPlayer(context);
-    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/signup/`, { intent: 'rsvp' });
     expect(rsvpResp.ok()).toBeTruthy();
     const signup = await rsvpResp.json();
 
@@ -276,7 +276,7 @@ test.describe('Events - Discord Integration (@cicd)', () => {
 
     // 2. Login as player and RSVP
     await loginEventPlayer(context);
-    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/rsvp/`);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${event.id}/signup/`, { intent: 'rsvp' });
     expect(rsvpResp.ok()).toBeTruthy();
 
     // Clear event_player_1's prior approved MMR so the test exercises the
