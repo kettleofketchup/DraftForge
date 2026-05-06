@@ -197,6 +197,41 @@ def process_rsvp(event, user, event_team=None):
     return _create_signup(event, user, event_team=event_team)
 
 
+def apply_signup_input(*, org_user, event, patch):
+    """Idempotently write any provided fields onto the OrgUser's PlayerDotaProfile.
+
+    NOTE: This commit is the skeleton only. No field-write branches are
+    implemented yet -- the actual per-field writes (Friend ID, positions,
+    rank_status, rank_medal, battle_cup_tier, screenshots) and policy
+    validation are added in subsequent commits (Tasks 6-11). Until those
+    land, the function performs a no-op `save()` and registers cacheops
+    invalidation when `patch` carries any explicitly-set fields, but does
+    not actually mutate any model attributes. The `save()` +
+    `invalidate_after_commit` calls become meaningful only once field
+    writes are present.
+
+    Contract (stable across the upcoming slices):
+    - Fields not in `patch` are not touched (partial-patch semantics).
+    - Multiple calls with the same `patch` are safe (idempotent).
+    - Returns the PlayerDotaProfile when `patch` had any set fields, or
+      None if `patch` was empty.
+    - Cacheops invalidation is registered via invalidate_after_commit,
+      which schedules via transaction.on_commit when a transaction is
+      active and fires immediately otherwise. Do NOT wrap in an outer
+      transaction.on_commit.
+    """
+    from org.models_profiles import PlayerDotaProfile
+
+    set_fields = patch.model_dump(exclude_unset=True)
+    if not set_fields:
+        return None
+
+    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
+    profile.save()
+    invalidate_after_commit(profile, org_user, event)
+    return profile
+
+
 def staff_add_signup(event, user, event_team=None):
     """Staff-path signup. Allowed during SIGNUPS_OPEN or ROLL_CALL."""
     if event.state not in (EventState.SIGNUPS_OPEN, EventState.ROLL_CALL):
