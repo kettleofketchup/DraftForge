@@ -668,6 +668,16 @@ EVENT_PLAYER_20: TestUser = TestUser(
     positions=TestPositions(carry=1, mid=5, offlane=3, soft_support=1, hard_support=3),
 )
 
+EVENT_PLAYER_NO_PROFILE: TestUser = TestUser(
+    pk=5099,
+    username="event_player_no_profile",
+    nickname="No-Profile Player",
+    discord_id="880000000000099999",
+    steam_id_64=76561198900199999,
+    mmr=None,
+    positions=TestPositions(),
+)
+
 EVENTS_USERS: list[TestUser] = [
     EVENT_PLAYER_1,
     EVENT_PLAYER_2,
@@ -689,6 +699,7 @@ EVENTS_USERS: list[TestUser] = [
     EVENT_PLAYER_18,
     EVENT_PLAYER_19,
     EVENT_PLAYER_20,
+    EVENT_PLAYER_NO_PROFILE,  # Loop 2 ([:4]) skips this naturally — no PlayerDotaProfile created.
 ]
 
 # =============================================================================
