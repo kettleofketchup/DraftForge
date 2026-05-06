@@ -185,17 +185,12 @@ test.describe('Events - Signup Flow', () => {
     // Initially no signups
     await expect(page.getByText('No Signups Yet')).toBeVisible();
 
-    // Click the RSVP button (appears after signups data loads)
-    const rsvpBtn = page.getByTestId('event-rsvp-btn');
+    // Click the signup button (appears after signups data loads)
+    const rsvpBtn = page.getByTestId('event-signup-btn');
     await expect(rsvpBtn).toBeVisible({ timeout: 10000 });
     await rsvpBtn.click();
 
-    // Confirmation dialog appears — click confirm
-    const confirmDialog = page.getByRole('alertdialog');
-    await expect(confirmDialog).toBeVisible();
-    await confirmDialog.getByRole('button', { name: /rsvp/i }).click();
-
-    // Should see the player's signup appear (Cancel RSVP button confirms signup worked)
+    // No confirm dialog now — fast path fires immediately for users with complete profiles.
     await expect(page.getByTestId('event-cancel-rsvp-btn')).toBeVisible({ timeout: 10000 });
   });
 
@@ -203,7 +198,7 @@ test.describe('Events - Signup Flow', () => {
     // Player RSVPs via API (separate context)
     const playerCtx = await browser.newContext({ ignoreHTTPSErrors: true });
     await loginEventPlayer(playerCtx);
-    const rsvpResp = await postWithCsrf(playerCtx, `${API_URL}/events/${eventInfo.pk}/rsvp/`);
+    const rsvpResp = await postWithCsrf(playerCtx, `${API_URL}/events/${eventInfo.pk}/signup/`, { intent: 'rsvp' });
     expect(rsvpResp.ok()).toBeTruthy();
     await playerCtx.close();
 

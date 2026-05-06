@@ -43,7 +43,7 @@ test.describe('Roll Call Flow (@cicd)', () => {
   }) => {
     // Step 1: Player RSVPs to the event
     await loginEventPlayer(context);
-    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${eventInfo.pk}/rsvp/`);
+    const rsvpResp = await postWithCsrf(context, `${API_URL}/events/${eventInfo.pk}/signup/`, { intent: 'rsvp' });
     expect(rsvpResp.ok()).toBeTruthy();
 
     // Step 2: Admin checks the signup (auto_approve may have already approved it)
