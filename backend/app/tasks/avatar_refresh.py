@@ -165,6 +165,8 @@ def refresh_avatars_batched():
 
     # Lazy imports keep the module importable in worker startup paths that
     # haven't fully bootstrapped Django.
+    from cacheops import invalidate_model
+
     from app.models import CustomUser, Organization
     from discordbot.services.users import get_discord_members_data
 
@@ -213,7 +215,13 @@ def refresh_avatars_batched():
             if discord_id:
                 avatar_map[str(discord_id)] = user_obj.get("avatar")
 
-    updated = 0
+    # Collect changed rows and bulk-update in one shot. Per-row update()
+    # was O(N) round-trips; at 100k users with ~5% churn that's 5,000
+    # statements (~150s in a worker). bulk_update batches 500 rows per
+    # CASE/WHEN UPDATE, taking the same scenario down to ~10 statements
+    # (~3s). Tradeoff: bulk_update doesn't fire post_save, so cacheops
+    # won't auto-invalidate — we call invalidate_model once at the end.
+    to_update = []
     for u in candidate_users:
         discord_id = str(u["discordId"])
         if discord_id not in avatar_map:
@@ -221,11 +229,18 @@ def refresh_avatars_batched():
         new_avatar = avatar_map[discord_id]
         if new_avatar == u["avatar"]:
             continue
-        # Use update() to skip save() signals + invalidate cacheops in a
-        # single statement; bulk path can revisit per-pk if invalidation
-        # becomes important.
-        CustomUser.objects.filter(pk=u["pk"]).update(avatar=new_avatar)
-        updated += 1
+        to_update.append(CustomUser(pk=u["pk"], avatar=new_avatar))
+
+    updated = len(to_update)
+    if updated:
+        # batch_size=500 keeps the CASE/WHEN expression bounded so MySQL/
+        # SQLite parsers don't choke on a million-line statement.
+        CustomUser.objects.bulk_update(to_update, ["avatar"], batch_size=500)
+        # bulk_update bypasses signals; cacheops needs an explicit nudge.
+        # Model-level invalidation is one cache op vs N per-pk ops; safe
+        # because no production view caches anything that wouldn't already
+        # consider an avatar-hash change a stale-cache trigger.
+        invalidate_model(CustomUser)
 
     log.info(
         "Batched avatar refresh complete: checked=%d, updated=%d, guilds=%d",
