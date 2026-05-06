@@ -41,8 +41,16 @@ export async function deleteEvent(eventId: number): Promise<void> {
   await axios.delete(`/events/${eventId}/`);
 }
 
-export async function rsvpForEvent(eventId: number): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(`/events/${eventId}/rsvp/`);
+export type SignupBody = {
+  intent: 'rsvp' | 'tentative';
+  profile?: Record<string, unknown>;
+};
+
+export async function signupForEvent(
+  eventId: number,
+  body: SignupBody,
+): Promise<EventSignupType> {
+  const { data } = await axios.post<EventSignupType>(`/events/${eventId}/signup/`, body);
   return data;
 }
 
@@ -298,11 +306,6 @@ export interface DiscordRole {
   color: number;
   mentionable: boolean;
   position: number;
-}
-
-export async function tentativeForEvent(eventId: number): Promise<EventSignupType> {
-  const { data } = await axios.post<EventSignupType>(`/events/${eventId}/tentative/`);
-  return data;
 }
 
 export async function adminAddSignup(
