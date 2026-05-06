@@ -296,9 +296,10 @@ def _rank_followup_message(rank_status):
 
 def handle_rank_status_select(event_id, discord_user_id, rank_status):
     """Save the rank status from the select menu to the Dota profile."""
-    from cacheops import invalidate_obj
+    from django.core.exceptions import ValidationError as DjangoValidationError
 
-    from org.models_profiles import PlayerDotaProfile
+    from events.schemas import SignupInputPatch
+    from events.services import apply_signup_input
 
     try:
         event = Event.objects.select_related("organization").get(pk=event_id)
@@ -310,11 +311,13 @@ def handle_rank_status_select(event_id, discord_user_id, rank_status):
         return
 
     try:
-        profile = PlayerDotaProfile.objects.get(org_user=org_user)
-        profile.rank_status = rank_status
-        profile.save(update_fields=["rank_status"])
-        invalidate_obj(profile)
-    except PlayerDotaProfile.DoesNotExist:
+        apply_signup_input(
+            org_user=org_user,
+            event=event,
+            patch=SignupInputPatch(rank_status=rank_status),
+        )
+    except DjangoValidationError:
+        # Fail silently per existing behavior (function returns None either way).
         pass
 
 
@@ -370,10 +373,10 @@ def handle_rank_medal_select(event_id, discord_user_id, medal):
 
 def handle_previous_rank_submit(event_id, discord_user_id, medal, date_text):
     """Handle previous rank modal submission. Saves rank info and signs up."""
-    from cacheops import invalidate_obj
+    from django.core.exceptions import ValidationError as DjangoValidationError
 
-    from events.services import process_rsvp
-    from org.models_profiles import PlayerDotaProfile
+    from events.schemas import SignupInputPatch
+    from events.services import apply_signup_input, process_rsvp
 
     try:
         event = Event.objects.select_related("organization").get(pk=event_id)
@@ -384,10 +387,15 @@ def handle_previous_rank_submit(event_id, discord_user_id, medal, date_text):
     if not org_user:
         return {"action": "error", "message": "Not found."}
 
-    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
-    profile.rank_medal = medal
-    profile.save(update_fields=["rank_medal"])
-    invalidate_obj(profile)
+    try:
+        profile = apply_signup_input(
+            org_user=org_user,
+            event=event,
+            patch=SignupInputPatch(rank_medal=medal),
+        )
+    except DjangoValidationError as exc:
+        msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+        return {"action": "error", "message": msg}
 
     # Check if screenshot required before completing signup
     if event.discord_require_rank_screenshot and not profile.rank_screenshot:
