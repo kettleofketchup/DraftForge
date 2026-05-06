@@ -26,6 +26,13 @@ from events.models import (
 logger = logging.getLogger(__name__)
 
 
+RANK_STATUS_DISALLOWED_MESSAGES = {
+    "active": "This event does not accept active MMR signups.",
+    "previous": "This event does not accept previous-rank signups.",
+    "never": "This event does not accept Battle Cup–only signups.",
+}
+
+
 def check_requirements(event, user):
     """Check if user meets event confirmation requirements."""
     from org.models import OrgUser
@@ -236,6 +243,20 @@ def apply_signup_input(*, org_user, event, patch):
         profile.pos_3 = 3 in positions
         profile.pos_4 = 4 in positions
         profile.pos_5 = 5 in positions
+    if "rank_status" in set_fields:
+        from django.core.exceptions import ValidationError
+        status = set_fields["rank_status"]
+        allowed = (
+            (status == "active" and event.allow_active_mmr)
+            or (status == "previous" and event.allow_previous_rank)
+            or (status == "never" and event.allow_battlecup_rating)
+        )
+        if not allowed:
+            raise ValidationError(
+                RANK_STATUS_DISALLOWED_MESSAGES[status],
+                code="rank_status_disallowed",
+            )
+        profile.rank_status = status
     profile.save()
     invalidate_after_commit(profile, org_user, event)
     return profile
