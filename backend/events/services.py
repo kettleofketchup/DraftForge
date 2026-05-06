@@ -229,6 +229,13 @@ def apply_signup_input(*, org_user, event, patch):
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
     if "unverified_friend_id" in set_fields:
         profile.unverified_friend_id = set_fields["unverified_friend_id"]
+    if "positions" in set_fields:
+        positions = set(set_fields["positions"] or [])
+        profile.pos_1 = 1 in positions
+        profile.pos_2 = 2 in positions
+        profile.pos_3 = 3 in positions
+        profile.pos_4 = 4 in positions
+        profile.pos_5 = 5 in positions
     profile.save()
     invalidate_after_commit(profile, org_user, event)
     return profile

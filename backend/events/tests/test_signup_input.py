@@ -45,3 +45,16 @@ class ApplySignupInputTests(TestCase):
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
         self.assertEqual(profile.unverified_friend_id, "12345678")
+
+    def test_writes_positions_and_dedups(self):
+        apply_signup_input(
+            org_user=self.org_user,
+            event=self.event,
+            patch=SignupInputPatch(positions=[1, 3, 3, 5]),
+        )
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertTrue(profile.pos_1)
+        self.assertFalse(profile.pos_2)
+        self.assertTrue(profile.pos_3)
+        self.assertFalse(profile.pos_4)
+        self.assertTrue(profile.pos_5)
