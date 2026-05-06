@@ -96,3 +96,37 @@ class ApplySignupInputTests(TestCase):
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
         self.assertEqual(profile.battle_cup_tier, 5)
+
+    def test_rank_screenshot_writes(self):
+        apply_signup_input(
+            org_user=self.org_user, event=self.event,
+            patch=SignupInputPatch(rank_screenshot="https://i.imgur.com/abc.png"),
+        )
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertEqual(profile.rank_screenshot, "https://i.imgur.com/abc.png")
+
+
+    def test_screenshot_bad_shape_raises(self):
+        with self.assertRaises(DjangoValidationError) as ctx:
+            apply_signup_input(
+                org_user=self.org_user, event=self.event,
+                patch=SignupInputPatch(rank_screenshot="ftp://example.com/x.png"),
+            )
+        self.assertEqual(ctx.exception.code, "screenshot_bad_url")
+
+
+    def test_screenshot_bad_extension_raises(self):
+        with self.assertRaises(DjangoValidationError):
+            apply_signup_input(
+                org_user=self.org_user, event=self.event,
+                patch=SignupInputPatch(rank_screenshot="https://i.imgur.com/abc.gif"),
+            )
+
+
+    def test_battlecup_screenshot_writes(self):
+        apply_signup_input(
+            org_user=self.org_user, event=self.event,
+            patch=SignupInputPatch(battlecup_screenshot="https://i.imgur.com/bc.jpg"),
+        )
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertEqual(profile.battlecup_screenshot, "https://i.imgur.com/bc.jpg")
