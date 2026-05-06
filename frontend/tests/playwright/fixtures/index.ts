@@ -123,6 +123,7 @@ export {
   loginEventPlayer,
   loginEventPlayer4,
   setApprovedMmr,
+  loginEventPlayerNoProfile,
   postWithCsrf,
   patchWithCsrf,
   syncDiscordEvents,

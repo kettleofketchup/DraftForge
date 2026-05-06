@@ -169,6 +169,16 @@ export async function setApprovedMmr(
   return resp.json();
 }
 
+/** Login as the no-profile event player (pk=5099). Mirrors loginEventPlayer. */
+export async function loginEventPlayerNoProfile(context: BrowserContext) {
+  const resp = await context.request.post(`${API_URL}/tests/login-as/`, {
+    data: { user_pk: 5099 },
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!resp.ok()) throw new Error(`Login event_player_no_profile failed: ${resp.status()}`);
+  return resp.json();
+}
+
 /** Trigger sync_discord_events synchronously. */
 export async function syncDiscordEvents(context: BrowserContext): Promise<string> {
   const resp = await context.request.post(`${API_URL}/tests/events/sync-discord/`);
