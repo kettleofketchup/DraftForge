@@ -39,17 +39,25 @@ class EventAPITests(EventTestCase):
         self.assertEqual(r.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_rsvp_for_event(self):
+        # Hits the unified /signup/ endpoint with intent=rsvp.
         event = self._create_event(state=EventState.SIGNUPS_OPEN)
         self.client.force_authenticate(user=self.user)
-        r = self.client.post(f"/api/events/{event.pk}/rsvp/")
+        r = self.client.post(
+            f"/api/events/{event.pk}/signup/", {"intent": "rsvp"}, format="json"
+        )
         self.assertEqual(r.status_code, status.HTTP_201_CREATED)
         self.assertEqual(r.data["status"], SignupStatus.RSVP)
 
     def test_rsvp_duplicate_rejected(self):
+        # Hits the unified /signup/ endpoint with intent=rsvp.
         event = self._create_event(state=EventState.SIGNUPS_OPEN)
         self.client.force_authenticate(user=self.user)
-        self.client.post(f"/api/events/{event.pk}/rsvp/")
-        r = self.client.post(f"/api/events/{event.pk}/rsvp/")
+        self.client.post(
+            f"/api/events/{event.pk}/signup/", {"intent": "rsvp"}, format="json"
+        )
+        r = self.client.post(
+            f"/api/events/{event.pk}/signup/", {"intent": "rsvp"}, format="json"
+        )
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_open_signups_requires_staff(self):
@@ -281,8 +289,11 @@ class AdminSignupDuringRollCallTest(TestCase):
         assert resp.status_code == 201, resp.content
 
     def test_public_rsvp_still_rejected_during_roll_call(self):
+        # Hits the unified /signup/ endpoint with intent=rsvp.
         self.client.force_authenticate(self.player)
-        resp = self.client.post(f"/api/events/{self.event.pk}/rsvp/")
+        resp = self.client.post(
+            f"/api/events/{self.event.pk}/signup/", {"intent": "rsvp"}, format="json"
+        )
         assert resp.status_code == 400
 
 
