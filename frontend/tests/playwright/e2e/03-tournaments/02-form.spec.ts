@@ -105,9 +105,12 @@ test.describe('Tournaments - create (e2e)', () => {
       .filter({ hasText: completedBracketTest })
       .first();
 
-    // Open edit modal using data-testid
+    // Open edit modal. Use Playwright's auto-waiting click (was previously
+    // .evaluate(btn => btn.click()), which bypasses visible/enabled/stable
+    // checks and races the framer-motion card mount animation — caused a
+    // first-attempt flake on PR #203's full-suite run).
     const editButton = tournamentCard.locator('[data-testid="tournament-edit-button"]');
-    await editButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+    await editButton.click();
 
     // Wait for modal and name input
     const nameInput = page.locator('[data-testid="tournament-name-input"]');
@@ -121,9 +124,9 @@ test.describe('Tournaments - create (e2e)', () => {
     await nameInput.clear();
     await nameInput.fill(editedNameWithSuffix);
 
-    // Find and click the save button
+    // Save — auto-waiting click for the same reason as above.
     const saveButton = page.getByRole('button', { name: /save changes/i }).first();
-    await saveButton.evaluate((btn) => (btn as HTMLButtonElement).click());
+    await saveButton.click();
 
     // Wait for success message
     await expect(page.getByText(/successfully/i)).toBeVisible({ timeout: 10000 });
