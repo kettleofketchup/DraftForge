@@ -245,7 +245,26 @@ def apply_signup_input(*, org_user, event, patch):
 
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
     if "unverified_friend_id" in set_fields:
-        profile.unverified_friend_id = set_fields["unverified_friend_id"]
+        from django.core.exceptions import ValidationError
+        from org.models_profiles import PlayerDotaProfile
+
+        fid = set_fields["unverified_friend_id"]
+        if fid:
+            # Global scope (matches handlers.py:234 — Friend ID is unique site-wide,
+            # not per-org).
+            collision = (
+                PlayerDotaProfile.objects
+                .filter(unverified_friend_id=fid)
+                .exclude(org_user=org_user)
+                .exists()
+            )
+            if collision:
+                raise ValidationError(
+                    f"Friend ID {fid} is already registered to another account. "
+                    f"Contact an admin or login to https://dota.kettle.sh to claim it.",
+                    code="duplicate_friend_id",
+                )
+        profile.unverified_friend_id = fid
     if "positions" in set_fields:
         positions = set(set_fields["positions"] or [])
         profile.pos_1 = 1 in positions
