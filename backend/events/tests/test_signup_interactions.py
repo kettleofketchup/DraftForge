@@ -178,6 +178,34 @@ class HandleSignupModalSubmitTest(EventTestCase):
         self.assertEqual(profile.rank, "Phantom IV")
         self.assertEqual(profile.unverified_friend_id, "12345")
 
+    def test_modal_submit_returns_vocabulary_message_on_disallowed_rank_status(self):
+        """Discord adapter surfaces the EXACT vocabulary-table message when
+        apply_signup_input raises DjangoValidationError from a policy gate.
+
+        This pins the contract that the {"action": "error", "message": ...}
+        return shape preserves the curated vocabulary from
+        events.services._RANK_STATUS_DISALLOWED_MESSAGES verbatim, rather
+        than wrapping/munging it via str(exc) (which would yield
+        "['This event...']" with the list brackets).
+        """
+        from events.discord import handle_signup_modal_submit
+
+        # Configure event to disallow active MMR signups.
+        self.event.allow_active_mmr = False
+        self.event.save()
+
+        result = handle_signup_modal_submit(
+            event_id=self.event.pk,
+            discord_user_id="100000000000000001",
+            game_type=GameType.DOTA2,
+            values={"rank_status": "active"},
+        )
+        self.assertEqual(result["action"], "error")
+        self.assertEqual(
+            result["message"],
+            "This event does not accept active MMR signups.",
+        )
+
 
 class HandleRankMedalSelectTest(EventTestCase):
     def setUp(self):
