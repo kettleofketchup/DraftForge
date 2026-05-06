@@ -2,12 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { EventSignupModal } from '../EventSignupModal';
-import { GameType } from '../schemas';
+import { GAME_TYPE } from '~/components/game/constants';
 
 const event = {
   id: 1,
   name: 'Evt',
-  game_type: GameType.DOTA2,
+  game_type: GAME_TYPE.DOTA2,
   require_steam_id: true,
   allow_active_mmr: true,
   allow_previous_rank: true,

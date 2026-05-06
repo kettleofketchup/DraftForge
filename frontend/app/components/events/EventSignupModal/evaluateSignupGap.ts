@@ -1,4 +1,5 @@
-import { GameType, type EventType } from '../schemas';
+import { type EventType } from '../schemas';
+import { GAME_TYPE } from '~/components/game/constants';
 import type { DotaProfileData } from '~/components/user';
 
 function hasAnyPosition(profile: DotaProfileData | null | undefined): boolean {
@@ -23,7 +24,7 @@ export function evaluateSignupGap(
 
   if (event.require_steam_id && !profile?.unverified_friend_id) missing.push('friend_id');
 
-  if (event.game_type === GameType.DOTA2) {
+  if (event.game_type === GAME_TYPE.DOTA2) {
     if (!profile?.rank_status) missing.push('rank_status');
     if (!hasAnyPosition(profile)) missing.push('positions');
     if (profile?.rank_status === 'active' || profile?.rank_status === 'previous') {

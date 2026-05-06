@@ -22,7 +22,8 @@ import { ScreenshotUrlField } from './EventSignupModal/ScreenshotUrlField';
 import { PrefilledSummaryChip } from './EventSignupModal/PrefilledSummaryChip';
 import { useSignupMutation } from '~/hooks/useEvent';
 
-import { GameType, type EventType } from './schemas';
+import { type EventType } from './schemas';
+import { GAME_TYPE } from '~/components/game/constants';
 import type { DotaProfileData } from '~/components/user';
 
 const POSITION_LABELS: Record<number, string> = {
@@ -145,7 +146,7 @@ export function EventSignupModal({
     }
   });
 
-  const isDota = event.game_type === GameType.DOTA2;
+  const isDota = event.game_type === GAME_TYPE.DOTA2;
   const showFriendId = event.require_steam_id;
   const friendIdPrefilled = !!profile?.unverified_friend_id;
   const showRankStatus = isDota;

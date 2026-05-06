@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { GameType, type EventType } from '../schemas';
+import { type EventType } from '../schemas';
+import { GAME_TYPE } from '~/components/game/constants';
 import type { DotaProfileData } from '~/components/user';
 
 const SCREENSHOT_URL_RE = /^https?:\/\/.+\.(png|jpe?g|webp)(\?.*)?$/i;
@@ -25,7 +26,7 @@ export function buildSignupPatchSchema(
     fields.unverified_friend_id = z.string().max(20).optional();
   }
 
-  if (event.game_type === GameType.DOTA2) {
+  if (event.game_type === GAME_TYPE.DOTA2) {
     if (!profile?.rank_status) {
       fields.rank_status = z.enum(['active', 'previous', 'never']);
     } else {
