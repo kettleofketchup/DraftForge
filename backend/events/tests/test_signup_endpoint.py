@@ -217,3 +217,42 @@ class SignupEndpointRollbackTests(TransactionTestCase):
                 "PlayerDotaProfile should not exist after rollback; "
                 f"got {PlayerDotaProfile.objects.filter(org_user=org_user).first()}",
             )
+
+    def test_notify_signup_changed_fires_once_after_commit(self):
+        from datetime import timedelta
+        from unittest.mock import patch as mock_patch
+
+        from django.utils import timezone
+
+        from app.models import CustomUser, GameType, Organization
+        from events.models import Event, EventState
+
+        org = Organization.objects.create(name="Org")
+        event = Event.objects.create(
+            name="Evt",
+            organization=org,
+            game_type=GameType.DOTA2,
+            scheduled_at=timezone.now() + timedelta(days=7),
+            state=EventState.SIGNUPS_OPEN,
+            allow_active_mmr=True,
+            allow_previous_rank=True,
+            allow_battlecup_rating=True,
+        )
+        user = CustomUser.objects.create(username="alice")
+        client = APIClient()
+        client.force_authenticate(user)
+
+        # Patch where services.py imports it, so on_commit-registered callback hits the spy.
+        with mock_patch("events.services.notify_signup_changed") as spy:
+            resp = client.post(
+                f"/api/events/{event.pk}/signup/",
+                {"intent": "rsvp"},
+                format="json",
+            )
+            self.assertEqual(resp.status_code, 201, resp.content)
+
+        # TransactionTestCase commits writes, so on_commit callbacks fire.
+        # The endpoint relies on process_rsvp/_create_signup to register
+        # notify_signup_changed exactly once via on_commit. The endpoint must NOT
+        # double-register it.
+        self.assertEqual(spy.call_count, 1)
