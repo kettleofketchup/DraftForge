@@ -465,22 +465,21 @@ def handle_screenshot_upload(
     event_id, discord_user_id, screenshot_type, attachment_url
 ):
     """Validate and save screenshot URL to PlayerDotaProfile."""
-    from cacheops import invalidate_obj
+    from django.core.exceptions import ValidationError as DjangoValidationError
 
-    from org.models_profiles import PlayerDotaProfile
+    from events.schemas import SignupInputPatch
+    from events.services import apply_signup_input
 
     # Validate URL
     if not attachment_url:
         return {"success": False, "message": "No file provided."}
 
-    # Validate extension
-    url_lower = attachment_url.lower().split("?")[0]  # Strip query params
-    valid_extensions = (".png", ".jpg", ".jpeg", ".webp")
-    if not any(url_lower.endswith(ext) for ext in valid_extensions):
-        return {
-            "success": False,
-            "message": f"Invalid file type. Allowed: {', '.join(valid_extensions)}",
-        }
+    if screenshot_type == "rank":
+        key = "rank_screenshot"
+    elif screenshot_type == "battlecup":
+        key = "battlecup_screenshot"
+    else:
+        return {"success": False, "message": "Unknown screenshot type."}
 
     try:
         event = Event.objects.select_related("organization").get(pk=event_id)
@@ -492,19 +491,15 @@ def handle_screenshot_upload(
         return {"success": False, "message": "User not found."}
 
     try:
-        profile = PlayerDotaProfile.objects.get(org_user=org_user)
-    except PlayerDotaProfile.DoesNotExist:
-        return {"success": False, "message": "Profile not found. Please sign up first."}
+        apply_signup_input(
+            org_user=org_user,
+            event=event,
+            patch=SignupInputPatch(**{key: attachment_url}),
+        )
+    except DjangoValidationError as exc:
+        msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+        return {"success": False, "message": msg}
 
-    if screenshot_type == "rank":
-        profile.rank_screenshot = attachment_url
-    elif screenshot_type == "battlecup":
-        profile.battlecup_screenshot = attachment_url
-    else:
-        return {"success": False, "message": "Unknown screenshot type."}
-
-    profile.save()
-    invalidate_obj(profile)
     _log_interaction(
         event_id, f"screenshot_uploaded:{screenshot_type}", discord_user_id
     )

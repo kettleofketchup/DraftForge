@@ -308,3 +308,22 @@ class HandleScreenshotUploadTest(EventTestCase):
         )
         self.assertFalse(result["success"])
         self.assertIn("Invalid file type", result["message"])
+
+    def test_handle_screenshot_upload_calls_apply_signup_input(self):
+        """rank_screenshot write flows through apply_signup_input via SignupInputPatch."""
+        from unittest.mock import patch as mock_patch
+
+        from events.discord import handle_screenshot_upload
+        from events.schemas import SignupInputPatch
+
+        with mock_patch("events.services.apply_signup_input") as spy:
+            handle_screenshot_upload(
+                event_id=self.event.pk,
+                discord_user_id="100000000000000001",
+                screenshot_type="rank",
+                attachment_url="https://example.com/a.png",
+            )
+        spy.assert_called_once()
+        patch_arg = spy.call_args.kwargs["patch"]
+        self.assertIsInstance(patch_arg, SignupInputPatch)
+        self.assertEqual(patch_arg.rank_screenshot, "https://example.com/a.png")
