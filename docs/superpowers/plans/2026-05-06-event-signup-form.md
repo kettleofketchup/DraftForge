@@ -59,36 +59,40 @@ All steps after this run from `/home/kettle/git_repos/draftforge/.worktrees/even
 
 ## Phase 1 — Populate fixtures (must come first; later tests need this data)
 
-### Task 1: Add `event_player_no_profile` user fixture
+### Task 1: Add `EVENT_PLAYER_NO_PROFILE` user fixture
 
 **Files:**
-- Modify: `backend/tests/data/users.py` (after `event_player_18`, ~line 654)
+- Modify: `backend/tests/data/users.py` (after `EVENT_PLAYER_18`, ~line 654)
 
-- [ ] **Step 1: Append the new fixture user**
+The class is `TestUser` (not `UserFixture`) from `backend/tests/data/models.py`. Existing rows use `pk`, `username`, `nickname`, `discord_id`, `steam_id_64`, `mmr`, `positions=TestPositions()`. Match that shape.
+
+- [ ] **Step 1: Append the new fixture**
 
 ```python
-event_player_no_profile = UserFixture(
+EVENT_PLAYER_NO_PROFILE: TestUser = TestUser(
+    pk=5099,
     username="event_player_no_profile",
-    email="event_player_no_profile@kettle.sh",
-    discord_id="9999900000000001",
     nickname="No-Profile Player",
-    positions=None,
+    discord_id="880000000000099999",
+    steam_id_64=76561198900199999,
+    mmr=None,                  # No MMR — populate skips PlayerDotaProfile creation.
+    positions=TestPositions(), # Default zeroes.
 )
 ```
 
-- [ ] **Step 2: Add to the module's `USERS` list** (find the exporter and append)
+- [ ] **Step 2: Add to the `EVENTS_USERS` (or equivalent) export so `populate_events_data` picks it up**
 
 ```bash
-grep -n "USERS\s*=\|USERS:\s*list" backend/tests/data/users.py
+grep -n "EVENT_PLAYER_1\b" backend/tests/data/users.py
 ```
 
-If `USERS` is a top-level list, append `event_player_no_profile`. If exporter uses `__all__`, add to `__all__`.
+Find the list/dict that aggregates `EVENT_PLAYER_*` fixtures and append `EVENT_PLAYER_NO_PROFILE`. If the existing populate loop creates a `PlayerDotaProfile` unconditionally, Task 2 adds the gate (skip when `mmr is None`).
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add backend/tests/data/users.py
-git commit -m "test(populate): add event_player_no_profile fixture"
+git commit -m "test(populate): add EVENT_PLAYER_NO_PROFILE fixture"
 ```
 
 ### Task 2: Add Deadlock event + screenshot-required Dota event + no-profile player to populate
@@ -96,19 +100,20 @@ git commit -m "test(populate): add event_player_no_profile fixture"
 **Files:**
 - Modify: `backend/tests/populate/events.py`
 
-- [ ] **Step 1: Create `event_player_no_profile` `OrgUser` (no `PlayerDotaProfile`)**
+- [ ] **Step 1: Make the existing event-player populate loop skip profile creation when `mmr is None`**
 
-Locate the section that creates `OrgUser` rows for `event_player_*` (around line 100-120 based on grep) and add a branch that creates an `OrgUser` for `event_player_no_profile` *without* creating a `PlayerDotaProfile`.
+Locate the loop in `populate_events_data` that creates `OrgUser` + `PlayerDotaProfile` for each `event_player_*`. Wrap the profile-creation branch:
 
 ```python
-# After the existing event_player loop:
-no_profile_user = CustomUser.objects.get(username="event_player_no_profile")
-OrgUser.objects.update_or_create(
-    user=no_profile_user, organization=org_7,
-    defaults={"role": OrgUserRole.MEMBER},
-)
-# Intentionally do NOT create a PlayerDotaProfile — this is the empty-profile fixture.
+if user_data.mmr is not None:
+    PlayerDotaProfile.objects.update_or_create(
+        org_user=org_user,
+        defaults={...},  # existing kwargs unchanged
+    )
+# When mmr is None (EVENT_PLAYER_NO_PROFILE), the OrgUser exists but no profile.
 ```
+
+This preserves the existing event-player profile creation while letting `EVENT_PLAYER_NO_PROFILE` flow through the same loop with no profile attached.
 
 - [ ] **Step 2: Add a Deadlock event with `require_steam_id=true` to org 7**
 
@@ -431,11 +436,11 @@ def apply_signup_input(*, org_user, event, patch):
 
     Fields not in `patch` are not touched. Validates against `event` config flags
     and raises django.core.exceptions.ValidationError on policy violations.
-    Cacheops invalidation is registered via invalidate_after_commit.
+    Cacheops invalidation is registered via invalidate_after_commit (which itself
+    schedules via transaction.on_commit when a transaction is active, and fires
+    immediately otherwise — no outer on_commit wrapper needed).
     """
     from org.models_profiles import PlayerDotaProfile
-    from app.cache_utils import invalidate_after_commit
-    from django.db import transaction
 
     set_fields = patch.model_dump(exclude_unset=True)
     if not set_fields:
@@ -444,9 +449,11 @@ def apply_signup_input(*, org_user, event, patch):
     # Will be filled out in subsequent tasks.
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
     profile.save()
-    transaction.on_commit(lambda: invalidate_after_commit(profile, org_user, event))
+    invalidate_after_commit(profile, org_user, event)
     return profile
 ```
+
+Imports `invalidate_after_commit` are at module top of `services.py:10` already (verified). Do **not** wrap the call in `transaction.on_commit(lambda: ...)` — `invalidate_after_commit` already does that internally (`backend/app/cache_utils.py:42`). Wrapping again is at best redundant and at worst incorrect when called outside a transaction.
 
 - [ ] **Step 4: Run, verify pass**
 
@@ -490,8 +497,6 @@ just test::run 'python manage.py test events.tests.test_signup_input.ApplySignup
 ```python
 def apply_signup_input(*, org_user, event, patch):
     from org.models_profiles import PlayerDotaProfile
-    from app.cache_utils import invalidate_after_commit
-    from django.db import transaction
 
     set_fields = patch.model_dump(exclude_unset=True)
     if not set_fields:
@@ -503,7 +508,7 @@ def apply_signup_input(*, org_user, event, patch):
         profile.unverified_friend_id = set_fields["unverified_friend_id"]
 
     profile.save()
-    transaction.on_commit(lambda: invalidate_after_commit(profile, org_user, event))
+    invalidate_after_commit(profile, org_user, event)
     return profile
 ```
 
@@ -759,8 +764,10 @@ git commit -am "feat(events): apply_signup_input writes screenshots with URL+ext
 
 ```python
 def test_duplicate_friend_id_raises(self):
+    # Other-org user owns Friend ID 9999. Global dedup must still reject.
+    other_org = Organization.objects.create(name="Other Org")
     bob = CustomUser.objects.create(username="bob")
-    bob_org_user = resolve_or_create_org_user(bob, self.org)
+    bob_org_user = resolve_or_create_org_user(bob, other_org)
     PlayerDotaProfile.objects.create(org_user=bob_org_user, unverified_friend_id="9999")
     with self.assertRaises(DjangoValidationError) as ctx:
         apply_signup_input(org_user=self.org_user, event=self.event,
@@ -778,16 +785,18 @@ def test_duplicate_friend_id_raises(self):
     if "unverified_friend_id" in set_fields:
         fid = set_fields["unverified_friend_id"]
         if fid:
+            # Global scope (matches existing handlers.py:234 behavior — duplicate
+            # Friend ID is rejected across the whole site, not just within one org).
             collision = (
                 PlayerDotaProfile.objects
-                .filter(org_user__organization=event.organization, unverified_friend_id=fid)
+                .filter(unverified_friend_id=fid)
                 .exclude(org_user=org_user)
                 .exists()
             )
             if collision:
                 from django.core.exceptions import ValidationError
                 raise ValidationError(
-                    f"Friend ID {fid} is already registered to another player. "
+                    f"Friend ID {fid} is already registered to another account. "
                     f"Contact an admin or login to https://dota.kettle.sh to claim it.",
                     code="duplicate_friend_id",
                 )
@@ -878,28 +887,17 @@ def test_cacheops_invalidation_after_commit(self):
     self.assertEqual(len(objs), 3)
 ```
 
-- [ ] **Step 2: Update `apply_signup_input` so the import is at module-level (so the patch works)**
+- [ ] **Step 2: Run the test**
 
-In `services.py`, replace `from app.cache_utils import invalidate_after_commit` inside the function with a top-level `from app.cache_utils import invalidate_after_commit`. The `transaction.on_commit(lambda: invalidate_after_commit(...))` line stays.
+Because `apply_signup_input` calls `invalidate_after_commit` synchronously (no outer `on_commit` wrapper), the spy receives the call immediately under the `with patch(...)` block. No `captureOnCommitCallbacks` is needed.
 
-Note: `transaction.on_commit` callbacks fire when the outer test-case transaction commits, which never happens under `TestCase`. To force the callback to fire so the spy sees it, wrap the call in `self.captureOnCommitCallbacks(execute=True)`:
-
-```python
-def test_cacheops_invalidation_after_commit(self):
-    with mock_patch("events.services.invalidate_after_commit") as spy:
-        with self.captureOnCommitCallbacks(execute=True):
-            apply_signup_input(
-                org_user=self.org_user, event=self.event,
-                patch=SignupInputPatch(rank_status="active"),
-            )
-    spy.assert_called_once()
-    args, kwargs = spy.call_args
-    self.assertEqual(len(args), 3)
+```bash
+just test::run 'python manage.py test events.tests.test_signup_input.ApplySignupInputTests.test_cacheops_invalidation_after_commit -v 2'
 ```
 
-- [ ] **Step 3: Run, verify pass**
+Verify pass.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git commit -am "test(events): pin invalidate_after_commit fires with (profile, org_user, event)"
@@ -917,17 +915,19 @@ from django.db import transaction
 
 
 def test_rollback_does_not_fire_invalidation(self):
-    with mock_patch("events.services.invalidate_after_commit") as spy:
-        with self.captureOnCommitCallbacks(execute=True):
-            try:
-                with transaction.atomic():
-                    apply_signup_input(
-                        org_user=self.org_user, event=self.event,
-                        patch=SignupInputPatch(rank_status="active"),
-                    )
-                    raise RuntimeError("boom")
-            except RuntimeError:
-                pass
+    # Spy on the inner `cacheops.invalidate_obj` (what `invalidate_after_commit`
+    # eventually calls via on_commit). On rollback, the registered callback
+    # is dropped, so `invalidate_obj` is never called.
+    with mock_patch("app.cache_utils.invalidate_obj") as spy:
+        try:
+            with transaction.atomic():
+                apply_signup_input(
+                    org_user=self.org_user, event=self.event,
+                    patch=SignupInputPatch(rank_status="active"),
+                )
+                raise RuntimeError("boom")
+        except RuntimeError:
+            pass
     spy.assert_not_called()
 ```
 
@@ -1019,8 +1019,8 @@ def create_tentative_signup(event, user):
     ).delete()
 
     signup = EventSignup.objects.create(event=event, user=user, status=SignupStatus.TENTATIVE)
-    transaction.on_commit(lambda: invalidate_after_commit(signup, event))
-    transaction.on_commit(lambda: notify_signup_changed(event))
+    invalidate_after_commit(signup, event)  # already on_commit-aware internally
+    transaction.on_commit(lambda: notify_signup_changed(event))  # NOT on_commit-aware; wrap explicitly
     return signup
 ```
 
@@ -1359,52 +1359,77 @@ git commit -am "test(events): pin discord-then-web signup idempotency"
 
 ## Phase 7 — Discord adapter refactor (using shared service)
 
-### Task 21: Refactor `handle_signup_modal_submit` to call `apply_signup_input`
+### Task 21: Refactor `handle_signup_modal_submit` (Dota branch only) to call `apply_signup_input`
 
 **Files:**
-- Modify: `backend/events/discord/handlers.py` (`handle_signup_modal_submit`)
+- Modify: `backend/events/discord/handlers.py` (`handle_signup_modal_submit`, lines 214-313)
 - Modify: `backend/events/tests/test_signup_interactions.py` (assert spy)
 
-- [ ] **Step 1: Add a spy assertion to an existing happy-path test in `test_signup_interactions.py`**
+**Critical context:** there is **no `_save_dota_profile` function** in this file — profile writes are inlined directly inside `handle_signup_modal_submit`. The function has TWO branches:
+- `game_type == GameType.DOTA2` (lines 219-296) — writes `PlayerDotaProfile` inline, including positions and rank_status, plus a global duplicate-Friend-ID check (lines 232-249).
+- `elif game_type == GameType.DEADLOCK` (lines 298-313) — writes `PlayerDeadlockProfile` and calls `process_rsvp`.
 
-Find a test that exercises `handle_signup_modal_submit` with full values. Wrap its inner call:
+Refactor only the Dota 2 branch. The Deadlock branch is **out of scope** for `apply_signup_input` (which is Dota-only) and stays unchanged.
+
+- [ ] **Step 1: Add a spy assertion to an existing happy-path test in `test_signup_interactions.py`**
 
 ```python
 from unittest.mock import patch as mock_patch
 
 with mock_patch("events.discord.handlers.apply_signup_input") as spy:
-    result = handle_signup_modal_submit(...)
+    result = handle_signup_modal_submit(event_id=..., discord_user_id=..., game_type=1, values={
+        "unverified_friend_id": "12345",
+        "rank_status": "active",
+        "positions": [],  # positions collected in follow-up step, not modal
+    })
 spy.assert_called_once()
 patch_arg = spy.call_args.kwargs["patch"]
-self.assertEqual(patch_arg.unverified_friend_id, ...)  # whatever the test passed
+self.assertEqual(patch_arg.unverified_friend_id, "12345")
+self.assertEqual(patch_arg.rank_status, "active")
 ```
 
-- [ ] **Step 2: Run the test, verify fail (handler doesn't call `apply_signup_input` yet)**
+- [ ] **Step 2: Run, verify fail (handler doesn't call `apply_signup_input` yet)**
 
-- [ ] **Step 3: Refactor `handle_signup_modal_submit`**
+- [ ] **Step 3: Refactor the Dota 2 branch only**
 
-Replace the inline `_save_dota_profile(...)` call (and the duplicate-Friend-ID block) with:
+Inside `handle_signup_modal_submit`, replace the entire `if game_type == GameType.DOTA2:` block (lines 219-296) including the duplicate-Friend-ID guard (which moves into `apply_signup_input` per Task 11) with:
 
 ```python
-from events.services import apply_signup_input
-from events.schemas import SignupInputPatch
-from django.core.exceptions import ValidationError as DjangoValidationError
+if game_type == GameType.DOTA2:
+    from events.services import apply_signup_input
+    from events.schemas import SignupInputPatch
+    from django.core.exceptions import ValidationError as DjangoValidationError
 
-# Build patch from values dict
-patch_kwargs = {}
-if values.get("unverified_friend_id"):
-    patch_kwargs["unverified_friend_id"] = values["unverified_friend_id"]
-if values.get("positions"):
-    patch_kwargs["positions"] = values["positions"]
-if values.get("rank_status"):
-    patch_kwargs["rank_status"] = values["rank_status"]
-patch = SignupInputPatch(**patch_kwargs)
+    patch_kwargs = {}
+    if values.get("unverified_friend_id"):
+        patch_kwargs["unverified_friend_id"] = values["unverified_friend_id"]
+    if values.get("rank_status"):
+        patch_kwargs["rank_status"] = values["rank_status"]
+    # NOTE: positions are collected in the follow-up PositionConfirmButton flow,
+    # not in this modal. The modal's `values["positions"]` is always [] here.
+    # Task 22 handles the positions write when the user confirms positions.
 
-try:
-    apply_signup_input(org_user=org_user, event=event, patch=patch)
-except DjangoValidationError as exc:
-    return {"action": "error", "message": exc.messages[0] if hasattr(exc, "messages") else str(exc)}
+    try:
+        apply_signup_input(
+            org_user=org_user, event=event,
+            patch=SignupInputPatch(**patch_kwargs),
+        )
+    except DjangoValidationError as exc:
+        return {"action": "error", "message": exc.messages[0] if hasattr(exc, "messages") else str(exc)}
+
+    # Preserve the existing return-value contract: the modal needs to fan out to
+    # the position-select view (or rank-status select if rank_status wasn't
+    # captured). Find the existing return statements at lines ~289-296 and keep
+    # them. Specifically, the function returns:
+    #   - {"action": "needs_rank_details"} when rank_status was provided
+    #   - {"action": "needs_rank_status"} when rank_status was missing
+    # Those branches stay unchanged.
+elif game_type == GameType.DEADLOCK:
+    # UNCHANGED — Deadlock branch (lines 298-313) is out of scope.
+    ...
 ```
+
+The Deadlock branch must remain bit-for-bit identical post-refactor.
 
 - [ ] **Step 4: Run modified test + the rest of `test_signup_interactions.py`, verify pass**
 
@@ -1412,11 +1437,17 @@ except DjangoValidationError as exc:
 just test::run 'python manage.py test events.tests.test_signup_interactions -v 2'
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Smoke-test Deadlock unchanged**
+
+```bash
+just test::run 'python manage.py test events.tests.test_discord -v 2 --pattern "*deadlock*"'
+```
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add backend/events/discord/handlers.py backend/events/tests/test_signup_interactions.py
-git commit -m "refactor(discord): handle_signup_modal_submit calls apply_signup_input"
+git commit -m "refactor(discord): handle_signup_modal_submit Dota 2 branch calls apply_signup_input (Deadlock unchanged)"
 ```
 
 ### Task 22: Refactor `PositionConfirmButton.callback`
@@ -1482,14 +1513,36 @@ self.assertEqual(spy.call_args.kwargs["patch"].battle_cup_tier, 5)
 
 - [ ] **Step 2: Run, verify fail**
 
-- [ ] **Step 3: Refactor both handlers** to build a `SignupInputPatch` and call `apply_signup_input`. Drop direct `profile.rank_medal = …; profile.save()` writes.
+- [ ] **Step 3: Refactor both handlers**
+
+For each handler, replace the inline `profile.rank_medal = …; profile.save(); invalidate_obj(profile)` block with:
+
+```python
+from events.services import apply_signup_input
+from events.schemas import SignupInputPatch
+from django.core.exceptions import ValidationError as DjangoValidationError
+
+try:
+    apply_signup_input(
+        org_user=org_user, event=event,
+        patch=SignupInputPatch(rank_medal=medal_with_star),  # or battle_cup_tier=int(tier)
+    )
+except DjangoValidationError as exc:
+    return {"action": "error", "message": exc.messages[0] if hasattr(exc, "messages") else str(exc)}
+```
+
+**Preserve the trailing logic.** Both `handle_rank_medal_select` (lines 374-380, 401-432) and `handle_battle_cup_submit` (lines 459-468) currently:
+1. Check `event.discord_require_rank_screenshot` (or `discord_require_battlecup_screenshot`); if required-and-missing, return `{"action": "needs_screenshot", "screenshot_type": "rank" | "battlecup"}` so the UI prompts for upload.
+2. Otherwise, call `process_rsvp(event, user)` to create the `EventSignup` and return `{"action": "signed_up", "status": signup.status}`.
+
+This screenshot-gate-then-`process_rsvp` flow is **NOT** moved into `apply_signup_input`. The shared service only writes profile fields. The trailing screenshot check + `process_rsvp` call must remain in the adapter, exactly as today.
 
 - [ ] **Step 4: Run, verify pass**
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "refactor(discord): rank_medal + battle_cup_tier handlers call apply_signup_input"
+git commit -am "refactor(discord): rank_medal + battle_cup_tier handlers call apply_signup_input (screenshot-gate + process_rsvp preserved)"
 ```
 
 ### Task 24: Refactor `handle_screenshot_upload`
@@ -1511,39 +1564,78 @@ self.assertEqual(spy.call_args.kwargs["patch"].rank_screenshot, "https://example
 
 - [ ] **Step 2: Run, verify fail**
 
-- [ ] **Step 3: Refactor** the function to build `{"rank_screenshot": url}` (or `{"battlecup_screenshot": url}` based on `screenshot_type`) and call `apply_signup_input`. Drop direct `profile.rank_screenshot = ...; profile.save()` writes.
+- [ ] **Step 3: Refactor**
+
+Replace the inline `profile.rank_screenshot = attachment_url; profile.save(); invalidate_obj(profile)` (or battlecup variant) with:
+
+```python
+from events.services import apply_signup_input
+from events.schemas import SignupInputPatch
+from django.core.exceptions import ValidationError as DjangoValidationError
+
+key = "rank_screenshot" if screenshot_type == "rank" else "battlecup_screenshot"
+try:
+    apply_signup_input(
+        org_user=org_user, event=event,
+        patch=SignupInputPatch(**{key: attachment_url}),
+    )
+except DjangoValidationError as exc:
+    return {"success": False, "message": exc.messages[0] if hasattr(exc, "messages") else str(exc)}
+```
+
+**Preserve `process_rsvp` follow-up.** `handle_screenshot_upload` today calls `process_rsvp(event, user)` after the screenshot save (line 468) to actually create the `EventSignup` — without this trailing call, screenshot uploads succeed but no signup is created. The trailing `process_rsvp` block (and its return-shape construction) remains in the adapter unchanged.
 
 - [ ] **Step 4: Run, verify pass**
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "refactor(discord): screenshot upload handler calls apply_signup_input"
+git commit -am "refactor(discord): screenshot handler calls apply_signup_input (process_rsvp follow-up preserved)"
 ```
 
-### Task 25: Delete `_save_dota_profile`
+### Task 25: Verify no orphaned profile writes remain in Discord adapters
 
 **Files:**
-- Modify: `backend/events/discord/handlers.py`
+- Audit: `backend/events/discord/handlers.py`, `backend/discordbot/components.py`
 
-- [ ] **Step 1: Delete the function and any remaining call sites**
+There is no `_save_dota_profile` function to delete (handlers.py inlines profile writes directly). Tasks 21–24 refactored each inline write to call `apply_signup_input`. This task verifies no inline profile-write blocks were missed.
+
+- [ ] **Step 1: Grep for direct profile writes that should now go through the service**
 
 ```bash
-grep -n "_save_dota_profile" backend/events/discord/handlers.py backend/events/discord/*.py backend/discordbot/*.py
+grep -n "profile\.\(unverified_friend_id\|pos_[1-5]\|rank_status\|rank_medal\|battle_cup_tier\|rank_screenshot\|battlecup_screenshot\)\s*=\|invalidate_obj(profile)" backend/events/discord/handlers.py backend/discordbot/components.py
 ```
 
-If any remain, refactor them to use `apply_signup_input`. Then delete the function definition.
+If any matches remain (other than the Deadlock branch in `handle_signup_modal_submit`, which writes `PlayerDeadlockProfile` not `PlayerDotaProfile`), refactor them to `apply_signup_input`.
 
-- [ ] **Step 2: Run all events + discordbot tests**
+- [ ] **Step 2: Verify Discord-side `notify_signup_changed` direct calls are unchanged**
+
+The pre-existing double-fire (handlers.py:177, 606, 651) is out of scope for this PR per the spec. Confirm the count is unchanged before vs after:
+
+```bash
+grep -c "notify_signup_changed" backend/events/discord/handlers.py
+```
+
+Pre-PR count and post-PR count must match.
+
+- [ ] **Step 3: Verify `custom_id` formats unchanged**
+
+```bash
+grep -n "custom_id=f.\"\\(event_signup\\|event_notify\\|event_tentative\\|event_decline\\|signup_friend_id\\|signup_rank_status\\|pos_select_\\|pos_confirm\\|rank_status\\|rank_medal\\|rank_star\\|bcup_tier\\|screenshot_upload\\|signup_deadlock_\\)" backend/discordbot/components.py
+```
+
+All custom_ids must remain bit-for-bit identical so existing Discord button-message rows continue to dispatch.
+
+- [ ] **Step 4: Run all events + discordbot tests**
 
 ```bash
 just test::run 'python manage.py test events discordbot -v 2'
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 5: Commit (only if anything was changed; otherwise skip)**
 
 ```bash
-git commit -am "refactor(discord): delete _save_dota_profile (replaced by apply_signup_input)"
+git commit -am "refactor(discord): audit — confirm no inline profile writes remain" || true
 ```
 
 ### Task 26: ValidationError → ephemeral error message preservation test
@@ -1663,40 +1755,47 @@ If any test still references `/rsvp/` or `/tentative/`, migrate it.
 git commit -am "refactor(events): delete rsvp and tentative DRF actions (replaced by /signup/)"
 ```
 
-### Task 30: Schema-drift snapshot + assertion
+### Task 30: URL-conf assertion for `/signup/` (replaces "schema-drift snapshot")
 
 **Files:**
-- Modify: `backend/app/tests/test_schema_drift.py` (snapshot file path may live alongside)
+- New: `backend/events/tests/test_signup_url_conf.py`
 
-- [ ] **Step 1: Regenerate the OpenAPI snapshot**
+`backend/app/tests/test_schema_drift.py` is a Pydantic↔DRF parity test, not an OpenAPI snapshot. There is no `manage.py spectacular` (drf-spectacular is not installed). Instead of "regenerating a snapshot," add a small URL-conf test that pins the new endpoint exists and the old ones are gone.
 
-```bash
-just test::run 'python manage.py spectacular --file backend/app/tests/openapi-snapshot.yaml'
-```
-
-(Adjust path/command per the actual `test_schema_drift.py` setup — read the file and follow its in-source instructions.)
-
-- [ ] **Step 2: Add assertion to `test_schema_drift.py`**
+- [ ] **Step 1: Write test**
 
 ```python
-def test_signup_endpoint_in_schema(self):
-    """Catch accidental future removal of /signup/."""
-    schema = load_schema()
-    self.assertIn("/api/events/{id}/signup/", schema["paths"])
-    self.assertNotIn("/api/events/{id}/rsvp/", schema["paths"])
-    self.assertNotIn("/api/events/{id}/tentative/", schema["paths"])
+# backend/events/tests/test_signup_url_conf.py
+from django.test import TestCase
+from django.urls import resolve, Resolver404
+
+
+class SignupUrlConfTest(TestCase):
+    def test_signup_endpoint_resolves(self):
+        match = resolve("/api/events/1/signup/")
+        # DRF action URLs resolve to ViewSet.as_view({...})
+        self.assertEqual(match.func.actions["post"], "signup")
+
+    def test_old_rsvp_endpoint_does_not_resolve(self):
+        with self.assertRaises(Resolver404):
+            resolve("/api/events/1/rsvp/")
+
+    def test_old_tentative_endpoint_does_not_resolve(self):
+        with self.assertRaises(Resolver404):
+            resolve("/api/events/1/tentative/")
 ```
 
-- [ ] **Step 3: Run schema-drift test, verify pass**
+- [ ] **Step 2: Run, verify pass**
 
 ```bash
-just test::run 'python manage.py test app.tests.test_schema_drift -v 2'
+just test::run 'python manage.py test events.tests.test_signup_url_conf -v 2'
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-git commit -am "test(schema): regenerate snapshot + assert /signup/ exists, /rsvp/ and /tentative/ removed"
+git add backend/events/tests/test_signup_url_conf.py
+git commit -m "test(events): URL-conf pins /signup/ exists and /rsvp/, /tentative/ removed"
 ```
 
 ---
@@ -1780,6 +1879,11 @@ export function useUserDotaProfile(
   userPk: number | null | undefined,
   options?: { initialData?: DotaProfileData | null },
 ) {
+  // Coerce null → undefined so TanStack Query doesn't lock the result to a
+  // resolved-null state (with `enabled: userPk != null` plus `data: null`,
+  // the query never refetches and consumers see stale null forever).
+  const initialData = options?.initialData ?? undefined;
+
   return useQuery({
     queryKey: ['user-dota-profile', userPk],
     queryFn: async () => {
@@ -1789,12 +1893,12 @@ export function useUserDotaProfile(
     enabled: userPk != null,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
-    initialData: options?.initialData ?? undefined,
+    initialData,
   });
 }
 ```
 
-(If no `/users/<pk>/dota-profile/` endpoint exists yet, derive the profile from `event.user_data.dota_profile` directly via `initialData` only — no fetch needed for v1. Document this in the file.)
+(If no `/users/<pk>/dota-profile/` endpoint exists yet, the query never fires — consumers see only `initialData`. That is acceptable for v1; the spec's stale-defense story relies on invalidation after writes (Task 42), which still works because TanStack Query's `invalidateQueries` will mark the cached entry stale and re-fetch on the next subscriber. Document this in the file's docstring.)
 
 - [ ] **Step 4: Run, verify pass**
 
@@ -2020,6 +2124,12 @@ export function buildSignupPatchSchema(
       fields.positions = z.array(z.number().int().min(1).max(5)).optional();
     }
 
+    // Medal+Star are split UI fields that stitch into rank_medal at submit time.
+    // Include them in the schema so RHF + zodResolver doesn't strip them as
+    // unknown fields. The .superRefine() below derives rank_medal from the pair
+    // when both are set.
+    fields.rank_medal_medal = z.string().optional();
+    fields.rank_medal_star = z.string().optional();
     fields.rank_medal = z.string().max(64).optional();
     fields.battle_cup_tier = z.number().int().min(1).max(8).optional();
 
@@ -2027,7 +2137,21 @@ export function buildSignupPatchSchema(
     fields.battlecup_screenshot = z.string().regex(SCREENSHOT_URL_RE).optional();
   }
 
-  return z.object(fields);
+  return z.object(fields).superRefine((data, ctx) => {
+    // When the form is in active/previous rank-status branch, both medal and
+    // star must be picked together (or both empty). The submit handler in
+    // EventSignupModal stitches "Crusader 3" / "Immortal" before sending.
+    if (data.rank_status === 'active' || data.rank_status === 'previous') {
+      const hasMedal = !!data.rank_medal_medal;
+      const isImmortal = data.rank_medal_medal === 'Immortal';
+      const hasStar = !!data.rank_medal_star;
+      if (!hasMedal) {
+        ctx.addIssue({ code: 'custom', message: 'Pick a medal', path: ['rank_medal_medal'] });
+      } else if (!isImmortal && !hasStar) {
+        ctx.addIssue({ code: 'custom', message: 'Pick a star', path: ['rank_medal_star'] });
+      }
+    }
+  });
 }
 
 export type SignupInputPatch = z.infer<ReturnType<typeof buildSignupPatchSchema>>;
@@ -2456,6 +2580,60 @@ git add frontend/app/components/events/EventSignupModal/ScreenshotUrlField.tsx
 git commit -m "feat(events): ScreenshotUrlField subcomponent"
 ```
 
+### Task 40b: `PrefilledSummaryChip` subcomponent
+
+**Files:**
+- New: `frontend/app/components/events/EventSignupModal/PrefilledSummaryChip.tsx`
+
+This component renders sections whose data is already on the user's profile in a collapsed `<Collapsible>` with a `<Badge>` summary chip + Edit affordance. Spec mandates this UX — without it, prefilled sections silently disappear and the user has no way to see/correct what was carried over.
+
+- [ ] **Step 1: Implement**
+
+```tsx
+'use client';
+import { useState, type ReactNode } from 'react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '~/components/ui/collapsible';
+import { Badge } from '~/components/ui/badge';
+import { Pencil } from 'lucide-react';
+import { cn } from '~/lib/utils';
+
+export type PrefilledSummaryChipProps = {
+  testId: string;             // e.g., "signup-prefilled-summary-positions"
+  summary: string;            // e.g., "Carry · Mid · Offlane"
+  children: ReactNode;        // The editable section to reveal on expand
+};
+
+export function PrefilledSummaryChip({ testId, summary, children }: PrefilledSummaryChipProps) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger
+        data-testid={testId}
+        className={cn(
+          'flex w-full items-center justify-between rounded-md border border-border',
+          'bg-base-200 px-3 py-2 hover:bg-base-300 min-h-11',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">{summary}</Badge>
+          <span className="text-xs text-muted-foreground">from your profile</span>
+        </div>
+        <Pencil className="size-4 text-muted-foreground" aria-label="Edit" />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-3">{children}</CollapsibleContent>
+    </Collapsible>
+  );
+}
+```
+
+- [ ] **Step 2: Type-check, commit**
+
+```bash
+git add frontend/app/components/events/EventSignupModal/PrefilledSummaryChip.tsx
+git commit -m "feat(events): PrefilledSummaryChip — collapsed prefilled-section UX"
+```
+
 ### Task 41: `EventSignupModal` root + integration test
 
 **Files:**
@@ -2536,15 +2714,17 @@ cd frontend && npm test -- EventSignupModal
 
 ```tsx
 'use client';
-import { useMemo, useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useMemo } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter } from '~/components/ui/dialog';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from '~/components/ui/sheet';
+import { useMediaQuery } from '@uidotdev/usehooks';   // matches LeagueCombobox / teamCombobox
+import { Dialog, DialogContent, DialogTitle, DialogHeader } from '~/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/sheet';
 import { Form } from '~/components/ui/form';
 import { Badge } from '~/components/ui/badge';
 import { SubmitButton, CancelButton } from '~/components/ui/buttons';
-import { useMediaQuery } from '~/hooks/useMediaQuery';
+import { extractApiError } from '~/lib/apiError';
+import { cn } from '~/lib/utils';
 import { buildSignupPatchSchema, type SignupInputPatch } from './EventSignupModal/schema';
 import { toPatch } from './EventSignupModal/toPatch';
 import { FriendIdField } from './EventSignupModal/FriendIdField';
@@ -2552,9 +2732,21 @@ import { RankStatusRadioGroup } from './EventSignupModal/RankStatusRadioGroup';
 import { PositionPickerGrid } from './EventSignupModal/PositionPickerGrid';
 import { RankDetailFields } from './EventSignupModal/RankDetailFields';
 import { ScreenshotUrlField } from './EventSignupModal/ScreenshotUrlField';
+import { PrefilledSummaryChip } from './EventSignupModal/PrefilledSummaryChip';
 import { useSignupMutation } from '~/hooks/useEvent';
 import { GameType, type EventType } from './schemas';
 import type { DotaProfileData } from '~/components/user';
+
+const POSITION_LABELS: Record<number, string> = { 1: 'Carry', 2: 'Mid', 3: 'Offlane', 4: 'Soft Support', 5: 'Hard Support' };
+function positionsSummary(p: DotaProfileData['positions']): string {
+  const picked: number[] = [];
+  if (p.pos_1) picked.push(1);
+  if (p.pos_2) picked.push(2);
+  if (p.pos_3) picked.push(3);
+  if (p.pos_4) picked.push(4);
+  if (p.pos_5) picked.push(5);
+  return picked.map((n) => POSITION_LABELS[n]).join(' · ');
+}
 
 export type EventSignupModalProps = {
   event: EventType;
@@ -2587,8 +2779,14 @@ export function EventSignupModal({ event, intent, profile, open, onOpenChange }:
     resolver: zodResolver(schema as never),
     mode: 'onChange',
     shouldUnregister: true,
-    defaultValues: {},
+    defaultValues: {
+      unverified_friend_id: profile?.unverified_friend_id ?? '',
+      positions: [],
+      rank_status: profile?.rank_status ?? undefined,
+    },
   });
+
+  const watchedRankStatus = useWatch({ control: form.control, name: 'rank_status' });
 
   const mutation = useSignupMutation(event.id);
 
@@ -2602,45 +2800,157 @@ export function EventSignupModal({ event, intent, profile, open, onOpenChange }:
     delete (merged as Record<string, unknown>).rank_medal_medal;
     delete (merged as Record<string, unknown>).rank_medal_star;
     const patch = toPatch(merged, profile);
-    await mutation.mutateAsync({ intent, profile: patch });
-    onOpenChange(false);
+    try {
+      await mutation.mutateAsync({ intent, profile: patch });
+      onOpenChange(false);
+    } catch (err) {
+      // Error rendered inline via mutation.error; modal stays open for retry.
+    }
   });
 
-  const showFriendId = event.require_steam_id && !profile?.unverified_friend_id;
   const isDota = event.game_type === GameType.DOTA2;
-  const showRankStatus = isDota && !profile?.rank_status;
+  const showFriendId = event.require_steam_id;
+  const friendIdPrefilled = !!profile?.unverified_friend_id;
+  const showRankStatus = isDota;
+  const rankStatusPrefilled = !!profile?.rank_status;
   const hasPos = profile?.positions ? Object.values(profile.positions).some(Boolean) : false;
-  const showPositions = isDota && !hasPos;
-  const showRankDetail = isDota && !!form.watch('rank_status');
+  const showPositions = isDota;
+  const positionsPrefilled = hasPos;
+  const showRankDetail = isDota && !!watchedRankStatus;
+  const rankDetailPrefilled = !!profile?.rank_medal || profile?.battle_cup_tier != null;
   const screenshotForActive = isDota && event.discord_require_rank_screenshot &&
-    (form.watch('rank_status') === 'active' || form.watch('rank_status') === 'previous') &&
-    !profile?.rank_screenshot;
-  const screenshotForBC = isDota && event.discord_require_battlecup_screenshot &&
-    form.watch('rank_status') === 'never' && !profile?.battlecup_screenshot;
+    (watchedRankStatus === 'active' || watchedRankStatus === 'previous');
+  const screenshotForActivePrefilled = !!profile?.rank_screenshot;
+  const screenshotForBC = isDota && event.discord_require_battlecup_screenshot && watchedRankStatus === 'never';
+  const screenshotForBCPrefilled = !!profile?.battlecup_screenshot;
+
+  let sectionNum = 0;
+  const heading = (label: string) => {
+    sectionNum += 1;
+    return <h3 className="text-sm font-semibold border-t border-border pt-3">{sectionNum}. {label}</h3>;
+  };
+
+  // Render either a prefilled-collapsed chip or the editable subcomponent.
+  function withPrefill(
+    prefilled: boolean,
+    summary: string,
+    testId: string,
+    editable: React.ReactNode,
+  ) {
+    if (prefilled) {
+      return <PrefilledSummaryChip testId={testId} summary={summary}>{editable}</PrefilledSummaryChip>;
+    }
+    return editable;
+  }
 
   const title = intent === 'rsvp' ? `Sign Up for ${event.name}` : `Mark Tentative for ${event.name}`;
   const banner = intent === 'rsvp'
     ? "You're committing to play this event. We'll add you to the signup list."
     : "You're marking yourself tentative — we count you as interested but not committed.";
 
+  const errorMessage = mutation.error ? (extractApiError(mutation.error) || 'Something went wrong') : null;
+
+  const scrollableBody = (
+    <div className="flex flex-col gap-4 overflow-y-auto pb-4" data-testid="event-signup-modal-body">
+      <div role="status" aria-live="polite" className="text-sm text-muted-foreground">{banner}</div>
+      <Badge variant={intent === 'rsvp' ? 'default' : 'secondary'} className="w-fit">
+        {intent === 'rsvp' ? 'Sign Up' : 'Tentative'}
+      </Badge>
+
+      {showFriendId && (
+        <section className="flex flex-col gap-2">
+          {heading('Steam Friend ID')}
+          {withPrefill(
+            friendIdPrefilled,
+            profile?.unverified_friend_id ?? '',
+            'signup-prefilled-summary-friend-id',
+            <FriendIdField control={form.control as never} />,
+          )}
+        </section>
+      )}
+      {showRankStatus && (
+        <section className="flex flex-col gap-2">
+          {heading('Rank Status')}
+          {withPrefill(
+            rankStatusPrefilled,
+            profile?.rank_status ?? '',
+            'signup-prefilled-summary-rank-status',
+            <RankStatusRadioGroup control={form.control as never} event={event} />,
+          )}
+        </section>
+      )}
+      {showPositions && (
+        <section className="flex flex-col gap-2">
+          {heading('Preferred Positions')}
+          {withPrefill(
+            positionsPrefilled,
+            profile?.positions ? positionsSummary(profile.positions) : '',
+            'signup-prefilled-summary-positions',
+            <PositionPickerGrid control={form.control as never} />,
+          )}
+        </section>
+      )}
+      {showRankDetail && (
+        <section className="flex flex-col gap-2">
+          {heading('Rank Detail')}
+          {withPrefill(
+            rankDetailPrefilled,
+            profile?.rank_medal || (profile?.battle_cup_tier ? `Battle Cup Tier ${profile.battle_cup_tier}` : ''),
+            'signup-prefilled-summary-rank-detail',
+            <RankDetailFields control={form.control as never} />,
+          )}
+        </section>
+      )}
+      {screenshotForActive && (
+        <section className="flex flex-col gap-2">
+          {heading('MMR Screenshot')}
+          {withPrefill(
+            screenshotForActivePrefilled,
+            'On file',
+            'signup-prefilled-summary-screenshot',
+            <ScreenshotUrlField control={form.control as never} name="rank_screenshot" />,
+          )}
+        </section>
+      )}
+      {screenshotForBC && (
+        <section className="flex flex-col gap-2">
+          {heading('Battle Cup Screenshot')}
+          {withPrefill(
+            screenshotForBCPrefilled,
+            'On file',
+            'signup-prefilled-summary-screenshot',
+            <ScreenshotUrlField control={form.control as never} name="battlecup_screenshot" label="Battle Cup Screenshot URL" />,
+          )}
+        </section>
+      )}
+      {errorMessage && (
+        <div
+          data-testid="event-signup-error"
+          role="alert"
+          className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive"
+        >
+          {errorMessage}
+        </div>
+      )}
+    </div>
+  );
+
+  const stickyFooter = (
+    <div className="sticky bottom-0 -mx-6 mt-2 flex justify-end gap-2 border-t border-border bg-background px-6 py-3">
+      <CancelButton type="button" onClick={() => onOpenChange(false)} disabled={mutation.isPending} data-testid="event-signup-cancel-btn">
+        Cancel
+      </CancelButton>
+      <SubmitButton loading={mutation.isPending} disabled={!form.formState.isValid} data-testid="event-signup-submit-btn">
+        {intent === 'rsvp' ? 'Sign Up' : 'Mark Tentative'}
+      </SubmitButton>
+    </div>
+  );
+
   const body = (
     <Form {...form}>
-      <form onSubmit={onSubmit} className="flex flex-col gap-4" data-testid="event-signup-modal">
-        <Badge variant={intent === 'rsvp' ? 'default' : 'secondary'}>{banner}</Badge>
-        {showFriendId && <FriendIdField control={form.control as never} />}
-        {showRankStatus && <RankStatusRadioGroup control={form.control as never} event={event} />}
-        {showPositions && <PositionPickerGrid control={form.control as never} />}
-        {showRankDetail && <RankDetailFields control={form.control as never} />}
-        {screenshotForActive && <ScreenshotUrlField control={form.control as never} name="rank_screenshot" />}
-        {screenshotForBC && <ScreenshotUrlField control={form.control as never} name="battlecup_screenshot" label="Battle Cup Screenshot URL" />}
-        <div className="flex justify-end gap-2 pt-2">
-          <CancelButton type="button" onClick={() => onOpenChange(false)} disabled={mutation.isPending} data-testid="event-signup-cancel-btn">
-            Cancel
-          </CancelButton>
-          <SubmitButton loading={mutation.isPending} disabled={!form.formState.isValid} data-testid="event-signup-submit-btn">
-            {intent === 'rsvp' ? 'Sign Up' : 'Mark Tentative'}
-          </SubmitButton>
-        </div>
+      <form onSubmit={onSubmit} className="flex flex-col" noValidate data-testid="event-signup-modal">
+        {scrollableBody}
+        {stickyFooter}
       </form>
     </Form>
   );
@@ -2648,7 +2958,7 @@ export function EventSignupModal({ event, intent, profile, open, onOpenChange }:
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogContent className="flex max-h-[90vh] flex-col">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
@@ -2659,7 +2969,7 @@ export function EventSignupModal({ event, intent, profile, open, onOpenChange }:
   }
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="max-h-[90dvh] overflow-y-auto">
+      <SheetContent side="bottom" className={cn('flex flex-col', '[height:100svh]', 'max-h-[100dvh]')}>
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
         </SheetHeader>
@@ -2714,14 +3024,16 @@ In `frontend/app/hooks/useEvent.ts`:
 ```ts
 export function useSignupMutation(eventId: number) {
   const queryClient = useQueryClient();
-  const currentUser = useUserStore.getState().currentUser;
+  // Use a Zustand selector so the hook reactively tracks user changes — calling
+  // `useUserStore.getState()` at hook-factory scope captures a stale snapshot.
+  const currentUserPk = useUserStore((s) => s.currentUser?.pk ?? null);
   return useMutation({
     mutationFn: (body: SignupBody) => signupForEvent(eventId, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
-      if (currentUser?.pk) {
-        queryClient.invalidateQueries({ queryKey: ['user-dota-profile', currentUser.pk] });
+      if (currentUserPk != null) {
+        queryClient.invalidateQueries({ queryKey: ['user-dota-profile', currentUserPk] });
       }
       useOrgStore.getState().clearOrgUsers();
     },
@@ -2774,9 +3086,13 @@ const [signupModal, setSignupModal] = useState<{ open: boolean; intent: 'rsvp' |
 
 - [ ] **Step 2: Replace the existing ConfirmDialog "RSVP for Event" flow with the gap-evaluating click handler**
 
-Replace the existing Sign Up button's `onClick={() => setShowRsvpConfirm(true)}` with:
+Trigger gating: Sign Up / Tentative buttons must wait for `event`, `signups`, and `profileQuery` to settle. Without this, the gap evaluator runs against `profile === undefined` and forces the modal even when the user's profile is actually complete.
 
 ```tsx
+const profileLoaded = profileQuery.status !== 'pending';
+const triggerEnabled = !!event && !!signups && profileLoaded && !signupMutation.isPending;
+
+// On the Sign Up button:
 onClick={async () => {
   if (!event) return;
   const gap = evaluateSignupGap(event, profile);
@@ -2785,18 +3101,24 @@ onClick={async () => {
       await signupMutation.mutateAsync({ intent: 'rsvp', profile: {} });
       toast.success('Signed up!');
     } catch (err) {
-      toast.error(extractApiError(err) || 'Failed to sign up');
+      // 400 with `error: ...` from the server (defense in depth — cached profile
+      // said "complete" but server disagrees). Refetch and re-evaluate.
+      await profileQuery.refetch();
+      const newGap = event ? evaluateSignupGap(event, profileQuery.data) : 'complete';
+      if (newGap !== 'complete') {
+        setSignupModal({ open: true, intent: 'rsvp' });
+      } else {
+        toast.error(extractApiError(err) || 'Failed to sign up');
+      }
     }
   } else {
     setSignupModal({ open: true, intent: 'rsvp' });
   }
 }}
-disabled={signupMutation.isPending}
+disabled={!triggerEnabled}
 ```
 
-Same for Tentative button (intent: 'tentative').
-
-Same for `event-upgrade-rsvp-btn` (intent: 'rsvp', re-using gap evaluation).
+Same pattern for Tentative button (intent: `'tentative'`) and `event-upgrade-rsvp-btn` (intent: `'rsvp'`).
 
 Delete the `ConfirmDialog` block titled "RSVP for Event".
 
@@ -2838,11 +3160,17 @@ git commit -m "feat(events): rewire event page to EventSignupModal with skip-the
 **Files:**
 - Modify: `frontend/tests/playwright/fixtures/events.ts` (or wherever `loginEventPlayer` lives)
 
-- [ ] **Step 1: Append the new fixture**
+- [ ] **Step 1: Append the new fixture (mirrors `loginEventPlayer` at events.ts:133)**
 
 ```ts
+/** Login as the no-profile event player (pk=5099). */
 export async function loginEventPlayerNoProfile(context: BrowserContext) {
-  await loginAs(context, 'event_player_no_profile');  // matches the populate user
+  const resp = await context.request.post(`${API_URL}/tests/login-as/`, {
+    data: { user_pk: 5099 },
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!resp.ok()) throw new Error(`Login event_player_no_profile failed: ${resp.status()}`);
+  return resp.json();
 }
 ```
 
@@ -3031,8 +3359,9 @@ test.describe('event signup form', () => {
     await page.setViewportSize({ width: 375, height: 812 });
     await loginEventPlayerNoProfile(context);
     await page.goto('/events/<screenshot-not-required-event-id>');
-    // Use mobile-nav flow per testing skill convention
-    await page.getByTestId('mobile-nav-trigger').click();
+    // Use mobile-nav flow per testing skill convention. The mobile nav button has
+    // aria-label="Open menu" (no data-testid; use accessible name).
+    await page.getByRole('button', { name: 'Open menu' }).click();
     await page.getByText('Sign Up').click();
     const modal = page.getByTestId('event-signup-modal');
     await expect(modal).toBeVisible();
@@ -3130,7 +3459,8 @@ EOF
 - §"Discord refactor" — Tasks 21–27.
 - §"Tentative as a service" — Task 15.
 - §"Removed endpoints + migration list" — Tasks 28–30, 45.
-- §"Frontend file layout / EventSignupModal" — Tasks 36–41.
+- §"Frontend file layout / EventSignupModal" — Tasks 36–40b–41.
+- §"Prefilled section collapse-to-summary" — Task 40b (PrefilledSummaryChip) + Task 41 (`withPrefill` integration).
 - §"Skip-the-form fast path" — Tasks 33, 43.
 - §"Stale-profile defense" — Task 32 (`useUserDotaProfile`).
 - §"Mutation wiring" — Task 42.
@@ -3144,7 +3474,7 @@ EOF
 - §"Discord regression tests + error vocab" — Tasks 21–27.
 - §"Frontend Vitest" — Tasks 32, 33, 34, 35, 41.
 - §"Playwright E2E + data-testid inventory" — Tasks 44–46.
-- §"Schema-drift" — Task 30.
+- §"Schema-drift" — Task 30 (URL-conf assertion; `test_schema_drift.py` is a Pydantic↔DRF parity test, not OpenAPI snapshot, and drf-spectacular is not installed).
 - §"Rollout" — Tasks 47–49.
 
 No gaps detected.
