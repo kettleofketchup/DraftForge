@@ -1,6 +1,7 @@
 import calendar
 import datetime
 import logging
+import re
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
@@ -31,6 +32,15 @@ RANK_STATUS_DISALLOWED_MESSAGES = {
     "previous": "This event does not accept previous-rank signups.",
     "never": "This event does not accept Battle Cup–only signups.",
 }
+
+SCREENSHOT_URL_RE = re.compile(r"^https?://.+\.(png|jpe?g|webp)(\?.*)?$", re.IGNORECASE)
+SCREENSHOT_BAD_URL_MESSAGE = "Screenshot must be a direct .png/.jpg/.jpeg/.webp URL."
+
+
+def _validate_screenshot_url(url):
+    if url and not SCREENSHOT_URL_RE.match(url):
+        from django.core.exceptions import ValidationError
+        raise ValidationError(SCREENSHOT_BAD_URL_MESSAGE, code="screenshot_bad_url")
 
 
 def check_requirements(event, user):
@@ -263,6 +273,14 @@ def apply_signup_input(*, org_user, event, patch):
 
     if "battle_cup_tier" in set_fields:
         profile.battle_cup_tier = set_fields["battle_cup_tier"]
+
+    if "rank_screenshot" in set_fields:
+        _validate_screenshot_url(set_fields["rank_screenshot"])
+        profile.rank_screenshot = set_fields["rank_screenshot"] or ""
+
+    if "battlecup_screenshot" in set_fields:
+        _validate_screenshot_url(set_fields["battlecup_screenshot"])
+        profile.battlecup_screenshot = set_fields["battlecup_screenshot"] or ""
 
     profile.save()
     invalidate_after_commit(profile, org_user, event)
