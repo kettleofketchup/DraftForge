@@ -256,3 +256,39 @@ class SignupEndpointRollbackTests(TransactionTestCase):
         # notify_signup_changed exactly once via on_commit. The endpoint must NOT
         # double-register it.
         self.assertEqual(spy.call_count, 1)
+
+    def test_discord_then_web_idempotent(self):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        from app.models import CustomUser, GameType, Organization
+        from events.models import Event, EventState, EventSignup
+        from events.services import process_rsvp
+
+        org = Organization.objects.create(name="Org")
+        event = Event.objects.create(
+            name="Evt",
+            organization=org,
+            game_type=GameType.DOTA2,
+            scheduled_at=timezone.now() + timedelta(days=7),
+            state=EventState.SIGNUPS_OPEN,
+            allow_active_mmr=True,
+            allow_previous_rank=True,
+            allow_battlecup_rating=True,
+        )
+        user = CustomUser.objects.create(username="alice")
+        # Simulate Discord-side signup first.
+        process_rsvp(event, user)
+        # Now web tries to sign up.
+        client = APIClient()
+        client.force_authenticate(user)
+        resp = client.post(
+            f"/api/events/{event.pk}/signup/",
+            {"intent": "rsvp"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        # Only one signup exists.
+        self.assertEqual(
+            EventSignup.objects.filter(event=event, user=user).count(), 1
+        )
