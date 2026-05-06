@@ -14,6 +14,7 @@ import type { UserType } from './types';
 
 /** Dota profile data from EventSignupSerializer.dota_profile */
 export interface DotaProfileData {
+  unverified_friend_id: string | null;
   positions: {
     pos_1: boolean;
     pos_2: boolean;
