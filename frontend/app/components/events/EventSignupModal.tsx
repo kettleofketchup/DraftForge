@@ -344,7 +344,7 @@ export function EventSignupModal({
     <Form {...form}>
       <form
         onSubmit={onSubmit}
-        className="flex flex-col"
+        className="flex min-h-0 flex-1 flex-col"
         noValidate
         data-testid="event-signup-modal"
       >
