@@ -85,7 +85,7 @@ def _get_org_user(event, discord_user_id, discord_username=None):
     using the Discord username. Returns (org_user, user) or (None, None).
     """
     from app.models import CustomUser, PositionsModel
-    from org.models import OrgUser
+    from events.services import resolve_or_create_org_user
 
     discord_id_str = str(discord_user_id)
 
@@ -109,10 +109,7 @@ def _get_org_user(event, discord_user_id, discord_username=None):
             positions=positions,
         )
 
-    org_user, _ = OrgUser.objects.get_or_create(
-        user=user,
-        organization=event.organization,
-    )
+    org_user = resolve_or_create_org_user(user, event.organization)
     return org_user, user
 
 
