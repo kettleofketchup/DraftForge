@@ -2,6 +2,7 @@ import { Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
+import { HotkeyBadge } from './HotkeyBadge';
 import { brandGradient, button3DVariants } from './styles';
 
 export type ConfirmButtonVariant = 'default' | 'destructive' | 'warning' | 'success';
@@ -14,6 +15,8 @@ export interface ConfirmButtonProps
   variant?: ConfirmButtonVariant;
   /** Whether to apply 3D depth effects (default: true) */
   depth?: boolean;
+  /** Optional keyboard shortcut label rendered as a badge in the top-left corner. */
+  hotkey?: string;
 }
 
 /**
@@ -50,6 +53,7 @@ const ConfirmButton = React.forwardRef<HTMLButtonElement, ConfirmButtonProps>(
       className,
       variant = 'default',
       depth = true,
+      hotkey,
       ...props
     },
     ref
@@ -68,20 +72,31 @@ const ConfirmButton = React.forwardRef<HTMLButtonElement, ConfirmButtonProps>(
       success: 'Saving...',
     };
 
+    // When hotkey is unset, pass a single child so `asChild` callers stay
+    // valid (Slot's React.Children.only rejects arrays — see SecondaryButton).
+    const inner = loading ? (
+      <>
+        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        {loadingText[variant]}
+      </>
+    ) : (
+      children
+    );
+
     return (
       <Button
         ref={ref}
         disabled={disabled || loading}
-        className={cn(variantStyles[variant], className)}
+        className={cn(variantStyles[variant], hotkey && 'relative', className)}
         {...props}
       >
-        {loading ? (
+        {hotkey ? (
           <>
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            {loadingText[variant]}
+            <HotkeyBadge hotkey={hotkey} />
+            {inner}
           </>
         ) : (
-          children
+          inner
         )}
       </Button>
     );

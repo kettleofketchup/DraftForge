@@ -136,3 +136,58 @@ class BuildAnnouncementEmbedSignupListTest(_EmbedTestCase):
         embed = build_announcement_embed(self.event)
         signed_up_field = next(f for f in embed["fields"] if "Signed Up" in f["name"])
         self.assertTrue(signed_up_field["inline"])
+
+
+class ReminderEmbedSignupCountTest(_EmbedTestCase):
+    """Regression tests for issue #188 — reminder embeds showed 0/∞ instead of
+    actual signup count because _build_reminder_embed and
+    build_signup_reminder_embed read event.signup_count via getattr (a
+    serializer-computed field, not a model attribute).  Fix: use the existing
+    _signup_counts(event) helper that queries EventSignup.status directly.
+    """
+
+    def _add_signup(self, status, index):
+        from app.models import CustomUser, PositionsModel
+        from events.constants import SignupStatus
+        from events.models import EventSignup
+
+        pos = PositionsModel.objects.create()
+        u = CustomUser.objects.create_user(
+            username=f"reminder_signup_user_{self.event.pk}_{index}",
+        )
+        u.positions = pos
+        u.save()
+        return EventSignup.objects.create(
+            event=self.event, user=u, status=status
+        )
+
+    def test_signup_reminder_shows_active_signup_count(self):
+        """issue #188: build_signup_reminder_embed must show real signup count."""
+        from events.constants import SignupStatus
+
+        for i in range(13):
+            self._add_signup(status=SignupStatus.APPROVED, index=i)
+
+        result = build_signup_reminder_embed(self.event)
+
+        signups_field = next(
+            f for f in result["embed"]["fields"] if f["name"] == "Signups"
+        )
+        self.assertEqual(signups_field["value"], "**13/10** players")
+        self.assertIn("13/10", result["embed"]["description"])
+
+    def test_reminder_embed_excludes_cancelled_and_waitlisted(self):
+        """Active count must exclude cancelled, rejected, waitlisted signups."""
+        from events.constants import SignupStatus
+
+        for i in range(5):
+            self._add_signup(status=SignupStatus.APPROVED, index=i)
+        self._add_signup(status=SignupStatus.CANCELLED, index=10)
+        self._add_signup(status=SignupStatus.REJECTED, index=11)
+        self._add_signup(status=SignupStatus.WAITLISTED, index=12)
+
+        result = build_signup_reminder_embed(self.event)
+        signups_field = next(
+            f for f in result["embed"]["fields"] if f["name"] == "Signups"
+        )
+        self.assertEqual(signups_field["value"], "**5/10** players")

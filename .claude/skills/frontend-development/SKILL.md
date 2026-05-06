@@ -9,6 +9,10 @@ description: Frontend development guidelines for React/TypeScript applications. 
 
 Comprehensive guide for modern React development, emphasizing Suspense-based data fetching, lazy loading, proper file organization, and performance optimization.
 
+## DraftForge Brand — Delegate to `brand`
+
+For UI / theming decisions in this project, use the **`brand` skill** — entry point at `.claude/skills/brand/SKILL.md`. Canonical guide is [`docs/THEMING-GUIDE.md`](../../../docs/THEMING-GUIDE.md), AI references at `docs/theming-guide/ai/references/`. This skill (`frontend-dev-guidelines`) covers React patterns and code organization; `brand` enforces the project's specific brand contract (`<PrimaryButton>` over `<button>`, `bg-base-*` over `bg-slate-*`, `<UserAvatar>` over `<img>`, mandatory `<EntityBreadcrumb>` on detail pages, etc.). Note: this skill's description still mentions MUI v7 — that's stale; the project uses Tailwind + shadcn/ui per the `brand` skill's references.
+
 ## When to Use This Skill
 
 - Creating new components or pages

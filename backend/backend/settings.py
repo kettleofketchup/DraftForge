@@ -504,3 +504,66 @@ LEAGUE_CHOICES = app_config.league_choices
 from telemetry.config import init_telemetry
 
 init_telemetry()
+
+# ============================================================================
+# Dota 2 medal / battle cup → MMR range mappings
+# ----------------------------------------------------------------------------
+# Drives the suggestion shown in MmrApprovalModal. Edit + redeploy to update.
+# Per-star ranges so the suggestion narrows to the actual sub-medal a player
+# reports (e.g. "Ancient 1" → 3850-4004, not the whole 3850-4620 tier). Even
+# subdivision of each tier across 5 stars (~154 MMR each); hand-tune individual
+# entries here if a patch shifts a sub-band. Immortal has no star number.
+# Battle cup tier 1 = lowest, 8 = Immortal-tier.
+# ============================================================================
+
+DOTA_MEDAL_MMR_RANGES = {
+    "Herald 1":   (0,    154),
+    "Herald 2":   (154,  308),
+    "Herald 3":   (308,  462),
+    "Herald 4":   (462,  616),
+    "Herald 5":   (616,  770),
+    "Guardian 1": (770,  924),
+    "Guardian 2": (924,  1078),
+    "Guardian 3": (1078, 1232),
+    "Guardian 4": (1232, 1386),
+    "Guardian 5": (1386, 1540),
+    "Crusader 1": (1540, 1694),
+    "Crusader 2": (1694, 1848),
+    "Crusader 3": (1848, 2002),
+    "Crusader 4": (2002, 2156),
+    "Crusader 5": (2156, 2310),
+    "Archon 1":   (2310, 2464),
+    "Archon 2":   (2464, 2618),
+    "Archon 3":   (2618, 2772),
+    "Archon 4":   (2772, 2926),
+    "Archon 5":   (2926, 3080),
+    "Legend 1":   (3080, 3234),
+    "Legend 2":   (3234, 3388),
+    "Legend 3":   (3388, 3542),
+    "Legend 4":   (3542, 3696),
+    "Legend 5":   (3696, 3850),
+    "Ancient 1":  (3850, 4004),
+    "Ancient 2":  (4004, 4158),
+    "Ancient 3":  (4158, 4312),
+    "Ancient 4":  (4312, 4466),
+    "Ancient 5":  (4466, 4620),
+    "Divine 1":   (4620, 4780),
+    "Divine 2":   (4780, 4940),
+    "Divine 3":   (4940, 5100),
+    "Divine 4":   (5100, 5260),
+    "Divine 5":   (5260, 5420),
+    "Immortal":   (5420, 8000),
+}
+
+DOTA_BATTLE_CUP_MMR_RANGES = {
+    1: (0,    500),
+    2: (500,  1000),
+    3: (1000, 2000),
+    4: (2000, 3000),
+    5: (3000, 4000),
+    6: (4000, 5000),
+    7: (5000, 6000),
+    8: (6000, 8000),
+}
+
+DOTA_DEFAULT_MMR_RANGE = (0, 2000)

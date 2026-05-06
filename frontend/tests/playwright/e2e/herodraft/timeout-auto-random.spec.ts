@@ -88,16 +88,8 @@ test.describe('HeroDraft Timeout Auto-Random Pick', () => {
   let browserB: Browser | null = null;
 
   test.beforeAll(async () => {
-    const isCI = !!process.env.CI;
-    const isDocker = !!process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-    const forceHeaded = process.env.HERODRAFT_HEADED === 'true';
-    const headless = forceHeaded ? false : (isCI || isDocker);
-
-    console.log(`   Browser mode: ${headless ? 'headless' : 'headed'}`);
-
     const browserOptions = {
-      headless,
-      slowMo: headless ? 0 : 50,
+      headless: true,
       args: [
         '--disable-web-security',
         '--ignore-certificate-errors',

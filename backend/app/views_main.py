@@ -1397,9 +1397,17 @@ def refresh_user_avatar_admin(request, user_id):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def refresh_all_avatars(request):
-    """
-    Refreshes the avatars for all users in the database.
-    This is a public endpoint but is rate-limited to once per hour.
+    """Queue an asynchronous avatar refresh.
+
+    Returns immediately (202 Accepted) and dispatches a Celery task that
+    fetches Discord guild members in batched calls (1–3 paginated calls per
+    org) and updates avatars in bulk. See `app.tasks.avatar_refresh
+    .refresh_avatars_batched`.
+
+    Rate-limited to once per hour. The cache key is set BEFORE dispatch so
+    concurrent calls can't double-queue the task — previously the cache was
+    set after the (synchronous, 27s) loop, which let two concurrent callers
+    each run the full work and block Daphne for ~54s.
     """
     cache_key = "avatar_refresh_last_run"
     last_run = cache.get(cache_key)
@@ -1410,15 +1418,15 @@ def refresh_all_avatars(request):
             status=status.HTTP_200_OK,
         )
 
-    updated_count = 0
-    users = CustomUser.objects.select_related("positions").all()
-    for user in users:
-        if user.check_and_update_avatar():
-            updated_count += 1
+    # Set the cache key BEFORE dispatch so a second caller arriving during
+    # task execution short-circuits instead of queueing another task.
+    cache.set(cache_key, timezone.now(), timeout=3600)
 
-    cache.set(cache_key, timezone.now(), timeout=3600)  # Cache for 1 hour
+    from app.tasks.avatar_refresh import refresh_avatars_batched
+
+    refresh_avatars_batched.delay()
 
     return Response(
-        {"message": f"Avatar refresh complete. {updated_count} avatars updated."},
-        status=status.HTTP_200_OK,
+        {"message": "Avatar refresh queued."},
+        status=status.HTTP_202_ACCEPTED,
     )

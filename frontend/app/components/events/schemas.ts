@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-export const GameType = { DOTA2: 1, DEADLOCK: 2 } as const;
-
 export const EventState = {
   UPCOMING: 'upcoming', SIGNUPS_OPEN: 'signups_open', ROLL_CALL: 'roll_call',
   IN_PROGRESS: 'in_progress', COMPLETED: 'completed', CANCELLED: 'cancelled',
@@ -143,6 +141,11 @@ export const eventSignupSchema = z.object({
     battle_cup_tier: z.number().nullable(),
   }).nullable(),
   org_user_mmr: z.number().nullable().default(null),
+  org_user_pk: z.number().nullable().default(null),
+  organization: z.number().nullable().default(null),
+  suggested_mmr: z.number().int(),
+  suggested_mmr_range: z.tuple([z.number().int(), z.number().int()]),
+  suggested_mmr_range_source: z.enum(['medal', 'battle_cup', 'fallback']),
   event_team: z.number().nullable(),
   signup_type: z.string(),
   status: z.string(),

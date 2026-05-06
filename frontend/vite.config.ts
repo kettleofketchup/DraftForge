@@ -31,6 +31,21 @@ export default defineConfig({
   },
   server: {
     allowedHosts: ['localhost', 'dota.kettle.sh', 'nginx'],
+    // Don't watch Playwright artifact directories — they churn during
+    // test runs (HTML reports, traces, screenshots, videos) and Vite's
+    // file watcher fires HMR page-reloads on every write, invalidating
+    // the transform cache mid-flight. Long suite runs orphan dozens of
+    // module-transform requests this way and surface as random "page
+    // stuck on loader spinner" flakes (GH issue #214). Adding to both
+    // the chokidar-level `watch.ignored` and HMR's logical exclusion
+    // list belt-and-suspenders.
+    watch: {
+      ignored: [
+        '**/playwright-report/**',
+        '**/test-results/**',
+        '**/.playwright/**',
+      ],
+    },
     // HMR: the page is served via nginx at https://localhost (port 443),
     // but Vite's dev server runs on port 3000 inside the frontend
     // container. Without an explicit clientPort the HMR client tries to

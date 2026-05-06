@@ -71,6 +71,29 @@ def get_user_guilds(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
+# Cache architecture for guild members:
+#
+#   `discord_members_<guild_id>` — full member list per guild, paginated
+#   from Discord and cached for DISCORD_MEMBER_CACHE_TTL_S (1 hour).
+#
+# Two consumer patterns share this single cache:
+#   1. Admin member search / add-to-tournament — admins searching a
+#      Discord member who joined recently force a refresh via the
+#      `refresh_discord_members` endpoint (5-min cooldown). That repaves
+#      the cache, so subsequent searches AND the daily avatar refresh
+#      (item 2) see the new member without their own Discord call.
+#   2. Daily avatar refresh — the `refresh_avatars_batched` Celery task
+#      reads this cache to update the User.avatar column for any
+#      Discord-linked user. Daily cadence is enough; admin-triggered
+#      refreshes (item 1) cover the "user joined since yesterday" gap.
+#
+# The 15-second TTL this used to have (sub-request burst dedup only) was
+# replaced when we made the cache load-bearing for the daily avatar
+# task — that task needs the cache to actually hold data between
+# admin-triggered fills, not for 15 seconds.
+DISCORD_MEMBER_CACHE_TTL_S = 60 * 60  # 1 hour
+
+
 def get_discord_members_data(guild_id=None):
     """
     Helper function to get discord members data as raw list (not JsonResponse).
@@ -112,7 +135,7 @@ def get_discord_members_data(guild_id=None):
         except requests.exceptions.RequestException as e:
             raise Exception(f"Discord API error: {str(e)}")
 
-    cache.set(cache_key, members, timeout=15)
+    cache.set(cache_key, members, timeout=DISCORD_MEMBER_CACHE_TTL_S)
     return members
 
 

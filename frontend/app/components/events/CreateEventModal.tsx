@@ -28,7 +28,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
-import { createEventInputSchema, GameType, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC, type CreateEventInput } from './schemas';
+import { createEventInputSchema, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC, type CreateEventInput } from './schemas';
+import { GAME_TYPE } from '~/components/game/constants';
 import { LeagueCombobox } from '~/components/league/LeagueCombobox';
 
 interface CreateEventModalProps {
@@ -316,10 +317,10 @@ export function CreateEventModal({
                     const gameType = parseInt(val, 10);
                     field.onChange(gameType);
                     // Update people_per_team default when switching games
-                    form.setValue('people_per_team', gameType === GameType.DEADLOCK ? 6 : 5);
+                    form.setValue('people_per_team', gameType === GAME_TYPE.DEADLOCK ? 6 : 5);
                     // Reset Dota-only fields when switching to non-Dota
                     const currentMode = form.getValues('game_mode');
-                    if (gameType !== GameType.DOTA2) {
+                    if (gameType !== GAME_TYPE.DOTA2) {
                       if (currentMode === GameMode.CAPTAINS_MODE || currentMode === GameMode.TURBO) {
                         form.setValue('game_mode', GameMode.NORMAL);
                       }

@@ -249,14 +249,35 @@ export function useUpdateOrgDefaultsMutation(orgId: number) {
  * Upsert signup user data into the entity adapter cache.
  * Call this after fetching signups to ensure all signup users are in the cache.
  */
-export function useEventSignupUsers(signups: EventSignupType[] | undefined) {
+export function useEventSignupUsers(
+  signups: EventSignupType[] | undefined,
+  /**
+   * Optional event organization id. When provided, each user's org-scoped
+   * cache slot is hydrated with `signup.org_user_mmr` + `signup.org_user_pk`
+   * so `<UserStrip organizationId={...} />` can show the right MMR badge
+   * without a second fetch.
+   */
+  eventOrgId?: number | null,
+) {
   useEffect(() => {
     if (!signups) return;
-    const users = signups
-      .map((s) => s.user_data)
-      .filter(Boolean) as UserType[];
-    if (users.length > 0) {
-      useUserCacheStore.getState().upsert(users);
+    const users: (UserType & { pk: number })[] = [];
+    for (const s of signups) {
+      if (!s.user_data) continue;
+      const base = { ...s.user_data } as UserType & { pk: number };
+      if (eventOrgId && s.org_user_pk != null && s.org_user_mmr != null) {
+        // The user-cache `toUserEntry` looks for raw.mmr + raw.orgUserPk
+        // alongside an UpsertContext.orgId before populating orgData.
+        base.mmr = s.org_user_mmr;
+        base.orgUserPk = s.org_user_pk;
+      }
+      users.push(base);
     }
-  }, [signups]);
+    if (users.length > 0) {
+      useUserCacheStore.getState().upsert(
+        users,
+        eventOrgId ? { orgId: eventOrgId } : undefined,
+      );
+    }
+  }, [signups, eventOrgId]);
 }

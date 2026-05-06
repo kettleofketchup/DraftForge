@@ -7,6 +7,10 @@ description: Create aesthetically beautiful interfaces following proven design p
 
 Create aesthetically beautiful interfaces by following proven design principles and systematic workflows.
 
+## DraftForge Brand — Delegate to `brand`
+
+For draftforge-specific theming (palette, button policy, brand wrappers, mandatory components, brand tokens), use the **`brand` skill** — entry point at `.claude/skills/brand/SKILL.md`. Canonical guide is [`docs/THEMING-GUIDE.md`](../../../docs/THEMING-GUIDE.md), AI references at `docs/theming-guide/ai/references/`. This skill (`aesthetic`) covers generic design principles; `brand` enforces the project's specific brand contract (`<PrimaryButton>` over `<button>`, `bg-base-*` over `bg-slate-*`, `<UserAvatar>` over `<img>`, etc.). Whenever a design choice would land in `frontend/app/`, run the `brand` review before declaring done.
+
 ## When to Use This Skill
 
 Use when:

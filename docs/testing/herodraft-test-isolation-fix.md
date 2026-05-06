@@ -79,9 +79,11 @@ c. The captain's user state hasn't fully rehydrated when `view-draft-btn` is
 
 **Investigation steps before writing a fix:**
 
-1. Run `just test::pw::headed --grep "two captains"` and watch the failed
-   workers in DevTools. Specifically: is `view-draft-btn` ever in the DOM, and
-   if so, why isn't it clickable when the click fires?
+1. Run `just test::pw::spec "two captains"` and inspect the failure
+   artifacts in `test-results/.../` (screenshot, `error-context.md`,
+   `trace.zip` — opened with `npx playwright show-trace`). Specifically:
+   is `view-draft-btn` ever in the DOM, and if so, why isn't it clickable
+   when the click fires?
 2. Add a `getAttribute('disabled')` log line right before the click to
    distinguish "button not in DOM" from "button disabled".
 3. If the captain *does* need draft state cleared between tests, the right
@@ -258,8 +260,9 @@ Listener was registered before the force-close, so this is not a listener race
 **Investigation steps before fixing:**
 - `git grep -n 'scheduleReconnect\|intentionalClose\|__wsInstances'` in
   `frontend/app/` to map the WS lifecycle module.
-- Run the spec headed (`just test::pw::headed --grep "client reconnects"`)
-  and observe DevTools Network → WS to confirm whether a new WS is attempted.
+- Run the spec (`just test::pw::spec "client reconnects"`) and inspect
+  the failure trace via `npx playwright show-trace` — the Network panel
+  in the trace viewer shows whether a new WS is attempted.
 - If no attempt: bug in the reconnect dispatcher.
 - If an attempt to a non-matching URL: bug in the URL builder.
 - If an attempt > 15s out: bug in backoff config (or just bump the spec

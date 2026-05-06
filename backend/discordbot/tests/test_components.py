@@ -190,3 +190,69 @@ class RankDetailsViewTest(TestCase):
             self.assertTrue(any(isinstance(c, discord.ui.Select) for c in view.children))
 
         run_async(_test())
+
+
+# ---------------------------------------------------------------------------
+# Regression test: MedalSelect → StarSelect medal-encoding race
+#
+# Verifies that picking "Crusader" in MedalSelect rebuilds the view such that
+# StarSelect.custom_id is `rank_star:{event_id}:Crusader` — NOT the initial
+# default of `rank_star:{event_id}:Herald`. Without the fix in
+# backend/discordbot/components.py:MedalSelect.callback, this test would fail.
+# ---------------------------------------------------------------------------
+
+from unittest import IsolatedAsyncioTestCase
+from unittest.mock import AsyncMock, MagicMock
+
+from discordbot.components import MedalSelect, RankDetailsView, StarSelect
+
+
+class TestMedalSelectRebuildsView(IsolatedAsyncioTestCase):
+    async def test_callback_rebuilds_view_with_medal_in_star_custom_id(self):
+        event_id = 42
+        medal = MedalSelect(
+            event_id, rank_status="active", require_screenshot=False
+        )
+        # discord.py populates `values` from the user's selection before callback fires
+        medal._values = ["Crusader"]  # private attr used by ui.Select
+
+        # Mock the interaction.response.edit_message
+        interaction = MagicMock()
+        interaction.response.edit_message = AsyncMock()
+
+        await medal.callback(interaction)
+
+        # edit_message must have been called once
+        interaction.response.edit_message.assert_awaited_once()
+        kwargs = interaction.response.edit_message.call_args.kwargs
+
+        # The new view must contain a StarSelect with custom_id encoding "Crusader"
+        view = kwargs["view"]
+        star_selects = [c for c in view.children if isinstance(c, StarSelect)]
+        self.assertEqual(len(star_selects), 1)
+        self.assertEqual(
+            star_selects[0].custom_id, f"rank_star:{event_id}:Crusader"
+        )
+
+        # Content includes the medal name
+        self.assertIn("Crusader", kwargs["content"])
+
+    async def test_callback_preserves_previous_rank_status(self):
+        event_id = 99
+        medal = MedalSelect(
+            event_id, rank_status="previous", require_screenshot=False
+        )
+        medal._values = ["Divine"]
+
+        interaction = MagicMock()
+        interaction.response.edit_message = AsyncMock()
+
+        await medal.callback(interaction)
+
+        kwargs = interaction.response.edit_message.call_args.kwargs
+        # Label should say "Previous rank", not "Rank"
+        self.assertIn("Previous rank", kwargs["content"])
+        # Rebuilt view's StarSelect should still be in active/previous mode
+        view = kwargs["view"]
+        star = next(c for c in view.children if isinstance(c, StarSelect))
+        self.assertEqual(star.rank_status, "previous")

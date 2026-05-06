@@ -132,6 +132,130 @@ def refresh_single_user_avatar(user_id: int):
 
 
 @shared_task
+def refresh_avatars_batched():
+    """Bulk avatar refresh via Discord guild-members API.
+
+    Replaces the per-user `/users/{id}` fan-out (one synchronous outbound
+    call per local user, blocked Daphne for 27s during the test suite) with:
+
+      1. Skip users that have no `discordId` (most "Failed to fetch" log
+         lines were coming from non-Discord-linked test users).
+      2. Group orgs by `discord_server_id`, then for each guild call
+         `discordbot.services.users.get_discord_members_data(guild_id)`.
+         That helper paginates `GET /guilds/{id}/members?limit=1000` until
+         exhausted AND caches the full member list per guild under the
+         Redis key `discord_members_{guild_id}` (15s TTL). Reusing it
+         means:
+           - cache hit when search-members or refresh-members has run in
+             the last 15 seconds → avatar refresh becomes free in that
+             window (no Discord call at all).
+           - single source of truth for pagination + rate-limit handling.
+           - any future improvements to the helper (e.g. retry on 429)
+             benefit avatar refresh automatically.
+      3. Build `discord_id -> avatar_hash` map across guilds, bulk-update
+         local users where the hash changed via a single
+         `CustomUser.objects.filter(pk=...).update(avatar=...)` per row.
+
+    This task is idempotent and rate-limited at the calling endpoint
+    (`/api/avatars/refresh/`) via a 1-hour cache key set BEFORE dispatch.
+    """
+    if _is_test_environment():
+        log.info("Skipping batched avatar refresh in test environment")
+        return {"checked": 0, "updated": 0, "skipped": True}
+
+    # Lazy imports keep the module importable in worker startup paths that
+    # haven't fully bootstrapped Django.
+    from cacheops import invalidate_model
+
+    from app.models import CustomUser, Organization
+    from discordbot.services.users import get_discord_members_data
+
+    # Discordful users only — non-Discord-linked accounts can't gain or lose
+    # a Discord avatar.
+    candidate_users = list(
+        CustomUser.objects.filter(discordId__isnull=False)
+        .exclude(discordId="")
+        .values("pk", "discordId", "avatar", "username")
+    )
+    if not candidate_users:
+        log.info("No Discord-linked users to refresh")
+        return {"checked": 0, "updated": 0}
+
+    guild_ids = list(
+        Organization.objects.filter(discord_server_id__isnull=False)
+        .exclude(discord_server_id="")
+        .values_list("discord_server_id", flat=True)
+        .distinct()
+    )
+    if not guild_ids:
+        log.info("No orgs with discord_server_id; nothing to refresh")
+        return {"checked": len(candidate_users), "updated": 0}
+
+    log.info(
+        "Refreshing avatars: %d users across %d guilds",
+        len(candidate_users),
+        len(guild_ids),
+    )
+
+    # Build discord_id → avatar_hash across all guilds. The shared helper
+    # already paginates each guild fully and caches the result per-guild;
+    # we just consume the cached/fresh member lists here.
+    avatar_map: dict[str, str | None] = {}
+    for guild_id in guild_ids:
+        try:
+            members = get_discord_members_data(guild_id=guild_id)
+        except Exception as exc:
+            log.warning(
+                "Failed to fetch members for guild %s: %s", guild_id, exc
+            )
+            continue
+        for member in members:
+            user_obj = (member or {}).get("user") or {}
+            discord_id = user_obj.get("id")
+            if discord_id:
+                avatar_map[str(discord_id)] = user_obj.get("avatar")
+
+    # Collect changed rows and bulk-update in one shot. Per-row update()
+    # was O(N) round-trips; at 100k users with ~5% churn that's 5,000
+    # statements (~150s in a worker). bulk_update batches 500 rows per
+    # CASE/WHEN UPDATE, taking the same scenario down to ~10 statements
+    # (~3s). Tradeoff: bulk_update doesn't fire post_save, so cacheops
+    # won't auto-invalidate — we call invalidate_model once at the end.
+    to_update = []
+    for u in candidate_users:
+        discord_id = str(u["discordId"])
+        if discord_id not in avatar_map:
+            continue
+        new_avatar = avatar_map[discord_id]
+        if new_avatar == u["avatar"]:
+            continue
+        to_update.append(CustomUser(pk=u["pk"], avatar=new_avatar))
+
+    updated = len(to_update)
+    if updated:
+        # batch_size=500 keeps the CASE/WHEN expression bounded so MySQL/
+        # SQLite parsers don't choke on a million-line statement.
+        CustomUser.objects.bulk_update(to_update, ["avatar"], batch_size=500)
+        # bulk_update bypasses signals; cacheops needs an explicit nudge.
+        # Model-level invalidation is one cache op vs N per-pk ops; safe
+        # because no production view caches anything that wouldn't already
+        # consider an avatar-hash change a stale-cache trigger.
+        invalidate_model(CustomUser)
+
+    log.info(
+        "Batched avatar refresh complete: checked=%d, updated=%d, guilds=%d",
+        len(candidate_users),
+        updated,
+        len(guild_ids),
+    )
+    return {
+        "checked": len(candidate_users),
+        "updated": updated,
+        "guilds": len(guild_ids),
+    }
+
+
+@shared_task
 def refresh_all_discord_data():
     """Refresh all Discord data for users (avatars, usernames, etc.).
 

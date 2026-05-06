@@ -29,9 +29,11 @@ from .test_auth import (
 )
 from .test_csv import reset_csv_import
 from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
+from .test_health import healthz
 from .test_discord import seed_discord_members
 from .test_events_discord import (
     send_test_notification,
+    set_org_user_approved_mmr,
     simulate_discord_signup,
     verify_discord_messages,
 )
@@ -123,6 +125,11 @@ urlpatterns = [
         "org/<int:org_pk>/reset-admin-team/",
         reset_org_admin_team,
         name="test-reset-org-admin-team",
+    ),
+    path(
+        "org/<int:org_pk>/user/<int:user_pk>/set-approved-mmr/",
+        set_org_user_approved_mmr,
+        name="test-set-org-user-approved-mmr",
     ),
     path(
         "create-claimable-user/",
@@ -235,4 +242,5 @@ urlpatterns = [
         get_demo_tournament,
         name="test-demo-get",
     ),
+    path("healthz/", healthz, name="test-healthz"),
 ]

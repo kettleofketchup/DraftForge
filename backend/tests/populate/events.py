@@ -314,6 +314,42 @@ def populate_events_data(force=False):
             user=site_admin,
         )
 
+    # Approval-demo event: auto_approve=False so signups stay PENDING_APPROVAL,
+    # exposing the MmrApprovalModal + RankSignalsCard for admin review. Users
+    # 5001-5005 already have differentiated dota_profiles (active medal w/
+    # screenshot, active medal alt, previous medal, battle-cup-only, none).
+    demo_approval_event, _ = Event.objects.update_or_create(
+        organization=org,
+        name="Demo MMR Approval Event",
+        defaults={
+            "description": "Pending signups across rank-signal scenarios. Click Approve on each row to see the RankSignalsCard variants.",
+            "scheduled_at": tz.now() + timedelta(hours=8),
+            "state": EventState.SIGNUPS_OPEN,
+            "created_by": event_admin or site_admin,
+            "tournament_name": "Demo Approval Tournament",
+            "tournament_league": league,
+            "tournament_type": "single_elimination",
+            "game_type": GameType.DOTA2,
+            "draft_type": "shuffle",
+            "people_per_team": 5,
+            "number_of_teams": 2,
+            "timezone": EVENTS_ORG.timezone,
+            "auto_approve": False,
+            "max_players": 10,
+        },
+    )
+    DiscordEvent.objects.update_or_create(
+        event=demo_approval_event,
+        defaults={"guild_id": EVENTS_ORG.discord_server_id},
+    )
+    for user_data in EVENTS_USERS[:5]:
+        user = CustomUser.objects.get(pk=user_data.pk)
+        EventSignup.objects.update_or_create(
+            event=demo_approval_event,
+            user=user,
+            defaults={"status": SignupStatus.PENDING_APPROVAL},
+        )
+
     demo_rollcall_event, _ = Event.objects.update_or_create(
         organization=org,
         name="Demo Roll Call Event",
@@ -382,7 +418,7 @@ def populate_events_data(force=False):
             defaults={"status": SignupStatus.CONFIRMED},
         )
 
-    print(f"    Created 3 demo events with signups")
+    print(f"    Created 4 demo events with signups (incl. Demo MMR Approval Event)")
 
     # 5c. Draft Test Tournament — ready for draft start, stable PK for browser testing
     from app.models import Team, Tournament

@@ -9,6 +9,10 @@ version: 1.0.0
 
 Comprehensive skill for creating beautiful, accessible user interfaces combining shadcn/ui components, Tailwind CSS utility styling, and canvas-based visual design systems.
 
+## DraftForge Brand — Delegate to `brand`
+
+For draftforge-specific theming (palette, button policy, brand wrappers, mandatory components, brand tokens), use the **`brand` skill** — entry point at `.claude/skills/brand/SKILL.md`. Canonical guide is [`docs/THEMING-GUIDE.md`](../../../docs/THEMING-GUIDE.md), AI references at `docs/theming-guide/ai/references/`. This skill (`ui-styling`) covers generic shadcn/Tailwind setup; `brand` enforces the project's specific brand contract (`<PrimaryButton>` over `<button>`, `bg-base-*` over `bg-slate-*`, `<UserAvatar>` over `<img>`, etc.). Whenever a styling decision lands in `frontend/app/`, run the `brand` review before declaring done.
+
 ## Reference
 
 - shadcn/ui: https://ui.shadcn.com/llms.txt

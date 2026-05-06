@@ -490,7 +490,7 @@ def _build_reminder_embed(
     """
 
     url = _event_url(event)
-    active = getattr(event, "signup_count", 0)
+    active, _confirmed = _signup_counts(event)
     max_display = str(event.max_players) if event.max_players else "\u221e"
 
     from zoneinfo import ZoneInfo
@@ -579,7 +579,7 @@ def _build_reminder_embed(
 
 
 def build_signup_reminder_embed(event):
-    active = getattr(event, "signup_count", 0)
+    active, _confirmed = _signup_counts(event)
     max_display = str(event.max_players) if event.max_players else "\u221e"
     desc = event.description or ""
     if desc:

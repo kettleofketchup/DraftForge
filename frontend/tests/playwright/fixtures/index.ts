@@ -121,6 +121,8 @@ export {
   triggerEventGeneration,
   loginEventAdmin,
   loginEventPlayer,
+  loginEventPlayer4,
+  setApprovedMmr,
   postWithCsrf,
   patchWithCsrf,
   syncDiscordEvents,

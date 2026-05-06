@@ -45,6 +45,13 @@ _beat_schedule = {
         "task": "app.tasks.avatar_refresh.refresh_all_discord_data",
         "schedule": crontab(hour=4, minute=0),
     },
+    # Daily batched avatar refresh — see celery.py for the full rationale.
+    # Reads the shared `discord_members_<guild_id>` cache (1 hr TTL) and
+    # bulk-updates User.avatar.
+    "refresh-avatars-batched-daily": {
+        "task": "app.tasks.avatar_refresh.refresh_avatars_batched",
+        "schedule": crontab(hour=4, minute=15),
+    },
 }
 
 _event_tasks = {

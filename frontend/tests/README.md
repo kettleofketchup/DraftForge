@@ -53,9 +53,6 @@ npm run test:component:open
 # Run all E2E tests headlessly
 npm run test:e2e
 
-# Run E2E tests with browser visible
-npm run test:e2e:headed
-
 # Run component tests
 npm run test:component
 ```

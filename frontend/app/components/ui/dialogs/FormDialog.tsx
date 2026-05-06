@@ -1,5 +1,4 @@
 import * as React from 'react';
-import { Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -8,8 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
-import { Button } from '~/components/ui/button';
-import { brandGradient } from '~/components/ui/buttons/styles';
+import { CancelButton, ConfirmButton } from '~/components/ui/buttons';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { cn } from '~/lib/utils';
 
@@ -38,6 +36,21 @@ export interface FormDialogProps {
   size?: FormDialogSize;
   /** Whether to show the footer (default true) */
   showFooter?: boolean;
+  /**
+   * Whether the dialog should auto-focus its first focusable element on open
+   * (Radix default). Set to `false` for forms that surface field-level
+   * keyboard shortcuts — auto-focusing the first input swallows those
+   * keystrokes until the user blurs out. Default: true.
+   */
+  autoFocus?: boolean;
+  /**
+   * Two-step Escape behavior for forms with field-level keyboard shortcuts.
+   * When true, the first Escape refocuses the dialog content (releasing
+   * focus from inputs / Select triggers / etc.) and a second Escape closes
+   * the dialog. When false (default), Escape closes the dialog immediately
+   * — matching long-standing convention.
+   */
+  escapeBlursToContent?: boolean;
   /** Additional class name for the dialog content */
   className?: string;
   /** Test ID for testing */
@@ -85,16 +98,88 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       onSubmit,
       size = 'md',
       showFooter = true,
+      autoFocus = true,
+      escapeBlursToContent = false,
       className,
       'data-testid': dataTestId,
       titleTestId,
     },
     ref
   ) => {
+    // Internal ref to DialogContent so we can move focus into the dialog when
+    // the caller opted out of Radix's auto-focus (otherwise focus stays on the
+    // trigger element, which Radix immediately marks aria-hidden — focus +
+    // aria-hidden on the same node is a screen-reader violation).
+    const contentRef = React.useRef<HTMLDivElement | null>(null);
+    const setContentRef = React.useCallback(
+      (node: HTMLDivElement | null) => {
+        contentRef.current = node;
+        if (typeof ref === 'function') ref(node);
+        else if (ref) ref.current = node;
+      },
+      [ref],
+    );
+
     const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       await onSubmit();
     };
+
+    // Submit button lives in <DialogFooter> — outside the <form>. Browser
+    // implicit Enter-submit can't reach it, so handle Enter ourselves at
+    // the DialogContent level. Skip:
+    //   - textarea / contenteditable: Enter inserts a newline
+    //   - button: native Enter triggers the button's click (Cancel, Submit,
+    //     SelectTrigger). Forms that want focus to leave a popper trigger
+    //     after a pick should blur on onValueChange (see editForm.tsx) so
+    //     subsequent Enter lands on the dialog content where this handler
+    //     fires.
+    //   - Radix popper items (role=option/menuitem) and anything inside an
+    //     open listbox/menu/combobox: skip (Enter is the pick gesture).
+    const handleContentKeyDown = React.useCallback(
+      (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+        const target = e.target as HTMLElement | null;
+        const tag = target?.tagName;
+        if (tag === 'TEXTAREA' || tag === 'BUTTON' || target?.isContentEditable) return;
+        const role = target?.getAttribute('role');
+        if (
+          role === 'option' ||
+          role === 'menuitem' ||
+          role === 'menuitemradio' ||
+          role === 'menuitemcheckbox' ||
+          target?.closest('[role="listbox"], [role="menu"], [role="combobox"]')
+        ) {
+          return;
+        }
+        e.preventDefault();
+        void onSubmit();
+      },
+      [onSubmit],
+    );
+
+    // Always suppress when a Radix popper (Select / DropdownMenu) is open
+    // inside the dialog — its own Escape handler closes the popper and the
+    // same keystroke would otherwise also close the outer Dialog.
+    //
+    // Then, opt-in two-step Escape via `escapeBlursToContent` (used by
+    // forms with field-level keyboard shortcuts where focus normally lives
+    // in inputs/triggers): first Escape refocuses the dialog content,
+    // second Escape closes. Default mode is the long-standing one-press
+    // close so existing AddUser/Tournament/etc. forms keep their Esc UX.
+    const handleEscapeKeyDown = React.useCallback((event: KeyboardEvent) => {
+      const openPopper = document.querySelector(
+        '[data-state="open"][role="listbox"], [data-state="open"][role="menu"]',
+      );
+      if (openPopper) {
+        event.preventDefault();
+        return;
+      }
+      if (!escapeBlursToContent) return;
+      if (document.activeElement === contentRef.current) return;
+      event.preventDefault();
+      contentRef.current?.focus({ preventScroll: true });
+    }, [escapeBlursToContent]);
 
     // Stable handlers for Radix Dialog's outside-interaction props — these
     // were inline arrows previously, so each FormDialog re-render handed
@@ -105,10 +190,26 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
       [],
     );
 
+    // Suppress Radix's open-time auto-focus when the caller wants raw
+    // focus (so field shortcuts like N / R / F start working immediately).
+    // We still move focus *into* the dialog (onto the DialogContent itself,
+    // which Radix marks tabindex=-1) so the trigger element doesn't keep
+    // focus while being aria-hidden by Radix's outside-content masking.
+    const handleOpenAutoFocus = React.useCallback(
+      (e: Event) => {
+        if (!autoFocus) {
+          e.preventDefault();
+          contentRef.current?.focus({ preventScroll: true });
+        }
+      },
+      [autoFocus],
+    );
+
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          ref={ref}
+          ref={setContentRef}
+          onKeyDown={handleContentKeyDown}
           className={cn(
             // Full-screen on mobile
             'h-full max-w-full rounded-none top-0 left-0 translate-x-0 translate-y-0',
@@ -124,6 +225,8 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
           // issues where an inner dialog's overlay triggers the outer's dismiss.
           onPointerDownOutside={preventOutside}
           onInteractOutside={preventOutside}
+          onEscapeKeyDown={handleEscapeKeyDown}
+          onOpenAutoFocus={handleOpenAutoFocus}
           data-testid={dataTestId}
         >
           <DialogHeader>
@@ -141,32 +244,34 @@ export const FormDialog = React.forwardRef<HTMLDivElement, FormDialogProps>(
             {/* px-1 py-1 leaves room for focus rings (3px box-shadow on
                 shadcn Input/Button) which would otherwise be clipped by
                 Radix Viewport's overflow:hidden. */}
-            <form onSubmit={handleSubmit} className="space-y-4 px-1 py-1">
+            <form
+              onSubmit={handleSubmit}
+              className="space-y-4 px-1 py-1"
+            >
               {children}
             </form>
           </ScrollArea>
 
           {showFooter && (
             <DialogFooter className="flex-row justify-end gap-2">
-              <Button
+              <CancelButton
                 type="button"
                 onClick={() => onOpenChange(false)}
                 disabled={isSubmitting}
-                className="bg-gradient-to-r from-red-700 to-violet-900 hover:from-red-600 hover:to-violet-800 text-white shadow-lg active:translate-y-0.5"
+                hotkey="⌫"
                 data-testid="modal-cancel-button"
               >
                 {cancelLabel}
-              </Button>
-              <Button
+              </CancelButton>
+              <ConfirmButton
                 type="submit"
                 onClick={handleSubmit}
-                disabled={isSubmitting}
-                className={brandGradient}
+                loading={isSubmitting}
+                hotkey="↵"
                 data-testid="form-dialog-submit"
               >
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {submitLabel}
-              </Button>
+              </ConfirmButton>
             </DialogFooter>
           )}
         </DialogContent>

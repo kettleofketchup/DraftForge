@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
+import { HotkeyBadge } from './HotkeyBadge';
 import { brandSecondary, brandSecondary3D, button3DBase, button3DDisabled } from './styles';
 
 export type SecondaryColor = 'green' | 'blue' | 'purple' | 'orange' | 'red' | 'sky' | 'cyan' | 'lime' | 'emerald';
@@ -11,6 +12,8 @@ export interface SecondaryButtonProps
   color?: SecondaryColor;
   /** Whether to apply 3D depth effects (default: false for brand, true for colored) */
   depth?: boolean;
+  /** Optional keyboard shortcut label rendered as a badge in the top-left corner. */
+  hotkey?: string;
 }
 
 const colorStyles: Record<SecondaryColor, string> = {
@@ -45,7 +48,7 @@ const colorStyles: Record<SecondaryColor, string> = {
 const SecondaryButton = React.forwardRef<
   HTMLButtonElement,
   SecondaryButtonProps
->(({ color, className, children, depth, ...props }, ref) => {
+>(({ color, className, children, depth, hotkey, ...props }, ref) => {
   const useDepth = depth ?? !!color;
   const styles = color
     ? colorStyles[color]
@@ -53,15 +56,31 @@ const SecondaryButton = React.forwardRef<
       ? brandSecondary3D
       : brandSecondary;
 
+  // When hotkey is unset we must pass `children` as the single child so this
+  // button stays compatible with `asChild` callers (e.g. <DotabuffButton>).
+  // JSX `{a}{b}` always produces a children array even when one branch is
+  // falsy, which trips Radix Slot's React.Children.only check.
   return (
     <Button
       ref={ref}
       // No variant prop — brand styles fully control appearance via className.
       // Passing variant="secondary" introduces shadcn classes that override brand bg.
-      className={cn(styles, !useDepth && 'shadow-lg shadow-black/30', className)}
+      className={cn(
+        styles,
+        !useDepth && 'shadow-lg shadow-black/30',
+        hotkey && 'relative',
+        className,
+      )}
       {...props}
     >
-      {children}
+      {hotkey ? (
+        <>
+          <HotkeyBadge hotkey={hotkey} />
+          {children}
+        </>
+      ) : (
+        children
+      )}
     </Button>
   );
 });

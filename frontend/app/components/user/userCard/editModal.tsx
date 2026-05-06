@@ -118,6 +118,50 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
   // EditIconButton. setOpen from useState is itself stable.
   const handleOpen = React.useCallback(() => setOpen(true), []);
 
+  // Field-focus hotkeys while the modal is open. We dispatch only when focus
+  // is outside an editable element, so typing those letters into a real
+  // input doesn't yank focus elsewhere. Position keys (Z X C V B) target the
+  // SelectTrigger button — focusing it lets the user open the dropdown with
+  // Space/Enter and pick with arrow keys, matching shadcn/Radix conventions.
+  useEffect(() => {
+    if (!open) return;
+    const KEY_TO_TESTID: Record<string, string> = {
+      n: 'edit-user-nickname',
+      r: 'edit-user-mmr',
+      f: 'edit-user-steam_account_id',
+      z: 'edit-user-carry',
+      x: 'edit-user-mid',
+      c: 'edit-user-offlane',
+      v: 'edit-user-soft_support',
+      b: 'edit-user-hard_support',
+    };
+    const handler = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      const testId = KEY_TO_TESTID[e.key.toLowerCase()];
+      if (!testId) return;
+      const target = document.querySelector<HTMLElement>(`[data-testid="${testId}"]`);
+      if (!target) return;
+      // Already on the matched element — let the keystroke through.
+      if (document.activeElement === target) return;
+      // Typing into another editable element — never steal focus.
+      const active = document.activeElement as HTMLElement | null;
+      const tag = active?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || active?.isContentEditable) return;
+      e.preventDefault();
+      target.focus();
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+        // Inputs: select the existing value so typing replaces it.
+        target.select();
+      } else if (target instanceof HTMLButtonElement) {
+        // SelectTrigger buttons: also click to open the dropdown immediately
+        // (otherwise the user has to press Space/Enter as a second step).
+        target.click();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open]);
+
   if (!canEdit) return null;
 
   return (
@@ -136,6 +180,8 @@ export function UserEditModal({ user, scope = { kind: 'global' }, fields }: Prop
         isSubmitting={isSubmitting}
         onSubmit={submitHandler}
         size="xl"
+        autoFocus={false}
+        escapeBlursToContent
         data-testid="edit-user-modal"
       >
         <Form {...form}>

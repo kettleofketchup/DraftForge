@@ -416,11 +416,29 @@ def demote_to_waitlist(signup):
 
 @transaction.atomic
 def reinstate_signup(signup):
-    """Reinstate a cancelled signup back to RSVP status."""
+    """Bring a removed signup back into the active list.
+
+    Behavior depends on event state:
+      - signups_open: CANCELLED → RSVP (or WAITLISTED if full).
+      - roll_call:    CANCELLED or REJECTED → APPROVED, so the player
+                      reappears in the Awaiting Confirmation list and admins
+                      can re-confirm without leaving the rollcall screen.
+    """
+    event = signup.event
+    if event.state == "roll_call":
+        if signup.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+            raise ValueError(
+                "Only removed or rejected signups can be reinstated during roll call."
+            )
+        signup.status = SignupStatus.APPROVED
+        signup.waitlist_position = None
+        signup.save(update_fields=["status", "waitlist_position", "updated_at"])
+        invalidate_after_commit(signup, event)
+        transaction.on_commit(lambda: notify_signup_changed(event))
+        return signup
+
     if signup.status != SignupStatus.CANCELLED:
         raise ValueError("Only cancelled signups can be reinstated.")
-    event = signup.event
-    # Check if event is still accepting signups
     if event.state != "signups_open":
         raise ValueError("Event is not accepting signups.")
     # Check capacity — if full, go to waitlist

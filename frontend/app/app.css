@@ -993,6 +993,17 @@ button:focus-visible {
     0.5px 0.5px 0 var(--base-400);
 }
 
+/* Pure-black text outline — use over colored brand surfaces (success/warning
+   gradients, hero backdrops) where the lighter --base-400 stroke disappears.
+   Reserved for display/title type, not body copy. */
+.text-outline-black {
+  text-shadow:
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000;
+}
+
 /* Accent text colors */
 .text-accent {
   color: var(--accent);

@@ -103,7 +103,7 @@
       "enabled": true,
       "pattern": "npx playwright",
       "just_command": "just test::pw::<recipe>",
-      "reason": "Use just test::pw::headless, test::pw::headed, test::pw::ui, or test::pw::debug"
+      "reason": "Use just test::pw::headless, test::pw::ui, or test::pw::debug"
     },
     {
       "category": "poetry",

@@ -7,7 +7,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '~/components/ui/alert-dialog';
-import { CancelButton, ConfirmButton, brandSuccessBg } from '~/components/ui/buttons';
+import {
+  CancelButton,
+  ConfirmButton,
+  brandReadableDestructive,
+  brandReadableSuccess,
+  brandReadableWarning,
+  brandSuccessBg,
+} from '~/components/ui/buttons';
 import type { CancelButtonVariant, ConfirmButtonVariant } from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
@@ -18,8 +25,8 @@ export interface ConfirmDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Dialog title */
   title: string;
-  /** Dialog description */
-  description: string;
+  /** Dialog description (string or React node — use a node for richer recaps like UserStrip + details) */
+  description: React.ReactNode;
   /** Confirm button label */
   confirmLabel?: string;
   /** Cancel button label */
@@ -45,11 +52,14 @@ const contentVariantStyles = {
   warning: 'bg-orange-950/95 border-orange-800',
 };
 
-// Description text styling per variant
+// Body text per variant — uses the tonal-harmony brand readables so the copy
+// picks up the surface hue family without competing with the gradient. Each
+// constant bakes in font-medium + a hair of letter-spacing for sub-pixel
+// sharpness over color.
 const descriptionVariantStyles = {
-  default: 'text-green-100',
-  destructive: 'text-slate-300',
-  warning: 'text-orange-200',
+  default: brandReadableSuccess,
+  destructive: brandReadableDestructive,
+  warning: brandReadableWarning,
 };
 
 // Map dialog variant to button variants
@@ -94,18 +104,44 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
     ref
   ) => {
     const handleConfirm = async () => {
+      if (isLoading) return;
       await onConfirm();
       onOpenChange(false);
     };
 
     const handleCancel = () => {
+      if (isLoading) return;
       onOpenChange(false);
+    };
+
+    // Enter → confirm, Backspace → cancel. Escape is already handled by Radix.
+    // We skip the keys when an editable element has focus so users can still
+    // type in inputs nested inside `description`.
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.defaultPrevented || isLoading) return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const isEditable =
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        target?.isContentEditable;
+      if (isEditable) return;
+
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        void handleConfirm();
+      } else if (event.key === 'Backspace') {
+        event.preventDefault();
+        handleCancel();
+      }
     };
 
     return (
       <AlertDialog open={open} onOpenChange={onOpenChange}>
         <AlertDialogContent
           ref={ref}
+          onKeyDown={handleKeyDown}
           className={cn(
             'max-w-[calc(100%-2rem)] sm:max-w-md',
             contentVariantStyles[variant]
@@ -113,10 +149,10 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
         >
           <AlertDialogHeader>
             <AlertDialogTitle>{title}</AlertDialogTitle>
-            <AlertDialogDescription
-              className={cn(descriptionVariantStyles[variant])}
-            >
-              {description}
+            <AlertDialogDescription asChild>
+              <div className={cn('text-sm', descriptionVariantStyles[variant])}>
+                {description}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-3">
@@ -124,6 +160,7 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
               onClick={handleCancel}
               disabled={isLoading}
               variant={cancelVariant ?? (variant === 'warning' ? 'success' : 'default')}
+              hotkey="⌫"
               data-testid={cancelTestId}
             >
               {cancelLabel}
@@ -132,6 +169,7 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
               onClick={handleConfirm}
               loading={isLoading}
               variant={confirmButtonVariantMap[variant]}
+              hotkey="↵"
               data-testid={confirmTestId}
             >
               {confirmLabel}

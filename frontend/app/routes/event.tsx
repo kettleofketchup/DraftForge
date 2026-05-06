@@ -64,7 +64,7 @@ import { Badge } from '~/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
 import { EventStateBadge } from '~/components/events';
 import { SubscriberList } from '~/components/events/SubscriberList';
-import { EventState, GameType } from '~/components/events/schemas';
+import { EventState } from '~/components/events/schemas';
 import { MmrApprovalModal } from '~/components/events/MmrApprovalModal';
 import { DiscordLogSection } from '~/components/events/DiscordLogSection';
 import { EditEventModal } from '~/components/events/EditEventModal';
@@ -93,6 +93,8 @@ import { usePageNav } from '~/hooks/usePageNav';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserStore } from '~/store/userStore';
 import { isUserEntry } from '~/store/userCacheTypes';
+import { useGameTypeStore } from '~/store/gameTypeStore';
+import type { GameTypeValue } from '~/components/game/constants';
 import { ConfirmDialog } from '~/components/ui/dialogs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import api from '~/components/api/axios';
@@ -127,6 +129,17 @@ export default function EventPage() {
       useOrgStore.getState().getOrgUsers(event.organization);
     }
   }, [event?.organization]);
+
+  // Set the current game type in the game type store for context-aware components
+  const setCurrentGameType = useGameTypeStore((s) => s.setCurrentGameType);
+  useEffect(() => {
+    if (event?.game_type) {
+      setCurrentGameType(event.game_type as GameTypeValue);
+    }
+    return () => {
+      setCurrentGameType(null);
+    };
+  }, [event?.game_type, setCurrentGameType]);
 
   // Mutations
   const queryClient = useQueryClient();
@@ -224,6 +237,10 @@ export default function EventPage() {
     () => (signups ?? []).filter((s) => s.status === 'waitlisted'),
     [signups],
   );
+  const removedSignups = useMemo(
+    () => (signups ?? []).filter((s) => s.status === 'cancelled' || s.status === 'rejected'),
+    [signups],
+  );
 
   const handleTabChange = useCallback(
     (newTab: string) => {
@@ -241,9 +258,10 @@ export default function EventPage() {
       { value: 'signups', label: `${activeSignups.length} Signups` },
       ...(tentativeSignups.length > 0 ? [{ value: 'tentative', label: `${tentativeSignups.length} Tentative` }] : []),
       { value: 'waitlist', label: `${waitlistedSignups.length} Waitlist` },
+      ...(removedSignups.length > 0 ? [{ value: 'removed', label: `${removedSignups.length} Removed` }] : []),
       { value: 'discord', label: 'Discord' },
     ],
-    [activeSignups.length, tentativeSignups.length, waitlistedSignups.length, isAdmin],
+    [activeSignups.length, tentativeSignups.length, waitlistedSignups.length, removedSignups.length, isAdmin],
   );
 
   usePageNav(event ? pageNavOptions : null, activeTab, handleTabChange);
@@ -475,6 +493,11 @@ export default function EventPage() {
             <TabsTrigger value="waitlist" data-testid="event-tab-waitlist">
               Waitlist ({waitlistedSignups.length})
             </TabsTrigger>
+            {removedSignups.length > 0 && (
+              <TabsTrigger value="removed" data-testid="event-tab-removed">
+                Removed ({removedSignups.length})
+              </TabsTrigger>
+            )}
             <TabsTrigger value="discord" data-testid="event-tab-discord">
               Discord
             </TabsTrigger>
@@ -515,6 +538,16 @@ export default function EventPage() {
           <TabsContent value="waitlist">
             <SignupsTab
               signups={waitlistedSignups}
+              isAdmin={isAdmin}
+              signupActions={signupActions}
+              gameType={event.game_type}
+              state={event.state}
+            />
+          </TabsContent>
+
+          <TabsContent value="removed">
+            <SignupsTab
+              signups={removedSignups}
               isAdmin={isAdmin}
               signupActions={signupActions}
               gameType={event.game_type}
@@ -772,7 +805,7 @@ function SignupsTab({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <SecondaryButton color="green" size="sm"
-                      onClick={() => gameType === GameType.DOTA2 ? setApprovalSignup(signup) : signupActions.approve.mutate({ id: signup.id })}
+                      onClick={() => setApprovalSignup(signup)}
                       disabled={signupActions.approve.isPending}
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" />
@@ -829,7 +862,7 @@ function SignupsTab({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <SecondaryButton color="green" size="sm"
-                    onClick={() => gameType === GameType.DOTA2 ? setApprovalSignup(signup) : signupActions.approve.mutate({ id: signup.id })}
+                    onClick={() => setApprovalSignup(signup)}
                     disabled={signupActions.approve.isPending}
                   >
                     <CheckCircle2 className="h-3.5 w-3.5" />
@@ -839,7 +872,22 @@ function SignupsTab({
                 <TooltipContent className="lg:hidden">Approve</TooltipContent>
               </Tooltip>
             )}
-            {signup.status !== 'cancelled' && (
+            {(signup.status === 'cancelled' || signup.status === 'rejected') && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <SecondaryButton size="sm"
+                    data-testid="event-restore-btn"
+                    onClick={() => signupActions.reinstate.mutate(signup.id)}
+                    disabled={signupActions.reinstate.isPending}
+                  >
+                    <Undo2 className="h-3.5 w-3.5" />
+                    <span className="hidden lg:inline ml-1">Restore</span>
+                  </SecondaryButton>
+                </TooltipTrigger>
+                <TooltipContent className="lg:hidden">Restore signup</TooltipContent>
+              </Tooltip>
+            )}
+            {signup.status !== 'cancelled' && signup.status !== 'rejected' && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DestructiveButton size="sm" depth={false}
