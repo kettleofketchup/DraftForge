@@ -129,3 +129,91 @@ class SignupEndpointHappyPathTests(TestCase):
 
         signup = EventSignup.objects.get(event=self.event, user=self.user)
         self.assertEqual(signup.status, SignupStatus.TENTATIVE)
+
+
+from django.test import TransactionTestCase
+
+
+class SignupEndpointRollbackTests(TransactionTestCase):
+    """Pin transactional rollback: when process_rsvp raises, profile writes from
+    apply_signup_input must roll back too.
+
+    Gate choice: the duplicate-signup gate inside _create_signup (raises
+    ValueError "User has already signed up for this event.") is the only
+    unambiguous hard gate that raises *inside* process_rsvp. The min_mmr and
+    screenshot-required checks live in check_requirements() and only downgrade
+    the signup status to PENDING_APPROVAL — they never raise — so they cannot
+    drive a 400/rollback path from process_rsvp itself.
+    """
+
+    def test_process_rsvp_failure_rolls_back_profile_write(self):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        from app.models import CustomUser, GameType, Organization
+        from events.models import (
+            Event,
+            EventSignup,
+            EventState,
+            SignupStatus,
+            SignupType,
+        )
+        from org.models_profiles import PlayerDotaProfile
+        from org.models import OrgUser
+
+        org = Organization.objects.create(name="Org")
+        event = Event.objects.create(
+            name="Evt",
+            organization=org,
+            game_type=GameType.DOTA2,
+            scheduled_at=timezone.now() + timedelta(days=7),
+            state=EventState.SIGNUPS_OPEN,
+            allow_active_mmr=True,
+            allow_previous_rank=True,
+            allow_battlecup_rating=True,
+        )
+        user = CustomUser.objects.create(username="alice")
+
+        # Pre-create an active signup to trigger the duplicate-signup raise inside
+        # _create_signup (status RSVP is not in the auto-delete set
+        # CANCELLED/REJECTED/TENTATIVE).
+        EventSignup.objects.create(
+            event=event,
+            user=user,
+            signup_type=SignupType.USER,
+            status=SignupStatus.RSVP,
+        )
+
+        # Confirm no profile exists yet — the endpoint's apply_signup_input would
+        # create it via get_or_create before process_rsvp runs.
+        self.assertFalse(
+            PlayerDotaProfile.objects.filter(org_user__user=user).exists(),
+        )
+
+        client = APIClient()
+        client.force_authenticate(user)
+        resp = client.post(
+            f"/api/events/{event.pk}/signup/",
+            {
+                "intent": "rsvp",
+                "profile": {
+                    "unverified_friend_id": "12345",
+                    "rank_status": "active",
+                    "rank_medal": "Legend 4",
+                },
+            },
+            format="json",
+        )
+
+        # process_rsvp raises ValueError -> view returns 400.
+        self.assertEqual(resp.status_code, 400, resp.content)
+        self.assertIn("already signed up", resp.json()["error"])
+
+        # Profile write inside apply_signup_input must have rolled back.
+        org_user = OrgUser.objects.filter(user=user, organization=org).first()
+        if org_user:
+            self.assertFalse(
+                PlayerDotaProfile.objects.filter(org_user=org_user).exists(),
+                "PlayerDotaProfile should not exist after rollback; "
+                f"got {PlayerDotaProfile.objects.filter(org_user=org_user).first()}",
+            )
