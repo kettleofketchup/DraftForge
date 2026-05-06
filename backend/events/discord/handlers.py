@@ -320,10 +320,10 @@ def handle_rank_status_select(event_id, discord_user_id, rank_status):
 
 def handle_rank_medal_select(event_id, discord_user_id, medal):
     """Handle active rank medal selection. Saves medal and signs up."""
-    from cacheops import invalidate_obj
+    from django.core.exceptions import ValidationError as DjangoValidationError
 
-    from events.services import process_rsvp
-    from org.models_profiles import PlayerDotaProfile
+    from events.schemas import SignupInputPatch
+    from events.services import apply_signup_input, process_rsvp
 
     try:
         event = Event.objects.select_related("organization").get(pk=event_id)
@@ -334,10 +334,15 @@ def handle_rank_medal_select(event_id, discord_user_id, medal):
     if not org_user:
         return {"action": "error", "message": "Not found."}
 
-    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
-    profile.rank_medal = medal
-    profile.save(update_fields=["rank_medal"])
-    invalidate_obj(profile)
+    try:
+        profile = apply_signup_input(
+            org_user=org_user,
+            event=event,
+            patch=SignupInputPatch(rank_medal=medal),
+        )
+    except DjangoValidationError as exc:
+        msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+        return {"action": "error", "message": msg}
 
     # Check if screenshot required before completing signup
     if event.discord_require_rank_screenshot and not profile.rank_screenshot:
@@ -402,10 +407,10 @@ def handle_previous_rank_submit(event_id, discord_user_id, medal, date_text):
 
 def handle_battle_cup_submit(event_id, discord_user_id, tier):
     """Handle battle cup modal submission. Saves tier and signs up."""
-    from cacheops import invalidate_obj
+    from django.core.exceptions import ValidationError as DjangoValidationError
 
-    from events.services import process_rsvp
-    from org.models_profiles import PlayerDotaProfile
+    from events.schemas import SignupInputPatch
+    from events.services import apply_signup_input, process_rsvp
 
     try:
         event = Event.objects.select_related("organization").get(pk=event_id)
@@ -416,13 +421,21 @@ def handle_battle_cup_submit(event_id, discord_user_id, tier):
     if not org_user:
         return {"action": "error", "message": "Not found."}
 
-    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
     try:
-        profile.battle_cup_tier = int(tier.strip())
-    except (ValueError, TypeError):
+        tier_int = int(tier.strip())
+    except (ValueError, TypeError, AttributeError):
         return {"action": "error", "message": "Invalid tier. Must be a number."}
-    profile.save(update_fields=["battle_cup_tier"])
-    invalidate_obj(profile)
+
+    try:
+        patch = SignupInputPatch(battle_cup_tier=tier_int)
+    except Exception:  # pydantic.ValidationError (range 1..8)
+        return {"action": "error", "message": "Invalid tier. Must be 1-8."}
+
+    try:
+        profile = apply_signup_input(org_user=org_user, event=event, patch=patch)
+    except DjangoValidationError as exc:
+        msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+        return {"action": "error", "message": msg}
 
     # Check if screenshot required before completing signup
     if event.discord_require_battlecup_screenshot and not profile.battlecup_screenshot:

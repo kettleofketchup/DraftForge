@@ -214,6 +214,56 @@ class HandleRankMedalSelectTest(EventTestCase):
             EventSignup.objects.filter(event=self.event, user=self.user).exists()
         )
 
+    def test_handle_rank_medal_select_calls_apply_signup_input(self):
+        """rank_medal write flows through apply_signup_input via SignupInputPatch."""
+        from unittest.mock import patch as mock_patch
+
+        from events.discord import handle_rank_medal_select
+        from events.schemas import SignupInputPatch
+
+        with mock_patch("events.services.apply_signup_input") as spy:
+            handle_rank_medal_select(
+                event_id=self.event.pk,
+                discord_user_id="100000000000000001",
+                medal="Legend 3",
+            )
+        spy.assert_called_once()
+        patch_arg = spy.call_args.kwargs["patch"]
+        self.assertIsInstance(patch_arg, SignupInputPatch)
+        self.assertEqual(patch_arg.rank_medal, "Legend 3")
+
+
+class HandleBattleCupSubmitTest(EventTestCase):
+    def setUp(self):
+        super().setUp()
+        self.event.state = EventState.SIGNUPS_OPEN
+        self.event.auto_approve = True
+        self.event.save()
+        self.user.discordId = "100000000000000001"
+        self.user.save()
+        self.org_user = OrgUser.objects.create(
+            user=self.user,
+            organization=self.event.organization,
+        )
+
+    def test_handle_battle_cup_submit_calls_apply_signup_input(self):
+        """battle_cup_tier write flows through apply_signup_input via SignupInputPatch."""
+        from unittest.mock import patch as mock_patch
+
+        from events.discord import handle_battle_cup_submit
+        from events.schemas import SignupInputPatch
+
+        with mock_patch("events.services.apply_signup_input") as spy:
+            handle_battle_cup_submit(
+                event_id=self.event.pk,
+                discord_user_id="100000000000000001",
+                tier="5",
+            )
+        spy.assert_called_once()
+        patch_arg = spy.call_args.kwargs["patch"]
+        self.assertIsInstance(patch_arg, SignupInputPatch)
+        self.assertEqual(patch_arg.battle_cup_tier, 5)
+
 
 class HandleScreenshotUploadTest(EventTestCase):
     def setUp(self):
