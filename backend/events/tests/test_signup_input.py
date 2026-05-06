@@ -79,3 +79,20 @@ class ApplySignupInputTests(TestCase):
             )
         self.assertEqual(ctx.exception.code, "rank_status_disallowed")
         self.assertIn("active MMR signups", str(ctx.exception))
+
+    def test_rank_medal_writes(self):
+        apply_signup_input(
+            org_user=self.org_user, event=self.event,
+            patch=SignupInputPatch(rank_medal="Crusader 3"),
+        )
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertEqual(profile.rank_medal, "Crusader 3")
+
+
+    def test_battle_cup_tier_writes(self):
+        apply_signup_input(
+            org_user=self.org_user, event=self.event,
+            patch=SignupInputPatch(battle_cup_tier=5),
+        )
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertEqual(profile.battle_cup_tier, 5)
