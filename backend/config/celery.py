@@ -54,6 +54,16 @@ _beat_schedule = {
         "task": "app.tasks.avatar_refresh.refresh_all_discord_data",
         "schedule": crontab(hour=4, minute=0),
     },
+    # Daily batched avatar refresh. Pulls one full guild-member fetch per
+    # org from the cached `discord_members_<guild_id>` (1 hr TTL — see
+    # discordbot/services/users.py), then bulk-updates User.avatar via a
+    # single CASE/WHEN UPDATE per 500-row batch. Admin Discord-member
+    # searches during the day already repave that cache, so this task
+    # picks up users who joined since yesterday without a separate fetch.
+    "refresh-avatars-batched-daily": {
+        "task": "app.tasks.avatar_refresh.refresh_avatars_batched",
+        "schedule": crontab(hour=4, minute=15),  # 15 min after the daily sweep
+    },
 }
 
 # Event-related tasks that write frequently to the DB.
