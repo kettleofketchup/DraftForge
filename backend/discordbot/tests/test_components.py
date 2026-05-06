@@ -1,8 +1,12 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch as mock_patch
 
 import discord
 from django.test import TestCase
+
+from events.tests.base import EventTestCase
+from org.models import OrgUser
 
 
 def run_async(coro):
@@ -256,3 +260,61 @@ class TestMedalSelectRebuildsView(IsolatedAsyncioTestCase):
         view = kwargs["view"]
         star = next(c for c in view.children if isinstance(c, StarSelect))
         self.assertEqual(star.rank_status, "previous")
+
+
+class PositionConfirmButtonCallbackTest(EventTestCase):
+    """PositionConfirmButton.callback routes the positions write through
+    apply_signup_input (Task 22)."""
+
+    def setUp(self):
+        super().setUp()
+        from app.models import GameType
+        from events.constants import EventState
+
+        self.event.state = EventState.SIGNUPS_OPEN
+        self.event.game_type = GameType.DOTA2
+        self.event.auto_approve = True
+        self.event.save()
+        self.user.discordId = "100000000000000001"
+        self.user.save()
+        self.org_user = OrgUser.objects.create(
+            user=self.user,
+            organization=self.event.organization,
+        )
+
+    def test_callback_calls_apply_signup_input_with_positions(self):
+        async def _test():
+            from discordbot.components import PositionConfirmButton, PositionSelectView
+            from events.schemas import SignupInputPatch
+
+            view = PositionSelectView(
+                event_id=self.event.pk, rank_status="active"
+            )
+            # Drive the sibling Selects' .values so the callback collects {1,2,3}
+            view.pos_1.values = ["1"]
+            view.pos_2.values = ["2"]
+            view.pos_3.values = ["3"]
+
+            # Find the confirm button on the view
+            button = next(
+                c for c in view.children if isinstance(c, PositionConfirmButton)
+            )
+
+            # Mock the discord interaction
+            interaction = MagicMock(spec=discord.Interaction)
+            interaction.user = MagicMock()
+            interaction.user.id = "100000000000000001"
+            interaction.response = MagicMock()
+            interaction.response.edit_message = AsyncMock()
+
+            with mock_patch("events.services.apply_signup_input") as spy:
+                await button.callback(interaction)
+
+            spy.assert_called_once()
+            patch_arg = spy.call_args.kwargs["patch"]
+            self.assertIsInstance(patch_arg, SignupInputPatch)
+            self.assertEqual(set(patch_arg.positions), {1, 2, 3})
+            self.assertEqual(spy.call_args.kwargs["org_user"], self.org_user)
+            self.assertEqual(spy.call_args.kwargs["event"].pk, self.event.pk)
+
+        run_async(_test())
