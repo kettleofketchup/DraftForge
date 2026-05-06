@@ -100,7 +100,12 @@ class HandleSignupModalSubmitTest(EventTestCase):
             organization=self.event.organization,
         )
 
-    def test_dota_modal_saves_profile_and_returns_needs_rank(self):
+    def test_dota_modal_writes_rank_status_and_returns_needs_rank_details(self):
+        """Dota modal submit persists rank_status and friend ID, returns needs_rank_details.
+
+        Positions are no longer written by the modal — they flow through
+        PositionConfirmButton.callback after the modal closes.
+        """
         from events.discord import handle_signup_modal_submit
 
         result = handle_signup_modal_submit(
@@ -109,46 +114,21 @@ class HandleSignupModalSubmitTest(EventTestCase):
             game_type=1,
             values={
                 "unverified_friend_id": "12345",
-                "positions": ["1", "2", "5"],
                 "rank_status": "active",
             },
         )
         self.assertEqual(result["action"], "needs_rank_details")
 
-        # Verify profile saved on OrgUser
+        # Verify non-position profile fields saved on OrgUser
         from org.models_profiles import PlayerDotaProfile
 
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
-        self.assertTrue(profile.pos_1)
-        self.assertTrue(profile.pos_2)
-        self.assertTrue(profile.pos_5)
-        self.assertFalse(profile.pos_3)
+        self.assertEqual(profile.rank_status, "active")
         self.assertEqual(profile.unverified_friend_id, "12345")
 
         # Verify CustomUser.steam_account_id was NOT modified
         self.user.refresh_from_db()
         self.assertIsNone(self.user.steam_account_id)
-
-    def test_dota_modal_saves_positions_from_selects(self):
-        """Position values from select menus are correctly saved to profile."""
-        from events.discord import handle_signup_modal_submit
-
-        result = handle_signup_modal_submit(
-            event_id=self.event.pk,
-            discord_user_id="100000000000000001",
-            game_type=1,  # Dota 2
-            values={
-                "unverified_friend_id": "12345",
-                "positions": ["1", "3", "5"],  # Select values, not comma-separated
-                "rank_status": "active",
-            },
-        )
-        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
-        self.assertTrue(profile.pos_1)
-        self.assertFalse(profile.pos_2)
-        self.assertTrue(profile.pos_3)
-        self.assertFalse(profile.pos_4)
-        self.assertTrue(profile.pos_5)
 
     def test_modal_submit_calls_apply_signup_input_for_dota(self):
         """Dota 2 branch routes profile writes through apply_signup_input."""
