@@ -130,3 +130,18 @@ class ApplySignupInputTests(TestCase):
         )
         profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
         self.assertEqual(profile.battlecup_screenshot, "https://i.imgur.com/bc.jpg")
+
+    def test_duplicate_friend_id_raises(self):
+        # Other-org user owns Friend ID 9999. Global dedup must still reject.
+        other_org = Organization.objects.create(name="Other Org")
+        bob = CustomUser.objects.create(username="bob")
+        bob_org_user = resolve_or_create_org_user(bob, other_org)
+        PlayerDotaProfile.objects.create(org_user=bob_org_user, unverified_friend_id="9999")
+        with self.assertRaises(DjangoValidationError) as ctx:
+            apply_signup_input(
+                org_user=self.org_user, event=self.event,
+                patch=SignupInputPatch(unverified_friend_id="9999"),
+            )
+        self.assertEqual(ctx.exception.code, "duplicate_friend_id")
+        self.assertIn("9999", str(ctx.exception))
+        self.assertIn("dota.kettle.sh", str(ctx.exception))
