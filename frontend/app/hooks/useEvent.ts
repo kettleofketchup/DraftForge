@@ -78,6 +78,9 @@ export function useSignupMutation(eventId: number) {
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
       queryClient.invalidateQueries({ queryKey: ['event-signups', eventId] });
       if (currentUserPk != null) {
+        // Match useUserDotaProfile's queryKey shape: ['user-dota-profile', userPk, orgId].
+        // We don't have orgId in scope here, so invalidate the prefix — TanStack
+        // Query treats this as "match any orgId for this user."
         queryClient.invalidateQueries({ queryKey: ['user-dota-profile', currentUserPk] });
       }
       useOrgStore.getState().clearOrgUsers();

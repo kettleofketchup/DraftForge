@@ -152,13 +152,16 @@ export default function EventPage() {
   const actions = useEventActionMutation(id ?? 0);
   const signupActions = useSignupActionMutations(id ?? 0);
 
-  // Fresh dota profile for the skip-the-form fast path. The SSR snapshot doesn't
-  // expose user_data on EventSSR, so seed initialData as null and let the hook
-  // fetch /users/<pk>/dota-profile/. The signup mutation invalidates this query
-  // on success so the next read is fresh.
-  const profileQuery = useUserDotaProfile(currentUser?.pk, { initialData: null });
+  // Fresh dota profile for the skip-the-form fast path. Profiles are org-scoped
+  // (PlayerDotaProfile hangs off OrgUser), so the hook needs the event's org.
+  // Backed by GET /api/organizations/<orgId>/my-dota-profile/. The signup
+  // mutation invalidates this query on success so the next read is fresh.
+  // Disabled until the event loads; the hook returns isPending until then,
+  // which we use below for trigger gating.
+  const profileQuery = useUserDotaProfile(currentUser?.pk, event?.organization);
   const profile = profileQuery.data;
-  const profileLoaded = profileQuery.status !== 'pending';
+  const profileLoaded =
+    profileQuery.status === 'success' || profileQuery.status === 'error';
 
   // Repeater subscription state
   const repeaterId = event?.event_repeater;
