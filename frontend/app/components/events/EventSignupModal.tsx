@@ -14,6 +14,7 @@ import { cn } from '~/lib/utils';
 
 import { buildSignupPatchSchema, type SignupInputPatch } from './EventSignupModal/schema';
 import { toPatch } from './EventSignupModal/toPatch';
+import { rankStatusReallySet } from './EventSignupModal/evaluateSignupGap';
 import { FriendIdField } from './EventSignupModal/FriendIdField';
 import { RankStatusRadioGroup } from './EventSignupModal/RankStatusRadioGroup';
 import { PositionPickerGrid } from './EventSignupModal/PositionPickerGrid';
@@ -150,7 +151,9 @@ export function EventSignupModal({
   const showFriendId = event.require_steam_id;
   const friendIdPrefilled = !!profile?.unverified_friend_id;
   const showRankStatus = isDota;
-  const rankStatusPrefilled = !!profile?.rank_status;
+  // Same check evaluateSignupGap uses — default `rank_status="never"` from
+  // get_or_create doesn't count as user-picked.
+  const rankStatusPrefilled = rankStatusReallySet(profile);
   const hasPos = profile?.positions
     ? Object.values(profile.positions).some(Boolean)
     : false;
