@@ -36,3 +36,12 @@ class ApplySignupInputTests(TestCase):
         # Empty patch should NOT create a profile and SHOULD return None.
         self.assertIsNone(result)
         self.assertEqual(after, before)
+
+    def test_writes_friend_id(self):
+        apply_signup_input(
+            org_user=self.org_user,
+            event=self.event,
+            patch=SignupInputPatch(unverified_friend_id="12345678"),
+        )
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertEqual(profile.unverified_friend_id, "12345678")
