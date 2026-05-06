@@ -296,8 +296,7 @@ def refresh_avatars_batched():
 
     # Lazy imports keep the module importable in worker startup paths that
     # haven't fully bootstrapped Django.
-    from app.models import CustomUser
-    from org.models import Organization
+    from app.models import CustomUser, Organization
 
     # Discordful users only — non-Discord-linked accounts can't gain or lose
     # a Discord avatar.
