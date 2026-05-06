@@ -212,7 +212,7 @@ export function EventSignupModal({
 
   const scrollableBody = (
     <div
-      className="flex flex-col gap-4 overflow-y-auto pb-4"
+      className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4"
       data-testid="event-signup-modal-body"
     >
       <div className="flex items-center gap-2">
@@ -317,7 +317,11 @@ export function EventSignupModal({
   );
 
   const stickyFooter = (
-    <div className="sticky bottom-0 -mx-6 mt-2 flex justify-end gap-2 border-t border-border bg-background px-6 py-3">
+    // flex-none keeps the footer at the natural bottom of the flex-column form;
+    // scrollableBody takes the remaining height with min-h-0 + flex-1 +
+    // overflow-y-auto, so the footer is never visually overlapping content
+    // (which broke clicks on radio cards near the bottom of short modals).
+    <div className="-mx-6 mt-2 flex flex-none justify-end gap-2 border-t border-border bg-background px-6 py-3">
       <CancelButton
         type="button"
         onClick={() => onOpenChange(false)}
