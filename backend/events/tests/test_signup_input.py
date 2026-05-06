@@ -1,4 +1,5 @@
 from datetime import timedelta
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.test import TestCase
 from django.utils import timezone
 
@@ -58,3 +59,23 @@ class ApplySignupInputTests(TestCase):
         self.assertTrue(profile.pos_3)
         self.assertFalse(profile.pos_4)
         self.assertTrue(profile.pos_5)
+
+    def test_rank_status_active_writes(self):
+        apply_signup_input(
+            org_user=self.org_user, event=self.event,
+            patch=SignupInputPatch(rank_status="active"),
+        )
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertEqual(profile.rank_status, "active")
+
+
+    def test_rank_status_disallowed_raises(self):
+        self.event.allow_active_mmr = False
+        self.event.save()
+        with self.assertRaises(DjangoValidationError) as ctx:
+            apply_signup_input(
+                org_user=self.org_user, event=self.event,
+                patch=SignupInputPatch(rank_status="active"),
+            )
+        self.assertEqual(ctx.exception.code, "rank_status_disallowed")
+        self.assertIn("active MMR signups", str(ctx.exception))
