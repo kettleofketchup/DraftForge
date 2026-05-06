@@ -106,11 +106,51 @@ Without this, subsequent API requests (e.g., `GET /organizations/1/`) will retur
 
 **This also applies to production views** — see `backend/app/views/admin_team.py` for the pattern where every M2M mutation (`add_org_admin`, `remove_org_staff`, etc.) calls `invalidate_obj()` after the change.
 
+## Diagnostic Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/tests/healthz/` | GET | Lightweight liveness probe — single PK SELECT on Event, returns `{ok, ts, db_ms}`. Used by the Playwright health-probe reporter to detect transient backend hangs during long suite runs. |
+
 ## Adding New Test Endpoints
 
-1. Add view function to `backend/tests/test_auth.py`
-2. Apply decorators: `@csrf_exempt`, `@api_view`, `@authentication_classes([])`, `@permission_classes([AllowAny])`
-3. Check `isTestEnvironment(request)` at top
-4. **If modifying M2M fields**: call `invalidate_obj(model)` after changes (cacheops doesn't auto-invalidate M2M)
-5. Add URL pattern to `backend/tests/urls.py`
-6. Add corresponding Playwright fixture function in `frontend/tests/playwright/fixtures/`
+**Where do test-only routes live?** Anything that exists *only* to support
+the test suite (login helpers, state resets, fixture creators, diagnostic
+probes) goes under `api/tests/` and is gated by `isTestEnvironment()`. The
+gating is in `backend/backend/urls.py` at the bottom of the file:
+
+```python
+if isTestEnvironment():
+    urlpatterns += [path("api/tests/", include("tests.urls"))]
+```
+
+`isTestEnvironment()` (in `backend/common/utils.py`) returns False unless
+`settings.TEST` is True, `settings.RELEASE` is False, `settings.DEBUG` is
+True, and `settings.NODE_ENV` is not `"prod"` / `"release"`. In prod the
+entire `tests/` urlconf is never registered — these routes are physically
+unreachable, no extra runtime check needed in each view.
+
+**Pattern for new test-only routes:**
+
+1. Decide which file in `backend/tests/` owns it. Domain-grouped:
+   `test_auth.py` (login + user state), `test_csv.py`, `test_demo.py`,
+   `test_discord.py`, `test_events_discord.py`, `test_herodraft.py`,
+   `test_steam.py`, `test_health.py`. Add a new `test_<domain>.py`
+   only when existing files don't fit.
+2. View boilerplate (env gate already applied at the urlconf level, so
+   per-view `isTestEnvironment()` checks are belt-and-suspenders, optional):
+   - `@api_view(["GET"])` or `@api_view(["POST"])`
+   - `@permission_classes([AllowAny])`
+   - `@csrf_exempt` for POST endpoints
+3. Import the view in `backend/tests/urls.py` and add the `path(...)` to
+   `urlpatterns`.
+4. **If modifying M2M fields**: call `invalidate_obj(model)` after changes
+   — cacheops doesn't auto-invalidate M2M.
+5. Add a Playwright fixture/helper in `frontend/tests/playwright/fixtures/`
+   so tests have a typed wrapper.
+
+**Don't put test-only routes in `backend/app/urls.py` or any always-on
+urlconf** — even with a runtime `isTestEnvironment()` check inside the
+view, you risk shipping the route to prod (the URL pattern is the leak,
+not just the response). The `api/tests/` gate is a single, auditable
+boundary; new diagnostic/probe endpoints belong inside it.
