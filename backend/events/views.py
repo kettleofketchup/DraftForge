@@ -39,7 +39,6 @@ from events.services import (
     ensure_discord_event,
     ensure_tournament_with_signups,
     finalize_event_tournament,
-    process_rsvp,
     reinstate_signup,
     reject_signup,
     restart_event_tournament,
@@ -448,82 +447,6 @@ class EventViewSet(viewsets.ModelViewSet):
         if self.action in ("update", "partial_update", "destroy"):
             if not has_org_staff_access(request.user, obj.organization):
                 self.permission_denied(request)
-
-    @action(
-        detail=True, methods=["post"], permission_classes=[permissions.IsAuthenticated]
-    )
-    def rsvp(self, request, pk=None):
-        event = self.get_object()
-        logger.info(
-            "RSVP request: user=%s (pk=%s), event=%s (pk=%s, state=%s)",
-            request.user.username,
-            request.user.pk,
-            event.name,
-            event.pk,
-            event.state,
-        )
-        try:
-            signup = process_rsvp(event, request.user)
-            logger.info(
-                "RSVP success: user=%s, event=%s, status=%s",
-                request.user.pk,
-                event.pk,
-                signup.status,
-            )
-            return Response(
-                EventSignupSerializer(signup).data, status=status.HTTP_201_CREATED
-            )
-        except ValueError as e:
-            logger.warning(
-                "RSVP rejected: user=%s, event=%s, reason=%s",
-                request.user.pk,
-                event.pk,
-                str(e),
-            )
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=True, methods=["post"])
-    def tentative(self, request, pk=None):
-        """Mark yourself as tentative for an event (interested but not committed).
-        POST /api/events/<pk>/tentative/
-        """
-        event = self.get_object()
-        if event.state != EventState.SIGNUPS_OPEN:
-            return Response(
-                {"error": "Event is not accepting signups"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        # Check for existing active signup
-        existing = (
-            EventSignup.objects.filter(event=event, user=request.user)
-            .exclude(status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED])
-            .first()
-        )
-        if existing:
-            if existing.status == SignupStatus.TENTATIVE:
-                return Response(
-                    {"error": "Already marked as tentative"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            return Response(
-                {"error": f"Already signed up (status: {existing.status})"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        # Delete cancelled/rejected signup to allow fresh tentative
-        EventSignup.objects.filter(
-            event=event,
-            user=request.user,
-            status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED],
-        ).delete()
-        signup = EventSignup.objects.create(
-            event=event, user=request.user, status=SignupStatus.TENTATIVE
-        )
-        from app.cache_utils import invalidate_after_commit
-
-        invalidate_after_commit(signup, event)
-        return Response(
-            EventSignupSerializer(signup).data, status=status.HTTP_201_CREATED
-        )
 
     @action(
         detail=True, methods=["post"],
