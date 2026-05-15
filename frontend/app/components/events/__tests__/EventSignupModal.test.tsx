@@ -1,47 +1,38 @@
-import { describe, it, expect, vi } from 'vitest';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { EventSignupModal } from '../EventSignupModal';
-import { GAME_TYPE } from '~/components/game/constants';
+import { describe, it, expect } from 'vitest';
+import {
+  buildSignupModalBanner,
+  buildSignupModalTitle,
+} from '../EventSignupModal';
 
-const event = {
-  id: 1,
-  name: 'Evt',
-  game_type: GAME_TYPE.DOTA2,
-  require_steam_id: true,
-  allow_active_mmr: true,
-  allow_previous_rank: true,
-  allow_battlecup_rating: true,
-  discord_require_rank_screenshot: false,
-  discord_require_battlecup_screenshot: false,
-};
+// The modal's content lives inside a Radix Dialog portal, so
+// renderToStaticMarkup can't see it in a node test environment (no
+// document.body). These pure-helper smoke tests cover the intent→copy
+// interpolation that the modal exposes; full DOM rendering (Dialog open
+// state, form interaction) is exercised by Playwright in
+// frontend/tests/playwright/e2e/16-events/12-event-signup-form.spec.ts.
 
-function renderModal(props: Parameters<typeof EventSignupModal>[0]) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return renderToStaticMarkup(
-    <QueryClientProvider client={qc}>
-      <EventSignupModal {...props} />
-    </QueryClientProvider>,
-  );
-}
+describe('buildSignupModalTitle', () => {
+  it('uses the "Sign Up" copy for rsvp intent', () => {
+    expect(buildSignupModalTitle('rsvp', 'Evt')).toBe('Sign Up for Evt');
+  });
 
-describe('EventSignupModal', () => {
-  it('uses correct title for rsvp vs tentative', () => {
-    const html1 = renderModal({
-      event: event as never,
-      intent: 'rsvp',
-      profile: null,
-      open: true,
-      onOpenChange: vi.fn(),
-    });
-    expect(html1).toContain('Sign Up for Evt');
-    const html2 = renderModal({
-      event: event as never,
-      intent: 'tentative',
-      profile: null,
-      open: true,
-      onOpenChange: vi.fn(),
-    });
-    expect(html2).toContain('Mark Tentative for Evt');
+  it('uses the "Mark Tentative" copy for tentative intent', () => {
+    expect(buildSignupModalTitle('tentative', 'Evt')).toBe('Mark Tentative for Evt');
+  });
+
+  it('interpolates the event name verbatim', () => {
+    expect(buildSignupModalTitle('rsvp', 'Friday Night Inhouse #42')).toBe(
+      'Sign Up for Friday Night Inhouse #42',
+    );
+  });
+});
+
+describe('buildSignupModalBanner', () => {
+  it('rsvp banner mentions committing to play', () => {
+    expect(buildSignupModalBanner('rsvp')).toContain('committing to play');
+  });
+
+  it('tentative banner mentions interested but not committed', () => {
+    expect(buildSignupModalBanner('tentative')).toContain('interested but not committed');
   });
 });

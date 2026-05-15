@@ -77,6 +77,12 @@ class EnsureTournamentWithSignupsTest(TestCase):
         AND user.tournament_set.all() — so we invalidate the tournament, the event,
         AND every user we added. Mocking invalidate_after_commit is more deterministic
         than measuring live cache state and captures the actual invariant.
+
+        Note: when the event has no tournament yet, create_tournament_for_event
+        also calls invalidate_after_commit(event). So we expect 2 calls here:
+        the create-tournament invalidation, then the M2M-add invalidation. We
+        assert the M2M call (the one this test is really about) has the right
+        shape regardless of the order.
         """
         from unittest.mock import patch
 
@@ -86,8 +92,17 @@ class EnsureTournamentWithSignupsTest(TestCase):
             ensure_tournament_with_signups(self.event)
 
         self.event.refresh_from_db()
-        mock_inv.assert_called_once()
-        args = mock_inv.call_args.args
+        # Find the M2M-add invalidation call — it's the one with the tournament
+        # plus the two added users in its args.
+        m2m_calls = [
+            c for c in mock_inv.call_args_list
+            if len(c.args) >= 2 and c.args[0] == self.event.tournament
+        ]
+        self.assertEqual(
+            len(m2m_calls), 1,
+            f"Expected exactly one M2M-add invalidation; got {mock_inv.call_args_list}",
+        )
+        args = m2m_calls[0].args
         self.assertEqual(args[0], self.event.tournament)
         self.assertEqual(args[1], self.event)
         # Both added users must be in the invalidation set

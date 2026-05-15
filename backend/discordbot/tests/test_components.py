@@ -262,38 +262,28 @@ class TestMedalSelectRebuildsView(IsolatedAsyncioTestCase):
         self.assertEqual(star.rank_status, "previous")
 
 
-class PositionConfirmButtonCallbackTest(EventTestCase):
+class PositionConfirmButtonCallbackTest(TestCase):
     """PositionConfirmButton.callback routes the positions write through
-    apply_signup_input (Task 22)."""
+    apply_signup_input (Task 22).
 
-    def setUp(self):
-        super().setUp()
-        from app.models import GameType
-        from events.constants import EventState
-
-        self.event.state = EventState.SIGNUPS_OPEN
-        self.event.game_type = GameType.DOTA2
-        self.event.auto_approve = True
-        self.event.save()
-        self.user.discordId = "100000000000000001"
-        self.user.save()
-        self.org_user = OrgUser.objects.create(
-            user=self.user,
-            organization=self.event.organization,
-        )
+    Mocks the DB lookups (Event.objects.get + _get_org_user) so the async
+    callback doesn't try to cross-thread query a TestCase-locked SQLite
+    in-memory connection. The contract this test pins is: "callback collects
+    Select values and forwards them to apply_signup_input as a SignupInputPatch".
+    """
 
     def test_callback_calls_apply_signup_input_with_positions(self):
         async def _test():
             from discordbot.components import PositionConfirmButton, PositionSelectView
             from events.schemas import SignupInputPatch
 
-            view = PositionSelectView(
-                event_id=self.event.pk, rank_status="active"
-            )
-            # Drive the sibling Selects' .values so the callback collects {1,2,3}
-            view.pos_1.values = ["1"]
-            view.pos_2.values = ["2"]
-            view.pos_3.values = ["3"]
+            view = PositionSelectView(event_id=42, rank_status="active")
+            # discord.py 2.x Select.values is a property backed by _values
+            # (with an interaction-context override that doesn't apply here).
+            # Setting _values directly drives the property the callback reads.
+            view.pos_1._values = ["1"]
+            view.pos_2._values = ["2"]
+            view.pos_3._values = ["3"]
 
             # Find the confirm button on the view
             button = next(
@@ -307,14 +297,27 @@ class PositionConfirmButtonCallbackTest(EventTestCase):
             interaction.response = MagicMock()
             interaction.response.edit_message = AsyncMock()
 
-            with mock_patch("events.services.apply_signup_input") as spy:
+            # Stand-ins for Event + OrgUser — apply_signup_input is patched, so
+            # only their identity needs to round-trip through the callback.
+            fake_event = MagicMock()
+            fake_event.pk = 42
+            fake_org_user = MagicMock()
+
+            with mock_patch(
+                "events.models.Event.objects.select_related"
+            ) as mock_sr, mock_patch(
+                "events.discord._get_org_user",
+                return_value=(fake_org_user, MagicMock()),
+            ), mock_patch("events.services.apply_signup_input") as spy:
+                mock_sr.return_value.get.return_value = fake_event
+
                 await button.callback(interaction)
 
             spy.assert_called_once()
             patch_arg = spy.call_args.kwargs["patch"]
             self.assertIsInstance(patch_arg, SignupInputPatch)
             self.assertEqual(set(patch_arg.positions), {1, 2, 3})
-            self.assertEqual(spy.call_args.kwargs["org_user"], self.org_user)
-            self.assertEqual(spy.call_args.kwargs["event"].pk, self.event.pk)
+            self.assertEqual(spy.call_args.kwargs["org_user"], fake_org_user)
+            self.assertEqual(spy.call_args.kwargs["event"], fake_event)
 
         run_async(_test())
