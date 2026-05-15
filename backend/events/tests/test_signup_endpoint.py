@@ -22,13 +22,17 @@ class SignupEndpointAuthTests(TestCase):
             allow_battlecup_rating=True,
         )
 
-    def test_unauthenticated_returns_401(self):
+    def test_unauthenticated_returns_403(self):
+        # DRF returns 403 (not 401) when only SessionAuthentication is
+        # configured because SessionAuthentication.authenticate_header()
+        # returns None — without a WWW-Authenticate header DRF emits 403.
+        # Matches the project-wide convention (see events.tests.test_api).
         resp = self.client.post(
             f"/api/events/{self.event.pk}/signup/",
             {"intent": "rsvp"},
             format="json",
         )
-        self.assertEqual(resp.status_code, 401)
+        self.assertEqual(resp.status_code, 403)
 
     def test_wrong_state_returns_400(self):
         self.event.state = EventState.CANCELLED

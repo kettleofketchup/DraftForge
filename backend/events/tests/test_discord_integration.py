@@ -13,6 +13,7 @@ Run: just test::run 'python manage.py test events.tests.test_discord_integration
 import time
 import unittest
 import warnings
+from unittest import mock
 
 from django.conf import settings
 from django.test import TestCase
@@ -36,9 +37,159 @@ HAS_MULTI_USER = bool(getattr(settings, "DISCORD_TEST_BOT_2_TOKEN", ""))
 ANNOUNCEMENT_CHANNEL = "1482767177063858216"
 SIGNUPS_CHANNEL = "1482767709279096893"
 
+# Module-level patches: in test runs the Django test DB is isolated from the
+# live backend container's DB. The internal HTTP client writes to the live DB,
+# but DiscordMessageLog.objects.get(...) reads from the test DB — so without
+# patching, tests would never find the row they just sent. Route those writes
+# directly to the test DB via the Django ORM so the read path sees them.
+_patchers: list = []
+
+
+def _orm_create_message_log(**data):
+    """Stand-in for app.internal_client.create_message_log that writes to the
+    test DB. Returns a mock response with .ok=True and .json() yielding the pk.
+    """
+    if "fired_by_user_id" in data:
+        data["fired_by_id"] = data.pop("fired_by_user_id")
+    entry = DiscordMessageLog.objects.create(**data)
+    resp = mock.MagicMock()
+    resp.ok = True
+    resp.status_code = 201
+    resp.json.return_value = {"id": entry.pk}
+    return resp
+
+
+def _orm_claim_discord_message_log(
+    *,
+    source,
+    source_id,
+    channel_id,
+    embed_data,
+    fired_by_user_id=None,
+    tournament_log_id=None,
+):
+    """Stand-in that creates a pending (success=None) lease row in the test DB.
+    Returns the new log PK or None if a pending/successful row already exists
+    (mirrors the partial-unique-constraint behavior of the real endpoint).
+    """
+    existing = DiscordMessageLog.objects.filter(
+        source=source, source_id=source_id,
+    ).filter(success__isnull=True).first() or DiscordMessageLog.objects.filter(
+        source=source, source_id=source_id, success=True,
+    ).first()
+    if existing:
+        return None
+    kwargs = dict(
+        source=source,
+        source_id=source_id,
+        channel_id=channel_id,
+        embed_data=embed_data,
+        success=None,
+    )
+    if fired_by_user_id is not None:
+        kwargs["fired_by_id"] = fired_by_user_id
+    if tournament_log_id is not None:
+        kwargs["tournament_log_id"] = tournament_log_id
+    entry = DiscordMessageLog.objects.create(**kwargs)
+    return entry.pk
+
+
+def _orm_finalize_discord_message_log(
+    log_id,
+    *,
+    success,
+    discord_message_id=None,
+    status_code=None,
+    response_data=None,
+):
+    """Stand-in that updates an existing lease row in the test DB."""
+    updates = {"success": success}
+    if discord_message_id is not None:
+        updates["discord_message_id"] = discord_message_id
+    if status_code is not None:
+        updates["status_code"] = status_code
+    if response_data is not None:
+        updates["response_data"] = response_data
+    DiscordMessageLog.objects.filter(pk=log_id).update(**updates)
+    resp = mock.MagicMock()
+    resp.ok = True
+    resp.status_code = 200
+    return resp
+
+
+def _orm_get_event_for_task(pk):
+    """Stand-in for app.internal_client.get_event_for_task — fetches the event
+    from the test DB and validates through EventTaskSchema (same shape the live
+    endpoint returns)."""
+    from events.models import Event
+    from events.schemas import EventTaskSchema
+    from events.serializers import EventSerializer
+
+    try:
+        event = Event.objects.select_related("organization", "event_repeater").get(pk=pk)
+    except Event.DoesNotExist:
+        return None
+    data = EventSerializer(event).data
+    data["organization_id"] = event.organization_id
+    data["organization_discord_server_id"] = event.organization.discord_server_id or ""
+    data["organization_logo"] = event.organization.logo or ""
+    data["event_repeater_id"] = event.event_repeater_id
+    return EventTaskSchema.model_validate(data)
+
+
+def _orm_get_or_create_discord_event(**data):
+    """Stand-in that creates/fetches a DiscordEvent row in the test DB."""
+    from discordbot.models import DiscordEvent
+    from events.models import Event
+
+    event_id = data.get("event_id")
+    try:
+        event = Event.objects.get(pk=event_id)
+    except Event.DoesNotExist:
+        resp = mock.MagicMock()
+        resp.ok = False
+        resp.status_code = 404
+        return resp
+    discord_event, _ = DiscordEvent.objects.get_or_create(
+        event=event,
+        defaults={"guild_id": data.get("guild_id", "")},
+    )
+    resp = mock.MagicMock()
+    resp.ok = True
+    resp.status_code = 200
+    resp.json.return_value = {"id": discord_event.pk}
+    return resp
+
+
+def _ok_response(payload=None):
+    resp = mock.MagicMock()
+    resp.ok = True
+    resp.status_code = 200
+    resp.json.return_value = payload or {}
+    return resp
+
+
+def _orm_create_or_update_signup_message(**data):
+    """Stand-in noop — tests don't assert on the signup-message row, but the
+    caller checks `msg_resp.ok` before continuing, so return a passing response."""
+    return _ok_response({"id": 1})
+
+
+def _orm_create_or_update_announcement(**data):
+    return _ok_response({"id": 1})
+
+
+def _orm_update_discord_event(pk, **data):
+    return _ok_response({"id": pk})
+
+
+def _orm_create_event_log(**data):
+    return _ok_response({"id": 1})
+
 
 def setUpModule():
-    """Warn early about missing bot tokens."""
+    """Warn early about missing bot tokens and route internal Discord-log
+    writes to the test DB (see module docstring for the why)."""
     if not HAS_TOKEN:
         warnings.warn(
             "\n⚠️  DISCORD_BOT_TOKEN not set — all Discord integration tests will be skipped.\n"
@@ -53,6 +204,45 @@ def setUpModule():
             "   and add tokens to backend/.env to enable.",
             stacklevel=1,
         )
+
+    if not HAS_TOKEN:
+        return  # tests below are all skipped; no patching needed
+
+    for target, replacement in (
+        ("app.internal_client.create_message_log", _orm_create_message_log),
+        (
+            "app.internal_client.claim_discord_message_log",
+            _orm_claim_discord_message_log,
+        ),
+        (
+            "app.internal_client.finalize_discord_message_log",
+            _orm_finalize_discord_message_log,
+        ),
+        ("app.internal_client.get_event_for_task", _orm_get_event_for_task),
+        (
+            "app.internal_client.get_or_create_discord_event",
+            _orm_get_or_create_discord_event,
+        ),
+        (
+            "app.internal_client.create_or_update_signup_message",
+            _orm_create_or_update_signup_message,
+        ),
+        (
+            "app.internal_client.create_or_update_announcement",
+            _orm_create_or_update_announcement,
+        ),
+        ("app.internal_client.update_discord_event", _orm_update_discord_event),
+        ("app.internal_client.create_event_log", _orm_create_event_log),
+    ):
+        p = mock.patch(target, side_effect=replacement)
+        p.start()
+        _patchers.append(p)
+
+
+def tearDownModule():
+    for p in _patchers:
+        p.stop()
+    _patchers.clear()
 
 
 @unittest.skipUnless(HAS_TOKEN, SKIP_REASON)

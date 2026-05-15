@@ -18,14 +18,15 @@ function withQueryClient(children: ReactNode) {
 
 interface ProbeProps {
   userPk: number | null | undefined;
-  initialData: Parameters<typeof useUserDotaProfile>[1] extends { initialData?: infer T } | undefined
+  orgId: number | null | undefined;
+  initialData: Parameters<typeof useUserDotaProfile>[2] extends { initialData?: infer T } | undefined
     ? T
     : never;
   onCapture: (snapshot: { data: unknown; isFetching: boolean }) => void;
 }
 
-function Probe({ userPk, initialData, onCapture }: ProbeProps) {
-  const result = useUserDotaProfile(userPk, { initialData });
+function Probe({ userPk, orgId, initialData, onCapture }: ProbeProps) {
+  const result = useUserDotaProfile(userPk, orgId, { initialData });
   onCapture({ data: result.data, isFetching: result.isFetching });
   return null;
 }
@@ -45,7 +46,12 @@ describe('useUserDotaProfile', () => {
     let captured: { data: unknown; isFetching: boolean } | null = null;
     renderToStaticMarkup(
       withQueryClient(
-        <Probe userPk={42} initialData={initial} onCapture={(s) => (captured = s)} />,
+        <Probe
+          userPk={42}
+          orgId={7}
+          initialData={initial}
+          onCapture={(s) => (captured = s)}
+        />,
       ),
     );
     expect(captured).not.toBeNull();
@@ -59,7 +65,12 @@ describe('useUserDotaProfile', () => {
     let captured: { data: unknown; isFetching: boolean } | null = null;
     renderToStaticMarkup(
       withQueryClient(
-        <Probe userPk={42} initialData={null} onCapture={(s) => (captured = s)} />,
+        <Probe
+          userPk={42}
+          orgId={7}
+          initialData={null}
+          onCapture={(s) => (captured = s)}
+        />,
       ),
     );
     // With null coerced to undefined, the query is not seeded with a resolved
@@ -75,7 +86,28 @@ describe('useUserDotaProfile', () => {
     let captured: { data: unknown; isFetching: boolean } | null = null;
     renderToStaticMarkup(
       withQueryClient(
-        <Probe userPk={null} initialData={null} onCapture={(s) => (captured = s)} />,
+        <Probe
+          userPk={null}
+          orgId={7}
+          initialData={null}
+          onCapture={(s) => (captured = s)}
+        />,
+      ),
+    );
+    const snap = captured as unknown as { data: unknown; isFetching: boolean };
+    expect(snap.isFetching).toBe(false);
+  });
+
+  it('does not fire query when orgId is null', () => {
+    let captured: { data: unknown; isFetching: boolean } | null = null;
+    renderToStaticMarkup(
+      withQueryClient(
+        <Probe
+          userPk={42}
+          orgId={null}
+          initialData={null}
+          onCapture={(s) => (captured = s)}
+        />,
       ),
     );
     const snap = captured as unknown as { data: unknown; isFetching: boolean };
