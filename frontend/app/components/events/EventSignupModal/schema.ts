@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { type EventType } from '../schemas';
 import { GAME_TYPE } from '~/components/game/constants';
 import type { DotaProfileData } from '~/components/user';
+import { isRankSectionComplete } from './evaluateSignupGap';
 
 const SCREENSHOT_URL_RE = /^https?:\/\/.+\.(png|jpe?g|webp)(\?.*)?$/i;
 
@@ -27,7 +28,12 @@ export function buildSignupPatchSchema(
   }
 
   if (event.game_type === GAME_TYPE.DOTA2) {
-    if (!profile?.rank_status) {
+    // Mirror evaluateSignupGap's per-game rule: the form requires rank_status
+    // whenever the gap evaluator considered the rank section incomplete.
+    // Without this, default `rank_status="never"` from get_or_create is treated
+    // as already-picked here while the gap evaluator treats it as missing, and
+    // the user can submit without ever picking a rank.
+    if (!isRankSectionComplete(event, profile)) {
       fields.rank_status = z.enum(['active', 'previous', 'never']);
     } else {
       fields.rank_status = z.enum(['active', 'previous', 'never']).optional();

@@ -14,7 +14,7 @@ import { cn } from '~/lib/utils';
 
 import { buildSignupPatchSchema, type SignupInputPatch } from './EventSignupModal/schema';
 import { toPatch } from './EventSignupModal/toPatch';
-import { rankStatusReallySet } from './EventSignupModal/evaluateSignupGap';
+import { isRankSectionComplete } from './EventSignupModal/evaluateSignupGap';
 import { FriendIdField } from './EventSignupModal/FriendIdField';
 import { RankStatusRadioGroup } from './EventSignupModal/RankStatusRadioGroup';
 import { PositionPickerGrid } from './EventSignupModal/PositionPickerGrid';
@@ -43,6 +43,24 @@ function positionsSummary(positions: DotaProfileData['positions']): string {
   if (positions.pos_4) picked.push(4);
   if (positions.pos_5) picked.push(5);
   return picked.map((n) => POSITION_LABELS[n]).join(' · ');
+}
+
+// Exported so smoke tests can verify intent → title interpolation without
+// having to render the modal (its body lives in a Radix portal that
+// renderToStaticMarkup can't reach).
+export function buildSignupModalTitle(
+  intent: 'rsvp' | 'tentative',
+  eventName: string,
+): string {
+  return intent === 'rsvp'
+    ? `Sign Up for ${eventName}`
+    : `Mark Tentative for ${eventName}`;
+}
+
+export function buildSignupModalBanner(intent: 'rsvp' | 'tentative'): string {
+  return intent === 'rsvp'
+    ? "You're committing to play this event. We'll add you to the signup list."
+    : "You're marking yourself tentative — we count you as interested but not committed.";
 }
 
 export type EventSignupModalProps = {
@@ -142,8 +160,10 @@ export function EventSignupModal({
     try {
       await mutation.mutateAsync({ intent, profile: patch });
       onOpenChange(false);
-    } catch {
+    } catch (err) {
       // Error surfaces via mutation.error inline; modal stays open for retry.
+      // Log non-mutation failures (e.g. network throw before request) so they're findable.
+      console.error('[EventSignupModal] submit failed', err);
     }
   });
 
@@ -152,8 +172,8 @@ export function EventSignupModal({
   const friendIdPrefilled = !!profile?.unverified_friend_id;
   const showRankStatus = isDota;
   // Same check evaluateSignupGap uses — default `rank_status="never"` from
-  // get_or_create doesn't count as user-picked.
-  const rankStatusPrefilled = rankStatusReallySet(profile);
+  // get_or_create doesn't count as a real user pick.
+  const rankStatusPrefilled = isRankSectionComplete(event, profile);
   const hasPos = profile?.positions
     ? Object.values(profile.positions).some(Boolean)
     : false;
@@ -199,12 +219,8 @@ export function EventSignupModal({
     return editable;
   }
 
-  const title =
-    intent === 'rsvp' ? `Sign Up for ${event.name}` : `Mark Tentative for ${event.name}`;
-  const banner =
-    intent === 'rsvp'
-      ? "You're committing to play this event. We'll add you to the signup list."
-      : "You're marking yourself tentative — we count you as interested but not committed.";
+  const title = buildSignupModalTitle(intent, event.name);
+  const banner = buildSignupModalBanner(intent);
 
   const errorMessage = mutation.error
     ? extractApiError(mutation.error) || 'Something went wrong'

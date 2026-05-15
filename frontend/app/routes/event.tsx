@@ -163,6 +163,36 @@ export default function EventPage() {
   const profileLoaded =
     profileQuery.status === 'success' || profileQuery.status === 'error';
 
+  // Signup trigger: fast-path mutate when the cached profile satisfies the
+  // event's requirements; otherwise open the modal. On fast-path failure,
+  // refetch the profile and re-evaluate — if the server now sees a gap, open
+  // the modal; otherwise surface the error as a toast.
+  const trySignup = useCallback(
+    async (intent: 'rsvp' | 'tentative') => {
+      if (!event) return;
+      const gap = evaluateSignupGap(event, profile);
+      const successMsg = intent === 'rsvp' ? 'Signed up!' : 'Marked as tentative!';
+      const errorMsg = intent === 'rsvp' ? 'Failed to sign up' : 'Failed to mark tentative';
+      if (gap === 'complete') {
+        try {
+          await signupMutation.mutateAsync({ intent, profile: {} });
+          toast.success(successMsg);
+        } catch (err) {
+          const refreshed = await profileQuery.refetch();
+          const newGap = event ? evaluateSignupGap(event, refreshed.data) : 'complete';
+          if (newGap !== 'complete') {
+            setSignupModal({ open: true, intent });
+          } else {
+            toast.error(extractApiError(err) || errorMsg);
+          }
+        }
+      } else {
+        setSignupModal({ open: true, intent });
+      }
+    },
+    [event, profile, profileQuery, signupMutation],
+  );
+
   // Repeater subscription state
   const repeaterId = event?.event_repeater;
   const { data: repeaterData } = useQuery({
@@ -407,28 +437,7 @@ export default function EventPage() {
               <>
                 <PrimaryButton
                   size="sm"
-                  onClick={async () => {
-                    if (!event) return;
-                    const gap = evaluateSignupGap(event, profile);
-                    if (gap === 'complete') {
-                      try {
-                        await signupMutation.mutateAsync({ intent: 'rsvp', profile: {} });
-                        toast.success('Signed up!');
-                      } catch (err) {
-                        // Defense in depth: cached profile said "complete" but server disagrees.
-                        // Refetch and re-evaluate; if still complete, surface the error.
-                        const refreshed = await profileQuery.refetch();
-                        const newGap = event ? evaluateSignupGap(event, refreshed.data) : 'complete';
-                        if (newGap !== 'complete') {
-                          setSignupModal({ open: true, intent: 'rsvp' });
-                        } else {
-                          toast.error(extractApiError(err) || 'Failed to sign up');
-                        }
-                      }
-                    } else {
-                      setSignupModal({ open: true, intent: 'rsvp' });
-                    }
-                  }}
+                  onClick={() => trySignup('rsvp')}
                   disabled={!event || !signups || !profileLoaded || signupMutation.isPending}
                   data-testid="event-signup-btn"
                 >
@@ -437,26 +446,7 @@ export default function EventPage() {
                 </PrimaryButton>
                 <SecondaryButton
                   size="sm"
-                  onClick={async () => {
-                    if (!event) return;
-                    const gap = evaluateSignupGap(event, profile);
-                    if (gap === 'complete') {
-                      try {
-                        await signupMutation.mutateAsync({ intent: 'tentative', profile: {} });
-                        toast.success('Marked as tentative!');
-                      } catch (err) {
-                        const refreshed = await profileQuery.refetch();
-                        const newGap = event ? evaluateSignupGap(event, refreshed.data) : 'complete';
-                        if (newGap !== 'complete') {
-                          setSignupModal({ open: true, intent: 'tentative' });
-                        } else {
-                          toast.error(extractApiError(err) || 'Failed to mark tentative');
-                        }
-                      }
-                    } else {
-                      setSignupModal({ open: true, intent: 'tentative' });
-                    }
-                  }}
+                  onClick={() => trySignup('tentative')}
                   disabled={!event || !signups || !profileLoaded || signupMutation.isPending}
                   data-testid="event-tentative-btn"
                 >
@@ -479,26 +469,7 @@ export default function EventPage() {
                 </SecondaryButton>
                 <SecondaryButton
                   size="sm"
-                  onClick={async () => {
-                    if (!event) return;
-                    const gap = evaluateSignupGap(event, profile);
-                    if (gap === 'complete') {
-                      try {
-                        await signupMutation.mutateAsync({ intent: 'tentative', profile: {} });
-                        toast.success('Marked as tentative!');
-                      } catch (err) {
-                        const refreshed = await profileQuery.refetch();
-                        const newGap = event ? evaluateSignupGap(event, refreshed.data) : 'complete';
-                        if (newGap !== 'complete') {
-                          setSignupModal({ open: true, intent: 'tentative' });
-                        } else {
-                          toast.error(extractApiError(err) || 'Failed to mark tentative');
-                        }
-                      }
-                    } else {
-                      setSignupModal({ open: true, intent: 'tentative' });
-                    }
-                  }}
+                  onClick={() => trySignup('tentative')}
                   disabled={!event || !signups || !profileLoaded || signupMutation.isPending}
                   data-testid="event-tentative-btn"
                 >
@@ -525,26 +496,7 @@ export default function EventPage() {
               <>
                 <PrimaryButton
                   size="sm"
-                  onClick={async () => {
-                    if (!event) return;
-                    const gap = evaluateSignupGap(event, profile);
-                    if (gap === 'complete') {
-                      try {
-                        await signupMutation.mutateAsync({ intent: 'rsvp', profile: {} });
-                        toast.success('Signed up!');
-                      } catch (err) {
-                        const refreshed = await profileQuery.refetch();
-                        const newGap = event ? evaluateSignupGap(event, refreshed.data) : 'complete';
-                        if (newGap !== 'complete') {
-                          setSignupModal({ open: true, intent: 'rsvp' });
-                        } else {
-                          toast.error(extractApiError(err) || 'Failed to sign up');
-                        }
-                      }
-                    } else {
-                      setSignupModal({ open: true, intent: 'rsvp' });
-                    }
-                  }}
+                  onClick={() => trySignup('rsvp')}
                   disabled={!event || !signups || !profileLoaded || signupMutation.isPending}
                   data-testid="event-upgrade-rsvp-btn"
                 >

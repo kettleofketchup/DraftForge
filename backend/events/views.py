@@ -488,7 +488,9 @@ class EventViewSet(viewsets.ModelViewSet):
         try:
             patch = SignupInputPatch(**(body.get("profile") or {}))
         except PydanticValidationError as exc:
-            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            first = exc.errors()[0] if exc.errors() else {}
+            msg = first.get("msg") or str(exc)
+            return Response({"error": msg}, status=status.HTTP_400_BAD_REQUEST)
 
         org_user = resolve_or_create_org_user(request.user, event.organization)
 

@@ -9,13 +9,17 @@ function hasAnyPosition(profile: DotaProfileData | null | undefined): boolean {
 }
 
 /**
- * Returns true if the user has actually picked their rank state, false if the
- * profile only has the model's default `rank_status="never"` with no
- * corroborating data (battle_cup_tier or rank_medal). Necessary because
- * `get_my_dota_profile` auto-creates rows on first read, so "never" comes back
- * even for users who've never touched their profile.
+ * Per-game completeness rule for the Dota 2 rank section.
+ *
+ * "Complete" means: a rank_status is picked AND the field that backs it up
+ * carries a value (rank_medal for active/previous, battle_cup_tier for never).
+ * Without the backing field, a `rank_status="never"` value could just be the
+ * default that PlayerDotaProfile.get_or_create emits on first read — not a
+ * deliberate user choice.
  */
-export function rankStatusReallySet(profile: DotaProfileData | null | undefined): boolean {
+function isDotaRankSectionComplete(
+  profile: DotaProfileData | null | undefined,
+): boolean {
   if (!profile?.rank_status) return false;
   if (profile.rank_status === 'never') {
     return profile.battle_cup_tier != null;
@@ -24,6 +28,39 @@ export function rankStatusReallySet(profile: DotaProfileData | null | undefined)
     return !!profile.rank_medal;
   }
   return false;
+}
+
+/**
+ * isRankSectionComplete — has the user fully filled the rank section of their
+ * profile for the event's game?
+ *
+ * Purpose: gate both the skip-the-form fast path (in evaluateSignupGap) and the
+ * "is this field required?" decision in the signup form's zod schema. Both
+ * callers must agree on what "complete" means; if the gap evaluator opens the
+ * modal because rank is missing, the form must refuse to submit without one.
+ *
+ * The rule is game-specific. Dispatch by `event.game_type` so each game can
+ * own its own completeness definition without leaking rules across games:
+ *   - DOTA2: rank_status + corroborating medal/tier (see isDotaRankSectionComplete).
+ *   - DEADLOCK: no rank section in the web signup modal today — vacuously true so
+ *     the gap evaluator and schema don't try to enforce a rank field that the
+ *     modal never renders. When Deadlock gains a rank section, add a helper.
+ *
+ * Returning `true` for games with no rank section is intentional: callers ask
+ * "is the rank section a blocker?", and the answer for those games is "no".
+ */
+export function isRankSectionComplete(
+  event: EventType,
+  profile: DotaProfileData | null | undefined,
+): boolean {
+  switch (event.game_type) {
+    case GAME_TYPE.DOTA2:
+      return isDotaRankSectionComplete(profile);
+    case GAME_TYPE.DEADLOCK:
+      return true;
+    default:
+      return true;
+  }
 }
 
 /**
@@ -43,7 +80,7 @@ export function evaluateSignupGap(
   if (event.require_steam_id && !profile?.unverified_friend_id) missing.push('friend_id');
 
   if (event.game_type === GAME_TYPE.DOTA2) {
-    if (!rankStatusReallySet(profile)) missing.push('rank_status');
+    if (!isRankSectionComplete(event, profile)) missing.push('rank_status');
     if (!hasAnyPosition(profile)) missing.push('positions');
     if (profile?.rank_status === 'active' || profile?.rank_status === 'previous') {
       if (!profile.rank_medal) missing.push('rank_medal');
