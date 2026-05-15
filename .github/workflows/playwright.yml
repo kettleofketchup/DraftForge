@@ -103,6 +103,25 @@ jobs:
           poetry run inv docker.test-build
         fi
 
+    - name: Rebuild frontend-dev image if pulled :latest is stale
+      run: |
+        # docker::all-pull returns success even when it falls back to :latest
+        # (e.g. when build-docker-images.yml hasn't pushed a hash-tagged image
+        # for this PR's package-lock yet — that workflow runs on main only).
+        # If the hash-tagged frontend-dev image isn't present locally after pull,
+        # the running container would have stale node_modules and vite would
+        # fail to resolve newly-added packages (issue: PR #217).
+        # Detect the mismatch and rebuild frontend-dev only.
+        FRONTEND_HASH=$(just docker::hash frontend)
+        FRONTEND_IMAGE="${IMAGE_PREFIX}/frontend-dev:${FRONTEND_HASH}"
+        if docker image inspect "$FRONTEND_IMAGE" >/dev/null 2>&1; then
+          echo "✓ frontend-dev:${FRONTEND_HASH:0:12}... already present (deps in sync)"
+        else
+          echo "✗ frontend-dev image lacks current package-lock hash (${FRONTEND_HASH:0:12}...)"
+          echo "  Rebuilding frontend-dev so vite can resolve current deps..."
+          poetry run inv docker.frontend.build-dev
+        fi
+
     - name: Get test database
       run: |
         # Strategy 1: Try to pull from GHCR (hash first, then latest)
