@@ -253,26 +253,26 @@ def create_tentative_signup(event, user):
 def apply_signup_input(*, org_user, event, patch):
     """Idempotently write any provided fields onto the OrgUser's PlayerDotaProfile.
 
-    NOTE: This commit is the skeleton only. No field-write branches are
-    implemented yet -- the actual per-field writes (Friend ID, positions,
-    rank_status, rank_medal, battle_cup_tier, screenshots) and policy
-    validation are added in subsequent commits (Tasks 6-11). Until those
-    land, the function performs a no-op `save()` and registers cacheops
-    invalidation when `patch` carries any explicitly-set fields, but does
-    not actually mutate any model attributes. The `save()` +
-    `invalidate_after_commit` calls become meaningful only once field
-    writes are present.
+    Used by both the web `/signup/` endpoint and the Discord adapters so the
+    write path is identical. Per-field branches:
+      - unverified_friend_id: site-wide uniqueness check, then write.
+      - positions: writes pos_1..pos_5 booleans from a list of ints.
+      - rank_status: validated against event.allow_* flags before writing.
+      - rank_medal, battle_cup_tier: written as-is.
+      - rank_screenshot, battlecup_screenshot: URL shape validated, then written.
 
-    Contract (stable across the upcoming slices):
-    - Fields not in `patch` are not touched (partial-patch semantics).
-    - Multiple calls with the same `patch` are safe (idempotent).
-    - Returns the PlayerDotaProfile when `patch` had any set fields, or
-      None if `patch` was empty.
-    - Cacheops invalidation is registered via invalidate_after_commit,
-      which schedules via transaction.on_commit when a transaction is
-      active and fires immediately otherwise. Do NOT wrap in an outer
-      transaction.on_commit.
+    Contract:
+      - Fields not in `patch` are not touched (partial-patch semantics).
+      - Multiple calls with the same `patch` are safe (idempotent).
+      - Returns the PlayerDotaProfile when `patch` had any set fields, or
+        None if `patch` was empty.
+      - Cacheops invalidation is registered via invalidate_after_commit,
+        which schedules via transaction.on_commit when a transaction is
+        active and fires immediately otherwise. Do NOT wrap in an outer
+        transaction.on_commit.
     """
+    from django.core.exceptions import ValidationError
+
     from org.models_profiles import PlayerDotaProfile
 
     set_fields = patch.model_dump(exclude_unset=True)
@@ -281,9 +281,6 @@ def apply_signup_input(*, org_user, event, patch):
 
     profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
     if "unverified_friend_id" in set_fields:
-        from django.core.exceptions import ValidationError
-        from org.models_profiles import PlayerDotaProfile
-
         fid = set_fields["unverified_friend_id"]
         if fid:
             # Global scope (matches handlers.py:234 — Friend ID is unique site-wide,
@@ -309,7 +306,6 @@ def apply_signup_input(*, org_user, event, patch):
         profile.pos_4 = 4 in positions
         profile.pos_5 = 5 in positions
     if "rank_status" in set_fields:
-        from django.core.exceptions import ValidationError
         status = set_fields["rank_status"]
         allowed = (
             (status == "active" and event.allow_active_mmr)
