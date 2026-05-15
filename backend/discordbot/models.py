@@ -302,7 +302,19 @@ class DiscordEventDM(models.Model):
 
 
 class DiscordTournamentLog(models.Model):
-    """Audit log for Discord notifications sent for tournaments."""
+    """Audit log for Discord notifications sent for tournaments.
+
+    success state machine (matches DiscordMessageLog):
+        NULL  → in flight (parent row created so child DMs can FK to it,
+                send loop has not yet completed)
+        True  → all DMs dispatched, recipient_count == number sent
+        False → loop completed but no recipients reached (e.g., zero
+                participants had a Discord ID, or every send failed)
+
+    Consumers polling this table MUST treat success=NULL as "not done yet"
+    and wait for a terminal True/False before reading recipient_count.
+    See events.tournament_tasks.send_tournament_draft_links for the writer.
+    """
 
     class NotificationType(models.TextChoices):
         DRAFT_LINK = "draft_link", "Draft Link"
@@ -324,7 +336,7 @@ class DiscordTournamentLog(models.Model):
     )
     message = models.TextField()
     recipient_count = models.IntegerField(default=0)
-    success = models.BooleanField(default=True)
+    success = models.BooleanField(null=True, blank=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -333,7 +345,13 @@ class DiscordTournamentLog(models.Model):
         verbose_name_plural = "Discord Tournament Logs"
 
     def __str__(self):
-        return f"{self.notification_type} for tournament {self.tournament_id} ({'ok' if self.success else 'fail'})"
+        if self.success is None:
+            state = "pending"
+        elif self.success:
+            state = "ok"
+        else:
+            state = "fail"
+        return f"{self.notification_type} for tournament {self.tournament_id} ({state})"
 
 
 class LogCategory(models.IntegerChoices):

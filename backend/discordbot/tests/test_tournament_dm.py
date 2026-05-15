@@ -16,11 +16,15 @@ class DiscordTournamentLogTest(TestCase):
     def test_create_log(self):
         from discordbot.models import DiscordTournamentLog
 
+        # success is nullable (NULL = in flight). Unset defaults to None, not
+        # True — see model docstring for the state machine. Callers MUST flip
+        # to True/False explicitly when the work is done.
         log_entry = DiscordTournamentLog.objects.create(
             tournament=self.tournament,
             notification_type="draft_link",
             message="Sent to 5/8",
             recipient_count=5,
+            success=True,
         )
         self.assertTrue(log_entry.success)
         self.assertEqual(log_entry.notification_type, "draft_link")
@@ -305,3 +309,183 @@ class AutoCreateHeroDraftsTaskTest(TestCase):
         auto_create_herodrafts(1)
         # Should not have tried to create herodraft (no captains)
         mock_resched.assert_called_once()  # Still reschedules
+
+
+# ---------------------------------------------------------------------------
+# DiscordTournamentLog.success state machine
+#
+# Pinning #220: send_tournament_draft_links used to create the parent log row
+# with success=True, recipient_count=0 BEFORE actually sending any DMs, then
+# updated to the final state after the loop. A consumer of the API (frontend,
+# test, dashboard) polling between the two writes would see an incoherent row
+# that claimed success while showing zero recipients.
+#
+# Contract these tests pin:
+#   - DiscordTournamentLog.success is nullable (NULL = in flight).
+#   - create_tournament_log on both tasks passes success=None at create time.
+#   - update_tournament_log sets success=True/False after the loop completes.
+# ---------------------------------------------------------------------------
+
+
+class DiscordTournamentLogSuccessNullableTest(TestCase):
+    """The model must allow success=None so callers can express the
+    'in-flight' state between create and update."""
+
+    def setUp(self):
+        from app.models import Tournament
+
+        self.tournament = Tournament.objects.create(
+            name="Nullable", state="future", date_played=timezone.now()
+        )
+
+    def test_success_can_be_null_at_create(self):
+        from discordbot.models import DiscordTournamentLog
+
+        log = DiscordTournamentLog.objects.create(
+            tournament=self.tournament,
+            notification_type="draft_link",
+            message="Sending...",
+            success=None,
+        )
+        log.refresh_from_db()
+        self.assertIsNone(log.success)
+
+    def test_internal_view_writes_success_null_via_orm(self):
+        """The internal view at app.views.internal.create_discord_tournament_log
+        forwards request.data fields directly into DiscordTournamentLog.objects.create
+        (see ALLOWED_FIELDS at app/views/internal.py:524-531). Verify the ORM path
+        the view ultimately calls accepts success=None — covers what the view does
+        without going through the IP-whitelisted internal HTTP auth layer."""
+        from discordbot.models import DiscordTournamentLog
+
+        # Mirror the keys the internal view passes through (it filters to
+        # ALLOWED_FIELDS but is otherwise a thin .create wrapper).
+        data = {
+            "tournament_id": self.tournament.pk,
+            "category": "notification",
+            "notification_type": "draft_link",
+            "message": "Sending...",
+            "recipient_count": 0,
+            "success": None,
+        }
+        entry = DiscordTournamentLog.objects.create(**data)
+        entry.refresh_from_db()
+        self.assertIsNone(entry.success)
+
+
+class SendDraftLinksRaceTest(TestCase):
+    """send_tournament_draft_links must NOT claim success=True at create.
+    The create-time row should be in-flight (success=None); the post-loop
+    update is what flips success to True/False with the final count."""
+
+    @patch("app.internal_client.update_tournament_log")
+    @patch("app.internal_client.create_tournament_log")
+    @patch("discordbot.utils.sync_send_dm")
+    @patch("app.internal_client.get_tournament_participants")
+    @patch("app.internal_client.get_tournament_for_task")
+    def test_create_log_passes_success_none(
+        self, mock_tourn, mock_parts, mock_dm, mock_create, mock_update
+    ):
+        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
+
+        mock_tourn.return_value = TournamentTaskSchema(
+            id=1,
+            name="Race",
+            state="in_progress",
+            discord_send_draft_link=True,
+            draft_type="snake",
+        )
+        mock_parts.return_value = [
+            TournamentParticipantSchema(user_pk=1, discord_id="111", username="p1"),
+            TournamentParticipantSchema(user_pk=2, discord_id="222", username="p2"),
+        ]
+        mock_dm.return_value = {"id": "msg123"}
+        mock_create.return_value = MagicMock(ok=True, json=lambda: {"id": 42})
+
+        from events.tournament_tasks import send_tournament_draft_links
+
+        send_tournament_draft_links(1, 99)
+
+        # The create call is the one a poller could observe mid-flight. It
+        # MUST NOT lie about success — pass None so consumers can distinguish
+        # "task running" from "task finished successfully".
+        create_kwargs = mock_create.call_args.kwargs
+        self.assertIsNone(
+            create_kwargs.get("success"),
+            f"create_tournament_log should pass success=None (got "
+            f"{create_kwargs.get('success')!r}); see #220",
+        )
+        self.assertEqual(create_kwargs.get("recipient_count"), 0)
+
+    @patch("app.internal_client.update_tournament_log")
+    @patch("app.internal_client.create_tournament_log")
+    @patch("discordbot.utils.sync_send_dm")
+    @patch("app.internal_client.get_tournament_participants")
+    @patch("app.internal_client.get_tournament_for_task")
+    def test_update_log_sets_terminal_state(
+        self, mock_tourn, mock_parts, mock_dm, mock_create, mock_update
+    ):
+        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
+
+        mock_tourn.return_value = TournamentTaskSchema(
+            id=1,
+            name="Race",
+            state="in_progress",
+            discord_send_draft_link=True,
+            draft_type="snake",
+        )
+        mock_parts.return_value = [
+            TournamentParticipantSchema(user_pk=1, discord_id="111", username="p1"),
+            TournamentParticipantSchema(user_pk=2, discord_id="222", username="p2"),
+        ]
+        mock_dm.return_value = {"id": "msg123"}
+        mock_create.return_value = MagicMock(ok=True, json=lambda: {"id": 42})
+
+        from events.tournament_tasks import send_tournament_draft_links
+
+        send_tournament_draft_links(1, 99)
+
+        mock_update.assert_called_once()
+        update_kwargs = mock_update.call_args.kwargs
+        self.assertTrue(update_kwargs.get("success"))
+        self.assertEqual(update_kwargs.get("recipient_count"), 2)
+
+
+class SendHerodraftLinksRaceTest(TestCase):
+    """Same contract as SendDraftLinksRaceTest, for herodraft variant."""
+
+    @patch("app.internal_client.update_tournament_log")
+    @patch("app.internal_client.create_tournament_log")
+    @patch("discordbot.utils.sync_send_dm")
+    @patch("app.internal_client.get_match_participants")
+    @patch("app.internal_client.get_tournament_for_task")
+    def test_create_log_passes_success_none(
+        self, mock_tourn, mock_parts, mock_dm, mock_create, mock_update
+    ):
+        from app.schemas import TournamentParticipantSchema, TournamentTaskSchema
+
+        mock_tourn.return_value = TournamentTaskSchema(
+            id=1,
+            name="Race",
+            state="in_progress",
+            discord_send_herodraft_link=True,
+        )
+        mock_parts.return_value = [
+            TournamentParticipantSchema(user_pk=1, discord_id="111", username="p1"),
+        ]
+        mock_dm.return_value = {"id": "msg123"}
+        mock_create.return_value = MagicMock(ok=True, json=lambda: {"id": 42})
+
+        from events.tournament_tasks import send_tournament_herodraft_links
+
+        send_tournament_herodraft_links(
+            1, 99, 10, radiant_name="Alpha", dire_name="Bravo"
+        )
+
+        create_kwargs = mock_create.call_args.kwargs
+        self.assertIsNone(
+            create_kwargs.get("success"),
+            f"create_tournament_log should pass success=None (got "
+            f"{create_kwargs.get('success')!r}); see #220",
+        )
+        self.assertEqual(create_kwargs.get("recipient_count"), 0)

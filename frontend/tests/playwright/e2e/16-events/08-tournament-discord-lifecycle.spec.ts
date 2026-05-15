@@ -222,7 +222,12 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
 
     // =========================================================================
     // 10. Verify DiscordTournamentLog has draft_link entry
-    //     (DMs dispatched via Celery — poll for the log to appear)
+    //     (DMs dispatched via Celery — poll for the log to reach a terminal state).
+    //
+    // The Celery task writes the row in two phases:
+    //   T0 — create with success=null  (in-flight, child DMs FK to it)
+    //   T1 — update with success=true/false + final recipient_count
+    // Poll until success !== null so we only assert on the terminal state.
     // =========================================================================
     let draftLogFound = false;
     for (let i = 0; i < 15; i++) {
@@ -233,7 +238,8 @@ test.describe('Tournament Discord Lifecycle (@cicd)', () => {
       if (logsResp.ok()) {
         const logs = await logsResp.json();
         const draftLog = logs.find(
-          (l: { notification_type: string }) => l.notification_type === 'draft_link',
+          (l: { notification_type: string; success: boolean | null }) =>
+            l.notification_type === 'draft_link' && l.success !== null,
         );
         if (draftLog) {
           draftLogFound = true;

@@ -41,14 +41,17 @@ def send_tournament_draft_links(tournament_id, draft_id):
     components = build_draft_link_components(tournament_id)
     participants = get_tournament_participants(tournament_id)
 
-    # Create tournament log first so individual DM message logs can link to it
+    # Create the parent log row first so child DiscordMessageLog rows can FK
+    # to it. success=None marks the row as in-flight; the post-loop
+    # update_tournament_log call below flips it to True/False with the final
+    # count. Consumers polling this row MUST wait for a terminal state.
     log_resp = create_tournament_log(
         tournament_id=tournament_id,
         category="notification",
         notification_type="draft_link",
         message=f"Sending draft link to {len(participants)} participants...",
         recipient_count=0,
-        success=True,
+        success=None,
     )
     tournament_log_id = log_resp.json().get("id") if log_resp and log_resp.ok else None
 
@@ -70,7 +73,7 @@ def send_tournament_draft_links(tournament_id, draft_id):
     if failed_users:
         message += f". Failed: {', '.join(failed_users[:10])}"
 
-    # Update tournament log with final count
+    # Flip the in-flight row to its terminal state with the actual count.
     if tournament_log_id:
         from app.internal_client import update_tournament_log
 
@@ -113,7 +116,8 @@ def send_tournament_herodraft_links(
     components = build_herodraft_link_components(herodraft_id)
     participants = get_match_participants(game_id)
 
-    # Create tournament log first so individual DM message logs can link to it
+    # Create the parent log row first so child DiscordMessageLog rows can FK
+    # to it. success=None = in-flight; flipped by update_tournament_log below.
     team_names = f"{radiant_name} vs {dire_name}"
     log_resp = create_tournament_log(
         tournament_id=tournament_id,
@@ -121,7 +125,7 @@ def send_tournament_herodraft_links(
         notification_type="herodraft_link",
         message=f"Sending hero draft link to {len(participants)} players ({team_names})...",
         recipient_count=0,
-        success=True,
+        success=None,
     )
     tournament_log_id = log_resp.json().get("id") if log_resp and log_resp.ok else None
 
