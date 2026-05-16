@@ -45,6 +45,18 @@ A raw `<Button>` with `onClick` that performs a user-facing action is a `block`.
 
 `Dialog` and `AlertDialog` content automatically include the `brandBg` overlay (see `THEMING-GUIDE.md` §"Brand Surface Background"). Adding `bg-gradient-to-*` to a `DialogContent` would silently strip `bg-background` (tailwind-merge group collision) — **do not do it**. Use `[background-image:var(--brand-bg)]` arbitrary property if a custom overlay is needed.
 
+**Width convention** (see `THEMING-GUIDE.md` §"Dialog Widths"):
+
+| Dialog kind | `DialogContent` width | Examples |
+|---|---|---|
+| Form-heavy (edit/signup/create with multiple sections) | `sm:max-w-2xl` | `EditProfileModal`, `EventSignupModal`, `CreateEventModal` |
+| Decision (single question, two buttons) | *default* (`sm:max-w-lg`) — no override | `ConfirmDialog`, `AlertDialog` |
+| Wide picker / table / chart (rare) | `sm:max-w-3xl` or larger, only with a justification comment | bracket pickers, large team rosters |
+
+A form-heavy `DialogContent` that ships with no `sm:max-w-*` override defaults to the shadcn `sm:max-w-lg` — too narrow for multi-field forms. The content then wraps awkwardly or spawns a horizontal scrollbar inside the modal. Reviewers should flag this as `warn`.
+
+Long forms inside `DialogContent` MUST scroll via `<ScrollArea>` (from `~/components/ui/scroll-area`), not raw `overflow-y-auto` — the brand-styled thin scrollbar replaces the chunky OS default and matches the rest of the app.
+
 ### Token vs literal
 
 The brand uses **semantic tokens** (`bg-primary`, `bg-base-900`, `text-foreground`, `text-success`) that map to oklch values in `app.css` / `tailwind.config.js`. Raw Tailwind color classes (`bg-violet-500`, `text-slate-100`) bypass the token layer.

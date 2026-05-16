@@ -115,6 +115,17 @@ done
 # Manual review: any AlertDialog whose body is just title/desc/yes-no buttons
 # is a candidate for ConfirmDialog (which adds Enter/Backspace + <Kbd> hints).
 rg -n '<AlertDialog\b' "$SCOPE" --glob '!**/components/ui/**'
+
+# Form-heavy DialogContent without a max-w override (defaults to sm:max-w-lg,
+# too narrow for multi-section forms). Manual review per hit: confirm dialogs
+# keep the default; edit/signup/create modals should be sm:max-w-2xl.
+# See THEMING-GUIDE.md §"Dialog Widths".
+rg -nB0 -A2 '<DialogContent' "$SCOPE" | rg -L 'max-w-'
+
+# Raw overflow-y-auto inside DialogContent — should be <ScrollArea> for
+# the brand-styled scrollbar. The OS-default scrollbar inside a themed
+# dialog reads as visual drift. See THEMING-GUIDE.md §"Dialog Widths".
+rg -nB0 -A8 '<DialogContent' "$SCOPE" | rg -B1 -A2 'overflow-y-auto'
 ```
 
 ## Keyboard hints
