@@ -675,7 +675,19 @@ EVENT_PLAYER_NO_PROFILE: TestUser = TestUser(
     discord_id="880000000000099999",
     steam_id_64=76561198900199999,
     mmr=None,
-    positions=TestPositions(),
+    # All-zero priorities so the EventSignupModal's prefill chip doesn't
+    # auto-collapse the position section for this user. Default
+    # TestPositions() seeds every role at 3 ("If the team needs"), which
+    # the modal interprets as "user has picked positions" and triggers
+    # the prefilled-summary chip — masking the picker in the @cicd
+    # "incomplete profile opens modal with all sections" spec.
+    positions=TestPositions(
+        carry=0,
+        mid=0,
+        offlane=0,
+        soft_support=0,
+        hard_support=0,
+    ),
 )
 
 EVENTS_USERS: list[TestUser] = [

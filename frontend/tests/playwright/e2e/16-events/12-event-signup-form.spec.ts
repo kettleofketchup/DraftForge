@@ -84,7 +84,7 @@ test.describe('Event Signup Form (@cicd)', () => {
     await expect(modal).toBeVisible();
     await expect(modal.getByTestId('signup-friend-id')).toBeVisible();
     await expect(modal.getByTestId('signup-rank-status')).toBeVisible();
-    await expect(modal.getByTestId('signup-positions')).toBeVisible();
+    await expect(modal.getByTestId('position-choices')).toBeVisible();
   });
 
   test('rank_status="never" reveals Battle Cup Tier (not Medal/Star)', async ({
@@ -144,7 +144,7 @@ test.describe('Event Signup Form (@cicd)', () => {
     await expect(modal.getByTestId('signup-friend-id')).toBeVisible();
     // Non-Dota game: rank-status / positions sections must not render.
     await expect(modal.getByTestId('signup-rank-status')).toHaveCount(0);
-    await expect(modal.getByTestId('signup-positions')).toHaveCount(0);
+    await expect(modal.getByTestId('position-choices')).toHaveCount(0);
   });
 
   test('upgrade tentative to rsvp re-runs gap evaluation', async ({ page, context }) => {
