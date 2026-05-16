@@ -668,6 +668,9 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
     Returns:
         dict: API response or None on error
     """
+    from telemetry.logging import get_logger
+    structured_log = get_logger(__name__)
+
     url = f"{DISCORD_API_BASE}/channels/{channel_id}/messages/{message_id}"
 
     payload = {}
@@ -676,15 +679,61 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
     if components is not None:
         payload["components"] = components
 
+    structured_log.info(
+        "discord_message_edit_attempt",
+        system="events",
+        subsystem="discord",
+        channel_id=str(channel_id),
+        message_id=str(message_id),
+        embed_count=len(payload.get("embeds", []) or []),
+        component_count=len(payload.get("components", []) or []),
+    )
     try:
         response = _rate_limited_request(
             "PATCH", url, json=payload, headers=_get_headers()
         )
-        response.raise_for_status()
-        log.info(f"Edited message {message_id} in channel {channel_id}")
+        if not (200 <= response.status_code < 300):
+            # Capture Discord's response body so 4xx errors (e.g. 404 Unknown
+            # Message — the channel/message pair the bot tries to edit no
+            # longer exists; this is the most likely "message got deleted"
+            # scenario) are visible in Grafana without a DB dive.
+            body = None
+            try:
+                body = response.json()
+            except Exception:
+                body = (response.text or "")[:500]
+            discord_code = body.get("code") if isinstance(body, dict) else None
+            discord_msg = body.get("message") if isinstance(body, dict) else None
+            structured_log.error(
+                "discord_message_edit_failed",
+                system="events",
+                subsystem="discord",
+                channel_id=str(channel_id),
+                message_id=str(message_id),
+                status_code=response.status_code,
+                discord_code=discord_code,
+                discord_message=discord_msg,
+            )
+            response.raise_for_status()
+        structured_log.info(
+            "discord_message_edit_success",
+            system="events",
+            subsystem="discord",
+            channel_id=str(channel_id),
+            message_id=str(message_id),
+        )
         return response.json()
     except requests.RequestException as e:
-        log.error(f"Failed to edit message {message_id}: {e}")
+        # Already logged the structured failure above when status_code was bad;
+        # this branch also catches network errors (timeouts, DNS, etc.).
+        structured_log.error(
+            "discord_message_edit_exception",
+            system="events",
+            subsystem="discord",
+            channel_id=str(channel_id),
+            message_id=str(message_id),
+            error=str(e),
+        )
         return None
 
 
