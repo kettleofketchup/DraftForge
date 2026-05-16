@@ -23,6 +23,7 @@ The skill itself is short — it points back to the pages here. Update content *
 | [`review-checklist.md`](references/review-checklist.md) | Single ordered checklist to walk a diff. Each item links to the relevant section of `THEMING-GUIDE.md` for the *why*. |
 | [`grep-recipes.md`](references/grep-recipes.md) | Copy-paste `rg` recipes for finding each anti-pattern across `frontend/app/`. |
 | [`severity-rubric.md`](references/severity-rubric.md) | `block` / `warn` / `nit` definitions and review-output format. |
+| [`scrollbars-dialogs.md`](references/scrollbars-dialogs.md) | `<ScrollArea>` inside `<DialogContent>` contract — the `overflow-hidden` clipping rule, why Radix Viewport's `size-full` needs a definite parent height, and the `-mx-6 px-6` padding-cancel trick. |
 
 ## Hidden From MkDocs Nav
 
