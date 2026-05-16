@@ -4,6 +4,69 @@ from django.test import TestCase
 from requests.exceptions import HTTPError
 
 
+class SyncEditMessageMessageDeletedTest(TestCase):
+    """sync_edit_message must raise MessageDeletedError on Discord 404 + code 10008.
+
+    Discord returns this combination when the target message was deleted by an
+    operator or external actor. Auto-recovery in send_signup_update needs the
+    typed signal so it can flip dedup state and let the next sync recreate the
+    post. Other 4xx/5xx and network failures should still return None silently.
+    """
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_404_unknown_message_raises_message_deleted_error(self, mock_request):
+        from discordbot.utils import MessageDeletedError, sync_edit_message
+
+        resp = MagicMock(status_code=404)
+        resp.json.return_value = {"message": "Unknown Message", "code": 10008}
+        # Make raise_for_status actually raise so the test fails loud if we
+        # incorrectly fall through to it instead of the typed exception.
+        resp.raise_for_status.side_effect = HTTPError("404")
+        mock_request.return_value = resp
+
+        with self.assertRaises(MessageDeletedError) as ctx:
+            sync_edit_message(
+                channel_id="111",
+                message_id="222",
+                embed={"title": "x"},
+            )
+
+        self.assertEqual(ctx.exception.channel_id, "111")
+        self.assertEqual(ctx.exception.message_id, "222")
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_404_with_different_code_does_not_raise_message_deleted(self, mock_request):
+        """Discord 404 without code 10008 (e.g. Unknown Channel) is not our case."""
+        from discordbot.utils import MessageDeletedError, sync_edit_message
+
+        resp = MagicMock(status_code=404)
+        resp.json.return_value = {"message": "Unknown Channel", "code": 10003}
+        resp.raise_for_status.side_effect = HTTPError("404")
+        mock_request.return_value = resp
+
+        # Generic transient — swallowed (return None), NOT raised as MessageDeletedError.
+        try:
+            result = sync_edit_message(channel_id="111", message_id="222", embed={})
+        except MessageDeletedError:
+            self.fail("Unrelated 404 must not raise MessageDeletedError")
+        self.assertIsNone(result)
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_403_does_not_raise_message_deleted(self, mock_request):
+        from discordbot.utils import MessageDeletedError, sync_edit_message
+
+        resp = MagicMock(status_code=403)
+        resp.json.return_value = {"message": "Missing Permissions", "code": 50013}
+        resp.raise_for_status.side_effect = HTTPError("403")
+        mock_request.return_value = resp
+
+        try:
+            result = sync_edit_message(channel_id="111", message_id="222", embed={})
+        except MessageDeletedError:
+            self.fail("403 must not raise MessageDeletedError")
+        self.assertIsNone(result)
+
+
 class SyncEditMessageTest(TestCase):
     @patch("discordbot.utils._rate_limited_request")
     def test_edit_message_sends_patch(self, mock_request):

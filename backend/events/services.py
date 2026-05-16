@@ -37,6 +37,48 @@ SCREENSHOT_URL_RE = re.compile(r"^https?://.+\.(png|jpe?g|webp)(\?.*)?$", re.IGN
 SCREENSHOT_BAD_URL_MESSAGE = "Screenshot must be a direct .png/.jpg/.jpeg/.webp URL."
 
 
+def clear_signup_dedup_state(event_id):
+    """Reset the dedup gates that block recreating a Discord signup post.
+
+    Two gates need to flip so the next sync_discord_events run treats the
+    event as needing a fresh signup post:
+      - DiscordEventMsgSignup.has_posted=True → False (drops the event from
+        the `events_with_signup_post` dedup set)
+      - DiscordMessageLog rows with source=event_announcement, success=True
+        → success=False (drops it from the `existing_logs` dedup set)
+
+    Called by both auto-recovery on 404 Unknown Message AND the admin "Repost"
+    button. Cacheops needs explicit invalidation here because .update() bypasses
+    save signals and the signup-message model is cached. Use
+    invalidate_after_commit so this is safe whether or not the caller wraps
+    us in a transaction.atomic (fires immediately in autocommit; defers to
+    on_commit when nested in a transaction).
+
+    Returns a dict with the counts of rows changed.
+    """
+    from discordbot.models import DiscordEventMsgSignup, DiscordMessageLog
+
+    affected_signups = list(
+        DiscordEventMsgSignup.objects.filter(event_id=event_id, has_posted=True)
+    )
+    signup_rows_cleared = len(affected_signups)
+    DiscordEventMsgSignup.objects.filter(
+        event_id=event_id, has_posted=True
+    ).update(has_posted=False)
+    for row in affected_signups:
+        row.refresh_from_db()
+        invalidate_after_commit(row)
+
+    message_log_rows_cleared = DiscordMessageLog.objects.filter(
+        source="event_announcement", source_id=event_id, success=True
+    ).update(success=False)
+
+    return {
+        "signup_rows_cleared": signup_rows_cleared,
+        "message_log_rows_cleared": message_log_rows_cleared,
+    }
+
+
 def _validate_screenshot_url(url):
     if url and not SCREENSHOT_URL_RE.match(url):
         from django.core.exceptions import ValidationError

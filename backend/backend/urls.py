@@ -368,6 +368,7 @@ urlpatterns += [
 from app.views.internal import (
     check_message_log_exists,
     claim_discord_message_log,
+    clear_event_signup_state,
     create_discord_event_log,
     create_discord_message_log,
     finalize_discord_message_log,
@@ -411,6 +412,10 @@ urlpatterns += [
     path("api/internal/discord/events/get-or-create/", get_or_create_discord_event),
     path("api/internal/discord/events/<int:pk>/", update_discord_event),
     path("api/internal/discord/signup-message/", create_or_update_signup_message),
+    path(
+        "api/internal/discord/signup-message/clear/",
+        clear_event_signup_state,
+    ),
     path("api/internal/discord/announcement/", create_or_update_announcement),
     path("api/internal/discord/event-dm/", create_event_dm),
     path("api/internal/discord/event-dm/<int:pk>/", update_event_dm),

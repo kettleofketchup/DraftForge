@@ -117,10 +117,23 @@ def configure_logging(
         "httpx",
         "httpcore",
         "opentelemetry.attributes",
-        "opentelemetry.exporter.otlp.proto.http._log_exporter",
-        "opentelemetry.sdk.metrics._internal.export",
     ]:
         logging.getLogger(logger_name).setLevel(logging.ERROR)
+
+    # Silence the OTel OTLP exporter retry/failure chatter entirely. The OTLP
+    # metric exporter against Grafana Cloud Mimir produces a 400 every 60s
+    # for cardinality/temporality edge cases that we already work around via
+    # views; the retry-failed log itself is not actionable — if metric export
+    # is broken, the absence of metrics in Grafana is the signal, not these
+    # logs. Same for log + trace exporters — we have _PatchedLogExporter
+    # handling the meaningful failures above.
+    for logger_name in [
+        "opentelemetry.exporter.otlp.proto.http._log_exporter",
+        "opentelemetry.exporter.otlp.proto.http.metric_exporter",
+        "opentelemetry.exporter.otlp.proto.http.trace_exporter",
+        "opentelemetry.sdk.metrics._internal.export",
+    ]:
+        logging.getLogger(logger_name).setLevel(logging.CRITICAL)
 
     _configured = True
 

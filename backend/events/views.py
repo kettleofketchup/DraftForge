@@ -1051,7 +1051,13 @@ def get_event_task_schedule(request, event_id):
             s = "ready"
 
         entry["status"] = s
-        entry["can_fire"] = s in ("ready", "pending")
+        # signup_post + announcement support re-firing as "Repost" when the
+        # Discord post is missing (deleted externally) or to push a fresh
+        # version. fire_event_task clears dedup state before re-running.
+        repostable = task in ("signup_post", "announcement")
+        entry["can_fire"] = (
+            s in ("ready", "pending") or (s == "fired" and repostable)
+        )
         if log_source and log_source in last_fired_map:
             info = last_fired_map[log_source]
             entry["last_fired_at"] = info["created_at"].isoformat()
@@ -1217,7 +1223,11 @@ def fire_event_task(request, event_id, task_name):
             {"error": f"Unknown task: {task_name}"}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Idempotency: prevent double-fire
+    # Idempotency: prevent double-fire for one-shot tasks (DMs). Repostable
+    # tasks (signup_post, announcement) intentionally allow re-fire — the admin
+    # is asking to push a fresh post — and we clear dedup state below before
+    # invoking celery so the task recreates instead of no-opping.
+    REPOSTABLE = {"signup_post", "announcement"}
     if task_name == "signup_reminder":
         from discordbot.models import DiscordEventDM, DMType
 
@@ -1229,7 +1239,7 @@ def fire_event_task(request, event_id, task_name):
                 {"error": "Signup reminder DMs have already been sent for this event"},
                 status=status.HTTP_409_CONFLICT,
             )
-    else:
+    elif task_name not in REPOSTABLE:
         log_source = TASK_LOG_SOURCES.get(task_name)
         if log_source:
             from discordbot.models import DiscordMessageLog
@@ -1241,6 +1251,16 @@ def fire_event_task(request, event_id, task_name):
                     {"error": f"{task_name} has already been fired for this event"},
                     status=status.HTTP_409_CONFLICT,
                 )
+
+    # Repost path: clear DiscordEventMsgSignup.has_posted and DiscordMessageLog
+    # success=True for source=event_announcement so send_event_announcement
+    # actually recreates the post instead of being blocked by sync dedup
+    # (sync_discord_events would otherwise skip; the manual-fire path bypasses
+    # that, but we still clear so the next auto-sync agrees with the new state).
+    if task_name in REPOSTABLE:
+        from events.services import clear_signup_dedup_state
+
+        clear_signup_dedup_state(event_id)
 
     from celery import current_app
 

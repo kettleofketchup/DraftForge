@@ -103,6 +103,12 @@ export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskSch
     },
   });
 
+  // signup_post + announcement can be re-fired even after they've fired —
+  // this becomes a "Repost" action that clears dedup and pushes a fresh post.
+  // Other tasks keep their one-shot semantics, so the wording stays "Fire".
+  const isRepost = (task: TaskEntry) =>
+    task.status === 'fired' && (task.task === 'signup_post' || task.task === 'announcement');
+
   if (isLoading) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -237,7 +243,7 @@ export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskSch
                       className="h-7 w-7 p-0"
                       onClick={() => setConfirmTask(task)}
                       disabled={fireMutation.isPending}
-                      title={`Fire ${task.label} now`}
+                      title={isRepost(task) ? `Repost ${task.label}` : `Fire ${task.label} now`}
                       data-testid={`fire-task-${task.task}`}
                     >
                       <Play className="h-3.5 w-3.5" />
@@ -253,9 +259,13 @@ export function TaskScheduleSection({ eventId, isAdmin, eventTimezone }: TaskSch
       <ConfirmDialog
         open={!!confirmTask}
         onOpenChange={(open) => !open && setConfirmTask(null)}
-        title={`Fire ${confirmTask?.label}?`}
-        description={`This will immediately execute "${confirmTask?.label}" for this event. This action cannot be undone.`}
-        confirmLabel="Fire Now"
+        title={confirmTask && isRepost(confirmTask)
+          ? `Repost ${confirmTask.label}?`
+          : `Fire ${confirmTask?.label}?`}
+        description={confirmTask && isRepost(confirmTask)
+          ? `This will clear the existing post tracking and create a fresh "${confirmTask.label}" in Discord. Use this if the original message was deleted or you want to push an updated version.`
+          : `This will immediately execute "${confirmTask?.label}" for this event. This action cannot be undone.`}
+        confirmLabel={confirmTask && isRepost(confirmTask) ? 'Repost' : 'Fire Now'}
         variant="default"
         onConfirm={() => {
           if (confirmTask) {

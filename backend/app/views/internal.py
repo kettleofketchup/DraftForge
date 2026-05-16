@@ -625,6 +625,40 @@ SIGNUP_MSG_UPDATE_FIELDS = {
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
+def clear_event_signup_state(request):
+    """Reset the signup-post dedup state so the next sync (or manual re-fire)
+    recreates the post.
+
+    Flips:
+      - DiscordEventMsgSignup.has_posted=False (clears `events_with_signup_post`)
+      - DiscordMessageLog.success=False for source=event_announcement+source_id=event_id
+        (clears `existing_logs` dedup)
+
+    Called by:
+      - send_signup_update on MessageDeletedError (auto-recovery for externally
+        deleted posts)
+      - fire_event_task for task_name="signup_post" (admin "repost" button)
+    """
+    from events.services import clear_signup_dedup_state
+
+    err = _validate_required(request.data, ["event_id"])
+    if err:
+        return err
+    event_id = request.data["event_id"]
+
+    result = clear_signup_dedup_state(event_id)
+    logger.info(
+        "Cleared signup dedup state for event %s (signups_changed=%s, logs_changed=%s)",
+        event_id,
+        result["signup_rows_cleared"],
+        result["message_log_rows_cleared"],
+    )
+    return Response({"event_id": event_id, **result})
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
 def create_or_update_signup_message(request):
     """Create/update DiscordEventMsgSignup (whitelisted fields only)."""
     from discordbot.models import ChannelType, DiscordEventMsgSignup

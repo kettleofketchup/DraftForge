@@ -514,11 +514,12 @@ def send_signup_update(event_id):
     DiscordMessageLog for pre-migration events.
     """
     from app.internal_client import (
+        clear_event_signup_state,
         create_event_log,
         create_or_update_signup_message,
         get_event_for_task,
     )
-    from discordbot.utils import sync_edit_message
+    from discordbot.utils import MessageDeletedError, sync_edit_message
     from events.discord.embeds import build_announcement_v2
     from telemetry.logging import get_logger
     structured_log = get_logger(__name__)
@@ -589,16 +590,30 @@ def send_signup_update(event_id):
 
     result = build_announcement_v2(event)
 
-    # Tracks whether the edit landed — sync_edit_message returns None on
-    # failure (404 Unknown Message most often: the operator or another bot
-    # deleted the post outside our flow). Capture this so Grafana shows
-    # whether the next signup-update job was a no-op or a real recovery.
-    edit_response = sync_edit_message(
-        channel_id=edit_channel_id,
-        message_id=message_id,
-        embed=result["embeds"],
-        components=result["components"],
-    )
+    # Edit the message. sync_edit_message raises MessageDeletedError on the
+    # specific "the post is gone" case (Discord 404 + code 10008) and returns
+    # None for other transient failures. Treat the typed exception as a
+    # signal to clear dedup state so the next sync recreates the post.
+    edit_response = None
+    try:
+        edit_response = sync_edit_message(
+            channel_id=edit_channel_id,
+            message_id=message_id,
+            embed=result["embeds"],
+            components=result["components"],
+        )
+    except MessageDeletedError as exc:
+        clear_event_signup_state(event_id=event.pk)
+        structured_log.warning(
+            "signup_message_orphaned_recovered",
+            system="events",
+            subsystem="discord",
+            event_id=event.pk,
+            channel_id=str(edit_channel_id),
+            message_id=str(message_id),
+            reason="discord_404_unknown_message",
+        )
+        return f"Recovered: cleared dedup for event {event.pk} (orphaned message)"
 
     # Update tracking via internal API
     if signup_msg:

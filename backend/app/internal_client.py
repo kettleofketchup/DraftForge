@@ -179,6 +179,16 @@ def create_or_update_signup_message(**data):
     return _post("/discord/signup-message/", data)
 
 
+def clear_event_signup_state(event_id):
+    """Reset signup dedup state for an event (auto-recovery + manual repost).
+
+    Flips DiscordEventMsgSignup.has_posted=False AND DiscordMessageLog.success=False
+    for the event_announcement source. The next sync_discord_events run (within
+    60s) will treat the event as having no signup post and recreate it.
+    """
+    return _post("/discord/signup-message/clear/", {"event_id": event_id})
+
+
 def create_or_update_announcement(**data):
     """Create/update DiscordEventMsgAnnouncement record."""
     return _post("/discord/announcement/", data)
