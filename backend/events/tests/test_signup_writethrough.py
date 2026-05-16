@@ -63,27 +63,40 @@ class SignupWritethroughTest(TestCase):
         self.user.refresh_from_db()
         return signup
 
-    def test_positions_writethrough_last_write_wins(self):
-        """Submitted positions overwrite User.positions on each signup save.
+    def test_positions_writethrough_no_longer_runs_here(self):
+        """`apply_signup_writethrough` MUST NOT touch User.positions.
 
-        PositionsModel uses carry/mid/offlane/soft_support/hard_support (IntegerField,
-        0 = no play, 1 = plays it). PlayerDotaProfile uses boolean pos_1..5 booleans.
-        Writethrough maps pos_1→carry, pos_2→mid, pos_3→offlane, pos_4→soft_support,
-        pos_5→hard_support.
+        Position writethrough used to live here (mapping PlayerDotaProfile.pos_N
+        booleans to PositionsModel priorities flattened at 1). That was removed in
+        PR #217 because it overwrote the real per-role priorities (0..5) that
+        users now pick in the web signup modal — those land on user.positions
+        directly via `apply_signup_input` BEFORE `_create_signup` runs. Discord
+        users with `positions=list[int]` get slot-order-derived priorities
+        through the same `apply_signup_input` path. Re-introducing a flatten-
+        to-1 here would silently clobber both.
         """
-        # First signup — declares carry (pos_1) + mid (pos_2)
-        self._signup_with_positions(pos_1=True, pos_2=True)
-        self.assertEqual(self.user.positions.carry, 1)
-        self.assertEqual(self.user.positions.mid, 1)
-        self.assertEqual(self.user.positions.offlane, 0)
+        # Seed user.positions with real priorities (simulating what
+        # apply_signup_input wrote during the signup modal flow).
+        self.user.positions.carry = 1
+        self.user.positions.mid = 2
+        self.user.positions.offlane = 3
+        self.user.positions.soft_support = 0
+        self.user.positions.hard_support = 0
+        self.user.positions.save()
 
-        # Second signup — declares hard support (pos_5) only; carry+mid should be gone
-        EventSignup.objects.filter(event=self.event, user=self.user).delete()
-        self._signup_with_positions(pos_5=True)
+        # Signup with PlayerDotaProfile.pos_N flags set. The writethrough
+        # would, in the old behavior, have flattened all of these to 1.
+        self._signup_with_positions(
+            pos_1=True, pos_2=True, pos_3=True, pos_4=True, pos_5=True,
+        )
         self.user.positions.refresh_from_db()
-        self.assertEqual(self.user.positions.carry, 0)
-        self.assertEqual(self.user.positions.mid, 0)
-        self.assertEqual(self.user.positions.hard_support, 1)
+
+        # Priorities preserved — writethrough did not touch positions.
+        self.assertEqual(self.user.positions.carry, 1)
+        self.assertEqual(self.user.positions.mid, 2)
+        self.assertEqual(self.user.positions.offlane, 3)
+        self.assertEqual(self.user.positions.soft_support, 0)
+        self.assertEqual(self.user.positions.hard_support, 0)
 
 
 class SignupSteamIdWritethroughTest(SignupWritethroughTest):
@@ -126,31 +139,46 @@ class SignupWritethroughInvariantsTest(SignupWritethroughTest):
         self.assertEqual(self.org_user.mmr, 4500)
 
     def test_user_update_failure_rolls_back(self):
-        """If saving the User's positions fails, the writethrough is fully rolled back."""
+        """If an unprotected write inside `apply_signup_writethrough` fails, a
+        caller wrapping `signup.create + writethrough` in `transaction.atomic`
+        gets full rollback.
+
+        Post-#217 the writethrough is mostly defensive — the steam_id branch has
+        its own `try/except (ValueError, Exception)` to keep a steam-id sync
+        failure from blocking signup creation. The one unprotected call near
+        the end is `invalidate_after_commit`; patching it to raise tests the
+        rollback path realistically. Wrap in atomic to mirror the production
+        call pattern (`_create_signup` → `EventSignup.create` → writethrough,
+        all inside a transaction).
+        """
         from unittest.mock import patch
 
-        # Force PositionsModel.save to raise; verify nothing leaked through.
-        with patch("app.models.PositionsModel.save", side_effect=RuntimeError("boom")):
+        with patch(
+            "events.services.invalidate_after_commit",
+            side_effect=RuntimeError("boom"),
+        ):
             with self.assertRaises(RuntimeError):
-                self._signup_with_positions(pos_1=True)
+                with transaction.atomic():
+                    self._signup_with_positions(pos_1=True)
 
-        self.user.refresh_from_db()
-        # No partial state survived — carry should still be 0
-        self.assertEqual(self.user.positions.carry, 0)
+        # No partial state survived — the signup row was rolled back.
+        self.assertEqual(
+            EventSignup.objects.filter(event=self.event, user=self.user).count(),
+            0,
+        )
 
     def test_signup_create_rolls_back_when_writethrough_fails(self):
         """Spec invariant: signup save + writethrough share one transaction.atomic.
 
-        When a caller wraps EventSignup.objects.create + apply_signup_writethrough in
-        the same atomic block, a writethrough failure must roll back the signup too.
-
-        A PlayerDotaProfile must exist for the writethrough to reach PositionsModel.save
-        — without one it returns early and nothing raises.
+        When a caller wraps EventSignup.objects.create + apply_signup_writethrough
+        in the same atomic block, a writethrough failure must roll back the signup
+        too. Force the failure at `invalidate_after_commit` (the only unprotected
+        write in the writethrough's post-#217 body).
         """
         from unittest.mock import patch
         from events.services import apply_signup_writethrough
 
-        # Pre-create the dota profile so writethrough proceeds to PositionsModel.save
+        # Pre-create profile so the writethrough proceeds past its early returns.
         PlayerDotaProfile.objects.get_or_create(org_user=self.org_user)
 
         initial_signup_count = EventSignup.objects.filter(event=self.event).count()
@@ -159,12 +187,12 @@ class SignupWritethroughInvariantsTest(SignupWritethroughTest):
             with transaction.atomic():
                 signup = EventSignup.objects.create(event=self.event, user=self.user)
                 with patch(
-                    "app.models.PositionsModel.save",
+                    "events.services.invalidate_after_commit",
                     side_effect=RuntimeError("boom"),
                 ):
                     apply_signup_writethrough(signup)
 
-        # Signup AND writethrough rolled back as a unit
+        # Signup AND writethrough rolled back as a unit.
         self.assertEqual(
             EventSignup.objects.filter(event=self.event).count(),
             initial_signup_count,

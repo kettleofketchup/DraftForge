@@ -118,10 +118,16 @@ def sync_discord_events():
     Runs every 5 minutes via celery beat. All reads via internal HTTP API.
     """
     from app.internal_client import get_sync_discord_state
+    from telemetry.logging import get_logger
+    structured_log = get_logger(__name__)
 
     state = get_sync_discord_state()
     if not state:
-        logger.error("Failed to fetch sync Discord state from internal API")
+        structured_log.error(
+            "sync_discord_state_fetch_failed",
+            system="events",
+            subsystem="discord",
+        )
         return "Failed: could not fetch sync state"
 
     existing_logs = {tuple(x) for x in state.existing_logs}
@@ -133,6 +139,16 @@ def sync_discord_events():
     notices_created = 0
     discord_events_created = 0
 
+    structured_log.info(
+        "sync_discord_events_start",
+        system="events",
+        subsystem="discord",
+        active_events=len(state.active_events),
+        events_with_signup_post=len(events_with_signup_post),
+        events_with_scheduled=len(events_with_scheduled),
+        events_with_recent_attempt=len(events_with_recent_attempt),
+    )
+
     for event in state.active_events:
         pk = event["pk"]
 
@@ -140,18 +156,37 @@ def sync_discord_events():
         has_signup = (
             pk in events_with_signup_post or ("event_announcement", pk) in existing_logs
         )
-        if (
+        signup_eligible = (
             event["state"] == "signups_open"
             and event["discord_announcement"]
             and event["discord_announcement_channel_id"]
             and not has_signup
-        ):
+        )
+        if signup_eligible:
+            structured_log.info(
+                "sync_signup_post_attempt",
+                system="events",
+                subsystem="discord",
+                event_id=pk,
+                channel_id=str(event.get("discord_announcement_channel_id") or ""),
+            )
             try:
                 send_event_announcement(pk)
                 signup_posts_created += 1
-                logger.info("Sync: created signup post for event %s", pk)
-            except Exception:
-                logger.exception("Sync: failed signup post for event %s", pk)
+                structured_log.info(
+                    "sync_signup_post_created",
+                    system="events",
+                    subsystem="discord",
+                    event_id=pk,
+                )
+            except Exception as e:
+                structured_log.exception(
+                    "sync_signup_post_failed",
+                    system="events",
+                    subsystem="discord",
+                    event_id=pk,
+                    error=str(e),
+                )
 
         # 2. Discord scheduled event
         has_scheduled = (
@@ -159,28 +194,50 @@ def sync_discord_events():
             or ("create_discord_event", pk) in existing_logs
             or pk in events_with_recent_attempt
         )
-        if (
+        sched_eligible = (
             event["discord_create_event"]
             and event["organization__discord_server_id"]
             and not has_scheduled
-        ):
+        )
+        if sched_eligible:
+            structured_log.info(
+                "sync_scheduled_event_attempt",
+                system="events",
+                subsystem="discord",
+                event_id=pk,
+                guild_id=str(event.get("organization__discord_server_id") or ""),
+            )
             try:
                 create_discord_scheduled_event(pk)
                 discord_events_created += 1
-                logger.info("Sync: created Discord scheduled event for event %s", pk)
-            except Exception:
-                logger.exception(
-                    "Sync: failed Discord scheduled event for event %s", pk
+                structured_log.info(
+                    "sync_scheduled_event_created",
+                    system="events",
+                    subsystem="discord",
+                    event_id=pk,
+                )
+            except Exception as e:
+                # create_discord_scheduled_event now raises with a Discord
+                # error string (PR #222). The structlog event captures it so
+                # operators can grep `sync_scheduled_event_failed` in Grafana
+                # to find every silent 403/400 without DB diving.
+                structured_log.exception(
+                    "sync_scheduled_event_failed",
+                    system="events",
+                    subsystem="discord",
+                    event_id=pk,
+                    error=str(e),
                 )
 
-    total = signup_posts_created + notices_created + discord_events_created
-    if total:
-        logger.info(
-            "sync_discord_events: %d signup posts, %d notices, %d scheduled events",
-            signup_posts_created,
-            notices_created,
-            discord_events_created,
-        )
+    structured_log.info(
+        "sync_discord_events_complete",
+        system="events",
+        subsystem="discord",
+        active_events=len(state.active_events),
+        signup_posts_created=signup_posts_created,
+        notices_created=notices_created,
+        scheduled_events_created=discord_events_created,
+    )
     return (
         f"Scanned {len(state.active_events)} events: "
         f"{signup_posts_created} signup posts, "
@@ -463,9 +520,24 @@ def send_signup_update(event_id):
     )
     from discordbot.utils import sync_edit_message
     from events.discord.embeds import build_announcement_v2
+    from telemetry.logging import get_logger
+    structured_log = get_logger(__name__)
+
+    structured_log.info(
+        "signup_update_start",
+        system="events",
+        subsystem="discord",
+        event_id=event_id,
+    )
 
     event = get_event_for_task(event_id)
     if not event:
+        structured_log.warning(
+            "signup_update_event_not_found",
+            system="events",
+            subsystem="discord",
+            event_id=event_id,
+        )
         return f"Failed: event {event_id} not found"
 
     # Try new model first
@@ -517,7 +589,11 @@ def send_signup_update(event_id):
 
     result = build_announcement_v2(event)
 
-    sync_edit_message(
+    # Tracks whether the edit landed — sync_edit_message returns None on
+    # failure (404 Unknown Message most often: the operator or another bot
+    # deleted the post outside our flow). Capture this so Grafana shows
+    # whether the next signup-update job was a no-op or a real recovery.
+    edit_response = sync_edit_message(
         channel_id=edit_channel_id,
         message_id=message_id,
         embed=result["embeds"],
@@ -538,9 +614,18 @@ def send_signup_update(event_id):
                 action="edit_signup_post",
                 target_type="DiscordEventMsgSignup",
                 message_id=message_id,
-                success=True,
+                success=edit_response is not None,
             )
 
+    structured_log.info(
+        "signup_update_complete",
+        system="events",
+        subsystem="discord",
+        event_id=event.pk,
+        message_id=str(message_id),
+        channel_id=str(edit_channel_id),
+        edit_succeeded=edit_response is not None,
+    )
     return f"Updated announcement for event {event.pk}"
 
 
@@ -624,20 +709,35 @@ def create_discord_scheduled_event(event_id):
         data = response.json()
         success = response.status_code in (200, 201)
 
+        # Extract the Discord-side error message from the response body
+        # (`{"message": "Missing Permissions", "code": 50013}` etc.) so the
+        # audit log surfaces it without anyone having to dig through
+        # response_data JSON. Default to the raw status when Discord
+        # didn't send a structured body.
+        error_message = ""
+        if not success:
+            if isinstance(data, dict) and data.get("message"):
+                error_message = (
+                    f"{data['message']} (code {data.get('code', '?')}, "
+                    f"HTTP {response.status_code})"
+                )
+            else:
+                error_message = f"HTTP {response.status_code}"
+
         # Legacy log via internal API
         create_message_log(
             channel_id=guild_id,
             embed_data=payload,
             source="create_discord_event",
             source_id=event.pk,
-            discord_message_id=data.get("id"),
+            discord_message_id=data.get("id") if isinstance(data, dict) else None,
             status_code=response.status_code,
             response_data=data,
             success=success,
         )
 
         # Store scheduled event ID via internal API
-        if success and data.get("id"):
+        if success and isinstance(data, dict) and data.get("id"):
             update_discord_event(discord_event_pk, scheduled_event_id=data["id"])
 
         # Audit log via internal API
@@ -648,9 +748,28 @@ def create_discord_scheduled_event(event_id):
             status_code=response.status_code,
             response_data=data,
             success=success,
+            error_message=error_message,
         )
 
+        if not success:
+            # Raise so the caller (sync_discord_events) logs an accurate
+            # "Sync: failed Discord scheduled event ..." line instead of
+            # "Sync: created ..." — the silent-success bug that caused 20+
+            # invisible 403 Missing-Permissions failures on prod (0.9.49).
+            logger.error(
+                "Discord scheduled-event create failed for event %s: %s",
+                event.pk, error_message,
+            )
+            raise RuntimeError(
+                f"Discord scheduled-event create failed for event {event.pk}: "
+                f"{error_message}"
+            )
+
         return f"Created Discord event for event {event.pk}"
+    except RuntimeError:
+        # Already logged + already wrote DiscordEventLog above. Re-raise so
+        # the caller's except branch fires (which emits "Sync: failed ...").
+        raise
     except Exception as e:
         create_message_log(
             channel_id=guild_id,
