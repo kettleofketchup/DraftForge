@@ -138,3 +138,97 @@ class LeaseEndpointsTest(TestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, 410, resp.content)
+
+
+@override_settings(INTERNAL_SERVICE_TOKEN=INTERNAL_TOKEN)
+class ClearEventSignupStateEndpointTest(TestCase):
+    """Verify the new POST /discord/signup-message/clear/ route.
+
+    This is the contract test the orphaned-recovery shim relies on — proves
+    the HTTP path, payload shape, auth, and ORM side effects are correct.
+    The worker-side recovery test exercises the worker logic through the
+    shim; this test exercises the endpoint independently of the shim.
+    """
+
+    def _seed_dedup_state(self, event_id):
+        from app.models import Organization
+        from discordbot.models import (
+            ChannelType,
+            DiscordEventMsgSignup,
+            DiscordMessageLog,
+        )
+        from events.models import Event
+
+        org = Organization.objects.create(name=f"Clear Test Org {event_id}")
+        Event.objects.create(
+            pk=event_id,
+            organization=org,
+            name="Clear Test Event",
+            state="signups_open",
+            scheduled_at=timezone.now(),
+        )
+        DiscordEventMsgSignup.objects.create(
+            event_id=event_id,
+            channel_id="ch_clear",
+            channel_type=ChannelType.TEXT,
+            has_posted=True,
+            message_id="ghost_msg",
+        )
+        DiscordMessageLog.objects.create(
+            source="event_announcement",
+            source_id=event_id,
+            success=True,
+            channel_id="ch_clear",
+            embed_data={"title": "seed"},
+        )
+
+    def test_clear_flips_both_dedup_gates(self):
+        from discordbot.models import DiscordEventMsgSignup, DiscordMessageLog
+
+        self._seed_dedup_state(event_id=201)
+        client = _internal_client()
+        resp = client.post(
+            "/api/internal/discord/signup-message/clear/",
+            data={"event_id": 201},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        body = resp.json()
+        self.assertEqual(body["event_id"], 201)
+        self.assertEqual(body["signup_rows_cleared"], 1)
+        self.assertEqual(body["message_log_rows_cleared"], 1)
+
+        self.assertFalse(
+            DiscordEventMsgSignup.objects.filter(
+                event_id=201, has_posted=True
+            ).exists()
+        )
+        self.assertFalse(
+            DiscordMessageLog.objects.filter(
+                source="event_announcement", source_id=201, success=True
+            ).exists()
+        )
+
+    def test_clear_requires_event_id(self):
+        client = _internal_client()
+        resp = client.post(
+            "/api/internal/discord/signup-message/clear/",
+            data={},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 400, resp.content)
+
+    def test_clear_is_noop_when_nothing_to_clear(self):
+        """Idempotent: calling clear with no matching rows returns 200 + zero
+        counts, so the auto-recovery path can call it safely even if a
+        concurrent run already cleared the state."""
+        client = _internal_client()
+        resp = client.post(
+            "/api/internal/discord/signup-message/clear/",
+            data={"event_id": 99999},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        body = resp.json()
+        self.assertEqual(body["signup_rows_cleared"], 0)
+        self.assertEqual(body["message_log_rows_cleared"], 0)

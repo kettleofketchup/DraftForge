@@ -14,6 +14,23 @@ log = logging.getLogger(__name__)
 
 DISCORD_API_BASE = "https://discord.com/api/v10"
 
+# Discord error code for "Unknown Message" — the target message was deleted
+# (by the operator, an automod bot, or any external actor). Surfacing this as
+# a typed exception lets callers like send_signup_update flip the dedup state
+# so the next sync recreates the post instead of retrying an edit on a ghost.
+DISCORD_CODE_UNKNOWN_MESSAGE = 10008
+
+
+class MessageDeletedError(Exception):
+    """Raised when Discord reports the target message no longer exists (404 / 10008)."""
+
+    def __init__(self, channel_id, message_id):
+        self.channel_id = str(channel_id)
+        self.message_id = str(message_id)
+        super().__init__(
+            f"Discord message {self.message_id} in channel {self.channel_id} was deleted"
+        )
+
 _REDIS_HOST = getattr(settings, "REDIS_HOST", "redis")
 redis_client = _redis.Redis(host=_REDIS_HOST, port=6379, db=2, socket_timeout=2)
 
@@ -714,6 +731,14 @@ def sync_edit_message(channel_id, message_id, embed=None, components=None):
                 discord_code=discord_code,
                 discord_message=discord_msg,
             )
+            # Distinguish "the message is gone, recreate it" (404 + code 10008)
+            # from generic transient errors. Callers handle the former by
+            # clearing dedup; the latter still just gets swallowed (return None).
+            if (
+                response.status_code == 404
+                and discord_code == DISCORD_CODE_UNKNOWN_MESSAGE
+            ):
+                raise MessageDeletedError(channel_id, message_id)
             response.raise_for_status()
         structured_log.info(
             "discord_message_edit_success",

@@ -170,6 +170,75 @@ class SendSignupUpdateEditsMessageTest(_DiscordTaskTestCase):
         self.assertEqual(result, "Skipped: no announcement message")
 
 
+class SendSignupUpdateOrphanedMessageRecoveryTest(_DiscordTaskTestCase):
+    """When Discord reports the target message no longer exists (404 + 10008),
+    send_signup_update must clear the dedup state so the next sync recreates
+    the post. Prior to this fix the bot would silently retry edits forever on
+    a ghost message and never re-post.
+    """
+
+    @patch("discordbot.utils._rate_limited_request")
+    def test_404_unknown_message_clears_dedup_state(self, mock_req):
+        from discordbot.models import DiscordEventMsgSignup, DiscordMessageLog
+        from events.tasks import send_event_announcement, send_signup_update
+
+        self.event.discord_announcement = True
+        self.event.discord_announcement_channel_id = "1482767177063858216"
+        self.event.save()
+
+        # Phase 1: create the original post. POST returns 201.
+        mock_req.return_value = _ok_response({"id": "ghost_msg"})
+        send_event_announcement(self.event.pk)
+
+        # Sanity: dedup is set (has_posted=True, log success=True).
+        self.assertTrue(
+            DiscordEventMsgSignup.objects.filter(
+                event_id=self.event.pk, has_posted=True
+            ).exists()
+        )
+        self.assertTrue(
+            DiscordMessageLog.objects.filter(
+                source="event_announcement",
+                source_id=self.event.pk,
+                success=True,
+            ).exists()
+        )
+
+        # Phase 2: the next edit returns 404 + 10008 (admin deleted in Discord).
+        from requests.exceptions import HTTPError
+
+        def _edit_404(method, url, **kwargs):
+            if method == "PATCH":
+                resp = MagicMock(status_code=404)
+                resp.json.return_value = {
+                    "message": "Unknown Message",
+                    "code": 10008,
+                }
+                resp.raise_for_status.side_effect = HTTPError("404")
+                return resp
+            return _ok_response({"id": "ignored"})
+
+        mock_req.side_effect = _edit_404
+        result = send_signup_update(self.event.pk)
+
+        # Dedup state must be cleared so the next sync recreates the post.
+        self.assertIn("Recovered", result)
+        self.assertFalse(
+            DiscordEventMsgSignup.objects.filter(
+                event_id=self.event.pk, has_posted=True
+            ).exists(),
+            "has_posted must flip to False on orphaned-message detection",
+        )
+        self.assertFalse(
+            DiscordMessageLog.objects.filter(
+                source="event_announcement",
+                source_id=self.event.pk,
+                success=True,
+            ).exists(),
+            "DiscordMessageLog.success must flip to False so existing_logs dedup unblocks",
+        )
+
+
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True, CELERY_TASK_EAGER_PROPAGATES=True)
 class CheckEventRemindersTaskTest(_DiscordTaskTestCase):
     """Verify check_event_reminders idempotency for the signup_reminder source.

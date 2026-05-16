@@ -325,6 +325,19 @@ def _create_or_update_signup_message_orm(**data):
     )
 
 
+def _clear_event_signup_state_orm(event_id):
+    """ORM shim mirroring POST /api/internal/discord/signup-message/clear/.
+
+    Delegates to the same service the real endpoint calls so the shim and the
+    HTTP path can't drift — if the route's behavior changes, the shim updates
+    for free.
+    """
+    from events.services import clear_signup_dedup_state
+
+    result = clear_signup_dedup_state(event_id)
+    return _ResponseLike(200, {"event_id": event_id, **result})
+
+
 def _create_or_update_announcement_orm(**data):
     from discordbot.models import ChannelType, DiscordEventMsgAnnouncement
 
@@ -411,6 +424,7 @@ _PATCH_MAP = {
     "get_or_create_discord_event": _get_or_create_discord_event_orm,
     "update_discord_event": _update_discord_event_orm,
     "create_or_update_signup_message": _create_or_update_signup_message_orm,
+    "clear_event_signup_state": _clear_event_signup_state_orm,
     "create_or_update_announcement": _create_or_update_announcement_orm,
     "get_repeater_subscribers": _get_repeater_subscribers_orm,
 }

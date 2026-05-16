@@ -146,3 +146,110 @@ class TaskScheduleEndpointTest(TestCase):
     def test_404_for_nonexistent_event(self):
         resp = self.client.get("/api/events/99999/task-schedule/")
         self.assertEqual(resp.status_code, 404)
+
+    def test_signup_post_can_fire_when_already_fired(self):
+        """signup_post (and announcement) must stay re-fireable so admin can
+        repost when the Discord post was deleted or needs a refresh. Other
+        tasks (one-shot DMs, reminders) stay non-fireable once fired.
+        """
+        from discordbot.models import DiscordEvent, DiscordEventLog
+
+        # Mark signup_post as fired via DiscordEventLog (the gate used by
+        # _task() to set status='fired' for signup_post).
+        discord_event = DiscordEvent.objects.create(
+            event=self.event, guild_id="guild_repost"
+        )
+        DiscordEventLog.objects.create(
+            discord_event=discord_event,
+            action="send_signup_post",
+            success=True,
+        )
+        # Required gating: signup_post needs discord_post_signups + channel id.
+        self.event.discord_post_signups = True
+        self.event.discord_post_signups_channel_id = "ch_signups"
+        self.event.save()
+
+        resp = self.client.get(f"/api/events/{self.event.pk}/task-schedule/")
+        self.assertEqual(resp.status_code, 200)
+        tasks = resp.json()
+        signup_post = next(t for t in tasks if t["task"] == "signup_post")
+        self.assertEqual(signup_post["status"], "fired")
+        self.assertTrue(
+            signup_post["can_fire"],
+            "signup_post must remain fireable after firing (Repost flow)",
+        )
+
+
+class FireSignupPostRepostTest(TestCase):
+    """fire_event_task for signup_post must clear dedup state then dispatch
+    send_event_announcement so the existing post is superseded by a fresh one.
+    """
+
+    def setUp(self):
+        from events.models import Event
+
+        self.client = APIClient()
+        self.org = Organization.objects.create(name="Repost Org")
+        self.event = Event.objects.create(
+            organization=self.org,
+            name="Repost Event",
+            state="signups_open",
+            scheduled_at=timezone.now() + timedelta(hours=24),
+            discord_announcement=True,
+            discord_announcement_channel_id="ch_ann",
+        )
+        # has_org_staff_access goes through has_org_admin_access which accepts
+        # is_superuser; plain is_staff doesn't qualify as org staff.
+        self.admin = CustomUser.objects.create_superuser(
+            username="repost_admin", password="x"
+        )
+        self.client.force_authenticate(user=self.admin)
+
+    def test_signup_post_repost_clears_dedup_and_dispatches(self):
+        """The 409 idempotency guard is intentionally lifted for signup_post.
+        We expect dedup state cleared AND celery dispatch."""
+        from unittest.mock import patch
+
+        from discordbot.models import DiscordEventMsgSignup, DiscordMessageLog
+
+        # Seed dedup state as if a prior post had succeeded.
+        DiscordEventMsgSignup.objects.create(
+            event_id=self.event.pk,
+            channel_id="ch_ann",
+            has_posted=True,
+            message_id="old_msg",
+        )
+        DiscordMessageLog.objects.create(
+            source="event_announcement",
+            source_id=self.event.pk,
+            success=True,
+            channel_id="ch_ann",
+            embed_data={"title": "seed"},
+        )
+
+        # Patch the celery current_app the view imports. The view does
+        # `from celery import current_app` inside the function so the import
+        # resolves at call time against the module-level proxy we replace.
+        with patch("celery.current_app") as mock_app:
+            resp = self.client.post(
+                f"/api/events/{self.event.pk}/task-schedule/signup_post/fire/"
+            )
+
+        self.assertEqual(resp.status_code, 200, resp.content)
+        # Dedup cleared on both gates.
+        self.assertFalse(
+            DiscordEventMsgSignup.objects.filter(
+                event_id=self.event.pk, has_posted=True
+            ).exists()
+        )
+        self.assertFalse(
+            DiscordMessageLog.objects.filter(
+                source="event_announcement",
+                source_id=self.event.pk,
+                success=True,
+            ).exists()
+        )
+        # send_event_announcement dispatched with the event id.
+        mock_app.send_task.assert_called_once_with(
+            "events.tasks.send_event_announcement", args=[self.event.pk]
+        )
