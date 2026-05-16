@@ -195,6 +195,35 @@ import { brandBg } from '~/components/ui/buttons/styles';
 <div className={cn("bg-background", brandBg)}>Branded surface</div>
 ```
 
+### Dialog Widths
+
+The shadcn `DialogContent` default is `sm:max-w-lg` (32rem). That's right for **decision dialogs** (one question, two buttons), but too narrow for **form-heavy modals** with multiple sections — they wrap awkwardly or spawn a horizontal scrollbar inside the modal.
+
+| Dialog kind | Width | Examples |
+|---|---|---|
+| Form-heavy (edit/signup/create with multiple sections) | `sm:max-w-2xl` | `EditProfileModal`, `EventSignupModal`, `CreateEventModal` |
+| Decision (single question, two buttons) | *default* (`sm:max-w-lg`) — no override | `ConfirmDialog`, `AlertDialog` |
+| Wide picker / table / chart (rare) | `sm:max-w-3xl`+ with a justification comment | bracket pickers, large team rosters |
+
+```tsx
+// Form-heavy modal — bump to max-w-2xl
+<DialogContent className="flex max-h-[90vh] flex-col sm:max-w-2xl">...</DialogContent>
+
+// Decision dialog — keep the default
+<AlertDialogContent>...</AlertDialogContent>
+```
+
+**Scrollable body.** When a form-heavy modal's content exceeds `max-h-[90vh]`, use `<ScrollArea>` from `~/components/ui/scroll-area`, not raw `overflow-y-auto`. The shadcn `ScrollArea` wraps the content in a Radix Viewport with a brand-styled thin scrollbar that matches the rest of the app; the chunky OS-default scrollbar inside an otherwise-themed dialog reads as visual drift.
+
+```tsx
+// Inside DialogContent, when the body scrolls:
+<ScrollArea className="flex-1 min-h-0 -mx-6 px-6">
+  <div className="flex flex-col gap-4 pb-4">…</div>
+</ScrollArea>
+```
+
+The `-mx-6 px-6` cancels the dialog's `p-6` for the viewport so the scrollbar sits flush against the edge without chopping content.
+
 ### 3D Depth Effects
 
 Buttons support a `depth` prop for 3D press effects:
