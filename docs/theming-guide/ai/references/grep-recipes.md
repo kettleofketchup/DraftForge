@@ -126,6 +126,14 @@ rg -nB0 -A2 '<DialogContent' "$SCOPE" | rg -L 'max-w-'
 # the brand-styled scrollbar. The OS-default scrollbar inside a themed
 # dialog reads as visual drift. See THEMING-GUIDE.md §"Dialog Widths".
 rg -nB0 -A8 '<DialogContent' "$SCOPE" | rg -B1 -A2 'overflow-y-auto'
+
+# DialogContent with a <ScrollArea> child but no overflow-hidden — the
+# dialog won't clip, ScrollArea Root has no definite height, Radix Viewport
+# never enables its scrollbar. See scrollbars-dialogs.md for the full chain.
+# Block-severity finding (PR #220 broke a Playwright spec because of this).
+rg -nB0 -A12 '<DialogContent' "$SCOPE" \
+  | rg -B12 'ScrollArea' \
+  | rg -L 'overflow-hidden'
 ```
 
 ## Keyboard hints

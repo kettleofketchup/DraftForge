@@ -59,6 +59,7 @@ All of the below live in `docs/theming-guide/ai/references/` (hidden from the Mk
 - [review-checklist.md](../../../docs/theming-guide/ai/references/review-checklist.md) — single ordered checklist; the spine of a review pass.
 - [grep-recipes.md](../../../docs/theming-guide/ai/references/grep-recipes.md) — copy-paste `rg` recipes for each anti-pattern.
 - [severity-rubric.md](../../../docs/theming-guide/ai/references/severity-rubric.md) — `block` / `warn` / `nit` definitions and output format.
+- [scrollbars-dialogs.md](../../../docs/theming-guide/ai/references/scrollbars-dialogs.md) — `<ScrollArea>` inside `<DialogContent>` contract: `overflow-hidden` clipping rule, why Radix Viewport's `size-full` needs a definite parent height, and the `-mx-6 px-6` padding-cancel trick.
 
 ## Updating This Skill
 

@@ -224,6 +224,8 @@ The shadcn `DialogContent` default is `sm:max-w-lg` (32rem). That's right for **
 
 The `-mx-6 px-6` cancels the dialog's `p-6` for the viewport so the scrollbar sits flush against the edge without chopping content.
 
+See [`theming-guide/ai/references/scrollbars-dialogs.md`](theming-guide/ai/references/scrollbars-dialogs.md) for the full ScrollArea-inside-Dialog contract (the `overflow-hidden` rule, why Radix Viewport's `size-full` needs a definite parent height, and how to verify the dialog actually clips).
+
 ### 3D Depth Effects
 
 Buttons support a `depth` prop for 3D press effects:
@@ -518,6 +520,10 @@ The companion `brand` skill (`.claude/skills/brand/SKILL.md`) loads these same f
 ### Severity Rubric
 
 --8<-- "theming-guide/ai/references/severity-rubric.md"
+
+### ScrollArea inside Dialog
+
+--8<-- "theming-guide/ai/references/scrollbars-dialogs.md"
 
 ---
 
