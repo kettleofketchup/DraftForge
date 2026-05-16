@@ -109,16 +109,46 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
             ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
             ObservableGauge: AggregationTemporality.DELTA,
         }
-        metric_exporter = OTLPMetricExporter(
+        # Wrap the exporter so that when Grafana Cloud rejects a batch with a
+        # 4xx the response body is captured to our logs. The stock SDK only
+        # logs `code: 400, reason: Bad Request` which is useless — Grafana's
+        # body carries the actual reason (e.g. "invalid temporality and type
+        # combination for metric X"). Without this, diagnosing future
+        # regressions required SSH + monkey-patching requests at runtime.
+        class _DiagnosticMetricExporter(OTLPMetricExporter):
+            def _export(self, serialized_data, timeout_sec=None):
+                resp = super()._export(serialized_data, timeout_sec)
+                if 400 <= resp.status_code < 500:
+                    body = (resp.text or "")[:1000].replace("\x00", "?")
+                    _log.error(
+                        "OTLP metric export rejected: %s %s — body=%r",
+                        resp.status_code,
+                        resp.reason,
+                        body,
+                    )
+                return resp
+
+        metric_exporter = _DiagnosticMetricExporter(
             endpoint=endpoint + "/v1/metrics",
             headers=header_dict or None,
             preferred_temporality=delta_temporality,
         )
         metric_reader = PeriodicExportingMetricReader(metric_exporter)
 
-        # Drop http.client.duration — requests instrumentation creates it with
-        # incompatible temporality that Grafana rejects. We get the same data
-        # from server-side http.server.duration spans.
+        # Drop metrics that Grafana Cloud Mimir rejects with HTTP 400:
+        #
+        # * http.client.* — requests instrumentation reports these with a
+        #   temporality combination Mimir refuses. We get the same data from
+        #   server-side http.server.duration spans.
+        #
+        # * otel.sdk.* — the SDK reports its own self-monitoring metrics
+        #   (collection.duration, exported.count, etc.) which use a
+        #   type/temporality combo Mimir parses as invalid:
+        #   "otlp parse error: invalid temporality and type combination for
+        #    metric \"otel.sdk.metric_reader.collection.duration\"".
+        #   These are exporter internals — not useful telemetry — and they
+        #   poison every batch because Mimir rejects the whole payload on
+        #   any invalid series. Dropping them ends the per-minute 400s.
         from opentelemetry.sdk.metrics.view import DropAggregation
 
         meter_provider = MeterProvider(
@@ -135,6 +165,10 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
                 ),
                 View(
                     instrument_name="http.client.response.size",
+                    aggregation=DropAggregation(),
+                ),
+                View(
+                    instrument_name="otel.sdk.*",
                     aggregation=DropAggregation(),
                 ),
             ],
