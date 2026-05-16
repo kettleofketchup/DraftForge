@@ -299,12 +299,77 @@ def apply_signup_input(*, org_user, event, patch):
                 )
         profile.unverified_friend_id = fid
     if "positions" in set_fields:
-        positions = set(set_fields["positions"] or [])
-        profile.pos_1 = 1 in positions
-        profile.pos_2 = 2 in positions
-        profile.pos_3 = 3 in positions
-        profile.pos_4 = 4 in positions
-        profile.pos_5 = 5 in positions
+        # Two accepted input shapes (normalized to per-role priorities here):
+        #   - dict {carry, mid, offlane, soft_support, hard_support} each 0..5
+        #     (web modal — preserves real user-picked priorities)
+        #   - list[int] in {1..5} (Discord adapter): slot order encodes
+        #     priority. The Discord UI presents three sequential Selects
+        #     ("1st choice / 2nd choice / 3rd choice") that emit role numbers
+        #     in the order picked, e.g. [1, 3, 5] means "carry is 1st pick,
+        #     offlane is 2nd, hard support is 3rd". We map list index + 1 →
+        #     priority (Favorite → Can play → If team needs → I would rather
+        #     not → Least Favorite), capping at 5. Duplicate role numbers
+        #     keep their earliest slot.
+        # Mapping role → pos_N: carry=1, mid=2, offlane=3, soft_support=4,
+        # hard_support=5. PlayerDotaProfile.pos_N stays binary; the priorities
+        # land on CustomUser.positions (PositionsModel).
+        raw = set_fields["positions"]
+        if isinstance(raw, dict):
+            priorities = {
+                "carry": int(raw.get("carry", 0) or 0),
+                "mid": int(raw.get("mid", 0) or 0),
+                "offlane": int(raw.get("offlane", 0) or 0),
+                "soft_support": int(raw.get("soft_support", 0) or 0),
+                "hard_support": int(raw.get("hard_support", 0) or 0),
+            }
+        else:
+            _ROLE_BY_NUM = {
+                1: "carry",
+                2: "mid",
+                3: "offlane",
+                4: "soft_support",
+                5: "hard_support",
+            }
+            priorities = {
+                "carry": 0,
+                "mid": 0,
+                "offlane": 0,
+                "soft_support": 0,
+                "hard_support": 0,
+            }
+            for slot_idx, role_num in enumerate(raw or []):
+                role = _ROLE_BY_NUM.get(role_num)
+                if role and priorities[role] == 0:
+                    priorities[role] = min(slot_idx + 1, 5)
+
+        # Derive per-org binary flags from priorities.
+        profile.pos_1 = priorities["carry"] > 0
+        profile.pos_2 = priorities["mid"] > 0
+        profile.pos_3 = priorities["offlane"] > 0
+        profile.pos_4 = priorities["soft_support"] > 0
+        profile.pos_5 = priorities["hard_support"] > 0
+
+        # Write priorities to the user's main PositionsModel so the
+        # edit-profile page reflects them. Auto-create the row if missing
+        # (matches CustomUser.save() default).
+        from app.models import PositionsModel
+
+        user = org_user.user
+        user_positions = user.positions
+        if user_positions is None:
+            user_positions = PositionsModel.objects.create()
+            user.positions = user_positions
+            user.save(update_fields=["positions"])
+        changed = False
+        for role, rating in priorities.items():
+            if getattr(user_positions, role) != rating:
+                setattr(user_positions, role, rating)
+                changed = True
+        if changed:
+            user_positions.save(
+                update_fields=["carry", "mid", "offlane", "soft_support", "hard_support"]
+            )
+            invalidate_after_commit(user_positions, user)
     if "rank_status" in set_fields:
         status = set_fields["rank_status"]
         allowed = (
@@ -462,23 +527,18 @@ def apply_signup_writethrough(signup):
     except PlayerDotaProfile.DoesNotExist:
         return signup
 
-    # Positions: last-write-wins on the linked PositionsModel.
-    # Mapping: PlayerDotaProfile.pos_N (bool) → PositionsModel fields (IntegerField).
-    # pos_1=carry, pos_2=mid, pos_3=offlane, pos_4=soft_support, pos_5=hard_support.
-    # True → 1 (plays it), False → 0 (does not play it).
+    # Positions used to be force-mapped here from PlayerDotaProfile.pos_N
+    # booleans → PositionsModel priority=1 (flattening any real user-picked
+    # priorities). The web signup modal now sends a priorities dict directly
+    # via apply_signup_input which writes CustomUser.positions properly, so
+    # there's nothing to do at approval time. (Discord users still go through
+    # apply_signup_input via the list[int] legacy path, which derives
+    # priority=1 the same way as before — no regression.)
     user_positions = user.positions
     if user_positions is None:
         user_positions = PositionsModel.objects.create()
         user.positions = user_positions
         user.save(update_fields=["positions"])
-    user_positions.carry = 1 if profile.pos_1 else 0
-    user_positions.mid = 1 if profile.pos_2 else 0
-    user_positions.offlane = 1 if profile.pos_3 else 0
-    user_positions.soft_support = 1 if profile.pos_4 else 0
-    user_positions.hard_support = 1 if profile.pos_5 else 0
-    user_positions.save(
-        update_fields=["carry", "mid", "offlane", "soft_support", "hard_support"]
-    )
 
     # steam_account_id: first-write-wins on User.steam_account_id (unique=True).
     # Source: profile.unverified_friend_id (CharField of digits; empty string = none).

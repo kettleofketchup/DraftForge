@@ -194,13 +194,31 @@ class ScheduledEventDueSchema(BaseModel):
     model_config = {"extra": "ignore"}
 
 
+class PositionPriorities(BaseModel):
+    """Per-role priority rating matching CustomUser.positions (PositionsModel).
+    0 = "don't play this role", 1..5 = Favorite → Least Favorite (same scale
+    the edit-profile PositionForm uses). Submitted by the web signup modal.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    carry: int = Field(default=0, ge=0, le=5)
+    mid: int = Field(default=0, ge=0, le=5)
+    offlane: int = Field(default=0, ge=0, le=5)
+    soft_support: int = Field(default=0, ge=0, le=5)
+    hard_support: int = Field(default=0, ge=0, le=5)
+
+
 class SignupInputPatch(BaseModel):
     """Profile patch sent by web/Discord callers to apply_signup_input.
 
     All fields optional - callers send only what changed. Validation rules:
     - rank_status must be one of the allowed literals (event-policy gating
       lives in apply_signup_input, not here).
-    - positions in {1..5}; deduping happens in the service.
+    - positions accepts EITHER a priority dict (web modal: per-role 0..5,
+      same shape as edit-profile) OR a list[int] in {1..5} (Discord adapter
+      legacy: list of role numbers to mark as preferred, mapped to priority=1).
+      apply_signup_input normalizes both into a PositionPriorities for storage.
     - battle_cup_tier in {1..8}.
     - URL fields are validated for shape + extension in apply_signup_input
       so message strings stay consistent with the Discord vocabulary.
@@ -211,7 +229,7 @@ class SignupInputPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     unverified_friend_id: Optional[str] = Field(default=None, max_length=20)
-    positions: Optional[list[int]] = None
+    positions: Optional[PositionPriorities | list[int]] = None
     rank_status: Optional[Literal["active", "previous", "never"]] = None
     rank_medal: Optional[str] = Field(default=None, max_length=64)
     battle_cup_tier: Optional[int] = Field(default=None, ge=1, le=8)
@@ -221,7 +239,9 @@ class SignupInputPatch(BaseModel):
     @field_validator("positions")
     @classmethod
     def _validate_positions_range(cls, v):
-        if v is None:
+        # PositionPriorities already validates 0..5 per field; only the legacy
+        # list[int] form needs the role-number range check here.
+        if v is None or isinstance(v, PositionPriorities):
             return v
         for p in v:
             if p < 1 or p > 5:

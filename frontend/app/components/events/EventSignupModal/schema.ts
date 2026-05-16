@@ -15,9 +15,18 @@ const SCREENSHOT_URL_RE = /^https?:\/\/.+\.(png|jpe?g|webp)(\?.*)?$/i;
  * into `rank_medal` at submit time. Including them here so the resolver doesn't
  * strip them; superRefine validates the joint state.
  */
+type UserPositions = {
+  carry?: number;
+  mid?: number;
+  offlane?: number;
+  soft_support?: number;
+  hard_support?: number;
+} | null | undefined;
+
 export function buildSignupPatchSchema(
   event: EventType,
   profile: DotaProfileData | null | undefined,
+  userPositions?: UserPositions,
 ) {
   const fields: Record<string, z.ZodType> = {};
 
@@ -39,13 +48,41 @@ export function buildSignupPatchSchema(
       fields.rank_status = z.enum(['active', 'previous', 'never']).optional();
     }
 
-    const hasPos = profile?.positions
+    // Positions: priority dict matching User.positions (PositionsModel) shape
+    // — each role rated 0..5 where 0 = "don't show this role" and 1..5 ranks
+    // willingness (Favorite → Least Favorite). Mirrors the edit-profile
+    // PositionForm so users don't relearn the UI per event.
+    // Required when the user hasn't picked positions yet (all zeros).
+    const positionDict = z.object({
+      carry: z.number().int().min(0).max(5),
+      mid: z.number().int().min(0).max(5),
+      offlane: z.number().int().min(0).max(5),
+      soft_support: z.number().int().min(0).max(5),
+      hard_support: z.number().int().min(0).max(5),
+    });
+    // "Already picked" if the user has any non-zero priority on their main
+    // profile (CustomUser.positions). Fallback to the per-org DotaProfile
+    // booleans for back-compat when userPositions isn't provided.
+    const hasPosFromUser = userPositions
+      ? [
+          userPositions.carry,
+          userPositions.mid,
+          userPositions.offlane,
+          userPositions.soft_support,
+          userPositions.hard_support,
+        ].some((v) => (v ?? 0) > 0)
+      : false;
+    const hasPosFromProfile = profile?.positions
       ? Object.values(profile.positions).some(Boolean)
       : false;
+    const hasPos = hasPosFromUser || hasPosFromProfile;
     if (!hasPos) {
-      fields.positions = z.array(z.number().int().min(1).max(5)).min(1);
+      fields.positions = positionDict.refine(
+        (p) => p.carry + p.mid + p.offlane + p.soft_support + p.hard_support > 0,
+        { message: 'Pick at least one position' },
+      );
     } else {
-      fields.positions = z.array(z.number().int().min(1).max(5)).optional();
+      fields.positions = positionDict.optional();
     }
 
     fields.rank_medal_medal = z.string().optional();

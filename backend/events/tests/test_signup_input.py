@@ -63,6 +63,82 @@ class ApplySignupInputTests(TestCase):
         self.assertFalse(profile.pos_4)
         self.assertTrue(profile.pos_5)
 
+    def test_discord_list_input_maps_slot_order_to_priority(self):
+        """Discord adapter sends positions as a list ordered by user pick order
+        (1st choice / 2nd choice / 3rd choice from sequential Selects). The
+        list index + 1 becomes the priority on CustomUser.positions so
+        Discord users get actual rankings instead of all-Favorite."""
+        from app.models import PositionsModel
+
+        # Ensure user has a PositionsModel to write to.
+        self.user.positions = PositionsModel.objects.create()
+        self.user.save(update_fields=["positions"])
+
+        apply_signup_input(
+            org_user=self.org_user,
+            event=self.event,
+            # [3, 1, 5] = "offlane is my 1st choice, carry 2nd, hard_support 3rd"
+            patch=SignupInputPatch(positions=[3, 1, 5]),
+        )
+        self.user.refresh_from_db()
+        positions = self.user.positions
+        self.assertEqual(positions.offlane, 1)  # 1st pick → Favorite
+        self.assertEqual(positions.carry, 2)    # 2nd pick → Can play
+        self.assertEqual(positions.hard_support, 3)  # 3rd pick → If team needs
+        self.assertEqual(positions.mid, 0)
+        self.assertEqual(positions.soft_support, 0)
+
+    def test_discord_list_input_duplicate_role_keeps_earliest_slot(self):
+        from app.models import PositionsModel
+
+        self.user.positions = PositionsModel.objects.create()
+        self.user.save(update_fields=["positions"])
+
+        apply_signup_input(
+            org_user=self.org_user,
+            event=self.event,
+            # [1, 3, 1] — carry appears twice; keep the earliest slot (priority 1).
+            patch=SignupInputPatch(positions=[1, 3, 1]),
+        )
+        self.user.refresh_from_db()
+        positions = self.user.positions
+        self.assertEqual(positions.carry, 1)
+        self.assertEqual(positions.offlane, 2)
+
+    def test_web_dict_input_preserves_user_priorities(self):
+        """Web modal sends positions as a {carry, mid, …} dict with the user's
+        per-role priorities (matches CustomUser.positions shape). Those values
+        land verbatim on PositionsModel without being flattened to 1."""
+        from app.models import PositionsModel
+        from events.schemas import PositionPriorities
+
+        self.user.positions = PositionsModel.objects.create()
+        self.user.save(update_fields=["positions"])
+
+        apply_signup_input(
+            org_user=self.org_user,
+            event=self.event,
+            patch=SignupInputPatch(
+                positions=PositionPriorities(
+                    carry=1, mid=2, offlane=0, soft_support=4, hard_support=0
+                ),
+            ),
+        )
+        self.user.refresh_from_db()
+        positions = self.user.positions
+        self.assertEqual(positions.carry, 1)
+        self.assertEqual(positions.mid, 2)
+        self.assertEqual(positions.offlane, 0)
+        self.assertEqual(positions.soft_support, 4)
+        self.assertEqual(positions.hard_support, 0)
+        # Binary pos_N booleans derive from priorities > 0
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertTrue(profile.pos_1)
+        self.assertTrue(profile.pos_2)
+        self.assertFalse(profile.pos_3)
+        self.assertTrue(profile.pos_4)
+        self.assertFalse(profile.pos_5)
+
     def test_rank_status_active_writes(self):
         apply_signup_input(
             org_user=self.org_user, event=self.event,

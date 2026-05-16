@@ -13,6 +13,22 @@ const baseEvent = {
 
 const emptyProfile = null;
 
+const completePositions = {
+  carry: 1,
+  mid: 0,
+  offlane: 0,
+  soft_support: 0,
+  hard_support: 0,
+};
+
+const emptyPositions = {
+  carry: 0,
+  mid: 0,
+  offlane: 0,
+  soft_support: 0,
+  hard_support: 0,
+};
+
 describe('buildSignupPatchSchema', () => {
   it('requires friend_id when required-and-missing', () => {
     const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile);
@@ -20,16 +36,27 @@ describe('buildSignupPatchSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('accepts a complete payload', () => {
+  it('accepts a complete payload (positions as priority dict)', () => {
     const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile);
     const ok = schema.safeParse({
       unverified_friend_id: '12345',
       rank_status: 'active',
-      positions: [1, 2],
+      positions: { carry: 1, mid: 2, offlane: 0, soft_support: 0, hard_support: 0 },
       rank_medal_medal: 'Legend',
       rank_medal_star: '3',
     });
     expect(ok.success).toBe(true);
+  });
+
+  it('rejects positions with all zeros when positions are required', () => {
+    const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile);
+    const result = schema.safeParse({
+      unverified_friend_id: '12345',
+      rank_status: 'active',
+      positions: emptyPositions,
+      rank_medal_medal: 'Immortal',
+    });
+    expect(result.success).toBe(false);
   });
 
   it('accepts Immortal without star', () => {
@@ -37,7 +64,7 @@ describe('buildSignupPatchSchema', () => {
     const ok = schema.safeParse({
       unverified_friend_id: '12345',
       rank_status: 'active',
-      positions: [1],
+      positions: completePositions,
       rank_medal_medal: 'Immortal',
     });
     expect(ok.success).toBe(true);
@@ -48,7 +75,7 @@ describe('buildSignupPatchSchema', () => {
     const result = schema.safeParse({
       unverified_friend_id: '12345',
       rank_status: 'active',
-      positions: [1],
+      positions: completePositions,
       rank_medal_medal: 'Legend',
       // star missing
     });
@@ -61,7 +88,7 @@ describe('buildSignupPatchSchema', () => {
     const result = schema.safeParse({
       unverified_friend_id: '12345',
       rank_status: 'active',
-      positions: [1],
+      positions: completePositions,
       rank_medal_medal: 'Legend',
       rank_medal_star: '1',
       rank_screenshot: 'not-a-url',
@@ -70,8 +97,6 @@ describe('buildSignupPatchSchema', () => {
   });
 
   it('still requires rank_status when profile has default never with no battle_cup_tier', () => {
-    // Mirrors evaluateSignupGap: default rank_status='never' from get_or_create
-    // is treated as not-really-set unless corroborated by battle_cup_tier.
     const profile = {
       unverified_friend_id: '12345',
       positions: { pos_1: true, pos_2: false, pos_3: false, pos_4: false, pos_5: false },
@@ -85,9 +110,7 @@ describe('buildSignupPatchSchema', () => {
     const schema = buildSignupPatchSchema(baseEvent as never, profile as never);
     const result = schema.safeParse({
       unverified_friend_id: '12345',
-      positions: [1],
-      // rank_status omitted — should fail because the default 'never' on the
-      // profile is not "really set" yet.
+      positions: completePositions,
     });
     expect(result.success).toBe(false);
   });
@@ -106,7 +129,20 @@ describe('buildSignupPatchSchema', () => {
     const schema = buildSignupPatchSchema(baseEvent as never, profile as never);
     const result = schema.safeParse({
       unverified_friend_id: '12345',
-      positions: [1],
+      positions: completePositions,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('treats positions as optional when user already has priorities on their main profile', () => {
+    // userPositions has carry=3 — user has picked a position; the modal
+    // shouldn't force them to re-enter it just to RSVP.
+    const userPositions = { carry: 3, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 };
+    const schema = buildSignupPatchSchema(baseEvent as never, emptyProfile, userPositions);
+    const result = schema.safeParse({
+      unverified_friend_id: '12345',
+      rank_status: 'active',
+      rank_medal_medal: 'Immortal',
     });
     expect(result.success).toBe(true);
   });

@@ -28,11 +28,31 @@ describe('toPatch', () => {
     expect(toPatch(values as never, profile as never)).toEqual({});
   });
 
-  it('treats array order as significant (positions diff)', () => {
-    const profile = { positions: [1, 2] };
-    const valuesSame = { positions: [1, 2] };
-    const valuesDifferent = { positions: [2, 1] };
-    expect(toPatch(valuesSame as never, profile as never)).toEqual({});
-    expect(toPatch(valuesDifferent as never, profile as never)).toEqual({ positions: [2, 1] });
+  it('omits positions when dict matches userPositions baseline', () => {
+    const userPositions = { carry: 1, mid: 2, offlane: 0, soft_support: 0, hard_support: 0 };
+    const values = {
+      positions: { carry: 1, mid: 2, offlane: 0, soft_support: 0, hard_support: 0 },
+    };
+    expect(toPatch(values as never, null, userPositions)).toEqual({});
+  });
+
+  it('includes positions when any role priority differs from userPositions baseline', () => {
+    const userPositions = { carry: 1, mid: 2, offlane: 0, soft_support: 0, hard_support: 0 };
+    const values = {
+      positions: { carry: 1, mid: 2, offlane: 3, soft_support: 0, hard_support: 0 },
+    };
+    expect(toPatch(values as never, null, userPositions)).toEqual({
+      positions: { carry: 1, mid: 2, offlane: 3, soft_support: 0, hard_support: 0 },
+    });
+  });
+
+  it('treats missing keys on baseline as zero', () => {
+    // Empty baseline {} → any non-zero priority in values triggers a diff.
+    const values = {
+      positions: { carry: 1, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
+    };
+    expect(toPatch(values as never, null, {})).toEqual({
+      positions: { carry: 1, mid: 0, offlane: 0, soft_support: 0, hard_support: 0 },
+    });
   });
 });
