@@ -624,20 +624,35 @@ def create_discord_scheduled_event(event_id):
         data = response.json()
         success = response.status_code in (200, 201)
 
+        # Extract the Discord-side error message from the response body
+        # (`{"message": "Missing Permissions", "code": 50013}` etc.) so the
+        # audit log surfaces it without anyone having to dig through
+        # response_data JSON. Default to the raw status when Discord
+        # didn't send a structured body.
+        error_message = ""
+        if not success:
+            if isinstance(data, dict) and data.get("message"):
+                error_message = (
+                    f"{data['message']} (code {data.get('code', '?')}, "
+                    f"HTTP {response.status_code})"
+                )
+            else:
+                error_message = f"HTTP {response.status_code}"
+
         # Legacy log via internal API
         create_message_log(
             channel_id=guild_id,
             embed_data=payload,
             source="create_discord_event",
             source_id=event.pk,
-            discord_message_id=data.get("id"),
+            discord_message_id=data.get("id") if isinstance(data, dict) else None,
             status_code=response.status_code,
             response_data=data,
             success=success,
         )
 
         # Store scheduled event ID via internal API
-        if success and data.get("id"):
+        if success and isinstance(data, dict) and data.get("id"):
             update_discord_event(discord_event_pk, scheduled_event_id=data["id"])
 
         # Audit log via internal API
@@ -648,9 +663,28 @@ def create_discord_scheduled_event(event_id):
             status_code=response.status_code,
             response_data=data,
             success=success,
+            error_message=error_message,
         )
 
+        if not success:
+            # Raise so the caller (sync_discord_events) logs an accurate
+            # "Sync: failed Discord scheduled event ..." line instead of
+            # "Sync: created ..." — the silent-success bug that caused 20+
+            # invisible 403 Missing-Permissions failures on prod (0.9.49).
+            logger.error(
+                "Discord scheduled-event create failed for event %s: %s",
+                event.pk, error_message,
+            )
+            raise RuntimeError(
+                f"Discord scheduled-event create failed for event {event.pk}: "
+                f"{error_message}"
+            )
+
         return f"Created Discord event for event {event.pk}"
+    except RuntimeError:
+        # Already logged + already wrote DiscordEventLog above. Re-raise so
+        # the caller's except branch fires (which emits "Sync: failed ...").
+        raise
     except Exception as e:
         create_message_log(
             channel_id=guild_id,

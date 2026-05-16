@@ -3,9 +3,14 @@
 Uses Django's TestCase in-process ORM — the worker-side helpers POST over
 HTTP, but in tests we exercise the underlying Django views via an APIClient
 authenticated with the same X-Internal-Token header that workers use.
+
+InternalServiceAuth requires BOTH (a) the X-Internal-Token header to match
+settings.INTERNAL_SERVICE_TOKEN AND (b) the request IP to be in the
+allowlist. We pin a known token via @override_settings so the test container
+(where INTERNAL_SERVICE_TOKEN is unset by default) can authenticate; the
+APIClient request IP defaults to 127.0.0.1 which is in DEFAULT_ALLOWED_IPS.
 """
 
-import os
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -14,16 +19,16 @@ from discordbot.models import DiscordMessageLog
 
 
 CLAIM_PAYLOAD = dict(channel_id="ch_1", embed_data={"title": "test"})
+INTERNAL_TOKEN = "test-internal-token"
 
 
 def _internal_client():
     client = APIClient()
-    client.credentials(
-        HTTP_X_INTERNAL_TOKEN=os.environ.get("INTERNAL_SERVICE_TOKEN", "")
-    )
+    client.credentials(HTTP_X_INTERNAL_TOKEN=INTERNAL_TOKEN)
     return client
 
 
+@override_settings(INTERNAL_SERVICE_TOKEN=INTERNAL_TOKEN)
 class LeaseEndpointsTest(TestCase):
     def test_claim_returns_201_with_log_id(self):
         client = _internal_client()
