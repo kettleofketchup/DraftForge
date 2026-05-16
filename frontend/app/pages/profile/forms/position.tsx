@@ -29,6 +29,11 @@ type PositionFieldsProps = {
   /** Tailwind grid classes for the field grid. Override when embedding in a
    *  smaller container (e.g. the EventSignupModal uses 2 fixed columns). */
   gridClassName?: string;
+  /** Override the default data-testid. Defaults to `position-choices` so any
+   *  consumer (EditProfileModal, EventSignupModal, future callers) can find
+   *  this picker by a stable name. Each Select inside also carries
+   *  `data-testid="position-choice-<role>"` for direct selection. */
+  testId?: string;
 };
 
 const DEFAULT_GRID_CLASS =
@@ -39,9 +44,10 @@ const DEFAULT_GRID_CLASS =
 export const PositionFormFields = ({
   form,
   gridClassName,
+  testId = 'position-choices',
 }: PositionFieldsProps) => {
   return (
-    <div className={gridClassName ?? DEFAULT_GRID_CLASS}>
+    <div className={gridClassName ?? DEFAULT_GRID_CLASS} data-testid={testId}>
       <FormField
         control={form.control}
         name="positions.carry"
@@ -56,7 +62,7 @@ export const PositionFormFields = ({
                 defaultValue={field.value?.toString()}
               >
                 <FormControl>
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="position-choice-carry">
                     <SelectValue placeholder={PositionChoiceEnum[field.value]} />
                   </SelectTrigger>
                 </FormControl>
@@ -81,7 +87,7 @@ export const PositionFormFields = ({
                 defaultValue={field.value?.toString()}
               >
                 <FormControl>
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="position-choice-mid">
                     <SelectValue placeholder={PositionChoiceEnum[field.value]} />
                   </SelectTrigger>
                 </FormControl>
@@ -106,7 +112,7 @@ export const PositionFormFields = ({
                 defaultValue={field.value?.toString()}
               >
                 <FormControl>
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="position-choice-offlane">
                     <SelectValue placeholder={PositionChoiceEnum[field.value]} />
                   </SelectTrigger>
                 </FormControl>
@@ -131,7 +137,7 @@ export const PositionFormFields = ({
                 defaultValue={field.value?.toString()}
               >
                 <FormControl>
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="position-choice-soft_support">
                     <SelectValue placeholder={PositionChoiceEnum[field.value]} />
                   </SelectTrigger>
                 </FormControl>
@@ -156,7 +162,7 @@ export const PositionFormFields = ({
                 defaultValue={field.value?.toString()}
               >
                 <FormControl>
-                  <SelectTrigger>
+                  <SelectTrigger data-testid="position-choice-hard_support">
                     <SelectValue placeholder={PositionChoiceEnum[field.value]} />
                   </SelectTrigger>
                 </FormControl>
