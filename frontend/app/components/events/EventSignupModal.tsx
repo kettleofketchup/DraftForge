@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogTitle, DialogHeader } from '~/components/u
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/sheet';
 import { Form } from '~/components/ui/form';
 import { Badge } from '~/components/ui/badge';
+import { ScrollArea } from '~/components/ui/scroll-area';
 import { SubmitButton, CancelButton } from '~/components/ui/buttons';
 import { extractApiError } from '~/lib/apiError';
 import { cn } from '~/lib/utils';
@@ -17,32 +18,37 @@ import { toPatch } from './EventSignupModal/toPatch';
 import { isRankSectionComplete } from './EventSignupModal/evaluateSignupGap';
 import { FriendIdField } from './EventSignupModal/FriendIdField';
 import { RankStatusRadioGroup } from './EventSignupModal/RankStatusRadioGroup';
-import { PositionPickerGrid } from './EventSignupModal/PositionPickerGrid';
 import { RankDetailFields } from './EventSignupModal/RankDetailFields';
 import { ScreenshotUrlField } from './EventSignupModal/ScreenshotUrlField';
 import { PrefilledSummaryChip } from './EventSignupModal/PrefilledSummaryChip';
 import { useSignupMutation } from '~/hooks/useEvent';
+import { PositionFormFields } from '~/pages/profile/forms/position';
+import {
+  POSITION_LABELS as DOTA_POSITION_LABELS,
+  positionKeys,
+} from '~/components/user/positions/positionEdit';
+import { useUserStore } from '~/store/userStore';
 
 import { type EventType } from './schemas';
 import { GAME_TYPE } from '~/components/game/constants';
 import type { DotaProfileData } from '~/components/user';
 
-const POSITION_LABELS: Record<number, string> = {
-  1: 'Carry',
-  2: 'Mid',
-  3: 'Offlane',
-  4: 'Soft Support',
-  5: 'Hard Support',
+type PositionPriorities = {
+  carry: number;
+  mid: number;
+  offlane: number;
+  soft_support: number;
+  hard_support: number;
 };
 
-function positionsSummary(positions: DotaProfileData['positions']): string {
-  const picked: number[] = [];
-  if (positions.pos_1) picked.push(1);
-  if (positions.pos_2) picked.push(2);
-  if (positions.pos_3) picked.push(3);
-  if (positions.pos_4) picked.push(4);
-  if (positions.pos_5) picked.push(5);
-  return picked.map((n) => POSITION_LABELS[n]).join(' · ');
+function positionsSummary(positions: PositionPriorities | undefined | null): string {
+  if (!positions) return '';
+  // Sort by priority asc (1=Favorite first) then show label · "(rating: N)" for non-zero.
+  const picked = positionKeys
+    .filter((k) => positions[k] > 0)
+    .sort((a, b) => positions[a] - positions[b])
+    .map((k) => DOTA_POSITION_LABELS[k]);
+  return picked.join(' · ');
 }
 
 // Exported so smoke tests can verify intent → title interpolation without
@@ -80,8 +86,16 @@ export function EventSignupModal({
 }: EventSignupModalProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
+  // Read currentUser.positions BEFORE useMemo so the schema can consult it.
+  const currentUserPositions = useUserStore(
+    (s) => s.currentUser?.positions,
+  ) as Partial<PositionPriorities> | undefined;
+  const userHasPos =
+    !!currentUserPositions &&
+    Object.values(currentUserPositions).some((v) => (v ?? 0) > 0);
+
   const schema = useMemo(
-    () => buildSignupPatchSchema(event, profile),
+    () => buildSignupPatchSchema(event, profile, currentUserPositions),
     // Specific deps that drive section visibility:
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -99,20 +113,20 @@ export function EventSignupModal({
       profile?.positions ? Object.values(profile.positions).some(Boolean) : false,
       profile?.rank_screenshot != null,
       profile?.battlecup_screenshot != null,
+      userHasPos,
     ],
   );
 
-  // Seed defaults from profile so prefilled-chip subcomponents (which mount
-  // inside <CollapsibleContent>) register valid values with RHF immediately.
-  const profilePositions = profile?.positions
-    ? [
-        profile.positions.pos_1 && 1,
-        profile.positions.pos_2 && 2,
-        profile.positions.pos_3 && 3,
-        profile.positions.pos_4 && 4,
-        profile.positions.pos_5 && 5,
-      ].filter((v): v is number => typeof v === 'number')
-    : [];
+  // Seed defaults from the user's main position priorities (CustomUser.positions
+  // — PositionsModel rated 0..5, same shape PositionForm uses on the edit-profile
+  // page). The per-org PlayerDotaProfile.pos_N booleans are derived server-side.
+  const defaultPositions: PositionPriorities = {
+    carry: currentUserPositions?.carry ?? 0,
+    mid: currentUserPositions?.mid ?? 0,
+    offlane: currentUserPositions?.offlane ?? 0,
+    soft_support: currentUserPositions?.soft_support ?? 0,
+    hard_support: currentUserPositions?.hard_support ?? 0,
+  };
 
   const splitMedal = useMemo(() => {
     const m = profile?.rank_medal ?? '';
@@ -130,7 +144,7 @@ export function EventSignupModal({
     shouldUnregister: true,
     defaultValues: {
       unverified_friend_id: profile?.unverified_friend_id ?? '',
-      positions: profilePositions,
+      positions: defaultPositions,
       rank_status: profile?.rank_status as 'active' | 'previous' | 'never' | undefined,
       rank_medal_medal: splitMedal.medal,
       rank_medal_star: splitMedal.star,
@@ -156,7 +170,7 @@ export function EventSignupModal({
     delete (merged as Record<string, unknown>).rank_medal_medal;
     delete (merged as Record<string, unknown>).rank_medal_star;
 
-    const patch = toPatch(merged, profile);
+    const patch = toPatch(merged, profile, currentUserPositions);
     try {
       await mutation.mutateAsync({ intent, profile: patch });
       onOpenChange(false);
@@ -174,18 +188,21 @@ export function EventSignupModal({
   // Same check evaluateSignupGap uses — default `rank_status="never"` from
   // get_or_create doesn't count as a real user pick.
   const rankStatusPrefilled = isRankSectionComplete(event, profile);
-  const hasPos = profile?.positions
-    ? Object.values(profile.positions).some(Boolean)
-    : false;
+  // "Prefilled" if the user already has any non-zero priority on their main
+  // profile — same rule the schema uses to decide whether positions is required.
+  const hasPos = Object.values(defaultPositions).some((v) => v > 0);
   const showPositions = isDota;
   const positionsPrefilled = hasPos;
   const showRankDetail = isDota && !!watchedRankStatus;
   const rankDetailPrefilled =
     !!profile?.rank_medal || profile?.battle_cup_tier != null;
+  // Screenshot only required for ACTIVE MMR (current rank claim must be
+  // corroborated). "I had an MMR" relies on the medal+star showing the last
+  // rank held — no current ladder screen to take.
   const screenshotForActive =
     isDota &&
     event.discord_require_rank_screenshot &&
-    (watchedRankStatus === 'active' || watchedRankStatus === 'previous');
+    watchedRankStatus === 'active';
   const screenshotForActivePrefilled = !!profile?.rank_screenshot;
   const screenshotForBC =
     isDota &&
@@ -227,10 +244,15 @@ export function EventSignupModal({
     : null;
 
   const scrollableBody = (
-    <div
-      className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4"
+    // shadcn ScrollArea wraps a Radix Viewport (which IS the scroll container)
+    // with a custom-styled scrollbar that matches the brand. The Viewport gets
+    // size-full from the primitive; we make the outer Root flex-1/min-h-0 so
+    // it claims the remaining vertical space inside the form column.
+    <ScrollArea
+      className="flex-1 min-h-0 -mx-6 px-6"
       data-testid="event-signup-modal-body"
     >
+      <div className="flex flex-col gap-4 pb-4">
       <div className="flex items-center gap-2">
         <Badge variant={intent === 'rsvp' ? 'default' : 'secondary'} className="shrink-0">
           {intent === 'rsvp' ? 'Committed' : 'Tentative'}
@@ -271,9 +293,12 @@ export function EventSignupModal({
           {heading('Preferred Positions')}
           {withPrefill(
             positionsPrefilled,
-            profile?.positions ? positionsSummary(profile.positions) : '',
+            positionsSummary(defaultPositions),
             'signup-prefilled-summary-positions',
-            <PositionPickerGrid control={form.control as never} />,
+            <PositionFormFields
+              form={form as never}
+              gridClassName="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full"
+            />,
           )}
         </section>
       )}
@@ -329,7 +354,8 @@ export function EventSignupModal({
           {errorMessage}
         </div>
       )}
-    </div>
+      </div>
+    </ScrollArea>
   );
 
   const stickyFooter = (
@@ -373,7 +399,7 @@ export function EventSignupModal({
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[90vh] flex-col">
+        <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
