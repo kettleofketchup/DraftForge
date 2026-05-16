@@ -91,15 +91,21 @@ When an event reaches `max_players`, new RSVPs go to the waitlist:
 
 ## Configuration
 
-These event config fields control signup behavior:
+These event config fields control signup behavior. **Game** column flags fields that only apply to one game type (Dota 2 vs Deadlock).
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `auto_approve` | false | Auto-approve signups (skip pending state) |
-| `auto_confirm` | false | Auto-confirm approved signups |
-| `max_players` | null | Maximum signups before waitlisting |
-| `min_players` | null | Minimum confirmed players to start tournament |
-| `roll_call_enabled` | false | Require roll call before tournament start |
-| `require_steam_id` | false | Require Steam ID for approval |
-| `require_mmr_verified` | false | Require verified MMR for approval |
-| `require_profile_complete` | false | Require complete profile for approval |
+| Field | Default | Game | Description |
+|-------|---------|------|-------------|
+| `auto_approve` | false | any | Auto-approve signups (skip pending state) |
+| `auto_confirm` | false | any | Auto-confirm approved signups |
+| `max_players` | null | any | Maximum signups before waitlisting |
+| `min_players` | null | any | Minimum confirmed players to start tournament |
+| `roll_call_enabled` | false | any | Require roll call before tournament start |
+| `require_steam_id` | false | any | Require Steam ID (Dota Friend ID / Deadlock Friend ID) for approval |
+| `require_profile_complete` | false | any | Require complete profile for approval (per-game definition: Dota needs rank + positions; Deadlock needs `rank` text) |
+| `require_mmr_verified` | false | Dota | Require admin-verified MMR for approval |
+| `allow_active_mmr` | true | Dota | Allow signups that claim a current MMR rank |
+| `allow_previous_rank` | true | Dota | Allow signups that record a previously-held rank (no current screenshot required) |
+| `allow_battlecup_rating` | true | Dota | Allow Battle-Cup-only signups (`rank_status="never"` + tier) |
+| `min_mmr` | null | Dota | Minimum MMR threshold for auto-approval |
+| `discord_require_rank_screenshot` | false | Dota | Discord/web modal require a `.png/.jpg/.jpeg/.webp` rank screenshot for `rank_status="active"` only — "previous" rank captures the medal+star without a screenshot |
+| `discord_require_battlecup_screenshot` | false | Dota | Require a Battle Cup screenshot for `rank_status="never"` |
