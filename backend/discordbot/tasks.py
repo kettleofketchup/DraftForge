@@ -6,7 +6,12 @@ from datetime import datetime, timedelta
 
 from celery import shared_task
 
+from telemetry.logging import get_logger
+
+# `log` keeps the printf-style stdlib formatting used by check_scheduled_events.
+# `slog` is the project-standard structlog BoundLogger for new code.
 log = logging.getLogger(__name__)
+slog = get_logger(__name__)
 
 
 @shared_task
@@ -89,15 +94,21 @@ def sweep_stale_discord_leases():
     Both deletes happen server-side via the internal endpoint — the
     worker stays ORM-free.
     """
-    from app.internal_client import sweep_stale_discord_leases as _sweep_remote
+    from app.internal_client import sweep_discord_leases
 
-    result = _sweep_remote(pending_threshold_minutes=5, failed_threshold_hours=1)
+    result = sweep_discord_leases(
+        pending_threshold_minutes=5, failed_threshold_hours=1
+    )
     pending_swept = result.get("pending_swept", 0)
     failed_swept = result.get("failed_swept", 0)
     total = pending_swept + failed_swept
     if total:
-        log.warning(
-            "Swept %d stale leases, %d aged-out failures",
-            pending_swept, failed_swept,
+        slog.warning(
+            "discord_leases_swept",
+            system="discord",
+            subsystem="lease",
+            pending_swept=pending_swept,
+            failed_swept=failed_swept,
+            total=total,
         )
     return total

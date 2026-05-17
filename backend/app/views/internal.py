@@ -21,8 +21,13 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
+from telemetry.logging import get_logger
 
+# `logger` is the file's pre-existing stdlib handle, kept so we don't churn
+# unrelated endpoints in this PR. `log` is the project-standard structlog
+# BoundLogger used by everything new — system/subsystem kwargs go through it.
 logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _auth = [InternalServiceAuth]
 _perm = [IsInternalService]
@@ -1126,6 +1131,12 @@ def list_discord_linked_users(request):
         .exclude(discordId="")
         .values("pk", "discordId", "avatar", "username")
     )
+    log.debug(
+        "avatars_discord_linked_listed",
+        system="avatars",
+        subsystem="endpoint",
+        count=len(rows),
+    )
     return Response(
         [
             {
@@ -1159,7 +1170,39 @@ def list_discord_guild_ids(request):
         .values_list("discord_server_id", flat=True)
         .distinct()
     )
+    log.debug(
+        "avatars_discord_guilds_listed",
+        system="avatars",
+        subsystem="endpoint",
+        count=len(guild_ids),
+    )
     return Response({"guild_ids": guild_ids})
+
+
+def _validated_avatar_updates(raw):
+    """Return (cleaned_list, error_response) for a bulk-avatar-update body.
+
+    Cleans `raw` into a flat list of `{pk: int, avatar: str|None}`.
+    Each item must be a dict with an integer `pk`. Any failure returns
+    a 400 Response and an empty list — never a partially-built result.
+    """
+    cleaned = []
+    for i, item in enumerate(raw):
+        if not isinstance(item, dict):
+            return [], Response(
+                {"error": f"updates[{i}] must be an object"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # bool is a subclass of int in Python — reject it explicitly so
+        # `{"pk": True}` doesn't sneak through as pk=1.
+        pk = item.get("pk")
+        if not isinstance(pk, int) or isinstance(pk, bool):
+            return [], Response(
+                {"error": f"updates[{i}].pk must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        cleaned.append({"pk": pk, "avatar": item.get("avatar")})
+    return cleaned, None
 
 
 @api_view(["POST"])
@@ -1189,17 +1232,27 @@ def bulk_update_user_avatars(request):
     if not updates:
         return Response({"updated": 0})
 
-    to_update = []
-    for item in updates:
-        if not isinstance(item, dict) or "pk" not in item:
-            return Response(
-                {"error": "each update needs a numeric 'pk' field"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        to_update.append(User(pk=item["pk"], avatar=item.get("avatar")))
+    # Validate every item *before* building any User instances or hitting
+    # the DB. Avoids "we got through 9 items then bailed on item 10."
+    cleaned, err = _validated_avatar_updates(updates)
+    if err is not None:
+        log.warning(
+            "avatars_bulk_update_invalid_payload",
+            system="avatars",
+            subsystem="endpoint",
+            count=len(updates),
+        )
+        return err
 
+    to_update = [User(pk=u["pk"], avatar=u["avatar"]) for u in cleaned]
     User.objects.bulk_update(to_update, ["avatar"], batch_size=500)
     invalidate_model(User)
+    log.info(
+        "avatars_bulk_updated",
+        system="avatars",
+        subsystem="endpoint",
+        updated=len(to_update),
+    )
     return Response({"updated": len(to_update)})
 
 
@@ -1208,13 +1261,37 @@ def bulk_update_user_avatars(request):
 # ---------------------------------------------------------------------------
 
 
+def _parse_nonneg_int(value, field_name, default):
+    """Parse a non-negative integer threshold field.
+
+    Returns (parsed, error_response). Refuses negatives explicitly —
+    a negative threshold would push the cutoff into the future and the
+    sweep would match every row in the table.
+    """
+    if value is None:
+        return default, None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None, Response(
+            {"error": f"{field_name} must be an integer"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if parsed < 0:
+        return None, Response(
+            {"error": f"{field_name} must be >= 0"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return parsed, None
+
+
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
 def sweep_stale_discord_leases(request):
     """Reap stuck DiscordMessageLog rows.
 
-    Body (all optional):
+    Body (all optional, must be non-negative):
         pending_threshold_minutes: default 5 — NULL-success rows older
             than this are considered crashed workers, deleted so the
             next poll can re-claim.
@@ -1229,16 +1306,20 @@ def sweep_stale_discord_leases(request):
 
     from discordbot.models import DiscordMessageLog
 
-    try:
-        pending_minutes = int(
-            request.data.get("pending_threshold_minutes", 5)
-        )
-        failed_hours = int(request.data.get("failed_threshold_hours", 1))
-    except (TypeError, ValueError):
-        return Response(
-            {"error": "thresholds must be integers"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    pending_minutes, err = _parse_nonneg_int(
+        request.data.get("pending_threshold_minutes"),
+        "pending_threshold_minutes",
+        default=5,
+    )
+    if err is not None:
+        return err
+    failed_hours, err = _parse_nonneg_int(
+        request.data.get("failed_threshold_hours"),
+        "failed_threshold_hours",
+        default=1,
+    )
+    if err is not None:
+        return err
 
     now = tz.now()
     pending_threshold = now - timedelta(minutes=pending_minutes)
@@ -1251,8 +1332,20 @@ def sweep_stale_discord_leases(request):
         success=False, claimed_at__lt=failed_threshold,
     ).delete()
 
+    total = pending_swept + failed_swept
+    if total:
+        log.info(
+            "discord_leases_swept",
+            system="discord",
+            subsystem="lease",
+            pending_swept=pending_swept,
+            failed_swept=failed_swept,
+            total=total,
+            pending_threshold_minutes=pending_minutes,
+            failed_threshold_hours=failed_hours,
+        )
     return Response({
         "pending_swept": pending_swept,
         "failed_swept": failed_swept,
-        "total": pending_swept + failed_swept,
+        "total": total,
     })

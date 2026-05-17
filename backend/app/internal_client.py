@@ -520,6 +520,11 @@ def list_discord_linked_users():
     """Return every Discord-linked user as a flat list, or [] on failure.
 
     Each entry: {pk, discord_id, avatar, username}.
+
+    A genuinely empty list and a network failure both return [] — the
+    caller's "nothing to do" branch handles both. The underlying _get
+    has already logged the network failure with the full path/status,
+    so we don't double-log here.
     """
     resp = _get("/users/discord-linked/")
     if resp is None or not resp.ok:
@@ -532,7 +537,10 @@ def list_discord_linked_users():
 
 
 def list_discord_guild_ids():
-    """Return distinct Org discord_server_ids, or [] on failure."""
+    """Return distinct Org discord_server_ids, or [] on failure.
+
+    See list_discord_linked_users for the empty-vs-failure semantics.
+    """
     resp = _get("/orgs/discord-guild-ids/")
     if resp is None or not resp.ok:
         return []
@@ -562,8 +570,12 @@ def bulk_update_user_avatars(updates):
 # ---- Discord lease sweeper (used by discordbot/tasks.py) ----
 
 
-def sweep_stale_discord_leases(pending_threshold_minutes=5, failed_threshold_hours=1):
+def sweep_discord_leases(pending_threshold_minutes=5, failed_threshold_hours=1):
     """Reap stuck DiscordMessageLog rows.
+
+    Renamed from `sweep_stale_discord_leases` so callers can `import` it
+    without colliding with the celery task of the same name in
+    `discordbot/tasks.py`.
 
     Returns {pending_swept, failed_swept, total} on success, or
     {pending_swept: 0, failed_swept: 0, total: 0} on failure (so callers
