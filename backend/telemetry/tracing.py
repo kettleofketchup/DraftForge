@@ -79,36 +79,38 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
     _tracer_provider = provider
     atexit.register(_shutdown_tracer_provider)
 
-    # Configure metrics export (delta temporality required by Grafana Cloud Mimir)
+    # Configure metrics export.
+    #
+    # Grafana Cloud Mimir's OTLP ingest uses the OpenTelemetry Collector's
+    # Prometheus remote-write translator. That translator rejects DELTA
+    # temporality for every Sum and Histogram type — see
+    # `isValidAggregationTemporality` in
+    # open-telemetry/opentelemetry-collector-contrib :
+    # pkg/translator/prometheusremotewrite/helper.go . Accepted combinations:
+    #
+    #   Gauge / Summary  : DELTA or CUMULATIVE (temporality ignored)
+    #   Sum (Counter, UpDownCounter, Observable{Up,Down}Counter)  : CUMULATIVE
+    #   Histogram, ExponentialHistogram                            : CUMULATIVE
+    #
+    # The SDK default is CUMULATIVE for every instrument type, which matches
+    # Mimir exactly. Older revisions of this file shipped a custom
+    # `preferred_temporality` map that forced DELTA on Counter / Histogram /
+    # ObservableCounter — the cause of the recurring
+    # "invalid temporality and type combination" 400s on
+    # `http.client.*`, `otel.sdk.*`, `flower.task.runtime.seconds`, etc.
+    # Don't reintroduce that map. If a specific metric needs DELTA in the
+    # future, override it with a per-instrument View, not globally.
     try:
         from opentelemetry import metrics
         from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
             OTLPMetricExporter,
         )
-        from opentelemetry.sdk.metrics import (
-            Counter,
-            Histogram,
-            MeterProvider,
-            ObservableCounter,
-            ObservableGauge,
-            ObservableUpDownCounter,
-            UpDownCounter,
-        )
+        from opentelemetry.sdk.metrics import MeterProvider
         from opentelemetry.sdk.metrics.export import (
-            AggregationTemporality,
             PeriodicExportingMetricReader,
         )
-        from opentelemetry.sdk.metrics.view import View
+        from opentelemetry.sdk.metrics.view import DropAggregation, View
 
-        # Grafana Cloud Mimir requires delta temporality for all instrument types
-        delta_temporality = {
-            Counter: AggregationTemporality.DELTA,
-            UpDownCounter: AggregationTemporality.CUMULATIVE,
-            Histogram: AggregationTemporality.DELTA,
-            ObservableCounter: AggregationTemporality.DELTA,
-            ObservableUpDownCounter: AggregationTemporality.CUMULATIVE,
-            ObservableGauge: AggregationTemporality.DELTA,
-        }
         # Wrap the exporter so that when Grafana Cloud rejects a batch with a
         # 4xx the response body is captured to our logs. The stock SDK only
         # logs `code: 400, reason: Bad Request` which is useless — Grafana's
@@ -131,26 +133,18 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
         metric_exporter = _DiagnosticMetricExporter(
             endpoint=endpoint + "/v1/metrics",
             headers=header_dict or None,
-            preferred_temporality=delta_temporality,
         )
         metric_reader = PeriodicExportingMetricReader(metric_exporter)
 
-        # Drop metrics that Grafana Cloud Mimir rejects with HTTP 400:
+        # Drop metrics we don't want shipped. These drops are about *noise*
+        # and *duplication*, not the old temporality-mismatch problem:
         #
-        # * http.client.* — requests instrumentation reports these with a
-        #   temporality combination Mimir refuses. We get the same data from
-        #   server-side http.server.duration spans.
+        # * http.client.* — requests instrumentation duplicates data we
+        #   already get from server-side http.server.duration spans.
         #
-        # * otel.sdk.* — the SDK reports its own self-monitoring metrics
-        #   (collection.duration, exported.count, etc.) which use a
-        #   type/temporality combo Mimir parses as invalid:
-        #   "otlp parse error: invalid temporality and type combination for
-        #    metric \"otel.sdk.metric_reader.collection.duration\"".
-        #   These are exporter internals — not useful telemetry — and they
-        #   poison every batch because Mimir rejects the whole payload on
-        #   any invalid series. Dropping them ends the per-minute 400s.
-        from opentelemetry.sdk.metrics.view import DropAggregation
-
+        # * otel.sdk.* — the SDK's own self-monitoring metrics
+        #   (collection.duration, exported.count, etc.). Exporter internals,
+        #   not useful telemetry.
         meter_provider = MeterProvider(
             resource=resource,
             metric_readers=[metric_reader],
