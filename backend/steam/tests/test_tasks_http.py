@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from steam.tasks import (
     recalculate_user_league_mmr_task,
+    sync_all_steam_leagues_task,
     sync_league_matches_task,
     update_league_stats_task,
 )
@@ -108,3 +109,53 @@ class RecalculateMmrTaskTest(TestCase):
 
         result = recalculate_user_league_mmr_task(99999)
         self.assertIsNone(result)
+
+
+class SyncAllSteamLeaguesTaskTest(TestCase):
+    @patch("steam.tasks.sync_league_matches_task")
+    @patch("app.internal_client.requests.get")
+    def test_dispatches_one_subtask_per_tracked_league(self, mock_get, mock_subtask):
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {"steam_league_ids": [19571, 12345]}
+        mock_get.return_value = mock_resp
+
+        result = sync_all_steam_leagues_task()
+
+        self.assertEqual(result, {
+            "dispatched": 2,
+            "league_ids": [19571, 12345],
+        })
+        self.assertEqual(mock_subtask.delay.call_count, 2)
+        mock_subtask.delay.assert_any_call(19571)
+        mock_subtask.delay.assert_any_call(12345)
+
+    @patch("steam.tasks.sync_league_matches_task")
+    @patch("app.internal_client.requests.get")
+    def test_no_dispatch_when_no_leagues_configured(self, mock_get, mock_subtask):
+        mock_resp = MagicMock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = {"steam_league_ids": []}
+        mock_get.return_value = mock_resp
+
+        result = sync_all_steam_leagues_task()
+
+        self.assertEqual(result, {"dispatched": 0, "league_ids": []})
+        mock_subtask.delay.assert_not_called()
+
+    @patch("steam.tasks.sync_league_matches_task")
+    @patch("app.internal_client.requests.get")
+    def test_retries_on_internal_api_failure(self, mock_get, mock_subtask):
+        mock_resp = MagicMock()
+        mock_resp.ok = False
+        mock_resp.status_code = 500
+        mock_resp.text = "boom"
+        mock_get.return_value = mock_resp
+
+        # Celery's self.retry raises Retry; we just assert it bubbles up
+        # and no sub-tasks were dispatched.
+        from celery.exceptions import Retry
+
+        with self.assertRaises(Retry):
+            sync_all_steam_leagues_task()
+        mock_subtask.delay.assert_not_called()

@@ -472,12 +472,14 @@ from steam.views_internal import (
     recalculate_mmr,
     steam_sync_state,
     store_match,
+    tracked_leagues,
     update_league_stats,
 )
 
 urlpatterns += [
     path("api/internal/steam/sync-state/<int:league_id>/", steam_sync_state),
     path("api/internal/steam/store-match/", store_match),
+    path("api/internal/steam/tracked-leagues/", tracked_leagues),
     path(
         "api/internal/steam/update-league-stats/<int:league_id>/", update_league_stats
     ),

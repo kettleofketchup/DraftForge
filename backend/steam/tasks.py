@@ -10,12 +10,12 @@ from celery import shared_task
 
 from app.internal_client import (
     get_steam_sync_state,
+    get_tracked_steam_league_ids,
     recalculate_user_mmr,
     store_steam_match,
     update_league_stats,
     update_steam_sync_state,
 )
-from steam.constants import LEAGUE_ID
 from steam.utils.retry import retry_with_backoff
 from steam.utils.steam_api_caller import SteamAPI
 from telemetry.logging import get_logger
@@ -24,14 +24,56 @@ log = get_logger(__name__)
 
 
 @shared_task(bind=True, max_retries=3)
-def sync_league_matches_task(self, league_id: int = None):
-    """
-    Fetch new matches from Steam API, store via internal API.
-    Scheduled to run every minute.
-    """
-    if league_id is None:
-        league_id = LEAGUE_ID
+def sync_all_steam_leagues_task(self):
+    """Periodic coordinator — fan out one `sync_league_matches_task` per
+    League row that has `steam_league_id` set.
 
+    Replaces the prior beat entry that called `sync_league_matches_task`
+    directly with no argument and silently fell back to a hardcoded
+    constant, pinning the periodic sync to a single league regardless
+    of DB configuration.
+
+    Dispatch is via `.delay()` so each league becomes its own job. Steam
+    API pressure is bounded by `sync_league_matches_task`'s own
+    `rate_limit` — workers process one league at a time at most one per
+    second, no matter how many leagues are tracked.
+    """
+    league_ids = get_tracked_steam_league_ids()
+    if league_ids is None:
+        log.error(
+            "steam_sync_fanout_state_fetch_failed",
+            system="steam",
+            subsystem="sync",
+            reason="internal_api_returned_none",
+        )
+        raise self.retry(countdown=60)
+
+    log.info(
+        "steam_sync_fanout_dispatch",
+        system="steam",
+        subsystem="sync",
+        league_count=len(league_ids),
+        league_ids=league_ids,
+    )
+
+    for league_id in league_ids:
+        sync_league_matches_task.delay(league_id)
+
+    return {"dispatched": len(league_ids), "league_ids": league_ids}
+
+
+@shared_task(bind=True, max_retries=3, rate_limit="60/m")
+def sync_league_matches_task(self, league_id: int):
+    """Fetch new matches from Steam API for a single league, store via internal API.
+
+    Dispatched per-league by `sync_all_steam_leagues_task`; never scheduled
+    directly anymore. The `rate_limit="60/m"` is a backstop against
+    Steam API abuse if many leagues are tracked — celery will serialize
+    task starts to at most one per second per worker. Each task itself
+    may issue multiple Steam calls (1 history + N detail per new match);
+    the cursor-based incremental sync keeps steady-state at one history
+    call per tick.
+    """
     started_at = time.monotonic()
 
     # 1. Check sync state
@@ -266,11 +308,8 @@ def _fetch_and_store_match(api, match_id, match_seq_num, league_id):
 
 
 @shared_task(bind=True)
-def update_league_stats_task(self, league_id: int = None):
+def update_league_stats_task(self, league_id: int):
     """Update LeaguePlayerStats for all users in a league via internal API."""
-    if league_id is None:
-        league_id = LEAGUE_ID
-
     log.info(
         "steam_league_stats_start",
         system="steam",

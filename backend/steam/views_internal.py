@@ -162,6 +162,26 @@ def store_match(request):
     )
 
 
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def tracked_leagues(request):
+    """Return League.steam_league_id values currently set on any League row.
+
+    The periodic sync coordinator calls this to discover which leagues
+    to poll — replaces the hardcoded LEAGUE_ID constant that previously
+    pinned sync to a single league.
+    """
+    from app.models import League
+
+    ids = list(
+        League.objects.filter(steam_league_id__isnull=False)
+        .values_list("steam_league_id", flat=True)
+        .order_by("steam_league_id")
+    )
+    return Response({"steam_league_ids": ids})
+
+
 @api_view(["POST"])
 @authentication_classes(_auth)
 @permission_classes(_perm)
