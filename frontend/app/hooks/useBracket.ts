@@ -1,12 +1,32 @@
 import { useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { AxiosError } from 'axios';
+import { toast } from 'sonner';
 import { loadBracket as loadBracketAPI, saveBracket as saveBracketAPI } from '~/components/api/bracketAPI';
 import { useBracketStore, mapApiMatchToMatch } from '~/store/bracketStore';
 import type { BracketMatch } from '~/components/bracket/types';
 import type { BracketMatchDTO } from '~/components/bracket/schemas';
 import { getLogger } from '~/lib/logger';
 
-const log = getLogger('useBracket');
+const log = getLogger('bracket:save');
+
+/**
+ * Pulls a user-facing message out of a save_bracket / advance_winner
+ * error response. Backend returns { error, code, details? } on 4xx.
+ */
+function parseBracketError(error: unknown): { message: string; code?: string; details?: unknown } {
+  if (error instanceof AxiosError) {
+    const data = error.response?.data as
+      | { error?: string; detail?: string; code?: string; details?: unknown }
+      | undefined;
+    const message = data?.error || data?.detail || error.message || 'Bracket request failed';
+    return { message, code: data?.code, details: data?.details };
+  }
+  if (error instanceof Error) {
+    return { message: error.message };
+  }
+  return { message: 'Bracket request failed' };
+}
 
 /**
  * Fetches bracket data via TanStack Query and seeds the Zustand bracketStore.
@@ -89,10 +109,13 @@ export function useSaveBracket(tournamentId: number) {
       });
       // Invalidate to ensure cache is fresh
       queryClient.invalidateQueries({ queryKey: ['bracket', tournamentId] });
-      log.debug('Bracket saved', { matchCount: savedMatches.length });
+      log.info('bracket_saved', { tournamentId, matchCount: savedMatches.length });
+      toast.success('Bracket saved');
     },
     onError: (error) => {
-      log.error('Failed to save bracket', error);
+      const { message, code, details } = parseBracketError(error);
+      log.error('bracket_save_failed', { tournamentId, message, code, details });
+      toast.error(`Failed to save bracket: ${message}`);
     },
   });
 }

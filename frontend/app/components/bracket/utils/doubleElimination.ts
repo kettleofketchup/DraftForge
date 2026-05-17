@@ -108,11 +108,20 @@ function generateLosersBracket(
   const matches: BracketMatch[] = [];
   let matchId = startId;
 
-  // Losers bracket has alternating "drop-down" and "elimination" rounds
+  // LB rounds alternate "major" (halves the field — first round of each pair)
+  // and "minor" (same field size — WB losers drop in). For each round we need
+  // BOTH its own match count and the NEXT round's match count to wire
+  // advancement correctly, because at minor→major boundaries the count halves
+  // and naively using "matchId + matchesInRound" skips a whole round.
+  const matchesPerRound = Array.from({ length: rounds }, (_, i) => {
+    const r = i + 1;
+    const winnersRound = Math.ceil(r / 2);
+    return bracketSize / Math.pow(2, winnersRound + 1);
+  });
+
   for (let round = 1; round <= rounds; round++) {
-    // Calculate matches in this round
-    const winnersRound = Math.ceil(round / 2);
-    const matchesInRound = bracketSize / Math.pow(2, winnersRound + 1);
+    const matchesInRound = matchesPerRound[round - 1];
+    const matchesInNextRound = round < rounds ? matchesPerRound[round] : 0;
 
     for (let position = 0; position < matchesInRound; position++) {
       const match: BracketMatch = {
@@ -124,11 +133,15 @@ function generateLosersBracket(
         status: 'pending',
       };
 
-      // Set next match
       if (round < rounds) {
-        const nextMatchId = matchId + matchesInRound;
-        match.nextMatchId = `l-${nextMatchId}`;
+        const nextPosition = matchesInNextRound === matchesInRound
+          ? position
+          : Math.floor(position / 2);
+        // Offset from current match to (start of next round) + nextPosition.
+        const offsetToNextRoundStart = matchesInRound - position;
+        const nextMatchId = matchId + offsetToNextRoundStart + nextPosition;
         match.nextMatchSlot = position % 2 === 0 ? 'radiant' : 'dire';
+        match.nextMatchId = `l-${nextMatchId}`;
       }
 
       matches.push(match);

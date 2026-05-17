@@ -65,6 +65,9 @@ export const MatchNode = memo(({ data, selected }: NodeProps & { data: MatchNode
   return (
     <BaseNode
       data-testid="bracket-match-node"
+      data-bracket-type={data.bracketType}
+      data-round={data.round}
+      data-position={data.position}
       className={cn(
         'w-52 cursor-pointer transition-all relative',
         bracketStyle.bg,

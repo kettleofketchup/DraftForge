@@ -6,7 +6,7 @@ import { generateBracket, reseedBracket } from '~/components/bracket/utils/brack
 import type { BracketMatchDTO as ApiBracketMatch } from '~/components/bracket/schemas';
 import { getLogger } from '~/lib/logger';
 
-const log = getLogger('bracketStore');
+const log = getLogger('bracket:store');
 
 /**
  * Generate a consistent string ID for bracket matches
@@ -182,17 +182,65 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
 
     // Advance winner to next match
     if (winningTeam && match.nextMatchId && match.nextMatchSlot) {
-      log.debug('Advancing winner', { matchId, nextMatchId: match.nextMatchId });
-      get().assignTeamToSlot(match.nextMatchId, match.nextMatchSlot, winningTeam);
+      const target = get().matches.find((m) => m.id === match.nextMatchId);
+      if (target) {
+        log.info('bracket_advance_winner', {
+          matchId,
+          bracketType: match.bracketType,
+          nextMatchId: match.nextMatchId,
+          slot: match.nextMatchSlot,
+          team: winningTeam.name,
+        });
+        get().assignTeamToSlot(match.nextMatchId, match.nextMatchSlot, winningTeam);
+      } else {
+        log.warn('bracket_advance_winner_target_missing', {
+          matchId,
+          nextMatchId: match.nextMatchId,
+        });
+      }
+    } else if (winningTeam && match.bracketType !== 'grand_finals') {
+      log.warn('bracket_advance_winner_no_next', {
+        matchId,
+        bracketType: match.bracketType,
+        round: match.round,
+        hasNextId: !!match.nextMatchId,
+        hasNextSlot: !!match.nextMatchSlot,
+      });
     }
 
     // Advance loser to losers bracket (double elimination)
     if (losingTeam && match.loserNextMatchId && match.loserNextMatchSlot) {
-      log.debug('Advancing loser to losers bracket', {
+      const target = get().matches.find((m) => m.id === match.loserNextMatchId);
+      if (target) {
+        log.info('bracket_advance_loser', {
+          matchId,
+          bracketType: match.bracketType,
+          loserNextMatchId: match.loserNextMatchId,
+          slot: match.loserNextMatchSlot,
+          team: losingTeam.name,
+        });
+        get().assignTeamToSlot(match.loserNextMatchId, match.loserNextMatchSlot, losingTeam);
+      } else {
+        log.warn('bracket_advance_loser_target_missing', {
+          matchId,
+          loserNextMatchId: match.loserNextMatchId,
+        });
+      }
+    } else if (
+      losingTeam &&
+      match.eliminationType === 'double' &&
+      match.bracketType === 'winners'
+    ) {
+      // Losing in WB with no loserNext wired = eliminated from a bracket that
+      // was supposed to drop to losers. Almost always a wiring bug, not the
+      // intended terminal placement, so log loudly.
+      log.warn('bracket_advance_loser_no_target', {
         matchId,
-        loserNextMatchId: match.loserNextMatchId,
+        bracketType: match.bracketType,
+        round: match.round,
+        hasLoserNextId: !!match.loserNextMatchId,
+        hasLoserNextSlot: !!match.loserNextMatchSlot,
       });
-      get().assignTeamToSlot(match.loserNextMatchId, match.loserNextMatchSlot, losingTeam);
     }
   },
 
