@@ -81,10 +81,10 @@ function MatchStatsContent({ matchId }: { matchId: number }) {
               <img
                 src="https://cdn.brandfetch.io/idKrze_WBi/w/96/h/96/theme/dark/logo.png?c=1dxbfHSJFAPEGdCLU4o5B"
                 alt="Dotabuff"
-                className="w-4 h-4 mr-1"
+                className="size-4 mr-1"
               />
               Dotabuff
-              <ExternalLink className="w-3 h-3 ml-1" />
+              <ExternalLink className="size-3 ml-1" />
             </a>
           </Button>
           <Button
@@ -100,10 +100,10 @@ function MatchStatsContent({ matchId }: { matchId: number }) {
               <img
                 src="https://raw.githubusercontent.com/odota/web/master/public/assets/images/logo.png"
                 alt="OpenDota"
-                className="w-4 h-4 mr-1"
+                className="size-4 mr-1"
               />
               OpenDota
-              <ExternalLink className="w-3 h-3 ml-1" />
+              <ExternalLink className="size-3 ml-1" />
             </a>
           </Button>
         </div>

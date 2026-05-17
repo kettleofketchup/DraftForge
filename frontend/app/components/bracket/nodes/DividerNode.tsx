@@ -23,17 +23,17 @@ export const DividerNode = memo(({ data }: NodeProps & { data: DividerNodeData }
       }}
     >
       {/* Left line */}
-      <div className="flex-1 h-[3px] bg-red-600 rounded-full shadow-[0_0_8px_rgba(220,38,38,0.5)]" />
+      <div className="flex-1 h-[3px] bg-error rounded-full shadow-error-glow" />
 
       {/* Label */}
       {data.label && (
-        <span className="text-red-500 text-xs font-semibold uppercase tracking-wider whitespace-nowrap px-2 bg-background/80 rounded">
+        <span className="text-error text-xs font-semibold uppercase tracking-wider whitespace-nowrap px-2 bg-background/80 rounded">
           {data.label}
         </span>
       )}
 
       {/* Right line */}
-      <div className="flex-1 h-[3px] bg-red-600 rounded-full shadow-[0_0_8px_rgba(220,38,38,0.5)]" />
+      <div className="flex-1 h-[3px] bg-error rounded-full shadow-error-glow" />
     </div>
   );
 });

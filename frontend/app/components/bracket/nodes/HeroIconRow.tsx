@@ -23,7 +23,7 @@ export function HeroIconRow({ heroIds, isWinner }: HeroIconRowProps) {
             <img
               src={getHeroIcon(heroId)}
               alt={getHeroName(heroId)}
-              className="w-5 h-5 rounded-sm"
+              className="size-5 rounded-sm"
             />
           </TooltipTrigger>
           <TooltipContent>{getHeroName(heroId)}</TooltipContent>

@@ -50,7 +50,7 @@ export const BracketBadge = memo(function BracketBadge({
       />
       {/* Badge pill */}
       <div
-        className="flex items-center justify-center w-5 h-5 rounded-full text-xs font-bold text-black"
+        className="flex items-center justify-center size-5 rounded-full text-xs font-bold text-black"
         style={{ backgroundColor: color }}
         data-testid={`bracket-badge-letter-${letter}`}
       >
