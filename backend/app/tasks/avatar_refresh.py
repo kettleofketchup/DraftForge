@@ -152,9 +152,11 @@ def refresh_avatars_batched():
            - single source of truth for pagination + rate-limit handling.
            - any future improvements to the helper (e.g. retry on 429)
              benefit avatar refresh automatically.
-      3. Build `discord_id -> avatar_hash` map across guilds, bulk-update
-         local users where the hash changed via a single
-         `CustomUser.objects.filter(pk=...).update(avatar=...)` per row.
+      3. Build `discord_id -> avatar_hash` map across guilds, post the
+         changed rows in a single bulk-update call to
+         `/api/internal/users/avatars/bulk-update/` — the backend does
+         `CustomUser.objects.bulk_update(...)` + `invalidate_model` in
+         one round-trip. Workers do not touch the ORM.
 
     This task is idempotent and rate-limited at the calling endpoint
     (`/api/avatars/refresh/`) via a 1-hour cache key set BEFORE dispatch.
@@ -165,28 +167,21 @@ def refresh_avatars_batched():
 
     # Lazy imports keep the module importable in worker startup paths that
     # haven't fully bootstrapped Django.
-    from cacheops import invalidate_model
-
-    from app.models import CustomUser, Organization
+    from app.internal_client import (
+        bulk_update_user_avatars,
+        list_discord_guild_ids,
+        list_discord_linked_users,
+    )
     from discordbot.services.users import get_discord_members_data
 
     # Discordful users only — non-Discord-linked accounts can't gain or lose
     # a Discord avatar.
-    candidate_users = list(
-        CustomUser.objects.filter(discordId__isnull=False)
-        .exclude(discordId="")
-        .values("pk", "discordId", "avatar", "username")
-    )
+    candidate_users = list_discord_linked_users()
     if not candidate_users:
         log.info("No Discord-linked users to refresh")
         return {"checked": 0, "updated": 0}
 
-    guild_ids = list(
-        Organization.objects.filter(discord_server_id__isnull=False)
-        .exclude(discord_server_id="")
-        .values_list("discord_server_id", flat=True)
-        .distinct()
-    )
+    guild_ids = list_discord_guild_ids()
     if not guild_ids:
         log.info("No orgs with discord_server_id; nothing to refresh")
         return {"checked": len(candidate_users), "updated": 0}
@@ -215,32 +210,22 @@ def refresh_avatars_batched():
             if discord_id:
                 avatar_map[str(discord_id)] = user_obj.get("avatar")
 
-    # Collect changed rows and bulk-update in one shot. Per-row update()
-    # was O(N) round-trips; at 100k users with ~5% churn that's 5,000
-    # statements (~150s in a worker). bulk_update batches 500 rows per
-    # CASE/WHEN UPDATE, taking the same scenario down to ~10 statements
-    # (~3s). Tradeoff: bulk_update doesn't fire post_save, so cacheops
-    # won't auto-invalidate — we call invalidate_model once at the end.
-    to_update = []
+    # Collect changed rows and bulk-update in one shot via the internal
+    # endpoint. Per-row PATCH was O(N) round-trips; at 100k users with
+    # ~5% churn that's 5,000 calls (~150s in a worker). The bulk endpoint
+    # batches all changed rows into one POST → one bulk_update on the
+    # backend, batched server-side at 500 rows per CASE/WHEN UPDATE.
+    updates = []
     for u in candidate_users:
-        discord_id = str(u["discordId"])
+        discord_id = str(u["discord_id"])
         if discord_id not in avatar_map:
             continue
         new_avatar = avatar_map[discord_id]
         if new_avatar == u["avatar"]:
             continue
-        to_update.append(CustomUser(pk=u["pk"], avatar=new_avatar))
+        updates.append({"pk": u["pk"], "avatar": new_avatar})
 
-    updated = len(to_update)
-    if updated:
-        # batch_size=500 keeps the CASE/WHEN expression bounded so MySQL/
-        # SQLite parsers don't choke on a million-line statement.
-        CustomUser.objects.bulk_update(to_update, ["avatar"], batch_size=500)
-        # bulk_update bypasses signals; cacheops needs an explicit nudge.
-        # Model-level invalidation is one cache op vs N per-pk ops; safe
-        # because no production view caches anything that wouldn't already
-        # consider an avatar-hash change a stale-cache trigger.
-        invalidate_model(CustomUser)
+    updated = bulk_update_user_avatars(updates) if updates else 0
 
     log.info(
         "Batched avatar refresh complete: checked=%d, updated=%d, guilds=%d",

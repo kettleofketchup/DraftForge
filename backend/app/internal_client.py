@@ -511,3 +511,75 @@ def get_games_without_herodraft(tournament_id):
 def create_herodraft_for_game(game_id):
     """Atomically create a HeroDraft for a game. Returns response or None."""
     return _post(f"/games/{game_id}/create-herodraft/", {})
+
+
+# ---- Batched avatar refresh (used by app/tasks/avatar_refresh.py) ----
+
+
+def list_discord_linked_users():
+    """Return every Discord-linked user as a flat list, or [] on failure.
+
+    Each entry: {pk, discord_id, avatar, username}.
+    """
+    resp = _get("/users/discord-linked/")
+    if resp is None or not resp.ok:
+        return []
+    try:
+        return resp.json()
+    except ValueError:
+        logger.error("discord-linked-users returned non-JSON: %s", resp.text[:200])
+        return []
+
+
+def list_discord_guild_ids():
+    """Return distinct Org discord_server_ids, or [] on failure."""
+    resp = _get("/orgs/discord-guild-ids/")
+    if resp is None or not resp.ok:
+        return []
+    try:
+        return resp.json().get("guild_ids", [])
+    except ValueError:
+        logger.error("discord-guild-ids returned non-JSON: %s", resp.text[:200])
+        return []
+
+
+def bulk_update_user_avatars(updates):
+    """Bulk-update avatar hashes. `updates`: list of {pk, avatar}.
+
+    Returns updated count (0 on empty or network failure).
+    """
+    if not updates:
+        return 0
+    resp = _post("/users/avatars/bulk-update/", {"updates": updates})
+    if resp is None or not resp.ok:
+        return 0
+    try:
+        return int(resp.json().get("updated", 0))
+    except (ValueError, TypeError):
+        return 0
+
+
+# ---- Discord lease sweeper (used by discordbot/tasks.py) ----
+
+
+def sweep_stale_discord_leases(pending_threshold_minutes=5, failed_threshold_hours=1):
+    """Reap stuck DiscordMessageLog rows.
+
+    Returns {pending_swept, failed_swept, total} on success, or
+    {pending_swept: 0, failed_swept: 0, total: 0} on failure (so callers
+    can treat the return value as truthy/falsy without crashing).
+    """
+    resp = _post(
+        "/discord/sweep-stale-leases/",
+        {
+            "pending_threshold_minutes": pending_threshold_minutes,
+            "failed_threshold_hours": failed_threshold_hours,
+        },
+    )
+    if resp is None or not resp.ok:
+        return {"pending_swept": 0, "failed_swept": 0, "total": 0}
+    try:
+        return resp.json()
+    except ValueError:
+        logger.error("sweep-stale-leases returned non-JSON: %s", resp.text[:200])
+        return {"pending_swept": 0, "failed_swept": 0, "total": 0}

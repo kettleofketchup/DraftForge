@@ -1,74 +1,57 @@
-"""sweep_stale_discord_leases — reaps NULL pending and False aged-out rows."""
+"""sweep_stale_discord_leases — celery task wrapper around the internal
+sweep endpoint.
 
-from datetime import timedelta
+DB-side correctness (which rows get reaped at which thresholds) lives
+in app/tests/test_internal_avatar_and_sweep::SweepStaleDiscordLeasesTest
+since the actual delete is server-side now. These tests cover the
+task-level contract: it forwards the right thresholds and returns the
+total count.
+"""
+
+from unittest.mock import patch
 
 from django.test import TestCase
-from django.utils import timezone
 
-from discordbot.models import DiscordMessageLog
 from discordbot.tasks import sweep_stale_discord_leases
 
 
-def _row(**overrides):
-    defaults = dict(
-        channel_id="ch_1",
-        embed_data={"title": "test"},
-    )
-    defaults.update(overrides)
-    return DiscordMessageLog.objects.create(**defaults)
-
-
-class SweepStaleLeasesTest(TestCase):
-    def test_deletes_pending_lease_older_than_5_min(self):
-        _row(
-            source="event_announcement",
-            source_id=1,
-            success=None,
-            claimed_at=timezone.now() - timedelta(minutes=10),
-        )
-        deleted = sweep_stale_discord_leases()
-        self.assertEqual(deleted, 1)
-        self.assertFalse(DiscordMessageLog.objects.filter(source_id=1).exists())
-
-    def test_does_not_delete_recent_pending_lease(self):
-        _row(
-            source="event_announcement",
-            source_id=2,
-            success=None,
-            claimed_at=timezone.now() - timedelta(minutes=2),
-        )
+class SweepStaleLeasesTaskTest(TestCase):
+    @patch("app.internal_client.sweep_stale_discord_leases")
+    def test_forwards_default_thresholds(self, mock_sweep):
+        mock_sweep.return_value = {
+            "pending_swept": 0,
+            "failed_swept": 0,
+            "total": 0,
+        }
         sweep_stale_discord_leases()
-        self.assertTrue(DiscordMessageLog.objects.filter(source_id=2).exists())
-
-    def test_does_not_delete_recent_failed_row(self):
-        # Recent failures (within 1-hour budget) stay so admins can investigate
-        _row(
-            source="event_announcement",
-            source_id=3,
-            success=False,
-            claimed_at=timezone.now() - timedelta(minutes=30),
+        mock_sweep.assert_called_once_with(
+            pending_threshold_minutes=5, failed_threshold_hours=1
         )
-        sweep_stale_discord_leases()
-        self.assertTrue(DiscordMessageLog.objects.filter(source_id=3).exists())
 
-    def test_deletes_aged_out_failed_row(self):
-        # Failures older than 1 hour are reaped so the next poll can retry
-        _row(
-            source="event_announcement",
-            source_id=4,
-            success=False,
-            claimed_at=timezone.now() - timedelta(hours=2),
-        )
-        deleted = sweep_stale_discord_leases()
-        self.assertEqual(deleted, 1)
-        self.assertFalse(DiscordMessageLog.objects.filter(source_id=4).exists())
+    @patch("app.internal_client.sweep_stale_discord_leases")
+    def test_returns_total_count(self, mock_sweep):
+        mock_sweep.return_value = {
+            "pending_swept": 2,
+            "failed_swept": 3,
+            "total": 5,
+        }
+        result = sweep_stale_discord_leases()
+        self.assertEqual(result, 5)
 
-    def test_does_not_delete_successful_rows(self):
-        _row(
-            source="event_announcement",
-            source_id=5,
-            success=True,
-            claimed_at=timezone.now() - timedelta(days=30),
-        )
-        sweep_stale_discord_leases()
-        self.assertTrue(DiscordMessageLog.objects.filter(source_id=5).exists())
+    @patch("app.internal_client.sweep_stale_discord_leases")
+    def test_zero_total_when_nothing_swept(self, mock_sweep):
+        mock_sweep.return_value = {
+            "pending_swept": 0,
+            "failed_swept": 0,
+            "total": 0,
+        }
+        result = sweep_stale_discord_leases()
+        self.assertEqual(result, 0)
+
+    @patch("app.internal_client.sweep_stale_discord_leases")
+    def test_handles_missing_keys_defensively(self, mock_sweep):
+        """If the endpoint returns an unexpected shape (e.g. network
+        wrapper bailed mid-parse), the task must not crash beat."""
+        mock_sweep.return_value = {}
+        result = sweep_stale_discord_leases()
+        self.assertEqual(result, 0)
