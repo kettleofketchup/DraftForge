@@ -973,8 +973,8 @@ class ScreenshotUploadModal(ui.Modal):
         else:
             self.file_upload = None
             self.url_input = ui.TextInput(
-                label="Imgur Link",
-                placeholder="Paste your imgur.com link here",
+                label="Catbox Link",
+                placeholder="https://files.catbox.moe/abc123.png",
                 custom_id=f"screenshot_url:{event_id}:{screenshot_type}",
                 required=True,
                 style=discord.TextStyle.short,
