@@ -34,7 +34,7 @@ def init_worker_telemetry(**kwargs):
 # Beat schedule for periodic tasks
 _beat_schedule = {
     "sync-league-matches-every-minute": {
-        "task": "steam.tasks.sync_league_matches_task",
+        "task": "steam.tasks.sync_all_steam_leagues_task",
         "schedule": 60.0,
     },
     "check-discord-scheduled-events": {

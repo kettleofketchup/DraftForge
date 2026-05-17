@@ -385,6 +385,18 @@ def get_steam_sync_state(league_id):
     return None
 
 
+def get_tracked_steam_league_ids():
+    """Return list of League.steam_league_id values currently configured.
+
+    Returns None on transport error so the caller can distinguish that
+    from a legitimate empty list (no League has steam_league_id set).
+    """
+    resp = _get("/steam/tracked-leagues/")
+    if resp and resp.ok:
+        return resp.json().get("steam_league_ids", [])
+    return None
+
+
 def update_steam_sync_state(league_id, **fields):
     """Update sync state fields. Returns True on success."""
     resp = _patch(f"/steam/sync-state/{league_id}/", fields)

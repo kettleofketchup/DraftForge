@@ -293,3 +293,38 @@ class RecalculateMmrEndpointTest(TestCase):
             **HEADERS,
         )
         self.assertEqual(resp.status_code, 404)
+
+
+@override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
+class TrackedLeaguesEndpointTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.url = "/api/internal/steam/tracked-leagues/"
+
+    def test_returns_empty_when_no_leagues_configured(self):
+        resp = self.client.get(self.url, **HEADERS)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"steam_league_ids": []})
+
+    def test_returns_steam_ids_sorted(self):
+        from app.models import League
+
+        League.objects.create(name="DTX", steam_league_id=19571)
+        League.objects.create(name="Other", steam_league_id=12345)
+        League.objects.create(name="NoSteamId", steam_league_id=None)
+
+        resp = self.client.get(self.url, **HEADERS)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"steam_league_ids": [12345, 19571]})
+
+    def test_excludes_leagues_without_steam_league_id(self):
+        from app.models import League
+
+        League.objects.create(name="Unconfigured", steam_league_id=None)
+
+        resp = self.client.get(self.url, **HEADERS)
+        self.assertEqual(resp.json(), {"steam_league_ids": []})
+
+    def test_requires_internal_auth(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 403)

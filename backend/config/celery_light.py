@@ -29,7 +29,7 @@ app.autodiscover_tasks(["events"], related_name="tournament_tasks")
 # Beat schedule — copied from config/celery.py
 _beat_schedule = {
     "sync-league-matches-every-minute": {
-        "task": "steam.tasks.sync_league_matches_task",
+        "task": "steam.tasks.sync_all_steam_leagues_task",
         "schedule": 60.0,
     },
     "check-discord-scheduled-events": {
