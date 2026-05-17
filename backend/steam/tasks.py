@@ -4,7 +4,7 @@ All DB operations via internal HTTP API — no ORM imports.
 Workers can run off-host with only broker + backend URL access.
 """
 
-import logging
+import time
 
 from celery import shared_task
 
@@ -18,8 +18,9 @@ from app.internal_client import (
 from steam.constants import LEAGUE_ID
 from steam.utils.retry import retry_with_backoff
 from steam.utils.steam_api_caller import SteamAPI
+from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 @shared_task(bind=True, max_retries=3)
@@ -31,16 +32,38 @@ def sync_league_matches_task(self, league_id: int = None):
     if league_id is None:
         league_id = LEAGUE_ID
 
-    logger.info(f"Starting league sync for league {league_id}")
+    started_at = time.monotonic()
 
     # 1. Check sync state
     state = get_steam_sync_state(league_id)
     if not state:
-        logger.error("Failed to fetch sync state from internal API")
+        log.error(
+            "steam_sync_state_fetch_failed",
+            system="steam",
+            subsystem="sync",
+            league_id=league_id,
+            reason="internal_api_returned_none",
+        )
         raise self.retry(countdown=60)
 
+    prior_last_match_id = state["last_match_id"]
+    log.info(
+        "steam_sync_start",
+        system="steam",
+        subsystem="sync",
+        league_id=league_id,
+        prior_last_match_id=prior_last_match_id,
+        failed_match_ids_count=len(state.get("failed_match_ids") or []),
+    )
+
     if state["is_syncing"]:
-        logger.warning(f"Sync already in progress for league {league_id}")
+        log.warning(
+            "steam_sync_skipped",
+            system="steam",
+            subsystem="sync",
+            league_id=league_id,
+            reason="already_syncing",
+        )
         return {"synced_count": 0, "failed_count": 0, "error": "Already syncing"}
 
     # 2. Mark as syncing
@@ -49,11 +72,14 @@ def sync_league_matches_task(self, league_id: int = None):
     api = SteamAPI()
     synced_count = 0
     failed_count = 0
+    skipped_count = 0
+    batches_fetched = 0
     start_at_match_id = None
-    new_last_match_id = state["last_match_id"]
+    new_last_match_id = prior_last_match_id
 
     try:
         while True:
+            batches_fetched += 1
             result = api.get_match_history(
                 league_id=league_id,
                 start_at_match_id=start_at_match_id,
@@ -61,12 +87,38 @@ def sync_league_matches_task(self, league_id: int = None):
             )
 
             if not result or "result" not in result:
-                logger.error(f"Failed to fetch match history for league {league_id}")
+                log.error(
+                    "steam_api_history_fetch_failed",
+                    system="steam",
+                    subsystem="sync",
+                    league_id=league_id,
+                    start_at_match_id=start_at_match_id,
+                    batch_num=batches_fetched,
+                )
                 break
 
             matches = result["result"].get("matches", [])
             if not matches:
+                log.info(
+                    "steam_api_history_empty",
+                    system="steam",
+                    subsystem="sync",
+                    league_id=league_id,
+                    start_at_match_id=start_at_match_id,
+                    batch_num=batches_fetched,
+                    reason=(
+                        "no_matches_for_league"
+                        if batches_fetched == 1
+                        else "end_of_history"
+                    ),
+                )
                 break
+
+            batch_first_match_id = matches[0]["match_id"]
+            batch_last_match_id = matches[-1]["match_id"]
+            batch_new = 0
+            batch_skipped = 0
+            batch_failed = 0
 
             caught_up = False
             for match_data in matches:
@@ -76,6 +128,8 @@ def sync_league_matches_task(self, league_id: int = None):
                 # Skip already-processed matches
                 if state["last_match_id"] and match_id <= state["last_match_id"]:
                     caught_up = True
+                    batch_skipped += 1
+                    skipped_count += 1
                     continue
 
                 # Fetch full match details from Steam and store via API
@@ -83,12 +137,29 @@ def sync_league_matches_task(self, league_id: int = None):
 
                 if stored:
                     synced_count += 1
+                    batch_new += 1
                     if new_last_match_id is None or match_id > new_last_match_id:
                         new_last_match_id = match_id
                 else:
                     failed_count += 1
+                    batch_failed += 1
 
-            start_at_match_id = matches[-1]["match_id"]
+            log.info(
+                "steam_sync_batch",
+                system="steam",
+                subsystem="sync",
+                league_id=league_id,
+                batch_num=batches_fetched,
+                batch_size=len(matches),
+                batch_first_match_id=batch_first_match_id,
+                batch_last_match_id=batch_last_match_id,
+                batch_new=batch_new,
+                batch_skipped=batch_skipped,
+                batch_failed=batch_failed,
+                caught_up=caught_up,
+            )
+
+            start_at_match_id = batch_last_match_id
 
             if caught_up:
                 break
@@ -104,11 +175,26 @@ def sync_league_matches_task(self, league_id: int = None):
     if synced_count > 0:
         update_league_stats_task.delay(league_id)
 
-    logger.info(
-        f"League sync complete: {synced_count} synced, {failed_count} failed"
+    log.info(
+        "steam_sync_complete",
+        system="steam",
+        subsystem="sync",
+        league_id=league_id,
+        synced_count=synced_count,
+        failed_count=failed_count,
+        skipped_count=skipped_count,
+        batches_fetched=batches_fetched,
+        prior_last_match_id=prior_last_match_id,
+        new_last_match_id=new_last_match_id,
+        advanced_cursor=new_last_match_id != prior_last_match_id,
+        duration_ms=int((time.monotonic() - started_at) * 1000),
     )
 
-    return {"synced_count": synced_count, "failed_count": failed_count}
+    return {
+        "synced_count": synced_count,
+        "failed_count": failed_count,
+        "skipped_count": skipped_count,
+    }
 
 
 def _fetch_and_store_match(api, match_id, match_seq_num, league_id):
@@ -130,7 +216,15 @@ def _fetch_and_store_match(api, match_id, match_seq_num, league_id):
     success, result = retry_with_backoff(fetch, max_retries=3, base_delay=1.0)
 
     if not success or not result or "result" not in result:
-        logger.warning(f"Failed to fetch match {match_id} from Steam")
+        log.warning(
+            "steam_match_fetch_failed",
+            system="steam",
+            subsystem="sync",
+            match_id=match_id,
+            match_seq_num=match_seq_num,
+            league_id=league_id,
+            fetch_method="seq_num" if match_seq_num else "match_details",
+        )
         return False
 
     data = result["result"]
@@ -147,7 +241,28 @@ def _fetch_and_store_match(api, match_id, match_seq_num, league_id):
         "players": data.get("players", []),
     })
 
-    return stored is not None
+    if stored is None:
+        log.warning(
+            "steam_match_store_failed",
+            system="steam",
+            subsystem="sync",
+            match_id=match_id,
+            league_id=league_id,
+            reason="internal_api_returned_none",
+        )
+        return False
+
+    log.info(
+        "steam_match_stored",
+        system="steam",
+        subsystem="sync",
+        match_id=match_id,
+        league_id=league_id,
+        created=stored.get("created"),
+        players_stored=stored.get("players_stored"),
+        players_linked=stored.get("players_linked"),
+    )
+    return True
 
 
 @shared_task(bind=True)
@@ -156,14 +271,31 @@ def update_league_stats_task(self, league_id: int = None):
     if league_id is None:
         league_id = LEAGUE_ID
 
-    logger.info(f"Updating league stats for league {league_id}")
+    log.info(
+        "steam_league_stats_start",
+        system="steam",
+        subsystem="stats",
+        league_id=league_id,
+    )
 
     updated_count = update_league_stats(league_id)
     if updated_count is None:
-        logger.error("Failed to update league stats via internal API")
+        log.error(
+            "steam_league_stats_failed",
+            system="steam",
+            subsystem="stats",
+            league_id=league_id,
+            reason="internal_api_returned_none",
+        )
         return {"updated_count": 0, "error": "API call failed"}
 
-    logger.info(f"Updated stats for {updated_count} users")
+    log.info(
+        "steam_league_stats_complete",
+        system="steam",
+        subsystem="stats",
+        league_id=league_id,
+        updated_count=updated_count,
+    )
     return {"updated_count": updated_count}
 
 
@@ -172,8 +304,18 @@ def recalculate_user_league_mmr_task(user_id: int):
     """Recalculate a single user's league_mmr via internal API."""
     result = recalculate_user_mmr(user_id)
     if result is None:
-        logger.error(f"Failed to recalculate MMR for user {user_id}")
+        log.error(
+            "steam_user_mmr_recalc_failed",
+            system="steam",
+            subsystem="mmr",
+            user_id=user_id,
+        )
         return None
 
-    logger.info(f"Recalculated league MMR for user {user_id}")
+    log.info(
+        "steam_user_mmr_recalc_complete",
+        system="steam",
+        subsystem="mmr",
+        user_id=user_id,
+    )
     return result

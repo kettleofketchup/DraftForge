@@ -468,7 +468,7 @@ urlpatterns += [
 ]
 
 # Internal API — Steam sync endpoints
-from app.views.internal_steam import (
+from steam.views_internal import (
     recalculate_mmr,
     steam_sync_state,
     store_match,
