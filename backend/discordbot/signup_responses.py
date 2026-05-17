@@ -5,11 +5,22 @@ generating) rather than ephemerals that auto-dismiss after 60 seconds. When a
 user has DMs disabled (Discord 50007), fall back to ephemeral and prefix with
 <@user_id> so they get a notification badge.
 
-Discord interactions must be acknowledged within 3 seconds — defer first to
-extend the window to 15 minutes, then attempt the DM. On DM success, delete
-the deferred placeholder so the originating button doesn't appear hung.
-delete_original_response is best-effort: NotFound/HTTPException are swallowed
-since the DM already landed.
+CRITICAL — `thinking=True` on defer for component interactions:
+
+    For a *component* (button) interaction, discord.py's `defer(ephemeral=...)`
+    without `thinking=True` issues a `DEFERRED_MESSAGE_UPDATE` (type 6). That
+    type does NOT create a new response message — it silently defers an
+    *update to the source message* (the message the button lives on), and
+    the `ephemeral` flag is ignored. After that, `@original` IS the source
+    message, so `delete_original_response()` deletes the public signup post.
+
+    Passing `thinking=True` switches discord.py to
+    `DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE` (type 5), creating a fresh
+    ephemeral placeholder. Then `@original` is that placeholder and
+    `delete_original_response()` cleans up only the placeholder.
+
+    Removing `thinking=True` here will start deleting users' signup posts
+    on every button click again. Do not change without re-reading this.
 """
 
 from enum import Enum
@@ -26,6 +37,11 @@ class ResponseChannel(Enum):
     EPHEMERAL = "ephemeral"
 
 
+def _message_id(interaction: discord.Interaction) -> str | None:
+    msg = getattr(interaction, "message", None)
+    return str(msg.id) if msg is not None and getattr(msg, "id", None) else None
+
+
 async def respond_to_signup_user(
     interaction: discord.Interaction,
     *,
@@ -37,17 +53,36 @@ async def respond_to_signup_user(
     """Try DM → fall back to ephemeral with <@user_id> prefix on Forbidden(50007)."""
     user_id = interaction.user.id
     event_id = getattr(event, "pk", None)
+    source_message_id = _message_id(interaction)
+    channel_id = (
+        str(interaction.channel_id) if getattr(interaction, "channel_id", None) else None
+    )
 
     if not interaction.response.is_done():
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        log.info(
+            "signup_interaction_deferred",
+            system="events",
+            subsystem="discord",
+            user_id=user_id,
+            event_id=event_id,
+            channel_id=channel_id,
+            source_message_id=source_message_id,
+        )
 
     try:
         dm_channel = await interaction.user.create_dm()
         await dm_channel.send(content=content, embed=embed, view=view)
         try:
             await interaction.delete_original_response()
-        except (discord.NotFound, discord.HTTPException):
-            # Cleanup is best-effort; the DM already landed.
+            log.info(
+                "signup_interaction_placeholder_deleted",
+                system="events",
+                subsystem="discord",
+                user_id=user_id,
+                event_id=event_id,
+            )
+        except discord.NotFound:
             pass
         channel = ResponseChannel.DM
     except discord.Forbidden as e:
@@ -65,6 +100,8 @@ async def respond_to_signup_user(
                 subsystem="discord",
                 user_id=user_id,
                 event_id=event_id,
+                channel_id=channel_id,
+                source_message_id=source_message_id,
                 error=str(e),
             )
             raise
@@ -77,5 +114,7 @@ async def respond_to_signup_user(
         fallback_to_ephemeral=(channel == ResponseChannel.EPHEMERAL),
         user_id=user_id,
         event_id=event_id,
+        channel_id=channel_id,
+        source_message_id=source_message_id,
     )
     return channel

@@ -34,7 +34,18 @@ def _make_forbidden(code):
 
 
 class RespondToSignupUserDMSuccessTest(SimpleTestCase):
-    async def test_dm_path_defers_then_sends_then_deletes_original(self):
+    async def test_dm_path_defers_with_thinking_then_sends_then_deletes_placeholder(self):
+        """Regression guard for the signup-post-deletion bug.
+
+        For component (button) interactions, `defer(ephemeral=True)` WITHOUT
+        `thinking=True` issues DEFERRED_MESSAGE_UPDATE (type 6), making
+        `@original` resolve to the SOURCE message (the public signup post).
+        `delete_original_response()` then deletes the signup post.
+
+        `thinking=True` switches to DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
+        (type 5), creating an ephemeral placeholder. `@original` is the
+        placeholder, and the subsequent delete only clears that.
+        """
         interaction = _make_interaction()
         dm_channel = AsyncMock()
         dm_channel.send = AsyncMock()
@@ -42,7 +53,9 @@ class RespondToSignupUserDMSuccessTest(SimpleTestCase):
 
         result = await respond_to_signup_user(interaction, content="hi")
 
-        interaction.response.defer.assert_awaited_once_with(ephemeral=True)
+        interaction.response.defer.assert_awaited_once_with(
+            ephemeral=True, thinking=True
+        )
         interaction.user.create_dm.assert_awaited_once()
         dm_channel.send.assert_awaited_once_with(content="hi", embed=None, view=None)
         interaction.delete_original_response.assert_awaited_once()
@@ -57,17 +70,30 @@ class RespondToSignupUserDMSuccessTest(SimpleTestCase):
         await respond_to_signup_user(interaction, content="hi")
         interaction.response.defer.assert_not_called()
 
-    async def test_delete_original_failure_does_not_break_dm_success(self):
-        """delete_original_response can raise NotFound/HTTPException; cleanup is best-effort."""
+    async def test_delete_original_not_found_does_not_break_dm_success(self):
+        """delete_original_response can raise NotFound if the placeholder is
+        already gone; cleanup is best-effort and the DM has already landed."""
         interaction = _make_interaction()
         dm_channel = AsyncMock()
         interaction.user.create_dm.return_value = dm_channel
         interaction.delete_original_response.side_effect = discord.NotFound(
             MagicMock(status=404), "not found"
         )
-        # Should not raise — DM already succeeded.
         result = await respond_to_signup_user(interaction, content="hi")
         self.assertEqual(result, ResponseChannel.DM)
+
+    async def test_other_http_errors_on_delete_propagate(self):
+        """We narrowed the except to NotFound only — a 403/5xx on delete should
+        surface, not be silently swallowed (it would have masked the signup-
+        post-deletion bug otherwise)."""
+        interaction = _make_interaction()
+        dm_channel = AsyncMock()
+        interaction.user.create_dm.return_value = dm_channel
+        interaction.delete_original_response.side_effect = discord.HTTPException(
+            MagicMock(status=500), "server error"
+        )
+        with self.assertRaises(discord.HTTPException):
+            await respond_to_signup_user(interaction, content="hi")
 
 
 class RespondToSignupUserDMDisabledTest(SimpleTestCase):
@@ -109,8 +135,16 @@ class RespondToSignupUserLoggingTest(SimpleTestCase):
         with patch("discordbot.signup_responses.log") as mock_log:
             await respond_to_signup_user(interaction, content="hi")
 
-        mock_log.info.assert_called_once()
-        kwargs = mock_log.info.call_args.kwargs
+        events = [call.args[0] for call in mock_log.info.call_args_list]
+        self.assertIn("signup_interaction_deferred", events)
+        self.assertIn("signup_interaction_placeholder_deleted", events)
+        self.assertIn("signup_response_sent", events)
+
+        sent_call = next(
+            c for c in mock_log.info.call_args_list
+            if c.args[0] == "signup_response_sent"
+        )
+        kwargs = sent_call.kwargs
         self.assertEqual(kwargs["system"], "events")
         self.assertEqual(kwargs["subsystem"], "discord")
         self.assertEqual(kwargs["channel"], "dm")
