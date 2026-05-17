@@ -9,6 +9,7 @@ Routes under test:
 """
 
 from datetime import timedelta
+from itertools import count
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -153,6 +154,61 @@ class BulkUpdateUserAvatarsTest(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
 
+    def test_rejects_non_integer_pk(self):
+        c = APIClient()
+        resp = c.post(
+            "/api/internal/users/avatars/bulk-update/",
+            {"updates": [{"pk": "not_an_int", "avatar": "x"}]},
+            format="json",
+            **HEADERS,
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("pk", resp.json()["error"])
+
+    def test_rejects_bool_pk(self):
+        # bool is a subclass of int in Python — explicitly rejected so
+        # {"pk": True} doesn't silently update pk=1.
+        c = APIClient()
+        resp = c.post(
+            "/api/internal/users/avatars/bulk-update/",
+            {"updates": [{"pk": True, "avatar": "x"}]},
+            format="json",
+            **HEADERS,
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_rejects_non_dict_item(self):
+        c = APIClient()
+        resp = c.post(
+            "/api/internal/users/avatars/bulk-update/",
+            {"updates": ["this is not a dict"]},
+            format="json",
+            **HEADERS,
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_no_partial_writes_on_validation_failure(self):
+        """Validation runs before any bulk_update; a bad item late in the
+        list must not leave earlier items written."""
+        u = CustomUser.objects.create(
+            username="alice", discordId="42", avatar="original"
+        )
+        c = APIClient()
+        resp = c.post(
+            "/api/internal/users/avatars/bulk-update/",
+            {
+                "updates": [
+                    {"pk": u.pk, "avatar": "would_be_new"},
+                    {"pk": "bogus", "avatar": "x"},  # bails here
+                ]
+            },
+            format="json",
+            **HEADERS,
+        )
+        self.assertEqual(resp.status_code, 400)
+        u.refresh_from_db()
+        self.assertEqual(u.avatar, "original")
+
     def test_requires_token(self):
         c = APIClient()
         resp = c.post(
@@ -165,19 +221,20 @@ class BulkUpdateUserAvatarsTest(TestCase):
 
 @override_settings(INTERNAL_SERVICE_TOKEN=TOKEN)
 class SweepStaleDiscordLeasesTest(TestCase):
-    _next_id = 1000  # avoid colliding with other tests; bumped per row to
-    # dodge the partial UniqueConstraint on (source, source_id) WHERE
-    # success IS NOT FALSE.
+    # Each call yields a unique source_id so we dodge the partial
+    # UniqueConstraint on (source, source_id) WHERE success IS NOT FALSE.
+    # Defined as a class attribute (not an instance attr) so every test
+    # method that calls _make_log within the class shares the same counter
+    # but no test ever sees a value from a prior test (the DB rolls back).
+    _ids = count(1000)
 
     def _make_log(self, **kwargs):
         from discordbot.models import DiscordMessageLog
 
-        cls = type(self)
-        cls._next_id += 1
         defaults = {
             "channel_id": "123",
             "source": "event_announcement",
-            "source_id": cls._next_id,
+            "source_id": next(type(self)._ids),
             "embed_data": {"title": "x"},
             "claimed_at": timezone.now(),
         }
@@ -242,6 +299,49 @@ class SweepStaleDiscordLeasesTest(TestCase):
             **HEADERS,
         )
         self.assertEqual(resp.status_code, 400)
+
+    def test_rejects_negative_pending_threshold(self):
+        """Negative threshold would push the cutoff into the future and
+        match every row in the table — must 400."""
+        from discordbot.models import DiscordMessageLog
+
+        # Pre-existing fresh log; must NOT be deleted.
+        log_row = self._make_log(
+            claimed_at=timezone.now(), success=None
+        )
+
+        c = APIClient()
+        resp = c.post(
+            "/api/internal/discord/sweep-stale-leases/",
+            {"pending_threshold_minutes": -5},
+            format="json",
+            **HEADERS,
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertTrue(
+            DiscordMessageLog.objects.filter(pk=log_row.pk).exists()
+        )
+
+    def test_rejects_negative_failed_threshold(self):
+        c = APIClient()
+        resp = c.post(
+            "/api/internal/discord/sweep-stale-leases/",
+            {"failed_threshold_hours": -1},
+            format="json",
+            **HEADERS,
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_accepts_zero_thresholds(self):
+        """Zero is a valid threshold (sweeps anything at-or-before now)."""
+        c = APIClient()
+        resp = c.post(
+            "/api/internal/discord/sweep-stale-leases/",
+            {"pending_threshold_minutes": 0, "failed_threshold_hours": 0},
+            format="json",
+            **HEADERS,
+        )
+        self.assertEqual(resp.status_code, 200)
 
     def test_requires_token(self):
         c = APIClient()

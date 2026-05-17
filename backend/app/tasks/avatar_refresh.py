@@ -11,8 +11,13 @@ import requests
 from celery import shared_task
 
 from app.internal_client import get_users_for_avatar_check, update_user_avatar
+from telemetry.logging import get_logger
 
+# Stdlib `log` is retained for the older per-user tasks in this file that
+# still use printf-style formatting. New code uses `slog` — the project's
+# standard structlog BoundLogger with system/subsystem kwargs.
 log = logging.getLogger(__name__)
+slog = get_logger(__name__)
 
 
 def _is_test_environment():
@@ -162,7 +167,12 @@ def refresh_avatars_batched():
     (`/api/avatars/refresh/`) via a 1-hour cache key set BEFORE dispatch.
     """
     if _is_test_environment():
-        log.info("Skipping batched avatar refresh in test environment")
+        slog.info(
+            "avatars_refresh_skipped",
+            system="avatars",
+            subsystem="refresh",
+            reason="test_environment",
+        )
         return {"checked": 0, "updated": 0, "skipped": True}
 
     # Lazy imports keep the module importable in worker startup paths that
@@ -175,33 +185,53 @@ def refresh_avatars_batched():
     from discordbot.services.users import get_discord_members_data
 
     # Discordful users only — non-Discord-linked accounts can't gain or lose
-    # a Discord avatar.
+    # a Discord avatar. Empty list here means either no Discord-linked users
+    # OR the internal endpoint was unreachable; _get already logs the latter.
     candidate_users = list_discord_linked_users()
     if not candidate_users:
-        log.info("No Discord-linked users to refresh")
+        slog.info(
+            "avatars_refresh_skipped",
+            system="avatars",
+            subsystem="refresh",
+            reason="no_discord_linked_users_or_backend_down",
+        )
         return {"checked": 0, "updated": 0}
 
     guild_ids = list_discord_guild_ids()
     if not guild_ids:
-        log.info("No orgs with discord_server_id; nothing to refresh")
+        slog.info(
+            "avatars_refresh_skipped",
+            system="avatars",
+            subsystem="refresh",
+            reason="no_org_guilds_or_backend_down",
+            candidate_user_count=len(candidate_users),
+        )
         return {"checked": len(candidate_users), "updated": 0}
 
-    log.info(
-        "Refreshing avatars: %d users across %d guilds",
-        len(candidate_users),
-        len(guild_ids),
+    slog.info(
+        "avatars_refresh_started",
+        system="avatars",
+        subsystem="refresh",
+        candidate_user_count=len(candidate_users),
+        guild_count=len(guild_ids),
     )
 
     # Build discord_id → avatar_hash across all guilds. The shared helper
     # already paginates each guild fully and caches the result per-guild;
     # we just consume the cached/fresh member lists here.
     avatar_map: dict[str, str | None] = {}
+    guilds_failed = 0
     for guild_id in guild_ids:
         try:
             members = get_discord_members_data(guild_id=guild_id)
         except Exception as exc:
-            log.warning(
-                "Failed to fetch members for guild %s: %s", guild_id, exc
+            guilds_failed += 1
+            slog.warning(
+                "avatars_guild_fetch_failed",
+                system="avatars",
+                subsystem="refresh",
+                guild_id=guild_id,
+                error=str(exc),
             )
             continue
         for member in members:
@@ -227,11 +257,14 @@ def refresh_avatars_batched():
 
     updated = bulk_update_user_avatars(updates) if updates else 0
 
-    log.info(
-        "Batched avatar refresh complete: checked=%d, updated=%d, guilds=%d",
-        len(candidate_users),
-        updated,
-        len(guild_ids),
+    slog.info(
+        "avatars_refresh_complete",
+        system="avatars",
+        subsystem="refresh",
+        checked=len(candidate_users),
+        updated=updated,
+        guild_count=len(guild_ids),
+        guilds_failed=guilds_failed,
     )
     return {
         "checked": len(candidate_users),
