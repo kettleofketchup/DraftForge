@@ -210,10 +210,7 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       }
     });
 
-    // SKIP REASON: Timing issue - modal appears before reseed completes.
-    // Needs waitForLoadState coordination between reseed dialog close and
-    // next action. The winner selection test above validates core functionality.
-    test.skip('should advance loser to losers bracket after winner selection', async ({
+    test('should advance loser to losers bracket after winner selection', async ({
       page,
     }) => {
       await visitAndWaitForHydration(page, `/tournament/${tournamentPk}/games`);
@@ -221,43 +218,85 @@ test.describe('Bracket Generation and Winner Advancement (e2e)', () => {
       const bracketContainer = page.locator('[data-testid="bracketContainer"]');
       await expect(bracketContainer).toBeVisible({ timeout: 15000 });
 
-      // First, reseed to ensure we have a fresh bracket with loser paths
-      const reseedButton = page.locator('[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]');
+      // Reseed to guarantee a fresh, fully-seeded bracket with loser paths wired.
+      const reseedButton = page.locator(
+        '[data-testid="reseedBracketButton"], [data-testid="generateBracketButton"]'
+      );
       await reseedButton.click();
-      await page.locator('[data-testid="randomSeedingOption"]').click();
 
-      // Confirm if dialog appears
-      const regenerateButton = page.locator('[data-testid="regenerateBracketConfirmButton"]');
-      await regenerateButton.waitFor({ state: 'visible', timeout: 2000 }).catch(() => {});
-      if (await regenerateButton.isVisible().catch(() => false)) {
-        await regenerateButton.click({ force: true });
+      const randomSeeding = page.locator('[data-testid="randomSeedingOption"]');
+      await randomSeeding.waitFor({ state: 'visible', timeout: 5000 });
+      await randomSeeding.click();
+
+      // If the regenerate confirm dialog appears (it does when matches already
+      // exist), wait for and click it. If not, we're on a fresh bracket.
+      const regenerateButton = page.locator(
+        '[data-testid="regenerateBracketConfirmButton"]'
+      );
+      const needsConfirm = await regenerateButton
+        .waitFor({ state: 'visible', timeout: 3000 })
+        .then(() => true)
+        .catch(() => false);
+      if (needsConfirm) {
+        await regenerateButton.click();
+        await regenerateButton.waitFor({ state: 'hidden', timeout: 5000 });
       }
 
-      // Wait for network to settle after regeneration
-      await page.waitForLoadState('networkidle');
+      // Wait for the toolbar to indicate an unsaved, generated bracket.
+      await expect(page.locator('text=Unsaved changes')).toBeVisible({
+        timeout: 10000,
+      });
 
-      // Click on first match
-      const matchNode = page.locator('[data-testid="bracket-match-node"]').first();
-      await matchNode.click({ force: true });
+      // Find the first Winners R1 node — it's guaranteed to have both teams
+      // (first-round assignment) and a wired loser path.
+      const winnersR1 = page.locator(
+        '[data-testid="bracket-match-node"][data-bracket-type="winners"][data-round="1"]'
+      );
+      await expect(winnersR1.first()).toBeVisible({ timeout: 10000 });
 
-      // Wait for modal
+      // Capture team names visible in the losers bracket BEFORE setting a winner.
+      const losersNodesLocator = page.locator(
+        '[data-testid="bracket-match-node"][data-bracket-type="losers"]'
+      );
+      const losersTextBefore = (
+        await losersNodesLocator.allTextContents()
+      ).join('\n');
+
+      // Open the first winners R1 match.
+      await winnersR1.first().click({ force: true });
+
       const dialog = page.locator('[role="dialog"]');
       await expect(dialog).toBeVisible({ timeout: 10000 });
 
-      // If match has Set Winner buttons, click one
-      const winButtons = dialog.locator('[data-testid="radiantWinsButton"], [data-testid="direWinsButton"]');
-      const winButtonCount = await winButtons.count();
+      const radiantWins = dialog.locator('[data-testid="radiantWinsButton"]');
+      const direWins = dialog.locator('[data-testid="direWinsButton"]');
+      await expect(radiantWins).toBeVisible({ timeout: 5000 });
+      await expect(direWins).toBeVisible({ timeout: 5000 });
 
-      if (winButtonCount >= 2) {
-        // Click second button (dire wins, so radiant is loser)
-        await winButtons.nth(1).click({ force: true });
+      // Capture the losing team's display name from the button text
+      // ("<Captain> Wins" → strip the suffix).
+      const direButtonText = (await direWins.textContent())?.trim() ?? '';
+      const losingTeamName = direButtonText.replace(/ Wins$/i, '').trim();
+      expect(losingTeamName.length).toBeGreaterThan(0);
 
-        // The loser should now be in the losers bracket
-        // But we can verify unsaved changes is shown (expect waits for condition)
-        await expect(page.locator('text=Unsaved changes')).toBeVisible();
-      } else {
-        console.log('Match does not have two teams - skipping loser advancement check');
-      }
+      // Set radiant as winner — dire is therefore the loser.
+      await radiantWins.click({ force: true });
+
+      // Close the modal so the bracket re-renders fully.
+      await page.keyboard.press('Escape');
+      await dialog.waitFor({ state: 'hidden', timeout: 5000 });
+
+      // The losing team's display name must now appear in a losers bracket node.
+      // Poll because Zustand state propagation through ReactFlow is async.
+      await expect(async () => {
+        const losersTextAfter = (
+          await losersNodesLocator.allTextContents()
+        ).join('\n');
+        // Sanity: losers bracket DOM should have changed (new team added).
+        expect(losersTextAfter).not.toBe(losersTextBefore);
+        // The specific losing team should now be visible somewhere in losers.
+        expect(losersTextAfter).toContain(losingTeamName);
+      }).toPass({ timeout: 5000 });
     });
   });
 
