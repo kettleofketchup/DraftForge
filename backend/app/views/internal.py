@@ -1100,3 +1100,159 @@ def generate_repeater_events(request, repeater_id):
     except Exception as e:
         logger.exception("Failed to generate events for repeater %s", repeater_id)
         return Response({"error": str(e)}, status=500)
+
+
+# ---------------------------------------------------------------------------
+# Batched avatar refresh (replaces direct ORM in app/tasks/avatar_refresh.py)
+# ---------------------------------------------------------------------------
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def list_discord_linked_users(request):
+    """Return every Discord-linked CustomUser as a flat list.
+
+    Unlike list_users_for_avatar_check (which is paged for per-user
+    refresh), this endpoint exists for the batched refresh task that
+    builds a single discord_id→avatar_hash map in memory. Returns the
+    four fields the task needs (pk, discord_id, avatar, username).
+    """
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    rows = list(
+        User.objects.filter(discordId__isnull=False)
+        .exclude(discordId="")
+        .values("pk", "discordId", "avatar", "username")
+    )
+    return Response(
+        [
+            {
+                "pk": r["pk"],
+                "discord_id": r["discordId"],
+                "avatar": r["avatar"],
+                "username": r["username"],
+            }
+            for r in rows
+        ]
+    )
+
+
+@api_view(["GET"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def list_discord_guild_ids(request):
+    """Return distinct Discord guild IDs across all Organizations.
+
+    Used by batched avatar refresh to know which guilds to call
+    `get_discord_members_data` against.
+    """
+    from app.models import Organization
+
+    # Organization has Meta.ordering — leaving it in the queryset would
+    # add the ordering columns to the SELECT and defeat .distinct().
+    guild_ids = list(
+        Organization.objects.filter(discord_server_id__isnull=False)
+        .exclude(discord_server_id="")
+        .order_by()
+        .values_list("discord_server_id", flat=True)
+        .distinct()
+    )
+    return Response({"guild_ids": guild_ids})
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def bulk_update_user_avatars(request):
+    """Bulk-update avatar hashes by user pk.
+
+    Body: {"updates": [{"pk": <int>, "avatar": <str|null>}, ...]}
+
+    Performs a single bulk_update with batch_size=500 and one
+    invalidate_model(CustomUser) call (bulk_update bypasses signals so
+    cacheops needs an explicit nudge). Returns the count actually
+    written. Empty updates list is a no-op.
+    """
+    from cacheops import invalidate_model
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    updates = request.data.get("updates")
+    if not isinstance(updates, list):
+        return Response(
+            {"error": "updates must be a list of {pk, avatar} objects"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not updates:
+        return Response({"updated": 0})
+
+    to_update = []
+    for item in updates:
+        if not isinstance(item, dict) or "pk" not in item:
+            return Response(
+                {"error": "each update needs a numeric 'pk' field"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        to_update.append(User(pk=item["pk"], avatar=item.get("avatar")))
+
+    User.objects.bulk_update(to_update, ["avatar"], batch_size=500)
+    invalidate_model(User)
+    return Response({"updated": len(to_update)})
+
+
+# ---------------------------------------------------------------------------
+# Discord lease sweeper (replaces direct ORM in discordbot/tasks.py)
+# ---------------------------------------------------------------------------
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def sweep_stale_discord_leases(request):
+    """Reap stuck DiscordMessageLog rows.
+
+    Body (all optional):
+        pending_threshold_minutes: default 5 — NULL-success rows older
+            than this are considered crashed workers, deleted so the
+            next poll can re-claim.
+        failed_threshold_hours: default 1 — success=False rows older
+            than this are considered transiently failed, deleted so the
+            next poll can retry. Admins should investigate via the
+            original log row before it ages out.
+
+    Returns {pending_swept, failed_swept, total}.
+    """
+    from datetime import timedelta
+
+    from discordbot.models import DiscordMessageLog
+
+    try:
+        pending_minutes = int(
+            request.data.get("pending_threshold_minutes", 5)
+        )
+        failed_hours = int(request.data.get("failed_threshold_hours", 1))
+    except (TypeError, ValueError):
+        return Response(
+            {"error": "thresholds must be integers"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    now = tz.now()
+    pending_threshold = now - timedelta(minutes=pending_minutes)
+    failed_threshold = now - timedelta(hours=failed_hours)
+
+    pending_swept, _ = DiscordMessageLog.objects.filter(
+        success__isnull=True, claimed_at__lt=pending_threshold,
+    ).delete()
+    failed_swept, _ = DiscordMessageLog.objects.filter(
+        success=False, claimed_at__lt=failed_threshold,
+    ).delete()
+
+    return Response({
+        "pending_swept": pending_swept,
+        "failed_swept": failed_swept,
+        "total": pending_swept + failed_swept,
+    })

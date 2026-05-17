@@ -85,22 +85,15 @@ def sweep_stale_discord_leases():
 
     The 60-second beat cadence keeps total worker-crash recovery latency
     below ~1.5 min (5min sweep threshold + 30s next poll).
+
+    Both deletes happen server-side via the internal endpoint — the
+    worker stays ORM-free.
     """
-    from django.utils import timezone as tz
+    from app.internal_client import sweep_stale_discord_leases as _sweep_remote
 
-    from discordbot.models import DiscordMessageLog
-
-    now = tz.now()
-    pending_threshold = now - timedelta(minutes=5)
-    failed_threshold = now - timedelta(hours=1)
-
-    pending_swept, _ = DiscordMessageLog.objects.filter(
-        success__isnull=True, claimed_at__lt=pending_threshold,
-    ).delete()
-    failed_swept, _ = DiscordMessageLog.objects.filter(
-        success=False, claimed_at__lt=failed_threshold,
-    ).delete()
-
+    result = _sweep_remote(pending_threshold_minutes=5, failed_threshold_hours=1)
+    pending_swept = result.get("pending_swept", 0)
+    failed_swept = result.get("failed_swept", 0)
     total = pending_swept + failed_swept
     if total:
         log.warning(

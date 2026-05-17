@@ -366,6 +366,7 @@ urlpatterns += [
 
 # Internal API — celery workers and Discord bot (token auth via X-Internal-Token)
 from app.views.internal import (
+    bulk_update_user_avatars,
     check_message_log_exists,
     claim_discord_message_log,
     clear_event_signup_state,
@@ -389,8 +390,11 @@ from app.views.internal import (
     get_sync_discord_state,
     get_tournament_for_task,
     get_tournament_participants,
+    list_discord_guild_ids,
+    list_discord_linked_users,
     list_users_for_avatar_check,
     search_message_logs,
+    sweep_stale_discord_leases,
     transition_event_state,
     update_discord_event,
     update_event_dm,
@@ -465,6 +469,28 @@ urlpatterns += [
     # User avatar management
     path("api/internal/users/avatar-check/", list_users_for_avatar_check),
     path("api/internal/users/<int:pk>/avatar/", update_user_avatar),
+    # Batched avatar refresh (worker → backend via internal_client)
+    path(
+        "api/internal/users/discord-linked/",
+        list_discord_linked_users,
+        name="internal_list_discord_linked_users",
+    ),
+    path(
+        "api/internal/orgs/discord-guild-ids/",
+        list_discord_guild_ids,
+        name="internal_list_discord_guild_ids",
+    ),
+    path(
+        "api/internal/users/avatars/bulk-update/",
+        bulk_update_user_avatars,
+        name="internal_bulk_update_user_avatars",
+    ),
+    # Discord lease sweeper (worker → backend via internal_client)
+    path(
+        "api/internal/discord/sweep-stale-leases/",
+        sweep_stale_discord_leases,
+        name="internal_sweep_stale_discord_leases",
+    ),
 ]
 
 # Internal API — Steam sync endpoints
