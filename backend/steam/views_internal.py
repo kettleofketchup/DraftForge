@@ -3,8 +3,6 @@
 All endpoints require InternalServiceAuth (X-Internal-Token header).
 """
 
-import logging
-
 from django.utils import timezone
 from rest_framework.decorators import (
     api_view,
@@ -16,8 +14,9 @@ from rest_framework.response import Response
 
 from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
+from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 _auth = [InternalServiceAuth]
 _perm = [IsInternalService]
@@ -72,7 +71,15 @@ def store_match(request):
 
     data = request.data
     match_id = data.get("match_id")
+    league_id = data.get("league_id")
     if not match_id:
+        log.warning(
+            "steam_store_match_rejected",
+            system="steam",
+            subsystem="ingest",
+            reason="missing_match_id",
+            league_id=league_id,
+        )
         return Response({"error": "match_id is required"}, status=400)
 
     # Create or update the Match record
@@ -84,16 +91,18 @@ def store_match(request):
             "start_time": data["start_time"],
             "game_mode": data["game_mode"],
             "lobby_type": data["lobby_type"],
-            "league_id": data.get("league_id"),
+            "league_id": league_id,
         },
     )
 
     players_stored = 0
     players_linked = 0
+    players_skipped_no_account = 0
 
     for player in data.get("players", []):
         account_id = player.get("account_id")
         if not account_id:
+            players_skipped_no_account += 1
             continue
 
         steam_id_64 = account_id + STEAM_ID_64_BASE
@@ -129,6 +138,18 @@ def store_match(request):
         players_stored += 1
 
     invalidate_after_commit(match)
+
+    log.info(
+        "steam_match_ingested",
+        system="steam",
+        subsystem="ingest",
+        match_id=match_id,
+        league_id=league_id,
+        created=created,
+        players_stored=players_stored,
+        players_linked=players_linked,
+        players_skipped_no_account=players_skipped_no_account,
+    )
 
     return Response(
         {
