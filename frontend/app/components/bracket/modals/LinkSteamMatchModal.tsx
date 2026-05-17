@@ -41,9 +41,9 @@ const TIER_STYLES: Record<string, { bg: string; border: string; text: string }> 
     text: 'text-yellow-400',
   },
   partial: {
-    bg: 'bg-gray-500/20',
-    border: 'border-gray-500',
-    text: 'text-gray-400',
+    bg: 'bg-muted',
+    border: 'border-border',
+    text: 'text-muted-foreground',
   },
 };
 

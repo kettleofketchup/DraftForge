@@ -229,7 +229,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
                 onClick={handleUnsetWinner}
                 data-testid="unsetWinnerButton"
               >
-                <RotateCcw className="w-4 h-4 mr-1" />
+                <RotateCcw className="size-4 mr-1" />
                 Unset Winner
               </SecondaryButton>
             </div>
@@ -275,9 +275,9 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
                       data-testid="view-draft-btn"
                     >
                       {createDraftMutation.isPending ? (
-                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                        <Loader2 className="size-4 mr-1 animate-spin" />
                       ) : (
-                        <Swords className="w-4 h-4 mr-1" />
+                        <Swords className="size-4 mr-1" />
                       )}
                       {match.herodraft_id ? 'View Draft' : 'Start Draft'}
                     </PrimaryButton>
@@ -289,9 +289,9 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
                       data-testid="reset-draft-btn"
                     >
                       {resetDraftMutation.isPending ? (
-                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                        <Loader2 className="size-4 mr-1 animate-spin" />
                       ) : (
-                        <RotateCcw className="w-4 h-4 mr-1" />
+                        <RotateCcw className="size-4 mr-1" />
                       )}
                       Restart Draft
                     </SecondaryButton>
@@ -319,7 +319,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
                     size="sm"
                     onClick={() => setShowStatsModal(true)}
                   >
-                    <BarChart3 className="w-4 h-4 mr-1" />
+                    <BarChart3 className="size-4 mr-1" />
                     View Stats
                   </SecondaryButton>
                 )}
@@ -335,7 +335,7 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
                 onClick={() => setShowLinkModal(true)}
                 data-testid="link-steam-match-btn"
               >
-                <Link2 className="w-4 h-4 mr-1" />
+                <Link2 className="size-4 mr-1" />
                 {match.steamMatchId
                   ? `Linked: Match #${match.steamMatchId}`
                   : 'Link Steam Match'}

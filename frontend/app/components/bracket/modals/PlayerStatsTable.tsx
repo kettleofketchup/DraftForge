@@ -110,7 +110,7 @@ export function PlayerStatsTable({
                 <img
                   src={getHeroIcon(player.hero_id)}
                   alt={getHeroName(player.hero_id)}
-                  className="w-9 h-9 rounded"
+                  className="size-9 rounded"
                   title={getHeroName(player.hero_id)}
                 />
               </TableCell>

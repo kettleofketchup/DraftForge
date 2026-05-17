@@ -218,7 +218,7 @@ export function BracketToolbar({
         <AlertDialogContent className="bg-red-950/95 border-red-800">
           <AlertDialogHeader>
             <AlertDialogTitle>Reset Bracket?</AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-300">
+            <AlertDialogDescription className="text-muted-foreground">
               This will clear all matches. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
