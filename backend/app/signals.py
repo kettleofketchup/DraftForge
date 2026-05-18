@@ -263,6 +263,7 @@ def reset_herodraft_on_team_change(sender, instance, **kwargs):
     # written yet (we're in pre_save), so the new IDs live on `instance`,
     # not in the DB. Match prior assignments to new slots by the prior
     # tournament_team_id.
+    updated_draft_teams = []
     for dt in DraftTeam.objects.filter(draft=draft):
         if dt.tournament_team_id == prior.radiant_team_id:
             new_team_id = instance.radiant_team_id
@@ -277,8 +278,12 @@ def reset_herodraft_on_team_change(sender, instance, **kwargs):
         dt.is_connected = False
         dt.reserve_time_remaining = 90000
         dt.save()
+        updated_draft_teams.append(dt)
 
-    # Wipe picks/bans — they belong to the wrong captain.
+    # Wipe picks/bans — they belong to the wrong captain. `app.herodraftround`
+    # is NOT in CACHEOPS so the bulk delete doesn't need cache invalidation
+    # of its own; the parent HeroDraft invalidation below covers any
+    # consumer that re-prefetches rounds.
     HeroDraftRound.objects.filter(draft=draft).delete()
 
     # Reset HeroDraft scheduling fields and state. Keep HeroDraftEvent rows
@@ -289,6 +294,17 @@ def reset_herodraft_on_team_change(sender, instance, **kwargs):
     draft.resuming_until = None
     draft.is_manual_pause = False
     draft.save()
+
+    # Re-invalidate AFTER commit. The .save() calls above already invalidate
+    # via Model.save() → invalidate_obj, but those fire immediately while
+    # save_bracket's @transaction.atomic is still open — between the
+    # immediate invalidate and the commit, a concurrent reader could pull
+    # the pre-update rows from the DB and re-cache them with the old
+    # captains, defeating the whole reset. `invalidate_after_commit` schedules
+    # a second invalidation on transaction.on_commit to close that race.
+    from app.cache_utils import invalidate_after_commit
+
+    invalidate_after_commit(draft, *updated_draft_teams)
 
     _broadcast_draft_event(draft.pk, "draft_reset", instance.pk)
 
