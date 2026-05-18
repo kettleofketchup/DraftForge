@@ -6,11 +6,12 @@ Handles:
 - Team deletion when last member is removed
 - Cascade removal from tournament.users to team.members
 - Auto-add tournament users to organization and league
+- Purge stale HeroDraft when a Game's teams change (issue #235)
 """
 
 import logging
 
-from django.db.models.signals import m2m_changed
+from django.db.models.signals import m2m_changed, pre_save
 from django.dispatch import receiver
 
 log = logging.getLogger(__name__)
@@ -170,3 +171,64 @@ def handle_tournament_user_addition(sender, instance, action, pk_set, **kwargs):
                 f"Created LeagueUser for {user.username} in league {league.name} "
                 f"(via tournament {tournament.name})"
             )
+
+
+@receiver(pre_save, sender="app.Game")
+def purge_stale_herodraft_on_team_change(sender, instance, **kwargs):
+    """Issue #235: bracket reset leaves stale HeroDraft with old captains.
+
+    A HeroDraft holds its captains via DraftTeam.tournament_team, captured
+    at draft-creation time. When the underlying Game's radiant_team or
+    dire_team is rewritten — by ``save_bracket`` (full bracket re-save) or
+    ``advance_winner`` (re-advancing a different winner into a downstream
+    match) — the Game's teams change but the DraftTeam rows still point at
+    the *previous* teams. The draft UI then renders the wrong captains and
+    no client reload recovers it.
+
+    Catch every team-mutation path in one place: just before Game.save()
+    commits, compare the new (radiant_team_id, dire_team_id) against what
+    is still in the DB. If either changed, delete the dependent HeroDraft
+    (and its DraftTeam / HeroDraftRound / HeroDraftEvent rows via FK
+    cascade). The next request to start a draft on that Game rebuilds a
+    clean one from the current teams.
+
+    Why this can't be preserved across the team change: any picks/bans
+    made before the change were made by the *wrong* captain, so carrying
+    them over is worse than starting fresh.
+    """
+    if not instance.pk:
+        return
+
+    try:
+        prior = sender.objects.only("radiant_team_id", "dire_team_id").get(
+            pk=instance.pk
+        )
+    except sender.DoesNotExist:
+        return
+
+    if (
+        prior.radiant_team_id == instance.radiant_team_id
+        and prior.dire_team_id == instance.dire_team_id
+    ):
+        return
+
+    from app.models import HeroDraft
+
+    draft = HeroDraft.objects.filter(game_id=instance.pk).first()
+    if not draft:
+        return
+
+    log.info(
+        "herodraft_purged_on_team_change",
+        extra={
+            "system": "bracket",
+            "subsystem": "herodraft",
+            "game_id": instance.pk,
+            "herodraft_id": draft.pk,
+            "prior_radiant_team_id": prior.radiant_team_id,
+            "new_radiant_team_id": instance.radiant_team_id,
+            "prior_dire_team_id": prior.dire_team_id,
+            "new_dire_team_id": instance.dire_team_id,
+        },
+    )
+    draft.delete()
