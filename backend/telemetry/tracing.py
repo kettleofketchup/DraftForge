@@ -122,11 +122,15 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
                 resp = super()._export(serialized_data, timeout_sec)
                 if 400 <= resp.status_code < 500:
                     body = (resp.text or "")[:1000].replace("\x00", "?")
-                    _log.error(
-                        "OTLP metric export rejected: %s %s — body=%r",
-                        resp.status_code,
-                        resp.reason,
-                        body,
+                    from telemetry.logging import get_logger
+
+                    get_logger(__name__).error(
+                        "otlp_metric_export_rejected",
+                        system="telemetry",
+                        subsystem="otlp",
+                        status_code=resp.status_code,
+                        reason=resp.reason,
+                        body=body,
                     )
                 return resp
 
