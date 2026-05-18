@@ -37,6 +37,7 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `avatars` | `single` | `app/tasks/avatar_refresh.py::refresh_single_user_avatar` + helpers | Single-user refresh: Discord API fetch + per-user `update_user_avatar` |
 | `avatars` | `legacy` | `app/tasks/avatar_refresh.py::refresh_discord_avatars` / `refresh_all_discord_data` | Older per-user fanout tasks (predates the batched path) |
 | `discord` | `lease` | `discordbot/tasks.py`, `app/views/internal.py` | DiscordMessageLog stale-lease sweep (pending NULL >5min, failed >1h) |
+| `cache` | `invalidate` | `app/cache_utils.py` | Per-object cacheops invalidation fired from `transaction.on_commit` |
 
 Add new systems/subsystems as features grow. Keep systems coarse (feature area), subsystems functional (what role the code plays).
 
