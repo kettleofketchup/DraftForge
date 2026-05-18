@@ -174,7 +174,7 @@ def handle_tournament_user_addition(sender, instance, action, pk_set, **kwargs):
 
 
 @receiver(pre_save, sender="app.Game")
-def purge_stale_herodraft_on_team_change(sender, instance, **kwargs):
+def reset_herodraft_on_team_change(sender, instance, **kwargs):
     """Issue #235: bracket reset leaves stale HeroDraft with old captains.
 
     A HeroDraft holds its captains via DraftTeam.tournament_team, captured
@@ -187,14 +187,29 @@ def purge_stale_herodraft_on_team_change(sender, instance, **kwargs):
 
     Catch every team-mutation path in one place: just before Game.save()
     commits, compare the new (radiant_team_id, dire_team_id) against what
-    is still in the DB. If either changed, delete the dependent HeroDraft
-    (and its DraftTeam / HeroDraftRound / HeroDraftEvent rows via FK
-    cascade). The next request to start a draft on that Game rebuilds a
-    clean one from the current teams.
+    is still in the DB. If either changed and the game has a HeroDraft,
+    reset the draft **in place**:
 
-    Why this can't be preserved across the team change: any picks/bans
-    made before the change were made by the *wrong* captain, so carrying
-    them over is worse than starting fresh.
+      - Repoint each DraftTeam.tournament_team at the Game's new team so
+        captains resolve correctly.
+      - Wipe HeroDraftRound rows (the picks/bans were made by the *wrong*
+        captain — carrying them over is worse than starting fresh).
+      - Reset DraftTeam state (is_ready / is_connected / reserve_time) and
+        HeroDraft scheduling fields (roll_winner / paused_at / resuming_until /
+        is_manual_pause) back to defaults, transition to
+        WAITING_FOR_CAPTAINS.
+      - Keep HeroDraftEvent rows — they're the audit trail of the wrong
+        setup; clearing them would hide that it ever happened.
+
+    The HeroDraft PK is preserved, so any external reference (the Discord-
+    posted /herodraft/{pk}/ link from notify_herodraft_created, etc.)
+    keeps working after the reset.
+
+    Edge case — Game slot cleared to NULL: DraftTeam.tournament_team is
+    non-nullable, so the in-place reset can't repoint to None. Fall back
+    to deleting the HeroDraft. When the bracket is re-saved with real
+    teams create_herodraft rebuilds; the Discord link 404s in this narrow
+    window.
     """
     if not instance.pk:
         return
@@ -212,14 +227,20 @@ def purge_stale_herodraft_on_team_change(sender, instance, **kwargs):
     ):
         return
 
-    from app.models import HeroDraft
+    from app.models import DraftTeam, HeroDraft, HeroDraftRound, HeroDraftState
 
     draft = HeroDraft.objects.filter(game_id=instance.pk).first()
     if not draft:
         return
 
+    teams_cleared = (
+        instance.radiant_team_id is None or instance.dire_team_id is None
+    )
+
     log.info(
-        "herodraft_purged_on_team_change",
+        "herodraft_deleted_on_team_cleared"
+        if teams_cleared
+        else "herodraft_reset_on_team_change",
         extra={
             "system": "bracket",
             "subsystem": "herodraft",
@@ -231,4 +252,76 @@ def purge_stale_herodraft_on_team_change(sender, instance, **kwargs):
             "new_dire_team_id": instance.dire_team_id,
         },
     )
-    draft.delete()
+
+    if teams_cleared:
+        draft_pk = draft.pk
+        draft.delete()
+        _broadcast_draft_event(draft_pk, "draft_invalidated", instance.pk)
+        return
+
+    # Repoint DraftTeams at the Game's new teams. The Game row hasn't been
+    # written yet (we're in pre_save), so the new IDs live on `instance`,
+    # not in the DB. Match prior assignments to new slots by the prior
+    # tournament_team_id.
+    for dt in DraftTeam.objects.filter(draft=draft):
+        if dt.tournament_team_id == prior.radiant_team_id:
+            new_team_id = instance.radiant_team_id
+        elif dt.tournament_team_id == prior.dire_team_id:
+            new_team_id = instance.dire_team_id
+        else:
+            # Shouldn't happen — DraftTeam.tournament_team should always
+            # match one of the Game's two teams. Skip rather than crash.
+            continue
+        dt.tournament_team_id = new_team_id
+        dt.is_ready = False
+        dt.is_connected = False
+        dt.reserve_time_remaining = 90000
+        dt.save()
+
+    # Wipe picks/bans — they belong to the wrong captain.
+    HeroDraftRound.objects.filter(draft=draft).delete()
+
+    # Reset HeroDraft scheduling fields and state. Keep HeroDraftEvent rows
+    # as the audit trail.
+    draft.state = HeroDraftState.WAITING_FOR_CAPTAINS
+    draft.roll_winner = None
+    draft.paused_at = None
+    draft.resuming_until = None
+    draft.is_manual_pause = False
+    draft.save()
+
+    _broadcast_draft_event(draft.pk, "draft_reset", instance.pk)
+
+
+def _broadcast_draft_event(draft_pk, event_type, game_id):
+    """Send a HeroDraftConsumer event to the draft's channel group.
+
+    Best-effort: a missing channel layer (tests, fallback to in-memory)
+    or send failure must NOT raise — the data-integrity guarantees are
+    the row updates that already committed, not the broadcast.
+    """
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+        async_to_sync(channel_layer.group_send)(
+            f"herodraft_{draft_pk}",
+            {
+                "type": "herodraft.event",
+                "event_type": event_type,
+                "event_id": None,
+                "draft_team": None,
+                "metadata": {
+                    "reason": "teams_changed",
+                    "game_id": game_id,
+                },
+                "timestamp": None,
+            },
+        )
+    except Exception as exc:
+        log.warning(
+            f"Failed to broadcast {event_type} for HeroDraft {draft_pk}: {exc}"
+        )
