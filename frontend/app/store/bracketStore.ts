@@ -246,7 +246,24 @@ export const useBracketStore = create<BracketStore>()((set, get) => ({
 
   unsetMatchWinner: (matchId) => {
     const match = get().matches.find((m) => m.id === matchId);
-    if (!match?.winner) return;
+    if (!match) return;
+
+    // Recovery case: the row is in status=completed but no winner can be
+    // derived (the backend's winning_team FK no longer matches either
+    // current team — e.g. teams changed after the winner was set).
+    // We don't know which downstream slots to clear, so just reset this
+    // row's status; admin can re-enter the winner from a clean state.
+    if (!match.winner) {
+      if (match.status !== 'completed') return;
+      log.debug('Unsetting match status (no derivable winner)', { matchId });
+      set((state) => ({
+        matches: state.matches.map((m) =>
+          m.id === matchId ? { ...m, status: 'pending' as const } : m
+        ),
+        isDirty: true,
+      }));
+      return;
+    }
 
     const winningTeam = match.winner === 'radiant' ? match.radiantTeam : match.direTeam;
     const losingTeam = match.winner === 'radiant' ? match.direTeam : match.radiantTeam;
