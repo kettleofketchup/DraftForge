@@ -600,6 +600,22 @@ class Tournament(models.Model):
             return []
         return self.users.filter(teams_as_captain__tournament=self).distinct()
 
+    @property
+    def effective_steam_league_id(self):
+        """Resolved Steam league ID for match-linking purposes.
+
+        Prefers the tournament's own `steam_league_id` (one-off override),
+        otherwise falls back to the parent League's. Most tournaments
+        belong to a League and don't set their own override, so callers
+        looking up Steam matches should use this instead of the raw
+        `steam_league_id` field to avoid empty results.
+        """
+        if self.steam_league_id:
+            return self.steam_league_id
+        if self.league_id and self.league:
+            return self.league.steam_league_id
+        return None
+
 
 class Team(models.Model):
     tournament = models.ForeignKey(

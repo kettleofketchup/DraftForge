@@ -2,10 +2,11 @@ from datetime import date
 
 from django.test import TestCase
 
-from app.models import CustomUser, Game, Team, Tournament
+from app.models import CustomUser, Game, League, Team, Tournament
 from steam.models import Match, PlayerMatchStats, SuggestionTier
 from steam.services.match_suggestions import (
     calculate_suggestion_tier,
+    get_match_suggestions_for_game,
     get_team_steam_ids,
 )
 
@@ -197,3 +198,121 @@ class CalculateSuggestionTierTest(TestCase):
             self.match, all_team_steam_ids, radiant_captain_id, dire_captain_id
         )
         self.assertEqual(tier, SuggestionTier.PARTIAL)
+
+
+class TournamentEffectiveSteamLeagueIdTest(TestCase):
+    """Tournament.effective_steam_league_id resolves through (tournament → league)."""
+
+    def test_uses_tournament_override_when_set(self):
+        league = League.objects.create(name="L", steam_league_id=19571)
+        tournament = Tournament.objects.create(
+            name="T",
+            date_played=date(2024, 1, 15),
+            league=league,
+            steam_league_id=99999,
+        )
+        self.assertEqual(tournament.effective_steam_league_id, 99999)
+
+    def test_falls_back_to_parent_league(self):
+        league = League.objects.create(name="L", steam_league_id=19571)
+        tournament = Tournament.objects.create(
+            name="T",
+            date_played=date(2024, 1, 15),
+            league=league,
+            steam_league_id=None,
+        )
+        self.assertEqual(tournament.effective_steam_league_id, 19571)
+
+    def test_returns_none_when_neither_set(self):
+        league = League.objects.create(name="L", steam_league_id=None)
+        tournament = Tournament.objects.create(
+            name="T",
+            date_played=date(2024, 1, 15),
+            league=league,
+        )
+        self.assertIsNone(tournament.effective_steam_league_id)
+
+    def test_returns_none_when_no_parent_league(self):
+        tournament = Tournament.objects.create(
+            name="T",
+            date_played=date(2024, 1, 15),
+        )
+        self.assertIsNone(tournament.effective_steam_league_id)
+
+
+class GetMatchSuggestionsFallbackTest(TestCase):
+    """get_match_suggestions_for_game finds matches via League.steam_league_id
+    even when Tournament.steam_league_id is null — regression for the case
+    where a tournament inherits its league from the parent."""
+
+    def setUp(self):
+        self.league = League.objects.create(name="DTX", steam_league_id=19571)
+        # Tournament with NO own steam_league_id — should fall back to the league
+        self.tournament = Tournament.objects.create(
+            name="DTX Turbo Tourney",
+            date_played=date(2024, 1, 15),
+            league=self.league,
+            steam_league_id=None,
+        )
+        self.radiant_captain = CustomUser.objects.create(
+            username="rcap",
+            discordId="100000000000000001",
+            steamid=76561198000000001,
+        )
+        self.dire_captain = CustomUser.objects.create(
+            username="dcap",
+            discordId="100000000000000002",
+            steamid=76561198000000002,
+        )
+        self.team1 = Team.objects.create(
+            tournament=self.tournament, name="R", captain=self.radiant_captain
+        )
+        self.team1.members.set([self.radiant_captain])
+        self.team2 = Team.objects.create(
+            tournament=self.tournament, name="D", captain=self.dire_captain
+        )
+        self.team2.members.set([self.dire_captain])
+        self.game = Game.objects.create(
+            tournament=self.tournament,
+            radiant_team=self.team1,
+            dire_team=self.team2,
+        )
+
+    def _create_match(self, match_id, league_id):
+        return Match.objects.create(
+            match_id=match_id,
+            radiant_win=True,
+            duration=2000,
+            start_time=1704567890,
+            game_mode=22,
+            lobby_type=1,
+            league_id=league_id,
+        )
+
+    def test_finds_matches_via_parent_league_steam_id(self):
+        self._create_match(match_id=1, league_id=19571)  # matches via fallback
+        self._create_match(match_id=2, league_id=12345)  # different league, skipped
+
+        suggestions = get_match_suggestions_for_game(self.game)
+
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]["match_id"], 1)
+
+    def test_returns_empty_when_neither_field_set(self):
+        self.tournament.league = None
+        self.tournament.save()
+        self._create_match(match_id=1, league_id=19571)
+
+        suggestions = get_match_suggestions_for_game(self.game)
+        self.assertEqual(suggestions, [])
+
+    def test_tournament_override_wins_over_league(self):
+        # Override pins suggestion lookup to the explicit id, not the league's
+        self.tournament.steam_league_id = 88888
+        self.tournament.save()
+        self._create_match(match_id=1, league_id=19571)  # ignored — league's id
+        self._create_match(match_id=2, league_id=88888)  # used — tournament's id
+
+        suggestions = get_match_suggestions_for_game(self.game)
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]["match_id"], 2)
