@@ -87,6 +87,15 @@ inv db.migrate.test      # Test environment only
 inv db.populate.all      # Reset and populate test DB
 ```
 
+**Adding a new Django app:** `inv db.migrate.*` runs
+`python manage.py makemigrations <apps>` with an explicit app list
+defined at `backend/tasks.py::apps` (it does NOT auto-discover from
+`INSTALLED_APPS`). When you scaffold a new app, append it there too —
+otherwise `makemigrations` silently skips it. Reference impl:
+the `user` app entry in
+`backend/tasks.py:27`. Registering in `settings.INSTALLED_APPS`
+covers `migrate` but not `makemigrations` in this project.
+
 ### Testing (Docker - Recommended)
 
 Avoid Redis hanging issues by running tests in Docker:
