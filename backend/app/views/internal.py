@@ -8,8 +8,6 @@ defers until commit when called inside @transaction.atomic.
 Field whitelists on update endpoints prevent unintended field modifications.
 """
 
-import logging
-
 from django.utils import timezone as tz
 from rest_framework import status
 from rest_framework.decorators import (
@@ -23,10 +21,6 @@ from app.auth import InternalServiceAuth, IsInternalService
 from app.cache_utils import invalidate_after_commit
 from telemetry.logging import get_logger
 
-# `logger` is the file's pre-existing stdlib handle, kept so we don't churn
-# unrelated endpoints in this PR. `log` is the project-standard structlog
-# BoundLogger used by everything new — system/subsystem kwargs go through it.
-logger = logging.getLogger(__name__)
 log = get_logger(__name__)
 
 _auth = [InternalServiceAuth]
@@ -652,11 +646,13 @@ def clear_event_signup_state(request):
     event_id = request.data["event_id"]
 
     result = clear_signup_dedup_state(event_id)
-    logger.info(
-        "Cleared signup dedup state for event %s (signups_changed=%s, logs_changed=%s)",
-        event_id,
-        result["signup_rows_cleared"],
-        result["message_log_rows_cleared"],
+    log.info(
+        "events_signup_dedup_cleared",
+        system="events",
+        subsystem="discord",
+        event_id=event_id,
+        signups_changed=result["signup_rows_cleared"],
+        logs_changed=result["message_log_rows_cleared"],
     )
     return Response({"event_id": event_id, **result})
 
@@ -1103,7 +1099,13 @@ def generate_repeater_events(request, repeater_id):
         events = generate_events_for_repeater(repeater)
         return Response({"created_count": len(events)})
     except Exception as e:
-        logger.exception("Failed to generate events for repeater %s", repeater_id)
+        log.exception(
+            "events_repeater_generate_failed",
+            system="events",
+            subsystem="scheduling",
+            repeater_id=repeater_id,
+            error=str(e),
+        )
         return Response({"error": str(e)}, status=500)
 
 

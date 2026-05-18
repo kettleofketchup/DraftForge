@@ -1,17 +1,13 @@
 # backend/discordbot/tasks.py
 """Celery tasks for Discord bot scheduled operations."""
 
-import logging
 from datetime import datetime, timedelta
 
 from celery import shared_task
 
 from telemetry.logging import get_logger
 
-# `log` keeps the printf-style stdlib formatting used by check_scheduled_events.
-# `slog` is the project-standard structlog BoundLogger for new code.
-log = logging.getLogger(__name__)
-slog = get_logger(__name__)
+log = get_logger(__name__)
 
 
 @shared_task
@@ -30,7 +26,13 @@ def check_scheduled_events():
 
     for se in due_events:
         tpl = se.template
-        log.info(f"Posting scheduled event: {tpl.name}")
+        log.info(
+            "scheduled_event_posting",
+            system="events",
+            subsystem="scheduling",
+            scheduled_event_id=se.pk,
+            template=tpl.name,
+        )
 
         # Build embed from template data (same fields as event_announcement_embed)
         color = int(tpl.color.lstrip("#"), 16) if tpl.color else 0x7289DA
@@ -54,9 +56,22 @@ def check_scheduled_events():
             if tpl.include_rsvp:
                 sync_add_reactions(tpl.channel_id, message_id)
 
-            log.info(f"Posted event {tpl.name}, message_id={message_id}")
+            log.info(
+                "scheduled_event_posted",
+                system="events",
+                subsystem="scheduling",
+                scheduled_event_id=se.pk,
+                template=tpl.name,
+                message_id=message_id,
+            )
         else:
-            log.error(f"Failed to post event {tpl.name}")
+            log.error(
+                "scheduled_event_post_failed",
+                system="events",
+                subsystem="scheduling",
+                scheduled_event_id=se.pk,
+                template=tpl.name,
+            )
             continue
 
         # Update via internal API
@@ -67,7 +82,14 @@ def check_scheduled_events():
                 discord_message_id=None,
                 next_post_at=dt.isoformat(),
             )
-            log.info(f"Rescheduled recurring event {tpl.name} to {dt.isoformat()}")
+            log.info(
+                "scheduled_event_recurrence_set",
+                system="events",
+                subsystem="scheduling",
+                scheduled_event_id=se.pk,
+                template=tpl.name,
+                next_post_at=dt.isoformat(),
+            )
         else:
             update_scheduled_event(se.pk, discord_message_id=message_id)
         processed += 1
@@ -103,7 +125,7 @@ def sweep_stale_discord_leases():
     failed_swept = result.get("failed_swept", 0)
     total = pending_swept + failed_swept
     if total:
-        slog.warning(
+        log.warning(
             "discord_leases_swept",
             system="discord",
             subsystem="lease",

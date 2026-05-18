@@ -4,7 +4,6 @@ Uses internal API for all database access. Discord CDN/API calls
 are made directly from the worker since they're external HTTP calls.
 """
 
-import logging
 import os
 
 import requests
@@ -13,11 +12,7 @@ from celery import shared_task
 from app.internal_client import get_users_for_avatar_check, update_user_avatar
 from telemetry.logging import get_logger
 
-# Stdlib `log` is retained for the older per-user tasks in this file that
-# still use printf-style formatting. New code uses `slog` — the project's
-# standard structlog BoundLogger with system/subsystem kwargs.
-log = logging.getLogger(__name__)
-slog = get_logger(__name__)
+log = get_logger(__name__)
 
 
 def _is_test_environment():
@@ -49,7 +44,13 @@ def _fetch_discord_avatar(discord_id):
         if resp.status_code == 200:
             return resp.json().get("avatar")
     except requests.RequestException as e:
-        log.error(f"Discord API error for {discord_id}: {e}")
+        log.error(
+            "avatars_discord_api_failed",
+            system="avatars",
+            subsystem="single",
+            discord_id=discord_id,
+            error=str(e),
+        )
     return None
 
 
@@ -77,10 +78,22 @@ def _check_and_update_user(user):
 
     resp = update_user_avatar(pk, new_avatar)
     if resp and resp.ok:
-        log.info(f"Updated avatar for user {user['username']} (pk={pk})")
+        log.info(
+            "avatars_single_updated",
+            system="avatars",
+            subsystem="single",
+            user_id=pk,
+            username=user["username"],
+        )
         return True
 
-    log.error(f"Failed to update avatar for user {user['username']} (pk={pk})")
+    log.error(
+        "avatars_single_update_failed",
+        system="avatars",
+        subsystem="single",
+        user_id=pk,
+        username=user["username"],
+    )
     return False
 
 
@@ -92,10 +105,20 @@ def refresh_discord_avatars(batch_size: int = 100):
     Runs periodically via Celery Beat.
     """
     if _is_test_environment():
-        log.info("Skipping Discord avatar refresh in test environment")
+        log.info(
+            "avatars_legacy_skipped",
+            system="avatars",
+            subsystem="legacy",
+            reason="test_environment",
+        )
         return {"checked": 0, "updated": 0, "failed": 0, "skipped": True}
 
-    log.info(f"Starting Discord avatar refresh (batch_size={batch_size})")
+    log.info(
+        "avatars_legacy_started",
+        system="avatars",
+        subsystem="legacy",
+        batch_size=batch_size,
+    )
 
     users = get_users_for_avatar_check(has_avatar=True, limit=batch_size)
     checked = 0
@@ -109,10 +132,21 @@ def refresh_discord_avatars(batch_size: int = 100):
                 updated += 1
         except Exception as e:
             failed += 1
-            log.error(f"Error refreshing avatar for user {user['username']}: {e}")
+            log.error(
+                "avatars_legacy_user_failed",
+                system="avatars",
+                subsystem="legacy",
+                username=user["username"],
+                error=str(e),
+            )
 
     log.info(
-        f"Avatar refresh complete: checked={checked}, updated={updated}, failed={failed}"
+        "avatars_legacy_complete",
+        system="avatars",
+        subsystem="legacy",
+        checked=checked,
+        updated=updated,
+        failed=failed,
     )
     return {"checked": checked, "updated": updated, "failed": failed}
 
@@ -167,7 +201,7 @@ def refresh_avatars_batched():
     (`/api/avatars/refresh/`) via a 1-hour cache key set BEFORE dispatch.
     """
     if _is_test_environment():
-        slog.info(
+        log.info(
             "avatars_refresh_skipped",
             system="avatars",
             subsystem="refresh",
@@ -189,7 +223,7 @@ def refresh_avatars_batched():
     # OR the internal endpoint was unreachable; _get already logs the latter.
     candidate_users = list_discord_linked_users()
     if not candidate_users:
-        slog.info(
+        log.info(
             "avatars_refresh_skipped",
             system="avatars",
             subsystem="refresh",
@@ -199,7 +233,7 @@ def refresh_avatars_batched():
 
     guild_ids = list_discord_guild_ids()
     if not guild_ids:
-        slog.info(
+        log.info(
             "avatars_refresh_skipped",
             system="avatars",
             subsystem="refresh",
@@ -208,7 +242,7 @@ def refresh_avatars_batched():
         )
         return {"checked": len(candidate_users), "updated": 0}
 
-    slog.info(
+    log.info(
         "avatars_refresh_started",
         system="avatars",
         subsystem="refresh",
@@ -226,7 +260,7 @@ def refresh_avatars_batched():
             members = get_discord_members_data(guild_id=guild_id)
         except Exception as exc:
             guilds_failed += 1
-            slog.warning(
+            log.warning(
                 "avatars_guild_fetch_failed",
                 system="avatars",
                 subsystem="refresh",
@@ -257,7 +291,7 @@ def refresh_avatars_batched():
 
     updated = bulk_update_user_avatars(updates) if updates else 0
 
-    slog.info(
+    log.info(
         "avatars_refresh_complete",
         system="avatars",
         subsystem="refresh",
@@ -280,7 +314,12 @@ def refresh_all_discord_data():
     Iterates through all users with Discord IDs in batches.
     """
     if _is_test_environment():
-        log.info("Skipping full Discord data refresh in test environment")
+        log.info(
+            "avatars_full_skipped",
+            system="avatars",
+            subsystem="legacy",
+            reason="test_environment",
+        )
         return {"checked": 0, "updated": 0, "failed": 0, "skipped": True}
 
     batch_size = 50
@@ -288,7 +327,12 @@ def refresh_all_discord_data():
     total_updated = 0
     total_failed = 0
 
-    log.info("Starting full Discord data refresh")
+    log.info(
+        "avatars_full_started",
+        system="avatars",
+        subsystem="legacy",
+        batch_size=batch_size,
+    )
 
     # Fetch all users once, paginated
     offset = 0
@@ -300,7 +344,12 @@ def refresh_all_discord_data():
         all_users.extend(batch)
         offset += batch_size
 
-    log.info(f"Found {len(all_users)} users with Discord IDs")
+    log.info(
+        "avatars_full_user_count",
+        system="avatars",
+        subsystem="legacy",
+        user_count=len(all_users),
+    )
 
     for user in all_users:
         try:
@@ -309,14 +358,30 @@ def refresh_all_discord_data():
                 total_updated += 1
         except Exception as e:
             total_failed += 1
-            log.error(f"Error refreshing Discord data for user {user['username']}: {e}")
+            log.error(
+                "avatars_full_user_failed",
+                system="avatars",
+                subsystem="legacy",
+                username=user["username"],
+                error=str(e),
+            )
 
         if total_checked % 50 == 0:
-            log.debug(f"Processed {total_checked}/{len(all_users)} users")
+            log.debug(
+                "avatars_full_progress",
+                system="avatars",
+                subsystem="legacy",
+                processed=total_checked,
+                total=len(all_users),
+            )
 
     log.info(
-        f"Full Discord refresh complete: checked={total_checked}, "
-        f"updated={total_updated}, failed={total_failed}"
+        "avatars_full_complete",
+        system="avatars",
+        subsystem="legacy",
+        checked=total_checked,
+        updated=total_updated,
+        failed=total_failed,
     )
     return {
         "checked": total_checked,
