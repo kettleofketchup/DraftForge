@@ -59,8 +59,7 @@ def get_match_suggestions_for_game(game: Game, search: str | None = None) -> lis
         return []
 
     tournament = game.tournament
-    league_id = tournament.effective_steam_league_id
-
+    league_id = tournament.linked_steam_league_id
     if not league_id:
         return []
 

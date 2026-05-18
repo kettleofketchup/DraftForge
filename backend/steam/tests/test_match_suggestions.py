@@ -200,10 +200,21 @@ class CalculateSuggestionTierTest(TestCase):
         self.assertEqual(tier, SuggestionTier.PARTIAL)
 
 
-class TournamentEffectiveSteamLeagueIdTest(TestCase):
-    """Tournament.effective_steam_league_id resolves through (tournament → league)."""
+class TournamentLinkedSteamLeagueIdTest(TestCase):
+    """Tournament.linked_steam_league_id resolves through the League FK."""
 
-    def test_uses_tournament_override_when_set(self):
+    def test_returns_league_steam_id(self):
+        league = League.objects.create(name="L", steam_league_id=19571)
+        tournament = Tournament.objects.create(
+            name="T",
+            date_played=date(2024, 1, 15),
+            league=league,
+        )
+        self.assertEqual(tournament.linked_steam_league_id, 19571)
+
+    def test_legacy_tournament_field_is_ignored(self):
+        # Tournament.steam_league_id is the legacy field slated for removal;
+        # the property reads only from the parent League.
         league = League.objects.create(name="L", steam_league_id=19571)
         tournament = Tournament.objects.create(
             name="T",
@@ -211,33 +222,23 @@ class TournamentEffectiveSteamLeagueIdTest(TestCase):
             league=league,
             steam_league_id=99999,
         )
-        self.assertEqual(tournament.effective_steam_league_id, 99999)
+        self.assertEqual(tournament.linked_steam_league_id, 19571)
 
-    def test_falls_back_to_parent_league(self):
-        league = League.objects.create(name="L", steam_league_id=19571)
-        tournament = Tournament.objects.create(
-            name="T",
-            date_played=date(2024, 1, 15),
-            league=league,
-            steam_league_id=None,
-        )
-        self.assertEqual(tournament.effective_steam_league_id, 19571)
-
-    def test_returns_none_when_neither_set(self):
+    def test_returns_none_when_league_steam_id_unset(self):
         league = League.objects.create(name="L", steam_league_id=None)
         tournament = Tournament.objects.create(
             name="T",
             date_played=date(2024, 1, 15),
             league=league,
         )
-        self.assertIsNone(tournament.effective_steam_league_id)
+        self.assertIsNone(tournament.linked_steam_league_id)
 
     def test_returns_none_when_no_parent_league(self):
         tournament = Tournament.objects.create(
             name="T",
             date_played=date(2024, 1, 15),
         )
-        self.assertIsNone(tournament.effective_steam_league_id)
+        self.assertIsNone(tournament.linked_steam_league_id)
 
 
 class GetMatchSuggestionsFallbackTest(TestCase):
@@ -306,13 +307,14 @@ class GetMatchSuggestionsFallbackTest(TestCase):
         suggestions = get_match_suggestions_for_game(self.game)
         self.assertEqual(suggestions, [])
 
-    def test_tournament_override_wins_over_league(self):
-        # Override pins suggestion lookup to the explicit id, not the league's
+    def test_legacy_tournament_field_does_not_override_league(self):
+        # The legacy Tournament.steam_league_id field is ignored — only the
+        # parent League's id matters.
         self.tournament.steam_league_id = 88888
         self.tournament.save()
-        self._create_match(match_id=1, league_id=19571)  # ignored — league's id
-        self._create_match(match_id=2, league_id=88888)  # used — tournament's id
+        self._create_match(match_id=1, league_id=19571)  # via league — used
+        self._create_match(match_id=2, league_id=88888)  # legacy field — ignored
 
         suggestions = get_match_suggestions_for_game(self.game)
         self.assertEqual(len(suggestions), 1)
-        self.assertEqual(suggestions[0]["match_id"], 2)
+        self.assertEqual(suggestions[0]["match_id"], 1)

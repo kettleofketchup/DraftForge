@@ -366,9 +366,8 @@ def auto_assign_matches_by_time(tournament_id, preview=True, min_overlap=4):
         "start_time__gte": start_timestamp,
         "start_time__lte": end_timestamp,
     }
-    effective_league_id = tournament.effective_steam_league_id
-    if effective_league_id:
-        match_filter["league_id"] = effective_league_id
+    if tournament.linked_steam_league_id:
+        match_filter["league_id"] = tournament.linked_steam_league_id
 
     # Exclude already linked matches
     linked_match_ids = set(
