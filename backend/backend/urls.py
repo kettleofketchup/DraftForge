@@ -366,7 +366,6 @@ urlpatterns += [
 
 # Internal API — celery workers and Discord bot (token auth via X-Internal-Token)
 from app.views.internal import (
-    bulk_update_user_avatars,
     check_message_log_exists,
     claim_discord_message_log,
     clear_event_signup_state,
@@ -390,8 +389,6 @@ from app.views.internal import (
     get_sync_discord_state,
     get_tournament_for_task,
     get_tournament_participants,
-    list_discord_guild_ids,
-    list_discord_linked_users,
     list_users_for_avatar_check,
     search_message_logs,
     sweep_stale_discord_leases,
@@ -401,6 +398,11 @@ from app.views.internal import (
     update_scheduled_event,
     update_tournament_log,
     update_user_avatar,
+)
+from user.internal.avatar import (
+    bulk_update_user_avatars,
+    list_discord_guild_ids,
+    list_discord_linked_users,
 )
 
 urlpatterns += [
