@@ -27,6 +27,7 @@ from .test_auth import (
     reset_tournament_by_key,
     sync_discord_events_test,
 )
+from .test_bracket import force_mismatched_winning_team
 from .test_csv import reset_csv_import
 from .test_demo import generate_demo_bracket, get_demo_tournament, reset_demo_tournament
 from .test_health import healthz
@@ -243,4 +244,10 @@ urlpatterns = [
         name="test-demo-get",
     ),
     path("healthz/", healthz, name="test-healthz"),
+    # Bracket scenario helpers (gated on TEST=true)
+    path(
+        "bracket/force-mismatched-winning-team/",
+        force_mismatched_winning_team,
+        name="test-bracket-force-mismatched-winning-team",
+    ),
 ]

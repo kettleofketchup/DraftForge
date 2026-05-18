@@ -68,6 +68,7 @@ export const MatchNode = memo(({ data, selected }: NodeProps & { data: MatchNode
       data-bracket-type={data.bracketType}
       data-round={data.round}
       data-position={data.position}
+      data-game-pk={data.gameId ?? ''}
       className={cn(
         'w-52 cursor-pointer transition-all relative',
         bracketStyle.bg,
@@ -103,6 +104,7 @@ export const MatchNode = memo(({ data, selected }: NodeProps & { data: MatchNode
           score={data.radiantScore}
           isWinner={data.winner === 'radiant'}
           isCompleted={data.status === 'completed'}
+          slot="radiant"
         />
         <div className="border-t my-1" />
         <TeamSlot
@@ -110,6 +112,7 @@ export const MatchNode = memo(({ data, selected }: NodeProps & { data: MatchNode
           score={data.direScore}
           isWinner={data.winner === 'dire'}
           isCompleted={data.status === 'completed'}
+          slot="dire"
         />
       </BaseNodeContent>
 
@@ -131,12 +134,17 @@ interface TeamSlotProps {
   score?: number;
   isWinner: boolean;
   isCompleted: boolean;
+  slot: 'radiant' | 'dire';
 }
 
-function TeamSlot({ team, score, isWinner, isCompleted }: TeamSlotProps) {
+function TeamSlot({ team, score, isWinner, isCompleted, slot }: TeamSlotProps) {
   if (!team) {
     return (
-      <div className="flex items-center gap-2 p-1.5 rounded bg-muted/50">
+      <div
+        className="flex items-center gap-2 p-1.5 rounded bg-muted/50"
+        data-testid={`bracket-team-slot-${slot}`}
+        data-team-status="empty"
+      >
         <div className="h-6 w-6 rounded-full bg-muted" />
         <span className="text-xs text-muted-foreground italic">TBD</span>
       </div>
@@ -155,6 +163,9 @@ function TeamSlot({ team, score, isWinner, isCompleted }: TeamSlotProps) {
         isWinner && isCompleted && 'bg-green-500/10',
         !isWinner && isCompleted && 'opacity-50'
       )}
+      data-testid={`bracket-team-slot-${slot}`}
+      data-team-status={isCompleted ? (isWinner ? 'winner' : 'loser') : 'pending'}
+      data-team-pk={team.pk}
     >
       {/* Captain avatar */}
       <Avatar className="h-6 w-6">
@@ -188,7 +199,14 @@ function TeamSlot({ team, score, isWinner, isCompleted }: TeamSlotProps) {
       )}
 
       {/* Winner indicator */}
-      {isWinner && isCompleted && <span className="text-green-500">&#x2713;</span>}
+      {isWinner && isCompleted && (
+        <span
+          className="text-green-500"
+          data-testid={`bracket-winner-check-${slot}`}
+        >
+          &#x2713;
+        </span>
+      )}
     </div>
   );
 }

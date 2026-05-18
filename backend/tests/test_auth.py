@@ -747,6 +747,10 @@ def reset_tournament_by_key(request, key: str):
         "shuffle_tie_resolution": lambda: __import__(
             "tests.populate.shuffle_tie", fromlist=["populate_shuffle_tie_data"]
         ).populate_shuffle_tie_data(force=True),
+        "bracket_unset_winner": lambda: __import__(
+            "tests.populate.bracket",
+            fromlist=["populate_bracket_unset_winner_tournament"],
+        ).populate_bracket_unset_winner_tournament(force=True),
     }
 
     reset_fn = RESET_FUNCTIONS.get(key)

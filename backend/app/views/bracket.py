@@ -205,6 +205,20 @@ def save_bracket(request, tournament_id):
             dire_team["pk"] if dire_team and dire_team.get("pk") else None
         )
 
+        # Persist the winning team from the FE's `winner` field
+        # ('radiant' | 'dire' | None). Without this, clicking "Set Winner"
+        # in the match modal and then Save would store status='completed'
+        # but leave winning_team=NULL — mapApiMatchToMatch can't derive
+        # match.winner on reload, the bracket card loses its green check,
+        # and the row goes "stuck" (covered by issue #235).
+        winner_slot = match.get("winner")
+        if winner_slot == "radiant":
+            game.winning_team_id = game.radiant_team_id
+        elif winner_slot == "dire":
+            game.winning_team_id = game.dire_team_id
+        else:
+            game.winning_team_id = None
+
         # Clear next_game/loser_next_game before pass 2 rewires them
         game.next_game = None
         game.loser_next_game = None
