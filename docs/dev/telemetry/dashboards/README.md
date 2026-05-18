@@ -8,25 +8,39 @@ JSON models for DraftForge Grafana Cloud dashboards. Import into Grafana via
 File: [`subsystem-logs.json`](subsystem-logs.json)
 UID: `draftforge-subsystem-logs`
 
-Structure: **one overview row + one repeating row per system**. Grafana
-fans out the repeating row automatically — pick 3 systems in the
-template var, you get 3 rows; pick all 8, you get 8.
+Structure: **overview row + one collapsed row per system in the taxonomy +
+JSON parse errors row at the bottom**.
 
-**Overview row** (always at top, never repeats):
+The per-system rows are *static* — one row per system in the canonical
+taxonomy (`avatars`, `bracket`, `cache`, `discord`, `events`,
+`herodraft`, `steam`, `telemetry`, `tournament`, `websocket`).
+Earlier versions used `repeat: "system"` over a template variable but
+that made the row labelled `system: All` whenever the variable's query
+returned nothing — fragile. Static rows render no matter what the data
+looks like; expand the system you care about, leave the rest folded.
+
+**Overview row** (always at top, never collapsed):
 
 | Panel | Type | Purpose |
 |-------|------|---------|
-| Subsystem inventory | table | Every `(system, subsystem)` tuple seen in range, with event count. Discovers newly-shipped and silently-dropped subsystems. |
+| Subsystem inventory | table | Every `(system, subsystem)` tuple seen in range. Discovers newly-shipped and silently-dropped subsystems. |
+| Top error messages | table | Top 20 `(event, system, subsystem)` tuples at `level=~"warning\|error"`. The list everyone should be looking at during incident triage. |
 | Log rate by system | timeseries (stacked) | Cross-system view of activity. |
 | Warn + error rate by system | timeseries (bars) | Cross-system incident scan. |
 
-**Repeating row** — title `system: $system`, generated once per selected system:
+**Per-system rows** — one collapsed row per known system, each containing:
 
 | Panel | Type | Purpose |
 |-------|------|---------|
-| `$system` — log rate by subsystem | timeseries (stacked) | Hot vs flatlined subsystems within this system. |
-| `$system` — warn + error rate by subsystem | timeseries (bars) | Errors and warnings within this system. |
-| `$system` — recent logs | logs | Live tail filtered to this system. |
+| `<system>` — log rate by subsystem | timeseries (stacked) | Hot vs flatlined subsystems within this system. |
+| `<system>` — warn + error rate by subsystem | timeseries (bars) | Errors and warnings within this system. |
+| `<system>` — recent logs | logs | Live tail filtered to `system="<name>"`. Respects the global subsystem and level filters. |
+
+To add a new system row, edit
+`docs/dev/telemetry/dashboards/gen_dashboard.py` — append the system
+name to the `SYSTEMS` list and re-run the script. Keeping the JSON
+generated-from-script lets us avoid hand-editing 30 panel blobs in
+sync every time the taxonomy grows.
 
 Template variables (cascade left to right):
 
