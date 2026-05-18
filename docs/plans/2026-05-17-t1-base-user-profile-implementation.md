@@ -2,9 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Land the BaseUserProfile layer end-to-end — new `users` Django app, model, data migration moving `nickname`/`avatar` off `CustomUser`, transitional setter properties on `CustomUser` so populate fixtures keep working unchanged, layered profile API endpoints with structlog logging, frontend `userProfileEntityAdapter` scaffold, and a new tabbed Edit Profile modal whose Base tab edits the new fields via shadcn Form + Zod + `useMutation` + `<ErrorBoundary>`/`<Suspense>` + `useSuspenseQuery`.
+**Goal:** Land the BaseUserProfile layer end-to-end — extend the existing `user` Django app (created in commit `1ceeb9f9`) with the `BaseUserProfile` model, data migration moving `nickname`/`avatar` off `CustomUser`, transitional setter properties on `CustomUser` so populate fixtures keep working unchanged, layered profile API endpoints with structlog logging, frontend `userProfileEntityAdapter` scaffold, and a new tabbed Edit Profile modal whose Base tab edits the new fields via shadcn Form + Zod + `useMutation` + `<ErrorBoundary>`/`<Suspense>` + `useSuspenseQuery`.
 
-**Architecture:** Vertical slice per spec `2026-05-17-user-profile-entity-adapter-epic-design.md` §T1. New `backend/users/` Django app holds `BaseUserProfile` (OneToOne FK → `app.CustomUser`). Data migration creates one row per existing user, copies `nickname`+`avatar`, drops the columns from `CustomUser`. `CustomUser.nickname` / `.avatar` become transitional read/write proxy properties so populate helpers and any incidental writers keep working. Frontend grows `userProfileStore.ts` mirroring `userCacheStore.ts`. New `EditProfileModal.tsx` + sibling `EditProfileModal/` directory uses `<ErrorBoundary>` → `<Suspense>` → `useSuspenseQuery` to fetch; PATCH uses `useMutation` with `onSuccess` dual-write to `userAdapter` + `queryClient.invalidateQueries`. Old `EditProfileModal.tsx` content replaced atomically.
+**Architecture:** Vertical slice per spec `2026-05-17-user-profile-entity-adapter-epic-design.md` §T1. The existing `backend/user/` Django app gains `BaseUserProfile` (OneToOne FK → `app.CustomUser`). Data migration creates one row per existing user, copies `nickname`+`avatar`, drops the columns from `CustomUser`. `CustomUser.nickname` / `.avatar` become transitional read/write proxy properties so populate helpers and any incidental writers keep working. Frontend grows `userProfileStore.ts` mirroring `userCacheStore.ts`. New `EditProfileModal.tsx` + sibling `EditProfileModal/` directory uses `<ErrorBoundary>` → `<Suspense>` → `useSuspenseQuery` to fetch; PATCH uses `useMutation` with `onSuccess` dual-write to `userAdapter` + `queryClient.invalidateQueries`. Old `EditProfileModal.tsx` content replaced atomically.
+
+**Pre-existing state (from commit `1ceeb9f9`, assumed merged to the T1 branch base):**
+- `backend/user/` exists with `apps.py` (`UserConfig`), `__init__.py`, `internal/avatar.py` (avatar-related internal views moved from `backend/app/views/internal.py`), and `migrations/`.
+- `user.apps.UserConfig` is already in `INSTALLED_APPS` (`backend/backend/settings.py`).
+- `backend/tasks.py` `db_makemigrations` already includes `"user"` in its app tuple.
+- T1 extends this: adds `models.py`, `admin.py`, `serializers.py`, `views.py` (new file separate from `user/internal/avatar.py`), `urls.py`, `migrations/`, `tests/`. Task 1 validates the baseline and wires what's missing rather than scaffolding from scratch.
 
 **Tech Stack:** Django 5 + DRF + django-cacheops + structlog on the backend; React 19 + Vite + Zustand + TanStack Query 5.90 + shadcn Form + react-hook-form + Zod + sonner on the frontend; Playwright for E2E; Vitest for FE unit tests.
 
@@ -16,31 +22,31 @@
 
 ### Backend — new files
 
-- `backend/users/__init__.py`
-- `backend/users/apps.py` — `UsersConfig`
-- `backend/users/models.py` — `BaseUserProfile`
-- `backend/users/admin.py` — `BaseUserProfileAdmin`
-- `backend/users/serializers.py` — `BaseUserProfileSerializer`, `UserProfileLayeredSerializer`
-- `backend/users/views.py` — `MeProfileView`, `MeProfileBasePatchView`
-- `backend/users/urls.py` — `/api/users/me/profile/*` URL conf
-- `backend/users/migrations/0001_initial.py` — auto-generated
-- `backend/users/migrations/0002_backfill_base_profiles.py` — data migration (RunPython)
-- `backend/users/tests/__init__.py`
-- `backend/users/tests/test_app_registration.py`
-- `backend/users/tests/test_models.py`
-- `backend/users/tests/test_auto_create.py`
-- `backend/users/tests/test_migration.py`
-- `backend/users/tests/test_transitional_setters.py`
-- `backend/users/tests/test_serializers.py`
-- `backend/users/tests/test_views.py`
-- `backend/users/tests/test_cacheops.py`
+- `backend/user/__init__.py`
+- `backend/user/apps.py` — `UsersConfig`
+- `backend/user/models.py` — `BaseUserProfile`
+- `backend/user/admin.py` — `BaseUserProfileAdmin`
+- `backend/user/serializers.py` — `BaseUserProfileSerializer`, `UserProfileLayeredSerializer`
+- `backend/user/views.py` — `MeProfileView`, `MeProfileBasePatchView`
+- `backend/user/urls.py` — `/api/users/me/profile/*` URL conf
+- `backend/user/migrations/0001_initial.py` — auto-generated
+- `backend/user/migrations/0002_backfill_base_profiles.py` — data migration (RunPython)
+- `backend/user/tests/__init__.py`
+- `backend/user/tests/test_app_registration.py`
+- `backend/user/tests/test_models.py`
+- `backend/user/tests/test_auto_create.py`
+- `backend/user/tests/test_migration.py`
+- `backend/user/tests/test_transitional_setters.py`
+- `backend/user/tests/test_serializers.py`
+- `backend/user/tests/test_views.py`
+- `backend/user/tests/test_cacheops.py`
 
 ### Backend — modified files
 
-- `backend/backend/settings.py` — `INSTALLED_APPS` += `users.apps.UsersConfig`; `CACHEOPS` += `users.baseuserprofile`.
-- `backend/backend/urls.py` — `path("api/users/", include("users.urls"))`.
+- `backend/backend/settings.py` — `INSTALLED_APPS` += `user.apps.UserConfig`; `CACHEOPS` += `user.baseuserprofile`.
+- `backend/backend/urls.py` — `path("api/users/", include("user.urls"))`.
 - `backend/app/models.py:92-140` (`CustomUser`): drop `nickname` + `avatar` field declarations; add transitional `nickname`/`avatar` `@property` (getter + setter both proxy to `base_profile`, setter calls `invalidate_after_commit`); extend `save()` to auto-create `BaseUserProfile`.
-- `backend/app/migrations/00XX_drop_user_nickname_avatar.py` — depends on `users.0002`; removes the columns.
+- `backend/app/migrations/00XX_drop_user_nickname_avatar.py` — depends on `user.0002`; removes the columns.
 - `backend/app/views_main.py` — every `@cached_as(...)` site that ships `nickname`/`avatar` gains a `BaseUserProfile` dep.
 - `backend/app/functions/tournament.py:456` — same `@cached_as` update.
 - `backend/app/serializers.py` — every user-identity serializer sources `nickname`/`avatar` from `base_profile`.
@@ -70,15 +76,36 @@
 
 ---
 
-## Task 1 — Create `users` Django app skeleton
+## Task 1 — Validate `user` Django app baseline + wire profile URL routes
+
+The `user` app already exists from commit `1ceeb9f9` (registered in `INSTALLED_APPS` as `user.apps.UserConfig`, with `backend/user/internal/avatar.py`). T1 extends it. This task validates the baseline, fills in any missing stub files for downstream tasks, and wires the profile URL include (which is NOT yet present — `1ceeb9f9` only wired the avatar internal endpoints separately).
 
 **Files:**
-- Create: `backend/users/__init__.py`, `backend/users/apps.py`, `backend/users/urls.py`, `backend/users/views.py`, `backend/users/models.py`, `backend/users/admin.py`, `backend/users/tests/__init__.py`, `backend/users/tests/test_app_registration.py`
-- Modify: `backend/backend/settings.py`, `backend/backend/urls.py`
+- Verify / create as missing: `backend/user/__init__.py`, `backend/user/apps.py`, `backend/user/models.py`, `backend/user/admin.py`, `backend/user/views.py`, `backend/user/urls.py`, `backend/user/tests/__init__.py`
+- Create: `backend/user/tests/test_app_registration.py`
+- Modify: `backend/backend/urls.py` (add the profile URL include)
 
-- [ ] **Step 1: Write a failing test for app registration**
+- [ ] **Step 1: Verify the baseline**
 
-Create `backend/users/tests/test_app_registration.py`:
+```bash
+ls -la backend/user/
+cat backend/user/apps.py 2>/dev/null || echo "apps.py MISSING — Step 3 recreates"
+cat backend/user/__init__.py 2>/dev/null || echo "__init__.py MISSING — Step 3 recreates"
+grep -n "user.apps.UserConfig" backend/backend/settings.py
+grep -n 'include("user.urls")' backend/backend/urls.py || echo "URL include NOT yet wired — Step 5 adds it"
+```
+
+Expected:
+- `backend/user/` directory exists.
+- `apps.py` exists with `class UserConfig(AppConfig)` and `name = "user"`. (If missing, Step 3 creates it.)
+- `user.apps.UserConfig` already in `INSTALLED_APPS` (one match).
+- `include("user.urls")` likely NOT yet wired (zero matches) — Step 5 adds it.
+
+- [ ] **Step 2: Write the baseline test**
+
+Create `backend/user/tests/__init__.py` (empty) if it doesn't exist.
+
+Create `backend/user/tests/test_app_registration.py`:
 
 ```python
 from django.apps import apps
@@ -86,13 +113,13 @@ from django.test import SimpleTestCase
 from django.urls import resolve
 
 
-class UsersAppRegistrationTests(SimpleTestCase):
+class UserAppRegistrationTests(SimpleTestCase):
     def test_app_is_installed(self):
-        assert apps.is_installed("users")
+        assert apps.is_installed("user")
 
     def test_app_config_name(self):
-        config = apps.get_app_config("users")
-        assert config.name == "users"
+        config = apps.get_app_config("user")
+        assert config.name == "user"
 
     def test_placeholder_url_resolves(self):
         # Placeholder URL until Task 8 lands the real views.
@@ -100,40 +127,46 @@ class UsersAppRegistrationTests(SimpleTestCase):
         assert match.url_name == "me-profile-ping"
 ```
 
-- [ ] **Step 2: Run test, expect failure**
+- [ ] **Step 3: Run test, expect partial failure**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_app_registration -v 2'
+just test::run 'python manage.py test user.tests.test_app_registration -v 2'
 ```
 
-Expected: `ModuleNotFoundError: No module named 'users'`.
+Expected: `test_app_is_installed` and `test_app_config_name` pass (app already registered by `1ceeb9f9`). `test_placeholder_url_resolves` fails with `Resolver404` — URL include not yet wired.
 
-- [ ] **Step 3: Scaffold the app**
+If `apps.py` or `__init__.py` were reported missing in Step 1, those tests fail too. Create them now:
 
-`backend/users/__init__.py` (empty).
+`backend/user/__init__.py` (empty file).
 
-`backend/users/apps.py`:
+`backend/user/apps.py`:
 ```python
 from django.apps import AppConfig
 
 
-class UsersConfig(AppConfig):
+class UserConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "users"
-    verbose_name = "Users (profile layer)"
+    name = "user"
+    verbose_name = "User (profile layer)"
 ```
 
-`backend/users/models.py` (empty — Task 2 adds the model):
+Skip this sub-step if both files exist.
+
+- [ ] **Step 4: Create stub files for Tasks 2/7/8**
+
+These let downstream tasks add real content without "module not found" surprises. Skip any file that already exists (do NOT overwrite existing content from `1ceeb9f9`).
+
+`backend/user/models.py`:
 ```python
 # BaseUserProfile lands in Task 2.
 ```
 
-`backend/users/admin.py` (empty — Task 2 adds the admin):
+`backend/user/admin.py`:
 ```python
 # Admin registration lands in Task 2.
 ```
 
-`backend/users/views.py`:
+`backend/user/views.py` (do NOT confuse with `backend/user/internal/avatar.py` — this file is for the public profile views from Task 8):
 ```python
 from django.http import JsonResponse
 
@@ -143,7 +176,7 @@ def ping(request):
     return JsonResponse({"ok": True})
 ```
 
-`backend/users/urls.py`:
+`backend/user/urls.py` — if this file does NOT exist yet, create it:
 ```python
 from django.urls import path
 
@@ -154,45 +187,36 @@ urlpatterns = [
 ]
 ```
 
-`backend/users/tests/__init__.py` (empty).
+If `backend/user/urls.py` already exists (e.g. wires the avatar internal endpoints), do NOT overwrite. Instead, APPEND the `path("me/profile/ping/", ...)` entry to the existing `urlpatterns` list and the corresponding `from .views import ping` import.
 
-- [ ] **Step 4: Register the app and URL include**
+- [ ] **Step 5: Wire the URL include**
 
-`backend/backend/settings.py` — find the `INSTALLED_APPS` list and add `"users.apps.UsersConfig"` after `"events.apps.EventsConfig"`:
-
-```python
-INSTALLED_APPS = [
-    # ... existing ...
-    "events.apps.EventsConfig",
-    "users.apps.UsersConfig",
-    "cacheops",
-]
-```
-
-`backend/backend/urls.py` — add the include alongside other `path(...)` entries:
+`backend/backend/urls.py` — add the include alongside other top-level `path(...)` entries:
 
 ```python
 urlpatterns = [
     # ... existing ...
-    path("api/users/", include("users.urls")),
+    path("api/users/", include("user.urls")),
 ]
 ```
 
-`include` is already imported in `urls.py` — verify it's in the import line.
+Verify `include` is in the imports (`from django.urls import include, path`).
 
-- [ ] **Step 5: Run tests, expect pass**
+NOTE: the avatar internal endpoints from `1ceeb9f9` were wired separately at a different URL path; this include is for the public profile API.
+
+- [ ] **Step 6: Run tests, expect pass**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_app_registration -v 2'
+just test::run 'python manage.py test user.tests.test_app_registration -v 2'
 ```
 
 Expected: 3 tests pass.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add backend/users/ backend/backend/settings.py backend/backend/urls.py
-git commit -m "feat(users): scaffold users Django app + URL include"
+git add backend/user/ backend/backend/urls.py
+git commit -m "feat(user): baseline test + wire profile URL include"
 ```
 
 ---
@@ -200,19 +224,19 @@ git commit -m "feat(users): scaffold users Django app + URL include"
 ## Task 2 — `BaseUserProfile` model + admin + initial migration
 
 **Files:**
-- Modify: `backend/users/models.py`, `backend/users/admin.py`
-- Create: `backend/users/migrations/0001_initial.py` (auto-generated), `backend/users/tests/test_models.py`
+- Modify: `backend/user/models.py`, `backend/user/admin.py`
+- Create: `backend/user/migrations/0001_initial.py` (auto-generated), `backend/user/tests/test_models.py`
 
 - [ ] **Step 1: Write failing model tests**
 
-Create `backend/users/tests/test_models.py`:
+Create `backend/user/tests/test_models.py`:
 
 ```python
 from django.db import IntegrityError
 from django.test import TestCase
 
 from app.models import CustomUser
-from users.models import BaseUserProfile
+from user.models import BaseUserProfile
 
 
 class BaseUserProfileModelTests(TestCase):
@@ -255,14 +279,14 @@ class BaseUserProfileModelTests(TestCase):
 - [ ] **Step 2: Run tests, expect failure**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_models -v 2'
+just test::run 'python manage.py test user.tests.test_models -v 2'
 ```
 
 Expected: `ImportError: cannot import name 'BaseUserProfile'`.
 
 - [ ] **Step 3: Implement the model**
 
-`backend/users/models.py`:
+`backend/user/models.py`:
 ```python
 from cacheops import invalidate_obj
 from django.db import models
@@ -299,7 +323,7 @@ class BaseUserProfile(models.Model):
 
 - [ ] **Step 4: Register the admin**
 
-`backend/users/admin.py`:
+`backend/user/admin.py`:
 ```python
 from django.contrib import admin
 
@@ -316,16 +340,16 @@ class BaseUserProfileAdmin(admin.ModelAdmin):
 - [ ] **Step 5: Generate the migration**
 
 ```bash
-just db::makemigrations users
+just db::makemigrations user
 ```
 
-Verify `backend/users/migrations/0001_initial.py` is created.
+Verify `backend/user/migrations/0001_initial.py` is created.
 
 - [ ] **Step 6: Run tests, expect pass**
 
 ```bash
 just db::migrate::test
-just test::run 'python manage.py test users.tests.test_models -v 2'
+just test::run 'python manage.py test user.tests.test_models -v 2'
 ```
 
 Expected: 4 tests pass.
@@ -333,8 +357,8 @@ Expected: 4 tests pass.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add backend/users/models.py backend/users/admin.py backend/users/migrations/0001_initial.py backend/users/tests/test_models.py
-git commit -m "feat(users): BaseUserProfile model + admin + initial migration"
+git add backend/user/models.py backend/user/admin.py backend/user/migrations/0001_initial.py backend/user/tests/test_models.py
+git commit -m "feat(user): BaseUserProfile model + admin + initial migration"
 ```
 
 ---
@@ -343,17 +367,17 @@ git commit -m "feat(users): BaseUserProfile model + admin + initial migration"
 
 **Files:**
 - Modify: `backend/app/models.py:141-160` (`CustomUser.save()`)
-- Create: `backend/users/tests/test_auto_create.py`
+- Create: `backend/user/tests/test_auto_create.py`
 
 - [ ] **Step 1: Write failing tests**
 
-Create `backend/users/tests/test_auto_create.py`:
+Create `backend/user/tests/test_auto_create.py`:
 
 ```python
 from django.test import TestCase
 
 from app.models import CustomUser
-from users.models import BaseUserProfile
+from user.models import BaseUserProfile
 
 
 class CustomUserAutoCreateTests(TestCase):
@@ -372,7 +396,7 @@ class CustomUserAutoCreateTests(TestCase):
 - [ ] **Step 2: Run test, expect failure**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_auto_create -v 2'
+just test::run 'python manage.py test user.tests.test_auto_create -v 2'
 ```
 
 Expected: `BaseUserProfile.DoesNotExist` or similar.
@@ -394,15 +418,15 @@ def save(self, *args, **kwargs):
     super().save(*args, **kwargs)
 
     # Auto-create BaseUserProfile if missing. Idempotent via get_or_create.
-    # Local import avoids the circular: users.models -> app.CustomUser.
-    from users.models import BaseUserProfile
+    # Local import avoids the circular: user.models -> app.CustomUser.
+    from user.models import BaseUserProfile
     BaseUserProfile.objects.get_or_create(user=self)
 ```
 
 - [ ] **Step 4: Run tests, expect pass**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_auto_create -v 2'
+just test::run 'python manage.py test user.tests.test_auto_create -v 2'
 ```
 
 Expected: 2 tests pass.
@@ -410,8 +434,8 @@ Expected: 2 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/app/models.py backend/users/tests/test_auto_create.py
-git commit -m "feat(users): auto-create BaseUserProfile on CustomUser.save()"
+git add backend/app/models.py backend/user/tests/test_auto_create.py
+git commit -m "feat(user): auto-create BaseUserProfile on CustomUser.save()"
 ```
 
 ---
@@ -419,7 +443,7 @@ git commit -m "feat(users): auto-create BaseUserProfile on CustomUser.save()"
 ## Task 4 — Data migration: copy `nickname`/`avatar` to `BaseUserProfile`
 
 **Files:**
-- Create: `backend/users/migrations/0002_backfill_base_profiles.py`, `backend/users/tests/test_migration.py`
+- Create: `backend/user/migrations/0002_backfill_base_profiles.py`, `backend/user/tests/test_migration.py`
 - Modify: `pyproject.toml`
 
 - [ ] **Step 1: Add `django-test-migrations` to poetry dev deps**
@@ -438,7 +462,7 @@ just test::setup
 
 - [ ] **Step 2: Write failing migration test**
 
-Create `backend/users/tests/test_migration.py`:
+Create `backend/user/tests/test_migration.py`:
 
 ```python
 from django_test_migrations.contrib.unittest_case import MigratorTestCase
@@ -446,7 +470,7 @@ from django_test_migrations.contrib.unittest_case import MigratorTestCase
 
 class BackfillBaseProfilesMigrationTest(MigratorTestCase):
     migrate_from = ("users", "0001_initial")
-    migrate_to = ("users", "0002_backfill_base_profiles")
+    migrate_to = ("user", "0002_backfill_base_profiles")
 
     def prepare(self):
         # Bypass auto-create signal by using the historical model from old_state.
@@ -471,7 +495,7 @@ class BackfillBaseProfilesMigrationTest(MigratorTestCase):
 - [ ] **Step 3: Run test, expect failure**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_migration -v 2'
+just test::run 'python manage.py test user.tests.test_migration -v 2'
 ```
 
 Expected: migration `0002_backfill_base_profiles` does not exist.
@@ -486,7 +510,7 @@ Note the most recent migration filename (e.g. `0042_something.py`); use its base
 
 - [ ] **Step 5: Create the migration**
 
-`backend/users/migrations/0002_backfill_base_profiles.py`:
+`backend/user/migrations/0002_backfill_base_profiles.py`:
 
 ```python
 from django.core.cache import cache
@@ -567,7 +591,7 @@ Replace `REPLACE_WITH_LATEST_APP_MIGRATION_BASE_NAME` with the value from Step 4
 - [ ] **Step 6: Run test, expect pass**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_migration -v 2'
+just test::run 'python manage.py test user.tests.test_migration -v 2'
 ```
 
 Expected: 1 test passes.
@@ -575,14 +599,14 @@ Expected: 1 test passes.
 - [ ] **Step 7: Run all `users` tests to confirm nothing regressed**
 
 ```bash
-just test::run 'python manage.py test users -v 2'
+just test::run 'python manage.py test user -v 2'
 ```
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add backend/users/migrations/0002_backfill_base_profiles.py backend/users/tests/test_migration.py pyproject.toml poetry.lock
-git commit -m "feat(users): data migration backfills BaseUserProfile from CustomUser"
+git add backend/user/migrations/0002_backfill_base_profiles.py backend/user/tests/test_migration.py pyproject.toml poetry.lock
+git commit -m "feat(user): data migration backfills BaseUserProfile from CustomUser"
 ```
 
 ---
@@ -591,11 +615,11 @@ git commit -m "feat(users): data migration backfills BaseUserProfile from Custom
 
 **Files:**
 - Modify: `backend/app/models.py:92-140` (`CustomUser`)
-- Create: `backend/app/migrations/00XX_drop_user_nickname_avatar.py`, `backend/users/tests/test_transitional_setters.py`
+- Create: `backend/app/migrations/00XX_drop_user_nickname_avatar.py`, `backend/user/tests/test_transitional_setters.py`
 
 - [ ] **Step 1: Write failing tests**
 
-Create `backend/users/tests/test_transitional_setters.py`:
+Create `backend/user/tests/test_transitional_setters.py`:
 
 ```python
 from django.test import TestCase
@@ -647,7 +671,7 @@ class CustomUserTransitionalSettersTests(TestCase):
 - [ ] **Step 2: Run tests, expect failure**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_transitional_setters -v 2'
+just test::run 'python manage.py test user.tests.test_transitional_setters -v 2'
 ```
 
 Expected: tests pass for any existing field access path (nickname is still a model field), but `test_fields_removed_from_meta` fails (fields still present) and the populate-style test may behave inconsistently. Some tests will fail with `AttributeError` once we make the property changes.
@@ -684,7 +708,7 @@ def nickname(self, value):
     base_profile cacheops row on commit.
     """
     # Use a local import to avoid the circular at module load.
-    from users.models import BaseUserProfile
+    from user.models import BaseUserProfile
     from app.cache_utils import invalidate_after_commit
     bp = getattr(self, "base_profile", None)
     if bp is None:
@@ -703,7 +727,7 @@ def avatar(self):
 
 @avatar.setter
 def avatar(self, value):
-    from users.models import BaseUserProfile
+    from user.models import BaseUserProfile
     from app.cache_utils import invalidate_after_commit
     bp = getattr(self, "base_profile", None)
     if bp is None:
@@ -728,7 +752,7 @@ def save(self, *args, **kwargs):
 
     super().save(*args, **kwargs)
 
-    from users.models import BaseUserProfile
+    from user.models import BaseUserProfile
     bp, _ = BaseUserProfile.objects.get_or_create(user=self)
 
     pending_nickname = getattr(self, "_pending_nickname", None)
@@ -759,7 +783,7 @@ Edit the generated migration's `dependencies` list to depend on the backfill:
 ```python
 dependencies = [
     ("app", "00XX_previous"),                       # auto-generated previous
-    ("users", "0002_backfill_base_profiles"),       # ADD THIS LINE
+    ("user", "0002_backfill_base_profiles"),       # ADD THIS LINE
 ]
 ```
 
@@ -767,7 +791,7 @@ dependencies = [
 
 ```bash
 just db::migrate::test
-just test::run 'python manage.py test users.tests.test_transitional_setters -v 2'
+just test::run 'python manage.py test user.tests.test_transitional_setters -v 2'
 ```
 
 Expected: 5 tests pass.
@@ -795,7 +819,7 @@ Expected: nickname/avatar non-empty, base_profile pk reported.
 
 ```bash
 git add backend/app/models.py backend/app/migrations/
-git commit -m "feat(users): drop nickname/avatar columns from CustomUser + transitional setter properties"
+git commit -m "feat(user): drop nickname/avatar columns from CustomUser + transitional setter properties"
 ```
 
 ---
@@ -804,7 +828,7 @@ git commit -m "feat(users): drop nickname/avatar columns from CustomUser + trans
 
 **Files:**
 - Modify: `backend/app/serializers.py` (every serializer that exposes `nickname` or `avatar`)
-- Create: `backend/users/tests/test_existing_serializer_compat.py`
+- Create: `backend/user/tests/test_existing_serializer_compat.py`
 
 - [ ] **Step 1: Identify call sites**
 
@@ -816,7 +840,7 @@ Note every serializer that lists these fields. Each needs the field declaration 
 
 - [ ] **Step 2: Write failing compatibility test**
 
-Create `backend/users/tests/test_existing_serializer_compat.py`:
+Create `backend/user/tests/test_existing_serializer_compat.py`:
 
 ```python
 from django.test import TestCase
@@ -842,7 +866,7 @@ Adjust `UserSerializer` import to whichever serializer in `backend/app/serialize
 - [ ] **Step 3: Run test, expect failure**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_existing_serializer_compat -v 2'
+just test::run 'python manage.py test user.tests.test_existing_serializer_compat -v 2'
 ```
 
 Expected: `KeyError` or empty/None values for the fields (since the model fields are gone).
@@ -874,7 +898,7 @@ Apply the same change to every serializer found in Step 1.
 - [ ] **Step 5: Run tests, expect pass**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_existing_serializer_compat -v 2'
+just test::run 'python manage.py test user.tests.test_existing_serializer_compat -v 2'
 just test::run 'python manage.py test app -v 2'
 ```
 
@@ -883,8 +907,8 @@ Expected: all pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/app/serializers.py backend/users/tests/test_existing_serializer_compat.py
-git commit -m "feat(users): source nickname/avatar from base_profile in existing serializers"
+git add backend/app/serializers.py backend/user/tests/test_existing_serializer_compat.py
+git commit -m "feat(user): source nickname/avatar from base_profile in existing serializers"
 ```
 
 ---
@@ -892,17 +916,17 @@ git commit -m "feat(users): source nickname/avatar from base_profile in existing
 ## Task 7 — `BaseUserProfileSerializer` + `UserProfileLayeredSerializer`
 
 **Files:**
-- Create: `backend/users/serializers.py`, `backend/users/tests/test_serializers.py`
+- Create: `backend/user/serializers.py`, `backend/user/tests/test_serializers.py`
 
 - [ ] **Step 1: Write failing serializer tests**
 
-Create `backend/users/tests/test_serializers.py`:
+Create `backend/user/tests/test_serializers.py`:
 
 ```python
 from django.test import TestCase
 
 from app.models import CustomUser
-from users.serializers import (
+from user.serializers import (
     BaseUserProfileSerializer,
     UserProfileLayeredSerializer,
 )
@@ -946,14 +970,14 @@ class UserProfileLayeredSerializerTests(TestCase):
 - [ ] **Step 2: Run tests, expect failure**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_serializers -v 2'
+just test::run 'python manage.py test user.tests.test_serializers -v 2'
 ```
 
 Expected: `ImportError`.
 
 - [ ] **Step 3: Implement the serializers**
 
-`backend/users/serializers.py`:
+`backend/user/serializers.py`:
 ```python
 from rest_framework import serializers
 
@@ -990,7 +1014,7 @@ class UserProfileLayeredSerializer(serializers.Serializer):
 - [ ] **Step 4: Run tests, expect pass**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_serializers -v 2'
+just test::run 'python manage.py test user.tests.test_serializers -v 2'
 ```
 
 Expected: 3 tests pass.
@@ -998,8 +1022,8 @@ Expected: 3 tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/users/serializers.py backend/users/tests/test_serializers.py
-git commit -m "feat(users): BaseUserProfile + UserProfileLayered serializers"
+git add backend/user/serializers.py backend/user/tests/test_serializers.py
+git commit -m "feat(user): BaseUserProfile + UserProfileLayered serializers"
 ```
 
 ---
@@ -1007,12 +1031,12 @@ git commit -m "feat(users): BaseUserProfile + UserProfileLayered serializers"
 ## Task 8 — `MeProfileView` (GET layered) + `MeProfileBasePatchView` + URL routes + structlog logging
 
 **Files:**
-- Modify: `backend/users/views.py`, `backend/users/urls.py`, `backend/users/tests/test_app_registration.py`
-- Create: `backend/users/tests/test_views.py`
+- Modify: `backend/user/views.py`, `backend/user/urls.py`, `backend/user/tests/test_app_registration.py`
+- Create: `backend/user/tests/test_views.py`
 
 - [ ] **Step 1: Write failing view tests**
 
-Create `backend/users/tests/test_views.py`:
+Create `backend/user/tests/test_views.py`:
 
 ```python
 from django.test import TestCase
@@ -1068,14 +1092,14 @@ class MeProfileViewTests(TestCase):
 - [ ] **Step 2: Run tests, expect failure**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_views -v 2'
+just test::run 'python manage.py test user.tests.test_views -v 2'
 ```
 
 Expected: 404s (ping URL doesn't cover these routes).
 
 - [ ] **Step 3: Implement the views with structlog logging**
 
-Replace `backend/users/views.py`:
+Replace `backend/user/views.py`:
 
 ```python
 import structlog
@@ -1098,7 +1122,7 @@ class MeProfileView(APIView):
     def get(self, request):
         log.debug(
             "profile_fetched",
-            system="users",
+            system="user",
             subsystem="profile",
             user_id=request.user.id,
         )
@@ -1120,7 +1144,7 @@ class MeProfileBasePatchView(APIView):
         if not serializer.is_valid():
             log.warning(
                 "profile_base_patch_invalid",
-                system="users",
+                system="user",
                 subsystem="profile",
                 user_id=request.user.id,
                 errors=serializer.errors,
@@ -1130,7 +1154,7 @@ class MeProfileBasePatchView(APIView):
         serializer.save()
         log.info(
             "profile_base_patched",
-            system="users",
+            system="user",
             subsystem="profile",
             user_id=request.user.id,
             fields_changed=sorted(serializer.validated_data.keys()),
@@ -1140,7 +1164,7 @@ class MeProfileBasePatchView(APIView):
 
 - [ ] **Step 4: Update URL conf**
 
-Replace `backend/users/urls.py`:
+Replace `backend/user/urls.py`:
 
 ```python
 from django.urls import path
@@ -1164,7 +1188,7 @@ def test_placeholder_url_resolves(self):
 - [ ] **Step 5: Run tests, expect pass**
 
 ```bash
-just test::run 'python manage.py test users -v 2'
+just test::run 'python manage.py test user -v 2'
 ```
 
 Expected: all `users` tests pass.
@@ -1172,8 +1196,8 @@ Expected: all `users` tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/users/views.py backend/users/urls.py backend/users/tests/test_views.py backend/users/tests/test_app_registration.py
-git commit -m "feat(users): MeProfile GET + Base PATCH views with structlog logging"
+git add backend/user/views.py backend/user/urls.py backend/user/tests/test_views.py backend/user/tests/test_app_registration.py
+git commit -m "feat(user): MeProfile GET + Base PATCH views with structlog logging"
 ```
 
 ---
@@ -1182,7 +1206,7 @@ git commit -m "feat(users): MeProfile GET + Base PATCH views with structlog logg
 
 **Files:**
 - Modify: `backend/backend/settings.py` (`CACHEOPS` block), `backend/app/views_main.py` (every `@cached_as` site shipping nickname/avatar), `backend/app/functions/tournament.py:456`
-- Create: `backend/users/tests/test_cacheops.py`
+- Create: `backend/user/tests/test_cacheops.py`
 
 - [ ] **Step 1: Survey `@cached_as` call sites**
 
@@ -1194,7 +1218,7 @@ Note every decorator whose cached response includes `nickname` or `avatar` in th
 
 - [ ] **Step 2: Write failing cacheops integration test**
 
-Create `backend/users/tests/test_cacheops.py`:
+Create `backend/user/tests/test_cacheops.py`:
 
 ```python
 from django.core.cache import cache
@@ -1252,19 +1276,19 @@ The exact endpoint URL depends on which cached view is most convenient. Pick one
 - [ ] **Step 3: Run test, expect failure**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_cacheops -v 2'
+just test::run 'python manage.py test user.tests.test_cacheops -v 2'
 ```
 
 Expected: second response still shows the old nickname (cache not invalidated because `BaseUserProfile` isn't a dependency yet).
 
-- [ ] **Step 4: Add `users.baseuserprofile` to CACHEOPS**
+- [ ] **Step 4: Add `user.baseuserprofile` to CACHEOPS**
 
 `backend/backend/settings.py` — find the `CACHEOPS = {...}` block and add:
 
 ```python
 CACHEOPS = {
     # ... existing entries ...
-    "users.baseuserprofile": {"ops": "all", "timeout": 60 * 60},
+    "user.baseuserprofile": {"ops": "all", "timeout": 60 * 60},
 }
 ```
 
@@ -1273,7 +1297,7 @@ CACHEOPS = {
 For every `@cached_as(...)` from Step 1's survey, add `BaseUserProfile` to the model list:
 
 ```python
-from users.models import BaseUserProfile  # add to imports at top of file
+from user.models import BaseUserProfile  # add to imports at top of file
 
 @cached_as(
     CustomUser,
@@ -1287,7 +1311,7 @@ def some_user_listing_view(request):
 - [ ] **Step 6: Verify the grep guardrail acceptance criterion**
 
 ```bash
-rg "@cached_as\(.*CustomUser" backend/app/ backend/users/ | rg -v "BaseUserProfile"
+rg "@cached_as\(.*CustomUser" backend/app/ backend/user/ | rg -v "BaseUserProfile"
 ```
 
 Expected: zero lines. Any line returned is a site that still depends on `CustomUser` without also depending on `BaseUserProfile` — those will silently serve stale nickname/avatar after a PATCH.
@@ -1295,8 +1319,8 @@ Expected: zero lines. Any line returned is a site that still depends on `CustomU
 - [ ] **Step 7: Run tests, expect pass**
 
 ```bash
-just test::run 'python manage.py test users.tests.test_cacheops -v 2'
-just test::run 'python manage.py test users -v 2'
+just test::run 'python manage.py test user.tests.test_cacheops -v 2'
+just test::run 'python manage.py test user -v 2'
 just test::run 'python manage.py test app -v 2'
 ```
 
@@ -1305,8 +1329,8 @@ Expected: all pass.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add backend/backend/settings.py backend/app/views_main.py backend/app/functions/tournament.py backend/users/tests/test_cacheops.py
-git commit -m "feat(users): cacheops integration for BaseUserProfile (@cached_as updates + grep guardrail)"
+git add backend/backend/settings.py backend/app/views_main.py backend/app/functions/tournament.py backend/user/tests/test_cacheops.py
+git commit -m "feat(user): cacheops integration for BaseUserProfile (@cached_as updates + grep guardrail)"
 ```
 
 ---
@@ -1366,7 +1390,7 @@ Expected: no errors.
 
 ```bash
 git add frontend/app/store/userProfileTypes.ts
-git commit -m "feat(users): userProfileTypes scaffold (T1 ships only Base layer)"
+git commit -m "feat(user): userProfileTypes scaffold (T1 ships only Base layer)"
 ```
 
 ---
@@ -1551,7 +1575,7 @@ Add `useUserProfileStore.getState().reset()` alongside the existing user-cache r
 git add frontend/app/store/userProfileStore.ts frontend/app/store/userProfileStore.test.ts
 # Also commit the logout-wiring change (path varies):
 git add frontend/app/store/userStore.ts  # or whichever file you modified
-git commit -m "feat(users): userProfileStore (Zustand + custom hasChanged + reset on logout)"
+git commit -m "feat(user): userProfileStore (Zustand + custom hasChanged + reset on logout)"
 ```
 
 ---
@@ -1624,7 +1648,7 @@ Expected: no errors.
 
 ```bash
 git add frontend/app/components/api/userProfileApi.ts
-git commit -m "feat(users): API client functions for layered profile GET + base PATCH"
+git commit -m "feat(user): API client functions for layered profile GET + base PATCH"
 ```
 
 ---
@@ -1814,7 +1838,7 @@ Expected: error about `./EditProfileModal/tabs/BaseTab` module not found. Task 1
 
 ```bash
 git add frontend/app/pages/user/EditProfileModal.tsx frontend/app/pages/user/EditProfileModal/schemas.ts frontend/app/pages/user/EditProfileModal/ProfileSkeleton.tsx frontend/app/pages/user/EditProfileModal/ProfileErrorFallback.tsx frontend/package.json frontend/package-lock.json
-git commit -m "feat(users): EditProfileModal shell with ErrorBoundary + Suspense + useSuspenseQuery"
+git commit -m "feat(user): EditProfileModal shell with ErrorBoundary + Suspense + useSuspenseQuery"
 ```
 
 ---
@@ -1866,9 +1890,9 @@ import type { UserProfileEntry } from '~/store/userProfileTypes';
 import { BaseProfileFormSchema, type BaseProfileFormValues } from '../schemas';
 
 const log = {
-  debug: (...args: unknown[]) => console.debug('[users.editProfile.base]', ...args),
-  warn: (...args: unknown[]) => console.warn('[users.editProfile.base]', ...args),
-  error: (...args: unknown[]) => console.error('[users.editProfile.base]', ...args),
+  debug: (...args: unknown[]) => console.debug('[user.editProfile.base]', ...args),
+  warn: (...args: unknown[]) => console.warn('[user.editProfile.base]', ...args),
+  error: (...args: unknown[]) => console.error('[user.editProfile.base]', ...args),
 };
 
 interface BaseTabProps {
@@ -2060,7 +2084,7 @@ Expected: zero hits.
 
 ```bash
 git add frontend/app/pages/user/EditProfileModal/tabs/BaseTab.tsx
-git commit -m "feat(users): BaseTab — shadcn Form + Zod + useMutation + brand primitives + dual-write"
+git commit -m "feat(user): BaseTab — shadcn Form + Zod + useMutation + brand primitives + dual-write"
 ```
 
 ---
@@ -2127,7 +2151,7 @@ Open the app, log in, click Edit Profile. Verify:
 
 ```bash
 git add frontend/app/routes/editProfile.tsx frontend/app/pages/user/UserProfilePage.tsx
-git commit -m "feat(users): wire EditProfileModal mount points to new userPk API"
+git commit -m "feat(user): wire EditProfileModal mount points to new userPk API"
 ```
 
 ---
@@ -2250,7 +2274,7 @@ Expected: all green (the other specs in `15-edit-user/` rely on the same `data-t
 
 ```bash
 git add frontend/tests/playwright/e2e/15-edit-user/06-profile-edit.spec.ts
-git commit -m "test(users): Playwright spec for new EditProfileModal Base tab (with restore + auto-retry)"
+git commit -m "test(user): Playwright spec for new EditProfileModal Base tab (with restore + auto-retry)"
 ```
 
 ---
@@ -2260,7 +2284,7 @@ git commit -m "test(users): Playwright spec for new EditProfileModal Base tab (w
 - [ ] **Run all backend test modules**
 
 ```bash
-just test::run 'python manage.py test users -v 2'
+just test::run 'python manage.py test user -v 2'
 just test::run 'python manage.py test app -v 2'
 ```
 
@@ -2285,7 +2309,7 @@ Expected: no regressions (new spec passes, plus all existing specs in `15-edit-u
 - [ ] **Grep guardrails**
 
 ```bash
-rg "@cached_as\(.*CustomUser" backend/app/ backend/users/ | rg -v "BaseUserProfile"
+rg "@cached_as\(.*CustomUser" backend/app/ backend/user/ | rg -v "BaseUserProfile"
 # Expected: empty
 rg "from '~/components/ui/button'" frontend/app/pages/user/EditProfileModal/ frontend/app/pages/user/EditProfileModal.tsx
 # Expected: empty
@@ -2300,7 +2324,7 @@ rg 'variant=["'\''](outline|destructive|ghost)["'\'']' frontend/app/pages/user/E
 ```bash
 just db::reset-test
 just db::populate::all
-just test::run 'python manage.py test users -v 2'
+just test::run 'python manage.py test user -v 2'
 ```
 
 Expected: populate completes; `users` suite still green against populated data.
@@ -2318,13 +2342,13 @@ gh pr create --title "T1: BaseUserProfile end-to-end (epic #224)" --body "$(cat 
 - `GET /api/users/me/profile/` (layered) + `PATCH /api/users/me/profile/base/` with structlog logging
 - `userProfileEntityAdapter` (Zustand) scaffolded — only Base layer wired
 - New `EditProfileModal` (ErrorBoundary → Suspense → useSuspenseQuery; per-tab useMutation; lazy-mounted tabs; brand primitives; dual-write to `userAdapter` + `queryClient.invalidateQueries` on PATCH success)
-- `users.baseuserprofile` added to `CACHEOPS`; every `@cached_as(CustomUser,…)` site that ships nickname/avatar now depends on `BaseUserProfile` (grep guardrail acceptance)
+- `user.baseuserprofile` added to `CACHEOPS`; every `@cached_as(CustomUser,…)` site that ships nickname/avatar now depends on `BaseUserProfile` (grep guardrail acceptance)
 
 ## Spec
 `docs/plans/2026-05-17-user-profile-entity-adapter-epic-design.md` §T1
 
 ## Test plan
-- [x] `just test::run 'python manage.py test users -v 2'`
+- [x] `just test::run 'python manage.py test user -v 2'`
 - [x] `just test::run 'python manage.py test app -v 2'` (no regressions)
 - [x] `cd frontend && npx vitest run`
 - [x] `just test::pw::spec 15-edit-user` (rewritten 06-profile-edit + existing specs)

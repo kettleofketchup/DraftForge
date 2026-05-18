@@ -32,7 +32,7 @@ On the frontend, `userAdapter` (`frontend/app/store/userCacheStore.ts:62`) alrea
 - **No discord-side or steam-side identity refactor.** `CustomUser.steam_account_id`, `discordId`, `username` all stay on `CustomUser` as identity, not profile.
 - **No bulk-edit UI.** Modal edits one user (the current user) at a time.
 - **No data backfill from sources beyond the existing rows.** If `CustomUser.nickname` is `NULL` today, `BaseUserProfile.nickname` will be `NULL` after T1.
-- **No `CustomUser` move into the new `users` app.** A follow-up epic moves `CustomUser` into `backend/users/`; this epic only creates the app and lands the new profile models in it.
+- **No `CustomUser` move into the `user` app.** A follow-up epic moves `CustomUser` into `backend/user/`; this epic only lands the new profile models in the existing `user` app (created in commit `1ceeb9f9`).
 
 ## Architecture
 
@@ -55,7 +55,7 @@ OrgUser ─1:1─< OrgUserProfile
 - `OrgUserProfile` is created when an `OrgUser` is created. Starts essentially empty; designed to grow.
 - Game profiles auto-created the first time the parent profile is saved.
 
-**New Django app `users` (T1).** All new profile models live in `backend/users/`, added to `INSTALLED_APPS`. Long-term intent (out of scope here): `CustomUser` itself moves into `users/` in a follow-up epic.
+**Existing Django app `user` (created in commit `1ceeb9f9`).** All new profile models land in `backend/user/`, which is already registered in `INSTALLED_APPS` as `user.apps.UserConfig`. T1 extends the existing app — it does NOT create it from scratch. Long-term intent (out of scope here): `CustomUser` itself moves into `backend/user/` in a follow-up epic.
 
 **`related_name` discipline on new positions FKs (T2 constraint).** `PositionsModel.save()`'s invalidation chain (see "Cache invalidation" below) walks `self.dotauserprofile_set` and `self.orgdotauserprofile_set` — Django's default reverse accessor names. New positions FKs in T2 MUST be declared with NO explicit `related_name` (default applies) OR with explicit `related_name="dotauserprofile_set"` / `"orgdotauserprofile_set"`. Any other value silently breaks the invalidation loop. Hard constraint in T2 acceptance.
 
@@ -234,15 +234,15 @@ Authorization: every endpoint scoped to "the current user can edit their own pro
 log = structlog.get_logger(__name__)
 
 # GET (high-volume, modal open)
-log.debug("profile_fetched", system="users", subsystem="profile", user_id=request.user.id)
+log.debug("profile_fetched", system="user", subsystem="profile", user_id=request.user.id)
 
 # PATCH (success)
-log.info("profile_base_patched", system="users", subsystem="profile",
+log.info("profile_base_patched", system="user", subsystem="profile",
          user_id=request.user.id,
          fields_changed=sorted(serializer.validated_data.keys()))
 
 # PATCH (validation error)
-log.warning("profile_base_patch_invalid", system="users", subsystem="profile",
+log.warning("profile_base_patch_invalid", system="user", subsystem="profile",
             user_id=request.user.id, errors=serializer.errors)
 ```
 
@@ -256,9 +256,9 @@ The new model layer changes which rows must be invalidated when which fields cha
 
 | Model | Ticket | Add? | Reason |
 |---|---|---|---|
-| `users.baseuserprofile` | T1 | Yes | Read on every list endpoint shipping `nickname` / `avatar`. App label is `users` (new app). |
-| `users.dotauserprofile` | T2 | Yes | Read by Dota draft / tournament / team-card views. |
-| `users.deadlockuserprofile` | T2 | Yes | Parity with Dota. |
+| `user.baseuserprofile` | T1 | Yes | Read on every list endpoint shipping `nickname` / `avatar`. App label is `users` (new app). |
+| `user.dotauserprofile` | T2 | Yes | Read by Dota draft / tournament / team-card views. |
+| `user.deadlockuserprofile` | T2 | Yes | Parity with Dota. |
 | `org.orguserprofile` | T3 | No (defer) | Empty placeholder; add when fields land. |
 | `org.orgdotauserprofile` | T3 | Yes (rename) | Renamed from `org.playerdotaprofile` — the CACHEOPS key MUST be renamed in `settings.py` in the same PR or caching silently disables. |
 | `org.orgdeadlockuserprofile` | T3 | Yes (rename) | Renamed from `org.playerdeadlockprofile`. |
@@ -278,7 +278,7 @@ def save(self, *args, **kwargs):
     for org_profile in org_profiles:
         invalidate_obj(org_profile)
         invalidate_obj(org_profile.org_user_profile.org_user)
-    log.debug("positions_invalidated", system="users", subsystem="cache",
+    log.debug("positions_invalidated", system="user", subsystem="cache",
               positions_id=self.pk,
               dota_profiles=len(dota_profiles),
               org_dota_profiles=len(org_profiles))
@@ -287,14 +287,14 @@ def save(self, *args, **kwargs):
 **`@cached_as` decorator updates (T1) — enumerate, not blanket.** Every `@cached_as(CustomUser, ...)` call site in `backend/app/views_main.py` (currently 14+ sites including lines 192-1199) AND `backend/app/functions/tournament.py:456` that ships `nickname` or `avatar` must also depend on `BaseUserProfile`:
 
 ```python
-from users.models import BaseUserProfile
+from user.models import BaseUserProfile
 
 @cached_as(CustomUser, BaseUserProfile, ...)
 def get_user_list(...):
     ...
 ```
 
-**T1 grep guardrail acceptance:** `rg "@cached_as\(.*CustomUser" backend/app/ backend/users/ | rg -v "BaseUserProfile"` returns zero lines (every remaining un-updated site is a defect).
+**T1 grep guardrail acceptance:** `rg "@cached_as\(.*CustomUser" backend/app/ backend/user/ | rg -v "BaseUserProfile"` returns zero lines (every remaining un-updated site is a defect).
 
 **`bulk_update` / `bulk_create` invariant for data migrations.** If any T1/T2/T3 data migration uses `bulk_update` or `bulk_create` (likely for T1's backfill at scale), cacheops post-save signals are NOT fired — the migration MUST follow up with explicit `invalidate_model(CustomUser); invalidate_model(BaseUserProfile)` after the bulk write.
 
@@ -304,7 +304,7 @@ def get_user_list(...):
 
 **`CustomUser.positions` shim — read + write (T2).** The shim is NOT read-only. Property has both a getter (proxying to `dota_user_profile.positions`) AND a setter (writing to `dota_user_profile.positions` AND calling `invalidate_after_commit(dota_user_profile)`). Same pattern as the T1 transitional setters for `nickname`/`avatar`. This lets populate fixtures and any unmigrated writers keep working without churn until the shim is removed in a cleanup ticket.
 
-**Tests:** each ticket includes a cacheops integration test in its own module (e.g. `backend/users/tests/test_cacheops.py`) that:
+**Tests:** each ticket includes a cacheops integration test in its own module (e.g. `backend/user/tests/test_cacheops.py`) that:
 1. Calls `cache.clear()` in `setUp` and `invalidate_all()` in `tearDown` (parallel-test safety).
 2. Warms a cached list endpoint (a `@cached_as(CustomUser, BaseUserProfile, ...)` view).
 3. PATCHes the relevant new model.
@@ -360,9 +360,9 @@ Replaces the current `frontend/app/pages/user/EditProfileModal.tsx` (207 lines, 
 
 ```ts
 const log = {
-  debug: (...args: unknown[]) => console.debug('[users.editProfile.base]', ...args),
-  warn:  (...args: unknown[]) => console.warn('[users.editProfile.base]', ...args),
-  error: (...args: unknown[]) => console.error('[users.editProfile.base]', ...args),
+  debug: (...args: unknown[]) => console.debug('[user.editProfile.base]', ...args),
+  warn:  (...args: unknown[]) => console.warn('[user.editProfile.base]', ...args),
+  error: (...args: unknown[]) => console.error('[user.editProfile.base]', ...args),
 };
 ```
 
@@ -390,12 +390,12 @@ DraftForge uses populate fixtures (`backend/tests/populate/`) and a feature-isol
 ### T1 — BaseUserProfile end-to-end
 
 **Backend:**
-- **New Django app `users`** added to `INSTALLED_APPS`. Houses the new profile models.
-- New `BaseUserProfile` model in `backend/users/models.py` (OneToOne FK → `app.CustomUser`). Fields moved from `CustomUser`: `nickname`, `avatar`.
+- **Existing Django app `user`** (already in `INSTALLED_APPS` as `user.apps.UserConfig` per commit `1ceeb9f9`). T1 extends it; does NOT create from scratch.
+- New `BaseUserProfile` model in `backend/user/models.py` (OneToOne FK → `app.CustomUser`). Fields moved from `CustomUser`: `nickname`, `avatar`.
 - Data migration: create one `BaseUserProfile` per existing `CustomUser`, copy `nickname` + `avatar` over, drop the columns from `CustomUser`. Migration calls `cache.clear()` at start and `invalidate_model(CustomUser); invalidate_model(BaseUserProfile)` at end. If `bulk_create`/`bulk_update` used, the post-bulk invalidations are mandatory.
 - `CustomUser.save()` auto-creates `BaseUserProfile`.
 - **Transitional setter properties** on `CustomUser` for `nickname` and `avatar`: getter returns `base_profile.<field>`, setter writes to `base_profile.<field>` and calls `invalidate_after_commit(base_profile)`. Keeps populate helpers and any incidental writers working without churn until removed in a cleanup ticket.
-- New endpoints (registered under `backend/users/urls.py`): `GET /api/users/me/profile/`, `PATCH /api/users/me/profile/base/`. Both emit structlog logs as specified above.
+- New endpoints (registered under `backend/user/urls.py`): `GET /api/users/me/profile/`, `PATCH /api/users/me/profile/base/`. Both emit structlog logs as specified above.
 - Serializers shipping user identity updated to read `nickname` / `avatar` from `base_profile`.
 - Every `@cached_as(CustomUser, ...)` site shipping nickname/avatar updated to also depend on `BaseUserProfile`. Grep guardrail acceptance.
 - `django-test-migrations` added: `poetry add --group dev django-test-migrations` then rebuild via `just test::setup`.
@@ -408,14 +408,14 @@ DraftForge uses populate fixtures (`backend/tests/populate/`) and a feature-isol
 - `frontend/app/routes/editProfile.tsx` and `UserProfilePage.tsx:20,181` updated to pass `userPk` (not the whole user object).
 
 **Tests:**
-- Backend: `backend/users/tests/test_models.py`, `test_auto_create.py`, `test_migration.py` (using `django-test-migrations`), `test_serializers.py`, `test_views.py`, `test_cacheops.py`, `test_transitional_setters.py`.
+- Backend: `backend/user/tests/test_models.py`, `test_auto_create.py`, `test_migration.py` (using `django-test-migrations`), `test_serializers.py`, `test_views.py`, `test_cacheops.py`, `test_transitional_setters.py`.
 - Frontend (Vitest): `userProfileStore.test.ts` — adapter behavior, custom `hasChanged`, `reset()`.
 - Playwright: rewrite `15-edit-user/06-profile-edit.spec.ts` to drive the new modal, using `loginAdmin` / `loginAsUser` fixtures, `data-testid` selectors, restore-in-test pattern, `expect(...).toHaveText(...)` for the dual-write assertion.
 
 **Acceptance:**
 - **Functional:** Logged-in user can open Edit Profile, change nickname or avatar, save, and see the change persist + reflect in every place a user-card is rendered. No regression in `userAdapter` consumers.
 - **Brand:** `rg "from '~/components/ui/button'" frontend/app/pages/user/EditProfileModal/` returns zero hits. Cancel uses `<CancelButton>`, Save uses `<SubmitButton>`. Avatar preview renders via `<UserAvatar>`. No `style={{}}` or hardcoded violet/slate.
-- **Cache:** `users.baseuserprofile` added to `CACHEOPS`. Grep guardrail `rg "@cached_as\(.*CustomUser" backend/app/ backend/users/ | rg -v "BaseUserProfile"` returns zero lines. Integration test mutates `BaseUserProfile.nickname` for a `USER_EDIT_USERS` user, hits a cached user-list view, asserts the change is reflected.
+- **Cache:** `user.baseuserprofile` added to `CACHEOPS`. Grep guardrail `rg "@cached_as\(.*CustomUser" backend/app/ backend/user/ | rg -v "BaseUserProfile"` returns zero lines. Integration test mutates `BaseUserProfile.nickname` for a `USER_EDIT_USERS` user, hits a cached user-list view, asserts the change is reflected.
 - **Frontend data flow:** Modal wraps `<ErrorBoundary>` → `<Suspense>` → `useSuspenseQuery` with `staleTime: 5min`. PATCH uses `useMutation`. `onSuccess` dual-writes to `userAdapter` AND calls `queryClient.invalidateQueries(['userProfile', userPk])`.
 - **Logging:** Backend GET emits `profile_fetched` debug. PATCH emits `profile_base_patched` info with `fields_changed`. Validation errors emit `profile_base_patch_invalid` warning. Frontend uses bracket-prefix logger; PATCH failures call `Sentry.captureException` with `system`/`subsystem` tags.
 - **Populate:** `backend/tests/populate/{utils.py,users.py,user_edit.py}` continue to work without call-site changes (transitional setter properties).
@@ -424,7 +424,7 @@ DraftForge uses populate fixtures (`backend/tests/populate/`) and a feature-isol
 ### T2 — DotaUserProfile + DeadlockUserProfile (user-wide) end-to-end
 
 **Backend:**
-- New models in `backend/users/models.py`: `DotaUserProfile` (OneToOne FK → `BaseUserProfile`; fields: `positions` FK to `PositionsModel` with default `related_name`, `has_active_dota_mmr`, `dota_mmr_last_verified`); `DeadlockUserProfile` (OneToOne FK → `BaseUserProfile`; fields mirror existing `PlayerDeadlockProfile`: `rank` loose string, `rank_date`).
+- New models in `backend/user/models.py`: `DotaUserProfile` (OneToOne FK → `BaseUserProfile`; fields: `positions` FK to `PositionsModel` with default `related_name`, `has_active_dota_mmr`, `dota_mmr_last_verified`); `DeadlockUserProfile` (OneToOne FK → `BaseUserProfile`; fields mirror existing `PlayerDeadlockProfile`: `rank` loose string, `rank_date`).
 - Data migration: create one `DotaUserProfile` per existing `BaseUserProfile`, move `CustomUser.positions` FK over, move `has_active_dota_mmr` + `dota_mmr_last_verified`, drop the columns. Bulk-write invariant applies (call `invalidate_model` after).
 - `BaseUserProfile.save()` auto-creates `DotaUserProfile` and `DeadlockUserProfile` if missing.
 - New endpoint: `PATCH /api/users/me/profile/game/{game}/` with structlog logging.
@@ -442,9 +442,9 @@ DraftForge uses populate fixtures (`backend/tests/populate/`) and a feature-isol
 
 **Acceptance:**
 - **Functional:** A user can edit user-wide Dota positions and Deadlock data via the modal. Existing position-display surfaces continue to work via the adapter. The `CustomUser.positions` shim (read + write) keeps unmigrated consumers working.
-- **`related_name` discipline:** `rg "related_name=" backend/users/models.py` against the `positions` FKs shows either no `related_name` (default applies) OR explicit `related_name="dotauserprofile_set"` / `"orgdotauserprofile_set"`. Any other value fails CI.
+- **`related_name` discipline:** `rg "related_name=" backend/user/models.py` against the `positions` FKs shows either no `related_name` (default applies) OR explicit `related_name="dotauserprofile_set"` / `"orgdotauserprofile_set"`. Any other value fails CI.
 - **Brand:** Dota and Deadlock tabs follow the same brand-primitive rules as Base.
-- **Cache (blocker class):** `PositionsModel.save()` rewritten to invalidate `DotaUserProfile`, `OrgDotaUserProfile`, and their bubbled parents — NOT the now-empty `customuser_set`. `users.dotauserprofile` + `users.deadlockuserprofile` added to `CACHEOPS`. Auto-create inside `transaction.atomic()` uses `invalidate_after_commit`. Integration test mutates `PositionsModel` row, hits cached Dota draft view, asserts change reflected.
+- **Cache (blocker class):** `PositionsModel.save()` rewritten to invalidate `DotaUserProfile`, `OrgDotaUserProfile`, and their bubbled parents — NOT the now-empty `customuser_set`. `user.dotauserprofile` + `user.deadlockuserprofile` added to `CACHEOPS`. Auto-create inside `transaction.atomic()` uses `invalidate_after_commit`. Integration test mutates `PositionsModel` row, hits cached Dota draft view, asserts change reflected.
 - **Frontend:** consumers reading `user.positions` migrated to `usePlayerPositions(userPk)`. Hook uses primitive selectors on `gameTypeStore` + `useShallow`.
 - **Logging:** `PositionsModel.save()` emits `positions_invalidated` debug log with chain counts. New PATCH endpoint emits structured logs.
 
@@ -502,9 +502,9 @@ DraftForge uses populate fixtures (`backend/tests/populate/`) and a feature-isol
 
 ## Affected files (anchor list)
 
-- **New Django app `backend/users/`** — `apps.py`, `models.py` (`BaseUserProfile`, `DotaUserProfile`, `DeadlockUserProfile`), `admin.py`, `serializers.py`, `views.py`, `urls.py`, `migrations/`, `tests/`. Added to `INSTALLED_APPS` in `backend/backend/settings.py`. Root URL conf wires `path("api/users/", include("users.urls"))`.
-- `backend/backend/settings.py` — `INSTALLED_APPS` += `users.apps.UsersConfig`; `CACHEOPS` += `users.baseuserprofile` (T1), `users.dotauserprofile` / `users.deadlockuserprofile` (T2), `org.orgdotauserprofile` / `org.orgdeadlockuserprofile` rename (T3).
-- `backend/backend/urls.py` — include `users.urls`.
+- **New Django app `backend/user/`** — `apps.py`, `models.py` (`BaseUserProfile`, `DotaUserProfile`, `DeadlockUserProfile`), `admin.py`, `serializers.py`, `views.py`, `urls.py`, `migrations/`, `tests/`. Added to `INSTALLED_APPS` in `backend/backend/settings.py`. Root URL conf wires `path("api/users/", include("user.urls"))`.
+- `backend/backend/settings.py` — `INSTALLED_APPS` += `user.apps.UserConfig`; `CACHEOPS` += `user.baseuserprofile` (T1), `user.dotauserprofile` / `user.deadlockuserprofile` (T2), `org.orgdotauserprofile` / `org.orgdeadlockuserprofile` rename (T3).
+- `backend/backend/urls.py` — include `user.urls`.
 - `backend/app/models.py:92-140` — `CustomUser`: drop `nickname`/`avatar` columns + add transitional setter properties (T1); drop `positions` + MMR-verification columns + add property shim (T2); extend `save()` to auto-create `BaseUserProfile` (T1).
 - `backend/app/models.py:48-53` — `PositionsModel.save()` rewrite (T2).
 - `backend/app/migrations/00XX_drop_user_nickname_avatar.py` (T1), `00YY_drop_user_positions_mmr.py` (T2).
