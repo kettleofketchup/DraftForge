@@ -728,12 +728,42 @@ def validate(d: dict) -> list[str]:
 
 print("\nValidating…")
 issues = validate(dashboard)
+
+
+# JSON Schema validation — runs alongside the custom checks above.
+# Schema lives at docs/dev/telemetry/dashboards/schema/grafana-dashboard.schema.json.
+# Grafana doesn't publish a stable external JSON Schema, so this file is a
+# permissive hand-curated subset covering the structural requirements
+# Grafana enforces at import time. additionalProperties=true throughout
+# means we don't false-alarm on the long tail of optional UI fields.
+SCHEMA_PATH = (
+    Path(__file__).parent / "schema" / "grafana-dashboard.schema.json"
+)
+try:
+    import jsonschema
+except ImportError:
+    issues.append(
+        "jsonschema not installed — `pip install --user jsonschema` to enable "
+        "the schema validation pass (custom checks still ran)"
+    )
+else:
+    schema = json.loads(SCHEMA_PATH.read_text())
+    validator = jsonschema.Draft202012Validator(schema)
+    for err in validator.iter_errors(dashboard):
+        loc = "$" + "".join(
+            f"[{p!r}]" if isinstance(p, int) else f".{p}" for p in err.absolute_path
+        )
+        issues.append(f"schema {loc}: {err.message}")
+
 if issues:
     print(f"\n{len(issues)} issue(s) found:")
     for i in issues:
         print(f"  ✗ {i}")
     sys.exit(1)
-print(f"  ✓ {len(seen_ids := {p['id'] for p in dashboard['panels']})} top-level panel/row IDs")
-print(f"  ✓ all datasource refs resolved against __inputs")
-print(f"  ✓ all template vars resolved against templating.list + Grafana built-ins")
+
+panel_ids_count = len({p["id"] for p in dashboard["panels"]})
+print(f"  ✓ {panel_ids_count} top-level panel/row IDs")
+print("  ✓ all datasource refs resolved against __inputs")
+print("  ✓ all template vars resolved against templating.list + Grafana built-ins")
 print("  ✓ all LogQL exprs balanced")
+print(f"  ✓ matches schema at {SCHEMA_PATH.relative_to(Path(__file__).parent.parent.parent.parent)}")

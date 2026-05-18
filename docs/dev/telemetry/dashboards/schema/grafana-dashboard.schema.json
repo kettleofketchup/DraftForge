@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://draftforge.local/schema/grafana-dashboard.json",
+  "title": "Grafana dashboard (hand-curated subset)",
+  "description": "Permissive JSON Schema for Grafana dashboards. Codifies the structural requirements Grafana actually enforces at import time (shape of panels, templating.list, annotations.list, time, gridPos, etc.) while leaving the long tail of optional UI fields open via additionalProperties=true. Grafana does not publish a stable external JSON Schema; this file is the project-owned equivalent. Validated by docs/dev/telemetry/dashboards/gen_dashboard.py after every regeneration.",
+  "type": "object",
+  "required": [
+    "panels",
+    "templating",
+    "title",
+    "uid",
+    "schemaVersion"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "__inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "name": {"type": "string"},
+          "label": {"type": "string"},
+          "description": {"type": "string"},
+          "type": {"type": "string", "enum": ["datasource", "constant"]},
+          "pluginId": {"type": "string"},
+          "pluginName": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "__elements": {"type": "object"},
+    "__requires": {"type": "array", "items": {"type": "object"}},
+
+    "annotations": {
+      "type": "object",
+      "required": ["list"],
+      "properties": {
+        "list": {
+          "type": "array",
+          "description": "Array of annotation objects. Each entry is a dict — NOT a string or scalar.",
+          "items": {
+            "type": "object",
+            "required": ["name", "type"],
+            "properties": {
+              "builtIn": {"type": "integer"},
+              "datasource": {"$ref": "#/$defs/datasource"},
+              "enable": {"type": "boolean"},
+              "hide": {"type": "boolean"},
+              "iconColor": {"type": "string"},
+              "name": {"type": "string"},
+              "type": {"type": "string"}
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "title": {"type": "string", "minLength": 1},
+    "uid": {"type": "string", "minLength": 1, "maxLength": 40},
+    "schemaVersion": {"type": "integer", "minimum": 16},
+    "version": {"type": "integer"},
+    "editable": {"type": "boolean"},
+    "fiscalYearStartMonth": {"type": "integer"},
+    "graphTooltip": {"type": "integer", "minimum": 0, "maximum": 2},
+    "id": {"type": ["integer", "null"]},
+    "description": {"type": "string"},
+    "tags": {"type": "array", "items": {"type": "string"}},
+    "timezone": {"type": "string"},
+    "weekStart": {"type": "string"},
+    "refresh": {"type": ["string", "boolean"]},
+    "links": {"type": "array"},
+
+    "time": {
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "from": {"type": "string"},
+        "to": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "timepicker": {"type": "object"},
+
+    "templating": {
+      "type": "object",
+      "required": ["list"],
+      "properties": {
+        "list": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "type"],
+            "properties": {
+              "name": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+              "type": {
+                "type": "string",
+                "enum": [
+                  "query",
+                  "custom",
+                  "constant",
+                  "datasource",
+                  "interval",
+                  "textbox",
+                  "adhoc",
+                  "groupby"
+                ]
+              },
+              "label": {"type": "string"},
+              "description": {"type": "string"},
+              "multi": {"type": "boolean"},
+              "includeAll": {"type": "boolean"},
+              "hide": {"type": "integer", "minimum": 0, "maximum": 2},
+              "refresh": {"type": "integer", "minimum": 0, "maximum": 2},
+              "regex": {"type": "string"},
+              "sort": {"type": "integer"},
+              "skipUrlSync": {"type": "boolean"},
+              "current": {"type": "object"},
+              "options": {"type": "array"},
+              "query": {}
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+
+    "panels": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/panel"}
+    }
+  },
+  "$defs": {
+    "datasource": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {"type": "string"},
+        "uid": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "gridPos": {
+      "type": "object",
+      "required": ["h", "w", "x", "y"],
+      "properties": {
+        "h": {"type": "integer", "minimum": 1},
+        "w": {"type": "integer", "minimum": 1, "maximum": 24},
+        "x": {"type": "integer", "minimum": 0, "maximum": 23},
+        "y": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "panel": {
+      "type": "object",
+      "required": ["id", "type", "gridPos"],
+      "properties": {
+        "id": {"type": "integer", "minimum": 1},
+        "type": {
+          "type": "string",
+          "description": "Panel type or 'row' for row containers."
+        },
+        "title": {"type": "string"},
+        "description": {"type": "string"},
+        "gridPos": {"$ref": "#/$defs/gridPos"},
+        "datasource": {"$ref": "#/$defs/datasource"},
+        "targets": {"type": "array", "items": {"$ref": "#/$defs/target"}},
+        "options": {"type": "object"},
+        "fieldConfig": {"type": "object"},
+        "transformations": {"type": "array"},
+        "pluginVersion": {"type": "string"},
+        "collapsed": {"type": "boolean"},
+        "panels": {
+          "type": "array",
+          "description": "Inner panels of a row.",
+          "items": {"$ref": "#/$defs/panel"}
+        },
+        "repeat": {"type": "string"},
+        "repeatDirection": {"type": "string", "enum": ["h", "v"]}
+      },
+      "additionalProperties": true,
+      "if": {"properties": {"type": {"const": "row"}}},
+      "then": {
+        "description": "Row panels do not need targets and accept inner panels."
+      },
+      "else": {
+        "description": "Non-row panels typically have targets unless they're status-only stat panels."
+      }
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "datasource": {"$ref": "#/$defs/datasource"},
+        "refId": {"type": "string"},
+        "expr": {"type": "string"},
+        "editorMode": {"type": "string"},
+        "instant": {"type": "boolean"},
+        "queryType": {"type": "string"},
+        "legendFormat": {"type": "string"}
+      },
+      "additionalProperties": true
+    }
+  }
+}
