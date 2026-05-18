@@ -281,7 +281,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" [$__rate_interval]))",
+          "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" [$__auto]))",
           "legendFormat": "{{system}}",
           "queryType": "range",
           "refId": "A"
@@ -381,7 +381,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" | level=~\"warning|error\" [$__rate_interval]))",
+          "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" | level=~\"warning|error\" [$__auto]))",
           "legendFormat": "{{system}}",
           "queryType": "range",
           "refId": "A"
@@ -492,7 +492,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=\"$system\" | subsystem!=\"\" [$__rate_interval]))",
+          "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=\"$system\" | subsystem!=\"\" [$__auto]))",
           "legendFormat": "{{subsystem}}",
           "queryType": "range",
           "refId": "A"
@@ -592,7 +592,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=\"$system\" | subsystem!=\"\" | level=~\"warning|error\" [$__rate_interval]))",
+          "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=\"$system\" | subsystem!=\"\" | level=~\"warning|error\" [$__auto]))",
           "legendFormat": "{{subsystem}}",
           "queryType": "range",
           "refId": "A"
