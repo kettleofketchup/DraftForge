@@ -62,6 +62,15 @@ pytest-django = "^4.11.1"
 pytest = "^8.4.2"
 mkdocs-material = "^9.7.1"
 mkdocs-panzoom-plugin = "^0.5.2"
+# Grafana's official Python SDK — types + builders for V2/Scenes dashboards.
+# Used by docs/dev/telemetry/dashboards/gen_dashboard.py to emit and
+# validate dashboard JSON against the upstream schema instead of our
+# hand-curated one. The SDK ships per-Grafana-version (11.x = Grafana
+# 11.x). PyPI releases carry an epoch prefix (e.g. `1769699452!11.5.0`)
+# so Poetry's caret constraint doesn't parse cleanly here — pin
+# explicitly to the latest 11.x.
+grafana-foundation-sdk = "1769699452!11.5.0"
+jsonschema = "^4.20.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
