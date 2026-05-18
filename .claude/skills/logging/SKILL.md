@@ -32,6 +32,9 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `events` | `discord` | `events/tasks.py` | Discord event sync, announcements, reminders |
 | `events` | `scheduling` | `events/tasks.py` | Event generation, signup opening, repeaters |
 | `tournament` | `discord` | `discordbot/tasks.py` | Tournament DMs, bracket notifications |
+| `avatars` | `endpoint` | `user/internal/avatar.py` | Internal endpoints: list-linked-users, list-guild-ids, bulk-update + invalidate |
+| `avatars` | `refresh` | `app/tasks/avatar_refresh.py` | Daily Celery beat: read guild-member cache, diff against DB, POST bulk-update |
+| `discord` | `lease` | `discordbot/tasks.py`, `app/views/internal.py` | DiscordMessageLog stale-lease sweep (pending NULL >5min, failed >1h) |
 
 Add new systems/subsystems as features grow. Keep systems coarse (feature area), subsystems functional (what role the code plays).
 
