@@ -1,6 +1,5 @@
 import { UserLock } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { DestructiveButton } from '~/components/ui/buttons';
+import { DestructiveButton, type DestructiveButtonProps } from '~/components/ui/buttons';
 import {
   Tooltip,
   TooltipContent,
@@ -10,28 +9,34 @@ import {
 interface AdminOnlyButtonProps {
   buttonTxt?: string;
   tooltipTxt?: string;
+  size?: DestructiveButtonProps['size'];
+  className?: string;
+  iconClassName?: string;
+  onClick?: DestructiveButtonProps['onClick'];
+  'data-testid'?: string;
 }
 
 export const AdminOnlyButton: React.FC<AdminOnlyButtonProps> = ({
   buttonTxt = 'Must be Admin',
   tooltipTxt = 'Be sure you are logged in. This request will fail if you are not a staff member or admin.',
+  size,
+  className,
+  iconClassName = 'mr-2',
+  onClick,
+  'data-testid': dataTestId,
 }) => {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <motion.div
-          whileInView={{
-            opacity: 1,
-            transition: { delay: 0.05, duration: 0.5 },
-          }}
-          whileHover={{ scale: 1.1 }}
-          whileFocus={{ scale: 1.05 }}
+        <DestructiveButton
+          size={size}
+          className={className}
+          onClick={onClick}
+          data-testid={dataTestId}
         >
-          <DestructiveButton>
-            <UserLock className="mr-2" />
-            {buttonTxt}
-          </DestructiveButton>
-        </motion.div>
+          <UserLock className={iconClassName} />
+          {buttonTxt}
+        </DestructiveButton>
       </TooltipTrigger>
       <TooltipContent className="bg-red-900 text-white rounded-lg">
         <div className="text-wrap text-center ">{tooltipTxt}</div>

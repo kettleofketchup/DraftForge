@@ -1,4 +1,5 @@
 import { useEffect, type FormEvent } from 'react';
+import { useLocation } from 'react-router';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,6 +13,8 @@ import {
 } from '~/components/ui/alert-dialog';
 import { Button } from '~/components/ui/button';
 import { CancelButton, ConfirmButton, PrimaryButton, brandSuccessBg } from '~/components/ui/buttons';
+import { AdminOnlyButton } from '~/components/reusable/adminButton';
+import { buildDiscordLoginUrl } from '~/components/navbar/login';
 import type { UserType } from '~/index';
 import { DisplayName } from '~/components/user/avatar';
 import { getLogger } from '~/lib/logger';
@@ -34,6 +37,7 @@ export const ChoosePlayerButton: React.FC<{
   const setDraft = useUserStore((state) => state.setDraft);
   const setDraftIndex = useUserStore((state) => state.setDraftIndex);
   const autoRefreshDraft = useUserStore((state) => state.autoRefreshDraft);
+  const location = useLocation();
 
   // Check if current user is logged in
   const isLoggedIn = currentUser?.pk != null;
@@ -90,27 +94,47 @@ export const ChoosePlayerButton: React.FC<{
 
   // If user can't pick (not staff and not captain for this round)
   if (!canPick) {
-    // Not logged in
+    // Not logged in — clickable AdminOnly button that kicks off Discord login
+    // and returns to the current page (e.g. the tournament draft) after auth.
     if (!isLoggedIn) {
+      const next = `${location.pathname}${location.search}`;
       return (
-        <Button disabled variant="ghost" size="sm" className="text-xs px-2 text-muted-foreground" data-testid="pickDisabledLogin">
-          Login...
-        </Button>
+        <AdminOnlyButton
+          size="sm"
+          className="text-xs px-2"
+          iconClassName="mr-1 h-3.5 w-3.5"
+          buttonTxt="Login to Pick"
+          tooltipTxt="Must be Logged In — click to sign in with Discord."
+          onClick={() => {
+            window.location.assign(buildDiscordLoginUrl(next));
+          }}
+          data-testid="pickDisabledLogin"
+        />
       );
     }
     // User is a captain but not their turn
     if (isAnyCaptain) {
       return (
-        <Button disabled variant="ghost" size="sm" className="text-xs px-2 text-muted-foreground" data-testid="pickDisabledNotYourTurn">
-          Not your turn
-        </Button>
+        <AdminOnlyButton
+          size="sm"
+          className="text-xs px-2"
+          iconClassName="mr-1 h-3.5 w-3.5"
+          buttonTxt="Not Your Turn"
+          tooltipTxt="Wait for your turn — only the captain on the clock can pick."
+          data-testid="pickDisabledNotYourTurn"
+        />
       );
     }
-    // Regular user watching
+    // Logged in but not a captain
     return (
-      <Button disabled variant="ghost" size="sm" className="text-xs px-2 text-muted-foreground" data-testid="pickDisabledWaiting">
-        Waiting...
-      </Button>
+      <AdminOnlyButton
+        size="sm"
+        className="text-xs px-2"
+        iconClassName="mr-1 h-3.5 w-3.5"
+        buttonTxt="Not Allowed"
+        tooltipTxt="Only team captains can pick players for this draft."
+        data-testid="pickDisabledWaiting"
+      />
     );
   }
 
