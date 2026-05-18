@@ -33,7 +33,9 @@ Every log MUST include `system` and `subsystem` kwargs. These are the primary Gr
 | `events` | `scheduling` | `events/tasks.py` | Event generation, signup opening, repeaters |
 | `tournament` | `discord` | `discordbot/tasks.py` | Tournament DMs, bracket notifications |
 | `avatars` | `endpoint` | `user/internal/avatar.py` | Internal endpoints: list-linked-users, list-guild-ids, bulk-update + invalidate |
-| `avatars` | `refresh` | `app/tasks/avatar_refresh.py` | Daily Celery beat: read guild-member cache, diff against DB, POST bulk-update |
+| `avatars` | `refresh` | `app/tasks/avatar_refresh.py::refresh_avatars_batched` | Daily Celery beat: read guild-member cache, diff against DB, POST bulk-update |
+| `avatars` | `single` | `app/tasks/avatar_refresh.py::refresh_single_user_avatar` + helpers | Single-user refresh: Discord API fetch + per-user `update_user_avatar` |
+| `avatars` | `legacy` | `app/tasks/avatar_refresh.py::refresh_discord_avatars` / `refresh_all_discord_data` | Older per-user fanout tasks (predates the batched path) |
 | `discord` | `lease` | `discordbot/tasks.py`, `app/views/internal.py` | DiscordMessageLog stale-lease sweep (pending NULL >5min, failed >1h) |
 
 Add new systems/subsystems as features grow. Keep systems coarse (feature area), subsystems functional (what role the code plays).
