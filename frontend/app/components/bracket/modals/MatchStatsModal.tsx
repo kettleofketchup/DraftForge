@@ -221,8 +221,15 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
             </div>
           )}
 
-          {/* Unset Winner - only show if match has winner */}
-          {isLeagueStaff && match.status === 'completed' && match.winner && (
+          {/* Unset Winner — show whenever the row is "set", even if the
+              derived winner is missing. A match can land in status=completed
+              with winner=undefined when the backend's winning_team FK
+              doesn't match either current radiant_team / dire_team (e.g. a
+              prior team change broke the derivation in bracketStore.ts), and
+              admins need a recovery path. The unset is a pending local
+              change (isDirty=true) and only persists on Save, so showing
+              the button even mid-edit is safe. */}
+          {isLeagueStaff && (match.status === 'completed' || match.winner) && (
             <div className="border-t pt-4">
               <SecondaryButton
                 size="sm"
