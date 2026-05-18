@@ -8,16 +8,25 @@ JSON models for DraftForge Grafana Cloud dashboards. Import into Grafana via
 File: [`subsystem-logs.json`](subsystem-logs.json)
 UID: `draftforge-subsystem-logs`
 
-What it shows, sliced by the project's `system` / `subsystem` structlog
-taxonomy (see [logging.md](../logging.md) and the `logging` skill):
+Structure: **one overview row + one repeating row per system**. Grafana
+fans out the repeating row automatically — pick 3 systems in the
+template var, you get 3 rows; pick all 8, you get 8.
+
+**Overview row** (always at top, never repeats):
 
 | Panel | Type | Purpose |
 |-------|------|---------|
-| Subsystem inventory — events in range | table | Every `(system, subsystem)` tuple seen, with event count. Surfaces newly-added and silently-dropped subsystems. |
-| Log rate by subsystem | timeseries (stacked) | Per-minute log rate; spikes flag a hot subsystem, flatlines flag a stopped one. |
-| Warn + error rate by subsystem | timeseries (bars) | Restricts to `level=~"warning\|error"`. Anything above zero is the first place to look during an incident. |
-| Top 20 events | table | Most-frequent `event` names across the selected subsystems. Surfaces noisy events worth de-duping or upgrading to metrics. |
-| Recent logs | logs | Live tail with full structured-log JSON view. |
+| Subsystem inventory | table | Every `(system, subsystem)` tuple seen in range, with event count. Discovers newly-shipped and silently-dropped subsystems. |
+| Log rate by system | timeseries (stacked) | Cross-system view of activity. |
+| Warn + error rate by system | timeseries (bars) | Cross-system incident scan. |
+
+**Repeating row** — title `system: $system`, generated once per selected system:
+
+| Panel | Type | Purpose |
+|-------|------|---------|
+| `$system` — log rate by subsystem | timeseries (stacked) | Hot vs flatlined subsystems within this system. |
+| `$system` — warn + error rate by subsystem | timeseries (bars) | Errors and warnings within this system. |
+| `$system` — recent logs | logs | Live tail filtered to this system. |
 
 Template variables (cascade left to right):
 
