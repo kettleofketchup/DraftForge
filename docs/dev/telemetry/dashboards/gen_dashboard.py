@@ -32,9 +32,18 @@ from grafana_foundation_sdk.builders import (
     timeseries,
 )
 from grafana_foundation_sdk.cog.encoder import JSONEncoder
-from grafana_foundation_sdk.models.common import GraphDrawStyle, StackingMode
+from grafana_foundation_sdk.models.common import (
+    BarGaugeDisplayMode,
+    GraphDrawStyle,
+    LegendDisplayMode,
+    LegendPlacement,
+    StackingMode,
+    TableBarGaugeCellOptions,
+    TooltipDisplayMode,
+)
 from grafana_foundation_sdk.models.dashboard import (
     DataSourceRef,
+    Threshold,
     VariableRefresh,
     VariableSort,
 )
@@ -78,6 +87,39 @@ def _loki_instant(expr: str, legend: str = "") -> loki.Dataquery:
     return _loki_target(expr, legend).query_type("instant").instant(True)
 
 
+def _legend() -> common_builder.VizLegendOptions:
+    """Project standard: right-side table with last + max calcs."""
+    return (
+        common_builder.VizLegendOptions()
+        .show_legend(True)
+        .placement(LegendPlacement.RIGHT)
+        .display_mode(LegendDisplayMode.TABLE)
+        .calcs(["lastNotNull", "max"])
+    )
+
+
+def _tooltip() -> common_builder.VizTooltipOptions:
+    """Multi-series tooltip sorted desc — easiest to read at a glance."""
+    return (
+        common_builder.VizTooltipOptions()
+        .mode(TooltipDisplayMode.MULTI)
+        .sort("desc")
+    )
+
+
+def _error_thresholds() -> dashboard.ThresholdsConfig:
+    """Green/red split at 0.001 — anything above zero on a warn+error
+    panel should pop visually."""
+    return (
+        dashboard.ThresholdsConfig()
+        .mode("absolute")
+        .steps([
+            Threshold(value=None, color="green"),
+            Threshold(value=0.001, color="red"),
+        ])
+    )
+
+
 def _ts_panel(
     title: str,
     expr: str,
@@ -88,9 +130,10 @@ def _ts_panel(
     draw_style: GraphDrawStyle = GraphDrawStyle.LINE,
     fill_opacity: int = 10,
     description: str = "",
+    thresholds_style: bool = False,
 ) -> timeseries.Panel:
     """Stacked timeseries panel — project defaults for log-rate views."""
-    return (
+    panel = (
         timeseries.Panel()
         .title(title)
         .description(description)
@@ -101,8 +144,13 @@ def _ts_panel(
         .draw_style(draw_style)
         .fill_opacity(fill_opacity)
         .stacking(common_builder.StackingConfig().mode(StackingMode.NORMAL).group("A"))
+        .legend(_legend())
+        .tooltip(_tooltip())
         .with_target(_loki_target(expr, legend))
     )
+    if thresholds_style:
+        panel = panel.thresholds(_error_thresholds())
+    return panel
 
 
 def _err_panel(
@@ -114,7 +162,7 @@ def _err_panel(
     height: int = 8,
     description: str = "",
 ) -> timeseries.Panel:
-    """Warn/error rate panel — bars, higher fill."""
+    """Warn/error rate panel — bars, higher fill, red threshold at 0.001."""
     return _ts_panel(
         title,
         expr,
@@ -124,6 +172,7 @@ def _err_panel(
         draw_style=GraphDrawStyle.BARS,
         fill_opacity=70,
         description=description,
+        thresholds_style=True,
     )
 
 
@@ -162,7 +211,13 @@ def _table_panel(
     height: int = 10,
     description: str = "",
 ) -> table.Panel:
-    """Table panel — used for inventory + top-N rankings."""
+    """Table panel — used for inventory + top-N rankings.
+
+    Project defaults:
+    - Sort by `Value` descending so the noisiest rows surface to the top.
+    - Render `Value` as a gradient bar gauge for quick at-a-glance ranking.
+    - Compact cell density.
+    """
     return (
         table.Panel()
         .title(title)
@@ -170,6 +225,13 @@ def _table_panel(
         .datasource(DS_LOKI)
         .span(width)
         .height(height)
+        .show_header(True)
+        .cell_options(TableBarGaugeCellOptions(mode=BarGaugeDisplayMode.GRADIENT))
+        .sort_by([
+            common_builder.TableSortByFieldState()
+            .display_name("Value")
+            .desc(True)
+        ])
         .with_target(_loki_instant(expr))
     )
 

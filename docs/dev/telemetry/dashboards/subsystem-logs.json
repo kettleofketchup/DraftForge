@@ -133,6 +133,36 @@
             "y": 1
           },
           "repeatDirection": "h",
+          "options": {
+            "frameIndex": 0,
+            "showHeader": true,
+            "showTypeIcons": false,
+            "sortBy": [
+              {
+                "displayName": "Value",
+                "desc": true
+              }
+            ],
+            "footer": {
+              "show": false,
+              "reducer": [],
+              "countRows": false
+            },
+            "cellHeight": "sm"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "inspect": false,
+                "cellOptions": {
+                  "type": "gauge",
+                  "mode": "gradient"
+                }
+              }
+            },
+            "overrides": []
+          },
           "id": 2
         },
         {
@@ -160,6 +190,36 @@
             "y": 1
           },
           "repeatDirection": "h",
+          "options": {
+            "frameIndex": 0,
+            "showHeader": true,
+            "showTypeIcons": false,
+            "sortBy": [
+              {
+                "displayName": "Value",
+                "desc": true
+              }
+            ],
+            "footer": {
+              "show": false,
+              "reducer": [],
+              "countRows": false
+            },
+            "cellHeight": "sm"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "inspect": false,
+                "cellOptions": {
+                  "type": "gauge",
+                  "mode": "gradient"
+                }
+              }
+            },
+            "overrides": []
+          },
           "id": 3
         },
         {
@@ -186,6 +246,21 @@
             "y": 11
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
@@ -226,9 +301,37 @@
             "y": 11
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 0.001,
+                    "color": "red"
+                  }
+                ]
+              },
               "custom": {
                 "drawStyle": "bars",
                 "fillOpacity": 70,
@@ -280,6 +383,21 @@
             "y": 20
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
@@ -320,9 +438,37 @@
             "y": 20
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 0.001,
+                    "color": "red"
+                  }
+                ]
+              },
               "custom": {
                 "drawStyle": "bars",
                 "fillOpacity": 70,
@@ -410,6 +556,21 @@
             "y": 39
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
@@ -450,9 +611,37 @@
             "y": 39
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 0.001,
+                    "color": "red"
+                  }
+                ]
+              },
               "custom": {
                 "drawStyle": "bars",
                 "fillOpacity": 70,
@@ -540,6 +729,21 @@
             "y": 58
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
@@ -580,9 +784,37 @@
             "y": 58
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 0.001,
+                    "color": "red"
+                  }
+                ]
+              },
               "custom": {
                 "drawStyle": "bars",
                 "fillOpacity": 70,
@@ -670,6 +902,21 @@
             "y": 77
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
@@ -710,9 +957,37 @@
             "y": 77
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 0.001,
+                    "color": "red"
+                  }
+                ]
+              },
               "custom": {
                 "drawStyle": "bars",
                 "fillOpacity": 70,
@@ -800,6 +1075,21 @@
             "y": 96
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
@@ -840,9 +1130,37 @@
             "y": 96
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 0.001,
+                    "color": "red"
+                  }
+                ]
+              },
               "custom": {
                 "drawStyle": "bars",
                 "fillOpacity": 70,
@@ -930,6 +1248,21 @@
             "y": 115
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
@@ -970,9 +1303,37 @@
             "y": 115
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 0.001,
+                    "color": "red"
+                  }
+                ]
+              },
               "custom": {
                 "drawStyle": "bars",
                 "fillOpacity": 70,
@@ -1060,6 +1421,21 @@
             "y": 134
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
@@ -1100,9 +1476,37 @@
             "y": 134
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 0.001,
+                    "color": "red"
+                  }
+                ]
+              },
               "custom": {
                 "drawStyle": "bars",
                 "fillOpacity": 70,
@@ -1190,6 +1594,21 @@
             "y": 153
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
@@ -1230,9 +1649,37 @@
             "y": 153
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 0.001,
+                    "color": "red"
+                  }
+                ]
+              },
               "custom": {
                 "drawStyle": "bars",
                 "fillOpacity": 70,
@@ -1320,6 +1767,21 @@
             "y": 172
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
@@ -1360,9 +1822,37 @@
             "y": 172
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 0.001,
+                    "color": "red"
+                  }
+                ]
+              },
               "custom": {
                 "drawStyle": "bars",
                 "fillOpacity": 70,
@@ -1450,6 +1940,21 @@
             "y": 191
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
@@ -1490,9 +1995,37 @@
             "y": 191
           },
           "repeatDirection": "h",
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "showLegend": true,
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "fieldConfig": {
             "defaults": {
               "unit": "logs/s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 0.001,
+                    "color": "red"
+                  }
+                ]
+              },
               "custom": {
                 "drawStyle": "bars",
                 "fillOpacity": 70,
@@ -1617,6 +2150,36 @@
             "y": 220
           },
           "repeatDirection": "h",
+          "options": {
+            "frameIndex": 0,
+            "showHeader": true,
+            "showTypeIcons": false,
+            "sortBy": [
+              {
+                "displayName": "Value",
+                "desc": true
+              }
+            ],
+            "footer": {
+              "show": false,
+              "reducer": [],
+              "countRows": false
+            },
+            "cellHeight": "sm"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "inspect": false,
+                "cellOptions": {
+                  "type": "gauge",
+                  "mode": "gradient"
+                }
+              }
+            },
+            "overrides": []
+          },
           "id": 48
         }
       ],
