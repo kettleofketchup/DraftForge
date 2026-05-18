@@ -1,0 +1,680 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "DraftForge structured-log inventory and live tail, sliced by (system, subsystem). Backed by the project's structlog taxonomy — see docs/dev/telemetry/logging.md and .claude/skills/logging/SKILL.md.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "description": "Every (system, subsystem) tuple seen in the selected service/env over the dashboard range. Use this to discover newly-added subsystems or spot dropped ones.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "gradient",
+                  "type": "gauge"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Events"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Events"
+          }
+        ]
+      },
+      "pluginVersion": "10.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (system, subsystem) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system!=\"\" [$__range]))",
+          "instant": true,
+          "legendFormat": "{{system}}/{{subsystem}}",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "Subsystem inventory — events in range",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "system": 0,
+              "subsystem": 1,
+              "Value": 2
+            },
+            "renameByName": {}
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "description": "Per-minute log rate by subsystem. Spikes flag a hot subsystem; flatlines flag a stopped one.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "logs/s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (system, subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" | subsystem=~\"$subsystem\" [$__rate_interval]))",
+          "legendFormat": "{{system}}/{{subsystem}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Log rate by subsystem",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "description": "Warning + error rate per subsystem. Anything above zero here is the first place to look during an incident.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.001
+              }
+            ]
+          },
+          "unit": "logs/s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 10
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (system, subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" | subsystem=~\"$subsystem\" | level=~\"warning|error\" [$__rate_interval]))",
+          "legendFormat": "{{system}}/{{subsystem}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Warn + error rate by subsystem",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "description": "Most-frequent event names across the selected subsystems. Useful for spotting noisy events worth de-duping or upgrading to metrics.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Events"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "gradient",
+                  "type": "gauge"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 10
+      },
+      "id": 4,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Events"
+          }
+        ]
+      },
+      "pluginVersion": "10.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "editorMode": "code",
+          "expr": "topk(20, sum by (event, system, subsystem) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" | subsystem=~\"$subsystem\" [$__range])))",
+          "instant": true,
+          "legendFormat": "{{event}}",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "Top 20 events",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "event": 0,
+              "system": 1,
+              "subsystem": 2,
+              "Value": 3
+            },
+            "renameByName": {}
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "description": "Live-tail of structured logs filtered to the selected service/env/system/subsystem/level. Use the Grafana logs panel features (wrap, dedup, json viewer) for inspection.",
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 5,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "pluginVersion": "10.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "editorMode": "code",
+          "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Recent logs",
+      "type": "logs"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "draftforge",
+    "logs",
+    "structlog"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "prod",
+          "value": "prod"
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${DS_LOKI}"
+        },
+        "definition": "label_values(deployment_environment)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Environment",
+        "multi": false,
+        "name": "env",
+        "options": [],
+        "query": {
+          "label": "deployment_environment",
+          "refId": "LokiVariableQueryEditor-VariableQuery",
+          "stream": "",
+          "type": 1
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${DS_LOKI}"
+        },
+        "definition": "label_values({deployment_environment=\"$env\"}, service_name)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Service",
+        "multi": true,
+        "name": "service",
+        "options": [],
+        "query": {
+          "label": "service_name",
+          "refId": "LokiVariableQueryEditor-VariableQuery",
+          "stream": "{deployment_environment=\"$env\"}",
+          "type": 1
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${DS_LOKI}"
+        },
+        "definition": "",
+        "hide": 0,
+        "includeAll": true,
+        "label": "System",
+        "multi": true,
+        "name": "system",
+        "options": [],
+        "query": {
+          "expr": "sum by (system) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system!=\"\" [$__range]))",
+          "refId": "LokiVariableQueryEditor-VariableQuery",
+          "type": 3
+        },
+        "refresh": 2,
+        "regex": "/\"system\"=\"(?<text>[^\"]+)\"/",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${DS_LOKI}"
+        },
+        "definition": "",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Subsystem",
+        "multi": true,
+        "name": "subsystem",
+        "options": [],
+        "query": {
+          "expr": "sum by (subsystem) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" | subsystem!=\"\" [$__range]))",
+          "refId": "LokiVariableQueryEditor-VariableQuery",
+          "type": 3
+        },
+        "refresh": 2,
+        "regex": "/\"subsystem\"=\"(?<text>[^\"]+)\"/",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": [
+            "info",
+            "warning",
+            "error"
+          ],
+          "value": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Level",
+        "multi": true,
+        "name": "level",
+        "options": [
+          {
+            "selected": false,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "debug",
+            "value": "debug"
+          },
+          {
+            "selected": true,
+            "text": "info",
+            "value": "info"
+          },
+          {
+            "selected": true,
+            "text": "warning",
+            "value": "warning"
+          },
+          {
+            "selected": true,
+            "text": "error",
+            "value": "error"
+          }
+        ],
+        "query": "debug,info,warning,error",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "DraftForge — Subsystem Logs",
+  "uid": "draftforge-subsystem-logs",
+  "version": 1,
+  "weekStart": ""
+}
