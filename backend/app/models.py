@@ -600,6 +600,20 @@ class Tournament(models.Model):
             return []
         return self.users.filter(teams_as_captain__tournament=self).distinct()
 
+    @property
+    def linked_steam_league_id(self):
+        """Steam league id resolved via the parent League FK.
+
+        The legacy `Tournament.steam_league_id` field is ignored — see the
+        separate rename-plan PR for the wider cleanup. Callers doing
+        Steam match lookups should use this property so behavior follows
+        the linked League and edits to League.steam_league_id take effect
+        without per-tournament duplication.
+        """
+        if not self.league_id:
+            return None
+        return self.league.steam_league_id
+
 
 class Team(models.Model):
     tournament = models.ForeignKey(
