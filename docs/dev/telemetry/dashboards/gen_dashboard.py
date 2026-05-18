@@ -580,3 +580,160 @@ OUTPUT.write_text(json.dumps(dashboard, indent=2) + "\n")
 print(f"Wrote {OUTPUT}")
 print(f"Systems: {len(SYSTEMS)}")
 print(f"Total panels (incl. rows): {len(dashboard['panels'])}")
+
+
+# ---- Validation -----------------------------------------------------------
+# Grafana doesn't publish a stable JSON schema for dashboard models (Cue
+# schemas live in-tree but aren't versioned for external consumers). The
+# grafana skill (`.claude/skills/grafana/SKILL.md` → Dashboard Review
+# section) enumerates the bugs that actually break dashboards at import
+# time, which is what we check for here.
+
+import sys
+
+
+def validate(d: dict) -> list[str]:
+    errors: list[str] = []
+
+    # --- Top-level shape ----------------------------------------------------
+    for key in ("panels", "templating", "title", "uid", "schemaVersion"):
+        if key not in d:
+            errors.append(f"top-level: missing required key {key!r}")
+
+    # --- Panel IDs and grid positions --------------------------------------
+    seen_ids: dict[int, str] = {}
+
+    def visit_panel(p: dict, parent_title: str = "") -> None:
+        pid = p.get("id")
+        if pid is None:
+            errors.append(
+                f"panel {parent_title!r} {p.get('title','?')!r}: missing 'id'"
+            )
+            return
+        if pid in seen_ids:
+            errors.append(
+                f"duplicate panel id {pid}: {seen_ids[pid]!r} and "
+                f"{p.get('title','?')!r}"
+            )
+        else:
+            seen_ids[pid] = p.get("title", "?")
+        if "gridPos" not in p:
+            errors.append(
+                f"panel id={pid} {p.get('title','?')!r}: missing 'gridPos'"
+            )
+        if "type" not in p:
+            errors.append(
+                f"panel id={pid} {p.get('title','?')!r}: missing 'type'"
+            )
+        for inner in p.get("panels", []) or []:
+            visit_panel(inner, parent_title=f"row id={pid}")
+
+    for p in d.get("panels", []):
+        visit_panel(p)
+
+    # --- Datasource references --------------------------------------------
+    declared_inputs = {i["name"] for i in d.get("__inputs", [])}
+    ds_refs: set[str] = set()
+
+    def walk_ds(o):
+        if isinstance(o, dict):
+            if (
+                "uid" in o
+                and isinstance(o.get("uid"), str)
+                and o["uid"].startswith("${")
+                and o["uid"].endswith("}")
+            ):
+                ds_refs.add(o["uid"][2:-1])
+            for v in o.values():
+                walk_ds(v)
+        elif isinstance(o, list):
+            for x in o:
+                walk_ds(x)
+
+    walk_ds(d)
+    for ref in ds_refs:
+        if ref not in declared_inputs:
+            errors.append(
+                f"datasource ${{{ref}}} referenced but not declared in __inputs"
+            )
+
+    # --- Template variable references in expressions ----------------------
+    declared_vars = {v["name"] for v in d.get("templating", {}).get("list", [])}
+    builtins = {
+        "__interval",
+        "__interval_ms",
+        "__range",
+        "__range_s",
+        "__range_ms",
+        "__rate_interval",
+        "__auto",
+        "__from",
+        "__to",
+        "__name",
+        "__org",
+        "__user",
+        "__dashboard",
+        "__timeFilter",
+        "__all",
+    }
+    import re as _re
+
+    var_re = _re.compile(r"\$(?:\{)?([A-Za-z_][A-Za-z0-9_]*)")
+    exprs: list[tuple[str, str]] = []
+
+    def walk_exprs(o, path="$"):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                walk_exprs(v, f"{path}.{k}")
+                if k == "expr" and isinstance(v, str):
+                    exprs.append((path, v))
+        elif isinstance(o, list):
+            for i, x in enumerate(o):
+                walk_exprs(x, f"{path}[{i}]")
+
+    walk_exprs(d)
+
+    for path, expr in exprs:
+        for name in var_re.findall(expr):
+            if name in builtins or name in declared_vars:
+                continue
+            errors.append(
+                f"expr {path}: references $${name} which is not a template "
+                f"variable or known Grafana built-in"
+            )
+
+    # --- LogQL paren/brace/bracket/backtick balance -----------------------
+    for path, e in exprs:
+        po, pc = e.count("("), e.count(")")
+        bo, bc = e.count("{"), e.count("}")
+        so, sc = e.count("["), e.count("]")
+        bt = e.count("`")
+        if po != pc:
+            errors.append(
+                f"expr {path}: paren imbalance ({po} `(` vs {pc} `)`)"
+            )
+        if bo != bc:
+            errors.append(
+                f"expr {path}: brace imbalance ({bo} `{{` vs {bc} `}}`)"
+            )
+        if so != sc:
+            errors.append(
+                f"expr {path}: bracket imbalance ({so} `[` vs {sc} `]`)"
+            )
+        if bt % 2 != 0:
+            errors.append(f"expr {path}: odd backtick count ({bt})")
+
+    return errors
+
+
+print("\nValidating…")
+issues = validate(dashboard)
+if issues:
+    print(f"\n{len(issues)} issue(s) found:")
+    for i in issues:
+        print(f"  ✗ {i}")
+    sys.exit(1)
+print(f"  ✓ {len(seen_ids := {p['id'] for p in dashboard['panels']})} top-level panel/row IDs")
+print(f"  ✓ all datasource refs resolved against __inputs")
+print(f"  ✓ all template vars resolved against templating.list + Grafana built-ins")
+print("  ✓ all LogQL exprs balanced")
