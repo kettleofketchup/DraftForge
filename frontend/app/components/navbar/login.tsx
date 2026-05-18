@@ -1,7 +1,7 @@
 import { useClickAway } from '@uidotdev/usehooks';
 import { LogOutIcon, UserPenIcon } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { DraftNotificationBadge } from '~/components/teamdraft/DraftNotificationBadge';
 import {
   DropdownMenu,
@@ -16,9 +16,21 @@ import { useUserStore } from '../../store/userStore';
 import type { UserType } from '../user/types';
 
 import { Button } from '~/components/ui/button';
-import { DestructiveButton } from '~/components/ui/buttons';
+import { DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
 import { getLogger } from '~/lib/logger';
 const log = getLogger('login');
+
+const DiscordIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z" />
+  </svg>
+);
 
 type AvatarProps = {
   children: React.ReactNode;
@@ -113,33 +125,26 @@ export const ProfileButton: React.FC = () => {
   );
 };
 
-export const LoginButton: React.FC = () => {
-  const loginUrl = '/login/discord/';
-  return (
-    <a className="p-2" href={loginUrl}>
-      <button className="bg-gray-950 flex items-center border border-gray-300 rounded-lg shadow-md px-6 py-2 text-sm font-medium text-gray-400 hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
-        <svg
-          className="h-6 w-6 mr-2"
-          xmlns="http://www.w3.org/2000/svg"
-          xmlnsXlink="http://www.w3.org/1999/xlink"
-          width="800px"
-          height="800px"
-          viewBox="0 -28.5 256 256"
-          version="1.1"
-          preserveAspectRatio="xMidYMid"
-        >
-          <g>
-            <path
-              d="M216.856339,16.5966031 C200.285002,8.84328665 182.566144,3.2084988 164.041564,0 C161.766523,4.11318106 159.108624,9.64549908 157.276099,14.0464379 C137.583995,11.0849896 118.072967,11.0849896 98.7430163,14.0464379 C96.9108417,9.64549908 94.1925838,4.11318106 91.8971895,0 C73.3526068,3.2084988 55.6133949,8.86399117 39.0420583,16.6376612 C5.61752293,67.146514 -3.4433191,116.400813 1.08711069,164.955721 C23.2560196,181.510915 44.7403634,191.567697 65.8621325,198.148576 C71.0772151,190.971126 75.7283628,183.341335 79.7352139,175.300261 C72.104019,172.400575 64.7949724,168.822202 57.8887866,164.667963 C59.7209612,163.310589 61.5131304,161.891452 63.2445898,160.431257 C105.36741,180.133187 151.134928,180.133187 192.754523,160.431257 C194.506336,161.891452 196.298154,163.310589 198.110326,164.667963 C191.183787,168.842556 183.854737,172.420929 176.223542,175.320965 C180.230393,183.341335 184.861538,190.991831 190.096624,198.16893 C211.238746,191.588051 232.743023,181.531619 254.911949,164.955721 C260.227747,108.668201 245.831087,59.8662432 216.856339,16.5966031 Z M85.4738752,135.09489 C72.8290281,135.09489 62.4592217,123.290155 62.4592217,108.914901 C62.4592217,94.5396472 72.607595,82.7145587 85.4738752,82.7145587 C98.3405064,82.7145587 108.709962,94.5189427 108.488529,108.914901 C108.508531,123.290155 98.3405064,135.09489 85.4738752,135.09489 Z M170.525237,135.09489 C157.88039,135.09489 147.510584,123.290155 147.510584,108.914901 C147.510584,94.5396472 157.658606,82.7145587 170.525237,82.7145587 C183.391518,82.7145587 193.761324,94.5189427 193.539891,108.914901 C193.539891,123.290155 183.391518,135.09489 170.525237,135.09489 Z"
-              fill="#5865F2"
-              fillRule="nonzero"
-            ></path>
-          </g>
-        </svg>
+// Build a Discord OAuth login URL that returns the user to `returnTo`
+// after auth completes. Passed through python-social-auth's `?next=` param,
+// which is honored by the social_django pipeline and falls back to
+// LOGIN_REDIRECT_URL when absent or unsafe.
+export const buildDiscordLoginUrl = (returnTo?: string | null): string => {
+  const base = '/login/discord/';
+  if (!returnTo || returnTo === '/' || returnTo === '/done') return base;
+  return `${base}?next=${encodeURIComponent(returnTo)}`;
+};
 
-        <span>Login</span>
-      </button>
-    </a>
+export const LoginButton: React.FC = () => {
+  const location = useLocation();
+  const loginUrl = buildDiscordLoginUrl(`${location.pathname}${location.search}`);
+  return (
+    <PrimaryButton asChild data-testid="navbarLoginButton">
+      <a href={loginUrl}>
+        <DiscordIcon className="h-5 w-5" />
+        <span>Login with Discord</span>
+      </a>
+    </PrimaryButton>
   );
 };
 
