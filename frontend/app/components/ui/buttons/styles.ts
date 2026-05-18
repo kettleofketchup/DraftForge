@@ -14,8 +14,13 @@ export const brandSecondary = 'bg-gradient-to-r from-violet-500/30 to-blue-500/2
 // (e.g. bg-background on dialogs). Applied by default to Dialog and AlertDialog content.
 export const brandBg = '[background-image:var(--brand-bg)]';
 
-// Brand 3D depth colors - violet border-bottom with neutral shadow
-export const brandDepthColors = 'border-b-violet-700 shadow-black/30';
+// Brand 3D depth colors — deep indigo bottom edge bridges the violet→blue
+// gradient (instead of fighting it the way `violet-700` did), and the drop
+// shadow swaps generic black for a brand-violet glow with a subtle 1px
+// inner-top highlight that reads as "lit from above". Together this gives
+// the brand primary a neon-cyber lift without the chunky-bevel feel.
+export const brandDepthColors =
+  'border-b-indigo-950 shadow-[0_8px_20px_-8px_var(--glow-violet),inset_0_1px_0_rgba(255,255,255,0.18)]';
 
 // Brand glow shadow - visible on dark backgrounds, matches brand gradient
 // Defined as --shadow-brand-glow in @theme (app.css) for use with variants

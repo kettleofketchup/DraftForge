@@ -19,7 +19,21 @@ const colorClasses: Record<PrimaryButtonColor, string> = {
   yellow: 'bg-yellow-600 hover:bg-yellow-500 text-black border-b-yellow-800 shadow-yellow-900/50',
 };
 
-const brandExtras = `${brandDepthColors} [text-shadow:_0_1px_2px_rgba(0,0,0,0.5)] [&_svg]:text-white [&_svg]:drop-shadow-[1px_1px_1px_rgba(0,0,0,0.5)]`;
+// Two-layer dark text-shadow under every PrimaryButton label: a hard 1px
+// stroke that gives the glyph edges definition, plus a soft 3px blurred
+// halo that lifts the text off the colored fill so it reads as "set into"
+// the button rather than printed on top. Applied to every variant.
+const primaryTextStroke =
+  '[text-shadow:_0_1px_0_rgba(0,0,0,0.85),_0_2px_3px_rgba(0,0,0,0.5)]';
+
+// Brand variant adds, on top of the two-layer dark stroke, a soft cyan
+// accent glow (using the brand --glow-cyan token) so the label feels
+// illuminated rather than printed flat. Kept brand-only so the green /
+// blue / yellow variants don't muddy their hue with an unrelated accent.
+// SVG icons get a matching dark hairline so the Discord glyph etc. stays
+// crisp on the gradient.
+const brandExtras =
+  `${brandDepthColors} [text-shadow:_0_1px_0_rgba(0,0,0,0.85),_0_2px_3px_rgba(0,0,0,0.5),_0_0_10px_var(--glow-cyan)] [&_svg]:text-white [&_svg]:drop-shadow-[0_1px_0_rgba(0,0,0,0.65)]`;
 
 const PrimaryButton = React.forwardRef<HTMLButtonElement, PrimaryButtonProps>(
   ({ color, className, children, depth = true, ...props }, ref) => {
@@ -31,7 +45,7 @@ const PrimaryButton = React.forwardRef<HTMLButtonElement, PrimaryButtonProps>(
           depth && button3DBase,
           depth && button3DDisabled,
           !depth && 'shadow-lg shadow-black/30',
-          isBrand ? [brandGradient, brandExtras] : colorClasses[color],
+          isBrand ? [brandGradient, brandExtras] : [colorClasses[color], primaryTextStroke],
           className
         )}
         {...props}
