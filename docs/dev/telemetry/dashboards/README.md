@@ -45,12 +45,34 @@ Template variables (cascade left to right):
 4. Save. The UID is pinned to `draftforge-subsystem-logs`, so re-importing
    overwrites cleanly instead of creating duplicates.
 
-### Updating
+### Updating an existing dashboard from new JSON
 
-Edit the JSON in this repo, push, then re-import (same Upload JSON flow).
-Grafana keeps the dashboard's saved state independent of the file — exporting
-back from Grafana ("Save → Export → Save to file" or the API) lets you commit
-your in-UI tweaks back here.
+Three ways, fastest first. Use whichever fits — the UID is pinned to
+`draftforge-subsystem-logs`, so all three target the same dashboard.
+
+1. **In-place via JSON Model (recommended)** — preserves URL, panel history,
+   and any in-UI tweaks not yet rolled back into the repo:
+   - Open the dashboard.
+   - ⚙️ **Dashboard settings** → **JSON Model**.
+   - Replace the whole JSON with the file contents.
+   - **Save changes**.
+
+2. **Re-import** — overwrites cleanly because the UID matches:
+   - Dashboards → New → **Import** → **Upload JSON file**.
+   - Confirm "Overwrite existing dashboard with same UID".
+
+3. **API** — for scripted updates:
+   ```bash
+   curl -X POST \
+     -H "Authorization: Bearer $GRAFANA_TOKEN" \
+     -H "Content-Type: application/json" \
+     "$GRAFANA_URL/api/dashboards/db" \
+     -d "$(jq '{dashboard: ., overwrite: true}' subsystem-logs.json)"
+   ```
+
+To capture in-UI tweaks back into the repo: open the dashboard → ⚙️ →
+**Save → Export → Save to file** (untick "Export for sharing externally"
+if you want the existing `__inputs` block kept), then commit the diff.
 
 ### Why a structured-log dashboard?
 

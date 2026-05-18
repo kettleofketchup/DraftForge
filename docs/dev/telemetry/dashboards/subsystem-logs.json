@@ -281,7 +281,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" [$__auto]))",
+          "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" [$__interval]))",
           "legendFormat": "{{system}}",
           "queryType": "range",
           "refId": "A"
@@ -381,7 +381,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" | level=~\"warning|error\" [$__auto]))",
+          "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" | level=~\"warning|error\" [$__interval]))",
           "legendFormat": "{{system}}",
           "queryType": "range",
           "refId": "A"
@@ -492,7 +492,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=\"$system\" | subsystem!=\"\" [$__auto]))",
+          "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=\"$system\" | subsystem!=\"\" [$__interval]))",
           "legendFormat": "{{subsystem}}",
           "queryType": "range",
           "refId": "A"
@@ -592,7 +592,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=\"$system\" | subsystem!=\"\" | level=~\"warning|error\" [$__auto]))",
+          "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=\"$system\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
           "legendFormat": "{{subsystem}}",
           "queryType": "range",
           "refId": "A"
@@ -727,7 +727,7 @@
           "uid": "${DS_LOKI}"
         },
         "definition": "",
-        "description": "Each selected system becomes its own row in the dashboard (rows repeat over this variable).",
+        "description": "Each selected system becomes its own row in the dashboard (rows repeat over this variable). Lookback fixed at 6h so the dropdown stays populated even when the dashboard time picker is set to a short window.",
         "hide": 0,
         "includeAll": true,
         "label": "System (repeats rows)",
@@ -735,7 +735,7 @@
         "name": "system",
         "options": [],
         "query": {
-          "expr": "sum by (system) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system!=\"\" [$__range]))",
+          "expr": "sum by (system) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system!=\"\" [6h]))",
           "refId": "LokiVariableQueryEditor-VariableQuery",
           "type": 3
         },
@@ -768,7 +768,7 @@
         "name": "subsystem",
         "options": [],
         "query": {
-          "expr": "sum by (subsystem) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" | subsystem!=\"\" [$__range]))",
+          "expr": "sum by (subsystem) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" | subsystem!=\"\" [6h]))",
           "refId": "LokiVariableQueryEditor-VariableQuery",
           "type": 3
         },
@@ -839,6 +839,6 @@
   "timezone": "browser",
   "title": "DraftForge — Subsystem Logs",
   "uid": "draftforge-subsystem-logs",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }
