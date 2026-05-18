@@ -74,6 +74,37 @@ To capture in-UI tweaks back into the repo: open the dashboard → ⚙️ →
 **Save → Export → Save to file** (untick "Export for sharing externally"
 if you want the existing `__inputs` block kept), then commit the diff.
 
+### Collapsed "JSON parse errors" row
+
+At the bottom there's a collapsed row labelled **JSON parse errors
+(collapsed)**. Expand it when:
+
+- A panel suddenly shows fewer series than expected.
+- Legends collapse to a generic `Value` label instead of one per system.
+- The `system` template variable returns fewer options than the
+  taxonomy table in `.claude/skills/logging/SKILL.md` says exist.
+
+All three symptoms have the same root cause: one or more Python log
+calls in the stream emit messages with stray `{` or `}` characters (an
+f-string that interpolated a dict, an unstructured `repr()`, etc.).
+Loki's `| json` parser rejects those lines and they never reach the
+panel filters that group by `system`/`subsystem`.
+
+The row contains:
+
+- **Lines that broke `| json`** — every offending log line with full
+  context labels (`code_file_path`, `code_function_name`,
+  `code_line_number`). Click into one to see the raw message.
+- **Top sources of broken JSON** — ranked table of `(file, line,
+  function)` tuples. Fix the top entries at source by migrating the
+  call from stdlib `logging` + f-string to `telemetry.logging.get_logger`
+  + structlog kwargs.
+
+The rest of the dashboard's panels include `| json | __error__=""`
+defensively, so a single broken line no longer poisons the entire
+view — but the source is still worth fixing because it's wasted log
+ingest cost.
+
 ### Why a structured-log dashboard?
 
 All backend logs are emitted via structlog with mandatory `system` and

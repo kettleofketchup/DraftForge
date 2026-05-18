@@ -8,13 +8,13 @@ Use this inside `transaction.atomic()` blocks instead of calling `invalidate_obj
 manually after the block.
 """
 
-import logging
-
 from cacheops import invalidate_obj
 from django.db import transaction
 from django.db.models import Model
 
-log = logging.getLogger(__name__)
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 
 def invalidate_after_commit(*objs: Model) -> None:
@@ -35,7 +35,11 @@ def invalidate_after_commit(*objs: Model) -> None:
     def _do():
         for obj in objs:
             log.info(
-                f"Invalidating: {obj.__class__.__name__}:{obj.pk}:{obj.__repr__()}"
+                "cache_invalidate",
+                system="cache",
+                subsystem="invalidate",
+                obj_class=obj.__class__.__name__,
+                obj_pk=obj.pk,
             )
             invalidate_obj(obj)
 

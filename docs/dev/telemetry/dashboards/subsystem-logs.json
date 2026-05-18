@@ -168,7 +168,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (system, subsystem) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system!=\"\" [$__range]))",
+          "expr": "sum by (system, subsystem) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system!=\"\" [$__range]))",
           "instant": true,
           "legendFormat": "{{system}}/{{subsystem}}",
           "queryType": "instant",
@@ -281,7 +281,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" [$__interval]))",
+          "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=~\"$system\" [$__interval]))",
           "legendFormat": "{{system}}",
           "queryType": "range",
           "refId": "A"
@@ -381,7 +381,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" | level=~\"warning|error\" [$__interval]))",
+          "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=~\"$system\" | level=~\"warning|error\" [$__interval]))",
           "legendFormat": "{{system}}",
           "queryType": "range",
           "refId": "A"
@@ -492,7 +492,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=\"$system\" | subsystem!=\"\" [$__interval]))",
+          "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"$system\" | subsystem!=\"\" [$__interval]))",
           "legendFormat": "{{subsystem}}",
           "queryType": "range",
           "refId": "A"
@@ -592,7 +592,7 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=\"$system\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
+          "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"$system\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
           "legendFormat": "{{subsystem}}",
           "queryType": "range",
           "refId": "A"
@@ -632,13 +632,177 @@
             "uid": "${DS_LOKI}"
           },
           "editorMode": "code",
-          "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=\"$system\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
+          "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"$system\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
           "queryType": "range",
           "refId": "A"
         }
       ],
       "title": "$system — recent logs",
       "type": "logs"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 300,
+      "panels": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "description": "Log lines that Loki's `| json` parser rejects. Source labels (code_file_path, code_function_name, code_line_number) tell you which Python file is emitting broken JSON — usually an f-string containing a stray `{` like a dict literal or repr() output. Fix at source by switching the call to structlog kwargs.",
+          "gridPos": {
+            "h": 10,
+            "w": 24,
+            "x": 0,
+            "y": 31
+          },
+          "id": 301,
+          "options": {
+            "dedupStrategy": "none",
+            "enableLogDetails": true,
+            "prettifyLogMessage": true,
+            "showCommonLabels": false,
+            "showLabels": true,
+            "showTime": true,
+            "sortOrder": "Descending",
+            "wrapLogMessage": true
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "loki",
+                "uid": "${DS_LOKI}"
+              },
+              "editorMode": "code",
+              "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"jsonparsererr\"",
+              "queryType": "range",
+              "refId": "A"
+            }
+          ],
+          "title": "Lines that broke `| json` (jsonparsererr)",
+          "type": "logs"
+        },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${DS_LOKI}"
+          },
+          "description": "Which source files are emitting broken JSON, ranked by count. Fix the top entries at source.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Value"
+                },
+                "properties": [
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "mode": "gradient",
+                      "type": "gauge"
+                    }
+                  },
+                  {
+                    "id": "displayName",
+                    "value": "Bad lines"
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 41
+          },
+          "id": 302,
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "countRows": false,
+              "fields": "",
+              "reducer": [
+                "sum"
+              ],
+              "show": false
+            },
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Bad lines"
+              }
+            ]
+          },
+          "pluginVersion": "10.4.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "loki",
+                "uid": "${DS_LOKI}"
+              },
+              "editorMode": "code",
+              "expr": "topk(20, sum by (code_file_path, code_function_name, code_line_number) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"jsonparsererr\" [$__range])))",
+              "instant": true,
+              "legendFormat": "{{code_file_path}}:{{code_line_number}} {{code_function_name}}",
+              "queryType": "instant",
+              "refId": "A"
+            }
+          ],
+          "title": "Top sources of broken JSON",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {
+                  "code_file_path": 0,
+                  "code_function_name": 1,
+                  "code_line_number": 2,
+                  "Value": 3
+                },
+                "renameByName": {}
+              }
+            }
+          ],
+          "type": "table"
+        }
+      ],
+      "title": "JSON parse errors (collapsed)",
+      "type": "row"
     }
   ],
   "refresh": "30s",
@@ -735,7 +899,7 @@
         "name": "system",
         "options": [],
         "query": {
-          "expr": "sum by (system) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system!=\"\" [6h]))",
+          "expr": "sum by (system) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system!=\"\" [6h]))",
           "refId": "LokiVariableQueryEditor-VariableQuery",
           "type": 3
         },
@@ -768,7 +932,7 @@
         "name": "subsystem",
         "options": [],
         "query": {
-          "expr": "sum by (subsystem) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | system=~\"$system\" | subsystem!=\"\" [6h]))",
+          "expr": "sum by (subsystem) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=~\"$system\" | subsystem!=\"\" [6h]))",
           "refId": "LokiVariableQueryEditor-VariableQuery",
           "type": 3
         },
@@ -839,6 +1003,6 @@
   "timezone": "browser",
   "title": "DraftForge — Subsystem Logs",
   "uid": "draftforge-subsystem-logs",
-  "version": 3,
+  "version": 4,
   "weekStart": ""
 }
