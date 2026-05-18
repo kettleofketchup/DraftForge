@@ -318,3 +318,43 @@ class GetMatchSuggestionsFallbackTest(TestCase):
         suggestions = get_match_suggestions_for_game(self.game)
         self.assertEqual(len(suggestions), 1)
         self.assertEqual(suggestions[0]["match_id"], 1)
+
+    def test_query_count_is_bounded_by_match_count(self):
+        """Regression guard for the prefetch — query count must NOT scale
+        with match count. Before the prefetch fix, every helper issued a
+        fresh `PlayerMatchStats.objects.filter(match=match)` query per
+        match (~5 queries × N matches). The bug is back if this test
+        fails on a higher fanout.
+        """
+        # Create 10 matches with 10 players each — 100 PlayerMatchStats rows
+        for match_id in range(1, 11):
+            match = self._create_match(match_id=match_id, league_id=19571)
+            for slot in range(10):
+                PlayerMatchStats.objects.create(
+                    match=match,
+                    steam_id=76561198000000100 + slot,
+                    player_slot=slot,
+                    hero_id=1,
+                    kills=0, deaths=0, assists=0,
+                    gold_per_min=0, xp_per_min=0,
+                    last_hits=0, denies=0,
+                    hero_damage=0, tower_damage=0, hero_healing=0,
+                )
+
+        # Bypass cacheops so we measure DB hits, not Redis hits.
+        from django.db import connection, reset_queries
+        from django.test.utils import CaptureQueriesContext
+
+        with CaptureQueriesContext(connection) as ctx:
+            suggestions = get_match_suggestions_for_game(self.game)
+
+        # 10 matches × 5 helpers without prefetch ≈ 50+ queries. With prefetch,
+        # it's a small constant (game/team/captain lookups + matches + players).
+        # 20 is a generous ceiling that catches the regression while tolerating
+        # incidental query churn.
+        self.assertEqual(len(suggestions), 10)
+        self.assertLess(
+            len(ctx.captured_queries),
+            20,
+            f"Too many queries ({len(ctx.captured_queries)}); prefetch likely bypassed.",
+        )

@@ -28,9 +28,7 @@ def calculate_suggestion_tier(
     - CAPTAINS_ONLY: Only both captains match
     - PARTIAL: Some players match but not both captains
     """
-    match_steam_ids = set(
-        PlayerMatchStats.objects.filter(match=match).values_list("steam_id", flat=True)
-    )
+    match_steam_ids = {p.steam_id for p in match.players.all()}
 
     overlap = all_team_steam_ids & match_steam_ids
 
@@ -164,27 +162,32 @@ def get_match_suggestions_for_game(game: Game, search: str | None = None) -> lis
 
 
 def _get_captain_match_info(match: Match, captain) -> dict | None:
-    """Get captain's info from match stats if they played."""
+    """Get captain's info from match stats if they played.
+
+    Reads from `match.players.all()` so the `prefetch_related("players__user")`
+    set up in `get_match_suggestions_for_game` is honored — without this,
+    every helper triggered a fresh `PlayerMatchStats.objects.filter(match=...)`
+    query per match (50 matches × 5 helpers = ~250 round-trips per modal open).
+    """
     if not captain or not captain.steamid:
         return None
 
-    try:
-        stats = PlayerMatchStats.objects.get(match=match, steam_id=captain.steamid)
-        return {
-            "steam_id": captain.steamid,
-            "username": captain.username,
-            "avatar": captain.avatarUrl if hasattr(captain, "avatarUrl") else None,
-            "hero_id": stats.hero_id,
-        }
-    except PlayerMatchStats.DoesNotExist:
+    stats = next(
+        (p for p in match.players.all() if p.steam_id == captain.steamid), None
+    )
+    if stats is None:
         return None
+    return {
+        "steam_id": captain.steamid,
+        "username": captain.username,
+        "avatar": captain.avatarUrl if hasattr(captain, "avatarUrl") else None,
+        "hero_id": stats.hero_id,
+    }
 
 
 def _count_player_overlap(match: Match, all_team_steam_ids: set[int]) -> int:
     """Count how many team players are in the match."""
-    match_steam_ids = set(
-        PlayerMatchStats.objects.filter(match=match).values_list("steam_id", flat=True)
-    )
+    match_steam_ids = {p.steam_id for p in match.players.all()}
     return len(all_team_steam_ids & match_steam_ids)
 
 
@@ -199,11 +202,10 @@ def _get_matched_players(
 
     captain_ids = {radiant_captain_id, dire_captain_id} - {None}
 
-    # Get all player stats for this match
-    stats = PlayerMatchStats.objects.filter(match=match).select_related("user")
-
+    # Read from the prefetched players (prefetch_related("players__user")
+    # populates both PlayerMatchStats rows and their related User).
     matched = []
-    for stat in stats:
+    for stat in match.players.all():
         if stat.steam_id in all_team_steam_ids:
             # Try to get user info
             user = stat.user
