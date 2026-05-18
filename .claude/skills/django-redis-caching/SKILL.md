@@ -165,8 +165,12 @@ per guild, 1-hour TTL (constant: `DISCORD_MEMBER_CACHE_TTL_S` in
 - `get_discord_voice_channel_activity` — voice-channel staffing
 - `app.tasks.avatar_refresh.refresh_avatars_batched` — daily Celery
   beat. Reads the cache, builds a `discord_id → avatar_hash` map,
-  bulk-updates `User.avatar`. Daily cadence works because admin
-  searches keep the cache current within the day.
+  posts diffed rows to the internal endpoint
+  `POST /api/internal/users/avatars/bulk-update/` (defined in
+  `user/internal/avatar.py`). The endpoint performs
+  `bulk_update(batch_size=500)` + `invalidate_model(CustomUser)`
+  server-side — the worker never touches the ORM. Daily cadence works
+  because admin searches keep the cache current within the day.
 
 **Why no separate avatar cache?** Avatars are stored on `User.avatar`
 (DB column), not in Redis. The "avatar cache" IS the DB column; the
@@ -180,10 +184,18 @@ list. No third cache needed.
 
 ### Bulk-update + cacheops invariant
 
-When a Celery task writes thousands of rows via
+When a process writes thousands of rows via
 `Model.objects.bulk_update(...)`, `post_save` doesn't fire and
 cacheops won't auto-invalidate. Pair `bulk_update` with one
 `invalidate_model(Model)` call after the batched write — N
 per-row `invalidate_obj()` calls would defeat the whole point of
-batching. The avatar refresh task uses this pattern; mirror it for
-similar batched-write paths.
+batching.
+
+For Celery workers and the Discord bot, the `bulk_update` itself
+must live behind an internal HTTP endpoint (`/api/internal/...`)
+because workers don't touch the ORM. Reference impl:
+`user/internal/avatar.py::bulk_update_user_avatars` —
+`bulk_update(batch_size=500)` + `invalidate_model(CustomUser)` in a
+single request body. Mirror this shape (validate payload first, then
+one `bulk_update`, then one `invalidate_model`) for similar
+batched-write paths in other domains.
