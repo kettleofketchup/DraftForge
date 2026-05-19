@@ -41,12 +41,21 @@ def _get_service_version() -> str:
 
 
 def _build_resource() -> "Resource":
-    """Build OTel Resource with deployment attributes."""
+    """Build OTel Resource with deployment attributes.
+
+    Single source of truth for resource attributes — do NOT also set
+    them via the SDK's `OTEL_RESOURCE_ATTRIBUTES` env. Setting the same
+    concept in two places lets the deprecated form (`deployment.environment`)
+    and the current form (`deployment.environment.name`) coexist on the
+    same Resource, which is confusing for downstream consumers and
+    occasionally trips Grafana Cloud's OTLP translator.
+    """
     import socket
 
     from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
     service_name = os.environ.get("OTEL_SERVICE_NAME", "dtx-backend")
+    namespace = os.environ.get("OTEL_SERVICE_NAMESPACE", "draftforge")
     environment = os.environ.get("NODE_ENV", "dev")
     version = _get_service_version()
     instance_id = socket.gethostname()
@@ -54,6 +63,7 @@ def _build_resource() -> "Resource":
     return Resource.create(
         {
             SERVICE_NAME: service_name,
+            "service.namespace": namespace,
             "deployment.environment.name": environment,
             "service.version": version,
             "service.instance.id": instance_id,

@@ -151,6 +151,40 @@ class ResourceAttributesTest(TestCase):
         resource = mock_setup.call_args[0][0]
         self.assertEqual(resource.attributes.get("deployment.environment.name"), "dev")
 
+    @mock.patch("telemetry.tracing._setup_provider")
+    def test_service_namespace_default_draftforge(self, mock_setup):
+        """service.namespace defaults to 'draftforge' when env var unset."""
+        env = {
+            "OTEL_ENABLED": "true",
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+        }
+        with mock.patch.dict(os.environ, env, clear=False):
+            os.environ.pop("OTEL_SERVICE_NAMESPACE", None)
+            init_tracing()
+        mock_setup.assert_called_once()
+        resource = mock_setup.call_args[0][0]
+        self.assertEqual(resource.attributes.get("service.namespace"), "draftforge")
+
+    @mock.patch("telemetry.tracing._setup_provider")
+    def test_no_deprecated_deployment_environment_key(self, mock_setup):
+        """`deployment.environment` (deprecated, no `.name`) is NOT set.
+
+        Setting both the deprecated and current keys causes downstream
+        confusion (Grafana Cloud's OTLP translator occasionally trips on
+        the duplicate). Resource builder must emit only the current key.
+        """
+        env = {
+            "OTEL_ENABLED": "true",
+            "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+            "NODE_ENV": "prod",
+        }
+        with mock.patch.dict(os.environ, env, clear=False):
+            os.environ.pop("OTEL_RESOURCE_ATTRIBUTES", None)
+            init_tracing()
+        resource = mock_setup.call_args[0][0]
+        self.assertIsNone(resource.attributes.get("deployment.environment"))
+        self.assertEqual(resource.attributes.get("deployment.environment.name"), "prod")
+
 
 class DjangoInstrumentorHooksTest(TestCase):
     """Tests for DjangoInstrumentor request/response hooks."""
