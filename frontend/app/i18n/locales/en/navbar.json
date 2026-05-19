@@ -1,0 +1,14 @@
+{
+  "login": "Login with Discord",
+  "logout": "Logout",
+  "profile": "Profile",
+  "signup_here": "Sign up here",
+  "home": "Home",
+  "aria": {
+    "star_github": "Star us on GitHub",
+    "documentation": "Documentation",
+    "report_bug": "Report a Bug",
+    "main_nav": "Main navigation",
+    "open_menu": "Open menu"
+  }
+}
