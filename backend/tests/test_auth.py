@@ -28,6 +28,7 @@ from tests.data.users import (
     LEAGUE_ADMIN_USER,
     LEAGUE_STAFF_USER,
     ORG_ADMIN_USER,
+    ORG_MEMBER_USER,
     ORG_STAFF_USER,
     REGULAR_USER,
     STAFF_USER,
@@ -304,6 +305,34 @@ def createOrgAdminTestUser() -> tuple[CustomUser, bool]:
     return user, True
 
 
+# OrgMember: Plain organization member (in org.users, not admin/staff)
+def createOrgMemberTestUser() -> tuple[CustomUser, bool]:
+    """
+    Get or create org member test user.
+    Uses PK from tests/data/users.py to match populate_test_auth_users().
+    """
+    assert isTestEnvironment() == True
+
+    user = CustomUser.objects.filter(pk=ORG_MEMBER_USER.pk).first()
+    if user:
+        create_social_auth(user)
+        return user, False
+
+    user = CustomUser(
+        pk=ORG_MEMBER_USER.pk,
+        username=ORG_MEMBER_USER.username,
+        discordId=ORG_MEMBER_USER.discord_id,
+        discordUsername=ORG_MEMBER_USER.username,
+        nickname=ORG_MEMBER_USER.nickname or "Org Member Tester",
+        steamid=ORG_MEMBER_USER.get_steam_id_64(),
+    )
+    user.set_password("cypress")
+    user.save()
+
+    create_social_auth(user)
+    return user, True
+
+
 # OrgStaff: Organization staff member
 def createOrgStaffTestUser() -> tuple[CustomUser, bool]:
     """
@@ -519,6 +548,32 @@ def login_org_staff(request):
     return return_tokens(user)
 
 
+# OrgMember login
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def login_org_member(request):
+    """Login as plain organization member (in org.users, no admin/staff role)."""
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    user, created = createOrgMemberTestUser()
+
+    # Make this user a member (NOT admin or staff) of org 1 (DTX) by
+    # ensuring an OrgUser row — that's the actual "member of org"
+    # relationship; Organization.users isn't a field.
+    from app.models import Organization
+    from tests.populate.utils import ensure_org_user
+
+    org = Organization.objects.filter(pk=1).first()
+    if org:
+        ensure_org_user(user, org)
+
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+    return return_tokens(user)
+
+
 # LeagueAdmin login
 @csrf_exempt
 @api_view(["POST"])
@@ -532,7 +587,7 @@ def login_league_admin(request):
     user, created = createLeagueAdminTestUser()
 
     # Make this user an admin of league 1 if not already
-    from league.models import League
+    from app.models import League
 
     league = League.objects.filter(pk=1).first()
     if league and user not in league.admins.all():
@@ -555,7 +610,7 @@ def login_league_staff(request):
     user, created = createLeagueStaffTestUser()
 
     # Make this user staff of league 1 if not already
-    from league.models import League
+    from app.models import League
 
     league = League.objects.filter(pk=1).first()
     if league and user not in league.staff.all():
