@@ -103,7 +103,7 @@ SYSTEMS = [
 # `${DS_LOKI}` is substituted by Grafana's import dialog from the
 # __inputs block we post-process in.
 DS_LOKI = DataSourceRef(type_val="loki", uid="${DS_LOKI}")
-SERVICE_FILTER = '{service=~"$service", deployment_environment=~"$env"}'
+SERVICE_FILTER = '{service_name=~"$service", deployment_environment=~"$env"}'
 # `| __error__=""` drops jsonparsererr series so they don't poison
 # aggregations or pop a frontend error toast.
 SAFE_JSON = '| json | __error__=""'
@@ -435,7 +435,7 @@ def build_variables() -> list:
     service = (
         v2.QueryVariable("service")
         .label("Service")
-        .query(_LokiQuery("label_values(service)"))
+        .query(_LokiQuery("label_values(service_name)"))
         .refresh(VariableRefresh.ON_DASHBOARD_LOAD)
         .multi(True)
         .include_all(True)
