@@ -3,6 +3,9 @@ import os
 import requests
 
 from steam.utils.retry import throttle_request
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 
 class SteamAPI:
@@ -21,11 +24,33 @@ class SteamAPI:
         params["key"] = self.api_key
         url = f"{self.base_url}/{interface}/{method}/v{version}/"
         try:
-            response = requests.get(url, params=params)
-            response.raise_for_status()  # Raise an exception for bad status codes
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
             return response.json()
+        except requests.exceptions.HTTPError as e:
+            # Steam returns useful detail in the body for 401/403/429/5xx;
+            # capture status code + body snippet so the warning is actually
+            # debuggable instead of just "fetch_failed".
+            log.warning(
+                "steam_api_request_failed",
+                system="steam",
+                subsystem="api",
+                interface=interface,
+                method=method,
+                status_code=e.response.status_code if e.response is not None else None,
+                body=(e.response.text[:200] if e.response is not None else None),
+            )
+            return None
         except requests.exceptions.RequestException as e:
-            print(f"Error calling Steam API: {e}")
+            log.warning(
+                "steam_api_request_failed",
+                system="steam",
+                subsystem="api",
+                interface=interface,
+                method=method,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
             return None
 
     def get_match_details(self, match_id):
