@@ -6,18 +6,6 @@ import {
   HeroDraftWebSocketMessageSchema,
 } from '~/components/herodraft/schemas';
 
-// CustomUser.username is declared null=True at the model level so that
-// Steam-only signups (no Discord OAuth, no chosen handle) can still exist
-// as DB rows. When such a user is added to a tournament team, the team
-// gets included verbatim in the HeroDraft initial_state WS payload via
-// DraftTeamSerializerFull. Before this PR, the frontend Zod schemas had
-// ``username: z.string()`` — a single Steam-only player on any team in
-// any draft was enough to fail safeParse on the entire ``initial_state``
-// message, causing heroDraftStore to early-return without setting
-// ``draft``. The page then rendered blank.
-//
-// These tests lock the schema contract to match the model.
-
 const captainStub = {
   pk: 1,
   username: 'kettleofketchup',
