@@ -42,7 +42,37 @@ from grafana_foundation_sdk.models.common import (
     TooltipDisplayMode,
 )
 from grafana_foundation_sdk.models.dashboard import DataSourceRef
-from grafana_foundation_sdk.models.dashboardv2beta1 import DashboardCursorSync
+from grafana_foundation_sdk.models.dashboardv2beta1 import (
+    DashboardCursorSync,
+    DataQueryKind,
+    Dashboardv2beta1DataQueryKindDatasource,
+)
+
+
+# V2's DataQueryKind envelope. The SDK's per-datasource builders
+# (loki.Dataquery, prometheus.Dataquery, etc.) emit V1-shaped query
+# bodies — we have to wrap them in the V2 envelope ourselves or
+# Grafana Cloud's V2 validator rejects with
+# `spec.query.kind: conflicting values "DataQuery" and ""`.
+class _LokiQuery:
+    """Builder shim that wraps a loki.Dataquery in DataQueryKind for V2."""
+
+    def __init__(self, expr: str, *, legend: str = "", instant: bool = False):
+        spec: dict = {"expr": expr, "editorMode": "code", "refId": "A"}
+        if legend:
+            spec["legendFormat"] = legend
+        if instant:
+            spec["queryType"] = "instant"
+            spec["instant"] = True
+        self._internal = DataQueryKind(
+            group="loki",
+            version="v1",
+            datasource=Dashboardv2beta1DataQueryKindDatasource(name="${DS_LOKI}"),
+            spec=spec,
+        )
+
+    def build(self) -> DataQueryKind:
+        return self._internal
 
 OUTPUT = Path(__file__).parent / "subsystem-logs.json"
 
@@ -72,14 +102,9 @@ SAFE_JSON = '| json | __error__=""'
 # ---- Query helpers --------------------------------------------------------
 
 
-def _loki_query(expr: str, legend: str = "", *, instant: bool = False):
-    """Loki Dataquery (V1 query model — V2 wraps it in a Target)."""
-    q = loki.Dataquery().expr(expr).editor_mode("code").ref_id("A")
-    if legend:
-        q = q.legend_format(legend)
-    if instant:
-        q = q.query_type("instant").instant(True)
-    return q
+def _loki_query(expr: str, legend: str = "", *, instant: bool = False) -> _LokiQuery:
+    """Loki query wrapped in V2 DataQueryKind envelope."""
+    return _LokiQuery(expr, legend=legend, instant=instant)
 
 
 def _query_group(expr: str, legend: str = "", *, instant: bool = False) -> v2.QueryGroup:
@@ -369,7 +394,7 @@ def build_variables() -> list:
     env = (
         v2.QueryVariable("env")
         .label("Environment")
-        .query(loki.Dataquery().expr("label_values(deployment_environment)"))
+        .query(_LokiQuery("label_values(deployment_environment)"))
         .multi(False)
         .include_all(False)
     )
@@ -377,7 +402,7 @@ def build_variables() -> list:
         v2.QueryVariable("service")
         .label("Service")
         .query(
-            loki.Dataquery().expr(
+            _LokiQuery(
                 'label_values({deployment_environment="$env"}, service_name)'
             )
         )
