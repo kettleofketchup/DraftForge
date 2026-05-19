@@ -211,12 +211,18 @@ def refresh_avatars_batched():
 
     # Lazy imports keep the module importable in worker startup paths that
     # haven't fully bootstrapped Django.
+    #
+    # Import from `discord_members` directly (not the DRF views module
+    # `discordbot.services.users`) — that module pulls in `app.models`,
+    # `social_django.models`, and cacheops decorators at load time, which
+    # touch `connections['default']` and crash with `ImproperlyConfigured`
+    # under `settings_celery.DATABASES = {}`.
     from app.internal_client import (
         bulk_update_user_avatars,
         list_discord_guild_ids,
         list_discord_linked_users,
     )
-    from discordbot.services.users import get_discord_members_data
+    from discordbot.services.discord_members import get_discord_members_data
 
     # Discordful users only — non-Discord-linked accounts can't gain or lose
     # a Discord avatar. Empty list here means either no Discord-linked users

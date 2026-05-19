@@ -71,72 +71,16 @@ def get_user_guilds(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-# Cache architecture for guild members:
-#
-#   `discord_members_<guild_id>` — full member list per guild, paginated
-#   from Discord and cached for DISCORD_MEMBER_CACHE_TTL_S (1 hour).
-#
-# Two consumer patterns share this single cache:
-#   1. Admin member search / add-to-tournament — admins searching a
-#      Discord member who joined recently force a refresh via the
-#      `refresh_discord_members` endpoint (5-min cooldown). That repaves
-#      the cache, so subsequent searches AND the daily avatar refresh
-#      (item 2) see the new member without their own Discord call.
-#   2. Daily avatar refresh — the `refresh_avatars_batched` Celery task
-#      reads this cache to update the User.avatar column for any
-#      Discord-linked user. Daily cadence is enough; admin-triggered
-#      refreshes (item 1) cover the "user joined since yesterday" gap.
-#
-# The 15-second TTL this used to have (sub-request burst dedup only) was
-# replaced when we made the cache load-bearing for the daily avatar
-# task — that task needs the cache to actually hold data between
-# admin-triggered fills, not for 15 seconds.
-DISCORD_MEMBER_CACHE_TTL_S = 60 * 60  # 1 hour
-
-
-def get_discord_members_data(guild_id=None):
-    """
-    Helper function to get discord members data as raw list (not JsonResponse).
-    Useful for testing and internal operations.
-
-    Args:
-        guild_id: Discord guild ID. Defaults to settings.DISCORD_GUILD_ID if not provided.
-    """
-    if guild_id is None:
-        guild_id = settings.DISCORD_GUILD_ID
-    bot_token = settings.DISCORD_BOT_TOKEN  # Add your bot token in settings
-
-    url = f"{settings.DISCORD_API_BASE_URL}/guilds/{guild_id}/members"
-    headers = {"Authorization": f"Bot {bot_token}"}
-    after = None
-    limit = 1000
-    members = []
-    cache_key = f"discord_members_{guild_id}"
-    cached_members = cache.get(cache_key)
-
-    if cached_members:
-        return cached_members
-
-    while True:
-        params = {"limit": limit}
-        if after:
-            params["after"] = after
-
-        try:
-            response = requests.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            page = response.json()
-            if not page:
-                break
-            after = page[-1]["user"]["id"]
-            members.extend(page)
-            if len(page) < limit:
-                break
-        except requests.exceptions.RequestException as e:
-            raise Exception(f"Discord API error: {str(e)}")
-
-    cache.set(cache_key, members, timeout=DISCORD_MEMBER_CACHE_TTL_S)
-    return members
+# Re-export from the celery-safe module so the existing
+# `from discordbot.services.users import get_discord_members_data`
+# import paths keep working for DRF view consumers. The Celery worker
+# imports directly from `discord_members` to avoid loading this module
+# (which has ORM-heavy top-level imports that crash with
+# settings_celery.DATABASES = {}).
+from discordbot.services.discord_members import (  # noqa: F401
+    DISCORD_MEMBER_CACHE_TTL_S,
+    get_discord_members_data,
+)
 
 
 def get_discord_members_api():
