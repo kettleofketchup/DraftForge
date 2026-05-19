@@ -267,8 +267,12 @@ class CustomUser(AbstractUser):
                 new_avatar = user_data.get("avatar")
 
                 if new_avatar != self.avatar:
+                    # The avatar setter persists to base_profile.avatar via
+                    # bp.save(update_fields=["avatar"]) inside the setter, so
+                    # an explicit CustomUser.save(update_fields=["avatar"])
+                    # here would crash now that `avatar` is a property, not a
+                    # model field.
                     self.avatar = new_avatar
-                    self.save(update_fields=["avatar"])
                     logging.info(
                         f"Updated avatar for user {self.username} (Discord ID: {self.discordId})"
                     )

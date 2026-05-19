@@ -11,6 +11,12 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+        # Pin the historical `app` graph so MigratorTestCase tests can resolve
+        # PositionsModel (which CustomUser.positions points at, NOT NULL).
+        # Without this, migrating to user.0001_initial picks an `app` graph
+        # version that may pre-date PositionsModel and breaks setup of any
+        # migration test that needs to create a CustomUser at this point.
+        ("app", "0094_alter_league_steam_league_id"),
     ]
 
     operations = [
