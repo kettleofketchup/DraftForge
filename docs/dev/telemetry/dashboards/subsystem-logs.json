@@ -27,7 +27,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (system, subsystem) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system!=\"\" [$__range]))",
+                        "expr": "sum by (system, subsystem) (count_over_time({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system!=\"\" [$__range]))",
                         "editorMode": "code",
                         "refId": "A",
                         "queryType": "instant",
@@ -104,7 +104,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "topk(20, sum by (event, system, subsystem) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | level=~\"warning|error\" [$__range])))",
+                        "expr": "topk(20, sum by (event, system, subsystem) (count_over_time({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | level=~\"warning|error\" [$__range])))",
                         "editorMode": "code",
                         "refId": "A",
                         "queryType": "instant",
@@ -181,7 +181,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system!=\"\" [$__interval]))",
+                        "expr": "sum by (system) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system!=\"\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{system}}"
@@ -256,7 +256,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (system) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system!=\"\" | level=~\"warning|error\" [$__interval]))",
+                        "expr": "sum by (system) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system!=\"\" | level=~\"warning|error\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{system}}"
@@ -331,7 +331,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"avatars\" | subsystem!=\"\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"avatars\" | subsystem!=\"\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -406,7 +406,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"avatars\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"avatars\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -481,7 +481,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"avatars\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
+                        "expr": "{service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"avatars\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
                         "editorMode": "code",
                         "refId": "A"
                       },
@@ -541,7 +541,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"bracket\" | subsystem!=\"\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"bracket\" | subsystem!=\"\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -616,7 +616,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"bracket\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"bracket\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -691,7 +691,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"bracket\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
+                        "expr": "{service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"bracket\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
                         "editorMode": "code",
                         "refId": "A"
                       },
@@ -751,7 +751,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"cache\" | subsystem!=\"\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"cache\" | subsystem!=\"\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -826,7 +826,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"cache\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"cache\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -901,7 +901,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"cache\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
+                        "expr": "{service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"cache\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
                         "editorMode": "code",
                         "refId": "A"
                       },
@@ -961,7 +961,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"discord\" | subsystem!=\"\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"discord\" | subsystem!=\"\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -1036,7 +1036,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"discord\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"discord\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -1111,7 +1111,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"discord\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
+                        "expr": "{service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"discord\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
                         "editorMode": "code",
                         "refId": "A"
                       },
@@ -1171,7 +1171,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"events\" | subsystem!=\"\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"events\" | subsystem!=\"\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -1246,7 +1246,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"events\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"events\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -1321,7 +1321,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"events\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
+                        "expr": "{service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"events\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
                         "editorMode": "code",
                         "refId": "A"
                       },
@@ -1381,7 +1381,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"herodraft\" | subsystem!=\"\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"herodraft\" | subsystem!=\"\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -1456,7 +1456,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"herodraft\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"herodraft\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -1531,7 +1531,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"herodraft\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
+                        "expr": "{service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"herodraft\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
                         "editorMode": "code",
                         "refId": "A"
                       },
@@ -1591,7 +1591,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"steam\" | subsystem!=\"\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"steam\" | subsystem!=\"\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -1666,7 +1666,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"steam\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"steam\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -1741,7 +1741,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"steam\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
+                        "expr": "{service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"steam\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
                         "editorMode": "code",
                         "refId": "A"
                       },
@@ -1801,7 +1801,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"telemetry\" | subsystem!=\"\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"telemetry\" | subsystem!=\"\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -1876,7 +1876,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"telemetry\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"telemetry\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -1951,7 +1951,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"telemetry\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
+                        "expr": "{service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"telemetry\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
                         "editorMode": "code",
                         "refId": "A"
                       },
@@ -2011,7 +2011,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"tournament\" | subsystem!=\"\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"tournament\" | subsystem!=\"\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -2086,7 +2086,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"tournament\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"tournament\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -2161,7 +2161,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"tournament\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
+                        "expr": "{service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"tournament\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
                         "editorMode": "code",
                         "refId": "A"
                       },
@@ -2221,7 +2221,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"websocket\" | subsystem!=\"\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"websocket\" | subsystem!=\"\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -2296,7 +2296,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "sum by (subsystem) (rate({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"websocket\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
+                        "expr": "sum by (subsystem) (rate({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"websocket\" | subsystem!=\"\" | level=~\"warning|error\" [$__interval]))",
                         "editorMode": "code",
                         "refId": "A",
                         "legendFormat": "{{subsystem}}"
@@ -2371,7 +2371,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"websocket\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
+                        "expr": "{service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"\" | system=\"websocket\" | subsystem=~\"$subsystem\" | level=~\"$level\"",
                         "editorMode": "code",
                         "refId": "A"
                       },
@@ -2431,7 +2431,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "{service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"jsonparsererr\"",
+                        "expr": "{service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"jsonparsererr\"",
                         "editorMode": "code",
                         "refId": "A"
                       },
@@ -2491,7 +2491,7 @@
                       "group": "loki",
                       "version": "v1",
                       "spec": {
-                        "expr": "topk(20, sum by (code_file_path, code_function_name, code_line_number) (count_over_time({service_name=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"jsonparsererr\" [$__range])))",
+                        "expr": "topk(20, sum by (code_file_path, code_function_name, code_line_number) (count_over_time({service=~\"$service\", deployment_environment=\"$env\"} | json | __error__=\"jsonparsererr\" [$__range])))",
                         "editorMode": "code",
                         "refId": "A",
                         "queryType": "instant",
@@ -3292,7 +3292,7 @@
             "group": "loki",
             "version": "v1",
             "spec": {
-              "expr": "label_values(service_name)",
+              "expr": "label_values(service)",
               "editorMode": "code",
               "refId": "A"
             },

@@ -103,7 +103,7 @@ SYSTEMS = [
 # `${DS_LOKI}` is substituted by Grafana's import dialog from the
 # __inputs block we post-process in.
 DS_LOKI = DataSourceRef(type_val="loki", uid="${DS_LOKI}")
-SERVICE_FILTER = '{service_name=~"$service", deployment_environment="$env"}'
+SERVICE_FILTER = '{service=~"$service", deployment_environment="$env"}'
 # `| __error__=""` drops jsonparsererr series so they don't poison
 # aggregations or pop a frontend error toast.
 SAFE_JSON = '| json | __error__=""'
@@ -421,7 +421,7 @@ def build_variables() -> list:
     # Service query intentionally does NOT filter by $env. Loki rejects
     # stream selectors whose only matchers are empty-compatible (`.*`,
     # `""`), and on first load $env hasn't resolved yet — so a query
-    # like `label_values({deployment_environment="$env"}, service_name)`
+    # like `label_values({deployment_environment="$env"}, service)`
     # becomes `{deployment_environment=""}` and gets refused before
     # the cascading variable can populate. Listing all services across
     # envs is fine for our usage; panel queries still constrain to
@@ -429,7 +429,7 @@ def build_variables() -> list:
     service = (
         v2.QueryVariable("service")
         .label("Service")
-        .query(_LokiQuery("label_values(service_name)"))
+        .query(_LokiQuery("label_values(service)"))
         .refresh(VariableRefresh.ON_DASHBOARD_LOAD)
         .multi(True)
         .include_all(True)
