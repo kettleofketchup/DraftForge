@@ -1,20 +1,22 @@
 /**
  * Create-Action Permission Matrix
  *
- * Locks the per-role visibility contract for the four "create" entry points:
- * Create Organization, Create League, Create Event, Create Tournament. Each
- * gate is asserted across all 8 roles in the project's hierarchy
- * (siteAdmin > siteStaff > orgAdmin > orgStaff > orgMember > leagueAdmin >
- * leagueStaff > anonymous) using ``roleMatrixTest`` — one Playwright test
- * per gate, fanning out to 8 concurrent BrowserContexts via ``Promise.all``.
+ * Locks the per-role visibility contract for the create entry points
+ * across all 8 roles in the project's hierarchy (siteAdmin > siteStaff >
+ * orgAdmin > orgStaff > orgMember > leagueAdmin > leagueStaff >
+ * anonymous) using ``roleMatrixTest`` — one Playwright test per gate,
+ * fanning out to 8 concurrent BrowserContexts via ``Promise.all``.
  *
- * Expected matrix (true = button visible to that role):
+ * Expected matrix (✓ = button visible to that role). Two Create Event
+ * rows because the org-detail tab and the /events route use different
+ * gates (``useIsOrganizationStaff`` vs ``useIsOrganizationAdmin``):
  *
- *                          siteAdmin siteStaff orgAdmin orgStaff orgMember leagueAdmin leagueStaff anonymous
- *   createOrganization        ✓         ✗         ✗        ✗        ✗         ✗           ✗          ✗
- *   createLeague (org 1)      ✓         ✓         ✓        ✓        ✗         ✗           ✗          ✗
- *   createEvent  (org 1)      ✓         ✓         ✓        ✗        ✗         ✗           ✗          ✗
- *   createTournament          ✓         ✓         ✗        ✗        ✗         ✗           ✗          ✗
+ *                                       siteAdmin siteStaff orgAdmin orgStaff orgMember leagueAdmin leagueStaff anonymous
+ *   createOrganization                     ✓         ✗         ✗        ✗        ✗         ✗           ✗          ✗
+ *   createLeague    (org-detail)           ✓         ✓         ✓        ✓        ✗         ✗           ✗          ✗
+ *   createEvent     (org-detail)           ✓         ✓         ✓        ✓        ✗         ✗           ✗          ✗
+ *   createEvent     (/events?org=X)        ✓         ✓         ✓        ✗        ✗         ✗           ✗          ✗
+ *   createTournament                       ✓         ✓         ✗        ✗        ✗         ✗           ✗          ✗
  *
  * The site-admin row exists because the permission hooks
  * (``useIsLeagueStaff`` / ``useIsOrganizationAdmin`` etc.) bypass on
@@ -101,12 +103,12 @@ const CREATE_TOURNAMENT_EXPECTATIONS: Expectations = {
 
 /** Assert a single role's button visibility, named so traces are readable.
  *
- * ``toBeVisible`` / ``toBeHidden`` poll for 15s after ``networkidle`` —
- * the org-detail page seeds its cache from a stripped SSR payload and the
- * permission gate only resolves once the CSR refetch lands. The longer
- * timeout absorbs that without needing per-URL wait shapes. ``toBeHidden``
- * uses ``not.toBeVisible`` semantics, so a slow-mounting button can't
- * silently pass the negative case.
+ * Positive case polls ``toBeVisible`` for 15s — the org-detail page seeds
+ * its query cache from a stripped SSR payload and the permission gate
+ * only resolves once the CSR refetch lands the full org. The negative
+ * case uses ``not.toBeVisible`` with a 5s ceiling: if the button isn't
+ * gated in, it should never appear, so a short wait is enough to catch
+ * a slow-but-eventually-visible regression without inflating run time.
  */
 async function assertGate(
   role: RoleName,

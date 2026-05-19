@@ -35,7 +35,12 @@
  * independent failure boundaries.
  */
 
-import { test as base, type BrowserContext, type Page } from '@playwright/test';
+import {
+  test as base,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from '@playwright/test';
 import {
   loginAdmin,
   loginStaff,
@@ -100,22 +105,33 @@ const ROLE_LOGINS: Record<RoleName, RoleLogin> = {
 
 /**
  * Build a RoleContexts object by creating 8 independent BrowserContexts
- * and logging each in concurrently. Caller is responsible for closing
- * via ``Promise.all(Object.values(rc).map(({context}) => context.close()))``,
- * but the fixture below handles that automatically.
+ * and logging each in concurrently. If any role's login fails, every
+ * already-created context is closed before re-throwing — without the
+ * cleanup the fixture's teardown never runs (it's tied to ``use()``)
+ * and orphaned contexts leak across tests.
  */
-export async function setupRoleContexts(
-  browser: Parameters<Parameters<typeof base.extend>[0]['context']>[0]['browser'],
-): Promise<RoleContexts> {
-  const entries = await Promise.all(
-    ROLE_NAMES.map(async (role): Promise<[RoleName, RoleSession]> => {
-      const context = await browser.newContext({ ignoreHTTPSErrors: true });
-      await ROLE_LOGINS[role](context);
-      const page = await context.newPage();
-      return [role, { context, page }];
-    }),
-  );
-  return Object.fromEntries(entries) as RoleContexts;
+export async function setupRoleContexts(browser: Browser): Promise<RoleContexts> {
+  const createdContexts: BrowserContext[] = [];
+  try {
+    const entries = await Promise.all(
+      ROLE_NAMES.map(async (role): Promise<[RoleName, RoleSession]> => {
+        const context = await browser.newContext({ ignoreHTTPSErrors: true });
+        createdContexts.push(context);
+        await ROLE_LOGINS[role](context);
+        const page = await context.newPage();
+        return [role, { context, page }];
+      }),
+    );
+    return Object.fromEntries(entries) as RoleContexts;
+  } catch (err) {
+    // ``Promise.all`` rejects on the first failure but the other login
+    // promises keep running and may also push contexts onto the list.
+    // Wait for the in-flight settles and close everything we made.
+    await Promise.allSettled(
+      createdContexts.map((c) => c.close().catch(() => {})),
+    );
+    throw err;
+  }
 }
 
 /**
