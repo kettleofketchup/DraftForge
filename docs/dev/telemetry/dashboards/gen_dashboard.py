@@ -103,7 +103,7 @@ SYSTEMS = [
 # `${DS_LOKI}` is substituted by Grafana's import dialog from the
 # __inputs block we post-process in.
 DS_LOKI = DataSourceRef(type_val="loki", uid="${DS_LOKI}")
-SERVICE_FILTER = '{service=~"$service", deployment_environment="$env"}'
+SERVICE_FILTER = '{service=~"$service", deployment_environment=~"$env"}'
 # `| __error__=""` drops jsonparsererr series so they don't poison
 # aggregations or pop a frontend error toast.
 SAFE_JSON = '| json | __error__=""'
@@ -415,8 +415,14 @@ def build_variables() -> list:
         .label("Environment")
         .query(_LokiQuery("label_values(deployment_environment)"))
         .refresh(VariableRefresh.ON_DASHBOARD_LOAD)
-        .multi(False)
-        .include_all(False)
+        # Regex-matched in SERVICE_FILTER so we can `include_all` + use
+        # `.+` as the "All" expansion. With equality matching, an
+        # unselected env would substitute to "" and Loki would reject
+        # the empty-compatible matcher → panels go blank instead of
+        # showing all envs.
+        .multi(True)
+        .include_all(True)
+        .all_value(".+")
     )
     # Service query intentionally does NOT filter by $env. Loki rejects
     # stream selectors whose only matchers are empty-compatible (`.*`,
