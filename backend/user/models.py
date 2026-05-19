@@ -1,3 +1,1 @@
-from django.db import models
-
-# Create your models here.
+# BaseUserProfile lands in Task 2.

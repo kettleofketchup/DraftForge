@@ -1,3 +1,1 @@
-from django.contrib import admin
-
-# Register your models here.
+# Admin registration lands in Task 2.

@@ -124,6 +124,8 @@ urlpatterns = [
     # User search (must be before router to avoid conflict with UserView)
     path("api/users/search/", search_users, name="search_users"),
     path("api/users/bulk/", app_views.bulk_users, name="bulk_users"),
+    # User profile (Task 1 — see backend/user/urls.py)
+    path("api/users/", include("user.urls")),
     path("api/", include(router.urls)),
     path("api/current_user", current_user),
     path("api/home-stats/", app_views.home_stats, name="home_stats"),
