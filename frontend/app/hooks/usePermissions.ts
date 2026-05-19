@@ -18,11 +18,20 @@ import type { OrganizationType } from '~/components/organization/schemas';
 import { useUserStore } from '~/store/userStore';
 
 /**
- * Check if the current user is a superuser/staff (Django global admin).
+ * Check if the current user is a site-level admin.
+ *
+ * Django models two flags here:
+ *  - ``is_staff``: can log into the Django admin
+ *  - ``is_superuser``: bypasses all permission checks
+ *
+ * Either grants site-level admin access in this app's permission
+ * hierarchy (site admin > org admin/staff > league admin/staff), so we
+ * accept either. Older callers that only checked ``is_staff`` are
+ * picked up by this same function now.
  */
 export function useIsSuperuser(): boolean {
   const currentUser = useUserStore((state) => state.currentUser);
-  return !!currentUser?.is_staff;
+  return !!(currentUser?.is_staff || currentUser?.is_superuser);
 }
 
 /**
@@ -63,10 +72,14 @@ export function useIsOrganizationAdmin(
   const isOwner = useIsOrganizationOwner(organization);
 
   return useMemo(() => {
-    if (!currentUser?.pk || !organization) return false;
+    if (!currentUser?.pk) return false;
 
-    // Superuser has access to everything
-    if (currentUser.is_staff) return true;
+    // Site admin (is_staff OR is_superuser) outranks every tier and
+    // applies even when no organization is in scope (e.g. a tournament
+    // with no league/org loaded yet).
+    if (currentUser.is_staff || currentUser.is_superuser) return true;
+
+    if (!organization) return false;
 
     // Owner is admin
     if (isOwner) return true;
@@ -80,7 +93,13 @@ export function useIsOrganizationAdmin(
     }
 
     return false;
-  }, [currentUser?.pk, currentUser?.is_staff, organization, isOwner]);
+  }, [
+    currentUser?.pk,
+    currentUser?.is_staff,
+    currentUser?.is_superuser,
+    organization,
+    isOwner,
+  ]);
 }
 
 /**
@@ -97,10 +116,18 @@ export function useIsOrganizationStaff(
   const isOrgAdmin = useIsOrganizationAdmin(organization);
 
   return useMemo(() => {
-    if (!currentUser?.pk || !organization) return false;
+    if (!currentUser?.pk) return false;
 
-    // Org admins have staff access
+    // Site admin (is_staff OR is_superuser) bypasses every tier — must
+    // short-circuit before the !organization early return so a site
+    // admin can still act on tournaments/games whose org isn't loaded.
+    if (currentUser.is_staff || currentUser.is_superuser) return true;
+
+    // Org admins have staff access (cascade through useIsOrganizationAdmin
+    // also picks up site admins, but the explicit check above runs first).
     if (isOrgAdmin) return true;
+
+    if (!organization) return false;
 
     // Check staff_ids array
     if (organization.staff_ids?.includes(currentUser.pk)) return true;
@@ -111,7 +138,13 @@ export function useIsOrganizationStaff(
     }
 
     return false;
-  }, [currentUser?.pk, organization, isOrgAdmin]);
+  }, [
+    currentUser?.pk,
+    currentUser?.is_staff,
+    currentUser?.is_superuser,
+    organization,
+    isOrgAdmin,
+  ]);
 }
 
 /**
@@ -129,25 +162,29 @@ export function useIsLeagueAdmin(
   const currentUser = useUserStore((state) => state.currentUser);
 
   return useMemo(() => {
-    if (!currentUser?.pk || !league) return false;
+    if (!currentUser?.pk) return false;
 
-    // Superuser has access to everything
-    if (currentUser.is_staff) return true;
+    // Site admin (is_staff OR is_superuser) outranks every tier — must
+    // run before the !league guard so a server admin can still edit a
+    // tournament whose league is null.
+    if (currentUser.is_staff || currentUser.is_superuser) return true;
 
-    // Check league-specific admin_ids array
-    if (league.admin_ids?.includes(currentUser.pk)) return true;
-
-    // Check league-specific admins array
-    if (league.admins?.some((admin) => admin.pk === currentUser.pk)) {
-      return true;
+    // League-specific lookups only meaningful when a league is present.
+    if (league) {
+      if (league.admin_ids?.includes(currentUser.pk)) return true;
+      if (league.admins?.some((admin) => admin.pk === currentUser.pk)) {
+        return true;
+      }
     }
 
-    // Check if user is admin of any linked organization
+    // Org-admin cascade: hierarchy puts org > league, so an org admin
+    // of the linked org grants league-admin access. Works even with no
+    // league, as long as ``organizations`` was passed in.
     const orgs = Array.isArray(organizations)
       ? organizations
       : organizations
         ? [organizations]
-        : league.organization
+        : league?.organization
           ? [league.organization]
           : [];
 
@@ -170,7 +207,13 @@ export function useIsLeagueAdmin(
     }
 
     return false;
-  }, [currentUser?.pk, currentUser?.is_staff, league, organizations]);
+  }, [
+    currentUser?.pk,
+    currentUser?.is_staff,
+    currentUser?.is_superuser,
+    league,
+    organizations,
+  ]);
 }
 
 /**
@@ -189,25 +232,33 @@ export function useIsLeagueStaff(
   const isLeagueAdmin = useIsLeagueAdmin(league, organizations);
 
   return useMemo(() => {
-    if (!currentUser?.pk || !league) return false;
+    if (!currentUser?.pk) return false;
 
-    // League admins have staff access
+    // Site admin (is_staff OR is_superuser) outranks every tier — must
+    // run before the !league guard. Without this, a server admin gets
+    // gated out of tournaments with no league.
+    if (currentUser.is_staff || currentUser.is_superuser) return true;
+
+    // League admin cascade (also covers site admins via useIsLeagueAdmin,
+    // but the direct check above already short-circuits faster).
     if (isLeagueAdmin) return true;
 
-    // Check league-specific staff_ids array
-    if (league.staff_ids?.includes(currentUser.pk)) return true;
-
-    // Check league-specific staff array
-    if (league.staff?.some((staff) => staff.pk === currentUser.pk)) {
-      return true;
+    // League-specific staff lookups only meaningful when a league is present.
+    if (league) {
+      if (league.staff_ids?.includes(currentUser.pk)) return true;
+      if (league.staff?.some((staff) => staff.pk === currentUser.pk)) {
+        return true;
+      }
     }
 
-    // Check if user is staff of any linked organization
+    // Org-staff cascade: hierarchy puts org > league, so an org staffer
+    // of the linked org grants league-staff access. Works even with no
+    // league, as long as ``organizations`` was passed in.
     const orgs = Array.isArray(organizations)
       ? organizations
       : organizations
         ? [organizations]
-        : league.organization
+        : league?.organization
           ? [league.organization]
           : [];
 
@@ -224,7 +275,14 @@ export function useIsLeagueStaff(
     }
 
     return false;
-  }, [currentUser?.pk, league, isLeagueAdmin, organizations]);
+  }, [
+    currentUser?.pk,
+    currentUser?.is_staff,
+    currentUser?.is_superuser,
+    league,
+    isLeagueAdmin,
+    organizations,
+  ]);
 }
 
 /**
