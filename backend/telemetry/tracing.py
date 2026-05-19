@@ -140,8 +140,7 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
         )
         metric_reader = PeriodicExportingMetricReader(metric_exporter)
 
-        # Drop metrics we don't want shipped. These drops are about *noise*
-        # and *duplication*, not the old temporality-mismatch problem:
+        # Drop metrics we don't want shipped:
         #
         # * http.client.* — requests instrumentation duplicates data we
         #   already get from server-side http.server.duration spans.
@@ -149,6 +148,14 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
         # * otel.sdk.* — the SDK's own self-monitoring metrics
         #   (collection.duration, exported.count, etc.). Exporter internals,
         #   not useful telemetry.
+        #
+        # * flower.* — Flower's task-runtime histogram (and friends) ship
+        #   with DELTA temporality. Mimir's OTLP→PromRW translator only
+        #   accepts CUMULATIVE for Histogram, so every batch containing a
+        #   `flower.task.runtime.seconds` data point gets rejected with
+        #   `otlp parse error: invalid temporality and type combination`.
+        #   Flower's internal counters aren't useful for our Grafana
+        #   dashboards anyway — drop them.
         meter_provider = MeterProvider(
             resource=resource,
             metric_readers=[metric_reader],
@@ -167,6 +174,10 @@ def _setup_provider(resource, provider, endpoint, header_dict, sample_rate) -> N
                 ),
                 View(
                     instrument_name="otel.sdk.*",
+                    aggregation=DropAggregation(),
+                ),
+                View(
+                    instrument_name="flower.*",
                     aggregation=DropAggregation(),
                 ),
             ],
