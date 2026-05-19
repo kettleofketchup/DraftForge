@@ -1411,10 +1411,11 @@ test.describe('navbar i18n — anonymous', () => {
   test('dynamic route SSR ships Spanish HTML (no flicker for es-ES)', async ({ browser }) => {
     const ctx = await browser.newContext({ locale: 'es-ES' });
     const page = await ctx.newPage();
-    attachErrorCapture(page);
+    const errors = attachErrorCapture(page);
     const response = await page.goto('/tournaments');
     const html = (await response?.text()) ?? '';
     expect(html).toContain(ES_LOGIN);
+    expect(errors).toEqual([]);
     await ctx.close();
   });
 
