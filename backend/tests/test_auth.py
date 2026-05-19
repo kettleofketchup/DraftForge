@@ -34,6 +34,12 @@ from tests.data.users import (
     USER_CLAIMER,
 )
 
+# Populate functions for non-standard tournament resets. Top-level imports —
+# the previous lambda+__import__ form was a holdover; these are leaf modules
+# with no circular-import risk.
+from tests.populate.bracket import populate_bracket_unset_winner_tournament
+from tests.populate.shuffle_tie import populate_shuffle_tie_data
+
 log = logging.getLogger(__name__)
 
 
@@ -742,20 +748,16 @@ def reset_tournament_by_key(request, key: str):
     from app.serializers import TournamentSerializer
     from tests.helpers.tournament_config import TEST_TOURNAMENTS
 
-    # Special reset functions for non-standard tournament configs
+    # Special reset functions for non-standard tournament configs.
+    # Each entry is the populate function itself, called with force=True below.
     RESET_FUNCTIONS = {
-        "shuffle_tie_resolution": lambda: __import__(
-            "tests.populate.shuffle_tie", fromlist=["populate_shuffle_tie_data"]
-        ).populate_shuffle_tie_data(force=True),
-        "bracket_unset_winner": lambda: __import__(
-            "tests.populate.bracket",
-            fromlist=["populate_bracket_unset_winner_tournament"],
-        ).populate_bracket_unset_winner_tournament(force=True),
+        "shuffle_tie_resolution": populate_shuffle_tie_data,
+        "bracket_unset_winner": populate_bracket_unset_winner_tournament,
     }
 
     reset_fn = RESET_FUNCTIONS.get(key)
     if reset_fn:
-        tournament = reset_fn()
+        tournament = reset_fn(force=True)
         tournament = Tournament.objects.get(pk=tournament.pk)
         return Response(TournamentSerializer(tournament).data)
 
