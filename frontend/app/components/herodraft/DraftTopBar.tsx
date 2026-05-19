@@ -26,7 +26,7 @@ function formatTime(ms: number): string {
  */
 function captainToUser(captain: {
   pk: number;
-  username: string;
+  username: string | null;
   nickname: string | null;
   avatar: string | null;
   avatarUrl?: string | null;
@@ -115,7 +115,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
 
   // Helper to render a player avatar with name underneath
   const renderPlayer = (
-    player: { pk: number; username: string; nickname: string | null; avatar: string | null; avatarUrl?: string | null; discordId?: string | null },
+    player: { pk: number; username: string | null; nickname: string | null; avatar: string | null; avatarUrl?: string | null; discordId?: string | null },
     isCaptain: boolean,
     testIdPrefix: string
   ) => (
