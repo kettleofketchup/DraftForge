@@ -249,21 +249,31 @@ export default function OrganizationDetailPage() {
     }
   }, [activeTab, pk, getOrgUsers]);
 
-  const isOrgAdmin =
-    currentUser?.is_superuser ||
-    organization?.owner?.pk === currentUser?.pk ||
-    organization?.admins?.some((a) => a.pk === currentUser?.pk);
+  // All four checks require a logged-in user. Without ``currentUser?.pk``
+  // gating the comparisons, ``organization?.owner?.pk === currentUser?.pk``
+  // is ``undefined === undefined`` for anonymous visitors and incorrectly
+  // promotes them to org admin.
+  const isOrgAdmin = !!(
+    currentUser?.pk &&
+    (currentUser.is_superuser ||
+      organization?.owner?.pk === currentUser.pk ||
+      organization?.admins?.some((a) => a.pk === currentUser.pk))
+  );
 
-  const isOrgStaff =
-    isOrgAdmin ||
-    organization?.staff?.some((s) => s.pk === currentUser?.pk);
+  const isOrgStaff = !!(
+    currentUser?.pk &&
+    (isOrgAdmin ||
+      organization?.staff?.some((s) => s.pk === currentUser.pk))
+  );
 
-  const canEditEvents = isOrgStaff || currentUser?.is_staff;
+  const canEditEvents = isOrgStaff || !!currentUser?.is_staff;
 
   // Staff can add members but not edit org settings
-  const canAddMembers =
-    isOrgAdmin ||
-    organization?.staff?.some((s) => s.pk === currentUser?.pk);
+  const canAddMembers = !!(
+    currentUser?.pk &&
+    (isOrgAdmin ||
+      organization?.staff?.some((s) => s.pk === currentUser.pk))
+  );
 
   // AddUserModal callbacks
   const handleAddMember = useCallback(
@@ -442,7 +452,10 @@ export default function OrganizationDetailPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Leagues</h2>
               {isOrgStaff && (
-                <PrimaryButton onClick={() => setCreateLeagueOpen(true)}>
+                <PrimaryButton
+                  onClick={() => setCreateLeagueOpen(true)}
+                  data-testid="create-league-button"
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Create League
                 </PrimaryButton>
