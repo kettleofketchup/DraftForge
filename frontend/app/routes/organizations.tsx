@@ -127,7 +127,11 @@ export default function OrganizationsPage() {
             <h1 className="text-xl! sm:text-2xl! font-bold truncate">Organizations</h1>
           </div>
           {currentUser?.is_superuser && (
-            <PrimaryButton onClick={() => setCreateModalOpen(true)} className="w-full sm:w-auto">
+            <PrimaryButton
+              onClick={() => setCreateModalOpen(true)}
+              className="w-full sm:w-auto"
+              data-testid="create-organization-button"
+            >
               <Plus className="w-4 h-4 mr-2" />
               Create Organization
             </PrimaryButton>
