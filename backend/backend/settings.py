@@ -381,6 +381,34 @@ else:
 
 CACHEOPS_DEGRADE_ON_FAILURE = True
 
+
+def _deploy_version() -> str:
+    """Read pyproject.toml `project.version` as the cache-key prefix.
+
+    `DEPLOY_VERSION` env override wins for cases where you want to
+    invalidate the whole cache mid-version (e.g. emergency rollback).
+    """
+    env = os.environ.get("DEPLOY_VERSION")
+    if env:
+        return env
+    try:
+        import tomllib
+
+        pyproject = Path(__file__).resolve().parent.parent.parent / "pyproject.toml"
+        with open(pyproject, "rb") as f:
+            return tomllib.load(f).get("project", {}).get("version", "0")
+    except Exception:
+        return "0"
+
+
+# Version-prefix cacheops keys so deploys auto-invalidate while restarts
+# stay warm. Old prefixed keys orphan and TTL out naturally. Replaces the
+# brute `invalidate_all()` that AppConfig.ready() used to fire on every
+# boot — that wiped warm cache on every Daphne reload / worker restart /
+# OOM, with the only legitimate goal being "fresh data after a deploy".
+_CACHE_KEY_PREFIX = f"dtx-v{_deploy_version()}:"
+CACHEOPS_PREFIX = lambda _query: _CACHE_KEY_PREFIX  # noqa: E731
+
 # Channel Layers for WebSocket support
 if env_bool("DISABLE_CACHE"):
     # In-memory channel layer when Redis is unavailable (populate, local tests)

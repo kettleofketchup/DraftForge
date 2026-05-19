@@ -129,10 +129,15 @@ def bulk_update_user_avatars(request):
 
     Body: {"updates": [{"pk": <int>, "avatar": <str|null>}, ...]}
 
-    Performs a single bulk_update with batch_size=500 and one
-    invalidate_model(CustomUser) call (bulk_update bypasses signals so
-    cacheops needs an explicit nudge). Returns the count actually
-    written. Empty updates list is a no-op.
+    Performs a single bulk_update with batch_size=500 and per-row
+    `invalidate_obj` calls (bulk_update bypasses signals so cacheops
+    needs an explicit nudge). Per-row instead of `invalidate_model` so
+    we only evict rows that actually changed — CustomUser is a hot
+    model, and a model-wide wipe on every daily avatar refresh would
+    cold-start every authenticated request's user cache. The per-row
+    cost is one tiny Redis DEL per user; for the typical 5–50 changed
+    avatars per daily run that's cheaper than scanning + deleting all
+    User-tagged cache keys.
     """
     User = get_user_model()
     updates = request.data.get("updates")
@@ -159,7 +164,12 @@ def bulk_update_user_avatars(request):
 
     to_update = [User(pk=u["pk"], avatar=u["avatar"]) for u in cleaned]
     User.objects.bulk_update(to_update, ["avatar"], batch_size=500)
-    invalidate_model(User)
+    # Per-row invalidation: only evict the users that changed instead of
+    # wiping the whole CustomUser cache. See docstring for rationale.
+    from cacheops import invalidate_obj
+
+    for u in to_update:
+        invalidate_obj(u)
     log.info(
         "avatars_bulk_updated",
         system="avatars",
