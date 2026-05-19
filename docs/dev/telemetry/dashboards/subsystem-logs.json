@@ -3252,7 +3252,7 @@
             "value": ""
           },
           "hide": "dontHide",
-          "refresh": "never",
+          "refresh": "onDashboardLoad",
           "skipUrlSync": false,
           "query": {
             "kind": "DataQuery",
@@ -3285,14 +3285,14 @@
             "value": ""
           },
           "hide": "dontHide",
-          "refresh": "never",
+          "refresh": "onDashboardLoad",
           "skipUrlSync": false,
           "query": {
             "kind": "DataQuery",
             "group": "loki",
             "version": "v1",
             "spec": {
-              "expr": "label_values({deployment_environment=\"$env\"}, service_name)",
+              "expr": "label_values(service_name)",
               "editorMode": "code",
               "refId": "A"
             },
@@ -3306,7 +3306,8 @@
           "multi": true,
           "includeAll": true,
           "allowCustomValue": true,
-          "label": "Service"
+          "label": "Service",
+          "allValue": ".+"
         }
       },
       {

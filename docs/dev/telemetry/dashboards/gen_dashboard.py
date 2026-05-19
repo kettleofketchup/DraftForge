@@ -46,6 +46,7 @@ from grafana_foundation_sdk.models.dashboardv2beta1 import (
     DashboardCursorSync,
     DataQueryKind,
     Dashboardv2beta1DataQueryKindDatasource,
+    VariableRefresh,
 )
 
 
@@ -413,19 +414,29 @@ def build_variables() -> list:
         v2.QueryVariable("env")
         .label("Environment")
         .query(_LokiQuery("label_values(deployment_environment)"))
+        .refresh(VariableRefresh.ON_DASHBOARD_LOAD)
         .multi(False)
         .include_all(False)
     )
+    # Service query intentionally does NOT filter by $env. Loki rejects
+    # stream selectors whose only matchers are empty-compatible (`.*`,
+    # `""`), and on first load $env hasn't resolved yet — so a query
+    # like `label_values({deployment_environment="$env"}, service_name)`
+    # becomes `{deployment_environment=""}` and gets refused before
+    # the cascading variable can populate. Listing all services across
+    # envs is fine for our usage; panel queries still constrain to
+    # the selected $env via the equality matcher in SERVICE_FILTER.
     service = (
         v2.QueryVariable("service")
         .label("Service")
-        .query(
-            _LokiQuery(
-                'label_values({deployment_environment="$env"}, service_name)'
-            )
-        )
+        .query(_LokiQuery("label_values(service_name)"))
+        .refresh(VariableRefresh.ON_DASHBOARD_LOAD)
         .multi(True)
         .include_all(True)
+        # `All` expands to all_value verbatim. `.+` (one-or-more) is
+        # non-empty-compatible so Loki accepts the matcher; `.*` (the
+        # default) is empty-compatible and gets rejected.
+        .all_value(".+")
     )
     subsystem = (
         v2.TextVariable("subsystem")
