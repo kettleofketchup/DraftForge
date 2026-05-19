@@ -472,8 +472,10 @@ def build_variables() -> list:
     # like `label_values({deployment_environment="$env"}, service)`
     # becomes `{deployment_environment=""}` and gets refused before
     # the cascading variable can populate. Listing all services across
-    # envs is fine for our usage; panel queries still constrain to
-    # the selected $env via the equality matcher in SERVICE_FILTER.
+    # envs is fine for our usage; panel queries still constrain to the
+    # selected $env via the ``deployment_environment=~"$env"`` regex
+    # matcher in SERVICE_FILTER (anchored implicitly by Grafana when
+    # $env resolves to a concrete value).
     service = (
         v2.QueryVariable("service")
         .label("Service")
