@@ -62,6 +62,19 @@ class TournamentUserSerializer(serializers.ModelSerializer):
     positions = PositionsSerializer(many=False, read_only=True)
     # Auto-computed 32-bit Steam Account ID from 64-bit Friend ID
     steam_account_id = serializers.IntegerField(read_only=True)
+    # nickname/avatar live on BaseUserProfile (T1 epic). Source via the
+    # OneToOne reverse accessor so the field list stays stable for callers
+    # and DRF doesn't fall back to the transitional @property getter.
+    nickname = serializers.CharField(
+        source="base_profile.nickname",
+        read_only=True,
+        allow_null=True,
+    )
+    avatar = serializers.CharField(
+        source="base_profile.avatar",
+        read_only=True,
+        allow_null=True,
+    )
 
     class Meta:
         model = CustomUser
@@ -1094,6 +1107,21 @@ class UserSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     steam_account_id = serializers.IntegerField(required=False, allow_null=True)
+    # nickname/avatar live on BaseUserProfile (T1 epic). Source via the
+    # OneToOne reverse accessor so the field list stays stable for callers
+    # and DRF doesn't fall back to the transitional @property getter.
+    # Writes flow through PATCH /api/users/me/profile/base/ (T1.8), not this
+    # legacy endpoint — keep read_only here.
+    nickname = serializers.CharField(
+        source="base_profile.nickname",
+        read_only=True,
+        allow_null=True,
+    )
+    avatar = serializers.CharField(
+        source="base_profile.avatar",
+        read_only=True,
+        allow_null=True,
+    )
 
     class Meta:
         model = CustomUser
