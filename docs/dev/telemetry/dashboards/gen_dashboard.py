@@ -46,6 +46,7 @@ from grafana_foundation_sdk.models.dashboardv2beta1 import (
     DashboardCursorSync,
     DataQueryKind,
     Dashboardv2beta1DataQueryKindDatasource,
+    VariableOption,
     VariableRefresh,
 )
 
@@ -107,6 +108,15 @@ SERVICE_FILTER = '{service_name=~"$service", deployment_environment=~"$env"}'
 # `| __error__=""` drops jsonparsererr series so they don't poison
 # aggregations or pop a frontend error toast.
 SAFE_JSON = '| json | __error__=""'
+# Coalesce missing system/subsystem labels (third-party loggers like
+# the OTLP exporter, requests, Discord client don't follow our
+# structlog taxonomy) to a non-empty placeholder so they render as
+# text rather than blank cells in aggregation panels.
+COALESCE_TAGS = (
+    "| label_format "
+    'system=`{{or .system "untagged"}}`, '
+    'subsystem=`{{or .subsystem "untagged"}}`'
+)
 
 
 # ---- Query helpers --------------------------------------------------------
@@ -270,11 +280,13 @@ def overview_panels() -> dict[str, v2.Panel]:
     top_err = _table_panel(
         "Top error messages",
         f"topk(20, sum by (event, system, subsystem) (count_over_time("
-        f"{SERVICE_FILTER} {SAFE_JSON} "
+        f"{SERVICE_FILTER} {SAFE_JSON} {COALESCE_TAGS} "
         f'| level=~"warning|error" [$__range])))',
         description=(
             "Most frequent warn/error events. Top of this list is where "
-            "to spend the next round of fixes."
+            "to spend the next round of fixes. Errors from third-party "
+            'loggers (OTLP exporter, requests, etc.) show as "untagged" — '
+            "fix at source by adding structlog system/subsystem kwargs."
         ),
     )
     log_rate = _ts_panel(
@@ -348,12 +360,32 @@ def system_panels(system: str) -> dict[str, v2.Panel]:
     }
 
 
-def system_grid(system: str) -> v2.Grid:
-    return (
+def system_layout(system: str) -> v2.Rows:
+    """Per-system layout: logs panel visible, rate breakdown collapsed.
+
+    Expanding a system row already costs the user a click; surfacing every
+    subsystem rate chart by default makes the row noisy. Nesting the
+    log-rate / warn-error-rate panels in a second collapsed row lets the
+    user drill in only when they need the breakdown.
+    """
+    logs_grid = (
+        v2.Grid()
+        .item(_grid_item(f"{system}-logs", x=0, y=0, w=24, h=10))
+    )
+    rate_grid = (
         v2.Grid()
         .item(_grid_item(f"{system}-log-rate", x=0,  y=0, w=12, h=8))
         .item(_grid_item(f"{system}-err-rate", x=12, y=0, w=12, h=8))
-        .item(_grid_item(f"{system}-logs",     x=0,  y=8, w=24, h=10))
+    )
+    return (
+        v2.Rows()
+        .row(v2.Row().title("Recent logs").collapse(False).layout(logs_grid))
+        .row(
+            v2.Row()
+            .title("Subsystem rate breakdown")
+            .collapse(True)
+            .layout(rate_grid)
+        )
     )
 
 
@@ -405,6 +437,16 @@ def build_variables() -> list:
         v2.DatasourceVariable("ds_loki")
         .label("Loki")
         .plugin_id("loki")
+        # Pre-select kettle's prod Loki so the dashboard renders data
+        # on first load instead of waiting for the user to pick a
+        # source. Users can still change the selection from the header.
+        .current(
+            VariableOption(
+                text="grafanacloud-kettle-logs",
+                value="grafanacloud-logs",
+                selected=True,
+            )
+        )
         .description(
             "Pick the Loki datasource to point this dashboard at. "
             "Selection persists per-user."
@@ -496,7 +538,7 @@ def build_dashboard():
     )
     for system in SYSTEMS:
         rows = rows.row(
-            v2.Row().title(system).collapse(True).layout(system_grid(system))
+            v2.Row().title(system).collapse(True).layout(system_layout(system))
         )
     rows = rows.row(
         v2.Row()
