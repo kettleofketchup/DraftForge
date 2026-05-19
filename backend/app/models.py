@@ -97,7 +97,6 @@ class CustomUser(AbstractUser):
     steam_account_id = models.IntegerField(null=True, unique=True, blank=True)
     # 64-bit Steam ID - auto-calculated from steam_account_id
     steamid = models.BigIntegerField(null=True, blank=True, db_index=True)
-    nickname = models.TextField(null=True, blank=True)
 
     # MMR verification tracking
     has_active_dota_mmr = models.BooleanField(default=False)
@@ -121,7 +120,6 @@ class CustomUser(AbstractUser):
         null=False,
         blank=True,
     )
-    avatar = models.TextField(null=True, blank=True)
     discordId = models.TextField(null=True, unique=True, blank=True)
     discordUsername = models.TextField(null=True, blank=True)
     discordNickname = models.TextField(null=True, blank=True)
@@ -138,20 +136,51 @@ class CustomUser(AbstractUser):
     # steamid (64-bit) = steam_account_id (32-bit) + STEAM_ID_64_BASE
     STEAM_ID_64_BASE = 76561197960265728
 
-    def save(self, *args, **kwargs):
-        """Keep steam_account_id (32-bit) and steamid (64-bit) in sync.
+    @property
+    def nickname(self):
+        """Transitional proxy — reads nickname from base_profile.
 
-        Primary direction: steam_account_id → steamid.
-        Backward compat: if only steamid is set, derive steam_account_id from it.
+        Removed in a follow-up cleanup ticket once all writers migrate to
+        PATCH /api/users/me/profile/base/.
         """
-        if self.steam_account_id is not None:
-            self.steamid = self.steam_account_id + self.STEAM_ID_64_BASE
-        elif self.steamid is not None:
-            self.steam_account_id = self.steamid - self.STEAM_ID_64_BASE
-        else:
-            self.steamid = None
-            self.steam_account_id = None
-        super().save(*args, **kwargs)
+        bp = getattr(self, "base_profile", None)
+        return bp.nickname if bp else None
+
+    @nickname.setter
+    def nickname(self, value):
+        """Transitional setter — writes through to base_profile.nickname.
+
+        Persists immediately so populate fixtures and incidental writers
+        behave as if the field were still on CustomUser. Invalidates the
+        base_profile cacheops row on commit.
+        """
+        # Use a local import to avoid the circular at module load.
+        from app.cache_utils import invalidate_after_commit
+        bp = getattr(self, "base_profile", None)
+        if bp is None:
+            # User hasn't been saved yet (no pk) — buffer the value and apply
+            # in save() after auto-create.
+            self._pending_nickname = value
+            return
+        bp.nickname = value
+        bp.save(update_fields=["nickname"])
+        invalidate_after_commit(bp)
+
+    @property
+    def avatar(self):
+        bp = getattr(self, "base_profile", None)
+        return bp.avatar if bp else None
+
+    @avatar.setter
+    def avatar(self, value):
+        from app.cache_utils import invalidate_after_commit
+        bp = getattr(self, "base_profile", None)
+        if bp is None:
+            self._pending_avatar = value
+            return
+        bp.avatar = value
+        bp.save(update_fields=["avatar"])
+        invalidate_after_commit(bp)
 
     def createFromDiscordData(self, data):
         self.username = data["user"]["username"]
@@ -262,26 +291,54 @@ class CustomUser(AbstractUser):
             return False
 
     def save(self, *args, **kwargs):
+        """Keep steam ids in sync, auto-create PositionsModel + BaseUserProfile,
+        invalidate cacheops, and flush pending nickname/avatar values buffered
+        by the transitional property setters before the user had a pk.
+
+        This single save() merges what used to be two separately-defined
+        save() overrides on CustomUser. Python MRO meant the second-defined
+        one always won, so the steam id sync was silently dead until this
+        merge resurrected it.
         """
-        Override save method to automatically create a PositionsModel instance
-        if the user doesn't have one, invalidate dependent caches, and ensure
-        every user has a BaseUserProfile after save.
-        """
-        if not self.positions_id:  # Check if positions is not set
-            # Create a default PositionsModel with all positions set to 0
+        # 1. Steam id 32-bit / 64-bit sync.
+        if self.steam_account_id is not None:
+            self.steamid = self.steam_account_id + self.STEAM_ID_64_BASE
+        elif self.steamid is not None:
+            self.steam_account_id = self.steamid - self.STEAM_ID_64_BASE
+        else:
+            self.steamid = None
+            self.steam_account_id = None
+
+        # 2. PositionsModel auto-create.
+        if not self.positions_id:
             default_positions = PositionsModel.objects.create()
             self.positions = default_positions
 
         super().save(*args, **kwargs)
 
-        # Invalidate this specific user's cache
-
+        # 3. Cacheops invalidation for this user.
         invalidate_obj(self)
 
-        # Auto-create BaseUserProfile if missing. Idempotent via get_or_create.
+        # 4. BaseUserProfile auto-create. Idempotent via get_or_create.
         # Local import avoids the circular: user.models -> app.CustomUser.
         from user.models import BaseUserProfile
-        BaseUserProfile.objects.get_or_create(user=self)
+        bp, _ = BaseUserProfile.objects.get_or_create(user=self)
+
+        # 5. Flush pending nickname/avatar values buffered by the property
+        #    setters before the user had a pk (and therefore a base_profile).
+        pending_nickname = getattr(self, "_pending_nickname", None)
+        pending_avatar = getattr(self, "_pending_avatar", None)
+        fields_to_update = []
+        if pending_nickname is not None:
+            bp.nickname = pending_nickname
+            fields_to_update.append("nickname")
+            del self._pending_nickname
+        if pending_avatar is not None:
+            bp.avatar = pending_avatar
+            fields_to_update.append("avatar")
+            del self._pending_avatar
+        if fields_to_update:
+            bp.save(update_fields=fields_to_update)
 
     @property
     def avatarUrl(self):
