@@ -342,6 +342,37 @@ export async function loginOrgStaff(context: BrowserContext): Promise<void> {
 }
 
 /**
+ * Login as plain organization member (in DTX as OrgUser, no admin/staff role).
+ * Use this to separate "member with no role" from "unaffiliated user" in
+ * permission-matrix tests.
+ */
+export async function loginOrgMember(context: BrowserContext): Promise<void> {
+  const url = `${API_URL}/tests/login-org-member/`;
+  console.log(`[auth] loginOrgMember: POST ${url}`);
+
+  const response = await context.request.post(url);
+
+  if (!response.ok()) {
+    const status = response.status();
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    console.error(`[auth] loginOrgMember FAILED: ${status} - ${body}`);
+    throw new Error(`loginOrgMember failed: ${status} - ${body.slice(0, 500)}`);
+  }
+
+  console.log(`[auth] loginOrgMember: OK (${response.status()})`);
+
+  const cookies = response.headers()['set-cookie'];
+  if (cookies) {
+    await setSessionCookies(context, cookies);
+  }
+}
+
+/**
  * Login as league admin.
  */
 export async function loginLeagueAdmin(context: BrowserContext): Promise<void> {
@@ -499,6 +530,7 @@ export const test = base.extend<{
   loginUserClaimer: () => Promise<void>;
   loginOrgAdmin: () => Promise<void>;
   loginOrgStaff: () => Promise<void>;
+  loginOrgMember: () => Promise<void>;
   loginLeagueAdmin: () => Promise<void>;
   loginLeagueStaff: () => Promise<void>;
   waitForHydration: () => Promise<void>;
@@ -536,6 +568,9 @@ export const test = base.extend<{
   },
   loginOrgStaff: async ({ context }, use) => {
     await use(() => loginOrgStaff(context));
+  },
+  loginOrgMember: async ({ context }, use) => {
+    await use(() => loginOrgMember(context));
   },
   loginLeagueAdmin: async ({ context }, use) => {
     await use(() => loginLeagueAdmin(context));

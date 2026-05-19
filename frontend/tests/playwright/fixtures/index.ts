@@ -18,6 +18,7 @@ export {
   loginUserClaimer,
   loginOrgAdmin,
   loginOrgStaff,
+  loginOrgMember,
   loginLeagueAdmin,
   loginLeagueStaff,
   loginEventLeagueStaff,
@@ -49,6 +50,17 @@ export { DraftWebSocketHelper } from '../helpers/DraftWebSocketHelper';
 
 // Re-export the extended test from auth (primary test fixture)
 export { test, expect } from './auth';
+
+// Role-contexts matrix fixture — re-exported under a distinct name so
+// spec files can opt in: ``import { roleMatrixTest } from '../../fixtures'``.
+export {
+  test as roleMatrixTest,
+  setupRoleContexts,
+  ROLE_NAMES,
+  type RoleName,
+  type RoleSession,
+  type RoleContexts,
+} from './role-contexts';
 
 // General utilities
 export {
