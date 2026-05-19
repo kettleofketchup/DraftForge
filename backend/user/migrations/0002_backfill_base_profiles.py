@@ -11,7 +11,14 @@ def copy_nickname_avatar_to_base_profile(apps, schema_editor):
     CustomUser = apps.get_model("app", "CustomUser")
     BaseUserProfile = apps.get_model("user", "BaseUserProfile")
 
-    cache.clear()  # Clear any existing cacheops state
+    # Clear any existing cacheops state. cache.clear() hits django-redis
+    # which hard-fails on connection errors (unlike cacheops, which degrades
+    # gracefully via CACHEOPS_DEGRADE_ON_FAILURE). Be defensive so cold-start
+    # CI or broken-Redis envs don't fail the migration.
+    try:
+        cache.clear()
+    except Exception:
+        pass
 
     to_create = []
     seen = set()
