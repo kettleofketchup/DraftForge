@@ -77,7 +77,6 @@ test.describe('Admin Team Section (@cicd)', () => {
   });
 
   test('@cicd AdminTeamSection renders in EditLeagueModal', async ({ context, page }) => {
-    // Login as league admin via Discord ID (the loginLeagueAdmin fixture endpoint is unreliable)
     await loginAsDiscordId(context, LEAGUE_ADMIN_DISCORD_ID);
 
     // Navigate to league page
