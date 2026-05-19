@@ -252,17 +252,46 @@ class HeroDraftResetOnGameTeamChangeTest(TestCase):
         other_game.dire_team = self.team_dire_corrected
         other_game.save()  # must not raise
 
+    def test_reset_clears_pick_order_and_side_choices(self):
+        """``do_submit_choice`` rejects when ``is_first_pick`` or
+        ``is_radiant`` is non-null ("Pick order already chosen" / "Side
+        already chosen"). After a team-swap reset the new captains must
+        be able to roll + choose again — so both fields go back to None,
+        matching what the user-facing ``reset_draft`` view does."""
+        self.dt_radiant.is_first_pick = True
+        self.dt_radiant.is_radiant = True
+        self.dt_radiant.save()
+        self.dt_dire.is_first_pick = False
+        self.dt_dire.is_radiant = False
+        self.dt_dire.save()
+
+        self.game.dire_team = self.team_dire_corrected
+        self.game.save()
+
+        self.dt_radiant.refresh_from_db()
+        self.dt_dire.refresh_from_db()
+        self.assertIsNone(self.dt_radiant.is_first_pick)
+        self.assertIsNone(self.dt_radiant.is_radiant)
+        self.assertIsNone(self.dt_dire.is_first_pick)
+        self.assertIsNone(self.dt_dire.is_radiant)
+
     def test_reset_broadcasts_draft_reset_event_with_same_pk(self):
         """Connected HeroDraftConsumer clients learn the draft was reset
         via the existing channel group (``herodraft_{pk}``). They can
-        refetch and stay on the same draft URL since the pk is preserved."""
+        refetch and stay on the same draft URL since the pk is preserved.
+
+        The broadcast is deferred to ``transaction.on_commit`` so clients
+        never see pre-commit data; ``captureOnCommitCallbacks(execute=True)``
+        runs the deferred callbacks at block exit (Django ``TestCase``
+        rolls the surrounding transaction back, so on_commit otherwise
+        never fires)."""
         draft_pk = self.draft.pk
 
         mock_layer = MagicMock()
         mock_layer.group_send = AsyncMock()
         with patch(
             "channels.layers.get_channel_layer", return_value=mock_layer
-        ):
+        ), self.captureOnCommitCallbacks(execute=True):
             self.game.dire_team = self.team_dire_corrected
             self.game.save()
 
@@ -277,6 +306,33 @@ class HeroDraftResetOnGameTeamChangeTest(TestCase):
         self.assertEqual(payload["metadata"]["reason"], "teams_changed")
         self.assertEqual(payload["metadata"]["game_id"], self.game.pk)
 
+    def test_broadcast_is_deferred_until_transaction_commit(self):
+        """Regression for the in-transaction race: if the WS broadcast
+        fires while ``save_bracket``'s outer ``@transaction.atomic`` is
+        still open, clients refetch and read pre-reset rows (or repopulate
+        cacheops with them), defeating the whole reset. The broadcast must
+        be scheduled on commit, not run synchronously inside the signal."""
+        mock_layer = MagicMock()
+        mock_layer.group_send = AsyncMock()
+        with patch(
+            "channels.layers.get_channel_layer", return_value=mock_layer
+        ), self.captureOnCommitCallbacks(execute=False) as callbacks:
+            self.game.dire_team = self.team_dire_corrected
+            self.game.save()
+            # Inside the block: the signal has run and the rows are
+            # updated, but the broadcast must NOT have fired yet. (The
+            # ``callbacks`` list is only populated at block exit, so
+            # length is asserted after the ``with``.)
+            mock_layer.group_send.assert_not_called()
+
+        # ``execute=False`` leaves the captured callbacks unrun, so the
+        # broadcast still has not fired even after the block. The list
+        # has more than one entry because ``invalidate_after_commit`` also
+        # registers an on_commit hook — we only care that *the broadcast*
+        # was deferred, not the precise count.
+        self.assertGreaterEqual(len(callbacks), 1)
+        mock_layer.group_send.assert_not_called()
+
     def test_clearing_team_to_none_broadcasts_draft_invalidated(self):
         """The delete-fallback path uses event_type=draft_invalidated so the
         frontend can show a different message from the in-place reset
@@ -287,7 +343,7 @@ class HeroDraftResetOnGameTeamChangeTest(TestCase):
         mock_layer.group_send = AsyncMock()
         with patch(
             "channels.layers.get_channel_layer", return_value=mock_layer
-        ):
+        ), self.captureOnCommitCallbacks(execute=True):
             self.game.dire_team = None
             self.game.save()
 
@@ -307,7 +363,7 @@ class HeroDraftResetOnGameTeamChangeTest(TestCase):
         failing_layer.group_send.side_effect = RuntimeError("channel down")
         with patch(
             "channels.layers.get_channel_layer", return_value=failing_layer
-        ):
+        ), self.captureOnCommitCallbacks(execute=True):
             self.game.dire_team = self.team_dire_corrected
             self.game.save()  # must not raise
 

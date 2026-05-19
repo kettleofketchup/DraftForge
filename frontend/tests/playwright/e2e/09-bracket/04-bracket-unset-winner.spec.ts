@@ -46,6 +46,15 @@ const TARGET_MATCH_SELECTOR =
   '[data-testid="bracket-match-node"][data-bracket-type="winners"][data-round="1"][data-position="0"]';
 
 test.describe('Bracket Unset Winner (e2e)', () => {
+  // All four tests reset and rebind the *same* tournament key in
+  // beforeEach (the endpoint deletes + recreates it). Default workers=1
+  // serializes this fine, but the project allows PLAYWRIGHT_WORKERS=2
+  // and fullyParallel is on globally, which would let two tests in this
+  // file race on the shared reset endpoint and the module-scoped
+  // tournamentPk. Pin to serial — the cost is zero at workers=1 and
+  // correctness insurance at workers>1.
+  test.describe.configure({ mode: 'serial' });
+
   test.beforeEach(async ({ loginStaff, page }) => {
     await loginStaff();
     // Reset the dedicated tournament between tests so each one starts from

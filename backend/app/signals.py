@@ -11,6 +11,7 @@ Handles:
 
 import logging
 
+from django.db import transaction
 from django.db.models.signals import m2m_changed, pre_save
 from django.dispatch import receiver
 
@@ -256,7 +257,9 @@ def reset_herodraft_on_team_change(sender, instance, **kwargs):
     if teams_cleared:
         draft_pk = draft.pk
         draft.delete()
-        _broadcast_draft_event(draft_pk, "draft_invalidated", instance.pk)
+        transaction.on_commit(
+            lambda: _broadcast_draft_event(draft_pk, "draft_invalidated", instance.pk)
+        )
         return
 
     # Repoint DraftTeams at the Game's new teams. The Game row hasn't been
@@ -276,6 +279,12 @@ def reset_herodraft_on_team_change(sender, instance, **kwargs):
         dt.tournament_team_id = new_team_id
         dt.is_ready = False
         dt.is_connected = False
+        # Clear roll-aftermath choices — leaving these set would make
+        # do_submit_choice reject the new captains with "already chosen"
+        # even though the draft is back at WAITING_FOR_CAPTAINS. Matches
+        # what reset_draft does in herodraft_views.py.
+        dt.is_first_pick = None
+        dt.is_radiant = None
         dt.reserve_time_remaining = 90000
         dt.save()
         updated_draft_teams.append(dt)
@@ -306,7 +315,14 @@ def reset_herodraft_on_team_change(sender, instance, **kwargs):
 
     invalidate_after_commit(draft, *updated_draft_teams)
 
-    _broadcast_draft_event(draft.pk, "draft_reset", instance.pk)
+    # Defer the broadcast to commit too. If we fired now, clients would
+    # receive draft_reset, immediately refetch from the API, and read the
+    # pre-commit rows (or repopulate cacheops with them) — defeating the
+    # whole reset for any reader that's faster than the COMMIT.
+    draft_pk = draft.pk
+    transaction.on_commit(
+        lambda: _broadcast_draft_event(draft_pk, "draft_reset", instance.pk)
+    )
 
 
 def _broadcast_draft_event(draft_pk, event_type, game_id):
