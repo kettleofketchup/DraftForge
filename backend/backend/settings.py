@@ -123,6 +123,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "app.apps.AppConfig",
+    "user.apps.UserConfig",
     "org.apps.OrgConfig",
     "league.apps.LeagueConfig",
     "social_django",
