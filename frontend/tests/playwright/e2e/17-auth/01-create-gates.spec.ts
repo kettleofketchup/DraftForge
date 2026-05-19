@@ -44,17 +44,14 @@ const CREATE_ORG_EXPECTATIONS: Expectations = {
   anonymous: false,
 };
 
-// The org-detail page uses an INLINE isOrgStaff check (not the hook):
-//   isOrgAdmin = is_superuser || owner.pk === me || admins.some(...)
-//   isOrgStaff = isOrgAdmin || staff.some(...)
-// Note this only checks ``is_superuser``, NOT ``is_staff`` — so a Django
-// site-staff user (is_staff=True, is_superuser=False) does NOT bypass the
-// org membership check on this page. The Tournament gate (which uses
-// ``is_staff || is_superuser`` directly) does grant access to site staff;
-// the contracts are intentionally different.
+// The org-detail page now uses ``useIsOrganizationStaff`` from the shared
+// permissions hooks (was an inline check that only honoured
+// ``is_superuser``). The hook treats ``is_staff || is_superuser`` as a
+// site-admin bypass, so a Django site-staff user gains org-staff
+// equivalence here.
 const CREATE_LEAGUE_EXPECTATIONS: Expectations = {
-  siteAdmin: true,    // is_superuser → inline isOrgAdmin
-  siteStaff: false,   // is_staff alone is NOT enough for the inline check
+  siteAdmin: true,    // is_superuser → useIsOrganizationStaff bypass
+  siteStaff: true,    // is_staff → same bypass
   orgAdmin: true,     // in DTX.admins
   orgStaff: true,     // in DTX.staff
   orgMember: false,
@@ -64,10 +61,10 @@ const CREATE_LEAGUE_EXPECTATIONS: Expectations = {
 };
 
 const CREATE_EVENT_EXPECTATIONS: Expectations = {
-  // Same gate as Create League — on the org-detail page, both buttons
-  // use the inline isOrgStaff.
+  // Same gate as Create League — both use useIsOrganizationStaff via
+  // the hook refactor.
   siteAdmin: true,
-  siteStaff: false,
+  siteStaff: true,
   orgAdmin: true,
   orgStaff: true,
   orgMember: false,

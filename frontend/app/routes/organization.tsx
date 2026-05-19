@@ -66,6 +66,10 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
 import { useOrgUsers } from '~/hooks/useOrgUsers';
+import {
+  useIsOrganizationAdmin,
+  useIsOrganizationStaff,
+} from '~/hooks/usePermissions';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
@@ -249,31 +253,15 @@ export default function OrganizationDetailPage() {
     }
   }, [activeTab, pk, getOrgUsers]);
 
-  // All four checks require a logged-in user. Without ``currentUser?.pk``
-  // gating the comparisons, ``organization?.owner?.pk === currentUser?.pk``
-  // is ``undefined === undefined`` for anonymous visitors and incorrectly
-  // promotes them to org admin.
-  const isOrgAdmin = !!(
-    currentUser?.pk &&
-    (currentUser.is_superuser ||
-      organization?.owner?.pk === currentUser.pk ||
-      organization?.admins?.some((a) => a.pk === currentUser.pk))
-  );
-
-  const isOrgStaff = !!(
-    currentUser?.pk &&
-    (isOrgAdmin ||
-      organization?.staff?.some((s) => s.pk === currentUser.pk))
-  );
-
-  const canEditEvents = isOrgStaff || !!currentUser?.is_staff;
-
-  // Staff can add members but not edit org settings
-  const canAddMembers = !!(
-    currentUser?.pk &&
-    (isOrgAdmin ||
-      organization?.staff?.some((s) => s.pk === currentUser.pk))
-  );
+  // Permission checks via the shared hooks (see ``hooks/usePermissions.ts``).
+  // They handle the site-admin bypass (is_staff || is_superuser), owner
+  // and admins/staff lookups, and short-circuit safely when ``organization``
+  // hasn't loaded yet. ``canEditEvents`` and ``canAddMembers`` were
+  // historically separate inline expressions but reduce to ``isOrgStaff``.
+  const isOrgAdmin = useIsOrganizationAdmin(organization);
+  const isOrgStaff = useIsOrganizationStaff(organization);
+  const canEditEvents = isOrgStaff;
+  const canAddMembers = isOrgStaff;
 
   // AddUserModal callbacks
   const handleAddMember = useCallback(
