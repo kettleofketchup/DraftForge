@@ -8,6 +8,9 @@ from user.models import BaseUserProfile
 class BaseUserProfileModelTests(TestCase):
     def test_create_profile_with_user(self):
         user = CustomUser.objects.create(username="alice")
+        # Auto-create from Task 3 makes the initial profile; replace it so we
+        # can assert on the nickname/avatar we set explicitly here.
+        BaseUserProfile.objects.filter(user=user).delete()
         profile = BaseUserProfile.objects.create(
             user=user,
             nickname="Alice Wonderland",

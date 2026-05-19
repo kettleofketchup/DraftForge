@@ -264,7 +264,8 @@ class CustomUser(AbstractUser):
     def save(self, *args, **kwargs):
         """
         Override save method to automatically create a PositionsModel instance
-        if the user doesn't have one, and invalidate dependent caches.
+        if the user doesn't have one, invalidate dependent caches, and ensure
+        every user has a BaseUserProfile after save.
         """
         if not self.positions_id:  # Check if positions is not set
             # Create a default PositionsModel with all positions set to 0
@@ -276,6 +277,11 @@ class CustomUser(AbstractUser):
         # Invalidate this specific user's cache
 
         invalidate_obj(self)
+
+        # Auto-create BaseUserProfile if missing. Idempotent via get_or_create.
+        # Local import avoids the circular: user.models -> app.CustomUser.
+        from user.models import BaseUserProfile
+        BaseUserProfile.objects.get_or_create(user=self)
 
     @property
     def avatarUrl(self):
