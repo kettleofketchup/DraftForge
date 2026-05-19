@@ -98,6 +98,7 @@ def populate_test_auth_users(force=False):
         LEAGUE_ADMIN_USER,
         LEAGUE_STAFF_USER,
         ORG_ADMIN_USER,
+        ORG_MEMBER_USER,
         ORG_STAFF_USER,
         REGULAR_USER,
         STAFF_USER,
@@ -184,6 +185,7 @@ def populate_test_auth_users(force=False):
     # Create org role users
     org_admin = create_user_with_pk(ORG_ADMIN_USER)
     org_staff = create_user_with_pk(ORG_STAFF_USER)
+    org_member = create_user_with_pk(ORG_MEMBER_USER)
 
     # Create league role users
     league_admin = create_user_with_pk(LEAGUE_ADMIN_USER)
@@ -200,6 +202,13 @@ def populate_test_auth_users(force=False):
         if org_staff not in org.staff.all():
             org.staff.add(org_staff)
             print(f"  Added {org_staff.username} as staff of {org.name}")
+        # Plain member: has an OrgUser row but NOT in admins/staff. The
+        # permission matrix needs this to distinguish "member, no role"
+        # from "unaffiliated user".
+        from tests.populate.utils import ensure_org_user
+
+        ensure_org_user(org_member, org)
+        print(f"  Ensured {org_member.username} OrgUser of {org.name}")
 
     # League roles
     league = League.objects.filter(pk=LEAGUE_ADMIN_USER.league_id or 1).first()

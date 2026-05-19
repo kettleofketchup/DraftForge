@@ -92,6 +92,18 @@ ORG_STAFF_USER: TestUser = TestUser(
     org_id=1,  # Staff of org 1
 )
 
+# Plain org member — added to org 1's users but NOT to admins/staff. Tests
+# need this distinct from REGULAR_USER (bucketoffish55) so the auth-matrix
+# can separate the "member with no role" case from "unaffiliated user".
+ORG_MEMBER_USER: TestUser = TestUser(
+    pk=1022,
+    username="org_member_tester",
+    nickname="Org Member Tester",
+    discord_id="100000000000000011",
+    steam_id_64=76561198012345685,
+    org_id=1,  # Member of org 1
+)
+
 # =============================================================================
 # League Role Test Users
 # =============================================================================
@@ -726,6 +738,7 @@ AUTH_TEST_USERS: list[TestUser] = [
     USER_CLAIMER,
     ORG_ADMIN_USER,
     ORG_STAFF_USER,
+    ORG_MEMBER_USER,
     LEAGUE_ADMIN_USER,
     LEAGUE_STAFF_USER,
     EVENT_LEAGUE_STAFF_USER,

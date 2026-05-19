@@ -17,6 +17,7 @@ from .test_auth import (
     login_league_admin,
     login_league_staff,
     login_org_admin,
+    login_org_member,
     login_org_staff,
     login_staff,
     login_user,
@@ -78,6 +79,12 @@ urlpatterns = [
         "login-org-staff/",
         login_org_staff,
         name="login-org-staff",
+    ),
+    # Org Member (in org.users, no admin/staff role)
+    path(
+        "login-org-member/",
+        login_org_member,
+        name="login-org-member",
     ),
     # League Admin
     path(
