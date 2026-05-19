@@ -71,6 +71,7 @@ mkdocs-panzoom-plugin = "^0.5.2"
 # once a PyPI release includes V2.
 grafana-foundation-sdk = {git = "https://github.com/grafana/grafana-foundation-sdk.git", rev = "a8c311b58", subdirectory = "python"}
 jsonschema = "^4.20.0"
+django-test-migrations = "^1.5.0"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
