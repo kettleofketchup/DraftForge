@@ -1730,15 +1730,20 @@ grpc = ["grpcio (>=1.44.0,<2.0.0)"]
 
 [[package]]
 name = "grafana-foundation-sdk"
-version = "1769699452!11.5.0"
+version = "0.0.12"
 description = "A set of tools, types and libraries for building and manipulating Grafana objects."
 optional = false
 python-versions = ">=3.11"
 groups = ["dev"]
-files = [
-    {file = "grafana_foundation_sdk-1769699452!11.5.0-py3-none-any.whl", hash = "sha256:427dbfd22a559d477495c74a3e62ec3324414e4a6833c20c67ac340ced229442"},
-    {file = "grafana_foundation_sdk-1769699452!11.5.0.tar.gz", hash = "sha256:5270bcb607f9fb4666010052687ffacb3804055af67b5ffab35f853d2a83c5df"},
-]
+files = []
+develop = false
+
+[package.source]
+type = "git"
+url = "https://github.com/grafana/grafana-foundation-sdk.git"
+reference = "a8c311b58"
+resolved_reference = "a8c311b58c45fbbd9f79d7609770541304fc9d86"
+subdirectory = "python"
 
 [[package]]
 name = "graphemeu"
@@ -5480,4 +5485,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12,<4"
-content-hash = "ef43ba893267f084f9e67fc36a69384546378bf4d8ccb70222e3fdc93ee82740"
+content-hash = "69468fdd6a3f7afde0d6e1689066b8ab6dd9b8de3687d99381790f72ac6395c6"

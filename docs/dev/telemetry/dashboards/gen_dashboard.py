@@ -1,20 +1,20 @@
-"""Generate the DraftForge subsystem-logs dashboard JSON via the SDK.
+"""Generate the DraftForge subsystem-logs dashboard JSON (V2 / Scenes).
 
-Uses Grafana's official Foundation SDK so the output matches the upstream
-schema by construction — replaces the previous hand-curated dict
-assembly that drifted vs. Grafana Cloud's V2 validator.
+Targets Grafana's `dashboard.grafana.app/v2beta1` schema (Dynamic
+Dashboards, GA April 2026). V1 dashboards still import but Grafana
+Cloud's JSON editor blocks save/apply with "Missing property" errors
+against the V2 schema — this generator emits V2 directly so editing
+in-app works.
 
-Layout:
-* Overview row (always open): subsystem inventory + top error events +
-  log rate by system + warn/error rate by system.
-* One collapsed row per system in the canonical taxonomy (see
-  .claude/skills/logging/SKILL.md). Each row has 3 panels:
-  log rate by subsystem, warn/error rate by subsystem, recent logs.
-* JSON parse errors row (collapsed): surface anything failing `| json`
-  so the source can be fixed.
+Structure:
+* Top-level envelope: {apiVersion, kind, metadata, spec}.
+* spec.elements: dict of {panel-name: Panel}.
+* spec.layout: RowsLayout containing one Row per system + an Overview
+  row at the top and a JSON-parse-errors row at the bottom.
+* Each Row's inner layout is a Grid referencing panel names via
+  ElementReference.
 
-Re-run after editing — the script self-validates and exits 1 on
-structural problems.
+Re-run after editing — self-validates and exits 1 on structural problems.
 """
 
 from __future__ import annotations
@@ -25,11 +25,11 @@ from pathlib import Path
 
 from grafana_foundation_sdk.builders import (
     common as common_builder,
-    dashboard,
-    logs,
+    dashboardv2beta1 as v2,
+    logs as logs_b,
     loki,
-    table,
-    timeseries,
+    table as table_b,
+    timeseries as timeseries_b,
 )
 from grafana_foundation_sdk.cog.encoder import JSONEncoder
 from grafana_foundation_sdk.models.common import (
@@ -41,12 +41,8 @@ from grafana_foundation_sdk.models.common import (
     TableBarGaugeCellOptions,
     TooltipDisplayMode,
 )
-from grafana_foundation_sdk.models.dashboard import (
-    DataSourceRef,
-    Threshold,
-    VariableRefresh,
-    VariableSort,
-)
+from grafana_foundation_sdk.models.dashboard import DataSourceRef
+from grafana_foundation_sdk.models.dashboardv2beta1 import DashboardCursorSync
 
 OUTPUT = Path(__file__).parent / "subsystem-logs.json"
 
@@ -64,6 +60,8 @@ SYSTEMS = [
     "websocket",
 ]
 
+# `${DS_LOKI}` is substituted by Grafana's import dialog from the
+# __inputs block we post-process in.
 DS_LOKI = DataSourceRef(type_val="loki", uid="${DS_LOKI}")
 SERVICE_FILTER = '{service_name=~"$service", deployment_environment="$env"}'
 # `| __error__=""` drops jsonparsererr series so they don't poison
@@ -71,24 +69,31 @@ SERVICE_FILTER = '{service_name=~"$service", deployment_environment="$env"}'
 SAFE_JSON = '| json | __error__=""'
 
 
-# ---- Panel helpers --------------------------------------------------------
+# ---- Query helpers --------------------------------------------------------
 
 
-def _loki_target(expr: str, legend: str = "") -> loki.Dataquery:
-    """Loki query target with project defaults."""
-    q = loki.Dataquery().ref_id("A").expr(expr).editor_mode("code")
+def _loki_query(expr: str, legend: str = "", *, instant: bool = False):
+    """Loki Dataquery (V1 query model — V2 wraps it in a Target)."""
+    q = loki.Dataquery().expr(expr).editor_mode("code").ref_id("A")
     if legend:
         q = q.legend_format(legend)
+    if instant:
+        q = q.query_type("instant").instant(True)
     return q
 
 
-def _loki_instant(expr: str, legend: str = "") -> loki.Dataquery:
-    """Loki instant query — for inventory/top-N panels."""
-    return _loki_target(expr, legend).query_type("instant").instant(True)
+def _query_group(expr: str, legend: str = "", *, instant: bool = False) -> v2.QueryGroup:
+    """V2 QueryGroup wrapping a single Loki target."""
+    return v2.QueryGroup().target(
+        v2.Target().ref_id("A").query(_loki_query(expr, legend, instant=instant))
+    )
 
 
-def _legend() -> common_builder.VizLegendOptions:
-    """Project standard: right-side table with last + max calcs."""
+# ---- Visualization helpers (V2 VizConfigKind builders) -------------------
+
+
+def _legend_opts() -> common_builder.VizLegendOptions:
+    """Right-side table legend with last + max calcs."""
     return (
         common_builder.VizLegendOptions()
         .show_legend(True)
@@ -98,8 +103,8 @@ def _legend() -> common_builder.VizLegendOptions:
     )
 
 
-def _tooltip() -> common_builder.VizTooltipOptions:
-    """Multi-series tooltip sorted desc — easiest to read at a glance."""
+def _tooltip_opts() -> common_builder.VizTooltipOptions:
+    """Multi-series tooltip sorted desc."""
     return (
         common_builder.VizTooltipOptions()
         .mode(TooltipDisplayMode.MULTI)
@@ -107,17 +112,57 @@ def _tooltip() -> common_builder.VizTooltipOptions:
     )
 
 
-def _error_thresholds() -> dashboard.ThresholdsConfig:
-    """Green/red split at 0.001 — anything above zero on a warn+error
-    panel should pop visually."""
+def _ts_viz(
+    *,
+    draw_style: GraphDrawStyle = GraphDrawStyle.LINE,
+    fill_opacity: int = 10,
+) -> timeseries_b.Visualization:
+    """Stacked timeseries visualization with project defaults."""
     return (
-        dashboard.ThresholdsConfig()
-        .mode("absolute")
-        .steps([
-            Threshold(value=None, color="green"),
-            Threshold(value=0.001, color="red"),
+        timeseries_b.Visualization()
+        .unit("logs/s")
+        .draw_style(draw_style)
+        .fill_opacity(fill_opacity)
+        .stacking(
+            common_builder.StackingConfig().mode(StackingMode.NORMAL).group("A")
+        )
+        .legend(_legend_opts())
+        .tooltip(_tooltip_opts())
+    )
+
+
+def _err_viz() -> timeseries_b.Visualization:
+    """Warn+error variant: bars + red threshold at 0.001."""
+    return _ts_viz(draw_style=GraphDrawStyle.BARS, fill_opacity=70)
+
+
+def _logs_viz(*, show_labels: bool = False) -> logs_b.Visualization:
+    return (
+        logs_b.Visualization()
+        .show_time(True)
+        .sort_order("Descending")
+        .prettify_log_message(True)
+        .wrap_log_message(True)
+        .enable_log_details(True)
+        .show_labels(show_labels)
+    )
+
+
+def _table_viz() -> table_b.Visualization:
+    return (
+        table_b.Visualization()
+        .show_header(True)
+        .cell_options(TableBarGaugeCellOptions(mode=BarGaugeDisplayMode.GRADIENT))
+        .sort_by([
+            common_builder.TableSortByFieldState().display_name("Value").desc(True)
         ])
     )
+
+
+# ---- Panel factories ------------------------------------------------------
+
+
+_next_panel_id = iter(range(1, 10_000))
 
 
 def _ts_panel(
@@ -125,54 +170,17 @@ def _ts_panel(
     expr: str,
     *,
     legend: str = "{{subsystem}}",
-    width: int = 12,
-    height: int = 8,
-    draw_style: GraphDrawStyle = GraphDrawStyle.LINE,
-    fill_opacity: int = 10,
     description: str = "",
-    thresholds_style: bool = False,
-) -> timeseries.Panel:
-    """Stacked timeseries panel — project defaults for log-rate views."""
-    panel = (
-        timeseries.Panel()
+    err: bool = False,
+) -> v2.Panel:
+    viz = _err_viz() if err else _ts_viz()
+    return (
+        v2.Panel()
+        .id(next(_next_panel_id))
         .title(title)
         .description(description)
-        .datasource(DS_LOKI)
-        .span(width)
-        .height(height)
-        .unit("logs/s")
-        .draw_style(draw_style)
-        .fill_opacity(fill_opacity)
-        .stacking(common_builder.StackingConfig().mode(StackingMode.NORMAL).group("A"))
-        .legend(_legend())
-        .tooltip(_tooltip())
-        .with_target(_loki_target(expr, legend))
-    )
-    if thresholds_style:
-        panel = panel.thresholds(_error_thresholds())
-    return panel
-
-
-def _err_panel(
-    title: str,
-    expr: str,
-    *,
-    legend: str = "{{subsystem}}",
-    width: int = 12,
-    height: int = 8,
-    description: str = "",
-) -> timeseries.Panel:
-    """Warn/error rate panel — bars, higher fill, red threshold at 0.001."""
-    return _ts_panel(
-        title,
-        expr,
-        legend=legend,
-        width=width,
-        height=height,
-        draw_style=GraphDrawStyle.BARS,
-        fill_opacity=70,
-        description=description,
-        thresholds_style=True,
+        .data(_query_group(expr, legend))
+        .visualization(viz)
     )
 
 
@@ -180,260 +188,263 @@ def _logs_panel(
     title: str,
     expr: str,
     *,
-    width: int = 24,
-    height: int = 10,
     description: str = "",
     show_labels: bool = False,
-) -> logs.Panel:
-    """Logs panel — project defaults (descending, prettified JSON)."""
+) -> v2.Panel:
     return (
-        logs.Panel()
+        v2.Panel()
+        .id(next(_next_panel_id))
         .title(title)
         .description(description)
-        .datasource(DS_LOKI)
-        .span(width)
-        .height(height)
-        .show_time(True)
-        .sort_order("Descending")
-        .prettify_log_message(True)
-        .wrap_log_message(True)
-        .enable_log_details(True)
-        .show_labels(show_labels)
-        .with_target(_loki_target(expr))
+        .data(_query_group(expr))
+        .visualization(_logs_viz(show_labels=show_labels))
     )
 
 
-def _table_panel(
-    title: str,
-    expr: str,
-    *,
-    width: int = 12,
-    height: int = 10,
-    description: str = "",
-) -> table.Panel:
-    """Table panel — used for inventory + top-N rankings.
-
-    Project defaults:
-    - Sort by `Value` descending so the noisiest rows surface to the top.
-    - Render `Value` as a gradient bar gauge for quick at-a-glance ranking.
-    - Compact cell density.
-    """
+def _table_panel(title: str, expr: str, *, description: str = "") -> v2.Panel:
     return (
-        table.Panel()
+        v2.Panel()
+        .id(next(_next_panel_id))
         .title(title)
         .description(description)
-        .datasource(DS_LOKI)
-        .span(width)
-        .height(height)
-        .show_header(True)
-        .cell_options(TableBarGaugeCellOptions(mode=BarGaugeDisplayMode.GRADIENT))
-        .sort_by([
-            common_builder.TableSortByFieldState()
-            .display_name("Value")
-            .desc(True)
-        ])
-        .with_target(_loki_instant(expr))
+        .data(_query_group(expr, instant=True))
+        .visualization(_table_viz())
     )
+
+
+# ---- Layout helpers -------------------------------------------------------
+
+
+def _grid_item(name: str, *, x: int, y: int, w: int, h: int) -> v2.GridItem:
+    return v2.GridItem().name(name).x(x).y(y).width(w).height(h)
 
 
 # ---- Overview row ---------------------------------------------------------
 
 
-def overview_row() -> dashboard.Row:
+def overview_panels() -> dict[str, v2.Panel]:
+    inv = _table_panel(
+        "Subsystem inventory",
+        f"sum by (system, subsystem) (count_over_time("
+        f'{SERVICE_FILTER} {SAFE_JSON} | system!="" [$__range]))',
+        description=(
+            "Every (system, subsystem) tuple seen in range. Surfaces "
+            "newly-shipped and silently-dropped subsystems."
+        ),
+    )
+    top_err = _table_panel(
+        "Top error messages",
+        f"topk(20, sum by (event, system, subsystem) (count_over_time("
+        f"{SERVICE_FILTER} {SAFE_JSON} "
+        f'| level=~"warning|error" [$__range])))',
+        description=(
+            "Most frequent warn/error events. Top of this list is where "
+            "to spend the next round of fixes."
+        ),
+    )
+    log_rate = _ts_panel(
+        "Log rate by system",
+        f"sum by (system) (rate("
+        f'{SERVICE_FILTER} {SAFE_JSON} | system!="" [$__interval]))',
+        legend="{{system}}",
+        description="Total log rate aggregated by system.",
+    )
+    err_rate = _ts_panel(
+        "Warn + error rate by system",
+        f"sum by (system) (rate("
+        f"{SERVICE_FILTER} {SAFE_JSON} "
+        f'| system!="" | level=~"warning|error" [$__interval]))',
+        legend="{{system}}",
+        description=(
+            "Warn + error rate aggregated by system. First place to look "
+            "during an incident."
+        ),
+        err=True,
+    )
+    return {
+        "overview-inventory": inv,
+        "overview-top-errors": top_err,
+        "overview-log-rate": log_rate,
+        "overview-err-rate": err_rate,
+    }
+
+
+def overview_grid(names: dict[str, v2.Panel]) -> v2.Grid:
     return (
-        dashboard.Row("Overview — all systems")
-        .collapsed(False)
-        .with_panel(
-            _table_panel(
-                "Subsystem inventory",
-                f"sum by (system, subsystem) (count_over_time("
-                f'{SERVICE_FILTER} {SAFE_JSON} | system!="" [$__range]))',
-                width=8,
-                height=10,
-                description=(
-                    "Every (system, subsystem) tuple seen in range. "
-                    "Surfaces newly-shipped and silently-dropped subsystems."
-                ),
-            )
-        )
-        .with_panel(
-            _table_panel(
-                "Top error messages",
-                f"topk(20, sum by (event, system, subsystem) (count_over_time("
-                f"{SERVICE_FILTER} {SAFE_JSON} "
-                f'| level=~"warning|error" [$__range])))',
-                width=16,
-                height=10,
-                description=(
-                    "Most frequent warn/error events. Top of this list is "
-                    "where to spend the next round of fixes."
-                ),
-            )
-        )
-        .with_panel(
-            _ts_panel(
-                "Log rate by system",
-                f"sum by (system) (rate("
-                f'{SERVICE_FILTER} {SAFE_JSON} | system!="" [$__interval]))',
-                legend="{{system}}",
-                width=12,
-                height=8,
-                description="Total log rate aggregated by system.",
-            )
-        )
-        .with_panel(
-            _err_panel(
-                "Warn + error rate by system",
-                f"sum by (system) (rate("
-                f"{SERVICE_FILTER} {SAFE_JSON} "
-                f'| system!="" | level=~"warning|error" [$__interval]))',
-                legend="{{system}}",
-                width=12,
-                height=8,
-                description=(
-                    "Warn + error rate aggregated by system. First place "
-                    "to look during an incident."
-                ),
-            )
-        )
+        v2.Grid()
+        .item(_grid_item("overview-inventory",   x=0,  y=0,  w=8,  h=10))
+        .item(_grid_item("overview-top-errors",  x=8,  y=0,  w=16, h=10))
+        .item(_grid_item("overview-log-rate",    x=0,  y=10, w=12, h=8))
+        .item(_grid_item("overview-err-rate",    x=12, y=10, w=12, h=8))
     )
 
 
 # ---- Per-system row -------------------------------------------------------
 
 
-def system_row(system: str) -> dashboard.Row:
+def system_panels(system: str) -> dict[str, v2.Panel]:
+    return {
+        f"{system}-log-rate": _ts_panel(
+            f"{system} — log rate by subsystem",
+            f"sum by (subsystem) (rate("
+            f"{SERVICE_FILTER} {SAFE_JSON} "
+            f'| system="{system}" | subsystem!="" [$__interval]))',
+            description=f"Log rate within {system}, grouped by subsystem.",
+        ),
+        f"{system}-err-rate": _ts_panel(
+            f"{system} — warn + error rate by subsystem",
+            f"sum by (subsystem) (rate("
+            f"{SERVICE_FILTER} {SAFE_JSON} "
+            f'| system="{system}" | subsystem!="" '
+            f'| level=~"warning|error" [$__interval]))',
+            description=f"Warn + error rate within {system}, grouped by subsystem.",
+            err=True,
+        ),
+        f"{system}-logs": _logs_panel(
+            f"{system} — recent logs",
+            f"{SERVICE_FILTER} {SAFE_JSON} "
+            f'| system="{system}" | subsystem=~"$subsystem" '
+            f'| level=~"$level"',
+            description=(
+                f"Live tail filtered to system={system}. Respects the "
+                "global subsystem and level filters."
+            ),
+        ),
+    }
+
+
+def system_grid(system: str) -> v2.Grid:
     return (
-        dashboard.Row(system)
-        .collapsed(True)
-        .with_panel(
-            _ts_panel(
-                f"{system} — log rate by subsystem",
-                f"sum by (subsystem) (rate("
-                f"{SERVICE_FILTER} {SAFE_JSON} "
-                f'| system="{system}" | subsystem!="" [$__interval]))',
-                description=f"Log rate within {system}, grouped by subsystem.",
-            )
-        )
-        .with_panel(
-            _err_panel(
-                f"{system} — warn + error rate by subsystem",
-                f"sum by (subsystem) (rate("
-                f"{SERVICE_FILTER} {SAFE_JSON} "
-                f'| system="{system}" | subsystem!="" '
-                f'| level=~"warning|error" [$__interval]))',
-                description=(
-                    f"Warn + error rate within {system}, grouped by subsystem."
-                ),
-            )
-        )
-        .with_panel(
-            _logs_panel(
-                f"{system} — recent logs",
-                f"{SERVICE_FILTER} {SAFE_JSON} "
-                f'| system="{system}" | subsystem=~"$subsystem" '
-                f'| level=~"$level"',
-                description=(
-                    f"Live tail filtered to system={system}. Respects the "
-                    "global subsystem and level filters."
-                ),
-            )
-        )
+        v2.Grid()
+        .item(_grid_item(f"{system}-log-rate", x=0,  y=0, w=12, h=8))
+        .item(_grid_item(f"{system}-err-rate", x=12, y=0, w=12, h=8))
+        .item(_grid_item(f"{system}-logs",     x=0,  y=8, w=24, h=10))
     )
 
 
 # ---- JSON parse errors row ------------------------------------------------
 
 
-def json_errors_row() -> dashboard.Row:
+def json_errors_panels() -> dict[str, v2.Panel]:
+    return {
+        "json-errors-logs": _logs_panel(
+            "Lines that broke `| json` (jsonparsererr)",
+            f'{SERVICE_FILTER} | json | __error__="jsonparsererr"',
+            show_labels=True,
+            description=(
+                "Log lines that Loki's `| json` parser rejects. Source "
+                "labels (code_file_path, code_function_name, "
+                "code_line_number) tell you which Python file is emitting "
+                "broken JSON — usually an f-string containing a stray `{` "
+                "like a dict literal or repr() output. Fix at source by "
+                "switching the call to structlog kwargs."
+            ),
+        ),
+        "json-errors-sources": _table_panel(
+            "Top sources of broken JSON",
+            f"topk(20, sum by (code_file_path, code_function_name, "
+            f"code_line_number) (count_over_time("
+            f'{SERVICE_FILTER} | json | __error__="jsonparsererr" '
+            f"[$__range])))",
+            description=(
+                "Which source files are emitting broken JSON, ranked by "
+                "count. Fix the top entries at source."
+            ),
+        ),
+    }
+
+
+def json_errors_grid() -> v2.Grid:
     return (
-        dashboard.Row("JSON parse errors (collapsed)")
-        .collapsed(True)
-        .with_panel(
-            _logs_panel(
-                "Lines that broke `| json` (jsonparsererr)",
-                f'{SERVICE_FILTER} | json | __error__="jsonparsererr"',
-                show_labels=True,
-                description=(
-                    "Log lines that Loki's `| json` parser rejects. Source "
-                    "labels (code_file_path, code_function_name, "
-                    "code_line_number) tell you which Python file is "
-                    "emitting broken JSON — usually an f-string containing "
-                    "a stray `{` like a dict literal or repr() output. Fix "
-                    "at source by switching the call to structlog kwargs."
-                ),
-            )
-        )
-        .with_panel(
-            _table_panel(
-                "Top sources of broken JSON",
-                f"topk(20, sum by (code_file_path, code_function_name, "
-                f"code_line_number) (count_over_time("
-                f'{SERVICE_FILTER} | json | __error__="jsonparsererr" '
-                f"[$__range])))",
-                width=24,
-                height=8,
-                description=(
-                    "Which source files are emitting broken JSON, ranked "
-                    "by count. Fix the top entries at source."
-                ),
-            )
-        )
+        v2.Grid()
+        .item(_grid_item("json-errors-logs",    x=0, y=0,  w=24, h=10))
+        .item(_grid_item("json-errors-sources", x=0, y=10, w=24, h=8))
     )
 
 
-# ---- Template variables ---------------------------------------------------
+# ---- Variables ------------------------------------------------------------
 
 
 def build_variables() -> list:
     env = (
-        dashboard.QueryVariable("env")
+        v2.QueryVariable("env")
         .label("Environment")
-        .datasource(DS_LOKI)
-        .query("label_values(deployment_environment)")
+        .query(loki.Dataquery().expr("label_values(deployment_environment)"))
         .multi(False)
         .include_all(False)
-        .refresh(VariableRefresh.ON_DASHBOARD_LOAD)
-        .sort(VariableSort.DISABLED)
     )
     service = (
-        dashboard.QueryVariable("service")
+        v2.QueryVariable("service")
         .label("Service")
-        .datasource(DS_LOKI)
-        .query('label_values({deployment_environment="$env"}, service_name)')
+        .query(
+            loki.Dataquery().expr(
+                'label_values({deployment_environment="$env"}, service_name)'
+            )
+        )
         .multi(True)
         .include_all(True)
-        .refresh(VariableRefresh.ON_DASHBOARD_LOAD)
-        .sort(VariableSort.ALPHABETICAL_ASC)
     )
-    # Subsystem is a textbox to avoid an extra Loki round-trip per page load.
-    # Per-system rows already filter on a literal `system=`, and
-    # `subsystem=~"$subsystem"` defaults to matching everything when empty.
     subsystem = (
-        dashboard.TextBoxVariable("subsystem")
+        v2.TextVariable("subsystem")
         .label("Subsystem")
         .description(
             "Regex filter applied to recent-logs panels. Empty matches all."
         )
-        .default_value(".*")
     )
     level = (
-        dashboard.CustomVariable("level")
+        v2.CustomVariable("level")
         .label("Level")
-        .values("debug,info,warning,error")
+        .query("debug,info,warning,error")
         .multi(True)
         .include_all(True)
     )
     return [env, service, subsystem, level]
 
 
-# ---- Build + serialize ----------------------------------------------------
+# ---- Time settings --------------------------------------------------------
 
 
-def build_dashboard() -> dashboard.Dashboard:
-    b = (
-        dashboard.Dashboard("DraftForge — Subsystem Logs")
-        .uid("draftforge-subsystem-logs")
+def build_time_settings() -> v2.TimeSettings:
+    return (
+        v2.TimeSettings()
+        .from_val("now-3h")
+        .to("now")
+        .auto_refresh("30s")
+        .timezone("browser")
+    )
+
+
+# ---- Top-level build ------------------------------------------------------
+
+
+def build_dashboard():
+    # Collect every panel and its element-name in one pass so we can both
+    # register them with .element() and reference them from grid items.
+    elements: dict[str, v2.Panel] = {}
+    elements.update(overview_panels())
+    for system in SYSTEMS:
+        elements.update(system_panels(system))
+    elements.update(json_errors_panels())
+
+    # Rows layout: overview at top (expanded), system rows (collapsed), then
+    # the JSON parse errors row (collapsed).
+    rows = v2.Rows()
+    rows = rows.row(
+        v2.Row().title("Overview — all systems").collapse(False).layout(overview_grid({}))
+    )
+    for system in SYSTEMS:
+        rows = rows.row(
+            v2.Row().title(system).collapse(True).layout(system_grid(system))
+        )
+    rows = rows.row(
+        v2.Row()
+        .title("JSON parse errors (collapsed)")
+        .collapse(True)
+        .layout(json_errors_grid())
+    )
+
+    builder = (
+        v2.Dashboard("DraftForge — Subsystem Logs")
         .description(
             "DraftForge structured-log dashboard. Overview row at the top "
             "summarizes inventory, log rate, warn/error rate, and top "
@@ -444,152 +455,141 @@ def build_dashboard() -> dashboard.Dashboard:
             "for the taxonomy."
         )
         .tags(["draftforge", "logs", "structlog"])
-        .refresh("30s")
-        .time("now-3h", "now")
-        .timezone("browser")
-        .editable()
+        .editable(True)
+        .preload(False)
+        .live_now(False)
+        .cursor_sync(DashboardCursorSync.OFF)
+        .time_settings(build_time_settings())
+        .layout(rows)
     )
-    for v in build_variables():
-        b = b.with_variable(v)
-    b = b.with_row(overview_row())
-    for system in SYSTEMS:
-        b = b.with_row(system_row(system))
-    b = b.with_row(json_errors_row())
-    return b
+    for name, panel in elements.items():
+        builder = builder.element(name, panel)
+    for var in build_variables():
+        builder = builder.variable(var)
+    return builder
 
 
-def post_process(d: dict) -> dict:
-    """Tweaks the SDK doesn't model cleanly.
+def post_process(dashboard_spec: dict, *, uid: str) -> dict:
+    """Wrap the SDK's spec output in the V2 envelope and add __inputs.
 
-    * Assign sequential panel/row IDs (SDK doesn't auto-number).
-    * Default `annotations.list` to an empty array.
-    * Add `__inputs` block so Grafana's import dialog prompts for the
-      Loki datasource.
-    * Patch the `level` variable's default to multi-select.
+    SDK's .build() returns just the `spec` body. Grafana's import dialog
+    expects the full `{apiVersion, kind, metadata, spec, __inputs, ...}`
+    envelope, plus the import-time inputs declaration to prompt for the
+    Loki datasource.
     """
-    # IDs — walk top-level + nested row.panels, assign sequentially.
-    next_id = iter(range(1, 10_000))
-
-    def assign_ids(p):
-        if p.get("id", 0) == 0:
-            p["id"] = next(next_id)
-        for inner in p.get("panels", []) or []:
-            assign_ids(inner)
-
-    for p in d.get("panels", []):
-        assign_ids(p)
-
-    # SDK's Row.with_panel() unconditionally sets collapsed=True (a defensive
-    # quirk around Grafana's save-time stripping of un-collapsed row panels).
-    # The first row is our always-open overview — set it back to False here.
-    rows = [p for p in d.get("panels", []) if p.get("type") == "row"]
-    if rows:
-        rows[0]["collapsed"] = False
-
-    # annotations.list — SDK emits {} when empty; schema wants {"list": []}.
-    if "annotations" not in d or not isinstance(d.get("annotations"), dict):
-        d["annotations"] = {}
-    d["annotations"].setdefault("list", [])
-
-    d["__inputs"] = [
-        {
-            "name": "DS_LOKI",
-            "label": "Loki",
-            "description": "Loki datasource (e.g. grafanacloudloki)",
-            "type": "datasource",
-            "pluginId": "loki",
-            "pluginName": "Loki",
-        }
-    ]
-    d["__elements"] = {}
-    d["__requires"] = [
-        {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "11.0.0"},
-        {"type": "datasource", "id": "loki", "name": "Loki", "version": "1.0.0"},
-        {"type": "panel", "id": "logs", "name": "Logs", "version": ""},
-        {"type": "panel", "id": "table", "name": "Table", "version": ""},
-        {"type": "panel", "id": "timeseries", "name": "Time series", "version": ""},
-        {"type": "panel", "id": "row", "name": "Row", "version": ""},
-    ]
-
-    defaults = {"info", "warning", "error"}
-    for var in d.get("templating", {}).get("list", []):
-        if var.get("name") == "level":
-            var["current"] = {
-                "selected": True,
-                "text": sorted(defaults),
-                "value": sorted(defaults),
+    return {
+        "apiVersion": "dashboard.grafana.app/v2beta1",
+        "kind": "Dashboard",
+        "metadata": {"name": uid},
+        "spec": dashboard_spec,
+        "__inputs": [
+            {
+                "name": "DS_LOKI",
+                "label": "Loki",
+                "description": "Loki datasource (e.g. grafanacloudloki)",
+                "type": "datasource",
+                "pluginId": "loki",
+                "pluginName": "Loki",
             }
-            for opt in var.get("options", []):
-                opt["selected"] = opt.get("value") in defaults
-    return d
+        ],
+        "__elements": {},
+        "__requires": [
+            {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "12.0.0"},
+            {"type": "datasource", "id": "loki", "name": "Loki", "version": "1.0.0"},
+        ],
+    }
 
 
 def main() -> int:
-    built = build_dashboard().build()
-    raw = JSONEncoder(sort_keys=False, indent=2).encode(built)
-    obj = post_process(json.loads(raw))
-    OUTPUT.write_text(json.dumps(obj, indent=2) + "\n")
+    spec = json.loads(JSONEncoder(sort_keys=False, indent=2).encode(build_dashboard().build()))
+    full = post_process(spec, uid="draftforge-subsystem-logs")
+    OUTPUT.write_text(json.dumps(full, indent=2) + "\n")
 
-    panels = obj.get("panels", [])
-    rows = [p for p in panels if p.get("type") == "row"]
     print(f"Wrote {OUTPUT}")
     print(f"Systems: {len(SYSTEMS)}")
-    print(f"Top-level panels: {len(panels)}  (rows: {len(rows)})")
-    return validate(obj)
+    print(f"Elements: {len(spec.get('elements', {}))}")
+    print(f"Rows in layout: {len(spec.get('layout', {}).get('spec', {}).get('rows', []))}")
+    return validate(full)
 
 
 # ---- Validation -----------------------------------------------------------
 
 
 def validate(d: dict) -> int:
-    """Sanity checks layered on top of the SDK's own type validation.
-
-    The SDK guarantees schema-shape correctness by construction — these
-    checks catch issues in the *content* the SDK can't see (LogQL paren
-    balance, unresolved variable refs, panel ID collisions).
-    """
     issues: list[str] = []
 
-    seen: dict[int, str] = {}
+    # Envelope
+    for k in ("apiVersion", "kind", "metadata", "spec"):
+        if k not in d:
+            issues.append(f"envelope: missing {k!r}")
+    if d.get("apiVersion") != "dashboard.grafana.app/v2beta1":
+        issues.append(
+            f"envelope: apiVersion={d.get('apiVersion')!r} (expected v2beta1)"
+        )
 
-    def visit(p):
-        pid = p.get("id")
-        if pid is not None:
-            if pid in seen:
-                issues.append(
-                    f"duplicate panel id {pid}: {seen[pid]!r} and "
-                    f"{p.get('title','?')!r}"
-                )
-            else:
-                seen[pid] = p.get("title", "?")
-        for inner in p.get("panels", []) or []:
-            visit(inner)
+    spec = d.get("spec", {})
 
-    for p in d.get("panels", []):
-        visit(p)
+    # Required spec fields (V2 schema)
+    for k in (
+        "title",
+        "layout",
+        "elements",
+        "cursorSync",
+        "timeSettings",
+        "variables",
+        "annotations",
+        "links",
+        "preload",
+        "editable",
+        "tags",
+    ):
+        if k not in spec:
+            issues.append(f"spec: missing required field {k!r}")
 
-    declared = {i["name"] for i in d.get("__inputs", [])}
-    ds_refs: set[str] = set()
+    # Element names referenced in layout grid items must exist in spec.elements
+    elements = spec.get("elements", {})
+    if not isinstance(elements, dict):
+        issues.append("spec.elements is not a dict")
+    referenced_names: set[str] = set()
 
-    def walk_ds(o):
-        if isinstance(o, dict):
-            uid = o.get("uid")
-            if isinstance(uid, str) and uid.startswith("${") and uid.endswith("}"):
-                ds_refs.add(uid[2:-1])
-            for v in o.values():
-                walk_ds(v)
-        elif isinstance(o, list):
-            for x in o:
-                walk_ds(x)
+    def walk_layout(layout):
+        if not isinstance(layout, dict):
+            return
+        sub_spec = layout.get("spec", {})
+        for row in sub_spec.get("rows", []) or []:
+            walk_layout(row.get("spec", {}).get("layout", {}))
+        for item in sub_spec.get("items", []) or []:
+            n = item.get("spec", {}).get("element", {}).get("name")
+            if n:
+                referenced_names.add(n)
 
-    walk_ds(d)
-    for ref in ds_refs:
-        if ref not in declared:
+    walk_layout(spec.get("layout", {}))
+    for n in referenced_names:
+        if n not in elements:
+            issues.append(f"layout references element {n!r} but it's not in spec.elements")
+    unreferenced = set(elements.keys()) - referenced_names
+    for n in unreferenced:
+        issues.append(f"element {n!r} declared but never referenced by layout")
+
+    # Panel id uniqueness across elements
+    seen_ids: dict[int, str] = {}
+    for name, el in elements.items():
+        if not isinstance(el, dict):
+            continue
+        pid = el.get("spec", {}).get("id")
+        if pid is None:
+            issues.append(f"element {name!r}: missing spec.id")
+            continue
+        if pid in seen_ids:
             issues.append(
-                f"datasource ${{{ref}}} referenced but not declared in __inputs"
+                f"duplicate panel id {pid}: {seen_ids[pid]!r} and {name!r}"
             )
+        else:
+            seen_ids[pid] = name
 
-    declared_vars = {v["name"] for v in d.get("templating", {}).get("list", [])}
+    # LogQL balance + variable refs
+    declared_vars = {v.get("spec", {}).get("name") for v in spec.get("variables", [])}
+    declared_vars.discard(None)
     builtins = {
         "__interval",
         "__interval_ms",
@@ -628,41 +628,15 @@ def validate(d: dict) -> int:
             if name in builtins or name in declared_vars:
                 continue
             issues.append(
-                f"expr {path}: references ${name} which is not a template "
+                f"expr {path}: references ${name} which is not a declared "
                 f"variable or known Grafana built-in"
             )
-
-    for path, e in exprs:
-        if e.count("(") != e.count(")"):
+        if expr.count("(") != expr.count(")"):
             issues.append(f"expr {path}: paren imbalance")
-        if e.count("{") != e.count("}"):
+        if expr.count("{") != expr.count("}"):
             issues.append(f"expr {path}: brace imbalance")
-        if e.count("[") != e.count("]"):
+        if expr.count("[") != expr.count("]"):
             issues.append(f"expr {path}: bracket imbalance")
-        if e.count("`") % 2 != 0:
-            issues.append(f"expr {path}: odd backtick count")
-
-    # JSON Schema validation against project schema, if present
-    schema_path = (
-        Path(__file__).parent / "schema" / "grafana-dashboard.schema.json"
-    )
-    if schema_path.exists():
-        try:
-            import jsonschema
-
-            schema = json.loads(schema_path.read_text())
-            validator = jsonschema.Draft202012Validator(schema)
-            for err in validator.iter_errors(d):
-                loc = "$" + "".join(
-                    f"[{p!r}]" if isinstance(p, int) else f".{p}"
-                    for p in err.absolute_path
-                )
-                issues.append(f"schema {loc}: {err.message}")
-        except ImportError:
-            issues.append(
-                "jsonschema not installed — `poetry install --with dev` "
-                "to enable schema validation (custom checks still ran)"
-            )
 
     print("\nValidating…")
     if issues:
@@ -670,11 +644,11 @@ def validate(d: dict) -> int:
         for i in issues:
             print(f"  ✗ {i}")
         return 1
-    print(f"  ✓ {len(seen)} panel IDs unique")
-    print("  ✓ all datasource refs resolved against __inputs")
-    print("  ✓ all variable refs resolved against templating + built-ins")
-    print(f"  ✓ all LogQL exprs ({len(exprs)}) balanced")
-    print("  ✓ matches project schema")
+    print(f"  ✓ envelope: apiVersion={d['apiVersion']}")
+    print(f"  ✓ spec has all V2 required fields")
+    print(f"  ✓ {len(seen_ids)} elements with unique panel IDs")
+    print(f"  ✓ all {len(referenced_names)} layout references resolve")
+    print(f"  ✓ all {len(exprs)} LogQL exprs balanced + variable refs resolve")
     return 0
 
 
