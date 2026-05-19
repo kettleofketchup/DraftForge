@@ -54,6 +54,15 @@ from grafana_foundation_sdk.models.dashboardv2beta1 import (
 # bodies — we have to wrap them in the V2 envelope ourselves or
 # Grafana Cloud's V2 validator rejects with
 # `spec.query.kind: conflicting values "DataQuery" and ""`.
+#
+# Datasource handling note: V2 dashboards do not support the V1
+# `__inputs` import-time substitution. Instead we declare a
+# `DatasourceVariable` named `ds_loki` (filtered to plugin_id="loki")
+# which renders as a dropdown in the dashboard header. Panels then
+# reference the variable via `$ds_loki` in their datasource.name field.
+LOKI_DS_VAR = "$ds_loki"
+
+
 class _LokiQuery:
     """Builder shim that wraps a loki.Dataquery in DataQueryKind for V2."""
 
@@ -67,7 +76,7 @@ class _LokiQuery:
         self._internal = DataQueryKind(
             group="loki",
             version="v1",
-            datasource=Dashboardv2beta1DataQueryKindDatasource(name="${DS_LOKI}"),
+            datasource=Dashboardv2beta1DataQueryKindDatasource(name=LOKI_DS_VAR),
             spec=spec,
         )
 
@@ -391,6 +400,15 @@ def json_errors_grid() -> v2.Grid:
 
 
 def build_variables() -> list:
+    ds_loki = (
+        v2.DatasourceVariable("ds_loki")
+        .label("Loki")
+        .plugin_id("loki")
+        .description(
+            "Pick the Loki datasource to point this dashboard at. "
+            "Selection persists per-user."
+        )
+    )
     env = (
         v2.QueryVariable("env")
         .label("Environment")
@@ -423,7 +441,9 @@ def build_variables() -> list:
         .multi(True)
         .include_all(True)
     )
-    return [env, service, subsystem, level]
+    # ds_loki goes first so the user picks the datasource before any
+    # downstream query variable fires.
+    return [ds_loki, env, service, subsystem, level]
 
 
 # ---- Time settings --------------------------------------------------------
@@ -495,33 +515,18 @@ def build_dashboard():
 
 
 def post_process(dashboard_spec: dict, *, uid: str) -> dict:
-    """Wrap the SDK's spec output in the V2 envelope and add __inputs.
+    """Wrap the SDK's spec output in the V2 envelope.
 
-    SDK's .build() returns just the `spec` body. Grafana's import dialog
-    expects the full `{apiVersion, kind, metadata, spec, __inputs, ...}`
-    envelope, plus the import-time inputs declaration to prompt for the
-    Loki datasource.
+    SDK's .build() returns just the `spec` body. Grafana's V2 schema
+    expects `{apiVersion, kind, metadata, spec}` at the root. V2 drops
+    the V1 `__inputs` import-time substitution — datasource selection
+    is now a runtime DatasourceVariable inside spec.variables instead.
     """
     return {
         "apiVersion": "dashboard.grafana.app/v2beta1",
         "kind": "Dashboard",
         "metadata": {"name": uid},
         "spec": dashboard_spec,
-        "__inputs": [
-            {
-                "name": "DS_LOKI",
-                "label": "Loki",
-                "description": "Loki datasource (e.g. grafanacloudloki)",
-                "type": "datasource",
-                "pluginId": "loki",
-                "pluginName": "Loki",
-            }
-        ],
-        "__elements": {},
-        "__requires": [
-            {"type": "grafana", "id": "grafana", "name": "Grafana", "version": "12.0.0"},
-            {"type": "datasource", "id": "loki", "name": "Loki", "version": "1.0.0"},
-        ],
     }
 
 
@@ -612,7 +617,9 @@ def validate(d: dict) -> int:
         else:
             seen_ids[pid] = name
 
-    # LogQL balance + variable refs
+    # LogQL balance + variable refs. In V2 we use a DatasourceVariable
+    # `ds_loki` rather than V1's __inputs substitution; pick it up from
+    # spec.variables so the validator doesn't flag $ds_loki as unknown.
     declared_vars = {v.get("spec", {}).get("name") for v in spec.get("variables", [])}
     declared_vars.discard(None)
     builtins = {

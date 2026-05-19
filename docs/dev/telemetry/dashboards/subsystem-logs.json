@@ -34,7 +34,7 @@
                         "instant": true
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -111,7 +111,7 @@
                         "instant": true
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -187,7 +187,7 @@
                         "legendFormat": "{{system}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -262,7 +262,7 @@
                         "legendFormat": "{{system}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -337,7 +337,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -412,7 +412,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -486,7 +486,7 @@
                         "refId": "A"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -547,7 +547,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -622,7 +622,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -696,7 +696,7 @@
                         "refId": "A"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -757,7 +757,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -832,7 +832,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -906,7 +906,7 @@
                         "refId": "A"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -967,7 +967,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1042,7 +1042,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1116,7 +1116,7 @@
                         "refId": "A"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1177,7 +1177,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1252,7 +1252,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1326,7 +1326,7 @@
                         "refId": "A"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1387,7 +1387,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1462,7 +1462,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1536,7 +1536,7 @@
                         "refId": "A"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1597,7 +1597,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1672,7 +1672,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1746,7 +1746,7 @@
                         "refId": "A"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1807,7 +1807,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1882,7 +1882,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -1956,7 +1956,7 @@
                         "refId": "A"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -2017,7 +2017,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -2092,7 +2092,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -2166,7 +2166,7 @@
                         "refId": "A"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -2227,7 +2227,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -2302,7 +2302,7 @@
                         "legendFormat": "{{subsystem}}"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -2376,7 +2376,7 @@
                         "refId": "A"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -2436,7 +2436,7 @@
                         "refId": "A"
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -2498,7 +2498,7 @@
                         "instant": true
                       },
                       "datasource": {
-                        "name": "${DS_LOKI}"
+                        "name": "$ds_loki"
                       }
                     },
                     "refId": "A",
@@ -3223,6 +3223,27 @@
     "title": "DraftForge \u2014 Subsystem Logs",
     "variables": [
       {
+        "kind": "DatasourceVariable",
+        "spec": {
+          "name": "ds_loki",
+          "pluginId": "loki",
+          "refresh": "never",
+          "regex": "",
+          "current": {
+            "text": "",
+            "value": ""
+          },
+          "options": [],
+          "multi": false,
+          "includeAll": false,
+          "hide": "dontHide",
+          "skipUrlSync": false,
+          "allowCustomValue": true,
+          "label": "Loki",
+          "description": "Pick the Loki datasource to point this dashboard at. Selection persists per-user."
+        }
+      },
+      {
         "kind": "QueryVariable",
         "spec": {
           "name": "env",
@@ -3243,7 +3264,7 @@
               "refId": "A"
             },
             "datasource": {
-              "name": "${DS_LOKI}"
+              "name": "$ds_loki"
             }
           },
           "regex": "",
@@ -3276,7 +3297,7 @@
               "refId": "A"
             },
             "datasource": {
-              "name": "${DS_LOKI}"
+              "name": "$ds_loki"
             }
           },
           "regex": "",
@@ -3325,30 +3346,5 @@
     "description": "DraftForge structured-log dashboard. Overview row at the top summarizes inventory, log rate, warn/error rate, and top error events. Each system in the canonical taxonomy gets its own collapsed row below \u2014 expand the one you care about. Bottom row surfaces lines that fail `| json` parsing so we can fix them at source. See .claude/skills/logging/SKILL.md for the taxonomy.",
     "editable": true,
     "liveNow": false
-  },
-  "__inputs": [
-    {
-      "name": "DS_LOKI",
-      "label": "Loki",
-      "description": "Loki datasource (e.g. grafanacloudloki)",
-      "type": "datasource",
-      "pluginId": "loki",
-      "pluginName": "Loki"
-    }
-  ],
-  "__elements": {},
-  "__requires": [
-    {
-      "type": "grafana",
-      "id": "grafana",
-      "name": "Grafana",
-      "version": "12.0.0"
-    },
-    {
-      "type": "datasource",
-      "id": "loki",
-      "name": "Loki",
-      "version": "1.0.0"
-    }
-  ]
+  }
 }
