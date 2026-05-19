@@ -33,12 +33,10 @@ from grafana_foundation_sdk.builders import (
 )
 from grafana_foundation_sdk.cog.encoder import JSONEncoder
 from grafana_foundation_sdk.models.common import (
-    BarGaugeDisplayMode,
     GraphDrawStyle,
     LegendDisplayMode,
     LegendPlacement,
     StackingMode,
-    TableBarGaugeCellOptions,
     TooltipDisplayMode,
 )
 from grafana_foundation_sdk.models.dashboard import DataSourceRef
@@ -46,6 +44,7 @@ from grafana_foundation_sdk.models.dashboardv2beta1 import (
     DashboardCursorSync,
     DataQueryKind,
     Dashboardv2beta1DataQueryKindDatasource,
+    DynamicConfigValue,
     VariableOption,
     VariableRefresh,
 )
@@ -182,6 +181,15 @@ def _err_viz() -> timeseries_b.Visualization:
 
 
 def _logs_viz(*, show_labels: bool = False) -> logs_b.Visualization:
+    """Logs viz tuned to mimic the Grafana Logs Drilldown experience.
+
+    `show_controls` + `show_field_selector` give the user the same in-panel
+    toolbar Drilldown uses: sort direction, dedup mode, and detected-field
+    chips (including a `level` chip that filters the visible stream
+    without a query round-trip). `show_log_context_toggle` lets the user
+    expand surrounding lines for any entry. `syntax_highlighting` colors
+    JSON keys/values so structured kwargs are scannable.
+    """
     return (
         logs_b.Visualization()
         .show_time(True)
@@ -190,14 +198,36 @@ def _logs_viz(*, show_labels: bool = False) -> logs_b.Visualization:
         .wrap_log_message(True)
         .enable_log_details(True)
         .show_labels(show_labels)
+        .show_common_labels(True)
+        .show_controls(True)
+        .show_field_selector(True)
+        .show_log_context_toggle(True)
+        .syntax_highlighting(True)
+        .dedup_strategy("signature")
+        .enable_infinite_scrolling(True)
     )
 
 
 def _table_viz() -> table_b.Visualization:
+    """Table viz: bar-gauge gradient on numeric cells only.
+
+    A global `cell_options(TableBarGaugeCellOptions(...))` would paint
+    a faint gradient strip behind text columns too (system, subsystem,
+    event) — useless visual noise. Scoping via `override_by_field_type`
+    restricts the gauge rendering to actual number columns.
+    """
     return (
         table_b.Visualization()
         .show_header(True)
-        .cell_options(TableBarGaugeCellOptions(mode=BarGaugeDisplayMode.GRADIENT))
+        .override_by_field_type(
+            "number",
+            [
+                DynamicConfigValue(
+                    id_val="custom.cellOptions",
+                    value={"type": "gauge", "mode": "gradient"},
+                )
+            ],
+        )
         .sort_by([
             common_builder.TableSortByFieldState().display_name("Value").desc(True)
         ])

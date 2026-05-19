@@ -69,17 +69,24 @@
                 "cellHeight": "sm"
               },
               "fieldConfig": {
-                "defaults": {
-                  "custom": {
-                    "align": "auto",
-                    "inspect": false,
-                    "cellOptions": {
-                      "type": "gauge",
-                      "mode": "gradient"
-                    }
+                "defaults": {},
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byType",
+                      "options": "number"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.cellOptions",
+                        "value": {
+                          "type": "gauge",
+                          "mode": "gradient"
+                        }
+                      }
+                    ]
                   }
-                },
-                "overrides": []
+                ]
               }
             }
           }
@@ -146,17 +153,24 @@
                 "cellHeight": "sm"
               },
               "fieldConfig": {
-                "defaults": {
-                  "custom": {
-                    "align": "auto",
-                    "inspect": false,
-                    "cellOptions": {
-                      "type": "gauge",
-                      "mode": "gradient"
-                    }
+                "defaults": {},
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byType",
+                      "options": "number"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.cellOptions",
+                        "value": {
+                          "type": "gauge",
+                          "mode": "gradient"
+                        }
+                      }
+                    ]
                   }
-                },
-                "overrides": []
+                ]
               }
             }
           }
@@ -505,14 +519,18 @@
             "spec": {
               "options": {
                 "showLabels": false,
-                "showCommonLabels": false,
+                "showCommonLabels": true,
                 "showTime": true,
-                "showLogContextToggle": false,
+                "showLogContextToggle": true,
                 "wrapLogMessage": true,
                 "prettifyLogMessage": true,
                 "enableLogDetails": true,
                 "sortOrder": "Descending",
-                "dedupStrategy": "none"
+                "dedupStrategy": "signature",
+                "enableInfiniteScrolling": true,
+                "showControls": true,
+                "showFieldSelector": true,
+                "syntaxHighlighting": true
               },
               "fieldConfig": {
                 "defaults": {},
@@ -715,14 +733,18 @@
             "spec": {
               "options": {
                 "showLabels": false,
-                "showCommonLabels": false,
+                "showCommonLabels": true,
                 "showTime": true,
-                "showLogContextToggle": false,
+                "showLogContextToggle": true,
                 "wrapLogMessage": true,
                 "prettifyLogMessage": true,
                 "enableLogDetails": true,
                 "sortOrder": "Descending",
-                "dedupStrategy": "none"
+                "dedupStrategy": "signature",
+                "enableInfiniteScrolling": true,
+                "showControls": true,
+                "showFieldSelector": true,
+                "syntaxHighlighting": true
               },
               "fieldConfig": {
                 "defaults": {},
@@ -925,14 +947,18 @@
             "spec": {
               "options": {
                 "showLabels": false,
-                "showCommonLabels": false,
+                "showCommonLabels": true,
                 "showTime": true,
-                "showLogContextToggle": false,
+                "showLogContextToggle": true,
                 "wrapLogMessage": true,
                 "prettifyLogMessage": true,
                 "enableLogDetails": true,
                 "sortOrder": "Descending",
-                "dedupStrategy": "none"
+                "dedupStrategy": "signature",
+                "enableInfiniteScrolling": true,
+                "showControls": true,
+                "showFieldSelector": true,
+                "syntaxHighlighting": true
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1135,14 +1161,18 @@
             "spec": {
               "options": {
                 "showLabels": false,
-                "showCommonLabels": false,
+                "showCommonLabels": true,
                 "showTime": true,
-                "showLogContextToggle": false,
+                "showLogContextToggle": true,
                 "wrapLogMessage": true,
                 "prettifyLogMessage": true,
                 "enableLogDetails": true,
                 "sortOrder": "Descending",
-                "dedupStrategy": "none"
+                "dedupStrategy": "signature",
+                "enableInfiniteScrolling": true,
+                "showControls": true,
+                "showFieldSelector": true,
+                "syntaxHighlighting": true
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1345,14 +1375,18 @@
             "spec": {
               "options": {
                 "showLabels": false,
-                "showCommonLabels": false,
+                "showCommonLabels": true,
                 "showTime": true,
-                "showLogContextToggle": false,
+                "showLogContextToggle": true,
                 "wrapLogMessage": true,
                 "prettifyLogMessage": true,
                 "enableLogDetails": true,
                 "sortOrder": "Descending",
-                "dedupStrategy": "none"
+                "dedupStrategy": "signature",
+                "enableInfiniteScrolling": true,
+                "showControls": true,
+                "showFieldSelector": true,
+                "syntaxHighlighting": true
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1555,14 +1589,18 @@
             "spec": {
               "options": {
                 "showLabels": false,
-                "showCommonLabels": false,
+                "showCommonLabels": true,
                 "showTime": true,
-                "showLogContextToggle": false,
+                "showLogContextToggle": true,
                 "wrapLogMessage": true,
                 "prettifyLogMessage": true,
                 "enableLogDetails": true,
                 "sortOrder": "Descending",
-                "dedupStrategy": "none"
+                "dedupStrategy": "signature",
+                "enableInfiniteScrolling": true,
+                "showControls": true,
+                "showFieldSelector": true,
+                "syntaxHighlighting": true
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1765,14 +1803,18 @@
             "spec": {
               "options": {
                 "showLabels": false,
-                "showCommonLabels": false,
+                "showCommonLabels": true,
                 "showTime": true,
-                "showLogContextToggle": false,
+                "showLogContextToggle": true,
                 "wrapLogMessage": true,
                 "prettifyLogMessage": true,
                 "enableLogDetails": true,
                 "sortOrder": "Descending",
-                "dedupStrategy": "none"
+                "dedupStrategy": "signature",
+                "enableInfiniteScrolling": true,
+                "showControls": true,
+                "showFieldSelector": true,
+                "syntaxHighlighting": true
               },
               "fieldConfig": {
                 "defaults": {},
@@ -1975,14 +2017,18 @@
             "spec": {
               "options": {
                 "showLabels": false,
-                "showCommonLabels": false,
+                "showCommonLabels": true,
                 "showTime": true,
-                "showLogContextToggle": false,
+                "showLogContextToggle": true,
                 "wrapLogMessage": true,
                 "prettifyLogMessage": true,
                 "enableLogDetails": true,
                 "sortOrder": "Descending",
-                "dedupStrategy": "none"
+                "dedupStrategy": "signature",
+                "enableInfiniteScrolling": true,
+                "showControls": true,
+                "showFieldSelector": true,
+                "syntaxHighlighting": true
               },
               "fieldConfig": {
                 "defaults": {},
@@ -2185,14 +2231,18 @@
             "spec": {
               "options": {
                 "showLabels": false,
-                "showCommonLabels": false,
+                "showCommonLabels": true,
                 "showTime": true,
-                "showLogContextToggle": false,
+                "showLogContextToggle": true,
                 "wrapLogMessage": true,
                 "prettifyLogMessage": true,
                 "enableLogDetails": true,
                 "sortOrder": "Descending",
-                "dedupStrategy": "none"
+                "dedupStrategy": "signature",
+                "enableInfiniteScrolling": true,
+                "showControls": true,
+                "showFieldSelector": true,
+                "syntaxHighlighting": true
               },
               "fieldConfig": {
                 "defaults": {},
@@ -2395,14 +2445,18 @@
             "spec": {
               "options": {
                 "showLabels": false,
-                "showCommonLabels": false,
+                "showCommonLabels": true,
                 "showTime": true,
-                "showLogContextToggle": false,
+                "showLogContextToggle": true,
                 "wrapLogMessage": true,
                 "prettifyLogMessage": true,
                 "enableLogDetails": true,
                 "sortOrder": "Descending",
-                "dedupStrategy": "none"
+                "dedupStrategy": "signature",
+                "enableInfiniteScrolling": true,
+                "showControls": true,
+                "showFieldSelector": true,
+                "syntaxHighlighting": true
               },
               "fieldConfig": {
                 "defaults": {},
@@ -2455,14 +2509,18 @@
             "spec": {
               "options": {
                 "showLabels": true,
-                "showCommonLabels": false,
+                "showCommonLabels": true,
                 "showTime": true,
-                "showLogContextToggle": false,
+                "showLogContextToggle": true,
                 "wrapLogMessage": true,
                 "prettifyLogMessage": true,
                 "enableLogDetails": true,
                 "sortOrder": "Descending",
-                "dedupStrategy": "none"
+                "dedupStrategy": "signature",
+                "enableInfiniteScrolling": true,
+                "showControls": true,
+                "showFieldSelector": true,
+                "syntaxHighlighting": true
               },
               "fieldConfig": {
                 "defaults": {},
@@ -2533,17 +2591,24 @@
                 "cellHeight": "sm"
               },
               "fieldConfig": {
-                "defaults": {
-                  "custom": {
-                    "align": "auto",
-                    "inspect": false,
-                    "cellOptions": {
-                      "type": "gauge",
-                      "mode": "gradient"
-                    }
+                "defaults": {},
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byType",
+                      "options": "number"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.cellOptions",
+                        "value": {
+                          "type": "gauge",
+                          "mode": "gradient"
+                        }
+                      }
+                    ]
                   }
-                },
-                "overrides": []
+                ]
               }
             }
           }
