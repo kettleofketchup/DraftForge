@@ -114,7 +114,8 @@ File: `frontend/app/i18n/locales/en/navbar.json`
     "star_github": "Star us on GitHub",
     "documentation": "Documentation",
     "report_bug": "Report a Bug",
-    "main_nav": "Main navigation"
+    "main_nav": "Main navigation",
+    "open_menu": "Open menu"
   }
 }
 ```
@@ -134,7 +135,8 @@ File: `frontend/app/i18n/locales/es/navbar.json`
     "star_github": "Danos una estrella en GitHub",
     "documentation": "Documentación",
     "report_bug": "Reportar un problema",
-    "main_nav": "Navegación principal"
+    "main_nav": "Navegación principal",
+    "open_menu": "Abrir menú"
   }
 }
 ```
@@ -423,9 +425,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const locale = await i18nServer.getLocale(request);
   return { locale };
 }
-
-export const handle = { i18n: ['navbar'] };
 ```
+
+Note: do NOT add `export const handle = { i18n: ['navbar'] }`. That export is consumed by `remix-i18next`'s `getRouteNamespaces` helper, which the project does not use (resources are bundled into the i18n instance directly).
 
 - [ ] **Step 3: Modify the `Layout` function**
 
@@ -956,17 +958,23 @@ git commit -m "build(just): add frontend:: module, migrate tsc+lint from npm::"
 
 ---
 
-## Task 14: Convert `login.tsx` — `t()` + testids for login, profile, logout
+## Task 14: Convert `login.tsx` — `t()` + testids for profile and logout
 
 **Files:**
 - Modify: `frontend/app/components/navbar/login.tsx`
 
 The file contains three translatable strings:
-- `Login with Discord` at line ~134 (`<span>` inside the discord button)
-- `Profile` at line ~100 (inside the dropdown menu item)
+- `Login with Discord` at line ~134 (`<span>` inside `<PrimaryButton>`)
+- `Profile` at line ~100 (inside the dropdown menu Button)
 - `Logout` at line ~108 (inside the destructive button)
 
-Each gets `t()` and a `data-testid`.
+Existing testids (do not change):
+- `data-testid="user-avatar"` at line 90 (the avatar trigger — used by visual QA dropdown scenarios)
+- `data-testid="navbarLoginButton"` at line 131 (the Discord login PrimaryButton — used by all i18n tests)
+
+New testids to add (camelCase to match existing convention):
+- `data-testid="navbarProfileButton"` on the Profile button
+- `data-testid="navbarLogoutButton"` on the Logout DestructiveButton
 
 - [ ] **Step 1: Add imports and hooks**
 
@@ -976,44 +984,57 @@ At the top of `login.tsx`, add:
 import { useTranslation } from 'react-i18next';
 ```
 
-Inside `LoginWithDiscordButton` (before its JSX `return`):
+Inside `LoginButton` (before its `return`):
 
 ```tsx
 const { t } = useTranslation('navbar');
 ```
 
-Same hook call inside any other component in the file that uses translated strings (e.g., the user dropdown component containing Profile/Logout).
+Same hook call inside the component containing the Profile / Logout dropdown items (typically the user-avatar wrapper component in the same file).
 
-- [ ] **Step 2: Replace the Discord login button**
+- [ ] **Step 2: Replace the Discord login text (testid already exists)**
 
-Find the existing `<span>Login with Discord</span>` and its wrapping `<button>`. Preserve the existing `className`, `onClick`, and icon child. Add `data-testid` to the button and replace the span text:
+Find the existing block:
 
 ```tsx
-<button data-testid="discord-login-button" /* ...existing className/onClick... */>
-  {/* ...existing DiscordIcon... */}
-  <span>{t('login')}</span>
-</button>
+<PrimaryButton asChild data-testid="navbarLoginButton">
+  <a href={loginUrl}>
+    <DiscordIcon className="h-5 w-5" />
+    <span>Login with Discord</span>
+  </a>
+</PrimaryButton>
 ```
 
-- [ ] **Step 3: Replace the Profile menu item**
+Replace only the inner span text:
+
+```tsx
+<PrimaryButton asChild data-testid="navbarLoginButton">
+  <a href={loginUrl}>
+    <DiscordIcon className="h-5 w-5" />
+    <span>{t('login')}</span>
+  </a>
+</PrimaryButton>
+```
+
+- [ ] **Step 3: Replace the Profile menu item (and add testid)**
 
 Find the `<Button>` containing `<UserPenIcon />` and `Profile`. Add `data-testid` and wrap text:
 
 ```tsx
 <Link to="/profile">
-  <Button data-testid="navbar-profile-button">
+  <Button data-testid="navbarProfileButton">
     <UserPenIcon />
     {t('profile')}
   </Button>
 </Link>
 ```
 
-- [ ] **Step 4: Replace the Logout destructive button**
+- [ ] **Step 4: Replace the Logout destructive button (and add testid)**
 
 Find the `<DestructiveButton onClick={logoutClick}>` containing `<LogOutIcon />` and `Logout`. Add `data-testid` and wrap text:
 
 ```tsx
-<DestructiveButton data-testid="navbar-logout-button" onClick={logoutClick}>
+<DestructiveButton data-testid="navbarLogoutButton" onClick={logoutClick}>
   <LogOutIcon />
   {t('logout')}
 </DestructiveButton>
@@ -1098,10 +1119,12 @@ git commit -m "feat(i18n): translate navbar.tsx visible text + aria-labels"
 
 ---
 
-## Task 16: Convert `MobileNav.tsx`
+## Task 16: Convert `MobileNav.tsx` (+ add menu-toggle testid)
 
 **Files:**
 - Modify: `frontend/app/components/navbar/MobileNav.tsx`
+
+In addition to string translation, this task adds `data-testid="mobileNavToggle"` to the `<SheetTrigger>`'s `<Button>` (line ~192) so the visual QA spec (Task 20) can locate the menu toggle deterministically.
 
 - [ ] **Step 1: Inventory the file's strings**
 
@@ -1109,9 +1132,9 @@ git commit -m "feat(i18n): translate navbar.tsx visible text + aria-labels"
 grep -nE '>[A-Z][a-zA-Z ]+<|(aria-label|title|subtitle|label|placeholder)="[^"]{3,}"' frontend/app/components/navbar/MobileNav.tsx
 ```
 
-For each match: add a key in both `en/navbar.json` and `es/navbar.json` if not present, then wrap with `t('<key>')`.
+For each match: add a key in both `en/navbar.json` and `es/navbar.json` if not present, then wrap with `t('<key>')`. Notably, the existing `aria-label="Open menu"` on the `<Button>` becomes `aria-label={t('aria.open_menu')}` — add the key (`Open menu` / `Abrir menú`) to both locale files.
 
-- [ ] **Step 2: Add the hook and translate**
+- [ ] **Step 2: Add the hook, translate, and add the toggle testid**
 
 ```tsx
 import { useTranslation } from 'react-i18next';
@@ -1119,7 +1142,20 @@ import { useTranslation } from 'react-i18next';
 const { t } = useTranslation('navbar');
 ```
 
-Apply the wrap pattern for every string from step 1.
+For the `<SheetTrigger asChild><Button ...></Button></SheetTrigger>` (around line 191-192):
+
+```tsx
+<SheetTrigger asChild>
+  <Button
+    variant="ghost"
+    size="icon"
+    className="md:hidden mr-1"
+    aria-label={t('aria.open_menu')}
+    data-testid="mobileNavToggle"
+  >
+```
+
+Apply the wrap-with-`t()` pattern to all other strings inventoried in Step 1.
 
 - [ ] **Step 3: Lint, check, guard**
 
@@ -1250,84 +1286,91 @@ File: `frontend/tests/playwright/e2e/01-locale.spec.ts`
 ```ts
 // Import from project fixtures (provides waitForHydration, sets
 // window.playwright = true to disable react-scan, and exposes login helpers).
-import { test, expect } from '../fixtures';
-import { loginUser } from '../fixtures';
+import { test, expect, loginUser } from '../fixtures';
+import type { Page } from '@playwright/test';
 
 // i18n hydration bugs must surface immediately; no retries here.
 test.describe.configure({ retries: 0 });
 
-const LOGIN_BUTTON = '[data-testid="discord-login-button"]';
-const LOGOUT_BUTTON = '[data-testid="navbar-logout-button"]';
-const PROFILE_BUTTON = '[data-testid="navbar-profile-button"]';
+const LOGIN_BUTTON = '[data-testid="navbarLoginButton"]';
+const LOGOUT_BUTTON = '[data-testid="navbarLogoutButton"]';
+const PROFILE_BUTTON = '[data-testid="navbarProfileButton"]';
+const USER_AVATAR = 'header [data-testid="user-avatar"]';
 const ES_LOGIN = 'Iniciar sesión con Discord';
 const EN_LOGIN = 'Login with Discord';
 
-// Capture hydration errors across every scenario.
-test.beforeEach(async ({ page }) => {
+// Helper: attach hydration-error capture to a freshly created page.
+// Used by both default-page tests and tests that build their own context.
+function attachErrorCapture(page: Page): string[] {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(`console: ${m.text()}`);
   });
-  // Attach for retrieval inside each test via test info.
-  (page as unknown as { _i18nErrors: string[] })._i18nErrors = errors;
-});
-
-function getErrors(page: import('@playwright/test').Page): string[] {
-  return (page as unknown as { _i18nErrors: string[] })._i18nErrors;
+  return errors;
 }
 
 test.describe('navbar i18n — anonymous', () => {
   test('?lang=es renders Spanish login + correct <html lang>', async ({ page }) => {
+    const errors = attachErrorCapture(page);
     await page.goto('/?lang=es');
     await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
-    expect(getErrors(page), 'unexpected runtime errors').toEqual([]);
+    expect(errors, 'unexpected runtime errors').toEqual([]);
   });
 
   test('?lang=es writes df-locale cookie even on prerendered /', async ({ page, context }) => {
+    const errors = attachErrorCapture(page);
     await page.goto('/?lang=es');
     await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
     const cookies = await context.cookies();
     const dfLocale = cookies.find((c) => c.name === 'df-locale');
     expect(dfLocale?.value).toBe('es');
+    expect(errors).toEqual([]);
   });
 
   test('cookie persists Spanish across navigation', async ({ page }) => {
+    const errors = attachErrorCapture(page);
     await page.goto('/?lang=es');
     await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
     await page.goto('/tournaments');
     await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
+    expect(errors).toEqual([]);
   });
 
   test('default en-US context renders English', async ({ browser }) => {
     const ctx = await browser.newContext({ locale: 'en-US' });
     const page = await ctx.newPage();
+    const errors = attachErrorCapture(page);
     await page.goto('/');
     await expect(page.locator(LOGIN_BUTTON)).toHaveText(EN_LOGIN);
+    expect(errors).toEqual([]);
     await ctx.close();
   });
 
   test('es-ES context renders Spanish navbar + aria-labels', async ({ browser }) => {
     const ctx = await browser.newContext({ locale: 'es-ES' });
     const page = await ctx.newPage();
+    const errors = attachErrorCapture(page);
     await page.goto('/tournaments');
     await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
-    // Aria-label regression check: at least one of the translated labels must
-    // appear with its Spanish value.
+    // Aria-label regression check.
     await expect(
       page.locator('[aria-label="Documentación"]').first(),
     ).toBeVisible();
+    expect(errors).toEqual([]);
     await ctx.close();
   });
 
   test('unsupported locale (fr-FR) falls back to English', async ({ browser }) => {
     const ctx = await browser.newContext({ locale: 'fr-FR' });
     const page = await ctx.newPage();
+    const errors = attachErrorCapture(page);
     await page.goto('/tournaments');
     await expect(page.locator(LOGIN_BUTTON)).toHaveText(EN_LOGIN);
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    expect(errors).toEqual([]);
     await ctx.close();
   });
 
@@ -1337,29 +1380,38 @@ test.describe('navbar i18n — anonymous', () => {
       { name: 'df-locale', value: 'es', url: 'https://localhost' },
     ]);
     const page = await ctx.newPage();
+    const errors = attachErrorCapture(page);
     await page.goto('/tournaments?lang=en');
     await expect(page.locator(LOGIN_BUTTON)).toHaveText(EN_LOGIN);
+    expect(errors).toEqual([]);
     await ctx.close();
   });
 
-  test('clearing the cookie returns to browser language', async ({ browser }) => {
+  test('clearing df-locale falls back to Accept-Language (en-US → English)', async ({ browser }) => {
+    // Sets cookie=es, asserts Spanish; clears cookie, asserts fallback to the
+    // context's Accept-Language (en-US) → English. The cookie's clear behavior
+    // is the actual subject; locale doesn't change between p1 and p2.
     const ctx = await browser.newContext({ locale: 'en-US' });
     await ctx.addCookies([
       { name: 'df-locale', value: 'es', url: 'https://localhost' },
     ]);
     const p1 = await ctx.newPage();
+    attachErrorCapture(p1);
     await p1.goto('/tournaments');
     await expect(p1.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
     await ctx.clearCookies();
     const p2 = await ctx.newPage();
+    const errors = attachErrorCapture(p2);
     await p2.goto('/tournaments');
     await expect(p2.locator(LOGIN_BUTTON)).toHaveText(EN_LOGIN);
+    expect(errors).toEqual([]);
     await ctx.close();
   });
 
   test('dynamic route SSR ships Spanish HTML (no flicker for es-ES)', async ({ browser }) => {
     const ctx = await browser.newContext({ locale: 'es-ES' });
     const page = await ctx.newPage();
+    attachErrorCapture(page);
     const response = await page.goto('/tournaments');
     const html = (await response?.text()) ?? '';
     expect(html).toContain(ES_LOGIN);
@@ -1369,10 +1421,12 @@ test.describe('navbar i18n — anonymous', () => {
   test('prerendered / ships English HTML then swaps to Spanish (documented trade-off)', async ({ browser }) => {
     const ctx = await browser.newContext({ locale: 'es-ES' });
     const page = await ctx.newPage();
+    const errors = attachErrorCapture(page);
     const response = await page.goto('/');
     const html = (await response?.text()) ?? '';
     expect(html).toContain(EN_LOGIN);
     await expect(page.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
+    expect(errors).toEqual([]);
     await ctx.close();
   });
 });
@@ -1382,22 +1436,20 @@ test.describe('navbar i18n — authenticated', () => {
     const ctx = await browser.newContext({ locale: 'es-ES' });
     await loginUser(ctx);
     const page = await ctx.newPage();
+    const errors = attachErrorCapture(page);
     await page.goto('/tournaments');
-    // Open the user dropdown to reveal logout + profile entries.
-    // The avatar trigger has a stable testid; if not, fall back to clicking
-    // the visible user avatar inside the navbar.
-    await page.locator('[data-testid="navbar-user-avatar"]').first().click().catch(async () => {
-      // Fallback: click any UserAvatar inside the navbar.
-      await page.locator('header [data-slot="avatar"]').first().click();
-    });
+    // Open the user dropdown using the existing user-avatar testid scoped to navbar.
+    await page.locator(USER_AVATAR).first().click();
+    await expect(page.locator(LOGOUT_BUTTON)).toBeVisible();
     await expect(page.locator(LOGOUT_BUTTON)).toHaveText('Cerrar sesión');
     await expect(page.locator(PROFILE_BUTTON)).toHaveText('Perfil');
+    expect(errors).toEqual([]);
     await ctx.close();
   });
 });
 ```
 
-If the `navbar-user-avatar` testid doesn't exist in the codebase yet, the `.catch()` fallback clicks any avatar inside the `<header>`. If both fail, add a `data-testid="navbar-user-avatar"` to the avatar trigger in `navbar.tsx` as part of this task.
+Every test that creates its own page calls `attachErrorCapture` immediately after `ctx.newPage()` so all 11 scenarios catch hydration warnings — not just the ones using the default `page` fixture.
 
 - [ ] **Step 2: Run the new spec**
 
@@ -1436,9 +1488,8 @@ touch frontend/screenshots/i18n/.gitkeep
 File: `frontend/tests/playwright/e2e/06-visual-qa-navbar.spec.ts`
 
 ```ts
-import { test } from '../fixtures';
-import { loginUser } from '../fixtures';
-import { expect } from '@playwright/test';
+import { test, expect, loginUser } from '../fixtures';
+import type { Page } from '@playwright/test';
 
 const VIEWPORTS = [
   { name: 'mobile', width: 375, height: 800 },
@@ -1446,29 +1497,32 @@ const VIEWPORTS = [
   { name: 'desktop', width: 1280, height: 800 },
 ];
 const LOCALES = ['en', 'es'] as const;
-const LOGIN_BUTTON = '[data-testid="discord-login-button"]';
+const LOGIN_BUTTON = '[data-testid="navbarLoginButton"]';
+const MOBILE_TOGGLE = '[data-testid="mobileNavToggle"]';
+const USER_AVATAR = 'header [data-testid="user-avatar"]';
+const LOGOUT_BUTTON = '[data-testid="navbarLogoutButton"]';
 
-async function settleNavbar(page: import('@playwright/test').Page, expectedLoginText: string) {
-  // Wait for navbar text to reflect the final locale, then for fonts to load.
-  await expect(page.locator(LOGIN_BUTTON)).toHaveText(expectedLoginText);
+const EXPECTED_LOGIN = (locale: 'en' | 'es') =>
+  locale === 'es' ? 'Iniciar sesión con Discord' : 'Login with Discord';
+
+async function settleNavbar(page: Page, locale: 'en' | 'es') {
+  await expect(page.locator(LOGIN_BUTTON)).toHaveText(EXPECTED_LOGIN(locale));
   await page.evaluate(() => document.fonts.ready);
 }
 
+// 1. First-paint matrix (3 viewports × 2 locales = 6)
 for (const vp of VIEWPORTS) {
   for (const locale of LOCALES) {
-    const expectedLogin = locale === 'es' ? 'Iniciar sesión con Discord' : 'Login with Discord';
-
     test(`first paint @ ${vp.name} ${locale}`, async ({ browser }) => {
       const ctx = await browser.newContext({
         viewport: { width: vp.width, height: vp.height },
         locale: locale === 'es' ? 'es-ES' : 'en-US',
       });
       const page = await ctx.newPage();
-      await page.goto(`/tournaments`);
-      await settleNavbar(page, expectedLogin);
+      await page.goto('/tournaments');
+      await settleNavbar(page, locale);
 
-      // Assert no horizontal scrollbar at mobile width in Spanish — the
-      // Discord button is the most likely overflow source.
+      // Horizontal-overflow assertion at mobile width.
       if (vp.name === 'mobile') {
         const overflow = await page.evaluate(
           () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -1485,9 +1539,8 @@ for (const vp of VIEWPORTS) {
   }
 }
 
-// Mobile drawer open
+// 2. Mobile drawer open (2)
 for (const locale of LOCALES) {
-  const expectedLogin = locale === 'es' ? 'Iniciar sesión con Discord' : 'Login with Discord';
   test(`mobile drawer open ${locale}`, async ({ browser }) => {
     const ctx = await browser.newContext({
       viewport: { width: 375, height: 800 },
@@ -1495,11 +1548,10 @@ for (const locale of LOCALES) {
     });
     const page = await ctx.newPage();
     await page.goto('/tournaments');
-    await settleNavbar(page, expectedLogin);
-    // Toggle the mobile menu — selector may need adjustment based on actual MobileNav implementation.
-    await page.locator('[data-testid="mobile-nav-toggle"]').click().catch(async () => {
-      await page.locator('header button:has-text("Menu"), header [aria-label*="navigation"]').first().click();
-    });
+    await settleNavbar(page, locale);
+    await page.locator(MOBILE_TOGGLE).click();
+    // Verify the drawer actually opened before screenshotting.
+    await expect(page.locator('[role="dialog"]').first()).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
     await page.screenshot({
       path: `screenshots/i18n/mobile-drawer-${locale}.png`,
@@ -1509,9 +1561,8 @@ for (const locale of LOCALES) {
   });
 }
 
-// Logged-in user dropdown
+// 3. Logged-in user dropdown (2)
 for (const locale of LOCALES) {
-  const expectedLogin = locale === 'es' ? 'Iniciar sesión con Discord' : 'Login with Discord';
   test(`user dropdown @ desktop ${locale}`, async ({ browser }) => {
     const ctx = await browser.newContext({
       viewport: { width: 1280, height: 800 },
@@ -1520,10 +1571,14 @@ for (const locale of LOCALES) {
     await loginUser(ctx);
     const page = await ctx.newPage();
     await page.goto('/tournaments');
+    // After login, the navbar shows the user-avatar instead of the login
+    // button — settleNavbar's login-text check would fail, so we settle on
+    // the avatar element directly.
+    await expect(page.locator(USER_AVATAR).first()).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
-    await page.locator('[data-testid="navbar-user-avatar"]').first().click().catch(async () => {
-      await page.locator('header [data-slot="avatar"]').first().click();
-    });
+    await page.locator(USER_AVATAR).first().click();
+    // Verify the dropdown actually opened.
+    await expect(page.locator(LOGOUT_BUTTON)).toBeVisible();
     await page.screenshot({
       path: `screenshots/i18n/user-dropdown-${locale}.png`,
       fullPage: false,
@@ -1532,9 +1587,8 @@ for (const locale of LOCALES) {
   });
 }
 
-// Focused login button
+// 4. Focused login button (2)
 for (const locale of LOCALES) {
-  const expectedLogin = locale === 'es' ? 'Iniciar sesión con Discord' : 'Login with Discord';
   test(`focused login button @ desktop ${locale}`, async ({ browser }) => {
     const ctx = await browser.newContext({
       viewport: { width: 1280, height: 800 },
@@ -1542,7 +1596,7 @@ for (const locale of LOCALES) {
     });
     const page = await ctx.newPage();
     await page.goto('/');
-    await settleNavbar(page, expectedLogin);
+    await settleNavbar(page, locale);
     await page.locator(LOGIN_BUTTON).focus();
     await page.screenshot({
       path: `screenshots/i18n/login-focused-${locale}.png`,
@@ -1551,9 +1605,35 @@ for (const locale of LOCALES) {
     await ctx.close();
   });
 }
+
+// 5. Hover-revealed Tooltip on translated icon button (2)
+// Navbar has icon buttons with aria-labels: Star us on GitHub, Documentation,
+// Report a Bug. Hovering reveals a <TooltipContent>. This scenario captures
+// the Documentation tooltip — translated separately in Task 15.
+for (const locale of LOCALES) {
+  const ariaLabel = locale === 'es' ? 'Documentación' : 'Documentation';
+  test(`hover documentation tooltip @ desktop ${locale}`, async ({ browser }) => {
+    const ctx = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+      locale: locale === 'es' ? 'es-ES' : 'en-US',
+    });
+    const page = await ctx.newPage();
+    await page.goto('/');
+    await settleNavbar(page, locale);
+    await page.locator(`[aria-label="${ariaLabel}"]`).first().hover();
+    // Verify the tooltip rendered (Radix tooltips have role="tooltip").
+    await expect(page.locator('[role="tooltip"]').first()).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await page.screenshot({
+      path: `screenshots/i18n/tooltip-docs-${locale}.png`,
+      fullPage: false,
+    });
+    await ctx.close();
+  });
+}
 ```
 
-Total scenarios: 6 (first-paint matrix) + 2 (mobile drawer) + 2 (user dropdown) + 2 (focused login) = 12.
+Total scenarios: 6 (first-paint matrix) + 2 (mobile drawer) + 2 (user dropdown) + 2 (focused login) + 2 (hover tooltip) = 14 screenshots.
 
 - [ ] **Step 3: Run the visual QA spec**
 
@@ -1561,7 +1641,7 @@ Total scenarios: 6 (first-paint matrix) + 2 (mobile drawer) + 2 (user dropdown) 
 just test::pw::spec 06-visual-qa-navbar
 ```
 
-Expected: 12 tests pass, 12 screenshots in `frontend/screenshots/i18n/`. The mobile-overflow assertion fails immediately if the Spanish login button truncates at 375px.
+Expected: 14 tests pass, 14 screenshots in `frontend/screenshots/i18n/`. The mobile-overflow assertion fails immediately if the Spanish login button truncates at 375px.
 
 - [ ] **Step 4: Inspect screenshots**
 
@@ -1646,7 +1726,7 @@ gh pr create --title "feat(i18n): Spanish navbar with SSR locale detection" --bo
 - Bootstrapped ESLint 9 flat config; lint scoped to `app/components/navbar/` for this PR (widening is follow-up).
 - `eslint-plugin-i18next/no-literal-string` (error) + grep guard (visible prop strings) + `i18next-parser --fail-on-update` (locale key parity).
 - 11-test Playwright spec (incl. aria-label assertion, cookie-write check, logged-in scenario).
-- 12-screenshot visual QA (first paint × 6, drawer × 2, dropdown × 2, focus × 2) committed under `frontend/screenshots/i18n/`.
+- 14-screenshot visual QA (first paint × 6, drawer × 2, dropdown × 2, focus × 2, hover-tooltip × 2) committed under `frontend/screenshots/i18n/`.
 - `/` and `/about` remain prerendered (Discord link previews). Documented Spanish flicker on those two routes.
 
 ## Follow-ups (separate PRs)
@@ -1700,6 +1780,17 @@ Without this follow-up, the new validation gates only run via `just frontend::va
 - Testing (unit/static, Playwright E2E with aria-labels + cookie-write + logged-in, visual QA with drawer/dropdown/focus + horizontal-overflow assertion, regression grep, manual smoke): Tasks 10-13, 18, 19, 20, 21.
 - Risk register: hydration mismatch covered by `beforeEach` pageerror listener across all 11 tests in Task 19; prerender behavior covered by scenarios 9 and 10 plus visual-QA mobile-overflow assertion; cookie fallback for prerendered `?lang=` covered by scenario 2.
 
-**Placeholder scan:** None remaining. The remaining ambiguity is in Task 19 step 1: if `navbar-user-avatar` testid doesn't exist, the test falls back to `header [data-slot="avatar"]` and the task instructs to add the testid as part of completion. Self-correcting.
+**Placeholder scan:** None remaining. All testids referenced in tests are either pre-existing in the codebase or explicitly added in the corresponding navbar-conversion task.
 
-**Type consistency:** `createI18nInstance` returns `I18nInstance` (Task 3), consumed identically in `client.ts` (Task 5) and `entry.server.tsx` (Task 8). Cookie name `df-locale` consistent across `server.ts` (Task 4), `client.ts` (Task 5), and tests (Task 19). `data-testid`s used in Task 14 (`discord-login-button`, `navbar-profile-button`, `navbar-logout-button`) and asserted by the same exact strings in Task 19 and Task 20. Key naming uses `defaultNS: 'navbar'` convention: `t('login')`, `t('profile')`, `t('logout')`, `t('aria.<x>')` — never `t('navbar.login')`. Visual QA output path `screenshots/i18n/` matches the directory created in Task 20 step 1 (`frontend/screenshots/i18n/.gitkeep`).
+**Type consistency:** `createI18nInstance` returns `I18nInstance` (Task 3), consumed identically in `client.ts` (Task 5) and `entry.server.tsx` (Task 8). Cookie name `df-locale` consistent across `server.ts` (Task 4), `client.ts` (Task 5), and tests (Task 19).
+
+**Testid consistency** (camelCase project convention):
+- `navbarLoginButton` — **pre-existing** at `login.tsx:131`. Task 14 keeps it; Tasks 19 and 20 assert against it.
+- `user-avatar` — **pre-existing** at `login.tsx:90`. Tasks 19 and 20 use `header [data-testid="user-avatar"]` to scope it to the navbar.
+- `navbarProfileButton` — **added by Task 14** on the Profile dropdown Button. Asserted in Task 19's authenticated scenario.
+- `navbarLogoutButton` — **added by Task 14** on the Logout DestructiveButton. Asserted in Task 19's authenticated scenario and Task 20's user-dropdown screenshots.
+- `mobileNavToggle` — **added by Task 16** on the SheetTrigger's Button. Used by Task 20's mobile-drawer screenshots.
+
+Key naming uses `defaultNS: 'navbar'` convention: `t('login')`, `t('profile')`, `t('logout')`, `t('aria.<x>')` — never `t('navbar.login')`. Visual QA output path `screenshots/i18n/` matches the directory created in Task 20 step 1 (`frontend/screenshots/i18n/.gitkeep`).
+
+**Error capture coverage:** Task 19's `attachErrorCapture(page)` helper is called inside **every test** that creates its own page via `ctx.newPage()`, not just the default `{ page }` fixture. All 11 scenarios capture hydration warnings.
