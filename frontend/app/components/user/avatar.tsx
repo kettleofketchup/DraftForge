@@ -6,7 +6,8 @@ import type { GuildMember, UserClassType, UserType } from '~/index';
  * Username can be optional to handle partial data from various sources.
  */
 type DisplayNameable = {
-  username?: string;
+  // Username may be null for Steam-only signups (model field is null=True).
+  username?: string | null;
   nickname?: string | null;
 };
 

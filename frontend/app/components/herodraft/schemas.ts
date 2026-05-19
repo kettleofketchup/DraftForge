@@ -2,7 +2,10 @@ import { z } from 'zod';
 
 export const DraftTeamCaptainSchema = z.object({
   pk: z.number(),  // Backend uses 'pk' not 'id'
-  username: z.string(),
+  // ``CustomUser.username`` is nullable (Steam-only signups don't pick one),
+  // so the schema has to accept null too. Render sites fall back to
+  // nickname / '?' via DisplayName.
+  username: z.string().nullable(),
   nickname: z.string().nullable(),
   avatar: z.string().nullable(),
   avatarUrl: z.string().nullable().optional(),

@@ -9,7 +9,10 @@ import type { UserType, UserClassType, GuildMember } from './types';
  */
 type UserLike = UserType | GuildMember | {
   pk?: number;
-  username?: string;
+  // Username can be null for Steam-only signups (CustomUser.username is
+  // null=True at the model level). DisplayName already falls back to
+  // nickname / '?'.
+  username?: string | null;
   nickname?: string | null;
   avatar?: string | null;
   avatarUrl?: string | null;

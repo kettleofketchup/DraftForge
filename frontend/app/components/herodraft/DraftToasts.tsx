@@ -4,7 +4,7 @@ import { UserAvatar } from "~/components/user/UserAvatar";
 
 interface CaptainInfo {
   pk: number;
-  username: string;
+  username: string | null;
   nickname: string | null;
   avatar: string | null;
   avatarUrl?: string | null;
