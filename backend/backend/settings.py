@@ -274,6 +274,21 @@ DATABASES = {
         "OPTIONS": {
             "timeout": 30,  # seconds — busy_timeout for lock waiting
             "transaction_mode": "IMMEDIATE",  # acquire RESERVED lock upfront, prevents deadlocks
+            # Switch to WAL journaling so concurrent readers don't block on
+            # the celery worker's periodic UPDATEs. The default DELETE journal
+            # mode serializes readers and writers — we observed SELECT
+            # `app_league` requests stalling 70–260ms behind the per-minute
+            # `UPDATE steam_leaguesyncstate` writes. WAL lets the reader see
+            # the last committed snapshot while the writer commits in parallel.
+            # `synchronous=NORMAL` is the safe pairing with WAL: still
+            # crash-safe across process death, only loses durability across
+            # power loss between commit and disk flush — acceptable for our
+            # workload (we can resync from Steam on disaster). Requires
+            # Django 5.2+ (init_command for SQLite).
+            "init_command": (
+                "PRAGMA journal_mode=WAL;"
+                "PRAGMA synchronous=NORMAL;"
+            ),
         },
     }
 }
