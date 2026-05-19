@@ -12,6 +12,5 @@ class UserAppRegistrationTests(SimpleTestCase):
         assert config.name == "user"
 
     def test_placeholder_url_resolves(self):
-        # Placeholder URL until Task 8 lands the real views.
-        match = resolve("/api/users/me/profile/ping/")
-        assert match.url_name == "me-profile-ping"
+        match = resolve("/api/users/me/profile/")
+        assert match.url_name == "me-profile"
