@@ -1,0 +1,14 @@
+{
+  "login": "Iniciar sesión con Discord",
+  "logout": "Cerrar sesión",
+  "profile": "Perfil",
+  "signup_here": "Regístrate aquí",
+  "home": "Inicio",
+  "aria": {
+    "star_github": "Danos una estrella en GitHub",
+    "documentation": "Documentación",
+    "report_bug": "Reportar un problema",
+    "main_nav": "Navegación principal",
+    "open_menu": "Abrir menú"
+  }
+}
