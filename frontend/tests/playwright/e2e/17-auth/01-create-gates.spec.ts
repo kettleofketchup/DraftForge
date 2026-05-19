@@ -65,11 +65,26 @@ const CREATE_LEAGUE_EXPECTATIONS: Expectations = {
 
 const CREATE_EVENT_EXPECTATIONS: Expectations = {
   // Same gate as Create League — on the org-detail page, both buttons
-  // use the inline isOrgStaff. Different from /events page (out of scope).
+  // use the inline isOrgStaff.
   siteAdmin: true,
   siteStaff: false,
   orgAdmin: true,
   orgStaff: true,
+  orgMember: false,
+  leagueAdmin: false,
+  leagueStaff: false,
+  anonymous: false,
+};
+
+// The /events page uses ``useIsOrganizationAdmin`` against the
+// (now full-org) selectedOrg fetched via useOrganization(selectedOrgIdNum).
+// The hook's site-admin bypass kicks in for is_staff || is_superuser, so
+// site staff also qualify here even without explicit org membership.
+const CREATE_EVENT_EVENTS_PAGE_EXPECTATIONS: Expectations = {
+  siteAdmin: true,    // is_superuser → useIsOrganizationAdmin bypass
+  siteStaff: true,    // is_staff → useIsOrganizationAdmin bypass (post-fix)
+  orgAdmin: true,     // in DTX.admins
+  orgStaff: false,    // staff is NOT admin (this gate is admin-only)
   orgMember: false,
   leagueAdmin: false,
   leagueStaff: false,
@@ -153,19 +168,25 @@ test.describe('Create-action permission matrix (8 roles in parallel)', () => {
     );
   });
 
-  test('Create Event button visibility (DTX org-detail)', async ({ roleContexts }) => {
-    // Use the org-detail events tab rather than /events?organization=X.
-    // The org-detail page fetches the full org payload (with admins/staff
-    // arrays) so the inline isOrgStaff gate can resolve correctly. The
-    // /events route fetches a stripped org list that omits those fields,
-    // so its create-event-btn gate is effectively broken for org admins
-    // — a known separate inconsistency (same testid, different gate),
-    // out of scope here.
+  test('Create Event button visibility (org-detail events tab)', async ({ roleContexts }) => {
     await assertGateAcrossRoles(
       roleContexts,
       `/organizations/${DTX_ORG_PK}?tab=events`,
       'create-event-btn',
       CREATE_EVENT_EXPECTATIONS,
+    );
+  });
+
+  test('Create Event button visibility (/events?organization=X)', async ({ roleContexts }) => {
+    // Same testid as the org-detail tab but a different gate (hook-based,
+    // admin-only) — see the EVENTS_PAGE expectation comment for the
+    // hierarchy difference. This locks the contract for the /events route
+    // now that it fetches the full org via useOrganization.
+    await assertGateAcrossRoles(
+      roleContexts,
+      `/events?organization=${DTX_ORG_PK}`,
+      'create-event-btn',
+      CREATE_EVENT_EVENTS_PAGE_EXPECTATIONS,
     );
   });
 

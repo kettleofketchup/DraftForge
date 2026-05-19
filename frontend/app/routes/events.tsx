@@ -15,7 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { EventStateBadge } from '~/components/events';
 import type { EventType } from '~/components/events/schemas';
 import { RepeaterCard } from '~/components/events/RepeaterCard';
-import { useOrganizations } from '~/components/organization';
+import { useOrganization, useOrganizations } from '~/components/organization';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
@@ -304,12 +304,12 @@ export default function EventsPage() {
     ordering: SORT_TO_ORDERING[sortBy] || 'closest',
   });
 
-  // Get selected organization for permission checks
-  const selectedOrg = useMemo(
-    () => organizations.find((o) => o.pk === selectedOrgIdNum) || null,
-    [organizations, selectedOrgIdNum],
-  );
-  const isOrgAdmin = useIsOrganizationAdmin(selectedOrg);
+  // Get selected organization for permission checks. The ``organizations``
+  // list from useOrganizations() returns a stripped payload (no admins /
+  // staff arrays), so useIsOrganizationAdmin would never resolve to true
+  // for org admins. Fetch the full org detail when one is selected.
+  const { organization: selectedOrgFull } = useOrganization(selectedOrgIdNum);
+  const isOrgAdmin = useIsOrganizationAdmin(selectedOrgFull);
   const canCreate = isOrgAdmin && selectedOrgIdNum;
 
   function setOrgFilter(value: string | null) {
