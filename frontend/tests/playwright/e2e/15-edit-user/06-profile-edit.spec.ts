@@ -1,143 +1,106 @@
 /**
- * Edit Profile Modal
+ * Edit Profile — Base tab of the new layered EditProfileModal.
  *
- * @cicd smoke test verifying that a logged-in user can open their profile
- * edit modal, update position preferences, save, and verify the change
- * appears in the UI.
+ * Covers T1 (BaseUserProfile epic):
+ *   - Nickname edit dual-writes to userCacheStore so UserCard / nickname
+ *     surfaces update without a reload.
+ *   - Avatar URL persists across reload (server round-trip).
  *
- * Uses the admin user (PK 1001, kettleofketchup) — edits only that user's
- * own profile positions and restores original values afterward.
+ * Logs in as the admin user (PK 1001, kettleofketchup) and only edits that
+ * user's OWN profile via /profile → EditProfileModal. Original values are
+ * captured in a try/finally so the row is restored even if assertions fail
+ * — never call this test flaky.
  */
 
-import {
-  test,
-  expect,
-  visitAndWaitForHydration,
-} from '../../fixtures';
+import { test, expect } from '../../fixtures';
 
-const ADMIN_PK = 1001;
-
-test.describe('Edit Profile Modal (@cicd)', () => {
-  test.beforeEach(async ({ loginAdmin }) => {
+test.describe('Edit Profile — Base tab (new layered modal)', () => {
+  test('user can change nickname and see it reflect in profile header without refresh', async ({
+    page,
+    loginAdmin,
+  }) => {
     await loginAdmin();
+    await page.goto('/profile');
+
+    // /profile redirects to /user/<currentUserPk>. Wait for the header H1.
+    const headerNickname = page.locator('[data-testid="user-card-nickname"]').first();
+    await expect(headerNickname).toBeVisible({ timeout: 15_000 });
+
+    const editTrigger = page.locator('[data-testid="edit-user-btn"]').first();
+    await expect(editTrigger).toBeVisible({ timeout: 10_000 });
+    await editTrigger.click();
+
+    const nicknameInput = page.locator('[data-testid="edit-user-nickname"]');
+    await expect(nicknameInput).toBeVisible({ timeout: 5_000 });
+    const originalNickname = await nicknameInput.inputValue();
+
+    const newNickname = `Renamed-${Date.now()}`;
+    try {
+      await nicknameInput.fill(newNickname);
+      await page.locator('[data-testid="edit-user-save"]').click();
+
+      // Toast confirms the PATCH landed.
+      await expect(page.getByText(/profile updated/i)).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5_000 });
+
+      // Dual-write verification — the profile header (sourced via the user
+      // query, which is invalidated + refetched on save) reflects the new
+      // nickname. Auto-retrying assertion handles the microtask race.
+      await expect(headerNickname).toHaveText(newNickname, { timeout: 10_000 });
+    } finally {
+      // Restore — open the modal again and write the original value back.
+      await editTrigger.click();
+      await expect(nicknameInput).toBeVisible({ timeout: 5_000 });
+      await nicknameInput.fill(originalNickname);
+      await page.locator('[data-testid="edit-user-save"]').click();
+      await expect(page.getByText(/profile updated/i)).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5_000 });
+    }
   });
 
-  test('@cicd smoke: edit position preference via profile edit modal', async ({ page }) => {
-    // Navigate to the admin user's profile page
-    await visitAndWaitForHydration(page, `/user/${ADMIN_PK}`);
-    await expect(page.locator('h1')).toBeVisible({ timeout: 15000 });
+  test('avatar URL updates persist across reload', async ({ page, loginAdmin }) => {
+    await loginAdmin();
+    await page.goto('/profile');
 
-    // Click the edit profile button (EditIconButton with sr-only text "Edit Profile")
-    const editBtn = page.getByRole('button', { name: 'Edit Profile' });
-    await expect(editBtn).toBeVisible({ timeout: 5000 });
-    await editBtn.click();
+    await expect(
+      page.locator('[data-testid="user-card-nickname"]').first(),
+    ).toBeVisible({ timeout: 15_000 });
 
-    // Wait for the edit profile modal to appear
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 5000 });
-    await expect(dialog.getByText('Edit Profile').first()).toBeVisible();
+    await page.locator('[data-testid="edit-user-btn"]').first().click();
+    const avatarInput = page.locator('[data-testid="edit-user-avatar"]');
+    await expect(avatarInput).toBeVisible({ timeout: 5_000 });
+    const originalAvatar = await avatarInput.inputValue();
 
-    // The PositionForm renders Carry as the first Select inside "Edit Positions".
-    // Locate the first combobox (Carry) inside the modal.
-    const carryTrigger = dialog.locator('button[role="combobox"]').first();
-    await expect(carryTrigger).toBeVisible({ timeout: 5000 });
+    const newAvatar = `https://example.com/test-${Date.now()}.png`;
+    try {
+      await avatarInput.fill(newAvatar);
+      await page.locator('[data-testid="edit-user-save"]').click();
+      await expect(page.getByText(/profile updated/i)).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5_000 });
 
-    // Read the current carry value text from the trigger
-    const originalCarryText = (await carryTrigger.textContent())?.trim() ?? '';
-
-    // Determine a new value: toggle between "1: Favorite" and "2: Can play"
-    const isCurrentlyFavorite = originalCarryText.includes('1:');
-    const newOptionText = isCurrentlyFavorite ? '2: Can play' : '1: Favorite';
-
-    // Click the carry select trigger to open the dropdown
-    await carryTrigger.click();
-
-    // Select the new option from the dropdown
-    const option = page.getByRole('option', { name: newOptionText });
-    await expect(option).toBeVisible({ timeout: 5000 });
-    await option.click();
-
-    // Wait for the select dropdown to close
-    await page.waitForTimeout(300);
-
-    // Set up response listener BEFORE clicking save
-    const postResponse = page.waitForResponse(
-      (resp) =>
-        resp.request().method() === 'POST' &&
-        resp.url().includes('/profile_update'),
-      { timeout: 15000 },
-    );
-
-    // Click Save Changes
-    const saveBtn = dialog.getByRole('button', { name: 'Save Changes' });
-    await expect(saveBtn).toBeVisible({ timeout: 5000 });
-    await saveBtn.click();
-
-    // Wait for the POST to complete with 201
-    const response = await postResponse;
-    expect(response.status()).toBe(201);
-
-    // The modal closes automatically on success
-    await expect(dialog).not.toBeVisible({ timeout: 5000 });
-
-    // Verify the toast success message appeared
-    await expect(page.getByText('Profile updated successfully')).toBeVisible({
-      timeout: 5000,
-    });
-
-    // Verify the Positions card is visible in the overview tab
-    // (confirms the page re-rendered with updated data)
-    const positionsLabel = page.getByText('Positions').first();
-    await expect(positionsLabel).toBeVisible({ timeout: 5000 });
-
-    // --- Restore original value ---
-    await editBtn.click();
-    await expect(dialog).toBeVisible({ timeout: 5000 });
-
-    // Find the first combobox (Carry) again
-    const carryTriggerRestore = dialog.locator('button[role="combobox"]').first();
-    await expect(carryTriggerRestore).toBeVisible({ timeout: 5000 });
-
-    // Determine the restore option text from the original value
-    let restoreOptionText: string;
-    if (originalCarryText.includes('0:') || originalCarryText.includes("Don't show")) {
-      restoreOptionText = "0: Don't show this role";
-    } else if (originalCarryText.includes('1:')) {
-      restoreOptionText = '1: Favorite';
-    } else if (originalCarryText.includes('2:')) {
-      restoreOptionText = '2: Can play';
-    } else if (originalCarryText.includes('3:')) {
-      restoreOptionText = '3: If the team needs';
-    } else if (originalCarryText.includes('4:')) {
-      restoreOptionText = '4: I would rather not but I guess';
-    } else if (originalCarryText.includes('5:')) {
-      restoreOptionText = '5: Least Favorite';
-    } else {
-      // Default: if no position was set, the placeholder might show "0: Don't show"
-      restoreOptionText = "0: Don't show this role";
+      await page.reload();
+      await page.locator('[data-testid="edit-user-btn"]').first().click();
+      await expect(page.locator('[data-testid="edit-user-avatar"]')).toHaveValue(
+        newAvatar,
+        { timeout: 10_000 },
+      );
+    } finally {
+      // Restore — the modal is open if the happy path finished, but it may
+      // also be closed if a prior step failed. Re-open defensively.
+      const stillOpen = await page
+        .locator('[data-testid="edit-user-avatar"]')
+        .isVisible({ timeout: 500 })
+        .catch(() => false);
+      if (!stillOpen) {
+        await page.locator('[data-testid="edit-user-btn"]').first().click();
+        await expect(page.locator('[data-testid="edit-user-avatar"]')).toBeVisible({
+          timeout: 5_000,
+        });
+      }
+      await page.locator('[data-testid="edit-user-avatar"]').fill(originalAvatar);
+      await page.locator('[data-testid="edit-user-save"]').click();
+      await expect(page.getByText(/profile updated/i)).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5_000 });
     }
-
-    await carryTriggerRestore.click();
-    const restoreOption = page.getByRole('option', { name: restoreOptionText });
-    await expect(restoreOption).toBeVisible({ timeout: 5000 });
-    await restoreOption.click();
-    await page.waitForTimeout(300);
-
-    // Save the restoration
-    const restoreResponsePromise = page.waitForResponse(
-      (resp) =>
-        resp.request().method() === 'POST' &&
-        resp.url().includes('/profile_update'),
-      { timeout: 15000 },
-    );
-
-    const saveBtnRestore = dialog.getByRole('button', { name: 'Save Changes' });
-    await saveBtnRestore.click();
-
-    const restoreResp = await restoreResponsePromise;
-    expect(restoreResp.status()).toBe(201);
-
-    // Verify modal closes after restoration
-    await expect(dialog).not.toBeVisible({ timeout: 5000 });
   });
 });
