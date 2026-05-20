@@ -1,19 +1,17 @@
 import type { FallbackProps } from 'react-error-boundary';
 
+import { SecondaryButton } from '~/components/ui/buttons/SecondaryButton';
+
 export function ProfileErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   const message = error instanceof Error ? error.message : '';
   return (
-    <div className="p-4 space-y-2">
+    <div className="flex flex-col gap-2 p-4">
       <p className="text-sm text-base-content">
         Could not load profile. {message}
       </p>
-      <button
-        type="button"
-        onClick={() => resetErrorBoundary()}
-        className="underline text-sm"
-      >
+      <SecondaryButton type="button" onClick={() => resetErrorBoundary()}>
         Retry
-      </button>
+      </SecondaryButton>
     </div>
   );
 }

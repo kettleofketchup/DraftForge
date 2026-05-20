@@ -144,7 +144,7 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form onSubmit={onSubmit} className="flex flex-col gap-4">
         {/* Avatar is Discord-synced (avatar-hash, not URL) and not user-editable.
             Showing the current avatar here as a read-only display so the user
             can confirm their identity in the modal. */}

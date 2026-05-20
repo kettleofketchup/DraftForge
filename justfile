@@ -21,10 +21,22 @@ bootstrap *args:
     cd "{{root}}"
 
     # Detect worktree once, up front — reused for .env copy + dev-startup skip.
-    main_repo="$(git rev-parse --git-common-dir 2>/dev/null | sed 's|/\.git$||')"
+    # In a worktree, .git is a FILE (containing `gitdir: <path>`). In a main
+    # checkout, .git is a DIRECTORY. That's the most reliable signal — much
+    # more robust than parsing `git rev-parse --git-common-dir`, which
+    # returns the relative path `.git` in a main repo and absolute paths in
+    # worktrees, so string comparisons against {{root}}/.git or "." misfire.
     is_worktree=false
-    if [[ -n "$main_repo" && "$main_repo" != "{{root}}/.git" && "$main_repo" != "." ]]; then
+    main_repo=""
+    if [[ -f "{{root}}/.git" ]]; then
         is_worktree=true
+        common_dir="$(git rev-parse --git-common-dir 2>/dev/null)"
+        # common_dir may be relative or absolute; normalize.
+        if [[ "$common_dir" = /* ]]; then
+            main_repo="$(dirname "$common_dir")"
+        else
+            main_repo="$(cd "$common_dir" && pwd | sed 's|/\.git$||')"
+        fi
     fi
 
     # Parse --up out of args (forces docker startup even in worktree).
