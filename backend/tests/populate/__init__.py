@@ -37,6 +37,7 @@ from tests.populate.constants import (
     TEST_STEAM_LEAGUE_ID,
     TOURNAMENT_USERS,
 )
+from tests.populate.auth_matrix import populate_auth_matrix_data
 from tests.populate.csv_import import populate_csv_import_data
 from tests.populate.demo import populate_demo_tournaments
 from tests.populate.events import populate_events_data
@@ -88,6 +89,9 @@ def populate_all(force=False):
         ("User Edit Data", populate_user_edit_data),
         ("Shuffle Tie Data", populate_shuffle_tie_data),
         ("Events Data", populate_events_data),
+        # Auth Matrix runs after every other isolated-org populate so its
+        # auto-incremented org pk lands on 8 (matching AUTH_MATRIX_ORG.pk).
+        ("Auth Matrix Data", populate_auth_matrix_data),
         ("Demo Tournaments", populate_demo_tournaments),
     ]
 
@@ -134,6 +138,7 @@ __all__ = [
     "populate_csv_import_data",
     "populate_user_edit_data",
     "populate_events_data",
+    "populate_auth_matrix_data",
     "populate_demo_tournaments",
     "populate_test_tournaments",
     # Utilities

@@ -13,6 +13,11 @@ from .test_auth import (
     login_admin,
     login_as_discord_id,
     login_as_user,
+    login_auth_matrix_league_admin,
+    login_auth_matrix_league_staff,
+    login_auth_matrix_org_admin,
+    login_auth_matrix_org_member,
+    login_auth_matrix_org_staff,
     login_event_league_staff,
     login_league_admin,
     login_league_staff,
@@ -103,6 +108,33 @@ urlpatterns = [
         "login-event-league-staff/",
         login_event_league_staff,
         name="login-event-league-staff",
+    ),
+    # Auth-matrix role logins — isolated org/league for the role-context
+    # matrix in frontend/tests/playwright/e2e/17-auth/.
+    path(
+        "login-auth-matrix-org-admin/",
+        login_auth_matrix_org_admin,
+        name="login-auth-matrix-org-admin",
+    ),
+    path(
+        "login-auth-matrix-org-staff/",
+        login_auth_matrix_org_staff,
+        name="login-auth-matrix-org-staff",
+    ),
+    path(
+        "login-auth-matrix-org-member/",
+        login_auth_matrix_org_member,
+        name="login-auth-matrix-org-member",
+    ),
+    path(
+        "login-auth-matrix-league-admin/",
+        login_auth_matrix_league_admin,
+        name="login-auth-matrix-league-admin",
+    ),
+    path(
+        "login-auth-matrix-league-staff/",
+        login_auth_matrix_league_staff,
+        name="login-auth-matrix-league-staff",
     ),
     path(
         "login-as/",

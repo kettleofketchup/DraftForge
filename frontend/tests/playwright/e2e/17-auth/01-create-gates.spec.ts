@@ -35,7 +35,10 @@
 import { roleMatrixTest as test, expect, ROLE_NAMES, type RoleName } from '../../fixtures';
 import type { Page } from '@playwright/test';
 
-const DTX_ORG_PK = 1;
+// Isolated org used by every non-site role in the matrix. Created by
+// populate_auth_matrix_data; keeps the gate contract independent of
+// any other suite that mutates DTX.
+const AUTH_MATRIX_ORG_PK = 8;
 
 type Expectations = Record<RoleName, boolean>;
 
@@ -61,8 +64,8 @@ const CREATE_ORG_EXPECTATIONS: Expectations = {
 const CREATE_LEAGUE_EXPECTATIONS: Expectations = {
   siteAdmin: true,    // is_superuser → useIsOrganizationStaff bypass
   siteStaff: true,    // is_staff → same bypass
-  orgAdmin: true,     // in DTX.admins
-  orgStaff: true,     // in DTX.staff
+  orgAdmin: true,     // in AUTH_MATRIX_ORG.admins
+  orgStaff: true,     // in AUTH_MATRIX_ORG.staff
   orgMember: false,
   leagueAdmin: false, // league role doesn't cascade UP to org
   leagueStaff: false,
@@ -109,7 +112,7 @@ const CREATE_TOURNAMENT_EXPECTATIONS: Expectations = {
   orgAdmin: true,     // admin_organization_ids: [1]
   orgStaff: false,    // staff doesn't cascade to admin
   orgMember: false,
-  leagueAdmin: true,  // admin_league_ids: [1]
+  leagueAdmin: true,  // admin_league_ids: [9]
   leagueStaff: false,
   anonymous: false,
 };
@@ -171,10 +174,10 @@ test.describe('Create-action permission matrix (8 roles in parallel)', () => {
     );
   });
 
-  test('Create League button visibility (DTX org)', async ({ roleContexts }) => {
+  test('Create League button visibility (auth-matrix org)', async ({ roleContexts }) => {
     await assertGateAcrossRoles(
       roleContexts,
-      `/organizations/${DTX_ORG_PK}?tab=leagues`,
+      `/organizations/${AUTH_MATRIX_ORG_PK}?tab=leagues`,
       'create-league-button',
       CREATE_LEAGUE_EXPECTATIONS,
     );
@@ -183,7 +186,7 @@ test.describe('Create-action permission matrix (8 roles in parallel)', () => {
   test('Create Event button visibility (org-detail events tab)', async ({ roleContexts }) => {
     await assertGateAcrossRoles(
       roleContexts,
-      `/organizations/${DTX_ORG_PK}?tab=events`,
+      `/organizations/${AUTH_MATRIX_ORG_PK}?tab=events`,
       'create-event-btn',
       CREATE_EVENT_EXPECTATIONS,
     );
@@ -196,7 +199,7 @@ test.describe('Create-action permission matrix (8 roles in parallel)', () => {
     // now that it fetches the full org via useOrganization.
     await assertGateAcrossRoles(
       roleContexts,
-      `/events?organization=${DTX_ORG_PK}`,
+      `/events?organization=${AUTH_MATRIX_ORG_PK}`,
       'create-event-btn',
       CREATE_EVENT_EVENTS_PAGE_EXPECTATIONS,
     );
