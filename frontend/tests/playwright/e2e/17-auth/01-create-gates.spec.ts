@@ -11,9 +11,11 @@
  * ``docs/dev/auth/roles.md``. The diagram below is a quick reference;
  * if it drifts from that page, the doc is authoritative.
  *
- * Expected matrix (✓ = button visible to that role). Two Create Event
- * rows because the org-detail tab and the /events route use different
- * gates (``useIsOrganizationStaff`` vs ``useIsOrganizationAdmin``):
+ * Expected matrix (✓ = button visible to that role). The Create Event
+ * row is locked separately for the org-detail tab and the /events
+ * route — they share the same testid and now share the same gate
+ * (``useIsOrganizationStaff``), but the matrix asserts both to lock
+ * the contract end-to-end:
  *
  *                                       siteAdmin siteStaff orgAdmin orgStaff orgMember leagueAdmin leagueStaff anonymous
  *   createOrganization                     ✓         ✓         ✓        ✓        ✓         ✓           ✓          ✗
@@ -193,10 +195,12 @@ test.describe('Create-action permission matrix (8 roles in parallel)', () => {
   });
 
   test('Create Event button visibility (/events?organization=X)', async ({ roleContexts }) => {
-    // Same testid as the org-detail tab but a different gate (hook-based,
-    // admin-only) — see the EVENTS_PAGE expectation comment for the
-    // hierarchy difference. This locks the contract for the /events route
-    // now that it fetches the full org via useOrganization.
+    // Same testid and same gate as the org-detail tab — both use
+    // ``useIsOrganizationStaff`` now. The /events route fetches the
+    // full org via useOrganization(selectedOrgIdNum) so the staff/admin
+    // arrays are populated; this test locks the route-level contract
+    // explicitly so a future regression to the stripped-payload path
+    // shows up here.
     await assertGateAcrossRoles(
       roleContexts,
       `/events?organization=${AUTH_MATRIX_ORG_PK}`,
