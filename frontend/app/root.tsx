@@ -11,7 +11,6 @@ import {
 } from 'react-router';
 import type { LoaderFunctionArgs } from 'react-router';
 import { useChangeLanguage } from 'remix-i18next/react';
-import { i18nServer } from './i18n/server';
 import './i18n/types';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { Toaster } from '~/components/ui/sonner';
@@ -34,6 +33,10 @@ const log = getLogger('root');
 export const links: Route.LinksFunction = () => [];
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  // Dynamic import keeps server-only code (`remix-i18next/server`, cookie
+  // wiring) out of the client bundle — matches the `~/lib/ssr.server`
+  // pattern used by other routes in this repo.
+  const { i18nServer } = await import('~/i18n/i18n.server');
   const locale = await i18nServer.getLocale(request);
   return { locale };
 }

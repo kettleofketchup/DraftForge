@@ -16,6 +16,11 @@ function writeCookie(name: string, value: string): void {
 }
 
 function resolveLocale(): SupportedLocale {
+  // Detection chain: ?lang= → df-locale cookie → <html lang> → fallback.
+  // The cookie check between query and html lang is load-bearing for
+  // prerendered routes (/, /about): the server never ran, so <html lang>
+  // is the build-time English value — the cookie is the only signal of
+  // the user's saved choice.
   const params = new URLSearchParams(location.search);
   const queryLocale = params.get('lang');
   if (queryLocale && isSupported(queryLocale)) {
@@ -24,6 +29,8 @@ function resolveLocale(): SupportedLocale {
     }
     return queryLocale;
   }
+  const cookieLocale = readCookie('df-locale');
+  if (cookieLocale && isSupported(cookieLocale)) return cookieLocale;
   const htmlLang = document.documentElement.lang;
   if (htmlLang && isSupported(htmlLang)) return htmlLang;
   return FALLBACK_LOCALE;

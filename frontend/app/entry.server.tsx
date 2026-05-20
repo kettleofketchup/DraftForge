@@ -11,7 +11,7 @@ import { ServerRouter } from 'react-router';
 import { renderToPipeableStream } from 'react-dom/server';
 import { I18nextProvider } from 'react-i18next';
 import { createI18nInstance } from './i18n/config';
-import { i18nServer } from './i18n/server';
+import { i18nServer } from './i18n/i18n.server';
 
 export default async function handleRequest(
   request: Request,
