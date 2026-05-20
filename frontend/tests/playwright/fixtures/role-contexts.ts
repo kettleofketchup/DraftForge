@@ -2,8 +2,12 @@
  * Role-Contexts Fixture
  *
  * Provides a map of pre-authenticated BrowserContext + Page pairs, one per
- * role in the project's permission hierarchy. Designed for "matrix" tests
- * that assert UI gates by fanning out across roles with ``Promise.all``:
+ * role in the project's permission hierarchy. The canonical role list and
+ * gate matrix lives in ``docs/dev/auth/roles.md`` — keep this fixture in
+ * sync with that document whenever a role is added, renamed, or removed.
+ *
+ * Designed for "matrix" tests that assert UI gates by fanning out across
+ * roles with ``Promise.all``:
  *
  *   test('Create X gate (all roles)', async ({ roleContexts }) => {
  *     await Promise.all(
