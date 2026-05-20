@@ -23,6 +23,7 @@ import { User } from '~/components/user/user';
 import type { GameType, GuildMember, GuildMembers, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserCacheStore } from '~/store/userCacheStore';
+import { useUserProfileStore } from '~/store/userProfileStore';
 
 const log = getLogger('userStore');
 
@@ -202,6 +203,7 @@ export const useUserStore = create<UserState>()(
       clearUser: () => {
         set({ currentUser: {} as UserType });
         useUserCacheStore.getState().reset();
+        useUserProfileStore.getState().reset();
       },
       isStaff: () => !!get().currentUser?.is_staff,
       globalUserPks: [] as number[],
