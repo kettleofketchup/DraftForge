@@ -1,44 +1,44 @@
 {
+  "aria": {
+    "documentation": "Documentación",
+    "main_nav": "Navegación principal",
+    "open_menu": "Abrir menú",
+    "report_bug": "Reportar un problema",
+    "star_github": "Danos una estrella en GitHub"
+  },
+  "home": "Inicio",
   "login": "Iniciar sesión con Discord",
   "logout": "Cerrar sesión",
-  "profile": "Perfil",
-  "signup_here": "Regístrate aquí",
-  "home": "Inicio",
-  "aria": {
-    "star_github": "Danos una estrella en GitHub",
-    "documentation": "Documentación",
-    "report_bug": "Reportar un problema",
-    "main_nav": "Navegación principal",
-    "open_menu": "Abrir menú"
-  },
   "nav": {
-    "github": "GitHub",
-    "github_subtitle": "Pidiendo estrellas",
-    "github_subtitle_star": "¡Danos una estrella!",
+    "about": "Acerca de",
+    "about_subtitle": "Quiénes somos",
+    "admin": "Administración",
+    "admin_subtitle": "Gestionar sitio",
     "docs": "Documentación",
     "docs_subtitle": "El ingrediente secreto",
     "documentation": "Documentación",
     "documentation_subtitle": "Aprende cómo funciona",
+    "events": "Eventos",
+    "github": "GitHub",
+    "github_subtitle": "Pidiendo estrellas",
+    "github_subtitle_star": "¡Danos una estrella!",
+    "home_subtitle": "Volver al inicio",
+    "leagues": "Ligas",
+    "leagues_subtitle": "Juego clasificatorio",
+    "organizations": "Organizaciones",
+    "organizations_subtitle": "Comunidades",
     "report_issue": "Reportar problema",
     "report_issue_subtitle": "Ayúdanos a solucionarlo",
     "report_issue_subtitle_improve": "Ayúdanos a mejorar",
-    "about": "Acerca de",
-    "about_subtitle": "Quiénes somos",
-    "home_subtitle": "Volver al inicio",
     "tournaments": "Torneos",
     "tournaments_subtitle": "Competir y ganar",
     "users": "Usuarios",
-    "users_subtitle": "Encontrar jugadores",
-    "organizations": "Organizaciones",
-    "organizations_subtitle": "Comunidades",
-    "leagues": "Ligas",
-    "leagues_subtitle": "Juego clasificatorio",
-    "events": "Eventos",
-    "admin": "Administración",
-    "admin_subtitle": "Gestionar sitio"
+    "users_subtitle": "Encontrar jugadores"
   },
+  "profile": "Perfil",
   "section": {
     "navigation": "Navegación",
     "resources": "Recursos"
-  }
+  },
+  "signup_here": "Regístrate aquí"
 }
