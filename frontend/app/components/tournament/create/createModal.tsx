@@ -16,18 +16,20 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '~/components/ui/tooltip';
-import type { UserType } from '~/components/user/types';
-import { useUserStore } from '~/store/userStore';
+import { useCanCreateAnyTournament } from '~/hooks/usePermissions';
 import type { TournamentClassType } from '../types';
 import { TournamentEditForm } from './editForm';
 
 interface Props {}
 
 export const TournamentCreateModal: React.FC<Props> = () => {
-  const currentUser: UserType = useUserStore((state) => state.currentUser);
+  const canCreate = useCanCreateAnyTournament();
   const [open, setOpen] = useState(false);
 
-  if (!currentUser || (!currentUser.is_staff && !currentUser.is_superuser)) {
+  // Mirror the backend's per-league admin cascade: site admin, or admin
+  // of any organisation, or admin of any league. Keeps the button from
+  // showing to users the backend would reject on submit.
+  if (!canCreate) {
     return <></>;
   }
 

@@ -32,7 +32,7 @@ import { Badge } from '~/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
 import { Switch } from '~/components/ui/switch';
 import { useEvents } from '~/hooks/useEvent';
-import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
+import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 import api from '~/components/api/axios';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 
@@ -306,11 +306,13 @@ export default function EventsPage() {
 
   // Get selected organization for permission checks. The ``organizations``
   // list from useOrganizations() returns a stripped payload (no admins /
-  // staff arrays), so useIsOrganizationAdmin would never resolve to true
-  // for org admins. Fetch the full org detail when one is selected.
+  // staff arrays), so the permission hook would never resolve true for
+  // org admins/staff. Fetch the full org detail when one is selected.
+  // Events are operational (not governance), so org staff get the gate
+  // — same contract as the org-detail Events tab.
   const { organization: selectedOrgFull } = useOrganization(selectedOrgIdNum);
-  const isOrgAdmin = useIsOrganizationAdmin(selectedOrgFull);
-  const canCreate = isOrgAdmin && selectedOrgIdNum;
+  const isOrgStaff = useIsOrganizationStaff(selectedOrgFull);
+  const canCreate = isOrgStaff && selectedOrgIdNum;
 
   function setOrgFilter(value: string | null) {
     const newParams = new URLSearchParams(searchParams);

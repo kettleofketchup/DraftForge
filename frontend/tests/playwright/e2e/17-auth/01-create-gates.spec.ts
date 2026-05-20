@@ -12,11 +12,11 @@
  * gates (``useIsOrganizationStaff`` vs ``useIsOrganizationAdmin``):
  *
  *                                       siteAdmin siteStaff orgAdmin orgStaff orgMember leagueAdmin leagueStaff anonymous
- *   createOrganization                     ✓         ✗         ✗        ✗        ✗         ✗           ✗          ✗
+ *   createOrganization                     ✓         ✓         ✓        ✓        ✓         ✓           ✓          ✗
  *   createLeague    (org-detail)           ✓         ✓         ✓        ✓        ✗         ✗           ✗          ✗
  *   createEvent     (org-detail)           ✓         ✓         ✓        ✓        ✗         ✗           ✗          ✗
- *   createEvent     (/events?org=X)        ✓         ✓         ✓        ✗        ✗         ✗           ✗          ✗
- *   createTournament                       ✓         ✓         ✗        ✗        ✗         ✗           ✗          ✗
+ *   createEvent     (/events?org=X)        ✓         ✓         ✓        ✓        ✗         ✗           ✗          ✗
+ *   createTournament                       ✓         ✓         ✓        ✗        ✗         ✓           ✗          ✗
  *
  * The site-admin row exists because the permission hooks
  * (``useIsLeagueStaff`` / ``useIsOrganizationAdmin`` etc.) bypass on
@@ -35,14 +35,17 @@ const DTX_ORG_PK = 1;
 
 type Expectations = Record<RoleName, boolean>;
 
+// Any logged-in user can create their own organization (the backend
+// OrganizationView.create permission has always been ``IsAuthenticated``;
+// the frontend gate was over-restrictive). Only anonymous is gated out.
 const CREATE_ORG_EXPECTATIONS: Expectations = {
-  siteAdmin: true,    // is_superuser
-  siteStaff: false,   // is_staff alone is not enough — route gate is is_superuser only
-  orgAdmin: false,
-  orgStaff: false,
-  orgMember: false,
-  leagueAdmin: false,
-  leagueStaff: false,
+  siteAdmin: true,
+  siteStaff: true,
+  orgAdmin: true,
+  orgStaff: true,
+  orgMember: true,
+  leagueAdmin: true,
+  leagueStaff: true,
   anonymous: false,
 };
 
@@ -75,28 +78,34 @@ const CREATE_EVENT_EXPECTATIONS: Expectations = {
   anonymous: false,
 };
 
-// The /events page uses ``useIsOrganizationAdmin`` against the
-// (now full-org) selectedOrg fetched via useOrganization(selectedOrgIdNum).
-// The hook's site-admin bypass kicks in for is_staff || is_superuser, so
-// site staff also qualify here even without explicit org membership.
+// /events now uses ``useIsOrganizationStaff`` against the full org
+// fetched via useOrganization(selectedOrgIdNum). Same gate as the
+// org-detail Events tab — events are operational, not governance,
+// so staff get the create button. Site admin bypass still applies via
+// the hook's is_staff || is_superuser short-circuit.
 const CREATE_EVENT_EVENTS_PAGE_EXPECTATIONS: Expectations = {
-  siteAdmin: true,    // is_superuser → useIsOrganizationAdmin bypass
-  siteStaff: true,    // is_staff → useIsOrganizationAdmin bypass (post-fix)
-  orgAdmin: true,     // in DTX.admins
-  orgStaff: false,    // staff is NOT admin (this gate is admin-only)
+  siteAdmin: true,
+  siteStaff: true,
+  orgAdmin: true,
+  orgStaff: true,
   orgMember: false,
   leagueAdmin: false,
   leagueStaff: false,
   anonymous: false,
 };
 
+// Tournament gate mirrors the backend's ``has_league_admin_access``
+// cascade via ``useCanCreateAnyTournament``: site admin OR admin of any
+// org (admin_organization_ids non-empty) OR admin of any league
+// (admin_league_ids non-empty). Staff roles can't create tournaments —
+// only admins can, matching the backend perform_create check.
 const CREATE_TOURNAMENT_EXPECTATIONS: Expectations = {
-  siteAdmin: true,    // gate: is_staff || is_superuser
-  siteStaff: true,
-  orgAdmin: false,
-  orgStaff: false,
+  siteAdmin: true,    // is_superuser
+  siteStaff: true,    // is_staff bypass (matches frontend convention)
+  orgAdmin: true,     // admin_organization_ids: [1]
+  orgStaff: false,    // staff doesn't cascade to admin
   orgMember: false,
-  leagueAdmin: false,
+  leagueAdmin: true,  // admin_league_ids: [1]
   leagueStaff: false,
   anonymous: false,
 };
