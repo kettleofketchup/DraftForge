@@ -10,10 +10,12 @@ flapping the matrix, and vice versa.
 Infrastructure created:
 - Auth Matrix Test Org (pk=8)
 - Auth Matrix League (pk=9, steam_league_id=17937) under the org
-- 3 tournaments under the league:
-    pk=10  "Auth Matrix No Bracket"        — no bracket (Generate test)
-    pk=11  "Auth Matrix Pending Bracket"   — bracket with all matches pending
-    pk=12  "Auth Matrix Completed Bracket" — bracket with all matches won
+- 3 tournaments under the league (pks chosen above the auto-increment
+  range used by other populate steps so explicit-pk creates can't
+  collide with anyone else's auto-assigned tournament rows):
+    pk=200 "Auth Matrix No Bracket"        — no bracket (Generate test)
+    pk=201 "Auth Matrix Pending Bracket"   — bracket with all matches pending
+    pk=202 "Auth Matrix Completed Bracket" — bracket with all matches won
 - 5 auth-matrix users (pk=1090-1094) wired into the org/league roles
 
 Runs last in ``populate_all`` so the auto-incremented org pk lands on 8.

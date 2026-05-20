@@ -20,7 +20,10 @@ def is_org_owner(user, obj):
 
 
 def has_org_admin_access(user, obj):
-    """Check if user is org owner, org admin, or superuser.
+    """Check if user is a site admin, org owner, or org admin.
+
+    Site admin = ``is_staff || is_superuser`` (matches the frontend
+    permission-hook convention so the gate is identical on both sides).
 
     Args:
         user: The user to check
