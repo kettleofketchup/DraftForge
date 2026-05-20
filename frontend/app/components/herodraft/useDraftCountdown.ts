@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useHeroDraftStore } from "~/store/heroDraftStore";
 import type { HeroDraftTick } from "./types";
 
 /**
@@ -25,20 +26,17 @@ const ZERO: DraftCountdown = {
   resumingRemainingMs: 0,
 };
 
-function computeServerNowMs(tick: HeroDraftTick): number {
-  // Offset between server clock and ours. Server time was the moment the
-  // broadcast was assembled; our Date.now() at receive includes network
-  // latency, so offset absorbs both clock skew and one-way latency.
-  const serverTimeMs = new Date(tick.server_time).getTime();
-  const receivedAtMs = Date.now();
-  const offset = serverTimeMs - receivedAtMs;
-  return Date.now() + offset;
-}
-
-function deriveCountdown(tick: HeroDraftTick | null): DraftCountdown {
+function deriveCountdown(
+  tick: HeroDraftTick | null,
+  serverClockOffsetMs: number,
+): DraftCountdown {
   if (!tick) return ZERO;
 
-  const serverNowMs = computeServerNowMs(tick);
+  // Offset was captured ONCE at tick-receive time by the store.
+  // Computing it again per frame (Date.now() + (server_time - Date.now()))
+  // collapses to `server_time` exactly — the clock would only advance
+  // when a new tick arrived (1Hz), not the 60fps we want.
+  const serverNowMs = Date.now() + serverClockOffsetMs;
 
   // RESUMING — single countdown to draft.resuming_until
   if (tick.draft_state === "resuming" && tick.resuming_until) {
@@ -96,16 +94,19 @@ function deriveCountdown(tick: HeroDraftTick | null): DraftCountdown {
  * tick reference, so offset re-computation happens on next frame).
  */
 export function useDraftCountdown(tick: HeroDraftTick | null): DraftCountdown {
+  const serverClockOffsetMs = useHeroDraftStore((s) => s.serverClockOffsetMs);
   const [countdown, setCountdown] = useState<DraftCountdown>(() =>
-    deriveCountdown(tick),
+    deriveCountdown(tick, serverClockOffsetMs),
   );
   const tickRef = useRef(tick);
+  const offsetRef = useRef(serverClockOffsetMs);
   tickRef.current = tick;
+  offsetRef.current = serverClockOffsetMs;
 
   useEffect(() => {
     let rafId = 0;
     const frame = () => {
-      setCountdown(deriveCountdown(tickRef.current));
+      setCountdown(deriveCountdown(tickRef.current, offsetRef.current));
       rafId = requestAnimationFrame(frame);
     };
     rafId = requestAnimationFrame(frame);

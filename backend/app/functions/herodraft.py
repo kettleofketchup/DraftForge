@@ -181,6 +181,18 @@ def _evaluate_client_pick_time(server_now, client_picked_at, draft_id):
     if not client_picked_at:
         return server_now, "server_now", None
 
+    # Subtracting a naive datetime from a tz-aware one raises TypeError.
+    # The view layer also filters these out; this is a defense-in-depth
+    # guard for tests or future direct callers.
+    if client_picked_at.tzinfo is None:
+        log.warning(
+            "pick_time_naive_datetime",
+            system="herodraft",
+            subsystem="timing",
+            draft_id=draft_id,
+        )
+        return server_now, "server_now", None
+
     age_s = (server_now - client_picked_at).total_seconds()
     age_ms = int(age_s * 1000)
 
