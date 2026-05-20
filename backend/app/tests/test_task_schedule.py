@@ -198,8 +198,10 @@ class FireSignupPostRepostTest(TestCase):
             discord_announcement=True,
             discord_announcement_channel_id="ch_ann",
         )
-        # has_org_staff_access goes through has_org_admin_access which accepts
-        # is_superuser; plain is_staff doesn't qualify as org staff.
+        # Both is_staff and is_superuser bypass the org-admin cascade
+        # (see has_org_admin_access in app/permissions_org.py). We use a
+        # superuser here because the test predates that cascade widening
+        # and there's no reason to narrow it.
         self.admin = CustomUser.objects.create_superuser(
             username="repost_admin", password="x"
         )

@@ -38,10 +38,14 @@ def populate_auth_matrix_data(force=False):
 
     print("Populating auth-matrix test data...")
 
-    # 1. Org
+    # 1. Org. Pin the pk explicitly so the matrix spec's
+    # AUTH_MATRIX_ORG_PK = 8 survives anyone reordering populate steps
+    # above this one — previously the pk landed by autoincrement
+    # side-effect, which was fragile.
     org, created = Organization.objects.update_or_create(
         name=AUTH_MATRIX_ORG.name,
         defaults={
+            "pk": AUTH_MATRIX_ORG.pk,
             "description": AUTH_MATRIX_ORG.description,
             "logo": "",
             "rules_template": AUTH_MATRIX_ORG.rules_template,
@@ -50,10 +54,11 @@ def populate_auth_matrix_data(force=False):
     )
     print(f"  {'Created' if created else 'Updated'} org: {org.name} (pk={org.pk})")
 
-    # 2. League
+    # 2. League. Same explicit-pk rationale as the org above.
     league, created = League.objects.update_or_create(
         steam_league_id=AUTH_MATRIX_LEAGUE.steam_league_id,
         defaults={
+            "pk": AUTH_MATRIX_LEAGUE.pk,
             "name": AUTH_MATRIX_LEAGUE.name,
             "description": AUTH_MATRIX_LEAGUE.description,
             "rules": AUTH_MATRIX_LEAGUE.rules,
