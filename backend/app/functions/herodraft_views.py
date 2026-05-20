@@ -424,15 +424,17 @@ def do_submit_pick(request, draft_pk):
             {"error": "hero_id must be an integer"}, status=status.HTTP_400_BAD_REQUEST
         )
 
-    # Optional — submit_pick handles None and out-of-window timestamps
-    # internally, so a malformed value just degrades to server-receive time.
+    # Optional — submit_pick degrades to server-receive time if missing.
+    # `parse_datetime` returns None for malformed input (doesn't raise) and
+    # can return a naive datetime when the string omits a tz offset;
+    # subtracting a naive value from `timezone.now()` raises TypeError, so
+    # reject both up front.
     client_picked_at = None
     raw = request.data.get("client_picked_at")
-    if raw:
-        try:
-            client_picked_at = parse_datetime(raw)
-        except (ValueError, TypeError):
-            client_picked_at = None
+    if isinstance(raw, str) and raw:
+        parsed = parse_datetime(raw)
+        if parsed is not None and parsed.tzinfo is not None:
+            client_picked_at = parsed
 
     # Check hero is available
     available = get_available_heroes(draft)

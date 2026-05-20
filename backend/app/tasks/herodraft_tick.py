@@ -641,7 +641,12 @@ async def run_tick_loop(draft_id: int, stop_event: threading.Event):
                 )
 
         last_tick_start = tick_start
-        await asyncio.sleep(1)
+        # Sleep just enough to maintain a 1Hz cadence. Sleeping a flat 1s
+        # would push the next tick out to `1s + work_duration`, which
+        # made `tick_loop_stalled` over-report (it compares start-to-start
+        # gaps against 1s expected). max(0, ...) absorbs a slow tick by
+        # firing immediately on the next iteration to catch up.
+        await asyncio.sleep(max(0.0, 1.0 - tick_duration))
 
     log.info(
         "tick_loop_ended",

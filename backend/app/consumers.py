@@ -516,19 +516,30 @@ class HeroDraftConsumer(BaseDraftConsumer):
         await self.send(text_data=json.dumps(message))
 
     async def herodraft_tick(self, event):
-        """Handle tick updates during active drafting."""
+        """Forward tick anchors from the channel layer to this WS client.
+
+        Anchor fields (server_time + round_started_at + round_grace_time_ms
+        + raw team reserves + resuming_until) drive the client-side rAF
+        countdown. See `backend/app/tasks/herodraft_tick.py::broadcast_tick`
+        for the producer side.
+        """
         await self.send(
             text_data=json.dumps(
                 {
                     "type": "herodraft_tick",
+                    "draft_state": event.get("draft_state"),
+                    "server_time": event.get("server_time"),
+                    # DRAFTING anchors
                     "current_round": event.get("current_round"),
                     "active_team_id": event.get("active_team_id"),
-                    "grace_time_remaining_ms": event.get("grace_time_remaining_ms"),
+                    "round_started_at": event.get("round_started_at"),
+                    "round_grace_time_ms": event.get("round_grace_time_ms"),
                     "team_a_id": event.get("team_a_id"),
                     "team_a_reserve_ms": event.get("team_a_reserve_ms"),
                     "team_b_id": event.get("team_b_id"),
                     "team_b_reserve_ms": event.get("team_b_reserve_ms"),
-                    "draft_state": event.get("draft_state"),
+                    # RESUMING anchor
+                    "resuming_until": event.get("resuming_until"),
                 }
             )
         )
