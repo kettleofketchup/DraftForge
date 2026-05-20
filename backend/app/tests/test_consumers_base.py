@@ -238,3 +238,39 @@ class TestSpanInstrumentation(SimpleTestCase):
         # Exception event recorded
         exc_events = [e for e in spans[0].events if e.name == "exception"]
         self.assertEqual(len(exc_events), 1)
+
+    def test_handler_span_is_child_of_traced_message(self):
+        """Inner handler spans nest under the traced_message parent span.
+
+        This is the value-add of wrapping `receive()` with
+        `traced_message` even when handlers already span themselves —
+        Tempo's waterfall view shows dispatch overhead vs. handler work
+        as parent/child instead of two unrelated traces. Catches a
+        future refactor that accidentally opens the inner span outside
+        the message context (which would re-parent it to no-op root).
+        """
+
+        async def run():
+            with mock.patch("app.tasks.herodraft_tick.get_redis_client") as g:
+                g.return_value = mock.MagicMock()
+                async with self.consumer.traced_message("heartbeat"):
+                    await self.consumer.handle_heartbeat()
+
+        asyncio.run(run())
+
+        message_spans = self._spans_by_name("ws.message")
+        heartbeat_spans = self._spans_by_name("ws.heartbeat")
+        self.assertEqual(len(message_spans), 1)
+        self.assertEqual(len(heartbeat_spans), 1)
+
+        # Heartbeat span's parent should be the message span — verified
+        # via trace_id match (same trace) AND parent.span_id match (same
+        # parent within the trace).
+        self.assertEqual(
+            heartbeat_spans[0].context.trace_id,
+            message_spans[0].context.trace_id,
+        )
+        self.assertEqual(
+            heartbeat_spans[0].parent.span_id,
+            message_spans[0].context.span_id,
+        )
