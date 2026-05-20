@@ -36,6 +36,18 @@ test.describe('WebSocket Connection Lifecycle', () => {
     await context.close();
   });
 
+  // Force navigation off the draft route so any lingering WS from the
+  // previous test is closed before the next one starts measuring. Playwright
+  // closes the page between tests on its own, but the close handler
+  // back-pressures on the server's group_discard + redis cleanup, which
+  // gets slow late in the suite. Navigating away first lets useEffect
+  // cleanup run synchronously while the page is still alive.
+  test.afterEach(async ({ page }) => {
+    if (!page.isClosed()) {
+      await page.goto('about:blank').catch(() => {});
+    }
+  });
+
   test('connects on modal open', async ({ page, loginAdmin }) => {
     await loginAdmin();
 

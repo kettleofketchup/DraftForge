@@ -108,8 +108,14 @@ export class DraftWebSocketHelper {
 
   /**
    * Wait for all active connections to close.
+   *
+   * Default 20s tolerates accumulated load late in the full suite; in
+   * isolation a clean disconnect completes in well under 5s. The flake
+   * we're guarding against is a long-tail timing when the test runner
+   * has been going for >15 minutes and React's useEffect cleanup races
+   * other queued work — not a regression in the disconnect logic.
    */
-  async waitForDisconnect(timeout = 10000): Promise<void> {
+  async waitForDisconnect(timeout = 20000): Promise<void> {
     if (this.activeConnectionCount === 0) return;
 
     const active = this.activeConnections;
