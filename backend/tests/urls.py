@@ -17,6 +17,7 @@ from .test_auth import (
     login_auth_matrix_league_staff,
     login_auth_matrix_org_admin,
     login_auth_matrix_org_member,
+    login_auth_matrix_org_owner,
     login_auth_matrix_org_staff,
     login_event_league_staff,
     login_league_admin,
@@ -111,6 +112,11 @@ urlpatterns = [
     ),
     # Auth-matrix role logins — isolated org/league for the role-context
     # matrix in frontend/tests/playwright/e2e/17-auth/.
+    path(
+        "login-auth-matrix-org-owner/",
+        login_auth_matrix_org_owner,
+        name="login-auth-matrix-org-owner",
+    ),
     path(
         "login-auth-matrix-org-admin/",
         login_auth_matrix_org_admin,

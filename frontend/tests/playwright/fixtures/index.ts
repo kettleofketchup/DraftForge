@@ -22,6 +22,7 @@ export {
   loginLeagueAdmin,
   loginLeagueStaff,
   loginEventLeagueStaff,
+  loginAuthMatrixOrgOwner,
   loginAuthMatrixOrgAdmin,
   loginAuthMatrixOrgStaff,
   loginAuthMatrixOrgMember,

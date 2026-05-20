@@ -19,16 +19,25 @@ from a row there, the tests fail (or you have a documentation bug).
 
 ## The Eight Roles
 
-| Role          | Test fixture                      | Test user pk | Defining attribute                                          |
-| ------------- | --------------------------------- | -----------: | ----------------------------------------------------------- |
-| `siteAdmin`   | `loginAdmin()`                    |         1001 | `is_superuser=True`                                         |
-| `siteStaff`   | `loginStaff()`                    |         1002 | `is_staff=True`, `is_superuser=False`                       |
-| `orgAdmin`    | `loginAuthMatrixOrgAdmin()`       |         1090 | In `Organization.admins` (Auth Matrix Test Org, pk=8)       |
-| `orgStaff`    | `loginAuthMatrixOrgStaff()`       |         1091 | In `Organization.staff` (Auth Matrix Test Org, pk=8)        |
-| `orgMember`   | `loginAuthMatrixOrgMember()`      |         1092 | `OrgUser` row only, no admin/staff role                     |
-| `leagueAdmin` | `loginAuthMatrixLeagueAdmin()`    |         1093 | In `League.admins` (Auth Matrix League, pk=9)               |
-| `leagueStaff` | `loginAuthMatrixLeagueStaff()`    |         1094 | In `League.staff` (Auth Matrix League, pk=9)                |
-| `anonymous`   | _(none — fresh context)_          |            — | No session                                                  |
+| Role          | Test fixture                      | Test user pk | Defining attribute                                                      |
+| ------------- | --------------------------------- | -----------: | ----------------------------------------------------------------------- |
+| `siteAdmin`   | `loginAdmin()`                    |         1001 | `is_superuser=True`                                                     |
+| `siteStaff`   | `loginStaff()`                    |         1002 | `is_staff=True`, `is_superuser=False`                                   |
+| `orgOwner`    | `loginAuthMatrixOrgOwner()`       |         1095 | `Organization.owner` FK (Auth Matrix Test Org, pk=8) — NOT in `admins`  |
+| `orgAdmin`    | `loginAuthMatrixOrgAdmin()`       |         1090 | In `Organization.admins` (Auth Matrix Test Org, pk=8)                   |
+| `orgStaff`    | `loginAuthMatrixOrgStaff()`       |         1091 | In `Organization.staff` (Auth Matrix Test Org, pk=8)                    |
+| `orgMember`   | `loginAuthMatrixOrgMember()`      |         1092 | `OrgUser` row only, no admin/staff role                                 |
+| `leagueAdmin` | `loginAuthMatrixLeagueAdmin()`    |         1093 | In `League.admins` (Auth Matrix League, pk=9)                           |
+| `leagueStaff` | `loginAuthMatrixLeagueStaff()`    |         1094 | In `League.staff` (Auth Matrix League, pk=9)                            |
+| `anonymous`   | _(none — fresh context)_          |            — | No session                                                              |
+
+`orgOwner` is intentionally **not** in the `admins` M2M — only on the
+`Organization.owner` FK. This lets the matrix verify the owner-implies-
+admin cascade in `useIsOrganizationAdmin` / `has_org_admin_access`
+independently of admin-set membership. The expectation is that
+`orgOwner` matches `orgAdmin` everywhere except where the cascade can't
+fire because of upstream store state (see the Edit User tournament row
+below).
 
 The non-site roles use **isolated** users + org + league (Auth Matrix
 Test Org pk=8, Auth Matrix League pk=9) created by
@@ -37,12 +46,17 @@ entities — they exist purely to lock the role-context matrix. This
 mirrors the feature-isolation rule in
 `.claude/skills/testing/references/feature-isolation.md`.
 
-The hierarchy is **site admin > org admin > org staff > league admin >
-league staff > org member > anonymous**. Each tier inherits the abilities
-of the tiers below it (the bypass is implemented in the `useIs*` hooks),
-**except** that staff roles do not cascade upward into admin abilities —
-a league admin is _not_ an org admin and an org staffer is _not_ an org
-admin.
+The hierarchy is **site admin > org owner ≥ org admin > org staff >
+league admin > league staff > org member > anonymous**. Each tier
+inherits the abilities of the tiers below it (the bypass is implemented
+in the `useIs*` hooks), **except** that staff roles do not cascade
+upward into admin abilities — a league admin is _not_ an org admin and
+an org staffer is _not_ an org admin.
+
+Org owner and org admin are at the same logical tier — the permission
+helpers treat them identically. They're distinct only at the data
+model level: `Organization.owner` is a FK to one user, `Organization.admins`
+is a M2M of zero-or-more users. The owner can't be removed; admins can.
 
 ## Site-Admin Cascade
 
@@ -60,13 +74,13 @@ hasn't loaded yet.
 The five entry points locked by `e2e/17-auth/01-create-gates.spec.ts`.
 ✓ = button visible to that role; ✗ = button hidden.
 
-|                              | siteAdmin | siteStaff | orgAdmin | orgStaff | orgMember | leagueAdmin | leagueStaff | anonymous |
-| ---------------------------- | :-------: | :-------: | :------: | :------: | :-------: | :---------: | :---------: | :-------: |
-| Create Organization          |     ✓     |     ✓     |    ✓     |    ✓     |     ✓     |      ✓      |      ✓      |     ✗     |
-| Create League (org-detail)   |     ✓     |     ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
-| Create Event (org-detail)    |     ✓     |     ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
-| Create Event (`/events`)     |     ✓     |     ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
-| Create Tournament            |     ✓     |     ✓     |    ✓     |    ✗     |     ✗     |      ✓      |      ✗      |     ✗     |
+|                              | siteAdmin | siteStaff | orgOwner | orgAdmin | orgStaff | orgMember | leagueAdmin | leagueStaff | anonymous |
+| ---------------------------- | :-------: | :-------: | :------: | :------: | :------: | :-------: | :---------: | :---------: | :-------: |
+| Create Organization          |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✓     |      ✓      |      ✓      |     ✗     |
+| Create League (org-detail)   |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
+| Create Event (org-detail)    |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
+| Create Event (`/events`)     |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
+| Create Tournament            |     ✓     |     ✓     |    ✓     |    ✓     |    ✗     |     ✗     |      ✓      |      ✗      |     ✗     |
 
 **Why some rows look this way:**
 
@@ -86,13 +100,13 @@ The five entry points locked by `e2e/17-auth/01-create-gates.spec.ts`.
 
 The five entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
 
-|                                        | siteAdmin | siteStaff | orgAdmin | orgStaff | orgMember | leagueAdmin | leagueStaff | anonymous |
-| -------------------------------------- | :-------: | :-------: | :------: | :------: | :-------: | :---------: | :---------: | :-------: |
-| Edit User (org members tab)            |     ✓     |     ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
-| Edit User (tournament players tab)     |     ✓     |     ✓     |    ✗     |    ✗     |     ✗     |      ✓      |      ✗      |     ✗     |
-| Generate Bracket                       |     ✓     |     ✓     |    ✓     |    ✓     |     ✗     |      ✓      |      ✓      |     ✗     |
-| Set Bracket Match Winner               |     ✓     |     ✓     |    ✓     |    ✓     |     ✗     |      ✓      |      ✓      |     ✗     |
-| Link Steam Match (bracket)             |     ✓     |     ✓     |    ✗     |    ✗     |     ✗     |      ✗      |      ✗      |     ✗     |
+|                                        | siteAdmin | siteStaff | orgOwner | orgAdmin | orgStaff | orgMember | leagueAdmin | leagueStaff | anonymous |
+| -------------------------------------- | :-------: | :-------: | :------: | :------: | :------: | :-------: | :---------: | :---------: | :-------: |
+| Edit User (org members tab)            |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
+| Edit User (tournament players tab)     |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |      ✓      |      ✗      |     ✗     |
+| Generate Bracket                       |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✓      |      ✓      |     ✗     |
+| Set Bracket Match Winner               |     ✓     |     ✓     |    ✓     |    ✓     |    ✓     |     ✗     |      ✓      |      ✓      |     ✗     |
+| Link Steam Match (bracket)             |     ✓     |     ✓     |    ✗     |    ✗     |    ✗     |     ✗     |      ✗      |      ✗      |     ✗     |
 
 **Why some rows look this way:**
 
@@ -157,6 +171,7 @@ The auth matrix owns:
 | Auth Matrix No Bracket (tournament) |  200 | `populate_auth_matrix_data`         |
 | Auth Matrix Pending Bracket         |  201 | `populate_auth_matrix_data`         |
 | Auth Matrix Completed Bracket       |  202 | `populate_auth_matrix_data`         |
+| `auth_matrix_org_owner` user        | 1095 | `populate_test_auth_users` + wiring |
 | `auth_matrix_org_admin` user        | 1090 | `populate_test_auth_users` + wiring |
 | `auth_matrix_org_staff` user        | 1091 | `populate_test_auth_users` + wiring |
 | `auth_matrix_org_member` user       | 1092 | `populate_test_auth_users` + wiring |

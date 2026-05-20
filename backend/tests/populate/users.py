@@ -97,6 +97,7 @@ def populate_test_auth_users(force=False):
         AUTH_MATRIX_LEAGUE_STAFF_USER,
         AUTH_MATRIX_ORG_ADMIN_USER,
         AUTH_MATRIX_ORG_MEMBER_USER,
+        AUTH_MATRIX_ORG_OWNER_USER,
         AUTH_MATRIX_ORG_STAFF_USER,
         CLAIMABLE_USER,
         EVENT_LEAGUE_STAFF_USER,
@@ -237,6 +238,7 @@ def populate_test_auth_users(force=False):
     # assignments to populate_auth_matrix_data. That step runs after
     # every other isolated-org populate so the AUTH_MATRIX_ORG pk lands
     # on 8 (matching tests/data/organizations.py).
+    create_user_with_pk(AUTH_MATRIX_ORG_OWNER_USER)
     create_user_with_pk(AUTH_MATRIX_ORG_ADMIN_USER)
     create_user_with_pk(AUTH_MATRIX_ORG_STAFF_USER)
     create_user_with_pk(AUTH_MATRIX_ORG_MEMBER_USER)
