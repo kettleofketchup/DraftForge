@@ -45,6 +45,11 @@ interface HeroDraftState {
   _unsubscribe: Unsubscribe | null;
   _currentDraftId: number | null;
   _heartbeatInterval: ReturnType<typeof setInterval> | null;
+  // Receive-side tick gap detection. Server logs `tick_loop_stalled`
+  // when the broadcaster itself stalls; this catches the COMPLEMENTARY
+  // case where the broadcast happened but didn't reach this client
+  // (WS hiccup, browser tab throttled, channel-layer queue saturated).
+  _lastTickReceivedAtMs: number | null;
 
   // Actions
   connect: (draftId: number) => void;
@@ -78,6 +83,7 @@ const initialState = {
   _unsubscribe: null,
   _currentDraftId: null,
   _heartbeatInterval: null,
+  _lastTickReceivedAtMs: null,
 };
 
 export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
@@ -173,7 +179,16 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
           // This fixes the bug where the selection overlay persists after a random pick
           if (message.event_type === 'hero_selected') {
             debugLog('Clearing selectedHeroId after hero_selected event');
-            set({ selectedHeroId: null });
+            // Also null out tick.active_team_id so useDraftCountdown stops
+            // burning the previous active team's reserve in the ~1s window
+            // before the next tick broadcast arrives with the new round.
+            const prevTick = get().tick;
+            set({
+              selectedHeroId: null,
+              tick: prevTick
+                ? { ...prevTick, active_team_id: null }
+                : prevTick,
+            });
           }
 
           set({ lastEvent: message as HeroDraftEvent });
@@ -193,12 +208,31 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
           // outbound timestamp will be ~RTT/2 in the past relative to
           // server-receive — that's the desired behaviour (the server's
           // 2s sanity window absorbs it cleanly).
+          const tickReceivedAtMs = Date.now();
           const serverTimeMs = new Date(message.server_time).getTime();
           const serverClockOffsetMs = Number.isFinite(serverTimeMs)
-            ? serverTimeMs - Date.now()
+            ? serverTimeMs - tickReceivedAtMs
             : 0;
 
+          // Gap detection — expected cadence is 1Hz. If we go >2s without
+          // a tick, log it. This catches client-side delivery problems
+          // the server can't see (WS hiccup, throttled tab, queue
+          // saturation) and complements server's `tick_loop_stalled`.
+          const lastTickAt = get()._lastTickReceivedAtMs;
+          if (lastTickAt !== null) {
+            const gapMs = tickReceivedAtMs - lastTickAt;
+            if (gapMs > 2000) {
+              log.warn('client_tick_gap', {
+                draft_id: get()._currentDraftId,
+                expected_gap_ms: 1000,
+                actual_gap_ms: gapMs,
+                stall_ms: gapMs - 1000,
+              });
+            }
+          }
+
           set({
+            _lastTickReceivedAtMs: tickReceivedAtMs,
             serverClockOffsetMs,
             tick: {
               type: 'herodraft_tick',
