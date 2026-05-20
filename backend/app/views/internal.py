@@ -1007,12 +1007,19 @@ def list_users_for_avatar_check(request):
     qs = User.objects.filter(discordId__isnull=False)
 
     has_avatar = request.query_params.get("has_avatar")
+    # T1.5+: avatar lives on base_profile, not CustomUser. ORM filters need
+    # the relation path; the transitional @property only works for attribute
+    # reads.
     if has_avatar == "true":
-        qs = qs.exclude(avatar__isnull=True).exclude(avatar="")
+        qs = qs.exclude(base_profile__avatar__isnull=True).exclude(
+            base_profile__avatar=""
+        )
     elif has_avatar == "false":
         from django.db.models import Q
 
-        qs = qs.filter(Q(avatar__isnull=True) | Q(avatar=""))
+        qs = qs.filter(
+            Q(base_profile__avatar__isnull=True) | Q(base_profile__avatar="")
+        )
 
     limit = int(request.query_params.get("limit", 100))
     offset = int(request.query_params.get("offset", 0))

@@ -42,10 +42,12 @@ def list_discord_linked_users(request):
     four fields the task needs (pk, discord_id, avatar, username).
     """
     User = get_user_model()
+    # T1.5+: avatar lives on base_profile, not CustomUser. Use the relation
+    # path in .values() — Django will JOIN BaseUserProfile in.
     rows = list(
         User.objects.filter(discordId__isnull=False)
         .exclude(discordId="")
-        .values("pk", "discordId", "avatar", "username")
+        .values("pk", "discordId", "base_profile__avatar", "username")
     )
     log.debug(
         "avatars_discord_linked_listed",
@@ -58,7 +60,7 @@ def list_discord_linked_users(request):
             {
                 "pk": r["pk"],
                 "discord_id": r["discordId"],
-                "avatar": r["avatar"],
+                "avatar": r["base_profile__avatar"],
                 "username": r["username"],
             }
             for r in rows
@@ -162,18 +164,45 @@ def bulk_update_user_avatars(request):
         )
         return err
 
-    to_update = [User(pk=u["pk"], avatar=u["avatar"]) for u in cleaned]
-    User.objects.bulk_update(to_update, ["avatar"], batch_size=500)
-    # Per-row invalidation: only evict the users that changed instead of
-    # wiping the whole CustomUser cache. See docstring for rationale.
+    # T1.5+: avatar lives on BaseUserProfile, not CustomUser. Bulk-update the
+    # profile rows directly; the property on CustomUser proxies reads through
+    # to base_profile.avatar. We need both: load each BaseUserProfile, set its
+    # avatar field, then bulk_update on BaseUserProfile.
     from app.cache_utils import invalidate_obj
+    from user.models import BaseUserProfile
 
-    for u in to_update:
-        invalidate_obj(u)
+    pks = [u["pk"] for u in cleaned]
+    bp_by_user = {bp.user_id: bp for bp in BaseUserProfile.objects.filter(user_id__in=pks)}
+
+    to_update = []
+    affected_user_pks = []
+    for u in cleaned:
+        bp = bp_by_user.get(u["pk"])
+        if bp is None:
+            # User row exists but base_profile wasn't auto-created yet
+            # (rare — CustomUser.save() should have created it). Skip;
+            # the next user.save() will fill it.
+            continue
+        bp.avatar = u["avatar"]
+        to_update.append(bp)
+        affected_user_pks.append(u["pk"])
+
+    if to_update:
+        BaseUserProfile.objects.bulk_update(to_update, ["avatar"], batch_size=500)
+
+    # Per-row invalidation: bulk_update bypasses post_save signals, so cacheops
+    # needs an explicit nudge. Evict BOTH the base_profile row (the storage)
+    # AND the user row (UserSerializer.avatar sources from base_profile, so
+    # the user row's cached payloads now reference stale data too).
+    for bp in to_update:
+        invalidate_obj(bp)
+    for pk in affected_user_pks:
+        invalidate_obj(User(pk=pk))
     log.info(
         "avatars_bulk_updated",
         system="avatars",
         subsystem="endpoint",
         updated=len(to_update),
+        requested=len(cleaned),
     )
     return Response({"updated": len(to_update)})

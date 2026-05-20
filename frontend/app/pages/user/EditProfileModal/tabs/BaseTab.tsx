@@ -26,6 +26,7 @@ import { Sentry } from '~/lib/sentry';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserProfileStore } from '~/store/userProfileStore';
 import type { UserProfileEntry } from '~/store/userProfileTypes';
+import { useUserStore } from '~/store/userStore';
 
 import {
   BaseProfileFormSchema,
@@ -78,10 +79,31 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
         useUserCacheStore.getState().upsert(merged);
       }
 
-      // 2. Mark the profile query stale so the next read refetches.
+      // 2. Refresh userStore.currentUser if the edited row is the logged-in
+      //    user. Navbar, profile-page header, and other components read
+      //    avatar/nickname directly off currentUser, so a stale value here
+      //    leaves the post-PATCH UI inconsistent until a page reload or
+      //    fetchCurrentUser() call. Merge the patched fields onto the
+      //    existing currentUser snapshot.
+      const currentUserState = useUserStore.getState().currentUser;
+      if (currentUserState?.pk === profile.pk) {
+        useUserStore.getState().setCurrentUser({
+          ...currentUserState,
+          nickname:
+            updated.nickname !== undefined
+              ? updated.nickname
+              : currentUserState.nickname,
+          avatar:
+            updated.avatar !== undefined
+              ? updated.avatar
+              : currentUserState.avatar,
+        } as UserType);
+      }
+
+      // 3. Mark the profile query stale so the next read refetches.
       queryClient.invalidateQueries({ queryKey: ['userProfile', profile.pk] });
 
-      // 3. Mirror the change into the profile store immediately for any
+      // 4. Mirror the change into the profile store immediately for any
       //    consumers reading via the adapter rather than the query.
       useUserProfileStore.setState((state) => {
         const current = state.entities[profile.pk];
