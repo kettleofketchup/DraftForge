@@ -181,21 +181,29 @@ def _err_viz() -> timeseries_b.Visualization:
 
 
 def _logs_viz(*, show_labels: bool = False) -> logs_b.Visualization:
-    """Logs viz tuned to mimic the Grafana Logs Drilldown experience.
+    """Logs viz tuned to match the Grafana Logs Drilldown look + behaviour.
 
-    `show_controls` + `show_field_selector` give the user the same in-panel
-    toolbar Drilldown uses: sort direction, dedup mode, and detected-field
-    chips (including a `level` chip that filters the visible stream
-    without a query round-trip). `show_log_context_toggle` lets the user
-    expand surrounding lines for any entry. `syntax_highlighting` colors
-    JSON keys/values so structured kwargs are scannable.
+    Notable choices:
+
+    * `prettify_log_message=False` + `wrap_log_message=False` — keep each
+      log line on a single horizontal row (Drilldown's default). The
+      pretty-print + wrap combo we used to ship expanded one event
+      across 10-15 lines of indented JSON, which scrolled out of the
+      panel almost immediately and made scanning useless. Click the
+      row to expand attributes via `enable_log_details`.
+    * `show_controls` + `show_field_selector` give the user the in-panel
+      toolbar Drilldown uses: sort direction, dedup mode, and detected
+      field chips (level filter chip comes from this).
+    * `show_log_context_toggle` lets the user expand surrounding lines.
+    * `syntax_highlighting` colors JSON keys/values for scannability
+      against the dark background.
     """
     return (
         logs_b.Visualization()
         .show_time(True)
         .sort_order("Descending")
-        .prettify_log_message(True)
-        .wrap_log_message(True)
+        .prettify_log_message(False)
+        .wrap_log_message(False)
         .enable_log_details(True)
         .show_labels(show_labels)
         .show_common_labels(True)
