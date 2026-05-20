@@ -1,6 +1,5 @@
 """API views for Captain's Mode hero draft."""
 
-import logging
 from datetime import timedelta
 
 from django.shortcuts import get_object_or_404
@@ -9,6 +8,8 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+
+from telemetry.logging import get_logger
 
 from app.broadcast import broadcast_herodraft_event
 from app.functions.herodraft import (
@@ -21,7 +22,7 @@ from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent, HeroDraftStat
 from app.permissions_org import IsTournamentStaff
 from app.serializers import HeroDraftEventSerializer, HeroDraftSerializer
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def _get_draft_with_prefetch(draft_pk: int) -> HeroDraft:
@@ -653,14 +654,22 @@ def pause_draft(request, draft_pk):
     draft_team = _get_draft_team_for_user(draft, request.user) if is_captain else None
 
     # Transition to paused state
+    prev_state = draft.state
     draft.state = HeroDraftState.PAUSED
     draft.paused_at = timezone.now()
     draft.is_manual_pause = True
     draft.save()
 
     log.info(
-        f"HeroDraft {draft.pk} manually paused by user {request.user.pk} "
-        f"(captain={is_captain}, staff={is_staff})"
+        "draft_paused",
+        system="herodraft",
+        subsystem="state",
+        draft_id=draft.id,
+        from_state=prev_state,
+        paused_by_user_id=request.user.pk,
+        is_captain=is_captain,
+        is_staff=is_staff,
+        paused_at=draft.paused_at.isoformat(),
     )
 
     # Create event for audit trail
@@ -725,20 +734,33 @@ def resume_draft(request, draft_pk):
     draft_team = _get_draft_team_for_user(draft, request.user) if is_captain else None
 
     # Calculate pause duration and adjust active round timing
+    pause_duration_s = None
+    adjustment_s = None
+    adjusted_round_number = None
     if draft.paused_at:
         pause_duration = timezone.now() - draft.paused_at
+        pause_duration_s = round(pause_duration.total_seconds(), 3)
         current_round = draft.rounds.filter(state="active").first()
         if current_round and current_round.started_at:
             # Add 3 seconds for countdown to total adjustment
             total_adjustment = pause_duration + timedelta(seconds=3)
             current_round.started_at += total_adjustment
             current_round.save(update_fields=["started_at"])
+            adjustment_s = round(total_adjustment.total_seconds(), 3)
+            adjusted_round_number = current_round.round_number
             log.info(
-                f"HeroDraft {draft.pk} adjusted round {current_round.round_number} "
-                f"started_at by {total_adjustment.total_seconds():.2f}s (includes 3s countdown)"
+                "round_started_at_adjusted",
+                system="herodraft",
+                subsystem="timing",
+                draft_id=draft.id,
+                round_number=current_round.round_number,
+                pause_duration_s=pause_duration_s,
+                total_adjustment_s=adjustment_s,
+                new_started_at=current_round.started_at.isoformat(),
             )
 
     # Enter RESUMING state with 3-second countdown
+    prev_state = draft.state
     draft.state = HeroDraftState.RESUMING
     draft.resuming_until = timezone.now() + timedelta(seconds=3)
     draft.paused_at = None
@@ -746,8 +768,18 @@ def resume_draft(request, draft_pk):
     draft.save()
 
     log.info(
-        f"HeroDraft {draft.pk} manually resumed by user {request.user.pk} "
-        f"(captain={is_captain}, staff={is_staff})"
+        "draft_resumed",
+        system="herodraft",
+        subsystem="state",
+        draft_id=draft.id,
+        from_state=prev_state,
+        resumed_by_user_id=request.user.pk,
+        is_captain=is_captain,
+        is_staff=is_staff,
+        resuming_until=draft.resuming_until.isoformat(),
+        pause_duration_s=pause_duration_s,
+        round_started_at_adjustment_s=adjustment_s,
+        adjusted_round_number=adjusted_round_number,
     )
 
     # Create event for audit trail
