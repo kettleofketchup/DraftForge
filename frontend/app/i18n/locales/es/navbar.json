@@ -10,5 +10,26 @@
     "report_bug": "Reportar un problema",
     "main_nav": "Navegación principal",
     "open_menu": "Abrir menú"
+  },
+  "nav": {
+    "github": "GitHub",
+    "github_subtitle": "Pidiendo estrellas",
+    "docs": "Documentación",
+    "docs_subtitle": "El ingrediente secreto",
+    "report_issue": "Reportar problema",
+    "report_issue_subtitle": "Ayúdanos a solucionarlo",
+    "about": "Acerca de",
+    "about_subtitle": "Quiénes somos",
+    "tournaments": "Torneos",
+    "tournaments_subtitle": "Competir y ganar",
+    "users": "Usuarios",
+    "users_subtitle": "Encontrar jugadores",
+    "organizations": "Organizaciones",
+    "organizations_subtitle": "Comunidades",
+    "leagues": "Ligas",
+    "leagues_subtitle": "Juego clasificatorio",
+    "events": "Eventos",
+    "admin": "Administración",
+    "admin_subtitle": "Gestionar sitio"
   }
 }

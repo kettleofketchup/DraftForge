@@ -2,6 +2,7 @@ import { Slot } from '@radix-ui/react-slot';
 import * as React from 'react';
 import { memo } from 'react';
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '../../store/userStore';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
@@ -448,6 +449,7 @@ const StarBadge = ({
 // External links (GitHub, Docs, Bug Report) using NavItem
 // Icons always visible, text hidden on small screens
 const ExternalLinks = ({ className }: { className?: string }) => {
+  const { t } = useTranslation('navbar');
   const { stars, isLoading } = useGitHubStars();
 
   return (
@@ -462,10 +464,10 @@ const ExternalLinks = ({ className }: { className?: string }) => {
         target="_blank"
         rel="noopener noreferrer"
         icon={<GitHubIcon />}
-        title="GitHub"
-        subtitle="Begging for Stars"
+        title={t('nav.github')}
+        subtitle={t('nav.github_subtitle')}
         badge={<StarBadge count={stars} isLoading={isLoading} />}
-        aria-label="Star us on GitHub"
+        aria-label={t('aria.star_github')}
         hideTextOnSmall
         className="[&_svg]:text-text-primary"
       />
@@ -474,9 +476,9 @@ const ExternalLinks = ({ className }: { className?: string }) => {
         target="_blank"
         rel="noopener noreferrer"
         icon={<DocsIcon />}
-        title="Docs"
-        subtitle="Secret Sauce"
-        aria-label="Documentation"
+        title={t('nav.docs')}
+        subtitle={t('nav.docs_subtitle')}
+        aria-label={t('aria.documentation')}
         hideTextOnSmall
         showSubtitleTooltip
         className="[&_svg]:text-info"
@@ -486,11 +488,11 @@ const ExternalLinks = ({ className }: { className?: string }) => {
         target="_blank"
         rel="noopener noreferrer"
         icon={<BugIcon />}
-        title="Report Issue"
-        subtitle="Help us fix it"
+        title={t('nav.report_issue')}
+        subtitle={t('nav.report_issue_subtitle')}
         className="[&_svg]:text-destructive hover:[&_svg]:text-red-400"
         titleClassName="text-destructive hover:text-red-400"
-        aria-label="Report a Bug"
+        aria-label={t('aria.report_bug')}
         hideTextOnSmall
       />
     </div>
@@ -500,6 +502,7 @@ const ExternalLinks = ({ className }: { className?: string }) => {
 // Main navigation with icons + text using NavItem
 // Icons always visible, text hidden on small screens
 const NavLinks = ({ className }: { className?: string }) => {
+  const { t } = useTranslation('navbar');
   const currentUser = useUserStore((state) => state.currentUser);
 
   return (
@@ -507,48 +510,48 @@ const NavLinks = ({ className }: { className?: string }) => {
       <NavItem
         to="/about"
         icon={<AboutIcon />}
-        title="About"
-        subtitle="Who we are"
+        title={t('nav.about')}
+        subtitle={t('nav.about_subtitle')}
         hideTextOnSmall
         className="[&_svg]:text-info"
       />
       <NavItem
         to="/tournaments"
         icon={<TrophyIcon />}
-        title="Tournaments"
-        subtitle="Compete & win"
+        title={t('nav.tournaments')}
+        subtitle={t('nav.tournaments_subtitle')}
         hideTextOnSmall
         className="[&_svg]:text-warning"
       />
       <NavItem
         to="/users"
         icon={<UsersIcon />}
-        title="Users"
-        subtitle="Find players"
+        title={t('nav.users')}
+        subtitle={t('nav.users_subtitle')}
         hideTextOnSmall
         className="[&_svg]:text-interactive"
       />
       <NavItem
         to="/organizations"
         icon={<BuildingIcon />}
-        title="Organizations"
-        subtitle="Communities"
+        title={t('nav.organizations')}
+        subtitle={t('nav.organizations_subtitle')}
         hideTextOnSmall
         className="[&_svg]:text-secondary"
       />
       <NavItem
         to="/leagues"
         icon={<LeagueIcon />}
-        title="Leagues"
-        subtitle="Ranked play"
+        title={t('nav.leagues')}
+        subtitle={t('nav.leagues_subtitle')}
         hideTextOnSmall
         className="[&_svg]:text-primary"
       />
       <NavItem
         to="/events"
         icon={<CalendarIcon />}
-        title="Events"
-        subtitle="Sign up here"
+        title={t('nav.events')}
+        subtitle={t('signup_here')}
         hideTextOnSmall
         className="[&_svg]:text-accent"
       />
@@ -556,8 +559,8 @@ const NavLinks = ({ className }: { className?: string }) => {
         <NavItem
           href="/admin/"
           icon={<AdminIcon />}
-          title="Admin"
-          subtitle="Manage site"
+          title={t('nav.admin')}
+          subtitle={t('nav.admin_subtitle')}
           hideTextOnSmall
           className="[&_svg]:text-success"
         />
@@ -588,47 +591,50 @@ const HomeIcon = () => (
 );
 
 const SiteLogo = () => {
+  const { t } = useTranslation('navbar');
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Link
           className="p-2 flex-shrink-0 hidden md:flex items-center"
           to="/"
-          aria-label="Home"
+          aria-label={t('home')}
         >
           <HomeIcon />
         </Link>
       </TooltipTrigger>
-      <TooltipContent>Home</TooltipContent>
+      <TooltipContent>{t('home')}</TooltipContent>
     </Tooltip>
   );
 };
 
 // Mobile home link - shown only on small screens, integrated into MobileNav
 const MobileHomeLink = () => {
+  const { t } = useTranslation('navbar');
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Link
           className="p-2 flex-shrink-0 md:hidden flex items-center"
           to="/"
-          aria-label="Home"
+          aria-label={t('home')}
         >
           <HomeIcon />
         </Link>
       </TooltipTrigger>
-      <TooltipContent>Home</TooltipContent>
+      <TooltipContent>{t('home')}</TooltipContent>
     </Tooltip>
   );
 };
 
 export const ResponsiveAppBar: React.FC = memo(() => {
+  const { t } = useTranslation('navbar');
   return (
     <header>
       <nav
         className="sticky z-50 top-0 navbar bg-base-600 shadow-elevated border-b border-border p-0"
         role="navigation"
-        aria-label="Main navigation"
+        aria-label={t('aria.main_nav')}
       >
         <div className="navbar-start flex-1">
           <MobileNav />

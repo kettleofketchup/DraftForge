@@ -10,5 +10,26 @@
     "report_bug": "Report a Bug",
     "main_nav": "Main navigation",
     "open_menu": "Open menu"
+  },
+  "nav": {
+    "github": "GitHub",
+    "github_subtitle": "Begging for Stars",
+    "docs": "Docs",
+    "docs_subtitle": "Secret Sauce",
+    "report_issue": "Report Issue",
+    "report_issue_subtitle": "Help us fix it",
+    "about": "About",
+    "about_subtitle": "Who we are",
+    "tournaments": "Tournaments",
+    "tournaments_subtitle": "Compete & win",
+    "users": "Users",
+    "users_subtitle": "Find players",
+    "organizations": "Organizations",
+    "organizations_subtitle": "Communities",
+    "leagues": "Leagues",
+    "leagues_subtitle": "Ranked play",
+    "events": "Events",
+    "admin": "Admin",
+    "admin_subtitle": "Manage site"
   }
 }
