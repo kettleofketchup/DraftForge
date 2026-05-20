@@ -15,13 +15,5 @@ build:
     cd "{{frontend}}" && npm run build
 
 [group('npm')]
-typecheck:
-    cd "{{frontend}}" && npm run typecheck
-
-[group('npm')]
-lint:
-    cd "{{frontend}}" && npm run lint
-
-[group('npm')]
 run *args:
     cd "{{frontend}}" && npm {{args}}
