@@ -1,6 +1,16 @@
 """Unit tests for BaseDraftConsumer abstract class."""
 
+import asyncio
+from types import SimpleNamespace
+from unittest import mock
+
 from django.test import SimpleTestCase
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+    InMemorySpanExporter,
+)
 
 from app.consumers_base import BaseDraftConsumer
 
@@ -116,3 +126,115 @@ class TestRedisKeyGeneration(SimpleTestCase):
         key_a = self.consumer._heartbeat_key(draft_id=1, user_id=1)
         key_b = self.consumer._heartbeat_key(draft_id=1, user_id=2)
         self.assertNotEqual(key_a, key_b)
+
+
+class TestSpanInstrumentation(SimpleTestCase):
+    """Verify lifecycle methods emit OTel spans with expected attributes.
+
+    The dashboard's per-user/per-conn-id correlation relies on every
+    span carrying `ws.conn_id`. A future refactor that drops that
+    attribute would silently break Tempo lookups — this test catches
+    that regression at the unit level.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # OTel installs `set_tracer_provider` as a one-shot — once a
+        # provider is set (e.g. by Django's app startup), subsequent
+        # `set_tracer_provider` calls are no-ops with a warning. So we
+        # piggyback on whatever's current: if it's a real
+        # `TracerProvider`, attach our in-memory processor to it; if
+        # it's the proxy (telemetry disabled in this test env), install
+        # ours as the first real provider.
+        super().setUpClass()
+        cls.exporter = InMemorySpanExporter()
+        cls.processor = SimpleSpanProcessor(cls.exporter)
+        provider = trace.get_tracer_provider()
+        if hasattr(provider, "add_span_processor"):
+            provider.add_span_processor(cls.processor)
+        else:
+            provider = TracerProvider()
+            provider.add_span_processor(cls.processor)
+            trace.set_tracer_provider(provider)
+
+    def setUp(self):
+        # Each test starts with a clean span buffer so assertions on
+        # span counts don't see leftovers from previous tests.
+        self.exporter.clear()
+        self.consumer = ConcreteDraftConsumer()
+        self.consumer.ws_conn_id = "test-conn-1234"
+        self.consumer.draft_id = 42
+        # Consumer code reads both `user.id` (Django auth API) and
+        # `user.pk` depending on path — populate both.
+        self.consumer.user = SimpleNamespace(is_authenticated=True, pk=99, id=99)
+
+    def _spans_by_name(self, name):
+        return [s for s in self.exporter.get_finished_spans() if s.name == name]
+
+    def test_handle_heartbeat_emits_span_with_conn_id(self):
+        """ws.heartbeat span carries ws.conn_id + ws.draft_id + user.id."""
+        with mock.patch(
+            "app.tasks.herodraft_tick.get_redis_client"
+        ) as mock_get_redis:
+            mock_get_redis.return_value = mock.MagicMock()
+            asyncio.run(self.consumer.handle_heartbeat())
+
+        spans = self._spans_by_name("ws.heartbeat")
+        self.assertEqual(len(spans), 1)
+        attrs = spans[0].attributes
+        self.assertEqual(attrs["ws.conn_id"], "test-conn-1234")
+        self.assertEqual(attrs["ws.draft_id"], 42)
+        self.assertEqual(attrs["user.id"], 99)
+        self.assertEqual(attrs["ws.consumer"], "ConcreteDraftConsumer")
+        # heartbeat-specific
+        self.assertIn("ws.heartbeat_ttl_s", attrs)
+
+    def test_base_span_attrs_skips_missing_conn_id(self):
+        """No conn_id set yet → attribute is absent, not None.
+
+        OTel SpanAttributes don't accept None values. The early-error
+        path in `base_connect` could fire a heartbeat span before
+        `telemetry_connect` runs, so `_base_span_attrs` must defensively
+        omit `ws.conn_id` when it isn't bound.
+        """
+        consumer = ConcreteDraftConsumer()
+        attrs = consumer._base_span_attrs()
+        self.assertNotIn("ws.conn_id", attrs)
+        self.assertNotIn("ws.draft_id", attrs)
+        # consumer class is the one universal attribute
+        self.assertEqual(attrs["ws.consumer"], "ConcreteDraftConsumer")
+
+    def test_traced_message_records_message_type(self):
+        """traced_message wraps subclass receive handlers with ws.message."""
+
+        async def run():
+            async with self.consumer.traced_message(
+                "captain_pick", **{"ws.event": "hero_selected"}
+            ):
+                pass
+
+        asyncio.run(run())
+        spans = self._spans_by_name("ws.message")
+        self.assertEqual(len(spans), 1)
+        attrs = spans[0].attributes
+        self.assertEqual(attrs["ws.message_type"], "captain_pick")
+        self.assertEqual(attrs["ws.event"], "hero_selected")
+        self.assertEqual(attrs["ws.conn_id"], "test-conn-1234")
+
+    def test_traced_message_records_exception(self):
+        """Exceptions inside traced_message land on the span as errors."""
+
+        async def run():
+            async with self.consumer.traced_message("explode"):
+                raise RuntimeError("boom")
+
+        with self.assertRaises(RuntimeError):
+            asyncio.run(run())
+
+        spans = self._spans_by_name("ws.message")
+        self.assertEqual(len(spans), 1)
+        # OTel SpanKind.STATUS_CODE.ERROR == 2
+        self.assertEqual(spans[0].status.status_code.value, 2)
+        # Exception event recorded
+        exc_events = [e for e in spans[0].events if e.name == "exception"]
+        self.assertEqual(len(exc_events), 1)
