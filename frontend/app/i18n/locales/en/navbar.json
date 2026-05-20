@@ -14,12 +14,17 @@
   "nav": {
     "github": "GitHub",
     "github_subtitle": "Begging for Stars",
+    "github_subtitle_star": "Star us!",
     "docs": "Docs",
     "docs_subtitle": "Secret Sauce",
+    "documentation": "Documentation",
+    "documentation_subtitle": "Learn how it works",
     "report_issue": "Report Issue",
     "report_issue_subtitle": "Help us fix it",
+    "report_issue_subtitle_improve": "Help us improve",
     "about": "About",
     "about_subtitle": "Who we are",
+    "home_subtitle": "Back to start",
     "tournaments": "Tournaments",
     "tournaments_subtitle": "Compete & win",
     "users": "Users",
@@ -31,5 +36,9 @@
     "events": "Events",
     "admin": "Admin",
     "admin_subtitle": "Manage site"
+  },
+  "section": {
+    "navigation": "Navigation",
+    "resources": "Resources"
   }
 }
