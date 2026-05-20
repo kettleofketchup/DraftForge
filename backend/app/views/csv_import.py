@@ -303,11 +303,14 @@ def import_csv_org(request, org_id):
             summary["errors"] += 1
             continue
 
-        # Set nickname from CSV 'name' column if user has no nickname
+        # Set nickname from CSV 'name' column if user has no nickname.
+        # T1.5+: nickname is a property over base_profile.nickname; the
+        # setter already persists via bp.save(update_fields=["nickname"]).
+        # An explicit CustomUser.save(update_fields=["nickname"]) would now
+        # crash because `nickname` is not a model field.
         csv_name = (row.get("name") or "").strip()
         if csv_name and not user.nickname:
             user.nickname = csv_name
-            user.save(update_fields=["nickname"])
 
         # Update positions if user has all defaults (zeros)
         _update_positions_if_empty(user, positions_dict)
@@ -482,11 +485,14 @@ def import_csv_tournament(request, tournament_id):
             summary["errors"] += 1
             continue
 
-        # Set nickname from CSV 'name' column if user has no nickname
+        # Set nickname from CSV 'name' column if user has no nickname.
+        # T1.5+: nickname is a property over base_profile.nickname; the
+        # setter already persists via bp.save(update_fields=["nickname"]).
+        # An explicit CustomUser.save(update_fields=["nickname"]) would now
+        # crash because `nickname` is not a model field.
         csv_name = (row.get("name") or "").strip()
         if csv_name and not user.nickname:
             user.nickname = csv_name
-            user.save(update_fields=["nickname"])
 
         # Update positions if user has all defaults (zeros)
         _update_positions_if_empty(user, positions_dict)

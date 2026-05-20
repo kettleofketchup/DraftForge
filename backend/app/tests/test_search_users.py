@@ -52,16 +52,22 @@ class SearchUsersTest(TestCase):
             username="globaluser", password="test", nickname="GlobalJohn"
         )
 
-        # User with steam ID
+        # User with steam ID. CustomUser.save() syncs steamid <-> steam_account_id
+        # via STEAM_ID_64_BASE (76561197960265728), so we set steam_account_id and
+        # let save() derive the canonical 64-bit value. Setting both to inconsistent
+        # values previously slipped past a dead save() override; T1.5 resurrected
+        # the sync, so the derived steamid is now authoritative.
         self.steam_user = CustomUser.objects.create_user(
             username="steamjohn",
             password="test",
-            steamid=76561198000000001,
             steam_account_id=39735273,
         )
+        self.steam_user.refresh_from_db()  # pick up save()'s derived steamid
 
     def test_search_by_steamid(self):
-        resp = self.client.get("/api/users/search/", {"q": "76561198000000001"})
+        resp = self.client.get(
+            "/api/users/search/", {"q": str(self.steam_user.steamid)}
+        )
         self.assertEqual(resp.status_code, 200)
         pks = [u["pk"] for u in resp.data]
         self.assertIn(self.steam_user.pk, pks)
