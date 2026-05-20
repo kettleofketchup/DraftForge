@@ -102,6 +102,45 @@ BRACKET_TEST_CONFIGS: list[DynamicTournamentConfig] = [
     PENDING_BRACKET_CONFIG,
 ]
 
+# Auth matrix tournaments — three bracket states under Auth Matrix League,
+# isolated from the COMPLETED/PARTIAL/PENDING ones above so other suites
+# can't flap the auth matrix. pks chosen well above the auto-incremented
+# range used by other populate steps so the explicit-pk creates can't
+# collide with anyone else's auto-assigned tournament rows.
+AUTH_MATRIX_NO_BRACKET_CONFIG = DynamicTournamentConfig(
+    pk=200,
+    name="Auth Matrix No Bracket",
+    user_count=8,
+    team_count=2,
+    tournament_type="single_elimination",
+    league_name="Auth Matrix League",
+    organization_pk=8,
+)
+
+AUTH_MATRIX_PENDING_BRACKET_CONFIG = DynamicTournamentConfig(
+    pk=201,
+    name="Auth Matrix Pending Bracket",
+    user_count=20,
+    team_count=4,
+    tournament_type="double_elimination",
+    league_name="Auth Matrix League",
+    organization_pk=8,
+    completed_game_count=0,
+    match_id_base=9000000401,
+)
+
+AUTH_MATRIX_COMPLETED_BRACKET_CONFIG = DynamicTournamentConfig(
+    pk=202,
+    name="Auth Matrix Completed Bracket",
+    user_count=20,
+    team_count=4,
+    tournament_type="double_elimination",
+    league_name="Auth Matrix League",
+    organization_pk=8,
+    completed_game_count=6,
+    match_id_base=9000000501,
+)
+
 # =============================================================================
 # Real Tournament 38
 # Based on production Tournament 38 data for testing Steam league sync

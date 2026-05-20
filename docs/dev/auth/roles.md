@@ -19,16 +19,23 @@ from a row there, the tests fail (or you have a documentation bug).
 
 ## The Eight Roles
 
-| Role          | Test fixture            | Test user pk | Defining attribute                          |
-| ------------- | ----------------------- | -----------: | ------------------------------------------- |
-| `siteAdmin`   | `loginAdmin()`          |         1001 | `is_superuser=True`                         |
-| `siteStaff`   | `loginStaff()`          |         1002 | `is_staff=True`, `is_superuser=False`       |
-| `orgAdmin`    | `loginOrgAdmin()`       |         1020 | In `Organization.admins` (DTX, pk=1)        |
-| `orgStaff`    | `loginOrgStaff()`       |         1021 | In `Organization.staff` (DTX, pk=1)         |
-| `orgMember`   | `loginOrgMember()`      |         1022 | `OrgUser` row only, no admin/staff role     |
-| `leagueAdmin` | `loginLeagueAdmin()`    |         1030 | In `League.admins` (DTX League, pk=1)       |
-| `leagueStaff` | `loginLeagueStaff()`    |         1031 | In `League.staff` (DTX League, pk=1)        |
-| `anonymous`   | _(none — fresh context)_|            — | No session                                  |
+| Role          | Test fixture                      | Test user pk | Defining attribute                                          |
+| ------------- | --------------------------------- | -----------: | ----------------------------------------------------------- |
+| `siteAdmin`   | `loginAdmin()`                    |         1001 | `is_superuser=True`                                         |
+| `siteStaff`   | `loginStaff()`                    |         1002 | `is_staff=True`, `is_superuser=False`                       |
+| `orgAdmin`    | `loginAuthMatrixOrgAdmin()`       |         1090 | In `Organization.admins` (Auth Matrix Test Org, pk=8)       |
+| `orgStaff`    | `loginAuthMatrixOrgStaff()`       |         1091 | In `Organization.staff` (Auth Matrix Test Org, pk=8)        |
+| `orgMember`   | `loginAuthMatrixOrgMember()`      |         1092 | `OrgUser` row only, no admin/staff role                     |
+| `leagueAdmin` | `loginAuthMatrixLeagueAdmin()`    |         1093 | In `League.admins` (Auth Matrix League, pk=9)               |
+| `leagueStaff` | `loginAuthMatrixLeagueStaff()`    |         1094 | In `League.staff` (Auth Matrix League, pk=9)                |
+| `anonymous`   | _(none — fresh context)_          |            — | No session                                                  |
+
+The non-site roles use **isolated** users + org + league (Auth Matrix
+Test Org pk=8, Auth Matrix League pk=9) created by
+`populate_auth_matrix_data`. Other suites must NOT touch these
+entities — they exist purely to lock the role-context matrix. This
+mirrors the feature-isolation rule in
+`.claude/skills/testing/references/feature-isolation.md`.
 
 The hierarchy is **site admin > org admin > org staff > league admin >
 league staff > org member > anonymous**. Each tier inherits the abilities
@@ -134,6 +141,38 @@ A new role requires:
 - An entry in `ROLE_NAMES` and `ROLE_LOGINS` in `role-contexts.ts`.
 - An expectation column in **every** matrix table — both in this page
   and in `e2e/17-auth/*.spec.ts`.
+
+If the new role scopes to an org or league, **wire it into the
+auth-matrix org/league**, not DTX — keep the isolation intact. The
+relevant populate file is `backend/tests/populate/auth_matrix.py`.
+
+## Isolation Guarantees
+
+The auth matrix owns:
+
+| Resource                            |   pk | Created by                          |
+| ----------------------------------- | ---: | ----------------------------------- |
+| Auth Matrix Test Org                |    8 | `populate_auth_matrix_data`         |
+| Auth Matrix League                  |    9 | `populate_auth_matrix_data`         |
+| Auth Matrix No Bracket (tournament) |  200 | `populate_auth_matrix_data`         |
+| Auth Matrix Pending Bracket         |  201 | `populate_auth_matrix_data`         |
+| Auth Matrix Completed Bracket       |  202 | `populate_auth_matrix_data`         |
+| `auth_matrix_org_admin` user        | 1090 | `populate_test_auth_users` + wiring |
+| `auth_matrix_org_staff` user        | 1091 | `populate_test_auth_users` + wiring |
+| `auth_matrix_org_member` user       | 1092 | `populate_test_auth_users` + wiring |
+| `auth_matrix_league_admin` user     | 1093 | `populate_test_auth_users` + wiring |
+| `auth_matrix_league_staff` user     | 1094 | `populate_test_auth_users` + wiring |
+
+Tournament pks land in the 200s (rather than 10–12) to sit clear of the
+auto-incremented range used by other populate steps — the bracket
+tournaments that DTX/Test Org create take pk 7+ via autoincrement, so
+the explicit-pk creates in the auth-matrix step would collide if they
+re-used the same range.
+
+Other suites must not touch any of these. Conversely, the matrix
+must not depend on DTX, league/org admins outside of this set, or
+shared bracket tournaments — those are owned by their respective
+feature suites.
 
 ## Related Files
 

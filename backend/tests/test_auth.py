@@ -24,6 +24,11 @@ from common.utils import isTestEnvironment
 # Import test user configuration
 from tests.data.users import (
     ADMIN_USER,
+    AUTH_MATRIX_LEAGUE_ADMIN_USER,
+    AUTH_MATRIX_LEAGUE_STAFF_USER,
+    AUTH_MATRIX_ORG_ADMIN_USER,
+    AUTH_MATRIX_ORG_MEMBER_USER,
+    AUTH_MATRIX_ORG_STAFF_USER,
     CLAIMABLE_USER,
     LEAGUE_ADMIN_USER,
     LEAGUE_STAFF_USER,
@@ -423,6 +428,52 @@ def createLeagueStaffTestUser() -> tuple[CustomUser, bool]:
     return user, True
 
 
+# Generic factory for auth-matrix role users. They all follow the same
+# get-or-create-with-PK pattern, so we share one helper instead of
+# copying five identical functions.
+def _create_or_get_auth_matrix_user(user_data) -> tuple[CustomUser, bool]:
+    assert isTestEnvironment() == True
+
+    user = CustomUser.objects.filter(pk=user_data.pk).first()
+    if user:
+        create_social_auth(user)
+        return user, False
+
+    user = CustomUser(
+        pk=user_data.pk,
+        username=user_data.username,
+        discordId=user_data.discord_id,
+        discordUsername=user_data.username,
+        nickname=user_data.nickname or user_data.username,
+        steamid=user_data.get_steam_id_64(),
+    )
+    user.set_password("cypress")
+    user.save()
+
+    create_social_auth(user)
+    return user, True
+
+
+def createAuthMatrixOrgAdminTestUser() -> tuple[CustomUser, bool]:
+    return _create_or_get_auth_matrix_user(AUTH_MATRIX_ORG_ADMIN_USER)
+
+
+def createAuthMatrixOrgStaffTestUser() -> tuple[CustomUser, bool]:
+    return _create_or_get_auth_matrix_user(AUTH_MATRIX_ORG_STAFF_USER)
+
+
+def createAuthMatrixOrgMemberTestUser() -> tuple[CustomUser, bool]:
+    return _create_or_get_auth_matrix_user(AUTH_MATRIX_ORG_MEMBER_USER)
+
+
+def createAuthMatrixLeagueAdminTestUser() -> tuple[CustomUser, bool]:
+    return _create_or_get_auth_matrix_user(AUTH_MATRIX_LEAGUE_ADMIN_USER)
+
+
+def createAuthMatrixLeagueStaffTestUser() -> tuple[CustomUser, bool]:
+    return _create_or_get_auth_matrix_user(AUTH_MATRIX_LEAGUE_STAFF_USER)
+
+
 def return_tokens(user):
     tokens = get_social_token(user)
     log.debug(tokens)
@@ -613,6 +664,109 @@ def login_league_staff(request):
     from app.models import League
 
     league = League.objects.filter(pk=1).first()
+    if league and user not in league.staff.all():
+        league.staff.add(user)
+
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+    return return_tokens(user)
+
+
+# Auth-matrix role logins. Each ensures the user's org/league membership
+# is present (idempotent) and returns the session cookies. They target
+# AUTH_MATRIX_ORG (pk=8) and AUTH_MATRIX_LEAGUE (pk=9) — kept distinct
+# from the DTX-scoped login_org_admin/staff/member/league_* fixtures so
+# other suites can't mutate matrix state.
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def login_auth_matrix_org_admin(request):
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    user, _ = createAuthMatrixOrgAdminTestUser()
+    from app.models import Organization
+
+    org = Organization.objects.filter(pk=AUTH_MATRIX_ORG_ADMIN_USER.org_id).first()
+    if org and user not in org.admins.all():
+        org.admins.add(user)
+
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+    return return_tokens(user)
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def login_auth_matrix_org_staff(request):
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    user, _ = createAuthMatrixOrgStaffTestUser()
+    from app.models import Organization
+
+    org = Organization.objects.filter(pk=AUTH_MATRIX_ORG_STAFF_USER.org_id).first()
+    if org and user not in org.staff.all():
+        org.staff.add(user)
+
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+    return return_tokens(user)
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def login_auth_matrix_org_member(request):
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    user, _ = createAuthMatrixOrgMemberTestUser()
+    from app.models import Organization
+    from tests.populate.utils import ensure_org_user
+
+    org = Organization.objects.filter(pk=AUTH_MATRIX_ORG_MEMBER_USER.org_id).first()
+    if org:
+        ensure_org_user(user, org)
+
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+    return return_tokens(user)
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def login_auth_matrix_league_admin(request):
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    user, _ = createAuthMatrixLeagueAdminTestUser()
+    from app.models import League
+
+    league = League.objects.filter(pk=AUTH_MATRIX_LEAGUE_ADMIN_USER.league_id).first()
+    if league and user not in league.admins.all():
+        league.admins.add(user)
+
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+    return return_tokens(user)
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def login_auth_matrix_league_staff(request):
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    user, _ = createAuthMatrixLeagueStaffTestUser()
+    from app.models import League
+
+    league = League.objects.filter(pk=AUTH_MATRIX_LEAGUE_STAFF_USER.league_id).first()
     if league and user not in league.staff.all():
         league.staff.add(user)
 

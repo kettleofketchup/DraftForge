@@ -90,6 +90,17 @@ EVENTS_LEAGUE_ALT: TestLeague = TestLeague(
     organization_names=["Events Test Org"],
 )
 
+# Auth-matrix E2E tests — isolated league linked to AUTH_MATRIX_ORG.
+AUTH_MATRIX_LEAGUE: TestLeague = TestLeague(
+    pk=9,
+    name="Auth Matrix League",
+    steam_league_id=17937,
+    description="Isolated league for auth-permission matrix E2E tests.",
+    rules="Auth matrix test rules.",
+    timezone="America/New_York",
+    organization_names=["Auth Matrix Test Org"],
+)
+
 # =============================================================================
 # Constants for easy access
 # =============================================================================
@@ -118,6 +129,9 @@ EVENTS_LEAGUE_STEAM_ID = EVENTS_LEAGUE.steam_league_id
 EVENTS_LEAGUE_ALT_NAME = EVENTS_LEAGUE_ALT.name
 EVENTS_LEAGUE_ALT_STEAM_ID = EVENTS_LEAGUE_ALT.steam_league_id
 
+AUTH_MATRIX_LEAGUE_NAME = AUTH_MATRIX_LEAGUE.name
+AUTH_MATRIX_LEAGUE_STEAM_ID = AUTH_MATRIX_LEAGUE.steam_league_id
+
 # =============================================================================
 # All Leagues (for iteration)
 # =============================================================================
@@ -131,4 +145,5 @@ ALL_LEAGUES: list[TestLeague] = [
     SHUFFLE_TIE_LEAGUE,
     EVENTS_LEAGUE,
     EVENTS_LEAGUE_ALT,
+    AUTH_MATRIX_LEAGUE,
 ]

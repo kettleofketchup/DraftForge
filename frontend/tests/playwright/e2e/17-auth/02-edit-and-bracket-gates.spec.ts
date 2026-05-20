@@ -34,17 +34,21 @@
 import { roleMatrixTest as test, expect, ROLE_NAMES, type RoleName } from '../../fixtures';
 import type { Page } from '@playwright/test';
 
-const DTX_ORG_PK = 1;
+// Isolated org used by every non-site role in the matrix. Created by
+// populate_auth_matrix_data; keeps the gate contract independent of
+// any other suite that mutates DTX.
+const AUTH_MATRIX_ORG_PK = 8;
 
-// Tournament fixtures from backend/tests/data/tournaments.py. Picked
-// for their bracket state so each gate has a page where the affordance
-// would naturally appear:
-//   pk=4 "Draft Test"            — DTX League, no bracket → Generate
-//   pk=3 "Pending Bracket Test"  — DTX League, matches w/ no winners → Set Winner
-//   pk=1 "Completed Bracket Test"— DTX League, matches w/ winners → Link Steam
-const TOURNAMENT_NO_BRACKET_PK = 4;
-const TOURNAMENT_PENDING_BRACKET_PK = 3;
-const TOURNAMENT_COMPLETED_BRACKET_PK = 1;
+// Tournament fixtures from backend/tests/data/tournaments.py. Each
+// targets AUTH_MATRIX_LEAGUE (pk=9) so the matrix never touches the
+// shared DTX bracket tournaments. pks sit above the auto-incremented
+// range used by other populates to keep the explicit-pk creates safe.
+//   pk=200 "Auth Matrix No Bracket"        — no bracket → Generate
+//   pk=201 "Auth Matrix Pending Bracket"   — pending matches → Set Winner
+//   pk=202 "Auth Matrix Completed Bracket" — won matches → Link Steam
+const TOURNAMENT_NO_BRACKET_PK = 200;
+const TOURNAMENT_PENDING_BRACKET_PK = 201;
+const TOURNAMENT_COMPLETED_BRACKET_PK = 202;
 
 type Expectations = Record<RoleName, boolean>;
 
@@ -213,7 +217,7 @@ test.describe('Edit + Bracket permission matrix (8 roles in parallel)', () => {
   test('Edit User button visibility (org members tab)', async ({ roleContexts }) => {
     await assertGateAcrossRoles(
       roleContexts,
-      `/organizations/${DTX_ORG_PK}?tab=users`,
+      `/organizations/${AUTH_MATRIX_ORG_PK}?tab=users`,
       'edit-user-btn',
       EDIT_USER_ORG_EXPECTATIONS,
     );

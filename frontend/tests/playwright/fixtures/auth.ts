@@ -438,6 +438,64 @@ export async function loginLeagueStaff(context: BrowserContext): Promise<void> {
 }
 
 /**
+ * Login helpers for the auth-permission matrix.
+ *
+ * These target AUTH_MATRIX_ORG (pk=8) and AUTH_MATRIX_LEAGUE (pk=9),
+ * which are isolated from DTX so other suites can't mutate the matrix.
+ * The actual login endpoints make the user's org/league memberships
+ * idempotent — calling them twice is safe.
+ */
+async function _postAuthMatrixLogin(
+  context: BrowserContext,
+  endpoint: string,
+  label: string,
+): Promise<void> {
+  const url = `${API_URL}/tests/${endpoint}/`;
+  console.log(`[auth] ${label}: POST ${url}`);
+
+  const response = await context.request.post(url);
+
+  if (!response.ok()) {
+    const status = response.status();
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    console.error(`[auth] ${label} FAILED: ${status} - ${body}`);
+    throw new Error(`${label} failed: ${status} - ${body.slice(0, 500)}`);
+  }
+
+  console.log(`[auth] ${label}: OK (${response.status()})`);
+
+  const cookies = response.headers()['set-cookie'];
+  if (cookies) {
+    await setSessionCookies(context, cookies);
+  }
+}
+
+export function loginAuthMatrixOrgAdmin(context: BrowserContext): Promise<void> {
+  return _postAuthMatrixLogin(context, 'login-auth-matrix-org-admin', 'loginAuthMatrixOrgAdmin');
+}
+
+export function loginAuthMatrixOrgStaff(context: BrowserContext): Promise<void> {
+  return _postAuthMatrixLogin(context, 'login-auth-matrix-org-staff', 'loginAuthMatrixOrgStaff');
+}
+
+export function loginAuthMatrixOrgMember(context: BrowserContext): Promise<void> {
+  return _postAuthMatrixLogin(context, 'login-auth-matrix-org-member', 'loginAuthMatrixOrgMember');
+}
+
+export function loginAuthMatrixLeagueAdmin(context: BrowserContext): Promise<void> {
+  return _postAuthMatrixLogin(context, 'login-auth-matrix-league-admin', 'loginAuthMatrixLeagueAdmin');
+}
+
+export function loginAuthMatrixLeagueStaff(context: BrowserContext): Promise<void> {
+  return _postAuthMatrixLogin(context, 'login-auth-matrix-league-staff', 'loginAuthMatrixLeagueStaff');
+}
+
+/**
  * Login as event-league-staff (staff of league 7 ONLY, not org 7).
  * Use to assert league-staff access on events tied to the Events Test League.
  */

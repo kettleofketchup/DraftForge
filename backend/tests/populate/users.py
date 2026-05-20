@@ -93,6 +93,11 @@ def populate_test_auth_users(force=False):
     from app.models import League, Organization
     from tests.data.users import (
         ADMIN_USER,
+        AUTH_MATRIX_LEAGUE_ADMIN_USER,
+        AUTH_MATRIX_LEAGUE_STAFF_USER,
+        AUTH_MATRIX_ORG_ADMIN_USER,
+        AUTH_MATRIX_ORG_MEMBER_USER,
+        AUTH_MATRIX_ORG_STAFF_USER,
         CLAIMABLE_USER,
         EVENT_LEAGUE_STAFF_USER,
         LEAGUE_ADMIN_USER,
@@ -226,5 +231,16 @@ def populate_test_auth_users(force=False):
         if event_league_staff not in events_league.staff.all():
             events_league.staff.add(event_league_staff)
             print(f"  Added {event_league_staff.username} as staff of {events_league.name}")
+
+    # Auth matrix users — create the CustomUser rows here (so social auth
+    # is wired alongside everyone else) but defer the org/league role
+    # assignments to populate_auth_matrix_data. That step runs after
+    # every other isolated-org populate so the AUTH_MATRIX_ORG pk lands
+    # on 8 (matching tests/data/organizations.py).
+    create_user_with_pk(AUTH_MATRIX_ORG_ADMIN_USER)
+    create_user_with_pk(AUTH_MATRIX_ORG_STAFF_USER)
+    create_user_with_pk(AUTH_MATRIX_ORG_MEMBER_USER)
+    create_user_with_pk(AUTH_MATRIX_LEAGUE_ADMIN_USER)
+    create_user_with_pk(AUTH_MATRIX_LEAGUE_STAFF_USER)
 
     print(f"Test auth users created/updated successfully!")

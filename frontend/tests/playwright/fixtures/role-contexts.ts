@@ -25,12 +25,16 @@
  *
  *   - siteAdmin     — is_superuser=True, is_staff=True (kettleofketchup)
  *   - siteStaff     — is_staff=True, is_superuser=False (hurk_)
- *   - orgAdmin      — Organization.admins of DTX (pk=1020)
- *   - orgStaff      — Organization.staff of DTX (pk=1021)
- *   - orgMember     — OrgUser of DTX, no admin/staff role (pk=1022)
- *   - leagueAdmin   — League.admins of DTX League (pk=1030)
- *   - leagueStaff   — League.staff of DTX League (pk=1031)
+ *   - orgAdmin      — Organization.admins of AUTH_MATRIX_ORG (pk=1090)
+ *   - orgStaff      — Organization.staff of AUTH_MATRIX_ORG (pk=1091)
+ *   - orgMember     — OrgUser of AUTH_MATRIX_ORG, no role (pk=1092)
+ *   - leagueAdmin   — League.admins of AUTH_MATRIX_LEAGUE (pk=1093)
+ *   - leagueStaff   — League.staff of AUTH_MATRIX_LEAGUE (pk=1094)
  *   - anonymous     — fresh context, no login
+ *
+ * The non-site roles target the isolated AUTH_MATRIX_ORG (pk=8) and
+ * AUTH_MATRIX_LEAGUE (pk=9) — not DTX. This keeps the matrix from
+ * flapping when other suites mutate DTX memberships, and vice versa.
  *
  * All 8 contexts are created and authenticated concurrently in the fixture
  * setup; the test body then drives them in parallel as well. With Promise.all
@@ -48,11 +52,11 @@ import {
 import {
   loginAdmin,
   loginStaff,
-  loginOrgAdmin,
-  loginOrgStaff,
-  loginOrgMember,
-  loginLeagueAdmin,
-  loginLeagueStaff,
+  loginAuthMatrixOrgAdmin,
+  loginAuthMatrixOrgStaff,
+  loginAuthMatrixOrgMember,
+  loginAuthMatrixLeagueAdmin,
+  loginAuthMatrixLeagueStaff,
 } from './auth';
 
 export type RoleName =
@@ -94,14 +98,18 @@ type RoleLogin = (context: BrowserContext) => Promise<void>;
  * Maps each role to the login fixture that authenticates a fresh
  * BrowserContext for that role. Anonymous resolves immediately — no login.
  */
+// All non-site roles target AUTH_MATRIX_ORG (pk=8) / AUTH_MATRIX_LEAGUE
+// (pk=9), not DTX. That keeps the matrix isolated from every other
+// suite — anyone mutating DTX admins/staff can't flap our contract,
+// and vice versa.
 const ROLE_LOGINS: Record<RoleName, RoleLogin> = {
   siteAdmin: loginAdmin,
   siteStaff: loginStaff,
-  orgAdmin: loginOrgAdmin,
-  orgStaff: loginOrgStaff,
-  orgMember: loginOrgMember,
-  leagueAdmin: loginLeagueAdmin,
-  leagueStaff: loginLeagueStaff,
+  orgAdmin: loginAuthMatrixOrgAdmin,
+  orgStaff: loginAuthMatrixOrgStaff,
+  orgMember: loginAuthMatrixOrgMember,
+  leagueAdmin: loginAuthMatrixLeagueAdmin,
+  leagueStaff: loginAuthMatrixLeagueStaff,
   anonymous: async () => {
     /* no login */
   },

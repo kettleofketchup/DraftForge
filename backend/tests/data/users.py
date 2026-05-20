@@ -136,6 +136,67 @@ EVENT_LEAGUE_STAFF_USER: TestUser = TestUser(
 )
 
 # =============================================================================
+# Auth Matrix Role Test Users (pk=1090-1094)
+# Dedicated to the role-context matrix at /tests/playwright/e2e/17-auth/.
+# Scoped to AUTH_MATRIX_ORG (pk=8) and AUTH_MATRIX_LEAGUE (pk=9) so the
+# matrix is fully isolated from DTX-using suites — neither side can flap
+# the other by mutating org/league memberships.
+# =============================================================================
+
+AUTH_MATRIX_ORG_ADMIN_USER: TestUser = TestUser(
+    pk=1090,
+    username="auth_matrix_org_admin",
+    nickname="Auth Matrix Org Admin",
+    discord_id="100000000000000090",
+    steam_id_64=76561198012345690,
+    org_id=8,  # Admin of Auth Matrix Test Org
+)
+
+AUTH_MATRIX_ORG_STAFF_USER: TestUser = TestUser(
+    pk=1091,
+    username="auth_matrix_org_staff",
+    nickname="Auth Matrix Org Staff",
+    discord_id="100000000000000091",
+    steam_id_64=76561198012345691,
+    org_id=8,
+)
+
+AUTH_MATRIX_ORG_MEMBER_USER: TestUser = TestUser(
+    pk=1092,
+    username="auth_matrix_org_member",
+    nickname="Auth Matrix Org Member",
+    discord_id="100000000000000092",
+    steam_id_64=76561198012345692,
+    org_id=8,
+)
+
+AUTH_MATRIX_LEAGUE_ADMIN_USER: TestUser = TestUser(
+    pk=1093,
+    username="auth_matrix_league_admin",
+    nickname="Auth Matrix League Admin",
+    discord_id="100000000000000093",
+    steam_id_64=76561198012345693,
+    league_id=9,  # Admin of Auth Matrix League
+)
+
+AUTH_MATRIX_LEAGUE_STAFF_USER: TestUser = TestUser(
+    pk=1094,
+    username="auth_matrix_league_staff",
+    nickname="Auth Matrix League Staff",
+    discord_id="100000000000000094",
+    steam_id_64=76561198012345694,
+    league_id=9,
+)
+
+AUTH_MATRIX_USERS: list[TestUser] = [
+    AUTH_MATRIX_ORG_ADMIN_USER,
+    AUTH_MATRIX_ORG_STAFF_USER,
+    AUTH_MATRIX_ORG_MEMBER_USER,
+    AUTH_MATRIX_LEAGUE_ADMIN_USER,
+    AUTH_MATRIX_LEAGUE_STAFF_USER,
+]
+
+# =============================================================================
 # Real Tournament 38 Users (pk=3000-3019, from production data)
 # These are real users with Steam IDs for testing Steam league sync
 # =============================================================================
@@ -742,6 +803,7 @@ AUTH_TEST_USERS: list[TestUser] = [
     LEAGUE_ADMIN_USER,
     LEAGUE_STAFF_USER,
     EVENT_LEAGUE_STAFF_USER,
+    *AUTH_MATRIX_USERS,
 ]
 
 # Legacy alias
