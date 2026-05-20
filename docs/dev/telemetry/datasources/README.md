@@ -60,3 +60,32 @@ When this stack moves off Grafana Cloud, the same JSON ports cleanly:
 The read-only constraint only exists on Cloud; self-hosted accepts API
 writes, so `apply.sh` will work end-to-end against your home-cluster
 Grafana when that exists.
+
+## Cloud caveat — bundled datasources are fully locked
+
+Grafana Cloud's bundled Loki / Tempo / Prom / etc. datasources are
+**provisioned by the platform**. The Settings page in the UI shows a
+banner: "Provisioned data source. This data source was added by config
+and cannot be modified using the UI." That means:
+
+* `apply.sh` gets HTTP 403 on PUT (handled — prints the UI URL).
+* The UI itself ALSO refuses edits (no per-field overlay; the whole
+  Settings page is read-only).
+* Existing derived fields like `traceID` came pre-baked from Grafana
+  Cloud's Logs↔Traces integration, not from anyone adding them.
+
+Workarounds in priority order:
+
+1. **Don't bother on Cloud.** `| json` in the query already exposes
+   every JSON body field as a clickable filter chip in the expanded
+   log row — derived fields would only give nicer chip labels. The
+   raw `ws_conn_id` / `user_id` chips work the same way as a
+   `wsConnId` derived field would.
+2. **Add a parallel custom Loki datasource** pointing at the same
+   Loki URL (`https://logs-prod-042.grafana.net`) authenticated with
+   a Grafana Cloud Access Policy token scoped to `logs:read`.
+   That datasource is user-editable, so derived fields work. Then
+   update the dashboard's `ds_loki` variable default.
+3. **Defer to self-host.** Files in this dir port to provisioning
+   YAML or Helm `additionalDataSources` directly; `apply.sh` works
+   end-to-end against any self-hosted Grafana.

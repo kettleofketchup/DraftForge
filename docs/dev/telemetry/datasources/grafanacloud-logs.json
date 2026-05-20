@@ -44,28 +44,22 @@
         "url": "${__value.raw}"
       },
       {
-        "_doc": "Click any ws_conn_id -> internal Loki query showing the full lifetime of that WebSocket connection (connect, every heartbeat, every message, disconnect). Uses an internal link (`datasourceUid` = same Loki) so you stay in the Explore view with the conn_id pre-filtered.",
+        "_doc": "Extract ws_conn_id from log lines. No internal link — Grafana restricts 'Internal link' to cross-datasource targets (logs↔traces). Same-datasource filtering happens via the +/- chips in the expanded log row.",
         "name": "wsConnId",
         "matcherType": "regex",
-        "matcherRegex": "\"?ws[._]conn_id\"?\\s*[:=]\\s*\"?([a-f0-9-]+)",
-        "datasourceUid": "grafanacloud-logs",
-        "url": "{service_name=\"backend\"} | json | ws_conn_id=\"${__value.raw}\""
+        "matcherRegex": "\"?ws[._]conn_id\"?\\s*[:=]\\s*\"?([a-f0-9-]+)"
       },
       {
-        "_doc": "Click any user_id -> internal Loki query showing every log emitted for that user across all systems. Useful for support requests and per-user debugging.",
+        "_doc": "Extract user_id from log lines. Same UX as wsConnId — expand a row and click + on the chip to filter the query.",
         "name": "userId",
         "matcherType": "regex",
-        "matcherRegex": "\"?user_id\"?\\s*[:=]\\s*\"?(\\d+)",
-        "datasourceUid": "grafanacloud-logs",
-        "url": "{service_name=~\"backend|celery-worker\"} | json | user_id=\"${__value.raw}\""
+        "matcherRegex": "\"?user_id\"?\\s*[:=]\\s*\"?(\\d+)"
       },
       {
-        "_doc": "Click any draft_id -> all logs related to that herodraft session across the websocket, bracket, and herodraft systems.",
+        "_doc": "Extract draft_id from log lines. Same UX as wsConnId — expand a row and click + on the chip to filter the query.",
         "name": "draftId",
         "matcherType": "regex",
-        "matcherRegex": "\"?draft_id\"?\\s*[:=]\\s*\"?(\\d+)",
-        "datasourceUid": "grafanacloud-logs",
-        "url": "{service_name=~\"backend|celery-worker\"} | json | draft_id=\"${__value.raw}\""
+        "matcherRegex": "\"?draft_id\"?\\s*[:=]\\s*\"?(\\d+)"
       }
     ]
   }
