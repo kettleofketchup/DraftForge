@@ -407,8 +407,12 @@ test.describe('Two Captains Full Draft', () => {
     ]);
 
     // Verify WebSocket connections were established
-    console.log(`   Captain A WebSocket: ${wsConnectionA ? 'connected to ' + wsConnectionA.url : 'NOT CONNECTED'}`);
-    console.log(`   Captain B WebSocket: ${wsConnectionB ? 'connected to ' + wsConnectionB.url : 'NOT CONNECTED'}`);
+    // Cast through unknown because TypeScript narrows these to `null` based on the
+    // initial assignment — the closures that mutate them run later at runtime.
+    const wsA = wsConnectionA as unknown as { url: string; closed: boolean } | null;
+    const wsB = wsConnectionB as unknown as { url: string; closed: boolean } | null;
+    console.log(`   Captain A WebSocket: ${wsA ? 'connected to ' + wsA.url : 'NOT CONNECTED'}`);
+    console.log(`   Captain B WebSocket: ${wsB ? 'connected to ' + wsB.url : 'NOT CONNECTED'}`);
 
     if (!wsConnectionA || !wsConnectionB) {
       throw new Error('WebSocket connections not established for both captains');
@@ -591,9 +595,9 @@ test.describe('Two Captains Full Draft', () => {
     ];
 
     // Set first pick based on who won the flip (winner chose 'first_pick')
-    const firstPickCaptain: CaptainContext = flipWinnerCaptain;
-    const secondPickCaptain: CaptainContext = flipWinnerCaptain === captainA ? captainB : captainA;
-    const firstPickDetermined = true;
+    let firstPickCaptain: CaptainContext = flipWinnerCaptain;
+    let secondPickCaptain: CaptainContext = flipWinnerCaptain === captainA ? captainB : captainA;
+    let firstPickDetermined = true;
     console.log(`   First pick captain: ${firstPickCaptain.username}`);
 
     // Helper to determine which captain should pick based on round number

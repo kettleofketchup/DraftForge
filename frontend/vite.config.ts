@@ -3,19 +3,15 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
-const ReactCompilerConfig = {
-  // Compile all files in app/ directory
-  sources: (filename: string) => filename.includes('/app/'),
-};
+// Note: `reactRouter()` no longer accepts a babel option in current versions;
+// React Compiler integration (babel-plugin-react-compiler) must be configured
+// via the React Router config file (react-router.config.ts) or a dedicated
+// babel plugin if reintroduced.
 
 export default defineConfig({
   plugins: [
     tailwindcss(),
-    reactRouter({
-      babel: {
-        plugins: [['babel-plugin-react-compiler', ReactCompilerConfig]],
-      },
-    }),
+    reactRouter(),
     tsconfigPaths(),
   ],
   build: {

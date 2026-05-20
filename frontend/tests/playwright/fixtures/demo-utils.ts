@@ -1,4 +1,5 @@
-import { Page, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 
 /**
  * Demo-specific utilities for ensuring content is fully loaded before recording.
