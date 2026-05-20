@@ -64,6 +64,9 @@ export default defineConfig({
     // Default viewport
     viewport: { width: 1280, height: 720 },
 
+    // Pin locale to en-US for deterministic regression assertions (without it, Playwright inherits host OS locale)
+    locale: 'en-US',
+
     // Action timeout - 15s max for clicks/fills (faster failure than test timeout)
     actionTimeout: 15_000,
   },
