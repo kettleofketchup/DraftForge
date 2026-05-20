@@ -190,7 +190,7 @@ class KettleBot(discord.Client):
                         event, str(interaction.user.id)
                     )
                     if org_user:
-                        from cacheops import invalidate_obj
+                        from app.cache_utils import invalidate_obj
 
                         from org.models_profiles import PlayerDotaProfile
 

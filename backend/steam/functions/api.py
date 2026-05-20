@@ -280,7 +280,7 @@ def link_game_match(request, game_id):
 
     Requires league staff access.
     """
-    from cacheops import invalidate_obj
+    from app.cache_utils import invalidate_obj
 
     from app.models import Game
 
@@ -330,7 +330,7 @@ def unlink_game_match(request, game_id):
 
     Requires league staff access.
     """
-    from cacheops import invalidate_obj
+    from app.cache_utils import invalidate_obj
 
     from app.models import Game
 

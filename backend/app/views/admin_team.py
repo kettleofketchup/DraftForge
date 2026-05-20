@@ -1,6 +1,6 @@
 """Admin Team API views for organization and league permission management."""
 
-from cacheops import invalidate_obj
+from app.cache_utils import invalidate_obj
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Q

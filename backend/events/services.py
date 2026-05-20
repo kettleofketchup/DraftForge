@@ -5,7 +5,7 @@ import re
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 
-from cacheops import invalidate_obj
+from app.cache_utils import invalidate_obj
 from django.db import models, transaction
 
 from app.cache_utils import invalidate_after_commit

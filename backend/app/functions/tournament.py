@@ -51,7 +51,7 @@ class PickPlayerForRound(serializers.Serializer):
     user_pk = serializers.IntegerField(required=True)
 
 
-from cacheops import invalidate_obj
+from app.cache_utils import invalidate_obj
 
 
 @api_view(["POST"])

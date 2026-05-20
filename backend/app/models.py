@@ -2,7 +2,9 @@ import logging
 
 import nh3
 import requests
-from cacheops import cached_as, invalidate_obj
+from cacheops import cached_as
+
+from app.cache_utils import invalidate_obj
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models
@@ -272,10 +274,8 @@ class CustomUser(AbstractUser):
             self.positions = default_positions
 
         super().save(*args, **kwargs)
-
-        # Invalidate this specific user's cache
-
-        invalidate_obj(self)
+        # Cacheops auto-fires invalidation for `self` via post_save signal
+        # (model is registered with ops="all"). No explicit call needed.
 
     @property
     def avatarUrl(self):
@@ -360,9 +360,9 @@ class Organization(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate this specific organization's cache
-
-        invalidate_obj(self)
+        # Cacheops post_save signal handles self-invalidation. This save()
+        # exists only so the orm-defined behavior matches the call shape
+        # used elsewhere; no cache work needed beyond what cacheops does.
 
     def delete(self, *args, **kwargs):
         # Invalidate related leagues before deletion
@@ -468,8 +468,9 @@ class League(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate this specific league and its related organization
-        invalidate_obj(self)
+        # Self-invalidation handled by cacheops post_save signal; explicit
+        # cascade to organization stays so the org's cached child list
+        # refreshes when this league mutates.
         if self.organization:
             invalidate_obj(self.organization)
 
@@ -571,10 +572,10 @@ class Tournament(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate this specific tournament and its related league/org
-        # Use invalidate_obj() to avoid invalidating ALL tournaments
-
-        invalidate_obj(self)
+        # Self-invalidation handled by cacheops post_save signal; the
+        # cascade to league + org refreshes those parents' embedded
+        # tournament list. Targeted invalidate_obj() rather than
+        # invalidate_model() so unrelated tournaments stay cached.
         if self.league:
             invalidate_obj(self.league)
             if self.league.organization:
@@ -849,9 +850,8 @@ class Game(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        # Invalidate this team and related tournament/league caches
-
-        invalidate_obj(self)
+        # Self-invalidation via cacheops post_save signal. Explicit
+        # cascade keeps the tournament/league cached team lists fresh.
         if self.tournament_id:
             invalidate_obj(self.tournament)
         if self.league_id:
@@ -1579,8 +1579,7 @@ class HeroDraft(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-
-        invalidate_obj(self)
+        # Self-invalidation handled by cacheops post_save signal.
 
     def __str__(self):
         return f"HeroDraft for {self.game}"
@@ -1603,8 +1602,8 @@ class DraftTeam(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-
-        invalidate_obj(self)
+        # Self-invalidation via cacheops post_save. Cascade to draft so
+        # the draft's cached team list refreshes when any team mutates.
         if self.draft_id:
             invalidate_obj(self.draft)
 
@@ -1649,8 +1648,8 @@ class HeroDraftRound(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-
-        invalidate_obj(self)
+        # Self-invalidation via cacheops post_save. Cascade to draft so
+        # the draft's cached round list refreshes on each pick/ban.
         if self.draft_id:
             invalidate_obj(self.draft)
 
@@ -1695,7 +1694,8 @@ class HeroDraftEvent(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
-        invalidate_obj(self)
+        # Self-invalidation via cacheops post_save. Cascade to draft so
+        # the draft's event log refreshes when a new event is recorded.
         if self.draft_id:
             invalidate_obj(self.draft)
 

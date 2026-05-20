@@ -210,7 +210,7 @@ def handle_signup_button(event_id, discord_user_id, discord_username=None):
 
 def handle_signup_modal_submit(event_id, discord_user_id, game_type, values):
     """Handle modal form submission. Saves profile data to OrgUser, may need follow-up."""
-    from cacheops import invalidate_obj
+    from app.cache_utils import invalidate_obj
 
     from app.models import GameType
     from org.models_profiles import PlayerDeadlockProfile
@@ -539,7 +539,7 @@ def handle_screenshot_upload(
 
 def handle_notify_button(event_id, discord_user_id):
     """Handle Notify Me button click. Toggles RepeaterSubscription."""
-    from cacheops import invalidate_obj
+    from app.cache_utils import invalidate_obj
 
     from app.models import CustomUser
     from events.models import RepeaterSubscription

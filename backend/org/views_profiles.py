@@ -83,7 +83,7 @@ def update_my_dota_profile(request, org_id):
             setattr(profile, field, request.data[field])
     profile.save()
 
-    from cacheops import invalidate_obj
+    from app.cache_utils import invalidate_obj
 
     invalidate_obj(profile)
     invalidate_obj(org_user)
@@ -149,7 +149,7 @@ def update_user_dota_profile(request, org_id, user_pk):
             setattr(profile, field, request.data[field])
     profile.save()
 
-    from cacheops import invalidate_obj
+    from app.cache_utils import invalidate_obj
 
     invalidate_obj(profile)
     invalidate_obj(org_user)
@@ -180,7 +180,7 @@ def delete_user_dota_profile(request, org_id, user_pk):
 
     deleted, _ = PlayerDotaProfile.objects.filter(org_user=org_user).delete()
     if deleted:
-        from cacheops import invalidate_obj
+        from app.cache_utils import invalidate_obj
 
         invalidate_obj(org_user)
     return Response(status=status.HTTP_204_NO_CONTENT)

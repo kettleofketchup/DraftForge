@@ -1,20 +1,61 @@
 """
 Cache invalidation utilities for cacheops + Django transactions.
 
-The `invalidate_after_commit` helper ensures cacheops sees committed state
-by deferring `invalidate_obj` calls until after the current transaction commits.
-
-Use this inside `transaction.atomic()` blocks instead of calling `invalidate_obj`
-manually after the block.
+All cache eviction in this codebase should go through this module's
+wrappers — `invalidate_obj`, `invalidate_model`, and `invalidate_after_commit`
+all emit structured `system="cache", subsystem="invalidate"` log entries
+so eviction frequency is visible on the subsystem-logs Grafana dashboard.
+Importing `invalidate_obj` directly from `cacheops` bypasses the telemetry.
 """
 
-from cacheops import invalidate_obj
+from cacheops import invalidate_model as _cacheops_invalidate_model
+from cacheops import invalidate_obj as _cacheops_invalidate_obj
 from django.db import transaction
 from django.db.models import Model
 
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
+
+
+def invalidate_obj(obj: Model) -> None:
+    """Evict a single cached object and emit a `cache_invalidate` log.
+
+    Drop-in replacement for `cacheops.invalidate_obj` — same signature,
+    same effect, plus structured logging tagged
+    `system=cache, subsystem=invalidate`.
+
+    Use inside non-transactional code paths or outside `atomic()` blocks.
+    Inside a transaction, prefer `invalidate_after_commit` so the eviction
+    fires only after the write actually commits.
+    """
+    log.info(
+        "cache_invalidate",
+        system="cache",
+        subsystem="invalidate",
+        obj_class=obj.__class__.__name__,
+        obj_pk=obj.pk,
+    )
+    _cacheops_invalidate_obj(obj)
+
+
+def invalidate_model(model: type[Model]) -> None:
+    """Evict every cached entry for a model and emit a `cache_invalidate_model` log.
+
+    Logged at WARNING because model-wide eviction is expensive (every
+    request that had something cached for this model now misses) — should
+    be rare and worth investigating each occurrence on the dashboard.
+    Migrations and explicit "clean slate" operations are the only
+    legitimate uses; for bulk_update of <1k rows, loop `invalidate_obj`
+    per row instead.
+    """
+    log.warning(
+        "cache_invalidate_model",
+        system="cache",
+        subsystem="invalidate",
+        obj_class=model.__name__,
+    )
+    _cacheops_invalidate_model(model)
 
 
 def invalidate_after_commit(*objs: Model) -> None:
@@ -34,13 +75,6 @@ def invalidate_after_commit(*objs: Model) -> None:
 
     def _do():
         for obj in objs:
-            log.info(
-                "cache_invalidate",
-                system="cache",
-                subsystem="invalidate",
-                obj_class=obj.__class__.__name__,
-                obj_pk=obj.pk,
-            )
             invalidate_obj(obj)
 
     transaction.on_commit(_do)

@@ -1,7 +1,9 @@
 import logging
 
-from cacheops import cached_as, invalidate_obj
+from cacheops import cached_as
 from django.db import transaction
+
+from app.cache_utils import invalidate_obj
 from django.db.models import BooleanField, Count, Exists, F, OuterRef, Q, Value
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action

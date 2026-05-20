@@ -11,7 +11,7 @@ These endpoints live in the `user` app so they can grow without bloating
 `app/views/internal.py`. All require InternalServiceAuth.
 """
 
-from cacheops import invalidate_model
+from app.cache_utils import invalidate_model
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.decorators import (
@@ -166,7 +166,7 @@ def bulk_update_user_avatars(request):
     User.objects.bulk_update(to_update, ["avatar"], batch_size=500)
     # Per-row invalidation: only evict the users that changed instead of
     # wiping the whole CustomUser cache. See docstring for rationale.
-    from cacheops import invalidate_obj
+    from app.cache_utils import invalidate_obj
 
     for u in to_update:
         invalidate_obj(u)

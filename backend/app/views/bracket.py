@@ -1,6 +1,6 @@
 """Bracket API views for tournament bracket management."""
 
-from cacheops import invalidate_obj
+from app.cache_utils import invalidate_obj
 from django.db import transaction
 from django.db.models import Max
 from rest_framework import status

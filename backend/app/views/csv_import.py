@@ -2,7 +2,7 @@
 
 import logging
 
-from cacheops import invalidate_obj
+from app.cache_utils import invalidate_obj
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import status

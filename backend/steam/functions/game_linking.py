@@ -178,7 +178,7 @@ def _link_game_to_match(game, match):
     - game.winning_team = determined from match.radiant_win and player positions
     - game.status = "completed"
     """
-    from cacheops import invalidate_obj
+    from app.cache_utils import invalidate_obj
 
     game.gameid = match.match_id
 
