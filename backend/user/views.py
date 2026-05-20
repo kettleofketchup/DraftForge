@@ -1,13 +1,14 @@
-import structlog
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from telemetry.logging import get_logger
+
 from .serializers import BaseUserProfileSerializer, UserProfileLayeredSerializer
 
 
-log = structlog.get_logger(__name__)
+log = get_logger(__name__)
 
 
 class MeProfileView(APIView):
