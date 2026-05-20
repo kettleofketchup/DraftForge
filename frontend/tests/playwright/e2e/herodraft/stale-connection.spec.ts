@@ -1,4 +1,5 @@
-import { test, expect, chromium, BrowserContext, Page, WebSocket as PWWebSocket, WebSocketRoute } from '@playwright/test';
+import { test, expect, chromium } from '@playwright/test';
+import type { BrowserContext, Page, WebSocket as PWWebSocket, WebSocketRoute } from '@playwright/test';
 import { loginAsDiscordId, loginUser, waitForHydration } from '../../fixtures/auth';
 import { HeroDraftPage } from '../../helpers/HeroDraftPage';
 

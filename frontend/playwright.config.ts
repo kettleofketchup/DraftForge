@@ -46,7 +46,7 @@ export default defineConfig({
     ['html', { open: 'never' }],
     ['list'],
     ['./tests/playwright/reporters/health-probe-reporter.ts'],
-    ...(process.env.CI ? [['github' as const]] : []),
+    ...(process.env.CI ? [['github', {}] as ['github', Record<string, unknown>]] : []),
   ],
 
   use: {

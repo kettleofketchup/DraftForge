@@ -315,7 +315,7 @@ test.describe('Shuffle Draft - Captain Login Scenarios', () => {
 
     // Login as the second captain using loginAsUser
     // captain is now a PK (number) from the slim serializer
-    const captainPk = typeof secondCaptain === 'number' ? secondCaptain : secondCaptain.pk;
+    const captainPk: number = typeof secondCaptain === 'number' ? secondCaptain : (secondCaptain as { pk: number }).pk;
     const response = await loginAsUser(captainPk);
     console.log(`Logged in as: ${response.user?.username}`);
 

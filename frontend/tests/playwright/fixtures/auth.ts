@@ -7,7 +7,8 @@
  * Ports the Cypress login commands to Playwright.
  */
 
-import { test as base, expect, BrowserContext, Page } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 
 // Use localhost by default (matches playwright.config.ts baseURL)
 // Can be overridden with DOCKER_HOST for running inside Docker containers
@@ -153,6 +154,12 @@ export async function loginAdmin(context: BrowserContext): Promise<void> {
   console.log(`[auth] loginAdmin response: ${status} ${statusText}`);
 
   if (!response.ok()) {
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
     console.error(`[auth] loginAdmin FAILED: ${status} ${statusText}`);
     console.error(`[auth] This usually means:`);
     console.error(`[auth]   - 403: TEST=true not set or IP not whitelisted`);
