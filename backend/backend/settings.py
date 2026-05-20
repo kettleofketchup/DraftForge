@@ -134,7 +134,6 @@ INSTALLED_APPS = [
     "bracket.apps.TournamentConfig",
     "discordbot.apps.DiscordbotConfig",
     "events.apps.EventsConfig",
-    "user.apps.UserConfig",
     "cacheops",  # Added for django-cacheops
 ]
 
