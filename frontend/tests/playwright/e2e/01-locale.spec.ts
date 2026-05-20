@@ -110,15 +110,16 @@ test.describe('navbar i18n — anonymous', () => {
       { name: 'df-locale', value: 'es', url: 'https://localhost' },
     ]);
     const p1 = await ctx.newPage();
-    attachErrorCapture(p1);
+    const errorsP1 = attachErrorCapture(p1);
     await p1.goto('/tournaments');
     await expect(p1.locator(LOGIN_BUTTON)).toHaveText(ES_LOGIN);
+    expect(errorsP1).toEqual([]);
     await ctx.clearCookies();
     const p2 = await ctx.newPage();
-    const errors = attachErrorCapture(p2);
+    const errorsP2 = attachErrorCapture(p2);
     await p2.goto('/tournaments');
     await expect(p2.locator(LOGIN_BUTTON)).toHaveText(EN_LOGIN);
-    expect(errors).toEqual([]);
+    expect(errorsP2).toEqual([]);
     await ctx.close();
   });
 
