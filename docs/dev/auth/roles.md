@@ -1,0 +1,153 @@
+# Auth Roles and Permission Matrix
+
+This page is the **single source of truth** for the permission contract
+across the eight roles in DraftForge. The matrix here mirrors what the
+Playwright role-matrix tests enforce at runtime — if a row here drifts
+from a row there, the tests fail (or you have a documentation bug).
+
+> **Centralised contract.** When changing a UI gate, update:
+>
+> 1. The relevant hook in
+>    [`frontend/app/hooks/usePermissions.ts`][hooks]
+> 2. The matching backend helper in
+>    [`backend/app/permissions_org.py`][permissions]
+> 3. The expectations in the matrix spec under
+>    [`frontend/tests/playwright/e2e/17-auth/`][matrix]
+> 4. The corresponding row in this document
+>
+> Any one of those four out of sync produces silent permission drift.
+
+## The Eight Roles
+
+| Role          | Test fixture            | Test user pk | Defining attribute                          |
+| ------------- | ----------------------- | -----------: | ------------------------------------------- |
+| `siteAdmin`   | `loginAdmin()`          |         1001 | `is_superuser=True`                         |
+| `siteStaff`   | `loginStaff()`          |         1002 | `is_staff=True`, `is_superuser=False`       |
+| `orgAdmin`    | `loginOrgAdmin()`       |         1020 | In `Organization.admins` (DTX, pk=1)        |
+| `orgStaff`    | `loginOrgStaff()`       |         1021 | In `Organization.staff` (DTX, pk=1)         |
+| `orgMember`   | `loginOrgMember()`      |         1022 | `OrgUser` row only, no admin/staff role     |
+| `leagueAdmin` | `loginLeagueAdmin()`    |         1030 | In `League.admins` (DTX League, pk=1)       |
+| `leagueStaff` | `loginLeagueStaff()`    |         1031 | In `League.staff` (DTX League, pk=1)        |
+| `anonymous`   | _(none — fresh context)_|            — | No session                                  |
+
+The hierarchy is **site admin > org admin > org staff > league admin >
+league staff > org member > anonymous**. Each tier inherits the abilities
+of the tiers below it (the bypass is implemented in the `useIs*` hooks),
+**except** that staff roles do not cascade upward into admin abilities —
+a league admin is _not_ an org admin and an org staffer is _not_ an org
+admin.
+
+## Site-Admin Cascade
+
+`is_staff` and `is_superuser` are both treated as site-level admin. Both
+the frontend hooks (`useIsOrganizationAdmin`, `useIsOrganizationStaff`,
+`useIsLeagueAdmin`, `useIsLeagueStaff`) and the backend helpers
+(`has_org_admin_access`, `has_league_admin_access`) short-circuit on
+`is_staff || is_superuser` _before_ the entity-null guard. That means a
+site admin can edit tournaments, declare winners on bracket nodes, and
+generate brackets even when the tournament has no league or its org
+hasn't loaded yet.
+
+## Create-Action Matrix
+
+The five entry points locked by `e2e/17-auth/01-create-gates.spec.ts`.
+✓ = button visible to that role; ✗ = button hidden.
+
+|                              | siteAdmin | siteStaff | orgAdmin | orgStaff | orgMember | leagueAdmin | leagueStaff | anonymous |
+| ---------------------------- | :-------: | :-------: | :------: | :------: | :-------: | :---------: | :---------: | :-------: |
+| Create Organization          |     ✓     |     ✓     |    ✓     |    ✓     |     ✓     |      ✓      |      ✓      |     ✗     |
+| Create League (org-detail)   |     ✓     |     ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
+| Create Event (org-detail)    |     ✓     |     ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
+| Create Event (`/events`)     |     ✓     |     ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
+| Create Tournament            |     ✓     |     ✓     |    ✓     |    ✗     |     ✗     |      ✓      |      ✗      |     ✗     |
+
+**Why some rows look this way:**
+
+- **Create Organization** is the most permissive — any signed-in account
+  can spin up its own org. The hook `useIsLoggedIn` plus
+  `IsAuthenticated` on the backend `OrganizationView.create`.
+- **Create League** and **Create Event** track `useIsOrganizationStaff` —
+  events are operational, not governance, so staff get the gate. Both
+  the org-detail tabs and `/events?organization=X` use the same hook.
+- **Create Tournament** mirrors the backend's `has_league_admin_access`
+  cascade via `useCanCreateAnyTournament`: site admin, admin of any
+  organisation (via `admin_organization_ids`), or admin of any league
+  (via `admin_league_ids`). Staff roles can't create tournaments —
+  matching the backend's `perform_create` check.
+
+## Edit + Bracket Matrix
+
+The five entry points locked by `e2e/17-auth/02-edit-and-bracket-gates.spec.ts`.
+
+|                                        | siteAdmin | siteStaff | orgAdmin | orgStaff | orgMember | leagueAdmin | leagueStaff | anonymous |
+| -------------------------------------- | :-------: | :-------: | :------: | :------: | :-------: | :---------: | :---------: | :-------: |
+| Edit User (org members tab)            |     ✓     |     ✓     |    ✓     |    ✓     |     ✗     |      ✗      |      ✗      |     ✗     |
+| Edit User (tournament players tab)     |     ✓     |     ✓     |    ✗     |    ✗     |     ✗     |      ✓      |      ✗      |     ✗     |
+| Generate Bracket                       |     ✓     |     ✓     |    ✓     |    ✓     |     ✗     |      ✓      |      ✓      |     ✗     |
+| Set Bracket Match Winner               |     ✓     |     ✓     |    ✓     |    ✓     |     ✗     |      ✓      |      ✓      |     ✗     |
+| Link Steam Match (bracket)             |     ✓     |     ✓     |    ✗     |    ✗     |     ✗     |      ✗      |      ✗      |     ✗     |
+
+**Why some rows look this way:**
+
+- **Edit User (org members tab)** uses `useIsOrganizationStaff(currentOrg)`
+  via the UserCard's org-scoped editScope — staff-permissive.
+- **Edit User (tournament players tab)** is a **known divergence**.
+  The hasErrors panel renders first when a player profile is incomplete
+  and uses `deriveEditScope({ league, currentOrg })`, which returns
+  `{ kind: 'league', league }` whenever the tournament has a league
+  (no `.organization` on the scope). That resolves to
+  `useIsLeagueAdmin(league, undefined)`. The hook's org-admin cascade
+  only fires if `league.organization` is embedded — in this navigation
+  path it's not, so **org admins lose access**. Only site admins and
+  direct league admins pass. Same user record, two gates depending on
+  which page you're on, with an additional store-state dependency.
+- **Generate Bracket** and **Set Winner** use `useCanEditTournament` /
+  `useIsLeagueStaff` — operational match-management actions that
+  league staff legitimately do.
+- **Link Steam Match** is another **known divergence**: gates on
+  `useUserStore.isStaff()` (site staff/superuser only) while the rest
+  of the MatchStatsModal uses `useIsLeagueStaff`. If you're widening
+  it, lift the gate to `useIsLeagueStaff` and flip the matrix row.
+
+## Adding a New Gate
+
+1. Pick the right hook in `usePermissions.ts` — or add one if none fits
+   (and document it in this page).
+2. Apply the hook to the JSX gate. If the action also has a backend
+   endpoint, make sure the backend's permission cascade lines up with
+   the frontend hook's convention (site admin bypass, owner-counts-as-
+   admin, etc.).
+3. Add a `data-testid` to the gated button.
+4. Append a row to whichever spec in `e2e/17-auth/` covers the action.
+5. Update the matrix table in this page.
+
+## Adding a New Role
+
+The fixture file is `frontend/tests/playwright/fixtures/role-contexts.ts`.
+A new role requires:
+
+- A `TestUser` in `backend/tests/data/users.py` and the corresponding
+  populate function in `backend/tests/populate/users.py`.
+- A `/api/tests/login-<role>/` view in `backend/tests/test_auth.py` and
+  URL entry in `backend/tests/urls.py`.
+- A login fixture in `frontend/tests/playwright/fixtures/auth.ts`.
+- An entry in `ROLE_NAMES` and `ROLE_LOGINS` in `role-contexts.ts`.
+- An expectation column in **every** matrix table — both in this page
+  and in `e2e/17-auth/*.spec.ts`.
+
+## Related Files
+
+| Concern                          | File                                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------- |
+| Frontend permission hooks         | `frontend/app/hooks/usePermissions.ts`                                                |
+| Backend permission helpers        | `backend/app/permissions_org.py`                                                      |
+| User serializer (role memberships)| `backend/app/serializers.py` (`UserSerializer`)                                       |
+| Playwright role fixture           | `frontend/tests/playwright/fixtures/role-contexts.ts`                                 |
+| Login endpoints                   | `backend/tests/test_auth.py`, `backend/tests/urls.py`                                 |
+| Test users                        | `backend/tests/data/users.py`                                                         |
+| Create-action matrix              | `frontend/tests/playwright/e2e/17-auth/01-create-gates.spec.ts`                        |
+| Edit + bracket matrix             | `frontend/tests/playwright/e2e/17-auth/02-edit-and-bracket-gates.spec.ts`              |
+
+[hooks]: ../../../frontend/app/hooks/usePermissions.ts
+[permissions]: ../../../backend/app/permissions_org.py
+[matrix]: ../../../frontend/tests/playwright/e2e/17-auth/

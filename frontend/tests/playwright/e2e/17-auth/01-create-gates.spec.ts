@@ -7,6 +7,10 @@
  * anonymous) using ``roleMatrixTest`` — one Playwright test per gate,
  * fanning out to 8 concurrent BrowserContexts via ``Promise.all``.
  *
+ * The canonical matrix and its rationale live in
+ * ``docs/dev/auth/roles.md``. The diagram below is a quick reference;
+ * if it drifts from that page, the doc is authoritative.
+ *
  * Expected matrix (✓ = button visible to that role). Two Create Event
  * rows because the org-detail tab and the /events route use different
  * gates (``useIsOrganizationStaff`` vs ``useIsOrganizationAdmin``):
