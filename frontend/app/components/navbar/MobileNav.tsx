@@ -1,5 +1,6 @@
 import { Menu } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { Button } from '~/components/ui/button';
 import {
@@ -168,6 +169,7 @@ const MobileNavLink: React.FC<MobileNavLinkProps> = ({
 };
 
 export function MobileNav() {
+  const { t } = useTranslation('navbar');
   const currentUser = useUserStore((state) => state.currentUser);
   // Render client-side only to avoid Radix UI hydration mismatch with special characters in IDs
   const [mounted, setMounted] = useState(false);
@@ -189,7 +191,13 @@ export function MobileNav() {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="md:hidden mr-1" aria-label="Open menu">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden mr-1"
+          aria-label={t('aria.open_menu')}
+          data-testid="mobileNavToggle"
+        >
           <Menu className="h-5 w-5" />
         </Button>
       </SheetTrigger>
@@ -197,66 +205,67 @@ export function MobileNav() {
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <img src="/logo512.png" alt="DraftForge" className="h-8 w-8 rounded-full" />
+            {/* eslint-disable-next-line i18next/no-literal-string */}
             <span>DraftForge</span>
           </SheetTitle>
         </SheetHeader>
         <nav className="flex flex-col gap-1 mt-6">
           {/* Main Navigation */}
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 py-2">
-            Navigation
+            {t('section.navigation')}
           </div>
           <MobileNavLink
             to="/"
             icon={<HomeIcon />}
-            title="Home"
-            subtitle="Back to start"
+            title={t('home')}
+            subtitle={t('nav.home_subtitle')}
             onClick={closeNav}
           />
           <MobileNavLink
             to="/about"
             icon={<AboutIcon />}
-            title="About"
-            subtitle="Who we are"
+            title={t('nav.about')}
+            subtitle={t('nav.about_subtitle')}
             iconClassName="text-info"
             onClick={closeNav}
           />
           <MobileNavLink
             to="/tournaments"
             icon={<TrophyIcon />}
-            title="Tournaments"
-            subtitle="Compete & win"
+            title={t('nav.tournaments')}
+            subtitle={t('nav.tournaments_subtitle')}
             iconClassName="text-warning"
             onClick={closeNav}
           />
           <MobileNavLink
             to="/users"
             icon={<UsersIcon />}
-            title="Users"
-            subtitle="Find players"
+            title={t('nav.users')}
+            subtitle={t('nav.users_subtitle')}
             iconClassName="text-interactive"
             onClick={closeNav}
           />
           <MobileNavLink
             to="/organizations"
             icon={<BuildingIcon />}
-            title="Organizations"
-            subtitle="Communities"
+            title={t('nav.organizations')}
+            subtitle={t('nav.organizations_subtitle')}
             iconClassName="text-secondary"
             onClick={closeNav}
           />
           <MobileNavLink
             to="/leagues"
             icon={<LeagueIcon />}
-            title="Leagues"
-            subtitle="Ranked play"
+            title={t('nav.leagues')}
+            subtitle={t('nav.leagues_subtitle')}
             iconClassName="text-primary"
             onClick={closeNav}
           />
           <MobileNavLink
             to="/events"
             icon={<CalendarIcon />}
-            title="Events"
-            subtitle="Sign up here"
+            title={t('nav.events')}
+            subtitle={t('signup_here')}
             iconClassName="text-accent"
             onClick={closeNav}
           />
@@ -264,8 +273,8 @@ export function MobileNav() {
             <MobileNavLink
               href="/admin/"
               icon={<AdminIcon />}
-              title="Admin"
-              subtitle="Manage site"
+              title={t('nav.admin')}
+              subtitle={t('nav.admin_subtitle')}
               iconClassName="text-success"
               onClick={closeNav}
             />
@@ -273,28 +282,28 @@ export function MobileNav() {
 
           {/* External Links */}
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 py-2 mt-4">
-            Resources
+            {t('section.resources')}
           </div>
           <MobileNavLink
             href={GITHUB_REPO_URL}
             icon={<GitHubIcon />}
-            title="GitHub"
-            subtitle="Star us!"
+            title={t('nav.github')}
+            subtitle={t('nav.github_subtitle_star')}
             external
           />
           <MobileNavLink
             href={DOCS_URL}
             icon={<DocsIcon />}
-            title="Documentation"
-            subtitle="Learn how it works"
+            title={t('nav.documentation')}
+            subtitle={t('nav.documentation_subtitle')}
             iconClassName="text-info"
             external
           />
           <MobileNavLink
             href={BUG_REPORT_URL}
             icon={<BugIcon />}
-            title="Report Issue"
-            subtitle="Help us improve"
+            title={t('nav.report_issue')}
+            subtitle={t('nav.report_issue_subtitle_improve')}
             iconClassName="text-destructive"
             external
           />
