@@ -332,6 +332,11 @@ else:
         "app.tournament": {"ops": "all", "timeout": 60 * 60},
         "app.team": {"ops": "all", "timeout": 60 * 60},
         "app.customuser": {"ops": "all", "timeout": 60 * 60},
+        # BaseUserProfile owns nickname/avatar (T1 epic). Every @cached_as
+        # site that ships nickname/avatar must list BaseUserProfile so PATCH
+        # /api/users/me/profile/base/ invalidates the cached payload — see
+        # backend/user/tests/test_cacheops.py for the grep guardrail.
+        "user.baseuserprofile": {"ops": "all", "timeout": 60 * 60},
         "app.draft": {"ops": "all", "timeout": 60 * 60},
         "app.game": {"ops": "all", "timeout": 60 * 60},
         "app.herodraft": {"ops": "all", "timeout": 60 * 60},

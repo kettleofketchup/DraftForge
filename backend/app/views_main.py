@@ -73,6 +73,13 @@ from .serializers import (
     _serialize_users_with_mmr,
 )
 
+# BaseUserProfile owns nickname/avatar (T1 epic). Every @cached_as site below
+# that ships nickname or avatar in its payload MUST list BaseUserProfile as a
+# dependency, otherwise PATCH /api/users/me/profile/base/ won't invalidate the
+# cached response. See backend/user/tests/test_cacheops.py for the grep
+# guardrail that enforces this.
+from user.models import BaseUserProfile
+
 log = logging.getLogger(__name__)
 from .utils.avatar_utils import refresh_user_avatar
 
@@ -190,7 +197,11 @@ class UserView(viewsets.ModelViewSet):
         cache_key = f"user_list:{request.get_full_path()}"
 
         @cached_as(
-            CustomUser.objects.all(), keep_fresh=True, extra=cache_key, timeout=60 * 60
+            CustomUser.objects.all(),
+            BaseUserProfile,
+            keep_fresh=True,
+            extra=cache_key,
+            timeout=60 * 60,
         )
         def get_data():
             queryset = self.filter_queryset(self.get_queryset())
@@ -206,6 +217,7 @@ class UserView(viewsets.ModelViewSet):
 
         @cached_as(
             CustomUser.objects.filter(pk=pk),
+            BaseUserProfile,
             keep_fresh=True,
             extra=cache_key,
             timeout=60 * 60,
@@ -400,6 +412,7 @@ class TournamentView(viewsets.ModelViewSet):
             Tournament,
             Team,
             CustomUser,
+            BaseUserProfile,
             Draft,
             Game,
             DraftRound,
@@ -422,6 +435,7 @@ class TournamentView(viewsets.ModelViewSet):
             Tournament.objects.filter(pk=pk),
             Team,
             CustomUser,
+            BaseUserProfile,
             Game,
             Draft,
             DraftRound,
@@ -523,6 +537,7 @@ class TeamView(viewsets.ModelViewSet):
         @cached_as(
             Team.objects.all(),
             CustomUser,
+            BaseUserProfile,
             Tournament,
             Game,
             Draft,
@@ -546,6 +561,7 @@ class TeamView(viewsets.ModelViewSet):
         @cached_as(
             Team.objects.filter(pk=pk),
             CustomUser,
+            BaseUserProfile,
             Tournament,
             Game,
             Draft,
@@ -599,6 +615,7 @@ class DraftView(viewsets.ModelViewSet):
             Team,
             Tournament,
             CustomUser,
+            BaseUserProfile,
             extra=cache_key,
             timeout=60 * 60,
         )
@@ -620,6 +637,7 @@ class DraftView(viewsets.ModelViewSet):
             Team,
             Tournament,
             CustomUser,
+            BaseUserProfile,
             extra=cache_key,
             timeout=60 * 60,
         )
@@ -672,6 +690,7 @@ class DraftRoundView(viewsets.ModelViewSet):
             Team,
             Tournament,
             CustomUser,
+            BaseUserProfile,
             extra=cache_key,
             timeout=60 * 10,
         )
@@ -692,6 +711,7 @@ class DraftRoundView(viewsets.ModelViewSet):
             Team,
             Tournament,
             CustomUser,
+            BaseUserProfile,
             extra=cache_key,
             timeout=60 * 10,
         )
@@ -855,6 +875,7 @@ class GameView(viewsets.ModelViewSet):
             Team,
             Tournament,
             CustomUser,
+            BaseUserProfile,
             extra=cache_key,
             timeout=60 * 10,
         )
@@ -875,6 +896,7 @@ class GameView(viewsets.ModelViewSet):
             Team,
             Tournament,
             CustomUser,
+            BaseUserProfile,
             extra=cache_key,
             timeout=60 * 10,
         )
@@ -963,6 +985,7 @@ class TournamentsBasicView(viewsets.ModelViewSet):
             Tournament.objects.all(),
             Team,
             CustomUser,
+            BaseUserProfile,
             Game,
             extra=cache_key,
             timeout=60 * 10,
@@ -1098,7 +1121,7 @@ class OrganizationView(viewsets.ModelViewSet):
         org = self.get_object()
         cache_key = f"organization_users:{pk}"
 
-        @cached_as(OrgUser, CustomUser, extra=cache_key, timeout=60 * 10)
+        @cached_as(OrgUser, CustomUser, BaseUserProfile, extra=cache_key, timeout=60 * 10)
         def get_data():
             org_users = OrgUser.objects.filter(organization=org).select_related(
                 "user", "user__positions"
@@ -1245,7 +1268,7 @@ class LeagueView(viewsets.ModelViewSet):
         league = self.get_object()
         cache_key = f"league_users:{pk}"
 
-        @cached_as(LeagueUser, CustomUser, extra=cache_key, timeout=60 * 10)
+        @cached_as(LeagueUser, CustomUser, BaseUserProfile, extra=cache_key, timeout=60 * 10)
         def get_data():
             league_users = LeagueUser.objects.filter(league=league).select_related(
                 "user", "user__positions"

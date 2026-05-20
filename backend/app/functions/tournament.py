@@ -435,6 +435,13 @@ class DraftPredictMMRSerializer(serializers.Serializer):
 
 from cacheops import cached_as
 
+# BaseUserProfile owns nickname/avatar (T1 epic). Listed alongside CustomUser
+# in @cached_as below to satisfy the grep guardrail enforced by
+# backend/user/tests/test_cacheops.py — every cached_as site that depends on
+# CustomUser must also depend on BaseUserProfile so a PATCH to
+# /api/users/me/profile/base/ invalidates the cached response.
+from user.models import BaseUserProfile
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
@@ -453,7 +460,15 @@ def get_draft_style_mmrs(request):
         return Response({"error": "Draft not found"}, status=404)
     cache_key = f"draft_sim_pk:{request.get_full_path()}"
 
-    @cached_as(Draft, CustomUser, Tournament, Team, extra=cache_key, timeout=60 * 15)
+    @cached_as(
+        Draft,
+        CustomUser,
+        BaseUserProfile,
+        Tournament,
+        Team,
+        extra=cache_key,
+        timeout=60 * 15,
+    )
     def get_data(request):
         return DraftSerializerMMRs(draft).data
 
