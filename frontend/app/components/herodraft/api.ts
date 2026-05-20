@@ -1,4 +1,5 @@
 import api from '~/components/api/axios';
+import { getServerNowISO } from '~/store/heroDraftStore';
 import type { HeroDraft } from './types';
 
 export interface CreateHeroDraftOptions {
@@ -48,8 +49,14 @@ export async function submitPick(
   draftId: number,
   heroId: number
 ): Promise<HeroDraft> {
+  // `client_picked_at` is in SERVER-clock reference (via offset learned
+  // from tick.server_time), not raw browser time. This way a client
+  // with a skewed local clock still sends a timestamp the server can
+  // trust. Server's 2s sanity window absorbs the residual one-way
+  // network latency.
   const response = await api.post(`/herodraft/${draftId}/submit-pick/`, {
     hero_id: heroId,
+    client_picked_at: getServerNowISO(),
   });
   return response.data;
 }

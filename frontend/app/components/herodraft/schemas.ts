@@ -53,24 +53,25 @@ export const HeroDraftSchema = z.object({
   updated_at: z.string(),
 });
 
-// WebSocket message schemas for runtime validation
-// Tick message fields vary by state:
-// - DRAFTING: has current_round, active_team_id, grace_time_remaining_ms, team reserves
-// - RESUMING: has countdown_remaining_ms only
+// Tick messages carry ANCHORS (timestamps + durations), not computed
+// remainders. The client uses `server_time` to derive a clock offset
+// and renders countdowns locally via requestAnimationFrame.
 export const HeroDraftTickSchema = z.object({
   type: z.literal("herodraft_tick"),
   draft_state: z.string(),
-  // DRAFTING-specific fields — nullable because backend sends null (not undefined)
-  // during RESUMING state when these fields aren't applicable
+  // Clock anchor — present on every tick regardless of state
+  server_time: z.string(),
+  // DRAFTING anchors
   current_round: z.number().nullable().optional(),
   active_team_id: z.number().nullable().optional(),
-  grace_time_remaining_ms: z.number().nullable().optional(),
+  round_started_at: z.string().nullable().optional(),
+  round_grace_time_ms: z.number().nullable().optional(),
   team_a_id: z.number().nullable().optional(),
   team_a_reserve_ms: z.number().nullable().optional(),
   team_b_id: z.number().nullable().optional(),
   team_b_reserve_ms: z.number().nullable().optional(),
-  // RESUMING-specific field
-  countdown_remaining_ms: z.number().nullable().optional(),
+  // RESUMING anchor
+  resuming_until: z.string().nullable().optional(),
 });
 
 // Metadata schema for hero_selected events

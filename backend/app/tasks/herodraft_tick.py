@@ -1,8 +1,10 @@
-"""Background task to broadcast tick updates during active drafts.
+"""Tick broadcaster. One thread + asyncio loop per active draft, Redis-locked.
 
-Uses Redis distributed locking to prevent duplicate broadcasters across
-multiple Django instances, and connection tracking to stop when no
-WebSocket clients are connected.
+Diagnostic events when ticks misbehave:
+  tick_step_slow      — any sub-step >300ms
+  tick_loop_stalled   — gap between consecutive ticks >1.5s (event-loop blocked)
+  tick_slow           — whole iteration >1.5s
+Tempo: herodraft.tick.iteration with child herodraft.tick.<step> spans.
 """
 
 import asyncio
@@ -17,10 +19,16 @@ from channels.db import database_sync_to_async
 from channels.layers import get_channel_layer
 from django.conf import settings
 from django.utils import timezone
+from opentelemetry import trace
 
 from telemetry.logging import get_logger
 
 log = get_logger(__name__)
+tracer = trace.get_tracer(__name__)
+
+TICK_STEP_SLOW_THRESHOLD_S = 0.3       # 30% of the 1s budget
+TICK_GAP_STALL_THRESHOLD_S = 1.5       # expected gap is 1.0s
+TICK_ITERATION_SLOW_THRESHOLD_S = 1.5  # backstop if no single step crossed
 
 # Redis client for locking and connection tracking
 _redis_client = None
@@ -79,7 +87,14 @@ def get_connection_count(draft_id: int) -> int:
 
 
 async def broadcast_tick(draft_id: int):
-    """Broadcast current timing state to all connected clients."""
+    """Broadcast timing anchors to all connected clients.
+
+    Sends ANCHORS (timestamps + durations) not computed remainders.
+    Clients render countdowns locally via requestAnimationFrame using
+    `server_time` to compute clock offset. Decouples timer smoothness
+    from broadcast cadence and eliminates the "everyone freezes for a
+    few seconds" bug class.
+    """
     from app.models import HeroDraft, HeroDraftState
 
     channel_layer = get_channel_layer()
@@ -102,18 +117,16 @@ async def broadcast_tick(draft_id: int):
             )
             return None
 
-        # Handle RESUMING state - broadcast countdown remaining
-        if draft.state == HeroDraftState.RESUMING:
-            now = timezone.now()
-            countdown_remaining_ms = 0
-            if draft.resuming_until:
-                remaining = (draft.resuming_until - now).total_seconds() * 1000
-                countdown_remaining_ms = max(0, int(remaining))
+        now = timezone.now()
 
+        if draft.state == HeroDraftState.RESUMING:
             return {
                 "type": "herodraft.tick",
                 "draft_state": draft.state,
-                "countdown_remaining_ms": countdown_remaining_ms,
+                "server_time": now.isoformat(),
+                "resuming_until": (
+                    draft.resuming_until.isoformat() if draft.resuming_until else None
+                ),
             }
 
         if draft.state != HeroDraftState.DRAFTING:
@@ -138,35 +151,10 @@ async def broadcast_tick(draft_id: int):
             )
             return None
 
-        # Use explicit ordering by ID for deterministic team order
+        # Deterministic team order by ID (matches frontend assumption)
         teams = list(draft.draft_teams.all().order_by("id"))
         team_a = teams[0] if teams else None
         team_b = teams[1] if len(teams) > 1 else None
-
-        # Calculate grace time remaining and reserve time being consumed
-        now = timezone.now()
-        elapsed_ms = 0
-        grace_remaining = current_round.grace_time_ms
-
-        if current_round.started_at:
-            elapsed_ms = int((now - current_round.started_at).total_seconds() * 1000)
-            grace_remaining = max(0, current_round.grace_time_ms - elapsed_ms)
-
-        # Calculate how much reserve time has been consumed (time past grace period)
-        reserve_consumed_ms = max(0, elapsed_ms - current_round.grace_time_ms)
-
-        # Calculate real-time reserve time for each team
-        # Only the active team's reserve is being consumed
-        active_team_id = current_round.draft_team_id
-        team_a_reserve = team_a.reserve_time_remaining if team_a else 0
-        team_b_reserve = team_b.reserve_time_remaining if team_b else 0
-
-        # Calculate remaining reserve for the active team (for broadcast only)
-        # Database is updated when pick is submitted in herodraft.py
-        if team_a and team_a.id == active_team_id:
-            team_a_reserve = max(0, team_a_reserve - reserve_consumed_ms)
-        elif team_b and team_b.id == active_team_id:
-            team_b_reserve = max(0, team_b_reserve - reserve_consumed_ms)
 
         log.debug(
             "tick_broadcast",
@@ -174,25 +162,38 @@ async def broadcast_tick(draft_id: int):
             subsystem="timer",
             draft_id=draft_id,
             round=current_round.round_number,
-            elapsed_ms=elapsed_ms,
-            grace_remaining_ms=grace_remaining,
-            reserve_consumed_ms=reserve_consumed_ms,
-            team_a_reserve_ms=team_a_reserve,
-            team_b_reserve_ms=team_b_reserve,
+            server_time=now.isoformat(),
+            round_started_at=(
+                current_round.started_at.isoformat() if current_round.started_at else None
+            ),
         )
 
         return {
             "type": "herodraft.tick",
-            "current_round": current_round.round_number
-            - 1,  # 0-indexed to match state serializer
-            "active_team_id": active_team_id,
-            "grace_time_remaining_ms": grace_remaining,
-            # Include team IDs so frontend can match reserve times correctly
-            "team_a_id": team_a.id if team_a else None,
-            "team_a_reserve_ms": team_a_reserve,
-            "team_b_id": team_b.id if team_b else None,
-            "team_b_reserve_ms": team_b_reserve,
             "draft_state": draft.state,
+            # Clock anchor for client-side rAF countdown
+            "server_time": now.isoformat(),
+            # Round anchors — client computes elapsed/grace/reserve locally
+            "current_round": current_round.round_number - 1,  # 0-indexed
+            "active_team_id": current_round.draft_team_id,
+            "round_started_at": (
+                current_round.started_at.isoformat() if current_round.started_at else None
+            ),
+            "round_grace_time_ms": current_round.grace_time_ms,
+            # DraftTeam.reserve_time_remaining — the team's cumulative
+            # reserve in the DB. Stable between picks; server debits
+            # `max(0, round_elapsed - grace)` at pick submission, so the
+            # next round's broadcast carries the lower value forward.
+            # The client subtracts the IN-ROUND consumption locally for
+            # display on the active team only.
+            "team_a_id": team_a.id if team_a else None,
+            "team_a_reserve_ms": (
+                team_a.reserve_time_remaining if team_a else None
+            ),
+            "team_b_id": team_b.id if team_b else None,
+            "team_b_reserve_ms": (
+                team_b.reserve_time_remaining if team_b else None
+            ),
         }
 
     tick_data = await get_tick_data()
@@ -543,53 +544,103 @@ async def run_tick_loop(draft_id: int, stop_event: threading.Event):
         "tick_loop_started", system="herodraft", subsystem="timer", draft_id=draft_id
     )
     tick_count = 0
+    last_tick_start: float | None = None
+
+    async def _timed_step(step_name: str, coro):
+        """Span + duration log per sub-step. Warns past TICK_STEP_SLOW_THRESHOLD_S."""
+        with tracer.start_as_current_span(
+            f"herodraft.tick.{step_name}",
+            attributes={
+                "ws.draft_id": draft_id,
+                "tick.step": step_name,
+                "tick.iteration": tick_count + 1,
+            },
+        ) as span:
+            step_start = time.time()
+            await coro
+            step_duration = time.time() - step_start
+            span.set_attribute("tick.step_duration_s", round(step_duration, 4))
+            if step_duration > TICK_STEP_SLOW_THRESHOLD_S:
+                log.warning(
+                    "tick_step_slow",
+                    system="herodraft",
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    tick_step=step_name,
+                    tick_count=tick_count + 1,
+                    duration_s=round(step_duration, 3),
+                )
 
     while not stop_event.is_set():
         tick_start = time.time()
 
-        should_continue, reason = await check_continue()
-        if not should_continue:
-            log.info(
-                "tick_loop_stopping",
-                system="herodraft",
-                subsystem="timer",
-                draft_id=draft_id,
-                reason=reason,
-                tick_count=tick_count,
-            )
-            break
+        # gap > expected = event loop was blocked outside per-step work
+        if last_tick_start is not None:
+            gap = tick_start - last_tick_start
+            if gap > TICK_GAP_STALL_THRESHOLD_S:
+                log.error(
+                    "tick_loop_stalled",
+                    system="herodraft",
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    tick_count=tick_count,
+                    expected_gap_s=1.0,
+                    actual_gap_s=round(gap, 3),
+                    stall_s=round(gap - 1.0, 3),
+                )
 
-        # Check if RESUMING countdown is complete first
-        await check_resume_countdown(draft_id)
-        # Check for stale captain heartbeats (zombie connections)
-        await check_captain_heartbeats(draft_id)
-        await broadcast_tick(draft_id)
-        await check_timeout(draft_id)
-        await extend_lock()
+        with tracer.start_as_current_span(
+            "herodraft.tick.iteration",
+            attributes={
+                "ws.draft_id": draft_id,
+                "tick.iteration": tick_count + 1,
+            },
+        ) as iter_span:
+            should_continue, reason = await check_continue()
+            if not should_continue:
+                iter_span.set_attribute("tick.outcome", "stopping")
+                iter_span.set_attribute("tick.stop_reason", reason)
+                log.info(
+                    "tick_loop_stopping",
+                    system="herodraft",
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    reason=reason,
+                    tick_count=tick_count,
+                )
+                break
 
-        tick_duration = time.time() - tick_start
-        tick_count += 1
+            await _timed_step("resume_countdown", check_resume_countdown(draft_id))
+            await _timed_step("captain_heartbeats", check_captain_heartbeats(draft_id))
+            await _timed_step("broadcast_tick", broadcast_tick(draft_id))
+            await _timed_step("check_timeout", check_timeout(draft_id))
+            await _timed_step("extend_lock", extend_lock())
 
-        # Log every 30 ticks (~30s) as a health check, or if a tick was slow
-        if tick_duration > 2.0:
-            log.warning(
-                "tick_slow",
-                system="herodraft",
-                subsystem="timer",
-                draft_id=draft_id,
-                tick_count=tick_count,
-                duration_s=round(tick_duration, 2),
-            )
-        elif tick_count % 30 == 0:
-            log.info(
-                "tick_loop_healthy",
-                system="herodraft",
-                subsystem="timer",
-                draft_id=draft_id,
-                tick_count=tick_count,
-                duration_s=round(tick_duration, 3),
-            )
+            tick_duration = time.time() - tick_start
+            tick_count += 1
+            iter_span.set_attribute("tick.duration_s", round(tick_duration, 4))
+            iter_span.set_attribute("tick.outcome", "completed")
 
+            if tick_duration > TICK_ITERATION_SLOW_THRESHOLD_S:
+                log.warning(
+                    "tick_slow",
+                    system="herodraft",
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    tick_count=tick_count,
+                    duration_s=round(tick_duration, 2),
+                )
+            elif tick_count % 30 == 0:
+                log.info(
+                    "tick_loop_healthy",
+                    system="herodraft",
+                    subsystem="timer",
+                    draft_id=draft_id,
+                    tick_count=tick_count,
+                    duration_s=round(tick_duration, 3),
+                )
+
+        last_tick_start = tick_start
         await asyncio.sleep(1)
 
     log.info(

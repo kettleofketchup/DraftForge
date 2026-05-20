@@ -32,6 +32,10 @@ interface HeroDraftState {
   // Domain state
   draft: HeroDraft | null;
   tick: HeroDraftTick | null;
+  // Computed from `tick.server_time - Date.now()` at receive — lets
+  // outbound calls (e.g. submitPick) send timestamps in server-clock
+  // reference. Defaults to 0 until the first tick arrives.
+  serverClockOffsetMs: number;
   selectedHeroId: number | null;
   searchQuery: string;
   lastEvent: HeroDraftEvent | null;
@@ -66,6 +70,7 @@ const initialState = {
   wasKicked: false,
   draft: null,
   tick: null,
+  serverClockOffsetMs: 0,
   selectedHeroId: null,
   searchQuery: '',
   lastEvent: null,
@@ -179,22 +184,35 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             draft_state: message.draft_state,
             current_round: message.current_round,
             active_team_id: message.active_team_id,
-            grace_time_remaining_ms: message.grace_time_remaining_ms,
-            countdown_remaining_ms: message.countdown_remaining_ms,
+            server_time: message.server_time,
+            round_started_at: message.round_started_at,
           });
 
+          // Re-anchor clock offset on every tick. Includes one-way
+          // network latency in the offset, which means submitPick's
+          // outbound timestamp will be ~RTT/2 in the past relative to
+          // server-receive — that's the desired behaviour (the server's
+          // 2s sanity window absorbs it cleanly).
+          const serverTimeMs = new Date(message.server_time).getTime();
+          const serverClockOffsetMs = Number.isFinite(serverTimeMs)
+            ? serverTimeMs - Date.now()
+            : 0;
+
           set({
+            serverClockOffsetMs,
             tick: {
               type: 'herodraft_tick',
               draft_state: message.draft_state,
+              server_time: message.server_time,
               current_round: message.current_round,
               active_team_id: message.active_team_id,
-              grace_time_remaining_ms: message.grace_time_remaining_ms,
+              round_started_at: message.round_started_at,
+              round_grace_time_ms: message.round_grace_time_ms,
               team_a_id: message.team_a_id,
               team_a_reserve_ms: message.team_a_reserve_ms,
               team_b_id: message.team_b_id,
               team_b_reserve_ms: message.team_b_reserve_ms,
-              countdown_remaining_ms: message.countdown_remaining_ms,
+              resuming_until: message.resuming_until,
             },
           });
           break;
@@ -396,3 +414,16 @@ export const heroDraftSelectors = {
     return s.draft.rounds[s.draft.current_round]?.action_type ?? null;
   },
 };
+
+/**
+ * Returns the current server time as an ISO string, derived from the
+ * latest tick's server_time plus elapsed local time. Use this instead of
+ * `new Date().toISOString()` for any timestamp the server will compare
+ * against its own clock (e.g. `client_picked_at` on pick submission).
+ * Falls back to local clock when no tick has arrived yet — the server's
+ * 2s sanity window then degrades cleanly to receive-time.
+ */
+export function getServerNowISO(): string {
+  const { serverClockOffsetMs } = useHeroDraftStore.getState();
+  return new Date(Date.now() + serverClockOffsetMs).toISOString();
+}

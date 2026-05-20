@@ -383,7 +383,9 @@ def do_submit_pick(request, draft_pk):
     Submit a hero pick or ban for the current round.
 
     Request body:
-        hero_id: int - The hero ID to pick/ban
+        hero_id: int — The hero ID to pick/ban
+        client_picked_at: str (ISO 8601, optional) — client's Date.now() at
+            confirm. Used to credit network latency when within 2s of server now.
 
     Returns:
         200: Updated draft data
@@ -391,6 +393,8 @@ def do_submit_pick(request, draft_pk):
         404: Draft not found
         400: Invalid state, hero already picked, or invalid hero
     """
+    from django.utils.dateparse import parse_datetime
+
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
 
     if draft.state != HeroDraftState.DRAFTING:
@@ -419,6 +423,16 @@ def do_submit_pick(request, draft_pk):
             {"error": "hero_id must be an integer"}, status=status.HTTP_400_BAD_REQUEST
         )
 
+    # Optional — submit_pick handles None and out-of-window timestamps
+    # internally, so a malformed value just degrades to server-receive time.
+    client_picked_at = None
+    raw = request.data.get("client_picked_at")
+    if raw:
+        try:
+            client_picked_at = parse_datetime(raw)
+        except (ValueError, TypeError):
+            client_picked_at = None
+
     # Check hero is available
     available = get_available_heroes(draft)
     if hero_id not in available:
@@ -428,7 +442,9 @@ def do_submit_pick(request, draft_pk):
         )
 
     try:
-        completed_round = submit_pick(draft, draft_team, hero_id)
+        completed_round = submit_pick(
+            draft, draft_team, hero_id, client_picked_at=client_picked_at
+        )
     except ValueError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 

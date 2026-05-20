@@ -164,9 +164,39 @@ def submit_choice(draft: HeroDraft, team: DraftTeam, choice_type: str, value: st
             first_round.save()
 
 
-def submit_pick(draft: HeroDraft, team: DraftTeam, hero_id: int) -> HeroDraftRound:
+CLIENT_PICK_TIME_MAX_AGE_S = 2.0
+
+
+def _effective_pick_time(server_now, client_picked_at):
+    """Trust the client-reported pick time if it's within the sanity window.
+
+    Client sends `client_picked_at = new Date().toISOString()` at the moment
+    they confirmed the pick. The message takes some network time to arrive.
+    Using server-receive time would penalise slow networks; trusting the
+    client time absorbs that latency. The 2s cap prevents a clock-skewed
+    or hostile client from "winding back" their pick arbitrarily.
+    """
+    if not client_picked_at:
+        return server_now
+    age_s = (server_now - client_picked_at).total_seconds()
+    if 0 <= age_s <= CLIENT_PICK_TIME_MAX_AGE_S:
+        return client_picked_at
+    return server_now
+
+
+def submit_pick(
+    draft: HeroDraft,
+    team: DraftTeam,
+    hero_id: int,
+    client_picked_at=None,
+) -> HeroDraftRound:
     """
     Submit a hero pick or ban for the current round.
+
+    Args:
+        client_picked_at: Optional datetime from the client (browser
+            `Date.now()` at confirm). Used when within 2s of server now,
+            ignored otherwise — see `_effective_pick_time`.
 
     Returns the completed round.
     """
@@ -190,9 +220,16 @@ def submit_pick(draft: HeroDraft, team: DraftTeam, hero_id: int) -> HeroDraftRou
 
         # Calculate time spent and update reserve time
         now = timezone.now()
-        elapsed_ms = int((now - current_round.started_at).total_seconds() * 1000)
+        effective_pick_time = _effective_pick_time(now, client_picked_at)
+        elapsed_ms = int(
+            (effective_pick_time - current_round.started_at).total_seconds() * 1000
+        )
         grace_used = min(elapsed_ms, current_round.grace_time_ms)
-        reserve_used = max(0, elapsed_ms - current_round.grace_time_ms)
+        # Floor reserve consumption to whole seconds so sub-second
+        # over-grace (typically network jitter) doesn't nibble the
+        # team's reserve.
+        over_grace_ms = max(0, elapsed_ms - current_round.grace_time_ms)
+        reserve_used = (over_grace_ms // 1000) * 1000
 
         team.reserve_time_remaining = max(0, team.reserve_time_remaining - reserve_used)
         team.save()

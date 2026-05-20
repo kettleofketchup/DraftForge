@@ -8,6 +8,7 @@ import { DisplayName } from "~/components/user/avatar";
 import { UserAvatar } from "~/components/user/UserAvatar";
 import { useHeroDraftStore, heroDraftSelectors } from "~/store/heroDraftStore";
 import { useUserStore } from "~/store/userStore";
+import { useDraftCountdown } from "~/components/herodraft/useDraftCountdown";
 
 interface DraftTopBarProps {
   draft: HeroDraft;
@@ -68,14 +69,21 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
   const activeTeamId = draft.state === "drafting"
     ? (tick?.active_team_id ?? currentRound?.draft_team ?? null)
     : null;
-  const graceRemaining = tick?.grace_time_remaining_ms ?? 0;
 
-  // Match reserve times by team ID for correctness
+  // rAF-driven countdown — recomputes every animation frame from the
+  // tick's anchors (round_started_at, round_grace_time_ms, reserves).
+  // Smooth 60fps display that keeps counting down even when ticks are
+  // delayed or dropped.
+  const countdown = useDraftCountdown(tick);
+  const graceRemaining = countdown.graceRemainingMs;
+
+  // Map team's reserve to the correct slot. Hook already accounted for
+  // active-team consumption (only the active team's reserve burns down).
   const getTeamReserve = (team: typeof teamA): number => {
     const defaultReserve = team?.reserve_time_remaining ?? 90000;
     if (!team || !tick) return defaultReserve;
-    if (tick.team_a_id === team.id) return tick.team_a_reserve_ms ?? defaultReserve;
-    if (tick.team_b_id === team.id) return tick.team_b_reserve_ms ?? defaultReserve;
+    if (tick.team_a_id === team.id) return countdown.teamAReserveMs;
+    if (tick.team_b_id === team.id) return countdown.teamBReserveMs;
     return defaultReserve;
   };
 
