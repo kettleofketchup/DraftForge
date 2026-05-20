@@ -1094,6 +1094,14 @@ class UserSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     steam_account_id = serializers.IntegerField(required=False, allow_null=True)
+    # Role memberships used by frontend permission hooks to gate create
+    # actions without needing a follow-up fetch (e.g. Create Tournament
+    # button on the global /tournaments/ page). Empty lists for users with
+    # no affiliations — never null.
+    admin_organization_ids = serializers.SerializerMethodField()
+    staff_organization_ids = serializers.SerializerMethodField()
+    admin_league_ids = serializers.SerializerMethodField()
+    staff_league_ids = serializers.SerializerMethodField()
 
     class Meta:
         model = CustomUser
@@ -1114,7 +1122,28 @@ class UserSerializer(serializers.ModelSerializer):
             "teams",  # Include associated teams
             "positions",
             "default_organization",
+            "admin_organization_ids",
+            "staff_organization_ids",
+            "admin_league_ids",
+            "staff_league_ids",
         )
+
+    def get_admin_organization_ids(self, obj):
+        # Owner counts as admin in the hierarchy; merge both reverse
+        # relations so the frontend gets one canonical "I can admin this
+        # org" list. Dedupe via set in case an owner is also in admins.
+        owned = obj.owned_organizations.values_list("pk", flat=True)
+        admin = obj.admin_organizations.values_list("pk", flat=True)
+        return sorted({*owned, *admin})
+
+    def get_staff_organization_ids(self, obj):
+        return list(obj.staff_organizations.values_list("pk", flat=True))
+
+    def get_admin_league_ids(self, obj):
+        return list(obj.admin_leagues.values_list("pk", flat=True))
+
+    def get_staff_league_ids(self, obj):
+        return list(obj.staff_leagues.values_list("pk", flat=True))
 
     def update(self, instance, validated_data):
         with transaction.atomic():

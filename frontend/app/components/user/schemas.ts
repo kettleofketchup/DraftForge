@@ -50,6 +50,15 @@ export const UserSchema = z.object({
   discordId: z.string().min(2).max(100).nullable().optional(),
   guildNickname: z.string().min(2).max(100).nullable().optional(),
   active_drafts: z.array(ActiveDraftSchema).optional(),
+  // Role-membership PK lists used by permission hooks to gate global
+  // create actions (e.g. Create Tournament) without a follow-up fetch.
+  // Backend returns ``[]`` for users with no affiliations — optional
+  // here only because older sub-user payloads (team rosters) may not
+  // include them.
+  admin_organization_ids: z.array(z.number()).optional(),
+  staff_organization_ids: z.array(z.number()).optional(),
+  admin_league_ids: z.array(z.number()).optional(),
+  staff_league_ids: z.array(z.number()).optional(),
 });
 
 /**
