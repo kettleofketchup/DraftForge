@@ -17,7 +17,10 @@
     "test:playwright:report": "playwright show-report",
     "test:playwright:install": "playwright install chromium",
     "test:herodraft": "playwright test tests/playwright/e2e/herodraft",
-    "test:herodraft:debug": "playwright test tests/playwright/e2e/herodraft --debug"
+    "test:herodraft:debug": "playwright test tests/playwright/e2e/herodraft --debug",
+    "i18n:extract": "i18next --config i18next-parser.config.ts",
+    "i18n:check": "i18next --config i18next-parser.config.ts --fail-on-update",
+    "i18n:guard": "scripts/check-navbar-prop-strings.sh"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
