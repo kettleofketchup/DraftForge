@@ -390,6 +390,60 @@ def system_panels(system: str) -> dict[str, v2.Panel]:
     }
 
 
+def cache_invalidation_panels() -> dict[str, v2.Panel]:
+    """Extra panels surfaced inside the `cache` system row.
+
+    Cache invalidations are emitted by `app.cache_utils.invalidate_obj`
+    (event=cache_invalidate, per-row) and `.invalidate_model`
+    (event=cache_invalidate_model, model-wide). Spotting eviction
+    spikes by class is the fastest way to catch regressions where a
+    write path starts over-invalidating.
+    """
+    top_classes = _table_panel(
+        "Top invalidated classes",
+        "topk(20, sum by (obj_class) (count_over_time("
+        f"{SERVICE_FILTER} {SAFE_JSON} "
+        '| event="cache_invalidate" | obj_class!="" [$__range])))',
+        description=(
+            "Which models are evicted most over the selected window. "
+            "Sudden spike on a single class usually means a write path "
+            "started cascading too widely."
+        ),
+    )
+    rate_by_class = _ts_panel(
+        "Per-row invalidation rate by class",
+        "sum by (obj_class) (rate("
+        f"{SERVICE_FILTER} {SAFE_JSON} "
+        '| event="cache_invalidate" | obj_class!="" [$__interval]))',
+        legend="{{obj_class}}",
+        description=(
+            "`invalidate_obj` rate split by model. Steady-state should "
+            "track write rate per model; outliers point to N+1 invalidate "
+            "patterns or accidental cascades."
+        ),
+    )
+    model_wide = _ts_panel(
+        "Model-wide invalidations (cache_invalidate_model)",
+        "sum by (obj_class) (rate("
+        f"{SERVICE_FILTER} {SAFE_JSON} "
+        '| event="cache_invalidate_model" [$__interval]))',
+        legend="{{obj_class}}",
+        description=(
+            "Full-model eviction events. Should be rare — migrations and "
+            "the daily avatar bulk path are the only known sources. Spikes "
+            "here are worth chasing: they cold-start every cached entry "
+            "for the model, and any hot-read endpoint will hit the DB "
+            "until the cache warms back up."
+        ),
+        err=True,
+    )
+    return {
+        "cache-top-classes": top_classes,
+        "cache-rate-by-class": rate_by_class,
+        "cache-model-wide": model_wide,
+    }
+
+
 def system_layout(system: str) -> v2.Rows:
     """Per-system layout: logs panel visible, rate breakdown collapsed.
 
@@ -397,6 +451,10 @@ def system_layout(system: str) -> v2.Rows:
     subsystem rate chart by default makes the row noisy. Nesting the
     log-rate / warn-error-rate panels in a second collapsed row lets the
     user drill in only when they need the breakdown.
+
+    The `cache` system gets an additional nested row showing
+    invalidation events by class — that's where eviction regressions
+    surface fastest.
     """
     logs_grid = (
         v2.Grid()
@@ -407,7 +465,7 @@ def system_layout(system: str) -> v2.Rows:
         .item(_grid_item(f"{system}-log-rate", x=0,  y=0, w=12, h=8))
         .item(_grid_item(f"{system}-err-rate", x=12, y=0, w=12, h=8))
     )
-    return (
+    rows = (
         v2.Rows()
         .row(v2.Row().title("Recent logs").collapse(False).layout(logs_grid))
         .row(
@@ -417,6 +475,20 @@ def system_layout(system: str) -> v2.Rows:
             .layout(rate_grid)
         )
     )
+    if system == "cache":
+        invalidations_grid = (
+            v2.Grid()
+            .item(_grid_item("cache-top-classes",   x=0,  y=0, w=8,  h=10))
+            .item(_grid_item("cache-rate-by-class", x=8,  y=0, w=16, h=10))
+            .item(_grid_item("cache-model-wide",    x=0, y=10, w=24, h=8))
+        )
+        rows = rows.row(
+            v2.Row()
+            .title("Invalidation event breakdown")
+            .collapse(False)
+            .layout(invalidations_grid)
+        )
+    return rows
 
 
 # ---- JSON parse errors row ------------------------------------------------
@@ -558,6 +630,7 @@ def build_dashboard():
     elements.update(overview_panels())
     for system in SYSTEMS:
         elements.update(system_panels(system))
+    elements.update(cache_invalidation_panels())
     elements.update(json_errors_panels())
 
     # Rows layout: overview at top (expanded), system rows (collapsed), then

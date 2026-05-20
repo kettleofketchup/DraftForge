@@ -2466,10 +2466,244 @@
           }
         }
       },
-      "json-errors-logs": {
+      "cache-top-classes": {
         "kind": "Panel",
         "spec": {
           "id": 35,
+          "title": "Top invalidated classes",
+          "description": "Which models are evicted most over the selected window. Sudden spike on a single class usually means a write path started cascading too widely.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "loki",
+                      "version": "v1",
+                      "spec": {
+                        "expr": "topk(20, sum by (obj_class) (count_over_time({service_name=~\"$service\", deployment_environment=~\"$env\"} | json | __error__=\"\" | event=\"cache_invalidate\" | obj_class!=\"\" [$__range])))",
+                        "editorMode": "code",
+                        "refId": "A",
+                        "queryType": "instant",
+                        "instant": true
+                      },
+                      "datasource": {
+                        "name": "$ds_loki"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "table",
+            "version": "",
+            "spec": {
+              "options": {
+                "frameIndex": 0,
+                "showHeader": true,
+                "showTypeIcons": false,
+                "sortBy": [
+                  {
+                    "displayName": "Value",
+                    "desc": true
+                  }
+                ],
+                "footer": {
+                  "show": false,
+                  "reducer": [],
+                  "countRows": false
+                },
+                "cellHeight": "sm"
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": [
+                  {
+                    "matcher": {
+                      "id": "byType",
+                      "options": "number"
+                    },
+                    "properties": [
+                      {
+                        "id": "custom.cellOptions",
+                        "value": {
+                          "type": "gauge",
+                          "mode": "gradient"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "cache-rate-by-class": {
+        "kind": "Panel",
+        "spec": {
+          "id": 36,
+          "title": "Per-row invalidation rate by class",
+          "description": "`invalidate_obj` rate split by model. Steady-state should track write rate per model; outliers point to N+1 invalidate patterns or accidental cascades.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "loki",
+                      "version": "v1",
+                      "spec": {
+                        "expr": "sum by (obj_class) (rate({service_name=~\"$service\", deployment_environment=~\"$env\"} | json | __error__=\"\" | event=\"cache_invalidate\" | obj_class!=\"\" [$__interval]))",
+                        "editorMode": "code",
+                        "refId": "A",
+                        "legendFormat": "{{obj_class}}"
+                      },
+                      "datasource": {
+                        "name": "$ds_loki"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "table",
+                  "placement": "right",
+                  "showLegend": true,
+                  "calcs": [
+                    "lastNotNull",
+                    "max"
+                  ]
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "logs/s",
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "stacking": {
+                      "mode": "normal",
+                      "group": "A"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "cache-model-wide": {
+        "kind": "Panel",
+        "spec": {
+          "id": 37,
+          "title": "Model-wide invalidations (cache_invalidate_model)",
+          "description": "Full-model eviction events. Should be rare \u2014 migrations and the daily avatar bulk path are the only known sources. Spikes here are worth chasing: they cold-start every cached entry for the model, and any hot-read endpoint will hit the DB until the cache warms back up.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "loki",
+                      "version": "v1",
+                      "spec": {
+                        "expr": "sum by (obj_class) (rate({service_name=~\"$service\", deployment_environment=~\"$env\"} | json | __error__=\"\" | event=\"cache_invalidate_model\" [$__interval]))",
+                        "editorMode": "code",
+                        "refId": "A",
+                        "legendFormat": "{{obj_class}}"
+                      },
+                      "datasource": {
+                        "name": "$ds_loki"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "table",
+                  "placement": "right",
+                  "showLegend": true,
+                  "calcs": [
+                    "lastNotNull",
+                    "max"
+                  ]
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "logs/s",
+                  "custom": {
+                    "drawStyle": "bars",
+                    "fillOpacity": 70,
+                    "stacking": {
+                      "mode": "normal",
+                      "group": "A"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "json-errors-logs": {
+        "kind": "Panel",
+        "spec": {
+          "id": 38,
           "title": "Lines that broke `| json` (jsonparsererr)",
           "description": "Log lines that Loki's `| json` parser rejects. Source labels (code_file_path, code_function_name, code_line_number) tell you which Python file is emitting broken JSON \u2014 usually an f-string containing a stray `{` like a dict literal or repr() output. Fix at source by switching the call to structlog kwargs.",
           "links": [],
@@ -2533,7 +2767,7 @@
       "json-errors-sources": {
         "kind": "Panel",
         "spec": {
-          "id": 36,
+          "id": 39,
           "title": "Top sources of broken JSON",
           "description": "Which source files are emitting broken JSON, ranked by count. Fix the top entries at source.",
           "links": [],
@@ -2919,6 +3153,59 @@
                         },
                         "title": "Subsystem rate breakdown",
                         "collapse": true
+                      }
+                    },
+                    {
+                      "kind": "RowsLayoutRow",
+                      "spec": {
+                        "layout": {
+                          "kind": "GridLayout",
+                          "spec": {
+                            "items": [
+                              {
+                                "kind": "GridLayoutItem",
+                                "spec": {
+                                  "x": 0,
+                                  "y": 0,
+                                  "width": 8,
+                                  "height": 10,
+                                  "element": {
+                                    "kind": "ElementReference",
+                                    "name": "cache-top-classes"
+                                  }
+                                }
+                              },
+                              {
+                                "kind": "GridLayoutItem",
+                                "spec": {
+                                  "x": 8,
+                                  "y": 0,
+                                  "width": 16,
+                                  "height": 10,
+                                  "element": {
+                                    "kind": "ElementReference",
+                                    "name": "cache-rate-by-class"
+                                  }
+                                }
+                              },
+                              {
+                                "kind": "GridLayoutItem",
+                                "spec": {
+                                  "x": 0,
+                                  "y": 10,
+                                  "width": 24,
+                                  "height": 8,
+                                  "element": {
+                                    "kind": "ElementReference",
+                                    "name": "cache-model-wide"
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        "title": "Invalidation event breakdown",
+                        "collapse": false
                       }
                     }
                   ]

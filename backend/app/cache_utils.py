@@ -42,14 +42,15 @@ def invalidate_obj(obj: Model) -> None:
 def invalidate_model(model: type[Model]) -> None:
     """Evict every cached entry for a model and emit a `cache_invalidate_model` log.
 
-    Logged at WARNING because model-wide eviction is expensive (every
-    request that had something cached for this model now misses) — should
-    be rare and worth investigating each occurrence on the dashboard.
-    Migrations and explicit "clean slate" operations are the only
-    legitimate uses; for bulk_update of <1k rows, loop `invalidate_obj`
-    per row instead.
+    Logged at INFO — it's measurement data, not an error. Migrations
+    legitimately use it for schema changes, and a few bulk paths
+    legitimately need it. Spike detection happens via the dashboard's
+    `cache_invalidate_model` panel rather than warn/error rate.
+
+    For bulk_update of <1k rows, prefer looping `invalidate_obj` per
+    row so unrelated cached entries for the same model survive.
     """
-    log.warning(
+    log.info(
         "cache_invalidate_model",
         system="cache",
         subsystem="invalidate",
