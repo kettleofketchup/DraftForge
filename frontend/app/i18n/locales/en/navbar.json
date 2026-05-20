@@ -1,44 +1,44 @@
 {
+  "aria": {
+    "documentation": "Documentation",
+    "main_nav": "Main navigation",
+    "open_menu": "Open menu",
+    "report_bug": "Report a Bug",
+    "star_github": "Star us on GitHub"
+  },
+  "home": "Home",
   "login": "Login with Discord",
   "logout": "Logout",
-  "profile": "Profile",
-  "signup_here": "Sign up here",
-  "home": "Home",
-  "aria": {
-    "star_github": "Star us on GitHub",
-    "documentation": "Documentation",
-    "report_bug": "Report a Bug",
-    "main_nav": "Main navigation",
-    "open_menu": "Open menu"
-  },
   "nav": {
-    "github": "GitHub",
-    "github_subtitle": "Begging for Stars",
-    "github_subtitle_star": "Star us!",
+    "about": "About",
+    "about_subtitle": "Who we are",
+    "admin": "Admin",
+    "admin_subtitle": "Manage site",
     "docs": "Docs",
     "docs_subtitle": "Secret Sauce",
     "documentation": "Documentation",
     "documentation_subtitle": "Learn how it works",
+    "events": "Events",
+    "github": "GitHub",
+    "github_subtitle": "Begging for Stars",
+    "github_subtitle_star": "Star us!",
+    "home_subtitle": "Back to start",
+    "leagues": "Leagues",
+    "leagues_subtitle": "Ranked play",
+    "organizations": "Organizations",
+    "organizations_subtitle": "Communities",
     "report_issue": "Report Issue",
     "report_issue_subtitle": "Help us fix it",
     "report_issue_subtitle_improve": "Help us improve",
-    "about": "About",
-    "about_subtitle": "Who we are",
-    "home_subtitle": "Back to start",
     "tournaments": "Tournaments",
     "tournaments_subtitle": "Compete & win",
     "users": "Users",
-    "users_subtitle": "Find players",
-    "organizations": "Organizations",
-    "organizations_subtitle": "Communities",
-    "leagues": "Leagues",
-    "leagues_subtitle": "Ranked play",
-    "events": "Events",
-    "admin": "Admin",
-    "admin_subtitle": "Manage site"
+    "users_subtitle": "Find players"
   },
+  "profile": "Profile",
   "section": {
     "navigation": "Navigation",
     "resources": "Resources"
-  }
+  },
+  "signup_here": "Sign up here"
 }
