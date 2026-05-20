@@ -29,6 +29,7 @@ from tests.data.users import (
     AUTH_MATRIX_LEAGUE_STAFF_USER,
     AUTH_MATRIX_ORG_ADMIN_USER,
     AUTH_MATRIX_ORG_MEMBER_USER,
+    AUTH_MATRIX_ORG_OWNER_USER,
     AUTH_MATRIX_ORG_STAFF_USER,
 )
 from tests.populate.utils import ensure_org_user
@@ -80,12 +81,19 @@ def populate_auth_matrix_data(force=False):
     # 3. Wire users into the org/league memberships. The CustomUser rows
     # themselves were already created by populate_test_auth_users — that
     # step iterates AUTH_MATRIX_USERS via the AUTH_TEST_USERS export.
-    # (Actually it doesn't yet — wire them here for self-containment.)
+    org_owner = CustomUser.objects.filter(pk=AUTH_MATRIX_ORG_OWNER_USER.pk).first()
     org_admin = CustomUser.objects.filter(pk=AUTH_MATRIX_ORG_ADMIN_USER.pk).first()
     org_staff = CustomUser.objects.filter(pk=AUTH_MATRIX_ORG_STAFF_USER.pk).first()
     org_member = CustomUser.objects.filter(pk=AUTH_MATRIX_ORG_MEMBER_USER.pk).first()
     league_admin = CustomUser.objects.filter(pk=AUTH_MATRIX_LEAGUE_ADMIN_USER.pk).first()
     league_staff = CustomUser.objects.filter(pk=AUTH_MATRIX_LEAGUE_STAFF_USER.pk).first()
+
+    # Owner is the Organization.owner FK — NOT added to admins, so the
+    # matrix can verify the owner-implies-admin cascade independently.
+    if org_owner and org.owner != org_owner:
+        org.owner = org_owner
+        org.save()
+        print(f"  Set {org_owner.username} as owner of {org.name}")
 
     if org_admin and org_admin not in org.admins.all():
         org.admins.add(org_admin)

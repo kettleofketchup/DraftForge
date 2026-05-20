@@ -475,6 +475,10 @@ async function _postAuthMatrixLogin(
   }
 }
 
+export function loginAuthMatrixOrgOwner(context: BrowserContext): Promise<void> {
+  return _postAuthMatrixLogin(context, 'login-auth-matrix-org-owner', 'loginAuthMatrixOrgOwner');
+}
+
 export function loginAuthMatrixOrgAdmin(context: BrowserContext): Promise<void> {
   return _postAuthMatrixLogin(context, 'login-auth-matrix-org-admin', 'loginAuthMatrixOrgAdmin');
 }

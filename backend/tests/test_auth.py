@@ -28,6 +28,7 @@ from tests.data.users import (
     AUTH_MATRIX_LEAGUE_STAFF_USER,
     AUTH_MATRIX_ORG_ADMIN_USER,
     AUTH_MATRIX_ORG_MEMBER_USER,
+    AUTH_MATRIX_ORG_OWNER_USER,
     AUTH_MATRIX_ORG_STAFF_USER,
     CLAIMABLE_USER,
     LEAGUE_ADMIN_USER,
@@ -454,6 +455,10 @@ def _create_or_get_auth_matrix_user(user_data) -> tuple[CustomUser, bool]:
     return user, True
 
 
+def createAuthMatrixOrgOwnerTestUser() -> tuple[CustomUser, bool]:
+    return _create_or_get_auth_matrix_user(AUTH_MATRIX_ORG_OWNER_USER)
+
+
 def createAuthMatrixOrgAdminTestUser() -> tuple[CustomUser, bool]:
     return _create_or_get_auth_matrix_user(AUTH_MATRIX_ORG_ADMIN_USER)
 
@@ -676,6 +681,28 @@ def login_league_staff(request):
 # AUTH_MATRIX_ORG (pk=8) and AUTH_MATRIX_LEAGUE (pk=9) — kept distinct
 # from the DTX-scoped login_org_admin/staff/member/league_* fixtures so
 # other suites can't mutate matrix state.
+
+
+@csrf_exempt
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def login_auth_matrix_org_owner(request):
+    """Owner FK only — NOT in Organization.admins, so the matrix can
+    verify that the owner-implies-admin cascade fires independently."""
+    if not isTestEnvironment(request):
+        return Response({"detail": "Not Found"}, status=status.HTTP_404_NOT_FOUND)
+
+    user, _ = createAuthMatrixOrgOwnerTestUser()
+    from app.models import Organization
+
+    org = Organization.objects.filter(pk=AUTH_MATRIX_ORG_OWNER_USER.org_id).first()
+    if org and org.owner != user:
+        org.owner = user
+        org.save()
+
+    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+    return return_tokens(user)
 
 
 @csrf_exempt

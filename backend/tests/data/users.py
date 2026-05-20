@@ -143,6 +143,15 @@ EVENT_LEAGUE_STAFF_USER: TestUser = TestUser(
 # the other by mutating org/league memberships.
 # =============================================================================
 
+AUTH_MATRIX_ORG_OWNER_USER: TestUser = TestUser(
+    pk=1095,
+    username="auth_matrix_org_owner",
+    nickname="Auth Matrix Org Owner",
+    discord_id="100000000000000095",
+    steam_id_64=76561198012345695,
+    org_id=8,  # Owner FK of Auth Matrix Test Org, NOT in admins M2M
+)
+
 AUTH_MATRIX_ORG_ADMIN_USER: TestUser = TestUser(
     pk=1090,
     username="auth_matrix_org_admin",
@@ -189,6 +198,7 @@ AUTH_MATRIX_LEAGUE_STAFF_USER: TestUser = TestUser(
 )
 
 AUTH_MATRIX_USERS: list[TestUser] = [
+    AUTH_MATRIX_ORG_OWNER_USER,
     AUTH_MATRIX_ORG_ADMIN_USER,
     AUTH_MATRIX_ORG_STAFF_USER,
     AUTH_MATRIX_ORG_MEMBER_USER,

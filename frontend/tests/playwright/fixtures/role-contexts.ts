@@ -20,11 +20,14 @@
  *     );
  *   });
  *
- * Eight roles in the hierarchy (site admin > org admin/staff > league
- * admin/staff > org member > anonymous):
+ * Nine roles in the hierarchy (site admin > org owner ≥ org admin >
+ * org staff > org member > league admin > league staff > anonymous):
  *
  *   - siteAdmin     — is_superuser=True, is_staff=True (kettleofketchup)
  *   - siteStaff     — is_staff=True, is_superuser=False (hurk_)
+ *   - orgOwner      — Organization.owner FK of AUTH_MATRIX_ORG (pk=1095),
+ *                     intentionally NOT in admins M2M so the matrix can
+ *                     verify the owner-implies-admin cascade
  *   - orgAdmin      — Organization.admins of AUTH_MATRIX_ORG (pk=1090)
  *   - orgStaff      — Organization.staff of AUTH_MATRIX_ORG (pk=1091)
  *   - orgMember     — OrgUser of AUTH_MATRIX_ORG, no role (pk=1092)
@@ -52,6 +55,7 @@ import {
 import {
   loginAdmin,
   loginStaff,
+  loginAuthMatrixOrgOwner,
   loginAuthMatrixOrgAdmin,
   loginAuthMatrixOrgStaff,
   loginAuthMatrixOrgMember,
@@ -62,6 +66,7 @@ import {
 export type RoleName =
   | 'siteAdmin'
   | 'siteStaff'
+  | 'orgOwner'
   | 'orgAdmin'
   | 'orgStaff'
   | 'orgMember'
@@ -84,6 +89,7 @@ export type RoleContexts = Record<RoleName, RoleSession>;
 export const ROLE_NAMES: readonly RoleName[] = [
   'siteAdmin',
   'siteStaff',
+  'orgOwner',
   'orgAdmin',
   'orgStaff',
   'orgMember',
@@ -105,6 +111,7 @@ type RoleLogin = (context: BrowserContext) => Promise<void>;
 const ROLE_LOGINS: Record<RoleName, RoleLogin> = {
   siteAdmin: loginAdmin,
   siteStaff: loginStaff,
+  orgOwner: loginAuthMatrixOrgOwner,
   orgAdmin: loginAuthMatrixOrgAdmin,
   orgStaff: loginAuthMatrixOrgStaff,
   orgMember: loginAuthMatrixOrgMember,

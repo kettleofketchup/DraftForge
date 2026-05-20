@@ -8,12 +8,12 @@
  * Canonical matrix lives in ``docs/dev/auth/roles.md`` — keep that page
  * in sync with the expectations below. Quick reference:
  *
- *                                       siteAdmin siteStaff orgAdmin orgStaff orgMember leagueAdmin leagueStaff anonymous
- *   editUser     (org members tab)        ✓         ✓         ✓        ✓        ✗         ✗           ✗          ✗
- *   editUser     (tournament players)     ✓         ✓         ✗        ✗        ✗         ✓           ✗          ✗
- *   generateBracket                       ✓         ✓         ✓        ✓        ✗         ✓           ✓          ✗
- *   setMatchWinner (radiant)              ✓         ✓         ✓        ✓        ✗         ✓           ✓          ✗
- *   linkSteamMatch                        ✓         ✓         ✗        ✗        ✗         ✗           ✗          ✗
+ *                                       siteAdmin siteStaff orgOwner orgAdmin orgStaff orgMember leagueAdmin leagueStaff anonymous
+ *   editUser     (org members tab)        ✓         ✓         ✓        ✓        ✓        ✗         ✗           ✗          ✗
+ *   editUser     (tournament players)     ✓         ✓         ✗        ✗        ✗        ✗         ✓           ✗          ✗
+ *   generateBracket                       ✓         ✓         ✓        ✓        ✓        ✗         ✓           ✓          ✗
+ *   setMatchWinner (radiant)              ✓         ✓         ✓        ✓        ✓        ✗         ✓           ✓          ✗
+ *   linkSteamMatch                        ✓         ✓         ✗        ✗        ✗        ✗         ✗           ✗          ✗
  *
  * Two known divergences:
  *
@@ -57,6 +57,7 @@ type Expectations = Record<RoleName, boolean>;
 const EDIT_USER_ORG_EXPECTATIONS: Expectations = {
   siteAdmin: true,
   siteStaff: true,
+  orgOwner: true,
   orgAdmin: true,
   orgStaff: true,
   orgMember: false,
@@ -79,6 +80,7 @@ const EDIT_USER_ORG_EXPECTATIONS: Expectations = {
 const EDIT_USER_TOURNAMENT_EXPECTATIONS: Expectations = {
   siteAdmin: true,
   siteStaff: true,
+  orgOwner: false,   // owner cascade hits same store-state gap as orgAdmin
   orgAdmin: false,   // org-admin cascade doesn't trigger (no embedded org)
   orgStaff: false,
   orgMember: false,
@@ -93,6 +95,7 @@ const EDIT_USER_TOURNAMENT_EXPECTATIONS: Expectations = {
 const GENERATE_BRACKET_EXPECTATIONS: Expectations = {
   siteAdmin: true,
   siteStaff: true,
+  orgOwner: true,    // owner cascade via useIsOrganizationAdmin → staff
   orgAdmin: true,
   orgStaff: true,
   orgMember: false,
@@ -106,6 +109,7 @@ const GENERATE_BRACKET_EXPECTATIONS: Expectations = {
 const SET_WINNER_EXPECTATIONS: Expectations = {
   siteAdmin: true,
   siteStaff: true,
+  orgOwner: true,
   orgAdmin: true,
   orgStaff: true,
   orgMember: false,
@@ -121,6 +125,7 @@ const SET_WINNER_EXPECTATIONS: Expectations = {
 const LINK_STEAM_MATCH_EXPECTATIONS: Expectations = {
   siteAdmin: true,
   siteStaff: true,
+  orgOwner: false,   // gate is site-only; owner doesn't cascade here
   orgAdmin: false,
   orgStaff: false,
   orgMember: false,

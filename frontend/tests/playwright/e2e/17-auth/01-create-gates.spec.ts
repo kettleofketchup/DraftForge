@@ -15,14 +15,15 @@
  * row is locked separately for the org-detail tab and the /events
  * route — they share the same testid and now share the same gate
  * (``useIsOrganizationStaff``), but the matrix asserts both to lock
- * the contract end-to-end:
+ * the contract end-to-end. The orgOwner column should match orgAdmin
+ * everywhere — owner is admin by the permission cascade:
  *
- *                                       siteAdmin siteStaff orgAdmin orgStaff orgMember leagueAdmin leagueStaff anonymous
- *   createOrganization                     ✓         ✓         ✓        ✓        ✓         ✓           ✓          ✗
- *   createLeague    (org-detail)           ✓         ✓         ✓        ✓        ✗         ✗           ✗          ✗
- *   createEvent     (org-detail)           ✓         ✓         ✓        ✓        ✗         ✗           ✗          ✗
- *   createEvent     (/events?org=X)        ✓         ✓         ✓        ✓        ✗         ✗           ✗          ✗
- *   createTournament                       ✓         ✓         ✓        ✗        ✗         ✓           ✗          ✗
+ *                                       siteAdmin siteStaff orgOwner orgAdmin orgStaff orgMember leagueAdmin leagueStaff anonymous
+ *   createOrganization                     ✓         ✓         ✓        ✓        ✓        ✓         ✓           ✓          ✗
+ *   createLeague    (org-detail)           ✓         ✓         ✓        ✓        ✓        ✗         ✗           ✗          ✗
+ *   createEvent     (org-detail)           ✓         ✓         ✓        ✓        ✓        ✗         ✗           ✗          ✗
+ *   createEvent     (/events?org=X)        ✓         ✓         ✓        ✓        ✓        ✗         ✗           ✗          ✗
+ *   createTournament                       ✓         ✓         ✓        ✓        ✗        ✗         ✓           ✗          ✗
  *
  * The site-admin row exists because the permission hooks
  * (``useIsLeagueStaff`` / ``useIsOrganizationAdmin`` etc.) bypass on
@@ -50,6 +51,7 @@ type Expectations = Record<RoleName, boolean>;
 const CREATE_ORG_EXPECTATIONS: Expectations = {
   siteAdmin: true,
   siteStaff: true,
+  orgOwner: true,
   orgAdmin: true,
   orgStaff: true,
   orgMember: true,
@@ -66,6 +68,7 @@ const CREATE_ORG_EXPECTATIONS: Expectations = {
 const CREATE_LEAGUE_EXPECTATIONS: Expectations = {
   siteAdmin: true,    // is_superuser → useIsOrganizationStaff bypass
   siteStaff: true,    // is_staff → same bypass
+  orgOwner: true,     // owner-implies-admin cascade in useIsOrganizationAdmin
   orgAdmin: true,     // in AUTH_MATRIX_ORG.admins
   orgStaff: true,     // in AUTH_MATRIX_ORG.staff
   orgMember: false,
@@ -79,6 +82,7 @@ const CREATE_EVENT_EXPECTATIONS: Expectations = {
   // the hook refactor.
   siteAdmin: true,
   siteStaff: true,
+  orgOwner: true,
   orgAdmin: true,
   orgStaff: true,
   orgMember: false,
@@ -95,6 +99,7 @@ const CREATE_EVENT_EXPECTATIONS: Expectations = {
 const CREATE_EVENT_EVENTS_PAGE_EXPECTATIONS: Expectations = {
   siteAdmin: true,
   siteStaff: true,
+  orgOwner: true,
   orgAdmin: true,
   orgStaff: true,
   orgMember: false,
@@ -111,7 +116,8 @@ const CREATE_EVENT_EVENTS_PAGE_EXPECTATIONS: Expectations = {
 const CREATE_TOURNAMENT_EXPECTATIONS: Expectations = {
   siteAdmin: true,    // is_superuser
   siteStaff: true,    // is_staff bypass (matches frontend convention)
-  orgAdmin: true,     // admin_organization_ids: [1]
+  orgOwner: true,     // owner pk merged into admin_organization_ids
+  orgAdmin: true,     // admin_organization_ids: [8]
   orgStaff: false,    // staff doesn't cascade to admin
   orgMember: false,
   leagueAdmin: true,  // admin_league_ids: [9]
