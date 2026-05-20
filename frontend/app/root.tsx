@@ -7,7 +7,12 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLoaderData,
 } from 'react-router';
+import type { LoaderFunctionArgs } from 'react-router';
+import { useChangeLanguage } from 'remix-i18next/react';
+import { i18nServer } from './i18n/server';
+import './i18n/types';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { Toaster } from '~/components/ui/sonner';
 import { SharedPopoverProvider } from '~/components/ui/shared-popover-context';
@@ -27,6 +32,11 @@ const log = getLogger('root');
 
 // ✅ All fonts and external styles live here
 export const links: Route.LinksFunction = () => [];
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  const locale = await i18nServer.getLocale(request);
+  return { locale };
+}
 
 // ✅ Meta tags live here
 export const meta: Route.MetaFunction = () => [
@@ -80,8 +90,12 @@ export const queryClient = new QueryClient({
 });
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const data = useLoaderData<typeof loader>();
+  const locale = data?.locale ?? 'en';
+  useChangeLanguage(locale);
+
   return (
-    <html lang="en" className="dark" data-theme="dark">
+    <html lang={locale} className="dark" data-theme="dark">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
