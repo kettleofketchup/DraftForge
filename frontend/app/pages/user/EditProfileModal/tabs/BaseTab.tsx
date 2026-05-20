@@ -18,7 +18,6 @@ import {
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
 import { CancelButton } from '~/components/ui/buttons/CancelButton';
-import { EditButton } from '~/components/ui/buttons/EditButton';
 import { SubmitButton } from '~/components/ui/buttons/SubmitButton';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import type { UserType } from '~/components/user/types';
@@ -52,7 +51,6 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
     resolver: zodResolver(BaseProfileFormSchema),
     defaultValues: {
       nickname: profile.base.nickname ?? '',
-      avatar: profile.base.avatar ?? '',
     },
   });
 
@@ -73,18 +71,15 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
           pk: profile.pk,
           nickname:
             updated.nickname !== undefined ? updated.nickname : existing.nickname,
-          avatar:
-            updated.avatar !== undefined ? updated.avatar : existing.avatar,
         };
         useUserCacheStore.getState().upsert(merged);
       }
 
       // 2. Refresh userStore.currentUser if the edited row is the logged-in
       //    user. Navbar, profile-page header, and other components read
-      //    avatar/nickname directly off currentUser, so a stale value here
-      //    leaves the post-PATCH UI inconsistent until a page reload or
-      //    fetchCurrentUser() call. Merge the patched fields onto the
-      //    existing currentUser snapshot.
+      //    nickname directly off currentUser, so a stale value here leaves
+      //    the post-PATCH UI inconsistent until a page reload or
+      //    fetchCurrentUser() call.
       const currentUserState = useUserStore.getState().currentUser;
       if (currentUserState?.pk === profile.pk) {
         useUserStore.getState().setCurrentUser({
@@ -93,10 +88,6 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
             updated.nickname !== undefined
               ? updated.nickname
               : currentUserState.nickname,
-          avatar:
-            updated.avatar !== undefined
-              ? updated.avatar
-              : currentUserState.avatar,
         } as UserType);
       }
 
@@ -142,9 +133,6 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
     if (dirtyFields.nickname) {
       payload.nickname = values.nickname ?? null;
     }
-    if (dirtyFields.avatar) {
-      payload.avatar = values.avatar ?? null;
-    }
     if (Object.keys(payload).length === 0) {
       onClose();
       return;
@@ -152,28 +140,26 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
     mutation.mutate(payload);
   });
 
-  const watchedAvatar = form.watch('avatar');
   const watchedNickname = form.watch('nickname');
 
   return (
     <Form {...form}>
       <form onSubmit={onSubmit} className="space-y-4">
+        {/* Avatar is Discord-synced (avatar-hash, not URL) and not user-editable.
+            Showing the current avatar here as a read-only display so the user
+            can confirm their identity in the modal. */}
         <div className="flex items-center gap-4">
           <UserAvatar
             user={{
               pk: profile.pk,
               nickname: watchedNickname ?? null,
-              avatar: watchedAvatar ?? null,
+              avatar: profile.base.avatar ?? null,
             }}
             size="lg"
           />
-          <EditButton
-            type="button"
-            onClick={() => document.getElementById('avatar-input')?.focus()}
-            data-testid="edit-user-avatar-trigger"
-          >
-            Change avatar
-          </EditButton>
+          <p className="text-sm text-base-content/70">
+            Avatar is synced from Discord automatically.
+          </p>
         </div>
 
         <FormField
@@ -191,26 +177,6 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
                 />
               </FormControl>
               <FormDescription>Display name shown on your profile</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="avatar"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Avatar URL</FormLabel>
-              <FormControl>
-                <Input
-                  id="avatar-input"
-                  placeholder="https://example.com/avatar.png"
-                  data-testid="edit-user-avatar"
-                  {...field}
-                  value={field.value ?? ''}
-                />
-              </FormControl>
               <FormMessage />
             </FormItem>
           )}

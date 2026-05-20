@@ -2,9 +2,13 @@
  * Edit Profile — Base tab of the new layered EditProfileModal.
  *
  * Covers T1 (BaseUserProfile epic):
- *   - Nickname edit dual-writes to userCacheStore so UserCard / nickname
- *     surfaces update without a reload.
- *   - Avatar URL persists across reload (server round-trip).
+ *   - Nickname edit dual-writes to userCacheStore + userStore.currentUser
+ *     so the navbar / profile header / user lists update without a reload.
+ *
+ * Avatar is NOT user-editable in this modal — it's synced from Discord
+ * server-side (BaseUserProfile.avatar stores the Discord avatar hash,
+ * not a URL). T2/T3 don't change that. If a future ticket adds
+ * user-uploaded avatars, add a separate spec for it.
  *
  * Logs in as the admin user (PK 1001, kettleofketchup) and only edits that
  * user's OWN profile via /profile → EditProfileModal. Original values are
@@ -52,52 +56,6 @@ test.describe('Edit Profile — Base tab (new layered modal)', () => {
       await editTrigger.click();
       await expect(nicknameInput).toBeVisible({ timeout: 5_000 });
       await nicknameInput.fill(originalNickname);
-      await page.locator('[data-testid="edit-user-save"]').click();
-      await expect(page.getByText(/profile updated/i)).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5_000 });
-    }
-  });
-
-  test('avatar URL updates persist across reload', async ({ page, loginAdmin }) => {
-    await loginAdmin();
-    await page.goto('/profile');
-
-    await expect(
-      page.locator('[data-testid="user-card-nickname"]').first(),
-    ).toBeVisible({ timeout: 15_000 });
-
-    await page.locator('[data-testid="edit-user-btn"]').first().click();
-    const avatarInput = page.locator('[data-testid="edit-user-avatar"]');
-    await expect(avatarInput).toBeVisible({ timeout: 5_000 });
-    const originalAvatar = await avatarInput.inputValue();
-
-    const newAvatar = `https://example.com/test-${Date.now()}.png`;
-    try {
-      await avatarInput.fill(newAvatar);
-      await page.locator('[data-testid="edit-user-save"]').click();
-      await expect(page.getByText(/profile updated/i)).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5_000 });
-
-      await page.reload();
-      await page.locator('[data-testid="edit-user-btn"]').first().click();
-      await expect(page.locator('[data-testid="edit-user-avatar"]')).toHaveValue(
-        newAvatar,
-        { timeout: 10_000 },
-      );
-    } finally {
-      // Restore — the modal is open if the happy path finished, but it may
-      // also be closed if a prior step failed. Re-open defensively.
-      const stillOpen = await page
-        .locator('[data-testid="edit-user-avatar"]')
-        .isVisible({ timeout: 500 })
-        .catch(() => false);
-      if (!stillOpen) {
-        await page.locator('[data-testid="edit-user-btn"]').first().click();
-        await expect(page.locator('[data-testid="edit-user-avatar"]')).toBeVisible({
-          timeout: 5_000,
-        });
-      }
-      await page.locator('[data-testid="edit-user-avatar"]').fill(originalAvatar);
       await page.locator('[data-testid="edit-user-save"]').click();
       await expect(page.getByText(/profile updated/i)).toBeVisible({ timeout: 10_000 });
       await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5_000 });
