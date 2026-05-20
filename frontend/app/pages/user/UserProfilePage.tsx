@@ -179,7 +179,7 @@ export function UserProfilePage() {
       {/* Edit Profile Modal */}
       {isOwnProfile && (
         <EditProfileModal
-          user={user}
+          userPk={user.pk!}
           open={editModalOpen}
           onOpenChange={setEditModalOpen}
           onSave={() => refetch()}
