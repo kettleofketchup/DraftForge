@@ -1136,7 +1136,8 @@ button:focus-visible {
 }
 
 /* Reserve critical: grace burned, reserve <30s. Faster, bigger, brighter
-   than grace-urgent. Red ↔ white with a glow halo to draw the eye. */
+   than grace-urgent. Red ↔ white with a glow halo to draw the eye.
+   Mobile uses a tighter scale to avoid bleeding into adjacent grid cells. */
 @keyframes pulse-reserve-critical {
   0%, 100% {
     transform: scale(1);
@@ -1144,12 +1145,36 @@ button:focus-visible {
     text-shadow: 0 0 6px var(--color-red-500);
   }
   50% {
-    transform: scale(1.25);
+    transform: scale(1.15);
     color: var(--color-white);
     text-shadow: 0 0 14px var(--color-red-400);
   }
 }
 
+@media (min-width: 640px) {
+  @keyframes pulse-reserve-critical {
+    0%, 100% {
+      transform: scale(1);
+      color: var(--color-red-500);
+      text-shadow: 0 0 6px var(--color-red-500);
+    }
+    50% {
+      transform: scale(1.25);
+      color: var(--color-white);
+      text-shadow: 0 0 14px var(--color-red-400);
+    }
+  }
+}
+
 .animate-reserve-critical {
   animation: pulse-reserve-critical 0.6s ease-in-out infinite;
+}
+
+/* Respect OS-level motion preferences (WCAG 2.3.3). */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-scale,
+  .animate-grace-urgent,
+  .animate-reserve-critical {
+    animation: none;
+  }
 }

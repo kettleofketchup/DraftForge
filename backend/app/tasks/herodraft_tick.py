@@ -688,11 +688,15 @@ def start_tick_broadcaster(draft_id: int) -> bool:
             log.error(f"Tick broadcaster error for draft {draft_id}: {e}")
         finally:
             loop.close()
-            # Release lock and cleanup
             try:
                 r.delete(lock_key)
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug(
+                    "tick_lock_release_failed",
+                    draft_id=draft_id,
+                    phase="run_in_thread",
+                    error=str(e),
+                )
             with _lock:
                 _active_tick_tasks.pop(draft_id, None)
 
@@ -725,11 +729,15 @@ def stop_tick_broadcaster(draft_id: int):
         task_info.stop_event.set()
         task_info.thread.join(timeout=2.0)
 
-    # Release lock (in case local thread didn't clean up)
     try:
         r.delete(lock_key)
-    except Exception:
-        pass
+    except Exception as e:
+        log.debug(
+            "tick_lock_release_failed",
+            draft_id=draft_id,
+            phase="stop_tick_broadcaster",
+            error=str(e),
+        )
 
     with _lock:
         _active_tick_tasks.pop(draft_id, None)

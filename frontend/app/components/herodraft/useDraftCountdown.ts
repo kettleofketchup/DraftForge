@@ -85,28 +85,38 @@ function deriveCountdown(
 /**
  * Render-time countdown driven by requestAnimationFrame.
  *
- * Each frame recomputes remaining values from `tick`'s anchors using the
- * client's current `Date.now()`. Result: 60fps smooth UI that keeps
- * counting down even when ticks are delayed or dropped — eliminates the
- * "everyone's timer froze for a few seconds" symptom by design.
+ * Reads `tick`, `serverClockOffsetMs`, and `draft.state` from the store.
+ * Each frame recomputes remaining values from the tick's anchors using
+ * `Date.now() + offset` — smooth 60fps even when 1Hz ticks are delayed
+ * or dropped, eliminating the "everyone's timer froze" symptom.
  *
- * Re-anchors implicitly on every new tick (the closure captures the new
- * tick reference, so offset re-computation happens on next frame).
+ * During pause the server stops broadcasting ticks; the cached tick
+ * keeps reading `drafting` with a stale `round_started_at`. We skip the
+ * setState call while `draft.state === "paused"` so values freeze at
+ * whatever they were the moment pause was entered.
  */
-export function useDraftCountdown(tick: HeroDraftTick | null): DraftCountdown {
+export function useDraftCountdown(): DraftCountdown {
+  const tick = useHeroDraftStore((s) => s.tick);
   const serverClockOffsetMs = useHeroDraftStore((s) => s.serverClockOffsetMs);
-  // Server stops broadcasting ticks during pause; the cached tick stays
-  // `drafting` with a stale `round_started_at`. Consult live `draft.state`.
   const isPaused = useHeroDraftStore((s) => s.draft?.state === "paused");
+
   const [countdown, setCountdown] = useState<DraftCountdown>(() =>
     deriveCountdown(tick, serverClockOffsetMs),
   );
+
   const tickRef = useRef(tick);
   const offsetRef = useRef(serverClockOffsetMs);
   const isPausedRef = useRef(isPaused);
   tickRef.current = tick;
   offsetRef.current = serverClockOffsetMs;
   isPausedRef.current = isPaused;
+
+  // Re-derive once on every new tick even while paused, so a tick that
+  // lands DURING pause (e.g. a final RESUMING anchor) still propagates
+  // its values into the display before the frame loop freezes.
+  useEffect(() => {
+    setCountdown(deriveCountdown(tick, serverClockOffsetMs));
+  }, [tick, serverClockOffsetMs]);
 
   useEffect(() => {
     let rafId = 0;
@@ -122,3 +132,7 @@ export function useDraftCountdown(tick: HeroDraftTick | null): DraftCountdown {
 
   return countdown;
 }
+
+// Exported for unit-test access to the pure derivation logic.
+export { deriveCountdown as _deriveCountdown };
+export type { HeroDraftTick };

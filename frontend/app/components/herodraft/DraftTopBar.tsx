@@ -22,6 +22,12 @@ function formatTime(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+// Animation thresholds (ms). Grace pulses red↔yellow when low; the active
+// team's reserve pulses red↔white once grace is exhausted AND the reserve
+// is in the danger zone.
+const GRACE_URGENT_MS = 10_000;
+const RESERVE_CRITICAL_MS = 30_000;
+
 /**
  * Convert draft captain data to UserType for PlayerPopover/AvatarUrl compatibility
  */
@@ -70,11 +76,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
     ? (tick?.active_team_id ?? currentRound?.draft_team ?? null)
     : null;
 
-  // rAF-driven countdown — recomputes every animation frame from the
-  // tick's anchors (round_started_at, round_grace_time_ms, reserves).
-  // Smooth 60fps display that keeps counting down even when ticks are
-  // delayed or dropped.
-  const countdown = useDraftCountdown(tick);
+  const countdown = useDraftCountdown();
   const graceRemaining = countdown.graceRemainingMs;
 
   // Map team's reserve to the correct slot. Hook already accounted for
@@ -89,6 +91,22 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
 
   const teamAReserve = getTeamReserve(teamA);
   const teamBReserve = getTeamReserve(teamB);
+
+  // Critical-reserve pulse fires only on the team whose reserve is
+  // actually burning down — gating on the topbar's team identity (not the
+  // tick's team_a/team_b ordering, which is by ID) avoids both teams
+  // pulsing in unison when both happen to start a round under 30s, and
+  // avoids a brief flash after `hero_selected` nulls active_team_id.
+  const teamAIsCritical =
+    graceRemaining === 0 &&
+    teamAReserve < RESERVE_CRITICAL_MS &&
+    tick?.active_team_id != null &&
+    teamA?.id === tick.active_team_id;
+  const teamBIsCritical =
+    graceRemaining === 0 &&
+    teamBReserve < RESERVE_CRITICAL_MS &&
+    tick?.active_team_id != null &&
+    teamB?.id === tick.active_team_id;
 
   // Get current action type from round data
   const currentAction = currentRound?.action_type ?? "pick";
@@ -253,8 +271,8 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
         {/* Team A Reserve */}
         <div
           className={cn(
-            "text-center font-mono text-sm sm:text-lg",
-            teamAReserve < 30000 && "text-red-400"
+            "text-center font-mono text-sm sm:text-lg overflow-visible",
+            teamAReserve < RESERVE_CRITICAL_MS && "text-red-400"
           )}
           data-testid="herodraft-team-a-reserve"
         >
@@ -262,7 +280,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
           <span
             className={cn(
               "inline-block origin-center",
-              graceRemaining === 0 && teamAReserve < 30000 && "animate-reserve-critical"
+              teamAIsCritical && "animate-reserve-critical"
             )}
             data-testid="herodraft-team-a-reserve-time"
           >
@@ -280,7 +298,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
           <span
             className={cn(
               "font-mono text-xl sm:text-2xl font-bold inline-block origin-center",
-              graceRemaining < 10000
+              graceRemaining < GRACE_URGENT_MS
                 ? "text-red-400 animate-grace-urgent"
                 : "text-yellow-400"
             )}
@@ -295,8 +313,8 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
         {/* Team B Reserve */}
         <div
           className={cn(
-            "text-center font-mono text-sm sm:text-lg",
-            teamBReserve < 30000 && "text-red-400"
+            "text-center font-mono text-sm sm:text-lg overflow-visible",
+            teamBReserve < RESERVE_CRITICAL_MS && "text-red-400"
           )}
           data-testid="herodraft-team-b-reserve"
         >
@@ -304,7 +322,7 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
           <span
             className={cn(
               "inline-block origin-center",
-              graceRemaining === 0 && teamBReserve < 30000 && "animate-reserve-critical"
+              teamBIsCritical && "animate-reserve-critical"
             )}
             data-testid="herodraft-team-b-reserve-time"
           >

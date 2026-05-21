@@ -4,7 +4,10 @@ Test endpoints for HeroDraft E2E testing (TEST ONLY).
 These endpoints are only available when TEST_ENDPOINTS=true in settings.
 """
 
+from datetime import timedelta
+
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import (
@@ -18,6 +21,9 @@ from rest_framework.response import Response
 from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent
 from app.serializers import HeroDraftSerializer
 from common.utils import isTestEnvironment
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 # Test key to tournament/game mapping for herodraft scenarios
 # Uses existing bracket games from Real Tournament 38:
@@ -183,8 +189,8 @@ def reset_herodraft(request, draft_pk):
                     f"herodraft:{draft.pk}:captain:{captain.pk}:heartbeat",
                 ]:
                     r.delete(key_pattern)
-    except Exception:
-        pass  # Redis may not be available in some test environments
+    except Exception as e:
+        log.debug("reset_herodraft_redis_cleanup_failed", draft_id=draft.pk, error=str(e))
 
     # Log reset event
     HeroDraftEvent.objects.create(
@@ -211,9 +217,6 @@ def warp_herodraft_round(request, draft_pk):
     against them. Does NOT trigger auto-pick — caller is responsible
     for keeping elapsed_ms < (grace + reserve) if they don't want one.
     """
-    from django.utils import timezone
-    from datetime import timedelta
-
     draft = get_object_or_404(HeroDraft, pk=draft_pk)
 
     if draft.state != "drafting":

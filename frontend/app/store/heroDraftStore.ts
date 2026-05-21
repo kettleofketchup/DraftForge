@@ -268,7 +268,7 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             _unsubscribe: null,
             wasKicked: true,
             error: 'Connection replaced by new tab',
-            isConnected: false,
+            status: 'disconnected',
           });
           break;
         }

@@ -200,11 +200,13 @@ Telemetry plumbing is shared across the whole backend (see [dev/telemetry/](../d
 
 ### Spans (Tempo)
 
+Every WS-lifecycle span carries `ws.conn_id` (plus `ws.draft_id` and `user.id` when known) so Tempo correlation can stitch a session together with `{ .ws.conn_id = "abc..." }`.
+
 | Span | Emitted by | Useful attributes |
 |------|-----------|-------------------|
-| `ws.connect`, `ws.disconnect`, `ws.heartbeat`, `ws.message` | `consumers_base.py` | `ws.draft_id`, `ws.user_id`, `ws.conn_id` |
-| `ws.captain_register`, `ws.captain_unregister` | `consumers.py` | `ws.draft_id`, `ws.user_id`, `ws.draft_team_id` |
-| `herodraft.submit_pick` | `functions/herodraft.py` | `draft.id`, `team.id`, `hero.id`, `round.number`, `elapsed_ms`, `over_grace_ms`, `reserve_used_ms`, `pick_time_source` (`client_now`, `server_now`, fallback reason) |
+| `ws.connect`, `ws.disconnect`, `ws.heartbeat`, `ws.message` | `consumers_base.py` | `ws.conn_id`, `ws.draft_id`, `user.id`, `ws.consumer` |
+| `ws.captain_register`, `ws.captain_unregister` | `consumers_base.py` | same base attrs; unregister also tags `ws.captain_unregistered` (bool) and `ws.skipped_reason` |
+| `herodraft.submit_pick` | `functions/herodraft.py` | `ws.draft_id`, `draft.team_id`, `draft.hero_id`, `draft.client_picked_at`, `draft.round_number`, `draft.action_type`, `draft.elapsed_ms`, `draft.grace_used_ms`, `draft.reserve_used_ms`, `draft.reserve_before_ms`, `draft.reserve_after_ms`, `draft.pick_time_source` (`client` or `server_now`), `draft.pick_time_age_ms`, `draft.next_round_number`, `draft.completed` |
 | `herodraft.tick.iteration` | `tasks/herodraft_tick.py` | `ws.draft_id`, `tick.iteration`, `tick.duration_s`, `tick.outcome`, `tick.stop_reason` |
 | `herodraft.tick.<step>` | `tasks/herodraft_tick.py` | child of `tick.iteration`. Steps: `resume_countdown`, `captain_heartbeats`, `broadcast_tick`, `check_timeout`, `extend_lock`. Each carries `tick.step_duration_s` |
 
@@ -214,13 +216,16 @@ Telemetry plumbing is shared across the whole backend (see [dev/telemetry/](../d
 
 ```traceql
 # Every pick in a draft
-{ name = "herodraft.submit_pick" && .draft.id = 123 }
+{ name = "herodraft.submit_pick" && .ws.draft_id = 123 }
 
 # Slow tick iterations
 { name = "herodraft.tick.iteration" && duration > 1500ms }
 
 # Picks where the server fell back from client_picked_at
-{ name = "herodraft.submit_pick" && .pick_time_source != "client_now" }
+{ name = "herodraft.submit_pick" && .draft.pick_time_source = "server_now" }
+
+# Picks that ran into reserve time (grace_used_ms == grace_time_ms means the team burned reserve)
+{ name = "herodraft.submit_pick" && .draft.reserve_used_ms > 0 }
 ```
 
 ### Log events (Loki)
@@ -231,6 +236,8 @@ All logs carry `system="herodraft"` plus a `subsystem` discriminator. Filter by 
 |-------------|-------|-------|---------|
 | `state` | `draft_paused` | info | Manual pause (captain/staff POST to `/pause/`) |
 | `state` | `draft_resumed` | info | Manual resume; includes `pause_duration_s`, `round_started_at_adjustment_s` |
+| `state` | `draft_completed` | info | Final pick committed and draft state flipped to COMPLETED |
+| `round` | `round_started` | info | A new round transitioned to `state="active"` (carries `round_number`, `action_type`) |
 | `timing` | `round_started_at_adjusted` | info | Round anchor pushed forward by pause duration + 3s countdown |
 | `heartbeat` | `heartbeat_missing` | warning | No heartbeat key in Redis for a connected captain |
 | `heartbeat` | `heartbeat_stale` | warning | Heartbeat older than 9s |
@@ -241,7 +248,7 @@ All logs carry `system="herodraft"` plus a `subsystem` discriminator. Filter by 
 | `timer` | `tick_skipped` | info / warning | `reason` ∈ {`wrong_state`, `no_active_round`, `not_found`} |
 | `timer` | `tick_step_slow` / `tick_slow` | warning | Sub-step >300ms or whole iteration >1.5s |
 | `timer` | `timeout_auto_pick` / `timeout_auto_pick_broadcast` | info | Auto-random fired (over grace + reserve) |
-| `pick` | `pick_submitted` | info | Includes `elapsed_ms`, `over_grace_ms`, `reserve_used_ms`, `pick_time_source` |
+| `pick` | `pick_submitted` | info | Includes `elapsed_ms`, `grace_used_ms`, `reserve_used_ms`, `reserve_before_ms`, `reserve_after_ms`, `pick_time_source`, `pick_time_age_ms` |
 | `pick` | `pick_time_too_old` / `pick_time_in_future` / `pick_time_naive_datetime` | warning | Server rejected `client_picked_at` and fell back to receive-time |
 | `pick` | `pick_reserve_exhausted` | warning | Active team finished pick with reserve_time_remaining ≤ 0 |
 | `pick` | `pick_elapsed_negative` | error | `now - round_started_at` < 0 (clock skew or DB clock drift) |
