@@ -138,6 +138,10 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
         allow_active_mmr: repeater.allow_active_mmr ?? true,
         allow_previous_rank: repeater.allow_previous_rank ?? true,
         allow_battlecup_rating: repeater.allow_battlecup_rating ?? true,
+        // Approval rule flags — see CreateEventModal for the regression note.
+        require_steam_id: repeater.require_steam_id ?? false,
+        require_mmr_verified: repeater.require_mmr_verified ?? false,
+        require_profile_complete: repeater.require_profile_complete ?? false,
       });
     }
   }, [repeater, open]);
