@@ -210,13 +210,15 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
           if (kickedConnId) {
             manager.disconnect(kickedConnId, 'Kicked by server');
           }
-          // Clear connection state but preserve wasKicked flag
+          // Clear connection state but preserve wasKicked flag.
+          // `isConnected` is a derived selector (line 353), not state — the
+          // canonical disconnected signal is `status: 'disconnected'`.
           set({
             _connectionId: null,
             _unsubscribe: null,
             wasKicked: true,
             error: 'Connection replaced by new tab',
-            isConnected: false,
+            status: 'disconnected',
           });
           break;
         }
