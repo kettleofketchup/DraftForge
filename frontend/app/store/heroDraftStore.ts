@@ -175,20 +175,54 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             set({ draft: message.draft_state });
           }
 
-          // Clear selected hero when a pick/ban is made (including random picks due to timeout)
-          // This fixes the bug where the selection overlay persists after a random pick
+          // On hero_selected, patch the tick with the NEW round's anchors
+          // immediately. The next 1Hz server tick would otherwise arrive up
+          // to a second later, so without this patch the grace timer keeps
+          // running against the previous round's `round_started_at` until
+          // the new tick lands — the user sees the timer linger on the
+          // previous team.
           if (message.event_type === 'hero_selected') {
-            debugLog('Clearing selectedHeroId after hero_selected event');
-            // Also null out tick.active_team_id so useDraftCountdown stops
-            // burning the previous active team's reserve in the ~1s window
-            // before the next tick broadcast arrives with the new round.
             const prevTick = get().tick;
-            set({
-              selectedHeroId: null,
-              tick: prevTick
-                ? { ...prevTick, active_team_id: null }
-                : prevTick,
-            });
+            const newDraft = message.draft_state;
+            const newRoundIdx = newDraft?.current_round ?? null;
+            const newRound =
+              newRoundIdx !== null && newDraft?.rounds
+                ? newDraft.rounds[newRoundIdx] ?? null
+                : null;
+
+            if (prevTick && newRound && newDraft) {
+              // Match teams by ID order (matches server-side tick ordering).
+              const teamsById = [...newDraft.draft_teams].sort(
+                (a, b) => a.id - b.id,
+              );
+              const teamA = teamsById[0] ?? null;
+              const teamB = teamsById[1] ?? null;
+              set({
+                selectedHeroId: null,
+                tick: {
+                  ...prevTick,
+                  current_round: newRoundIdx,
+                  active_team_id: newRound.draft_team,
+                  round_started_at: newRound.started_at,
+                  round_grace_time_ms: newRound.grace_time_ms,
+                  team_a_id: teamA?.id ?? prevTick.team_a_id,
+                  team_a_reserve_ms:
+                    teamA?.reserve_time_remaining ?? prevTick.team_a_reserve_ms,
+                  team_b_id: teamB?.id ?? prevTick.team_b_id,
+                  team_b_reserve_ms:
+                    teamB?.reserve_time_remaining ?? prevTick.team_b_reserve_ms,
+                },
+              });
+            } else {
+              // No new round (draft complete) — clear active team so the
+              // previous picker's reserve stops burning.
+              set({
+                selectedHeroId: null,
+                tick: prevTick
+                  ? { ...prevTick, active_team_id: null }
+                  : prevTick,
+              });
+            }
           }
 
           set({ lastEvent: message as HeroDraftEvent });
