@@ -12,6 +12,7 @@ import {
 import type { LoaderFunctionArgs } from 'react-router';
 import { useChangeLanguage } from 'remix-i18next/react';
 import './i18n/types';
+import { i18n } from '~/i18n/client';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { Toaster } from '~/components/ui/sonner';
 import { SharedPopoverProvider } from '~/components/ui/shared-popover-context';
@@ -96,6 +97,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const data = useLoaderData<typeof loader>();
   const locale = data?.locale ?? 'en';
   useChangeLanguage(locale);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const cookieMatch = document.cookie.match(/(?:^|; )df-locale=([^;]*)/);
+    const cookieLocale = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
+    if (cookieLocale && cookieLocale !== locale) {
+      void i18n.changeLanguage(cookieLocale);
+    }
+  }, [locale]);
 
   return (
     <html lang={locale} className="dark" data-theme="dark">
