@@ -54,59 +54,37 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
   const mutation = useMutation({
     mutationFn: (patch: BasePatchPayload) => patchBaseProfile(patch),
     onSuccess: (updated) => {
-      // 1. Dual-write to userCacheStore so UserCard / user lists refresh in
-      //    the same microtask. upsert() requires a UserType with username,
-      //    so we spread the existing UserEntry (which UserCard et al
-      //    populated). If no entry exists yet (rare — user is editing their
-      //    own profile, so typically loaded), skip the cache write — the
-      //    invalidateQueries below + the userProfileStore mirror keep the
-      //    UI consistent on the next read.
+      // userCacheStore: spread existing entry through the adapter's
+      // upsert(), which preserves orgData/leagueData and runs its own
+      // change-detection. Skip if the user isn't cached yet — the query
+      // invalidation below covers that case.
       const existing = useUserCacheStore.getState().getById(profile.pk);
       if (existing) {
-        const merged: UserType = {
-          ...existing,
-          pk: profile.pk,
-          nickname:
-            updated.nickname !== undefined ? updated.nickname : existing.nickname,
-        };
-        useUserCacheStore.getState().upsert(merged);
+        useUserCacheStore.getState().upsert({ ...existing, ...updated });
       }
 
-      // 2. Refresh userStore.currentUser if the edited row is the logged-in
-      //    user. Navbar, profile-page header, and other components read
-      //    nickname directly off currentUser, so a stale value here leaves
-      //    the post-PATCH UI inconsistent until a page reload or
-      //    fetchCurrentUser() call.
+      // userProfileStore: same idea via its upsert() — built-in
+      // hasChanged() short-circuits no-op writes.
+      const currentProfile = useUserProfileStore.getState().entities[profile.pk];
+      if (currentProfile) {
+        useUserProfileStore.getState().upsert({
+          ...currentProfile,
+          base: { ...currentProfile.base, ...updated },
+          _fetchedAt: Date.now(),
+        });
+      }
+
+      // userStore.currentUser has no partial-patch helper, so spread +
+      // setCurrentUser. Navbar/header read nickname off currentUser.
       const currentUserState = useUserStore.getState().currentUser;
       if (currentUserState?.pk === profile.pk) {
         useUserStore.getState().setCurrentUser({
           ...currentUserState,
-          nickname:
-            updated.nickname !== undefined
-              ? updated.nickname
-              : currentUserState.nickname,
+          ...updated,
         } as UserType);
       }
 
-      // 3. Mark the profile query stale so the next read refetches.
       queryClient.invalidateQueries({ queryKey: ['userProfile', profile.pk] });
-
-      // 4. Mirror the change into the profile store immediately for any
-      //    consumers reading via the adapter rather than the query.
-      useUserProfileStore.setState((state) => {
-        const current = state.entities[profile.pk];
-        if (!current) return state;
-        return {
-          entities: {
-            ...state.entities,
-            [profile.pk]: {
-              ...current,
-              base: { ...current.base, ...updated },
-              _fetchedAt: Date.now(),
-            },
-          },
-        };
-      });
 
       log.debug('base_patch_success', { userPk: profile.pk, updated });
       toast.success('Profile updated');
