@@ -20,6 +20,10 @@ class OrganizationAPITest(TestCase):
             username="orgadmin",
             password="test123",
         )
+        self.org_owner = CustomUser.objects.create_user(
+            username="orgowner",
+            password="test123",
+        )
         self.superuser = CustomUser.objects.create_superuser(
             username="superuser",
             password="test123",
@@ -28,7 +32,14 @@ class OrganizationAPITest(TestCase):
             name="Test Org",
             description="Test Description",
         )
+        self.org.owner = self.org_owner
+        self.org.save()
         self.org.admins.add(self.org_admin)
+        self.org_staff = CustomUser.objects.create_user(
+            username="orgstaff",
+            password="test123",
+        )
+        self.org.staff.add(self.org_staff)
         self.client = APIClient()
 
     def test_list_organizations_public(self):
@@ -127,3 +138,35 @@ class OrganizationAPITest(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertNotIn("javascript:", response.data["description"])
+
+    def test_destroy_organization_as_owner_succeeds(self):
+        """Org owner can delete the organization (204) and it's gone from DB."""
+        self.client.force_authenticate(user=self.org_owner)
+        response = self.client.delete(f"/api/organizations/{self.org.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Organization.objects.filter(pk=self.org.pk).exists())
+
+    def test_destroy_organization_as_admin_forbidden(self):
+        """Org admin (not owner) cannot delete the organization."""
+        self.client.force_authenticate(user=self.org_admin)
+        response = self.client.delete(f"/api/organizations/{self.org.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Organization.objects.filter(pk=self.org.pk).exists())
+
+    def test_destroy_organization_as_staff_forbidden(self):
+        """Org staff (not owner) cannot delete the organization."""
+        self.client.force_authenticate(user=self.org_staff)
+        response = self.client.delete(f"/api/organizations/{self.org.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_destroy_organization_as_random_user_forbidden(self):
+        """A logged-in user with no org membership cannot delete the organization."""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.delete(f"/api/organizations/{self.org.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_destroy_organization_as_superuser_succeeds(self):
+        """Django superuser can still delete (escape-hatch in IsOrgOwner)."""
+        self.client.force_authenticate(user=self.superuser)
+        response = self.client.delete(f"/api/organizations/{self.org.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
