@@ -66,7 +66,10 @@ export function EditOrgDefaultsModal({
     enabled: open && !!organizationId,
   });
 
-  const form = useForm<OrgDefaultsInput>({
+  // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
+  // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
+  // See https://github.com/react-hook-form/resolvers/issues/792.
+  const form = useForm<z.input<typeof orgDefaultsSchema>, undefined, OrgDefaultsInput>({
     resolver: zodResolver(orgDefaultsSchema),
     defaultValues: {
       tournament_name: '',
