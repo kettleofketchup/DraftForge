@@ -20,7 +20,6 @@ import { Input } from '~/components/ui/input';
 import { CancelButton } from '~/components/ui/buttons/CancelButton';
 import { SubmitButton } from '~/components/ui/buttons/SubmitButton';
 import { UserAvatar } from '~/components/user/UserAvatar';
-import type { UserType } from '~/components/user/types';
 import { getLogger } from '~/lib/logger';
 import { Sentry } from '~/lib/sentry';
 import { useUserCacheStore } from '~/store/userCacheStore';
@@ -74,14 +73,10 @@ export default function BaseTab({ profile, onSave, onClose }: BaseTabProps) {
         });
       }
 
-      // userStore.currentUser has no partial-patch helper, so spread +
-      // setCurrentUser. Navbar/header read nickname off currentUser.
-      const currentUserState = useUserStore.getState().currentUser;
-      if (currentUserState?.pk === profile.pk) {
-        useUserStore.getState().setCurrentUser({
-          ...currentUserState,
-          ...updated,
-        } as UserType);
+      // Navbar/header read nickname off currentUser, so patch it if the
+      // edited row is the logged-in user.
+      if (useUserStore.getState().currentUser?.pk === profile.pk) {
+        useUserStore.getState().patchCurrentUser(updated);
       }
 
       queryClient.invalidateQueries({ queryKey: ['userProfile', profile.pk] });

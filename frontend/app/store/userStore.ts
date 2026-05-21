@@ -33,6 +33,7 @@ interface UserState {
   hasHydrated: boolean;
   setHasHydrated: (hydrated: boolean) => void;
   setCurrentUser: (user: UserType) => void;
+  patchCurrentUser: (partial: Partial<UserType>) => void;
   clearUser: () => void;
   isStaff: () => boolean;
   selectedDiscordUser: GuildMember;
@@ -198,6 +199,12 @@ export const useUserStore = create<UserState>()(
         log.debug('User set:', user);
 
         set({ currentUser: user });
+      },
+
+      patchCurrentUser: (partial) => {
+        const current = get().currentUser;
+        if (!current?.pk) return;
+        set({ currentUser: { ...current, ...partial } as UserType });
       },
 
       clearUser: () => {
