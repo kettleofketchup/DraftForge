@@ -16,7 +16,11 @@ interface DraftTopBarProps {
 }
 
 function formatTime(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  // Round-to-nearest so each integer second displays for a full 1s window
+  // centered on it (e.g. "0:30" shows for ms in [29500, 30500]). Math.floor
+  // would only show 30 for the single ms at the round start, then flip
+  // immediately to 29 — visually jittery for low-precision countdowns.
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;

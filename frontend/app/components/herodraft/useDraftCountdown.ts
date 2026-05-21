@@ -38,48 +38,61 @@ function deriveCountdown(
   // when a new tick arrived (1Hz), not the 60fps we want.
   const serverNowMs = Date.now() + serverClockOffsetMs;
 
-  // RESUMING — single countdown to draft.resuming_until
+  // RESUMING — single countdown to draft.resuming_until. The grace and
+  // reserve values are FROZEN at what they'll be when RESUMING completes:
+  // server has already pushed round_started_at forward by pause_duration
+  // + 3s, so evaluating elapsed at resuming_until reproduces the values
+  // from the moment of pause.
   if (tick.draft_state === "resuming" && tick.resuming_until) {
     const target = new Date(tick.resuming_until).getTime();
+    const resumingRemainingMs = Math.max(0, target - serverNowMs);
+    const frozen = computeDraftingValues(tick, target);
     return {
-      ...ZERO,
-      resumingRemainingMs: Math.max(0, target - serverNowMs),
+      ...frozen,
+      resumingRemainingMs,
     };
   }
 
   // DRAFTING — compute grace + per-team reserve from anchors
-  if (
-    tick.draft_state === "drafting" &&
-    tick.round_started_at &&
-    typeof tick.round_grace_time_ms === "number"
-  ) {
-    const startedAtMs = new Date(tick.round_started_at).getTime();
-    const elapsedMs = Math.max(0, serverNowMs - startedAtMs);
-    const graceRemainingMs = Math.max(0, tick.round_grace_time_ms - elapsedMs);
-
-    // Active team's reserve burns down once elapsed exceeds grace.
-    // Non-active team's reserve stays at its round-start value.
-    const reserveConsumedMs = Math.max(0, elapsedMs - tick.round_grace_time_ms);
-    const teamAAtStart = tick.team_a_reserve_ms ?? 0;
-    const teamBAtStart = tick.team_b_reserve_ms ?? 0;
-    const teamAReserveMs =
-      tick.team_a_id === tick.active_team_id
-        ? Math.max(0, teamAAtStart - reserveConsumedMs)
-        : teamAAtStart;
-    const teamBReserveMs =
-      tick.team_b_id === tick.active_team_id
-        ? Math.max(0, teamBAtStart - reserveConsumedMs)
-        : teamBAtStart;
-
+  if (tick.draft_state === "drafting") {
     return {
-      graceRemainingMs,
-      teamAReserveMs,
-      teamBReserveMs,
+      ...computeDraftingValues(tick, serverNowMs),
       resumingRemainingMs: 0,
     };
   }
 
   return ZERO;
+}
+
+function computeDraftingValues(
+  tick: HeroDraftTick,
+  serverNowMs: number,
+): Omit<DraftCountdown, "resumingRemainingMs"> {
+  if (
+    !tick.round_started_at ||
+    typeof tick.round_grace_time_ms !== "number"
+  ) {
+    return { graceRemainingMs: 0, teamAReserveMs: 0, teamBReserveMs: 0 };
+  }
+  const startedAtMs = new Date(tick.round_started_at).getTime();
+  const elapsedMs = Math.max(0, serverNowMs - startedAtMs);
+  const graceRemainingMs = Math.max(0, tick.round_grace_time_ms - elapsedMs);
+
+  // Active team's reserve burns down once elapsed exceeds grace.
+  // Non-active team's reserve stays at its round-start value.
+  const reserveConsumedMs = Math.max(0, elapsedMs - tick.round_grace_time_ms);
+  const teamAAtStart = tick.team_a_reserve_ms ?? 0;
+  const teamBAtStart = tick.team_b_reserve_ms ?? 0;
+  const teamAReserveMs =
+    tick.team_a_id === tick.active_team_id
+      ? Math.max(0, teamAAtStart - reserveConsumedMs)
+      : teamAAtStart;
+  const teamBReserveMs =
+    tick.team_b_id === tick.active_team_id
+      ? Math.max(0, teamBAtStart - reserveConsumedMs)
+      : teamBAtStart;
+
+  return { graceRemainingMs, teamAReserveMs, teamBReserveMs };
 }
 
 /**

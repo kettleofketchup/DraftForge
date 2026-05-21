@@ -120,6 +120,16 @@ async def broadcast_tick(draft_id: int):
         now = timezone.now()
 
         if draft.state == HeroDraftState.RESUMING:
+            # Include the round anchors too so the client can render the
+            # frozen grace + reserve values that the timer will land on
+            # when RESUMING completes — server has already pushed
+            # round.started_at forward by pause_duration + 3s, so
+            # `grace_time_ms - (resuming_until - round_started_at)`
+            # equals the grace remaining at the moment of pause.
+            current_round = draft.rounds.filter(state="active").first()
+            teams = list(draft.draft_teams.all().order_by("id"))
+            team_a = teams[0] if teams else None
+            team_b = teams[1] if len(teams) > 1 else None
             return {
                 "type": "herodraft.tick",
                 "draft_state": draft.state,
@@ -127,6 +137,24 @@ async def broadcast_tick(draft_id: int):
                 "resuming_until": (
                     draft.resuming_until.isoformat() if draft.resuming_until else None
                 ),
+                "current_round": (
+                    current_round.round_number - 1 if current_round else None
+                ),
+                "active_team_id": (
+                    current_round.draft_team_id if current_round else None
+                ),
+                "round_started_at": (
+                    current_round.started_at.isoformat()
+                    if current_round and current_round.started_at
+                    else None
+                ),
+                "round_grace_time_ms": (
+                    current_round.grace_time_ms if current_round else None
+                ),
+                "team_a_id": team_a.id if team_a else None,
+                "team_a_reserve_ms": team_a.reserve_time_remaining if team_a else None,
+                "team_b_id": team_b.id if team_b else None,
+                "team_b_reserve_ms": team_b.reserve_time_remaining if team_b else None,
             }
 
         if draft.state != HeroDraftState.DRAFTING:
