@@ -43,6 +43,18 @@ export interface ConfirmDialogProps {
   confirmTestId?: string;
   /** data-testid for cancel button */
   cancelTestId?: string;
+  /** data-testid for the AlertDialogContent root */
+  contentTestId?: string;
+  /** data-testid for the AlertDialogTitle */
+  titleTestId?: string;
+  /** data-testid for the AlertDialogDescription */
+  descriptionTestId?: string;
+  /** Optional content rendered between header and footer as a sibling grid row.
+   *  When omitted, NO wrapper element is emitted (the 13 existing call sites
+   *  see identical layout). */
+  bodyContent?: React.ReactNode;
+  /** When true, the confirm button is rendered disabled regardless of isLoading. */
+  confirmDisabled?: boolean;
 }
 
 // Content background styling per variant
@@ -100,11 +112,16 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
       onConfirm,
       confirmTestId,
       cancelTestId,
+      contentTestId,
+      titleTestId,
+      descriptionTestId,
+      bodyContent,
+      confirmDisabled = false,
     },
     ref
   ) => {
     const handleConfirm = async () => {
-      if (isLoading) return;
+      if (isLoading || confirmDisabled) return;
       await onConfirm();
       onOpenChange(false);
     };
@@ -142,19 +159,24 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
         <AlertDialogContent
           ref={ref}
           onKeyDown={handleKeyDown}
+          data-testid={contentTestId}
           className={cn(
             'max-w-[calc(100%-2rem)] sm:max-w-md',
             contentVariantStyles[variant]
           )}
         >
           <AlertDialogHeader>
-            <AlertDialogTitle>{title}</AlertDialogTitle>
+            <AlertDialogTitle data-testid={titleTestId}>{title}</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className={cn('text-sm', descriptionVariantStyles[variant])}>
+              <div
+                data-testid={descriptionTestId}
+                className={cn('text-sm', descriptionVariantStyles[variant])}
+              >
                 {description}
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {bodyContent ? <div data-testid="confirm-dialog-body-slot">{bodyContent}</div> : null}
           <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-3">
             <CancelButton
               onClick={handleCancel}
@@ -168,6 +190,7 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
             <ConfirmButton
               onClick={handleConfirm}
               loading={isLoading}
+              disabled={confirmDisabled}
               variant={confirmButtonVariantMap[variant]}
               hotkey="↵"
               data-testid={confirmTestId}
