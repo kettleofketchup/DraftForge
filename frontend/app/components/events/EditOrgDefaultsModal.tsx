@@ -124,6 +124,10 @@ export function EditOrgDefaultsModal({
         allow_active_mmr: defaults.allow_active_mmr ?? true,
         allow_previous_rank: defaults.allow_previous_rank ?? true,
         allow_battlecup_rating: defaults.allow_battlecup_rating ?? true,
+        // Approval rule flags — see CreateEventModal for the regression note.
+        require_steam_id: defaults.require_steam_id ?? false,
+        require_mmr_verified: defaults.require_mmr_verified ?? false,
+        require_profile_complete: defaults.require_profile_complete ?? false,
       });
     }
   }, [defaults, open]);

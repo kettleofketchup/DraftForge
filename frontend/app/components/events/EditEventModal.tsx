@@ -143,6 +143,10 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
         allow_active_mmr: event.allow_active_mmr,
         allow_previous_rank: event.allow_previous_rank,
         allow_battlecup_rating: event.allow_battlecup_rating,
+        // Approval rule flags — see CreateEventModal for the regression note.
+        require_steam_id: event.require_steam_id ?? false,
+        require_mmr_verified: event.require_mmr_verified ?? false,
+        require_profile_complete: event.require_profile_complete ?? false,
       });
     }
   }, [event, open]);

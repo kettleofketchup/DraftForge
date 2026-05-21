@@ -140,6 +140,13 @@ export function CreateEventModal({
         allow_active_mmr: orgDefaults.allow_active_mmr ?? true,
         allow_previous_rank: orgDefaults.allow_previous_rank ?? true,
         allow_battlecup_rating: orgDefaults.allow_battlecup_rating ?? true,
+        // Approval rule flags added to discordConfigSchema in 46de0503. Without
+        // these in the reset payload, form state would be `undefined` after
+        // orgDefaults loads and zod's z.boolean() would silently fail validation
+        // on submit — the modal would stay open with no visible error.
+        require_steam_id: orgDefaults.require_steam_id ?? false,
+        require_mmr_verified: orgDefaults.require_mmr_verified ?? false,
+        require_profile_complete: orgDefaults.require_profile_complete ?? false,
         is_recurring: false,
         frequency: Frequency.WEEKLY,
         generate_days_ahead: 7,
