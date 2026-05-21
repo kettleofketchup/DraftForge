@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import '@testing-library/jest-dom/vitest';
 import { render, screen } from '@testing-library/react';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import { ConfirmDialog } from '../ConfirmDialog';

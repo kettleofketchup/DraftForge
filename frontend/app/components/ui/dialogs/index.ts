@@ -1,3 +1,6 @@
+export { DeleteDialog } from './DeleteDialog';
+export type { DeleteDialogProps } from './DeleteDialog';
+
 export { ConfirmDialog } from './ConfirmDialog';
 export type { ConfirmDialogProps } from './ConfirmDialog';
 
