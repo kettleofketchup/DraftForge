@@ -13,8 +13,7 @@ class CustomUserTransitionalSettersTests(TestCase):
 
     def test_nickname_setter_writes_to_base_profile(self):
         user = CustomUser.objects.create(username="hans")
-        user.nickname = "Hans New"  # transitional setter
-        # NOTE: setter is not committed until base_profile.save() is called
+        user.nickname = "Hans New"  # transitional setter persists immediately
         user.base_profile.refresh_from_db()
         assert user.base_profile.nickname == "Hans New"
 

@@ -343,7 +343,9 @@ class CustomUser(AbstractUser):
             fields_to_update.append("avatar")
             del self._pending_avatar
         if fields_to_update:
+            from app.cache_utils import invalidate_after_commit
             bp.save(update_fields=fields_to_update)
+            invalidate_after_commit(bp)
 
     @property
     def avatarUrl(self):

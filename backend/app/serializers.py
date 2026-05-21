@@ -70,10 +70,12 @@ class TournamentUserSerializer(serializers.ModelSerializer):
     # silent no-op if the fields were read_only=True.
     nickname = serializers.CharField(
         allow_null=True,
+        allow_blank=True,
         required=False,
     )
     avatar = serializers.CharField(
         allow_null=True,
+        allow_blank=True,
         required=False,
     )
 
@@ -1123,10 +1125,12 @@ class UserSerializer(serializers.ModelSerializer):
     # (org/tournament pages) which would otherwise be a silent no-op.
     nickname = serializers.CharField(
         allow_null=True,
+        allow_blank=True,
         required=False,
     )
     avatar = serializers.CharField(
         allow_null=True,
+        allow_blank=True,
         required=False,
     )
 
