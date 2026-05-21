@@ -42,7 +42,9 @@ import type { UserType } from '~/components/user/types';
 const LARGE_CHANGE_THRESHOLD = 0.2;
 
 const mmrSchema = z.object({
-  mmr: z.number({ coerce: true }).int().min(0, 'MMR must be positive').max(20000, 'MMR too high'),
+  // zod 4 dropped the `{ coerce: true }` option on z.number; use z.coerce.number()
+  // so the resolver still parses string inputs from the <Input> element.
+  mmr: z.coerce.number().int().min(0, 'MMR must be positive').max(20000, 'MMR too high'),
 });
 type MmrFormValues = z.infer<typeof mmrSchema>;
 
@@ -67,7 +69,10 @@ export function MmrApprovalModal({
 }: MmrApprovalModalProps) {
   const gameType = useGameType();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const form = useForm<MmrFormValues>({
+  // 3-generic useForm because z.coerce.number() genuinely splits input/output:
+  // input is `unknown` (coerce accepts anything), output is `number`.
+  // See https://github.com/react-hook-form/resolvers/issues/792.
+  const form = useForm<z.input<typeof mmrSchema>, unknown, MmrFormValues>({
     resolver: zodResolver(mmrSchema),
     defaultValues: { mmr: 0 },
   });
@@ -81,7 +86,10 @@ export function MmrApprovalModal({
     }
   }, [signup, open]);
 
-  const watchedMmr = form.watch('mmr');
+  // form.watch returns z.input shape, which for z.coerce.number() is `unknown`
+  // (the resolver coerces at parse time). At runtime the Input's onChange
+  // already calls valueAsNumber, so Number(...)||0 is a safe narrowing.
+  const watchedMmr = Number(form.watch('mmr')) || 0;
   const priorMmr = signup?.org_user_mmr ?? null;
   const hasDelta =
     priorMmr != null && Number.isFinite(watchedMmr) && watchedMmr !== priorMmr;
@@ -128,7 +136,9 @@ export function MmrApprovalModal({
   };
 
   const handleConfirmApproval = () => {
-    onApprove(signup.id, form.getValues('mmr'));
+    // form.getValues returns z.input shape (unknown for coerce fields).
+    // Narrow with Number() — matches onChange's valueAsNumber behavior.
+    onApprove(signup.id, Number(form.getValues('mmr')) || 0);
     setConfirmOpen(false);
   };
 
@@ -223,6 +233,9 @@ export function MmrApprovalModal({
                         placeholder="e.g. 3000"
                         data-testid="mmr-input"
                         {...field}
+                        // field.value is `unknown` (coerce input). Narrow to
+                        // number|'' so the <input> value prop typechecks.
+                        value={typeof field.value === 'number' ? field.value : ''}
                         onChange={(e) => field.onChange(e.target.valueAsNumber || 0)}
                       />
                     </FormControl>
