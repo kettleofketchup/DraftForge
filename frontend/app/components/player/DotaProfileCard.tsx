@@ -6,6 +6,7 @@ import api from '~/components/api/axios';
 import { Badge } from '~/components/ui/badge';
 import { PrimaryButton, SecondaryButton, DestructiveButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { Input } from '~/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select';
 import { RolePositions } from '~/components/user/positions';
@@ -63,6 +64,7 @@ interface DotaProfileCardProps {
 export function DotaProfileCard({ orgId, userPk, isStaff }: DotaProfileCardProps) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
 
   const endpoint = userPk
     ? `/organizations/${orgId}/users/${userPk}/dota-profile/`
@@ -133,11 +135,7 @@ export function DotaProfileCard({ orgId, userPk, isStaff }: DotaProfileCardProps
               <DestructiveButton
                 size="sm"
                 depth={false}
-                onClick={() => {
-                  if (window.confirm('Delete this player\'s Dota profile? This cannot be undone.')) {
-                    deleteMutation.mutate();
-                  }
-                }}
+                onClick={() => setShowDelete(true)}
               >
                 <X className="h-3.5 w-3.5" />
               </DestructiveButton>
@@ -210,6 +208,25 @@ export function DotaProfileCard({ orgId, userPk, isStaff }: DotaProfileCardProps
           </div>
         )}
       </CardContent>
+      <ConfirmDialog
+        open={showDelete}
+        onOpenChange={setShowDelete}
+        title="Delete Dota Profile?"
+        description="This will permanently delete this player's Dota profile. This cannot be undone."
+        confirmLabel="Delete Profile"
+        variant="destructive"
+        isLoading={deleteMutation.isPending}
+        onConfirm={async () => {
+          try {
+            await deleteMutation.mutateAsync();
+          } catch {
+            // Error toast handled by useDeleteDotaProfileMutation's onError
+          }
+        }}
+        contentTestId="delete-dota-profile-dialog"
+        confirmTestId="delete-dota-profile-confirm"
+        cancelTestId="delete-dota-profile-cancel"
+      />
     </Card>
   );
 }
