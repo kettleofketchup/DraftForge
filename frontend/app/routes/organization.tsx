@@ -55,7 +55,7 @@ import type { EventRepeaterType } from '~/components/api/api';
 import { useEvents, useEventRepeaters, useRepeaterSubscriptionMutation } from '~/hooks/useEvent';
 import { Repeat, CalendarDays } from 'lucide-react';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
-import { ClaimsTab, EditOrganizationModal, useOrganization } from '~/components/organization';
+import { ClaimsTab, DeleteOrganizationDangerZone, EditOrganizationModal, useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { AddDiscordBotButton, PrimaryButton } from '~/components/ui/buttons';
@@ -70,6 +70,7 @@ import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 import { usePageNav } from '~/hooks/usePageNav';
+import { useIsOrganizationOwner } from '~/hooks/usePermissions';
 import { cn } from '~/lib/utils';
 import { toast } from 'sonner';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
@@ -248,6 +249,8 @@ export default function OrganizationDetailPage() {
       getOrgUsers(pk);
     }
   }, [activeTab, pk, getOrgUsers]);
+
+  const isOwner = useIsOrganizationOwner(organization);
 
   const isOrgAdmin =
     currentUser?.is_superuser ||
@@ -573,6 +576,10 @@ export default function OrganizationDetailPage() {
           )}
         </Tabs>
         </div>
+
+        {organization && isOwner && (
+          <DeleteOrganizationDangerZone organization={organization} />
+        )}
 
         {pk && (
           <CreateLeagueModal
