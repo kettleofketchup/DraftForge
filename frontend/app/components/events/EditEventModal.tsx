@@ -72,7 +72,7 @@ export function EditEventModal({ event, open, onOpenChange }: EditEventModalProp
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
   // See https://github.com/react-hook-form/resolvers/issues/792.
-  const form = useForm<z.input<typeof editEventSchema>, undefined, EditEventInput>({
+  const form = useForm<z.input<typeof editEventSchema>, unknown, EditEventInput>({
     resolver: zodResolver(editEventSchema),
     defaultValues: {
       name: '',

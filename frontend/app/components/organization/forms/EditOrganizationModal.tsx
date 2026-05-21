@@ -52,7 +52,7 @@ export function EditOrganizationModal({
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
   // See https://github.com/react-hook-form/resolvers/issues/792.
-  const form = useForm<z.input<typeof EditOrganizationSchema>, undefined, EditOrganizationInput>({
+  const form = useForm<z.input<typeof EditOrganizationSchema>, unknown, EditOrganizationInput>({
     resolver: zodResolver(EditOrganizationSchema),
     defaultValues: {
       name: organization.name || '',

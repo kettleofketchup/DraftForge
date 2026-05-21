@@ -67,7 +67,7 @@ export function CreateEventModal({
   // TTransformedValues = z.output<S> (what onSubmit receives after parse)
   // For schemas without transforms these are structurally identical but
   // TypeScript still treats them as distinct due to zod 4 type branding.
-  const form = useForm<z.input<typeof createEventInputSchema>, undefined, CreateEventInput>({
+  const form = useForm<z.input<typeof createEventInputSchema>, unknown, CreateEventInput>({
     resolver: zodResolver(createEventInputSchema),
     defaultValues: {
       name: '',

@@ -67,7 +67,7 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
   // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
   // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
   // See https://github.com/react-hook-form/resolvers/issues/792.
-  const form = useForm<z.input<typeof editRepeaterSchema>, undefined, EditRepeaterInput>({
+  const form = useForm<z.input<typeof editRepeaterSchema>, unknown, EditRepeaterInput>({
     resolver: zodResolver(editRepeaterSchema),
     defaultValues: {
       name: '',
