@@ -38,6 +38,7 @@ from tests.populate.constants import (
     TOURNAMENT_USERS,
 )
 from tests.populate.csv_import import populate_csv_import_data
+from tests.populate.org_delete import populate_org_delete
 from tests.populate.demo import populate_demo_tournaments
 from tests.populate.events import populate_events_data
 from tests.populate.organizations import populate_organizations_and_leagues
@@ -76,6 +77,7 @@ def populate_all(force=False):
 
     steps = [
         ("Organizations & Leagues", populate_organizations_and_leagues),
+        ("Org Delete Data", populate_org_delete),
         ("Users", populate_users),
         ("Test Auth Users", populate_test_auth_users),
         ("Tournaments", populate_tournaments),
@@ -132,6 +134,7 @@ __all__ = [
     "populate_bracket_linking_scenario",
     "populate_bracket_unset_winner_tournament",
     "populate_csv_import_data",
+    "populate_org_delete",
     "populate_user_edit_data",
     "populate_events_data",
     "populate_demo_tournaments",
