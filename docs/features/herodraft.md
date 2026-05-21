@@ -38,7 +38,8 @@ Hero Draft runs through several phases:
 | `rolling` | Coin flip phase |
 | `choosing` | Winner/loser making pick order and side choices |
 | `drafting` | Active ban/pick phase with timers |
-| `paused` | Draft paused due to captain disconnect |
+| `paused` | Draft paused (captain disconnect or manual via captain/staff). Server stops broadcasting ticks. |
+| `resuming` | 3-second countdown between PAUSED → DRAFTING. `resuming_until` carries the target timestamp. |
 | `completed` | Draft finished successfully |
 | `abandoned` | Draft cancelled |
 
@@ -99,14 +100,19 @@ Clients connect via WebSocket to `/api/herodraft/<draft_id>/`. The `HeroDraftCon
 
 ### Tick Updates
 
-During drafting phase, the server broadcasts `herodraft_tick` every second:
+During `drafting` and `resuming` phases, the server broadcasts `herodraft_tick` at 1Hz. Ticks carry **anchors** (server timestamps + durations), not pre-computed remainders — the client derives the countdown locally via `requestAnimationFrame` so the displayed timer stays smooth even when ticks are delayed, batched, or dropped.
+
+**DRAFTING tick:**
 
 ```json
 {
   "type": "herodraft_tick",
+  "draft_state": "drafting",
+  "server_time": "2026-05-21T18:42:13.421Z",
   "current_round": 0,
   "active_team_id": 123,
-  "grace_time_remaining_ms": 25000,
+  "round_started_at": "2026-05-21T18:42:08.000Z",
+  "round_grace_time_ms": 30000,
   "team_a_id": 123,
   "team_a_reserve_ms": 90000,
   "team_b_id": 456,
@@ -114,35 +120,56 @@ During drafting phase, the server broadcasts `herodraft_tick` every second:
 }
 ```
 
+**RESUMING tick** (during the 3s countdown after pause):
+
+```json
+{
+  "type": "herodraft_tick",
+  "draft_state": "resuming",
+  "server_time": "2026-05-21T18:43:11.005Z",
+  "resuming_until": "2026-05-21T18:43:14.000Z"
+}
+```
+
+`team_a_reserve_ms` / `team_b_reserve_ms` are the team's **cumulative reserve at round start** (stable for the duration of the round). The active team's display value is computed client-side as `max(0, reserve - max(0, elapsed - grace))`. The server debits actual usage at pick-submit time, so the *next* round's tick carries the lower value forward.
+
+### Client-Side Countdown
+
+The store captures `serverClockOffsetMs = server_time - Date.now()` once on every tick receive. `useDraftCountdown` runs a `requestAnimationFrame` loop and recomputes the display values each frame against `Date.now() + serverClockOffsetMs` and the current tick's anchors. This decouples timer smoothness from broadcast cadence — even a 5-second tick gap doesn't freeze the UI.
+
+**While paused, the server stops broadcasting ticks**, so the cached tick keeps reading `drafting` with a stale `round_started_at`. The hook reads the live `draft.state` from the store and skips its `setState` call while paused, freezing the displayed values until the next tick arrives (during RESUMING).
+
+**Outbound timestamps** use `getServerNowISO()` (also derived from the offset). `submitPick` sends `client_picked_at` so the server can credit reserve against the picker's local clock rather than the server-receive time. The server applies a 2-second sanity window: stamps older than 2s or in the future fall back to server-receive.
+
 ## Pause/Resume System
 
 ### Trigger Conditions
 
 The draft **pauses immediately** when:
-- Any captain disconnects during the `drafting` phase
-- This ensures fairness - no picks can be made while a captain is absent
+- Any captain's heartbeat goes stale (>9s without keepalive) during `drafting`
+- A captain or tournament staff member POSTs to `/api/herodraft/<pk>/pause/` (manual pause; sets `is_manual_pause=true`)
 
 The draft **resumes** when:
-- All captains are reconnected
-- A 3-second countdown is shown before timer resumes
+- POST to `/api/herodraft/<pk>/resume/` by a captain or tournament staff
+- Server transitions PAUSED → RESUMING with a 3-second countdown anchor (`resuming_until`)
+- After 3s the tick loop transitions RESUMING → DRAFTING
 
 ### Backend Logic
 
-**On Captain Disconnect (during DRAFTING):**
+**On Pause (heartbeat-stale or manual):**
 
 1. Set `draft.state = PAUSED`
 2. Store `draft.paused_at = now()`
 3. Broadcast `draft_paused` event to all clients
-4. Tick broadcaster stops (checks state != DRAFTING)
+4. Tick broadcaster stops on next iteration (`should_continue_ticking` returns False)
 
-**On All Captains Reconnected (during PAUSED):**
+**On Resume (manual):**
 
 1. Calculate `pause_duration = now() - draft.paused_at`
-2. Broadcast `resume_countdown` with `{countdown_seconds: 3}`
-3. Adjust active round's `started_at` forward by `pause_duration + 3 seconds`
-4. Set `draft.state = DRAFTING`, clear `paused_at`
-5. Broadcast `draft_resumed` event
-6. Restart tick broadcaster
+2. Adjust active round's `started_at` forward by `pause_duration + 3 seconds` and `save(update_fields=["started_at"])`
+3. Set `draft.state = RESUMING`, `resuming_until = now() + 3s`, clear `paused_at` and `is_manual_pause`
+4. Restart tick broadcaster — first ticks carry the RESUMING anchor; clients display "Resuming in N…"
+5. After `resuming_until` passes, the tick loop's `check_resume_countdown` flips the draft to `DRAFTING` and broadcasts `draft_resumed`. Subsequent ticks carry the new `round_started_at`
 
 **Timer Adjustment:**
 
@@ -166,6 +193,90 @@ For responsive UX:
 - Pause overlay should appear within 100ms of disconnect
 - Resume countdown should start within 100ms of all captains connected
 - Timer should resume exactly where it paused (no drift)
+
+## Observability
+
+Telemetry plumbing is shared across the whole backend (see [dev/telemetry/](../dev/telemetry/index.md)). This section documents what herodraft-specific signals you can expect and how to query them.
+
+### Spans (Tempo)
+
+| Span | Emitted by | Useful attributes |
+|------|-----------|-------------------|
+| `ws.connect`, `ws.disconnect`, `ws.heartbeat`, `ws.message` | `consumers_base.py` | `ws.draft_id`, `ws.user_id`, `ws.conn_id` |
+| `ws.captain_register`, `ws.captain_unregister` | `consumers.py` | `ws.draft_id`, `ws.user_id`, `ws.draft_team_id` |
+| `herodraft.submit_pick` | `functions/herodraft.py` | `draft.id`, `team.id`, `hero.id`, `round.number`, `elapsed_ms`, `over_grace_ms`, `reserve_used_ms`, `pick_time_source` (`client_now`, `server_now`, fallback reason) |
+| `herodraft.tick.iteration` | `tasks/herodraft_tick.py` | `ws.draft_id`, `tick.iteration`, `tick.duration_s`, `tick.outcome`, `tick.stop_reason` |
+| `herodraft.tick.<step>` | `tasks/herodraft_tick.py` | child of `tick.iteration`. Steps: `resume_countdown`, `captain_heartbeats`, `broadcast_tick`, `check_timeout`, `extend_lock`. Each carries `tick.step_duration_s` |
+
+`herodraft.submit_pick` runs inside the parent `ws.message` span, so a single trace shows: client message arrives → handler dispatches → pick logic → DB commit → broadcast. Look for the trace by `ws.draft_id` or via the `traceID` derived field on any associated log line.
+
+**Sample TraceQL (Tempo Explore):**
+
+```traceql
+# Every pick in a draft
+{ name = "herodraft.submit_pick" && .draft.id = 123 }
+
+# Slow tick iterations
+{ name = "herodraft.tick.iteration" && duration > 1500ms }
+
+# Picks where the server fell back from client_picked_at
+{ name = "herodraft.submit_pick" && .pick_time_source != "client_now" }
+```
+
+### Log events (Loki)
+
+All logs carry `system="herodraft"` plus a `subsystem` discriminator. Filter by `service_name="backend"` for the relevant stream.
+
+| `subsystem` | Event | Level | Trigger |
+|-------------|-------|-------|---------|
+| `state` | `draft_paused` | info | Manual pause (captain/staff POST to `/pause/`) |
+| `state` | `draft_resumed` | info | Manual resume; includes `pause_duration_s`, `round_started_at_adjustment_s` |
+| `timing` | `round_started_at_adjusted` | info | Round anchor pushed forward by pause duration + 3s countdown |
+| `heartbeat` | `heartbeat_missing` | warning | No heartbeat key in Redis for a connected captain |
+| `heartbeat` | `heartbeat_stale` | warning | Heartbeat older than 9s |
+| `heartbeat` | `heartbeat_triggered_pause` | info | Heartbeat-stale forced a state → PAUSED transition |
+| `timer` | `tick_loop_started` / `tick_loop_stopping` / `tick_loop_ended` | info | Broadcaster lifecycle. `tick_loop_stopping.reason` is `no_connections`, `draft_state_paused`, `draft_state_completed`, etc. |
+| `timer` | `tick_loop_healthy` | info | Heartbeat log every 30 ticks with `duration_s` |
+| `timer` | `tick_loop_stalled` | error | Gap between consecutive ticks >1.5s (event loop blocked) |
+| `timer` | `tick_skipped` | info / warning | `reason` ∈ {`wrong_state`, `no_active_round`, `not_found`} |
+| `timer` | `tick_step_slow` / `tick_slow` | warning | Sub-step >300ms or whole iteration >1.5s |
+| `timer` | `timeout_auto_pick` / `timeout_auto_pick_broadcast` | info | Auto-random fired (over grace + reserve) |
+| `pick` | `pick_submitted` | info | Includes `elapsed_ms`, `over_grace_ms`, `reserve_used_ms`, `pick_time_source` |
+| `pick` | `pick_time_too_old` / `pick_time_in_future` / `pick_time_naive_datetime` | warning | Server rejected `client_picked_at` and fell back to receive-time |
+| `pick` | `pick_reserve_exhausted` | warning | Active team finished pick with reserve_time_remaining ≤ 0 |
+| `pick` | `pick_elapsed_negative` | error | `now - round_started_at` < 0 (clock skew or DB clock drift) |
+
+**Sample LogQL queries:**
+
+```logql
+# Full lifecycle of a specific draft
+{service_name="backend"} | json | draft_id="123"
+
+# Every pause/resume event across the cluster, with timing
+{service_name="backend"} | json | event_name=~"draft_paused|draft_resumed|round_started_at_adjusted"
+
+# Tick health for a draft (cadence, slow steps, stalls)
+{service_name="backend"} | json | system="herodraft" | subsystem="timer" | draft_id="123"
+
+# Captains whose heartbeat went stale (potential disconnect leading to pause)
+{service_name="backend"} | json | event_name=~"heartbeat_(stale|missing|triggered_pause)"
+
+# Picks that crossed grace and burned reserve, sorted by burn amount
+{service_name="backend"} | json | event_name="pick_submitted" | reserve_used_ms > 0
+```
+
+### Derived fields → one-click navigation
+
+The Loki datasource is configured (see [`docs/dev/telemetry/datasources/grafanacloud-logs.json`](../dev/telemetry/datasources/grafanacloud-logs.json)) so the following IDs in any log line become clickable:
+
+| Field | Click action |
+|-------|--------------|
+| `trace_id` (any spelling: `traceID`, `trace_id`, body or label) | Open the trace in Tempo |
+| `ws_conn_id` | Internal Loki query showing every event for that WebSocket from connect → disconnect |
+| `user_id` | Internal Loki query for all events involving that user |
+| `draft_id` | Internal Loki query for the entire herodraft session |
+
+When debugging a pause complaint, the typical loop is: open Loki → filter by `draft_id` → find the `draft_paused` event → click its `trace_id` → see the `ws.message` → `herodraft.submit_pick` (or pause-endpoint) span in Tempo.
 
 ## API Endpoints
 
