@@ -45,7 +45,10 @@ Walk this list against any diff that touches an [in-scope source tree](scope.md)
 - [ ] `<Dialog>` / `<AlertDialog>` content does NOT add `bg-gradient-to-*` overrides — `brandBg` is automatic and tailwind-merge will strip `bg-background`. → [substitutions](component-substitutions.md#dialogs)
 - [ ] Custom dialog overlays use the arbitrary property `[background-image:var(--brand-bg)]`, not `bg-gradient-*`.
 - [ ] `<Dialog>` / `<AlertDialog>` always include `<DialogTitle>` / `<AlertDialogTitle>` (use `className="sr-only"` if visually hidden).
-- [ ] Yes/no confirmation flows use `<ConfirmDialog>` from `~/components/ui/dialogs` — never a hand-rolled `<AlertDialog>`. The wrapper supplies Enter→confirm, Backspace→cancel, and the `<Kbd>` keycap hints on each button.
+- [ ] Confirmation flows use canonical wrappers from `~/components/ui/dialogs`:
+  - Yes/no confirm (positive OR negative) → `<ConfirmDialog>` with the appropriate `variant`.
+  - Destructive with a typed-name gate (League, Organization, Event Series) → `<DeleteDialog>` with `entityKind` + `entityName`.
+  Never hand-roll `<AlertDialog>` for these. Never `window.confirm()` in `.tsx`/`.ts`.
 - [ ] Keyboard hints use `<Kbd>` from `~/components/ui/kbd`, never raw `<kbd>`.
 - [ ] Brand buttons exposing a page-level shortcut use the `hotkey` prop, never a hand-rolled `<Kbd>` child. The prop renders `<HotkeyBadge>` (corner pill + LazyTooltip) — bypassing it skips the tooltip and breaks the standardized pattern.
 
