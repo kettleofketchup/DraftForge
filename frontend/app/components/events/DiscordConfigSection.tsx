@@ -1,4 +1,5 @@
-import type { Control, UseFormWatch } from 'react-hook-form';
+import type { Control, FieldValues, UseFormWatch } from 'react-hook-form';
+import type { z } from 'zod';
 import {
   FormControl,
   FormDescription,
@@ -16,8 +17,19 @@ import {
   SelectValue,
 } from '~/components/ui/select';
 import { Textarea } from '~/components/ui/textarea';
+import type { discordConfigSchema } from './schemas';
 import { DiscordChannelPicker } from './DiscordChannelPicker';
 import { DiscordRolePicker } from './DiscordRolePicker';
+
+/** Field set covered by this section. Includes discordConfigSchema's input
+ *  plus the repeater-only `discord_notify_new_events` flag — that field lives
+ *  on createEventInputSchema + editRepeaterSchema directly (not in the shared
+ *  sub-schema) because non-repeater forms don't expose it, but the JSX still
+ *  references it under the `isRepeater` guard. */
+type DiscordFields = z.input<typeof discordConfigSchema> & {
+  discord_notify_new_events?: boolean;
+};
+type DiscordFieldName = Extract<keyof DiscordFields, string>;
 
 const REMINDER_HOURS_OPTIONS = [
   { value: 1, label: '1 hour before' },
@@ -35,11 +47,11 @@ export const DiscordIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-/** Reusable checkbox field for Discord config options */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/** Reusable checkbox field for Discord config options. The `name` prop is
+ *  constrained to known DiscordFields keys — a typo'd literal is a TS error. */
 function CheckboxField({ control, name, label, description }: {
-  control: Control<any>;
-  name: string;
+  control: Control<DiscordFields>;
+  name: DiscordFieldName;
   label: string;
   description: string;
 }) {
@@ -53,7 +65,7 @@ function CheckboxField({ control, name, label, description }: {
             <input
               type="checkbox"
               data-testid={`discord-${name}`}
-              checked={field.value}
+              checked={!!field.value}
               onChange={field.onChange}
               className="h-4 w-4 rounded border-border accent-primary"
             />
@@ -69,10 +81,9 @@ function CheckboxField({ control, name, label, description }: {
 }
 
 /** Reusable hours dropdown for reminder timing */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function HoursSelect({ control, name, label }: {
-  control: Control<any>;
-  name: string;
+  control: Control<DiscordFields>;
+  name: DiscordFieldName;
   label?: string;
 }) {
   return (
@@ -108,16 +119,24 @@ function HoursSelect({ control, name, label }: {
   );
 }
 
-interface DiscordConfigSectionProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  control: Control<any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  watch: UseFormWatch<any>;
+interface DiscordConfigSectionProps<T extends FieldValues & DiscordFields> {
+  control: Control<T>;
+  watch: UseFormWatch<T>;
   isRepeater: boolean;
   organizationId: number;
 }
 
-export function DiscordConfigSection({ control, watch, isRepeater, organizationId }: DiscordConfigSectionProps) {
+export function DiscordConfigSection<T extends FieldValues & DiscordFields>({
+  control: parentControl,
+  watch: parentWatch,
+  isRepeater,
+  organizationId,
+}: DiscordConfigSectionProps<T>) {
+  // T extends DiscordFields by the generic constraint, so narrowing to
+  // Control<DiscordFields> is sound: we touch only the discord-config slice.
+  const control = parentControl as unknown as Control<DiscordFields>;
+  const watch = parentWatch as unknown as UseFormWatch<DiscordFields>;
+
   const [createEvent, signupReminder, profileReminder, confirmAttendance, postSignups, announcement] = watch([
     'discord_create_event',
     'discord_signup_reminder',
