@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
+import { z } from 'zod';
 
 import { AdminTeamSection } from '~/components/admin-team';
 import { updateOrganization } from '~/components/api/api';
@@ -48,7 +49,10 @@ export function EditOrganizationModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isOrgAdmin = useIsOrganizationAdmin(organization);
 
-  const form = useForm<EditOrganizationInput>({
+  // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
+  // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
+  // See https://github.com/react-hook-form/resolvers/issues/792.
+  const form = useForm<z.input<typeof EditOrganizationSchema>, undefined, EditOrganizationInput>({
     resolver: zodResolver(EditOrganizationSchema),
     defaultValues: {
       name: organization.name || '',

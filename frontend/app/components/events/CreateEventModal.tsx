@@ -28,6 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
+import { z } from 'zod';
 import { createEventInputSchema, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC, type CreateEventInput } from './schemas';
 import { GAME_TYPE } from '~/components/game/constants';
 import { LeagueCombobox } from '~/components/league/LeagueCombobox';
@@ -59,7 +60,14 @@ export function CreateEventModal({
   // hardcoded useForm values and we show the form anyway after isLoading clears.
   const formReady = !orgDefaultsLoading && (orgDefaults == null || defaultsApplied);
 
-  const form = useForm<CreateEventInput>({
+  // RHF 7.55+ split the form's internal field-values type from the
+  // transformed-on-submit type. @hookform/resolvers v5 + zod 4 always returns
+  // Resolver<z.input<T>, _, z.output<T>>, so we need both generics aligned:
+  // TFieldValues = z.input<S> (matches resolver's first arg)
+  // TTransformedValues = z.output<S> (what onSubmit receives after parse)
+  // For schemas without transforms these are structurally identical but
+  // TypeScript still treats them as distinct due to zod 4 type branding.
+  const form = useForm<z.input<typeof createEventInputSchema>, undefined, CreateEventInput>({
     resolver: zodResolver(createEventInputSchema),
     defaultValues: {
       name: '',
