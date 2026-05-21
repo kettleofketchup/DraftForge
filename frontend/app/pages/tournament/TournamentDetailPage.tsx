@@ -17,6 +17,7 @@ import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity
 import { TournamentSettingsModal } from '~/components/tournament/settings/TournamentSettingsModal';
 import { SecondaryButton, DestructiveButton } from '~/components/ui/buttons';
 import { BrandDropdownMenu, type BrandDropdownAction } from '~/components/ui/brand-dropdown-menu';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { toast } from 'sonner';
 
 import { getLogger } from '~/lib/logger';
@@ -175,11 +176,16 @@ export const TournamentDetailPage: React.FC = () => {
   }, [tournament?.league_pk]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showDeleteTournament, setShowDeleteTournament] = useState(false);
   const isAdmin = currentUser?.is_staff || currentUser?.is_superuser;
+
+  const openDeleteDialog = () => {
+    if (!tournament?.pk) return;
+    setShowDeleteTournament(true);
+  };
 
   const handleDelete = async () => {
     if (!tournament?.pk) return;
-    if (!window.confirm('Are you sure you want to permanently delete this tournament? This cannot be undone.')) return;
     try {
       await deleteTournament(tournament.pk);
       toast.success('Tournament deleted');
@@ -204,7 +210,7 @@ export const TournamentDetailPage: React.FC = () => {
         key: 'delete',
         icon: <Trash2 className="h-4 w-4 mr-1.5" />,
         label: 'Delete',
-        onClick: handleDelete,
+        onClick: openDeleteDialog,
         variant: 'destructive',
         'data-testid': 'tournament-delete-btn',
       },
@@ -295,7 +301,7 @@ export const TournamentDetailPage: React.FC = () => {
               </SecondaryButton>
               <DestructiveButton
                 size="sm"
-                onClick={handleDelete}
+                onClick={openDeleteDialog}
                 data-testid="tournament-delete-btn"
               >
                 <Trash2 className="h-4 w-4 mr-1.5" />
@@ -333,6 +339,22 @@ export const TournamentDetailPage: React.FC = () => {
       {breadcrumbSegments.length > 1 && <EntityBreadcrumb segments={breadcrumbSegments} />}
       {title()}
       <TournamentTabs />
+      <ConfirmDialog
+        open={showDeleteTournament}
+        onOpenChange={setShowDeleteTournament}
+        title="Delete tournament?"
+        description={
+          <>
+            This will permanently delete <strong>{tournament?.name}</strong>, its brackets, matches, and signups. This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete tournament"
+        variant="destructive"
+        onConfirm={handleDelete}
+        contentTestId="delete-tournament-dialog"
+        confirmTestId="delete-tournament-confirm"
+        cancelTestId="delete-tournament-cancel"
+      />
     </div>
   );
 };
