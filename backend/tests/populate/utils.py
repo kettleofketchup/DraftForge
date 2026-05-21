@@ -289,8 +289,11 @@ def fetch_discord_avatars_for_users(users):
             continue
         avatar_hash = avatar_map.get(user.discordId)
         if avatar_hash and user.avatar != avatar_hash:
+            # T1.5+: avatar is a property over base_profile.avatar; the setter
+            # persists via bp.save(update_fields=["avatar"]) internally, so an
+            # explicit CustomUser.save(update_fields=["avatar"]) crashes since
+            # `avatar` is no longer a model field.
             user.avatar = avatar_hash
-            user.save(update_fields=["avatar"])
             updated += 1
     if updated:
         print(f"  Updated {updated} avatars")

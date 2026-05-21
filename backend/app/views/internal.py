@@ -1055,8 +1055,15 @@ def update_user_avatar(request, pk):
     except User.DoesNotExist:
         return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    # T1.5+: avatar is a property over base_profile.avatar; the setter
+    # persists via bp.save(update_fields=["avatar"]) internally, so an
+    # explicit CustomUser.save(update_fields=["avatar"]) crashes because
+    # `avatar` is no longer a model field. The setter also calls
+    # invalidate_after_commit(bp) on the base_profile, but we still want
+    # the user row's cached payloads (UserSerializer.avatar sources from
+    # base_profile, so reads through cached `CustomUser` rows reference
+    # stale data) evicted too.
     user.avatar = request.data.get("avatar")
-    user.save(update_fields=["avatar"])
     invalidate_after_commit(user)
 
     return Response({"pk": user.pk, "avatar": user.avatar})
