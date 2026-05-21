@@ -717,8 +717,43 @@ test.describe('HeroDraft with Bracket Demo', () => {
         await expect(pausedOverlayB).toBeVisible({ timeout: 10000 });
         console.log('Draft paused - overlay visible on both pages');
 
+        // Topbar countdown must freeze while paused. ±1s tolerance for the
+        // second-precision display flipping at the capture boundary.
+        const graceBeforeA = await captainA.draftPage.getGraceTimeSeconds();
+        const teamABeforeA = await captainA.draftPage.getTeamAReserveTimeSeconds();
+        const teamBBeforeA = await captainA.draftPage.getTeamBReserveTimeSeconds();
+        const graceBeforeB = await captainB.draftPage.getGraceTimeSeconds();
+        console.log(
+          `Paused timers (A view): grace=${graceBeforeA}s, A=${teamABeforeA}s, B=${teamBBeforeA}s; (B view): grace=${graceBeforeB}s`,
+        );
+
         // Show the paused state for video
         await captainA.page.waitForTimeout(3000);
+
+        const graceAfterA = await captainA.draftPage.getGraceTimeSeconds();
+        const teamAAfterA = await captainA.draftPage.getTeamAReserveTimeSeconds();
+        const teamBAfterA = await captainA.draftPage.getTeamBReserveTimeSeconds();
+        const graceAfterB = await captainB.draftPage.getGraceTimeSeconds();
+        console.log(
+          `After 3s pause (A view): grace=${graceAfterA}s, A=${teamAAfterA}s, B=${teamBAfterA}s; (B view): grace=${graceAfterB}s`,
+        );
+
+        expect(
+          Math.abs(graceBeforeA - graceAfterA),
+          'grace timer must not advance during pause (A view)',
+        ).toBeLessThanOrEqual(1);
+        expect(
+          Math.abs(teamABeforeA - teamAAfterA),
+          'team A reserve must not advance during pause',
+        ).toBeLessThanOrEqual(1);
+        expect(
+          Math.abs(teamBBeforeA - teamBAfterA),
+          'team B reserve must not advance during pause',
+        ).toBeLessThanOrEqual(1);
+        expect(
+          Math.abs(graceBeforeB - graceAfterB),
+          'grace timer must not advance during pause (B view)',
+        ).toBeLessThanOrEqual(1);
 
         // Captain A clicks resume button
         const resumeButton = captainA.page.locator('[data-testid="herodraft-resume-btn"]');

@@ -259,7 +259,15 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
           data-testid="herodraft-team-a-reserve"
         >
           <span className="text-[10px] sm:text-xs text-muted-foreground block">Reserve</span>
-          <span data-testid="herodraft-team-a-reserve-time">{formatTime(teamAReserve)}</span>
+          <span
+            className={cn(
+              "inline-block origin-center",
+              graceRemaining === 0 && teamAReserve < 30000 && "animate-reserve-critical"
+            )}
+            data-testid="herodraft-team-a-reserve-time"
+          >
+            {formatTime(teamAReserve)}
+          </span>
         </div>
 
         <div className="hidden sm:block" />
@@ -271,8 +279,10 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
           </span>
           <span
             className={cn(
-              "font-mono text-xl sm:text-2xl font-bold",
-              graceRemaining < 10000 ? "text-red-400" : "text-yellow-400"
+              "font-mono text-xl sm:text-2xl font-bold inline-block origin-center",
+              graceRemaining < 10000
+                ? "text-red-400 animate-grace-urgent"
+                : "text-yellow-400"
             )}
             data-testid="herodraft-grace-time"
           >
@@ -291,7 +301,15 @@ export function DraftTopBar({ draft, tick }: DraftTopBarProps) {
           data-testid="herodraft-team-b-reserve"
         >
           <span className="text-[10px] sm:text-xs text-muted-foreground block">Reserve</span>
-          <span data-testid="herodraft-team-b-reserve-time">{formatTime(teamBReserve)}</span>
+          <span
+            className={cn(
+              "inline-block origin-center",
+              graceRemaining === 0 && teamBReserve < 30000 && "animate-reserve-critical"
+            )}
+            data-testid="herodraft-team-b-reserve-time"
+          >
+            {formatTime(teamBReserve)}
+          </span>
         </div>
       </div>
     </div>

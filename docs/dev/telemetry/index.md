@@ -39,3 +39,9 @@ def my_function():
 - [Context Guide](context.md) - Adding context to new endpoints
 - [Local Observability](local-observability.md) - Local tracing setup
 - [Reference](reference.md) - Environment variable reference
+
+## Per-feature observability
+
+Some features document their span/log inventory and recommended queries alongside the feature itself:
+
+- [HeroDraft](../../features/herodraft.md#observability) - WebSocket draft timer spans (`herodraft.tick.*`, `herodraft.submit_pick`), pause/resume log events, and LogQL/TraceQL examples.

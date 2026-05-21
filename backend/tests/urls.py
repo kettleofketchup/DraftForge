@@ -49,6 +49,7 @@ from .test_herodraft import (
     force_herodraft_timeout,
     get_herodraft_by_key,
     reset_herodraft,
+    warp_herodraft_round,
 )
 from .test_steam import create_test_match
 
@@ -201,6 +202,11 @@ urlpatterns = [
         "herodraft/<int:draft_pk>/reset/",
         reset_herodraft,
         name="test-herodraft-reset",
+    ),
+    path(
+        "herodraft/<int:draft_pk>/warp/",
+        warp_herodraft_round,
+        name="test-herodraft-warp",
     ),
     path(
         "herodraft-by-key/<str:key>/",

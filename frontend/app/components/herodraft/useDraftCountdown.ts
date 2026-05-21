@@ -95,18 +95,25 @@ function deriveCountdown(
  */
 export function useDraftCountdown(tick: HeroDraftTick | null): DraftCountdown {
   const serverClockOffsetMs = useHeroDraftStore((s) => s.serverClockOffsetMs);
+  // Server stops broadcasting ticks during pause; the cached tick stays
+  // `drafting` with a stale `round_started_at`. Consult live `draft.state`.
+  const isPaused = useHeroDraftStore((s) => s.draft?.state === "paused");
   const [countdown, setCountdown] = useState<DraftCountdown>(() =>
     deriveCountdown(tick, serverClockOffsetMs),
   );
   const tickRef = useRef(tick);
   const offsetRef = useRef(serverClockOffsetMs);
+  const isPausedRef = useRef(isPaused);
   tickRef.current = tick;
   offsetRef.current = serverClockOffsetMs;
+  isPausedRef.current = isPaused;
 
   useEffect(() => {
     let rafId = 0;
     const frame = () => {
-      setCountdown(deriveCountdown(tickRef.current, offsetRef.current));
+      if (!isPausedRef.current) {
+        setCountdown(deriveCountdown(tickRef.current, offsetRef.current));
+      }
       rafId = requestAnimationFrame(frame);
     };
     rafId = requestAnimationFrame(frame);
