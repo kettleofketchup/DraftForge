@@ -21,6 +21,7 @@ import { CancelButton } from '~/components/ui/buttons/CancelButton';
 import { SubmitButton } from '~/components/ui/buttons/SubmitButton';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import type { UserType } from '~/components/user/types';
+import { getLogger } from '~/lib/logger';
 import { Sentry } from '~/lib/sentry';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserProfileStore } from '~/store/userProfileStore';
@@ -32,11 +33,7 @@ import {
   type BaseProfileFormValues,
 } from '../schemas';
 
-const log = {
-  debug: (...args: unknown[]) => console.debug('[user.editProfile.base]', ...args),
-  warn: (...args: unknown[]) => console.warn('[user.editProfile.base]', ...args),
-  error: (...args: unknown[]) => console.error('[user.editProfile.base]', ...args),
-};
+const log = getLogger('user.editProfile.base');
 
 interface BaseTabProps {
   profile: UserProfileEntry;
