@@ -16,6 +16,7 @@ function writeCookie(name: string, value: string): void {
 }
 
 function resolveLocale(): SupportedLocale {
+  if (typeof document === 'undefined') return FALLBACK_LOCALE;
   const htmlLang = document.documentElement.lang;
   if (htmlLang && isSupported(htmlLang)) return htmlLang;
   const params = new URLSearchParams(location.search);
