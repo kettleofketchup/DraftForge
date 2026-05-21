@@ -470,7 +470,7 @@ export default function OrganizationDetailPage() {
           {/* Events Tab */}
           <TabsContent value="events">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Events</h2>
+              <h2 className="text-xl font-semibold" data-testid="org-events-heading">Events</h2>
               <div className="flex items-center gap-2">
                 {canEditEvents && (
                   <Tooltip>

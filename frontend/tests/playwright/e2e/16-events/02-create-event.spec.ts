@@ -40,10 +40,11 @@ test.describe('Events - Create Event (@cicd)', () => {
     // Click the Events tab
     await page.getByTestId('org-tab-events').click();
 
-    // Should see Events heading and Create Event button. Use exact:true —
-    // the org page already contains "Events Test Org" (h1), "Events (N)" (h3)
-    // and "Repeating Events (N)" (h3), all of which substring-match "Events".
-    await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
+    // Use data-testid per the project's testing skill: getByRole with text
+    // matching is fragile on the org page where "Events" is a substring of
+    // multiple headings (h1 "Events Test Org", h3 "Events (N)", h3 "Repeating
+    // Events (N)").
+    await expect(page.getByTestId('org-events-heading')).toBeVisible();
     await expect(page.getByTestId('create-event-btn')).toBeVisible();
   });
 
@@ -53,7 +54,7 @@ test.describe('Events - Create Event (@cicd)', () => {
 
     await page.getByTestId('org-tab-events').click();
 
-    await expect(page.getByRole('heading', { name: 'Events', exact: true })).toBeVisible();
+    await expect(page.getByTestId('org-events-heading')).toBeVisible();
     await expect(page.getByTestId('create-event-btn')).not.toBeVisible();
   });
 
