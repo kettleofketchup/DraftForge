@@ -1,17 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '~/components/ui/alert-dialog';
-import { CancelButton, ConfirmButton, DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
+import { ConfirmDialog } from '~/components/ui/dialogs';
+import { DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
 import type { TeamType, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -29,6 +19,7 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
     return tournament?.teams?.find((t: TeamType) => t.captain?.pk === user.pk);
   };
   const [isCaptain, setIsCaptain] = useState<boolean>(determineIsCaptain());
+  const [showConfirm, setShowConfirm] = useState(false);
   const setTournament = useUserStore((state) => state.setTournament);
 
   const getDraftOrder = () => {
@@ -46,8 +37,8 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
     setIsCaptain(determineIsCaptain());
   }, [tournament.captains, tournament.teams, isCaptain, draft_order]);
 
-  const handleChange = async (e: FormEvent) => {
-    log.debug('handleChange', e);
+  const handleChange = async () => {
+    log.debug('handleChange');
     await createTeamFromCaptainHook({
       tournament,
       captain: user,
@@ -57,7 +48,6 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
       setIsCaptain: setIsCaptain,
     });
   };
-  const dialogBG = () => (isCaptain ? 'bg-red-900' : 'bg-green-900');
   if (!isStaff()) return <AdminOnlyButton buttonTxt="Change Captain" />;
 
   return (
@@ -65,42 +55,20 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
       className="flex flex-col gap-y-2 justify-between
     justify-between items-center align-middle w-full md:flex-row md:gap-x-2 md:py-1"
     >
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          {isCaptain ? (
-            <DestructiveButton className="w-40">{msg()} Captain</DestructiveButton>
-          ) : (
-            <PrimaryButton className="w-40">{msg()} Captain</PrimaryButton>
-          )}
-        </AlertDialogTrigger>
-        <AlertDialogContent className={dialogBG()}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {' '}
-              {msg()} Captain? Are You Sure? This will affect already created
-              teams and drafts
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-200">
-              This action cannot be undone. Drafts started must be deleted and
-              recreated.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel asChild>
-              <CancelButton variant={isCaptain ? 'default' : 'destructive'} depth={false}>Cancel</CancelButton>
-            </AlertDialogCancel>
-            <AlertDialogAction asChild>
-              <ConfirmButton
-                onClick={handleChange}
-                variant={isCaptain ? 'destructive' : 'default'}
-                depth={false}
-              >
-                {msg()} Captain
-              </ConfirmButton>
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {isCaptain ? (
+        <DestructiveButton className="w-40" onClick={() => setShowConfirm(true)}>{msg()} Captain</DestructiveButton>
+      ) : (
+        <PrimaryButton className="w-40" onClick={() => setShowConfirm(true)}>{msg()} Captain</PrimaryButton>
+      )}
+      <ConfirmDialog
+        open={showConfirm}
+        onOpenChange={setShowConfirm}
+        title={`${msg()} Captain? Are You Sure? This will affect already created teams and drafts`}
+        description="This action cannot be undone. Drafts started must be deleted and recreated."
+        confirmLabel={`${msg()} Captain`}
+        variant={isCaptain ? 'destructive' : 'default'}
+        onConfirm={handleChange}
+      />
       {isCaptain && (
         <DraftOrderButton
           id={`draft-order-${user.pk}`}
