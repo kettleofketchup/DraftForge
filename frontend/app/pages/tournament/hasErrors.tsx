@@ -1,5 +1,5 @@
 import { ChevronDown } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType, UserType } from '~/components/user';
@@ -69,7 +69,15 @@ export const hasErrors = () => {
   const tournament = useUserStore((state) => state.tournament);
   const entities = useUserCacheStore((state) => state.entities);
   const league = useLeagueStore((state) => state.currentLeague);
+  // Default closed for SSR (mobile-first) so hydration matches; expand once
+  // on mount when the viewport is md+ so desktop admins see the issues
+  // immediately. After that the user controls open/close manually.
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches) {
+      setOpen(true);
+    }
+  }, []);
 
   const orgId = tournament?.organization_pk ?? undefined;
 

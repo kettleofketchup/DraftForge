@@ -1,5 +1,6 @@
 import { Crown } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useCallback } from 'react';
+import { useSearchParams } from 'react-router';
 import { TEAMS_BUTTONS_WIDTH } from '~/components/constants';
 import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
@@ -23,11 +24,34 @@ import {
 import { useUserStore } from '~/store/userStore';
 import { CaptainTable } from './captainTable';
 
+/**
+ * `?modal=captains` opens this dialog, so the URL is bookmarkable and the
+ * mobile suite can deep-link straight into it instead of clicking the
+ * Teams-tab trigger.
+ */
+const MODAL_PARAM = 'modal';
+const MODAL_VALUE = 'captains';
+
 export const CaptainSelectionModal: React.FC = () => {
   const tournament = useUserStore((state) => state.tournament);
   const isStaff = useUserStore((state) => state.isStaff());
   const TriggerButton = isStaff ? PrimaryButton : SecondaryButton;
-  const [open, setOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const open = searchParams.get(MODAL_PARAM) === MODAL_VALUE;
+  const setOpen = useCallback(
+    (next: boolean) => {
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (next) params.set(MODAL_PARAM, MODAL_VALUE);
+          else if (params.get(MODAL_PARAM) === MODAL_VALUE) params.delete(MODAL_PARAM);
+          return params;
+        },
+        { replace: true, preventScrollReset: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const dialogButton = () => {
     return (

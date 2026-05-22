@@ -59,4 +59,13 @@ test.describe('Tournament detail on mobile', () => {
     // Page-nav dropdown (centered in the navbar at mobile widths) drives tabs.
     await expect(page.locator('[data-testid="page-nav-trigger"]')).toBeVisible();
   });
+
+  test('?modal=captains deep-link opens the Choose Captains dialog', async ({ page }) => {
+    // The captain-selection modal is URL-addressable so it can be bookmarked
+    // and shared. Visiting the teams tab with ?modal=captains opens the
+    // dialog directly without clicking the in-page trigger.
+    await page.goto(`/tournament/${tournamentPk}/teams?modal=captains`);
+    const dialog = page.locator('[role="dialog"]', { hasText: 'Choose Captains' });
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+  });
 });
