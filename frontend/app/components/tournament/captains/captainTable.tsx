@@ -1,89 +1,88 @@
-import { useEffect } from 'react';
-import { PlayerPopover } from '~/components/player';
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '~/components/ui/table';
-import { PositionEnum } from '~/components/user';
-import { UserAvatar } from '~/components/user/UserAvatar';
-import { RolePositions } from '~/components/user/positions';
+import { useMemo, useState } from 'react';
+import { UserStrip } from '~/components/user/UserStrip';
 import type { UserType } from '~/components/user/types';
 import { useUserStore } from '~/store/userStore';
+import type { TeamType } from '~/index';
+import { DraftOrderButton } from './draftOrder';
 import { UpdateCaptainButton } from './UpdateCaptainButton';
-interface TournamentUsersTable {}
-export const CaptainTable: React.FC<TournamentUsersTable> = () => {
+
+/**
+ * Captain selection list — vertical UserStrip per tournament participant.
+ *
+ * Replaces the prior 4-column Table layout, which clipped the captain action
+ * column at modal width on mobile. The strip puts:
+ *   - actionSlot  → compact Crown / X icon button (toggle captain)
+ *   - contextSlot → DraftOrderButton (only when the user is a captain)
+ *
+ * Component name kept as `CaptainTable` so the existing import site in
+ * `captainSelectionModal.tsx` doesn't need to change.
+ */
+export const CaptainTable: React.FC = () => {
   const tournament = useUserStore((state) => state.tournament);
 
-  useEffect(() => {}, [tournament.users]);
-  const positions = (user: UserType) => {
-    if (!user.positions) return null;
-    return (
-      <div className="flex gap-1 flex-wrap">
-        {Object.entries(user.positions)
-          .filter(([_, value]) => value)
-          .map(([pos]) => (
-            <span key={pos} className="badge badge-info p-1">
-              {PositionEnum[pos as keyof typeof PositionEnum]}
-            </span>
-          ))}
-      </div>
-    );
-  };
-  const members = () => {
+  const sortedUsers = useMemo<UserType[]>(() => {
     if (!tournament.users) return [];
-    const sortedUsers = [...tournament.users].sort((a, b) => {
-      if (!a.mmr && !b.mmr) return 0;
-      if (!a.mmr) return 1; // Treat undefined MMR as lower
-      if (!b.mmr) return -1; // Treat undefined MMR as lower
-      if (a.mmr > b.mmr) return -1;
-      if (a.mmr < b.mmr) return 1;
-      return 0;
+    return [...tournament.users].sort((a, b) => {
+      const am = a.mmr ?? -Infinity;
+      const bm = b.mmr ?? -Infinity;
+      return bm - am;
     });
-    return sortedUsers;
-  };
+  }, [tournament.users]);
+
+  const captainPks = useMemo(
+    () => new Set((tournament.captains ?? []).map((c) => c.pk)),
+    [tournament.captains],
+  );
 
   return (
-    <Table>
-      <TableCaption>Tournament Users</TableCaption>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Member</TableHead>
-          <TableHead>MMR</TableHead>
-          <TableHead>Positions</TableHead>
-          <TableHead>Captain</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {members().map((user: UserType, idx: number) => (
-          <TableRow key={`TeamTableRow-${user.pk}`}>
-            <TableCell>
-              <PlayerPopover player={user}>
-                <div className="flex items-center gap-2 hover:text-primary transition-colors">
-                  <UserAvatar
-                    user={user}
-                    size="md"
-                    className="hover:ring-2 hover:ring-primary transition-all"
-                  />
-                  <span>{user.nickname || user.username}</span>
-                </div>
-              </PlayerPopover>
-            </TableCell>
-            <TableCell>{user.mmr ?? 'N/A'}</TableCell>
-            <TableCell>
-              <RolePositions user={user as UserType} />
-            </TableCell>
+    <div className="flex flex-col gap-2" data-testid="captain-list">
+      {sortedUsers.map((user) => (
+        <CaptainRow
+          key={user.pk}
+          user={user}
+          isCaptain={captainPks.has(user.pk)}
+        />
+      ))}
+      {sortedUsers.length === 0 && (
+        <p className="text-sm text-muted-foreground text-center py-4">
+          No tournament users yet.
+        </p>
+      )}
+    </div>
+  );
+};
 
-            <TableCell>
-              <UpdateCaptainButton user={user} />
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+interface CaptainRowProps {
+  user: UserType;
+  isCaptain: boolean;
+}
+
+const CaptainRow: React.FC<CaptainRowProps> = ({ user, isCaptain }) => {
+  const tournament = useUserStore((state) => state.tournament);
+  const team = useMemo<TeamType | undefined>(
+    () => tournament?.teams?.find((t) => t.captain?.pk === user.pk),
+    [tournament?.teams, user.pk],
+  );
+  const initialOrder = team?.draft_order ? String(team.draft_order) : '0';
+  const [draftOrder, setDraftOrder] = useState<string>(initialOrder);
+
+  return (
+    <UserStrip
+      user={user}
+      compact
+      showPositions={false}
+      data-testid={`captain-row-${user.pk}`}
+      contextSlot={
+        isCaptain ? (
+          <DraftOrderButton
+            id={`draft-order-${user.pk}`}
+            user={user}
+            draft_order={draftOrder}
+            setDraftOrder={setDraftOrder}
+          />
+        ) : undefined
+      }
+      actionSlot={<UpdateCaptainButton user={user} compact hideDraftOrder />}
+    />
   );
 };
