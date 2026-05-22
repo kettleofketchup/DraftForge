@@ -329,3 +329,4 @@ docs/assets/site_snapshots/
 
 # Git worktrees
 .worktrees/
+frontend/screenshots/
