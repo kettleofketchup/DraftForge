@@ -262,11 +262,14 @@ export const TournamentDetailPage: React.FC = () => {
     if (!tournament.name) return null;
     const adminActionsNode = isAdmin && hydratedTournament && (
       <div className="flex items-center gap-2 mb-3">
-        {/* Desktop: button group */}
+        {/* Desktop: button group — fixed min-width on both pills so the
+            shorter "Edit" label doesn't render a visibly narrower button
+            next to "Delete". */}
         <div className="hidden md:flex items-center gap-2">
           <SecondaryButton
             color="emerald"
             size="sm"
+            className="min-w-24 justify-center"
             onClick={() => setSettingsOpen(true)}
             data-testid="tournament-edit-btn"
           >
@@ -275,6 +278,7 @@ export const TournamentDetailPage: React.FC = () => {
           </SecondaryButton>
           <DestructiveButton
             size="sm"
+            className="min-w-24 justify-center"
             onClick={handleDelete}
             data-testid="tournament-delete-btn"
           >
