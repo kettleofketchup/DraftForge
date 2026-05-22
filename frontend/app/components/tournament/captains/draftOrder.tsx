@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { toast } from 'sonner';
 import { updateTeam } from '~/components/api/api';
 import {
@@ -6,6 +6,7 @@ import {
   BrandSelectContent,
   BrandSelectItem,
   BrandSelectTrigger,
+  SelectSeparator,
   SelectValue,
 } from '~/components/ui/brand-select';
 import { Label } from '~/components/ui/label';
@@ -103,9 +104,10 @@ export const DraftOrderButton: React.FC<{
           </BrandSelectTrigger>
           <BrandSelectContent>
             {Array.from({ length: getRange() }, (_, i) => (
-              <BrandSelectItem key={i + 1} value={String(i + 1)}>
-                {i + 1}
-              </BrandSelectItem>
+              <Fragment key={i + 1}>
+                {i > 0 && <SelectSeparator className="!my-0 bg-violet-400/30" />}
+                <BrandSelectItem value={String(i + 1)}>{i + 1}</BrandSelectItem>
+              </Fragment>
             ))}
           </BrandSelectContent>
         </BrandSelect>
