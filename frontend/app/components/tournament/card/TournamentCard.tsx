@@ -110,6 +110,16 @@ export const TournamentCard: React.FC<Props> = React.memo(({
     }
   };
 
+  const getDateFromDate = (dateStr: string | null): string => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+      return '';
+    }
+  };
+
   // Helper to format timezone for display
   const formatTimezone = (tz: string | undefined): string => {
     if (!tz) return 'UTC';
@@ -130,7 +140,9 @@ export const TournamentCard: React.FC<Props> = React.memo(({
               </ItemMedia>
               <ItemContent className="!gap-0">
                 <ItemTitle className="!text-xs text-muted-foreground">Date</ItemTitle>
-                <span className="text-sm" title={tournament.date_played}>{truncateText(tournament.date_played)}</span>
+                <span className="text-sm" title={tournament.date_played} data-testid="tournament-card-date">
+                  {truncateText(getDateFromDate(tournament.date_played))}
+                </span>
               </ItemContent>
             </Item>
           )}

@@ -252,13 +252,10 @@ export const TournamentDetailPage: React.FC = () => {
   }
 
   const getDate = () => {
-    let date = tournament.date_played
-      ? (() => {
-          const [year, month, day] = tournament.date_played.split('-');
-          return `${month}-${day}`;
-        })()
-      : '';
-    return `${date || ''}`;
+    if (!tournament.date_played) return '';
+    const d = new Date(tournament.date_played);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const title = () => {
