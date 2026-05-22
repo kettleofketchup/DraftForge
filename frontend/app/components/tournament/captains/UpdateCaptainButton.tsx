@@ -83,12 +83,20 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
   const dialogBG = () => (isCaptain ? 'bg-red-900' : 'bg-green-900');
   if (!isStaff()) {
     return compact ? (
-      <AdminOnlyButton
-        buttonTxt=""
-        className="h-9 w-9 p-0 [&_svg]:size-4 [&_svg]:mr-0"
-        iconClassName=""
-        data-testid={`captain-action-locked-${user.pk}`}
-      />
+      <div className="flex flex-col items-stretch gap-0.5 w-9">
+        <span
+          className="text-[9px] uppercase tracking-wider text-muted-foreground leading-none text-center"
+          aria-hidden
+        >
+          {isCaptain ? 'Remove' : 'Pick'}
+        </span>
+        <AdminOnlyButton
+          buttonTxt=""
+          className="h-9 w-9 p-0 [&_svg]:size-4 [&_svg]:mr-0"
+          iconClassName=""
+          data-testid={`captain-action-locked-${user.pk}`}
+        />
+      </div>
     ) : (
       <AdminOnlyButton buttonTxt="Change Captain" />
     );
@@ -98,14 +106,26 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
     compact ? 'h-9 w-9 p-0 [&_svg]:size-4' : 'w-40',
   );
 
+  // Compact mode: stack a small "Pick" / "Remove" label above the icon
+  // button to match the "Order" subtitle on the DraftOrder picker below.
+  const compactLabel = isCaptain ? 'Remove' : 'Pick';
+
   return (
     <div
       className={cn(
         compact
-          ? 'inline-flex items-center gap-2'
+          ? 'flex flex-col items-stretch gap-0.5 w-9'
           : 'flex flex-col gap-y-2 justify-between items-center align-middle w-full md:flex-row md:gap-x-2 md:py-1',
       )}
     >
+      {compact && (
+        <span
+          className="text-[9px] uppercase tracking-wider text-muted-foreground leading-none text-center"
+          aria-hidden
+        >
+          {compactLabel}
+        </span>
+      )}
       <AlertDialog>
         <AlertDialogTrigger asChild>
           {isCaptain ? (

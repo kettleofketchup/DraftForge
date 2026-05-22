@@ -140,16 +140,18 @@ const CaptainStripRow: React.FC<CaptainStripRowProps> = ({ user, isCaptain }) =>
       actionSlot={
         // Action column lives inside the UserStrip card so the bordered
         // background expands around both the captain toggle and the draft
-        // order picker. Height is enough to fit button (36) + gap (4) +
-        // Order label (~12) + gap (2) + sm trigger (32) = 86px so the
-        // picker never overflows the strip; non-captain rows reserve the
-        // same height so base MMR badges align horizontally across rows.
-        // justify-center when alone (no draft order) so the button doesn't
-        // float at the top of the column; justify-start when the draft
-        // order is present so the two items stack from the top.
+        // order picker. Total stack for a captain row:
+        //   Pick/Remove label (~9) + gap (2) + button (36)
+        //   + gap (4)
+        //   + Order label (~9) + gap (2) + sm trigger (28) ≈ 90px
+        // Non-captain rows reserve the same height so base MMR badges
+        // line up across rows.
         <div
           className={cn(
-            'flex flex-col items-end gap-1 h-[88px]',
+            // pr-2 so the action column doesn't sit flush against the
+            // strip's right border — gives the icon button + order
+            // picker a bit of breathing room.
+            'flex flex-col items-end gap-1 h-[92px] pr-2',
             isCaptain ? 'justify-start' : 'justify-center',
           )}
         >
