@@ -116,10 +116,6 @@ export const DraftOrderButton: React.FC<{
   }
 
   return (
-    // Total stack height ≈ label (10) + gap (2) + sm trigger (24) = 36px,
-    // so the label + select column matches the sibling Remove Captain
-    // pill's `h-9` (36px) so both cells sit on the same baseline in the
-    // captain Table row.
     <div className="inline-flex flex-col items-start gap-0.5">
       <Label
         htmlFor={id}
@@ -131,8 +127,7 @@ export const DraftOrderButton: React.FC<{
       <div className="flex items-center gap-2">
         <BrandSelect onValueChange={handleChange} value={draft_order}>
           <BrandSelectTrigger
-            size="sm"
-            className="w-[80px] h-6 py-0 text-xs"
+            className="w-[80px] !h-6 data-[size=default]:!h-6 data-[size=sm]:!h-6 px-2 py-0 text-xs"
             id={id}
           >
             <SelectValue placeholder={draft_order} />
