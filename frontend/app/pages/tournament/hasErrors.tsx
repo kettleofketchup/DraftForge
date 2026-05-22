@@ -1,8 +1,14 @@
-import { useMemo } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import type { LeagueType } from '~/components/league/schemas';
 import type { OrganizationType } from '~/components/organization/schemas';
 import type { UserClassType, UserType } from '~/components/user';
 import { brandErrorBg, brandErrorCard } from '~/components/ui/buttons';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '~/components/ui/collapsible';
 import UserEditModal from '~/components/user/userCard/editModal';
 import type { EditUserScope } from '~/components/user/userCard/editUserSchema';
 import { getLogger } from '~/lib/logger';
@@ -63,6 +69,7 @@ export const hasErrors = () => {
   const tournament = useUserStore((state) => state.tournament);
   const entities = useUserCacheStore((state) => state.entities);
   const league = useLeagueStore((state) => state.currentLeague);
+  const [open, setOpen] = useState(false);
 
   const orgId = tournament?.organization_pk ?? undefined;
 
@@ -109,41 +116,61 @@ export const hasErrors = () => {
     return issues;
   }, [tournament?.users, entities, orgId]);
 
-  return (
-    <>
-      {usersWithIssues.length > 0 && (
-        <div className={cn('flex flex-col items-start justify-center p-4 rounded-lg shadow-md w-full mb-4', brandErrorBg)}>
-          <div className="flex flex-col sm:flex-row gap-5 w-full">
-            <div className="text-red-500 font-bold text-center w-full pb-5">
-              <span className="text-lg">⚠️</span> {usersWithIssues.length} player{usersWithIssues.length !== 1 ? 's have' : ' has'} incomplete profiles
-            </div>
-          </div>
+  if (usersWithIssues.length === 0) return null;
 
-          <div className="w-full">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 w-full">
-              {usersWithIssues.map(({ user, issues }) => (
-                <div className={cn('p-3 rounded-lg', brandErrorCard)} key={user.pk}>
-                  <div className="text-white text-center underline underline-offset-2 font-bold mb-2">
-                    {user.nickname || user.username}
-                  </div>
-                  <div className="flex flex-col gap-1 text-center text-sm text-red-100">
-                    {issues.map((issue) => (
-                      <span key={issue}>{issue}</span>
-                    ))}
-                  </div>
-                  <div className="flex justify-center mt-3">
-                    <UserEditModal
-                      user={user}
-                      scope={editScope}
-                      key={`UserEditModal-${user.pk}`}
-                    />
-                  </div>
-                </div>
-              ))}
+  const count = usersWithIssues.length;
+  const label = `${count} player${count !== 1 ? 's have' : ' has'} incomplete profiles`;
+
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className={cn('rounded-lg shadow-md w-full mb-4', brandErrorBg)}
+      data-testid="incomplete-profiles-banner"
+    >
+      <CollapsibleTrigger
+        className="flex items-center justify-between gap-3 w-full p-3 sm:p-4 text-red-500 font-bold text-left cursor-pointer min-h-11"
+        data-testid="incomplete-profiles-toggle"
+        aria-label={open ? `Hide ${label}` : `Show ${label}`}
+      >
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="text-lg shrink-0" aria-hidden>⚠️</span>
+          <span className="truncate">{label}</span>
+        </span>
+        <ChevronDown
+          className={cn(
+            'size-5 shrink-0 transition-transform duration-200',
+            open && 'rotate-180',
+          )}
+          aria-hidden
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent
+        className="overflow-hidden"
+        data-testid="incomplete-profiles-list"
+      >
+        <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 p-3 sm:p-4 pt-0 sm:pt-0">
+          {usersWithIssues.map(({ user, issues }) => (
+            <div className={cn('p-3 rounded-lg', brandErrorCard)} key={user.pk}>
+              <div className="text-white text-center underline underline-offset-2 font-bold mb-2 break-words">
+                {user.nickname || user.username}
+              </div>
+              <div className="flex flex-col gap-1 text-center text-sm text-red-100">
+                {issues.map((issue) => (
+                  <span key={issue}>{issue}</span>
+                ))}
+              </div>
+              <div className="flex justify-center mt-3">
+                <UserEditModal
+                  user={user}
+                  scope={editScope}
+                  key={`UserEditModal-${user.pk}`}
+                />
+              </div>
             </div>
-          </div>
+          ))}
         </div>
-      )}
-    </>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };
