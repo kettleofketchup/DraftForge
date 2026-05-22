@@ -49,12 +49,17 @@ export const BrandSelectTrigger = React.forwardRef<
       // Base layout
       'inline-flex w-fit items-center justify-between gap-2 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-[box-shadow,background-color,border-color] outline-none',
       'data-[size=default]:h-9 data-[size=sm]:h-8',
-      // Brand surface — sits on bg-base-200 panels (UserStrip, cards)
-      'bg-base-300 text-foreground border border-violet-400/30',
-      'hover:bg-violet-500/15 hover:border-violet-400/60',
-      // Focus / open state — brand violet glow
-      'focus-visible:ring-2 focus-visible:ring-violet-400/60 focus-visible:ring-offset-1 focus-visible:ring-offset-base-200',
-      'data-[state=open]:border-violet-400 data-[state=open]:ring-2 data-[state=open]:ring-violet-400/40',
+      // Brand surface — `brandSecondary` violet→blue translucent gradient
+      // with a visible violet hairline ring so the trigger reads as a brand
+      // affordance at rest, not a neutral input. Bumped from the original
+      // `bg-base-300 / border-violet-400/30` which was too subtle to
+      // identify as brand on the captain table.
+      'bg-gradient-to-r from-violet-500/20 to-blue-500/10 ring-1 ring-violet-400/60',
+      'text-violet-50',
+      'hover:from-violet-500/30 hover:to-blue-500/20 hover:ring-violet-400/80',
+      // Focus / open state — stronger brand-violet ring
+      'focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-200',
+      'data-[state=open]:ring-2 data-[state=open]:ring-violet-400 data-[state=open]:from-violet-500/35 data-[state=open]:to-blue-500/25',
       // Placeholder + value tone
       'data-[placeholder]:text-muted-foreground',
       // Disabled
