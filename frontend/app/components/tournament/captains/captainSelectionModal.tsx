@@ -60,10 +60,12 @@ export const CaptainSelectionModal: React.FC = () => {
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
               <TriggerButton
-                className={`w-[${TEAMS_BUTTONS_WIDTH}]`}
+                className={`flex-1 sm:flex-none sm:w-[${TEAMS_BUTTONS_WIDTH}]`}
+                data-testid="captain-modal-trigger"
               >
-                <Crown className="mr-2" />
-                Pick Captains
+                <Crown className="mr-1.5 sm:mr-2" />
+                <span className="sm:hidden">Captains</span>
+                <span className="hidden sm:inline">Pick Captains</span>
               </TriggerButton>
             </DialogTrigger>
           </TooltipTrigger>

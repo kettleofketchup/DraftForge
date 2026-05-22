@@ -87,12 +87,13 @@ export const RandomizeTeamsModal: React.FC<Props> = ({
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
               <TriggerButton
-                className={`w-[${TEAMS_BUTTONS_WIDTH}] flex w-200px sm:w-auto`}
+                className={`flex-1 sm:flex-none sm:w-[${TEAMS_BUTTONS_WIDTH}]`}
                 data-testid="createTeamsBtn"
                 aria-label="Open create teams modal"
               >
-                <UsersRound className="mr-2" />
-                Create Teams
+                <UsersRound className="mr-1.5 sm:mr-2" />
+                <span className="sm:hidden">Teams</span>
+                <span className="hidden sm:inline">Create Teams</span>
               </TriggerButton>
             </DialogTrigger>
           </TooltipTrigger>
