@@ -1,107 +1,18 @@
-import { memo, useState, useCallback } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
-import { SecondaryButton } from '~/components/ui/buttons';
-import { Wand2 } from 'lucide-react';
+import { memo } from 'react';
 import { BracketView } from '~/components/bracket';
-import { AutoAssignModal } from '~/components/bracket/modals';
-import { GameCreateModal } from '~/components/game/create/createGameModal';
-import { GameCard } from '~/components/game/gameCard/gameCard';
-import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
-import { useQueryClient } from '@tanstack/react-query';
-
-const log = getLogger('GamesTab');
 
 export const GamesTab: React.FC = memo(() => {
   const tournament = useUserStore((state) => state.tournament);
-  const isStaff = useUserStore((state) => state.isStaff());
-  const queryClient = useQueryClient();
-  const [viewMode, setViewMode] = useState<'bracket' | 'list'>('bracket');
-  const [showAutoAssign, setShowAutoAssign] = useState(false);
-
-  const handleAutoAssignComplete = useCallback(() => {
-    if (tournament?.pk) {
-      queryClient.invalidateQueries({ queryKey: ['bracket', tournament.pk] });
-    }
-  }, [tournament?.pk, queryClient]);
-
-  const renderNoGames = () => {
-    return (
-      <div className="flex justify-center items-center h-40">
-        <div className="alert alert-info">
-          <span>No games available for this tournament.</span>
-        </div>
-      </div>
-    );
-  };
-
-  const renderGamesList = () => {
-    if (!tournament || !tournament.games) {
-      log.error('No Tournament games');
-      return renderNoGames();
-    }
-    log.debug('rendering games');
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {tournament.games?.map((game) => (
-          <GameCard key={game.pk} game={game} />
-        ))}
-      </div>
-    );
-  };
 
   return (
     <div className="py-3 px-1 sm:py-5 sm:px-3" data-testid="gamesTab">
-      {/* View mode tabs */}
-      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'bracket' | 'list')}>
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-          <TabsList>
-            <TabsTrigger value="bracket" data-testid="bracket-view-tab">Bracket View</TabsTrigger>
-            <TabsTrigger value="list" data-testid="list-view-tab">List View</TabsTrigger>
-          </TabsList>
-
-          <div className="flex items-center gap-2">
-            {isStaff && viewMode === 'bracket' && (
-              <SecondaryButton
-                size="sm"
-                onClick={() => setShowAutoAssign(true)}
-                data-testid="auto-assign-btn"
-              >
-                <Wand2 className="h-4 w-4 mr-1" />
-                Auto-Assign Matches
-              </SecondaryButton>
-            )}
-            {isStaff && viewMode === 'list' && (
-              <GameCreateModal data-testid="gameCreateModalBtn" />
-            )}
-          </div>
+      {tournament?.pk ? (
+        <BracketView tournamentId={tournament.pk} />
+      ) : (
+        <div className="text-center text-muted-foreground py-8">
+          No tournament selected
         </div>
-
-        <TabsContent value="bracket">
-          {tournament?.pk ? (
-            <BracketView tournamentId={tournament.pk} />
-          ) : (
-            <div className="text-center text-muted-foreground py-8">
-              No tournament selected
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="list">
-          {!tournament || !tournament.games || tournament.games.length === 0
-            ? renderNoGames()
-            : renderGamesList()}
-        </TabsContent>
-      </Tabs>
-
-      {/* Auto-Assign Modal */}
-      {tournament?.pk && (
-        <AutoAssignModal
-          isOpen={showAutoAssign}
-          onClose={() => setShowAutoAssign(false)}
-          tournamentId={tournament.pk}
-          onAssignComplete={handleAutoAssignComplete}
-        />
       )}
     </div>
   );

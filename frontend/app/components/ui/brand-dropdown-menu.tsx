@@ -37,19 +37,18 @@ interface BrandDropdownMenuProps {
   'data-testid'?: string;
 }
 
-// Per-variant text + icon tone. Hover/focus background is brand-aligned per
-// row so the focus wash matches the row's brand tone (Edit → emerald, Delete
-// → red, etc.) instead of shadcn's default cyan `bg-accent`.
-//
-// Edit text uses a solid emerald instead of a bg-clip-text gradient because
-// the gradient owns the element's background-image, which would compete with
-// the focus background and end up invisible.
+// Per-variant text + icon tone. Hover wash is brand-aligned per row so the
+// highlight matches the row's tone (Edit → emerald, Delete → red, etc.)
+// instead of shadcn's default cyan `bg-accent`. Both `hover:` and `focus:`
+// states are set — Radix moves focus on hover for mouse users, but the
+// shadcn item base also carries `focus:bg-accent` which can race the
+// merge; specifying `hover:` directly is the belt to that braces.
 const variantStyles = {
-  default: 'text-foreground focus:bg-violet-500/20',
-  primary: 'text-primary font-medium [&_svg]:text-primary focus:bg-violet-500/20',
-  edit: 'text-emerald-300 font-medium [&_svg]:text-emerald-300 focus:bg-emerald-500/20',
-  success: 'text-success font-medium [&_svg]:text-success focus:bg-emerald-500/20',
-  destructive: 'text-error font-medium [&_svg]:text-error focus:bg-red-500/20',
+  default: 'text-foreground hover:bg-violet-500/20 focus:bg-violet-500/20',
+  primary: 'text-primary font-medium [&_svg]:text-primary hover:bg-violet-500/20 focus:bg-violet-500/20',
+  edit: 'text-emerald-300 font-medium [&_svg]:text-emerald-300 hover:bg-emerald-500/20 focus:bg-emerald-500/20',
+  success: 'text-success font-medium [&_svg]:text-success hover:bg-emerald-500/20 focus:bg-emerald-500/20',
+  destructive: 'text-error font-medium [&_svg]:text-error hover:bg-red-500/20 focus:bg-red-500/20',
 } as const;
 
 const triggerVariants = {

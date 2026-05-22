@@ -68,10 +68,7 @@ test.describe.skip('Bracket Badges (e2e)', () => {
     const bracketTab = page.locator('[data-testid="bracketTab"]');
     await expect(bracketTab).toBeVisible({ timeout: 10000 });
 
-    // Default view should be bracket view
-    await expect(page.locator('[data-testid="bracket-view-tab"]')).toBeVisible();
-
-    // Wait for bracket container to appear (bracket data loaded)
+    // Bracket container is the only view now (List View was removed)
     const bracketContainer = page.locator('[data-testid="bracketContainer"]');
     await expect(bracketContainer).toBeVisible({ timeout: 15000 });
   });
@@ -184,23 +181,4 @@ test.describe.skip('Bracket Badges (e2e)', () => {
     await expect(bracketContainer).toBeVisible({ timeout: 15000 });
   });
 
-  test('can switch between bracket and list view', async ({ page }) => {
-    await visitAndWaitForHydration(page, `/tournament/${completedBracketPk}/games`);
-
-    const bracketTab = page.locator('[data-testid="bracketTab"]');
-    await expect(bracketTab).toBeVisible({ timeout: 10000 });
-
-    // Click on List View tab
-    await page.locator('[data-testid="list-view-tab"]').click();
-
-    // Bracket container should not be visible in list view
-    const bracketContainer = page.locator('[data-testid="bracketContainer"]');
-    await expect(bracketContainer).not.toBeVisible();
-
-    // Switch back to Bracket View
-    await page.locator('[data-testid="bracket-view-tab"]').click();
-
-    // Bracket container should be visible again
-    await expect(bracketContainer).toBeVisible({ timeout: 10000 });
-  });
 });
