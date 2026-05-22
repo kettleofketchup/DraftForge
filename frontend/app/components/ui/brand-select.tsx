@@ -90,11 +90,13 @@ export const BrandSelectContent = React.forwardRef<
       data-slot="select-content"
       position={position}
       className={cn(
-        // Neon-cyber popover surface — same brand-bg gradient + violet ring
-        // that <BrandDropdownMenu> content uses, so a value-picker and an
-        // action-menu read as siblings on the page.
+        // Neon-cyber popover surface — solid `bg-popover` base under the
+        // brand gradient overlay. Without the solid base the underlying
+        // page bleeds through (brandBg is background-IMAGE only). Same
+        // recipe BrandDropdownMenu uses on its content surface.
+        'bg-popover',
         brandBg,
-        'text-foreground border border-primary/30 shadow-[0_8px_30px_-8px_var(--glow-violet,rgba(124,58,237,0.45))]',
+        'text-popover-foreground border border-primary/30 shadow-[0_8px_30px_-8px_var(--glow-violet,rgba(124,58,237,0.45))]',
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
