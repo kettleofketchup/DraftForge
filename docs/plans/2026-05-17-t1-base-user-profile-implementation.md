@@ -2366,6 +2366,52 @@ EOF
 
 ---
 
+## Lessons learned — bind these patterns into T2/T3
+
+Captured during PR #250 review iterations. T2 and T3 should inherit these by design; don't relearn them by review.
+
+1. **`select_related` is required on every queryset feeding a user-shaped serializer.**
+   `UserSerializer`, `TournamentUserSerializer`, `OrgUserSerializer`, `LeagueUserSerializer` all resolve `nickname`/`avatar` via the `CustomUser` `@property` (`self.base_profile.<x>`), so DRF cannot auto-detect the join. Cold-cache hits eat N extra SELECTs. The same will be true for T2's `DotaUserProfile`/`DeadlockUserProfile` and T3's `OrgUserProfile`. Patterns landed in T1:
+   - Direct user queryset: `.select_related("base_profile")` (plus existing `"positions"`).
+   - Reverse through `OrgUser`/`LeagueUser`: `.select_related("user__base_profile")` (plus existing `"user", "user__positions"`).
+   - Fix sites in T1 (use as templates): `backend/app/views_main.py` UserView queryset + org/league list endpoints, `backend/app/views/admin_team.py` search + org_user detail, `backend/app/serializers.py` `_build_users_dict` + `_serialize_users_with_mmr`.
+   - T2/T3 equivalent: every queryset that flows into a serializer reading `obj.dota_profile.x` / `obj.deadlock_profile.x` / `obj.org_user_profile.x` MUST `select_related` the new model.
+
+2. **Pre-pk pending-buffer flush: hold the `del` until after `bp.save()` succeeds.**
+   `CustomUser.save()` buffers `_pending_nickname`/`_pending_avatar` while `pk is None`, then flushes after `BaseUserProfile.get_or_create`. The `del self._pending_*` MUST come *after* `bp.save(update_fields=...)` returns, otherwise a transient DB failure loses the buffer and a retry has nothing to flush. T2's per-game profiles will need the same pattern if they introduce any pre-pk-buffered setter on `CustomUser`.
+
+3. **`test_populate_style_create_keeps_working` is legitimate — don't refactor it.**
+   `CustomUser(nickname="X")` *does* exercise the `@property.setter` because Django's `Model.__init__` invokes class-level descriptors via `setattr()` (the descriptor protocol). One earlier review claim said the test passed for the wrong reason; verification proved that wrong. Future readers may have the same instinct — the docstring on the test itself should call this out (and the broader test_transitional_setters file does cover the no-pk → save path explicitly via `test_nickname_setter_writes_to_base_profile`).
+
+4. **`UserSerializer`/`TournamentUserSerializer` nickname/avatar are writable, NOT `read_only=True`.**
+   The plan originally specified `read_only=True` to "force callers to use the new endpoint." That broke admin PATCH `/api/users/<pk>/`: DRF silently drops `read_only` fields on write, so the admin user-edit flow became a no-op. Correct pattern (now in code): plain `CharField(allow_null=True, allow_blank=True, required=False)` — writes route through the `@property.setter` which writes through to `base_profile`. T2/T3 must preserve this writability for any field they migrate off `CustomUser`.
+
+5. **`allow_blank=True` is required wherever `TextField(blank=True)` is in the model.**
+   DRF `CharField` defaults to `allow_blank=False`, which 400s `{"field": ""}`. The base profile fields are `TextField(null=True, blank=True)`, so the serializer fields need `allow_null=True, allow_blank=True`. T2/T3 fields likely follow the same shape (display-only strings) — keep the pattern.
+
+6. **`BaseTab.onSuccess` 4-way store sync is load-bearing, not over-engineered.**
+   The mutation `onSuccess` writes to `userCacheStore.upsert`, `userProfileStore.upsert`, `userStore.patchCurrentUser`, then `queryClient.invalidateQueries`. `EditProfileModal` also has a write-through `useEffect` that mirrors fetched data into `userProfileStore`. Surface read: looks redundant — surely the refetch via invalidateQueries handles everything? **No.** `onClose()` fires immediately in the same microtask after `onSave?.()`, which unmounts `EditProfileModal` before its write-through `useEffect` can re-run on refetched data. The manual writes are what update the navbar/header/list view *now*. The invalidate is what makes the next mount fetch fresh. Both are required. T2/T3 game/org tabs should follow the same shape.
+
+7. **Discord avatar is a HASH (~32 chars), not a URL.**
+   `BaseUserProfile.avatar` stores the Discord avatar hash; `CustomUser.avatarUrl` is a computed `@property` that builds the CDN URL from `discordId` + hash. Any UI that lets a user "edit avatar" must not validate as a URL or store a URL. T1's `BaseTab.tsx` intentionally has no avatar input — avatar is read-only display only. T2's Dota/Deadlock tabs may have game-icon avatars; check whether those are hashes (Discord-style) or URLs (uploaded artwork) and validate accordingly.
+
+8. **`update_user_avatar` internal endpoint: sanity-cap the payload.**
+   The Celery avatar-refresh task is the only ingress, but the endpoint accepts any string. Cap at 64 chars (animated Discord hashes are 34 with the `a_` prefix; 32 plain). T2/T3 internal endpoints that accept Discord-shaped data should follow.
+
+9. **`@cached_as(..., BaseUserProfile, ...)` dep declaration.**
+   Every endpoint shipping nickname/avatar must list `BaseUserProfile` in `cached_as` deps so post-PATCH eviction works. `backend/user/tests/test_cacheops.py` is the static grep guardrail (catches obvious misses). `backend/user/tests/test_cacheops_integration.py` is the live-Redis behavioral test (catches subtle dep gaps when run inside `just test::run`). T2's `DotaUserProfile`/`DeadlockUserProfile` and T3's `OrgUserProfile` will need their own grep targets added to `test_cacheops.py:SCAN_TARGETS` and their own behavioral tests mirroring `test_cacheops_integration.py`.
+
+10. **Frontend logger: always `getLogger('namespace')` from `~/lib/logger`.**
+    Never hand-roll `const log = { debug: (...) => console.debug('[ns]', ...) }` wrappers. The project logger is consola-backed and handles level gating in dev/test vs prod. T2/T3 tabs/stores: `getLogger('user.editProfile.dota')`, `getLogger('user.editProfile.org')`, etc.
+
+11. **`userStore.patchCurrentUser(partial)` exists — use it for any partial currentUser update.**
+    `setCurrentUser` is a full replace; `patchCurrentUser` is the partial-merge helper, guards on `currentUser.pk`, and is the right primitive when a PATCH succeeds and only one or two fields changed. T2 nickname-via-OrgUser flows (if any) should call this rather than spreading manually.
+
+12. **3-generic `useForm<z.input<typeof S>, unknown, OutputType>` for any zod schema with `.default()` / `.transform()`.**
+    Project convention from main's `2e41cf80` `fix(types): align useForm generics with zodResolver input/output split`. T1's `BaseTab` got away with single-generic because the schema is pure-shape, but T2's Dota/Deadlock tabs and T3's org tabs will almost certainly have position-default `.default(3)` style fields — use the 3-generic form from day one. Examples: `MmrApprovalModal.tsx:75`, `EditOrgDefaultsModal.tsx:72`.
+
+---
+
 ## Self-review notes
 
 - **Spec coverage:** every §T1 requirement maps to a task (users app: T1; model + auto-create: T2-3; data migration: T4; column drop + transitional setters: T5; existing-serializer update: T6; new serializers: T7; views + structlog: T8; cacheops + grep guardrail: T9; frontend types/store/api: T10-12; modal shell with ErrorBoundary + Suspense + useSuspenseQuery: T13; Base tab with useMutation + dual-write + brand primitives + no `as never`: T14; mount swap: T15; Playwright rewrite at `15-edit-user/06-profile-edit.spec.ts`: T16). Frontend hook & data-loading contract (from spec) lands in T13/T14 (useSuspenseQuery + useMutation + invalidateQueries + lazy tab + dual-write). Logging conventions land in T8 (backend) + T14 (frontend bracket prefix + Sentry).
