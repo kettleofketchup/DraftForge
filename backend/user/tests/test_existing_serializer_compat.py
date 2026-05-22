@@ -36,9 +36,12 @@ class UserSerializerNicknameAvatarTests(TestCase):
         user = CustomUser.objects.create(username="lior")
         # base_profile auto-created with empty defaults
         data = UserSerializer(user).data
-        # BaseUserProfile defaults nickname/avatar to None/null
-        assert data["nickname"] in (None, "")
-        assert data["avatar"] in (None, "")
+        # BaseUserProfile.nickname/avatar are TextField(null=True) with no
+        # explicit default → Django returns None, DRF serializes to JSON null.
+        # Pin the exact value (not `in (None, "")`) — both representations
+        # would technically pass the assertion, but only one is correct.
+        assert data["nickname"] is None
+        assert data["avatar"] is None
 
 
 class TournamentUserSerializerNicknameAvatarTests(TestCase):
