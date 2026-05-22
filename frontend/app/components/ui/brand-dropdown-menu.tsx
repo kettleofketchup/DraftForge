@@ -9,7 +9,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
-import { brandBg, brandErrorBg } from '~/components/ui/buttons';
+import {
+  brandBg,
+  brandDepthColors,
+  brandErrorBg,
+  brandGradient,
+  brandSecondary,
+  button3DBase,
+  button3DDisabled,
+} from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
 export interface BrandDropdownAction {
@@ -51,10 +59,17 @@ const variantStyles = {
   destructive: 'text-error font-medium [&_svg]:text-error hover:bg-red-500/20 focus:bg-red-500/20',
 } as const;
 
+// Triggers reuse the same brand pill recipes the standalone buttons use, so
+// a `<BrandDropdownMenu variant="primary">` looks identical to a
+// `<PrimaryButton>` (3D depth, indigo bottom-edge, brand-violet glow), a
+// `secondary` variant matches `<SecondaryButton>` (violet ring outline),
+// and `admin` matches the wine/violet error surface used for destructive
+// action groups. Without the 3D classes the Reseed trigger went flat
+// against the otherwise depthful toolbar.
 const triggerVariants = {
-  primary: 'bg-gradient-to-r from-violet-500 to-blue-500 hover:from-violet-400 hover:to-blue-400 text-white border-0',
-  secondary: 'bg-transparent border border-border text-foreground hover:bg-accent',
-  admin: `${brandErrorBg} text-foreground hover:brightness-110`,
+  primary: `${button3DBase} ${button3DDisabled} ${brandGradient} ${brandDepthColors} border-0`,
+  secondary: `${button3DBase} ${button3DDisabled} ${brandSecondary} border-b-violet-700/50`,
+  admin: `${button3DBase} ${button3DDisabled} ${brandErrorBg} text-foreground hover:brightness-110 border-b-red-900/60 shadow-red-950/40`,
 } as const;
 
 /**
