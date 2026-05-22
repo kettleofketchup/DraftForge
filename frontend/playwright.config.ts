@@ -182,6 +182,24 @@ export default defineConfig({
         },
       },
     },
+    {
+      name: 'mobile-iphone-se',
+      testMatch: /e2e\/mobile\/.*\.spec\.ts$/,
+      use: {
+        // iPhone SE 375x667 — the actual width the user reported overflow at.
+        ...devices['iPhone SE'],
+        browserName: 'chromium',
+        launchOptions: {
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          args: [
+            '--no-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+          ],
+        },
+      },
+    },
   ],
 
   // Global timeout - 30s for test, but faster action timeout
