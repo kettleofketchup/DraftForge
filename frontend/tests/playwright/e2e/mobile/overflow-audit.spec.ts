@@ -30,7 +30,7 @@ test.beforeAll(async ({ browser }) => {
     { path: `/tournament/${tournament.pk}/players` },
     { path: `/organizations/${events.orgPk}` },
     { path: '/leagues' },
-    { path: '/users/1003' },
+    { path: '/user/1003' },
     { path: '/leagues/1' },
   ];
 });

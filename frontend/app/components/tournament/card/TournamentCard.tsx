@@ -22,11 +22,14 @@ interface Props {
   animationIndex?: number;
 }
 
-/** Truncate text to max 12 characters with ellipsis */
+/** Truncate text to max 12 characters with ellipsis (fallback for unstyled callers). */
 const truncateText = (text: string, maxLength = 12): string => {
   if (!text) return '';
   return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
 };
+
+/** className that lets the cell trim its content with native CSS ellipsis. */
+const CELL_TRUNCATE = 'block w-full overflow-hidden text-ellipsis whitespace-nowrap';
 
 export const TournamentCard: React.FC<Props> = React.memo(({
   tournament,
@@ -71,7 +74,9 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         </ItemMedia>
         <ItemContent className="!gap-0">
           <ItemTitle className="!text-xs text-muted-foreground">League</ItemTitle>
-          <span className={`text-sm font-medium ${!hasLeague ? 'text-red-500' : ''}`} title={leagueName}>{truncateText(leagueName)}</span>
+          <span className={`text-sm font-medium ${!hasLeague ? 'text-red-500' : ''} ${CELL_TRUNCATE}`} title={leagueName}>
+            {leagueName}
+          </span>
         </ItemContent>
       </Item>
     );
@@ -93,7 +98,9 @@ export const TournamentCard: React.FC<Props> = React.memo(({
         </ItemMedia>
         <ItemContent className="!gap-0">
           <ItemTitle className="!text-xs text-muted-foreground">Organization</ItemTitle>
-          <span className={`text-sm font-medium ${!hasOrg ? 'text-red-500' : ''}`} title={orgName || 'None'}>{truncateText(orgName || 'None')}</span>
+          <span className={`text-sm font-medium ${!hasOrg ? 'text-red-500' : ''} ${CELL_TRUNCATE}`} title={orgName || 'None'}>
+            {orgName || 'None'}
+          </span>
         </ItemContent>
       </Item>
     );
@@ -132,7 +139,7 @@ export const TournamentCard: React.FC<Props> = React.memo(({
     return (
       <div className="flex flex-col gap-1.5">
         {/* Top row: Date and Time/Timezone */}
-        <div className="grid grid-cols-2 gap-1">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-1">
           {tournament.date_played && (
             <Item size="sm" variant="muted" className="!p-1.5">
               <ItemMedia variant="icon" className="!size-6 bg-sky-500/20 border-sky-500/30">
@@ -140,8 +147,8 @@ export const TournamentCard: React.FC<Props> = React.memo(({
               </ItemMedia>
               <ItemContent className="!gap-0">
                 <ItemTitle className="!text-xs text-muted-foreground">Date</ItemTitle>
-                <span className="text-sm" title={tournament.date_played} data-testid="tournament-card-date">
-                  {truncateText(getDateFromDate(tournament.date_played))}
+                <span className={`text-sm ${CELL_TRUNCATE}`} title={tournament.date_played} data-testid="tournament-card-date">
+                  {getDateFromDate(tournament.date_played)}
                 </span>
               </ItemContent>
             </Item>
@@ -152,8 +159,8 @@ export const TournamentCard: React.FC<Props> = React.memo(({
             </ItemMedia>
             <ItemContent className="!gap-0">
               <ItemTitle className="!text-xs text-muted-foreground">Time</ItemTitle>
-              <span className="text-sm" title={`${getTimeFromDate(tournament.date_played)} (${tournament.timezone || 'UTC'})`}>
-                {truncateText(`${getTimeFromDate(tournament.date_played)} ${formatTimezone(tournament.timezone)}`)}
+              <span className={`text-sm ${CELL_TRUNCATE}`} title={`${getTimeFromDate(tournament.date_played)} (${tournament.timezone || 'UTC'})`}>
+                {`${getTimeFromDate(tournament.date_played)} ${formatTimezone(tournament.timezone)}`}
               </span>
             </ItemContent>
           </Item>
@@ -167,19 +174,21 @@ export const TournamentCard: React.FC<Props> = React.memo(({
             </ItemMedia>
             <ItemContent className="!gap-0">
               <ItemTitle className="!text-xs text-muted-foreground">Style</ItemTitle>
-              <span className="text-sm capitalize" title={tournament.tournament_type.replace('_', ' ')}>{truncateText(tournament.tournament_type.replace('_', ' '))}</span>
+              <span className={`text-sm capitalize ${CELL_TRUNCATE}`} title={tournament.tournament_type.replace('_', ' ')}>
+                {tournament.tournament_type.replace('_', ' ')}
+              </span>
             </ItemContent>
           </Item>
         )}
 
         {/* Second row: League and Organization */}
-        <div className="grid grid-cols-2 gap-1">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-1">
           <LeagueItem />
           <OrganizationItem />
         </div>
 
         {/* Third row: State and Players */}
-        <div className="grid grid-cols-2 gap-1">
+        <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-1">
           {tournament.state && (
             <Item size="sm" variant="muted" className="!p-1.5">
               <ItemMedia variant="icon" className="!size-6 bg-emerald-500/20 border-emerald-500/30">
@@ -187,7 +196,9 @@ export const TournamentCard: React.FC<Props> = React.memo(({
               </ItemMedia>
               <ItemContent className="!gap-0">
                 <ItemTitle className="!text-xs text-muted-foreground">State</ItemTitle>
-                <span className="text-sm capitalize" title={STATE_CHOICES[tournament.state] || tournament.state}>{truncateText(STATE_CHOICES[tournament.state] || tournament.state)}</span>
+                <span className={`text-sm capitalize ${CELL_TRUNCATE}`} title={STATE_CHOICES[tournament.state] || tournament.state}>
+                  {STATE_CHOICES[tournament.state] || tournament.state}
+                </span>
               </ItemContent>
             </Item>
           )}
