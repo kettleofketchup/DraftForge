@@ -116,23 +116,31 @@ export const DraftOrderButton: React.FC<{
   }
 
   return (
-    <div className="flex flex-col items-center gap-2 md:flex-row">
-      <Label htmlFor={id}>Draft Order</Label>
+    <div className="inline-flex flex-col items-start gap-0.5">
+      <Label
+        htmlFor={id}
+        className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground leading-none"
+      >
+        Draft Order
+      </Label>
 
-      <BrandSelect onValueChange={handleChange} value={draft_order}>
-        <BrandSelectTrigger className="w-[80px]" id={id}>
-          <SelectValue placeholder={draft_order} />
-        </BrandSelectTrigger>
+      <div className="flex items-center gap-2">
+        <BrandSelect onValueChange={handleChange} value={draft_order}>
+          <BrandSelectTrigger className="w-[80px]" id={id}>
+            <SelectValue placeholder={draft_order} />
+          </BrandSelectTrigger>
 
-        <BrandSelectContent>
-          {Array.from({ length: getRange() }, (_, i) => (
-            <BrandSelectItem key={i + 1} value={String(i + 1)}>
-              {i + 1}
-            </BrandSelectItem>
-          ))}
-        </BrandSelectContent>
-      </BrandSelect>
-      {isLoading && <span className="loading loading-spinner loading-xs" />}
+          <BrandSelectContent>
+            {Array.from({ length: getRange() }, (_, i) => (
+              <Fragment key={i + 1}>
+                {i > 0 && <SelectSeparator className="!my-0 bg-violet-400/30" />}
+                <BrandSelectItem value={String(i + 1)}>{i + 1}</BrandSelectItem>
+              </Fragment>
+            ))}
+          </BrandSelectContent>
+        </BrandSelect>
+        {isLoading && <span className="loading loading-spinner loading-xs" />}
+      </div>
     </div>
   );
 };
