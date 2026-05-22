@@ -83,11 +83,6 @@ body {
   min-height: 100vh;
 }
 
-/* h1 reset sits in @layer base so Tailwind utility classes like
-   `text-base`, `text-2xl`, etc. can override the default heading size on
-   per-component basis. Without the layer wrap, the bare element selector
-   beat utilities by source order, forcing every <h1> to ~51px regardless
-   of className (see PageHeader mobile sizing). */
 @layer base {
   h1 {
     font-size: 3.2em;
