@@ -40,7 +40,7 @@ export function meta({ data }: Route.MetaArgs) {
   });
 }
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import {
   Bell,
   BellOff,
@@ -73,6 +73,7 @@ import { PrimaryButton, SecondaryButton, DestructiveButton, HighlightButton } fr
 import { EventAdminActions } from '~/components/events/EventAdminActions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
+import { PageHeader } from '~/components/ui/page-header';
 import { UserEventStrip } from '~/components/user';
 import type { DotaProfileData } from '~/components/user';
 import {
@@ -295,20 +296,23 @@ export default function EventPage() {
     [eventId, navigate],
   );
 
-  // Page nav for mobile
-  const signupCount = signups?.length ?? 0;
+  // Mobile tab navigation goes through the centered navbar dropdown
+  // (PageNavBar) — register page-level tabs here so it renders.
   const pageNavOptions = useMemo(
     () => [
       { value: 'details', label: 'Details' },
       { value: 'signups', label: `${activeSignups.length} Signups` },
-      ...(tentativeSignups.length > 0 ? [{ value: 'tentative', label: `${tentativeSignups.length} Tentative` }] : []),
+      ...(tentativeSignups.length > 0
+        ? [{ value: 'tentative', label: `${tentativeSignups.length} Tentative` }]
+        : []),
       { value: 'waitlist', label: `${waitlistedSignups.length} Waitlist` },
-      ...(removedSignups.length > 0 ? [{ value: 'removed', label: `${removedSignups.length} Removed` }] : []),
+      ...(removedSignups.length > 0
+        ? [{ value: 'removed', label: `${removedSignups.length} Removed` }]
+        : []),
       { value: 'discord', label: 'Discord' },
     ],
-    [activeSignups.length, tentativeSignups.length, waitlistedSignups.length, removedSignups.length, isAdmin],
+    [activeSignups.length, tentativeSignups.length, waitlistedSignups.length, removedSignups.length],
   );
-
   usePageNav(event ? pageNavOptions : null, activeTab, handleTabChange);
 
   if (isLoading) {
@@ -337,61 +341,71 @@ export default function EventPage() {
     minute: '2-digit',
     timeZoneName: 'short',
   });
+  // Compact format for mobile so the date pill can sit next to the state
+  // badge on a single row at iPhone-SE width (375px).
+  const shortDate = scheduledDate.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
 
   return (
     <div className="max-w-7xl mx-auto py-4 md:py-8 px-4 md:px-6 space-y-5 md:space-y-8">
       {/* Breadcrumb */}
       {breadcrumbSegments.length > 1 && <EntityBreadcrumb segments={breadcrumbSegments} />}
 
-      {/* Page Header */}
-      <div className="space-y-4">
-        {/* Row 1: Title (left) + Org/Series (right, lg+ only) */}
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-          <h1 className="text-xl sm:text-2xl lg:text-4xl font-bold min-w-0">
-            {event.name}
-          </h1>
-          <div className="hidden lg:flex flex-wrap items-center gap-2 shrink-0">
-            {event.organization_name && (
-              <div className="flex flex-col items-center gap-0.5">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Organization</span>
-                <HighlightButton
-                  size="sm"
-                  onClick={() => navigate(`/organizations/${event.organization}`)}
-                  avatarUrl={eventOrg?.logo || undefined}
-                  avatarAlt={event.organization_name}
-                >
-                  {!eventOrg?.logo && <Building2 className="h-4 w-4 mr-1.5" />}
-                  {event.organization_name}
-                </HighlightButton>
-              </div>
-            )}
-            {event.event_repeater && event.event_repeater_name && (
-              <div className="flex flex-col items-center gap-0.5">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Event Series</span>
-                <HighlightButton
-                  size="sm"
-                  onClick={() => navigate(`/event-series/${event.event_repeater}`)}
-                >
-                  <Repeat className="h-4 w-4 mr-1.5" />
-                  {event.event_repeater_name}
-                </HighlightButton>
-              </div>
-            )}
-          </div>
+      {/* Page Header — compact on mobile, lg+ adds an Org/Series side rail */}
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+        <PageHeader
+          title={event.name}
+          badge={<EventStateBadge state={event.state} data-testid="event-state-badge" />}
+          subtitle={
+            <Badge variant="secondary" className="flex items-center gap-1 w-fit text-xs sm:text-sm">
+              <Clock className="h-3 w-3" />
+              <span className="sm:hidden">{shortDate}</span>
+              <span className="hidden sm:inline">{formattedDate}</span>
+            </Badge>
+          }
+          className="lg:min-w-0 flex-1"
+          data-testid="event-title"
+        />
+        <div className="hidden lg:flex flex-wrap items-center gap-2 shrink-0">
+          {event.organization_name && (
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Organization</span>
+              <HighlightButton
+                size="sm"
+                onClick={() => navigate(`/organizations/${event.organization}`)}
+                avatarUrl={eventOrg?.logo || undefined}
+                avatarAlt={event.organization_name}
+              >
+                {!eventOrg?.logo && <Building2 className="h-4 w-4 mr-1.5" />}
+                {event.organization_name}
+              </HighlightButton>
+            </div>
+          )}
+          {event.event_repeater && event.event_repeater_name && (
+            <div className="flex flex-col items-center gap-0.5">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Event Series</span>
+              <HighlightButton
+                size="sm"
+                onClick={() => navigate(`/event-series/${event.event_repeater}`)}
+              >
+                <Repeat className="h-4 w-4 mr-1.5" />
+                {event.event_repeater_name}
+              </HighlightButton>
+            </div>
+          )}
         </div>
-
-        {/* Row 2: Status + Date */}
-        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2 text-muted-foreground">
-          <EventStateBadge state={event.state} data-testid="event-state-badge" />
-          <Badge variant="secondary" className="flex items-center gap-1 w-fit">
-            <Clock className="h-3 w-3" />
-            {formattedDate}
-          </Badge>
-        </div>
+      </div>
+      <div className="space-y-2 sm:space-y-4">
 
         {/* Row 3: Admin button group (left) + Subscribe/RSVP (right) */}
         {(isAdmin || (currentUser && event.state === EventState.SIGNUPS_OPEN && signups) || (currentUser && event.event_repeater)) && (
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
             {/* Admin actions — left side */}
             {isAdmin ? (
               <EventAdminActions
@@ -410,7 +424,7 @@ export default function EventPage() {
             )}
 
             {/* Right side: Subscribe + RSVP */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
             {event.event_repeater && currentUser && (
               isSubscribed ? (
                 <SecondaryButton
@@ -520,10 +534,16 @@ export default function EventPage() {
         )}
       </div>
 
-      {/* Content Card — full width */}
-      <div className="rounded-lg border border-border bg-base-200/50 p-4 md:p-8">
+      {/* Tabs + content sit flush against the page now — the prior
+          rounded/bg-base-200 wrapper added card-on-card chrome that read as
+          visual noise at every breakpoint. */}
+      <div>
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          <TabsList>
+          {/* TabsList hidden on mobile — the centered PageNavBar dropdown in
+              the global navbar drives tab switching at narrow widths (six
+              tabs fit cleanly in the dropdown). At md+ the inline pill
+              TabsList takes over. */}
+          <TabsList className="hidden md:inline-flex flex-wrap">
             <TabsTrigger value="details" data-testid="event-tab-details">
               Details
             </TabsTrigger>
@@ -679,7 +699,22 @@ export default function EventPage() {
   );
 }
 
-/** Details tab showing event configuration */
+/** Stat row inside a card: tiny uppercase label above bold value. */
+function Stat({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5 py-1.5 border-b border-border/40 last:border-b-0">
+      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+        {label}
+      </span>
+      <span className="text-sm font-semibold text-foreground">{value}</span>
+    </div>
+  );
+}
+
+/** Details tab — two cards (Tournament Info + Signup Rules) plus an
+ *  optional Description card, restored after the flat-grid experiment.
+ *  The outer tab content no longer carries its own bg/border wrapper, so
+ *  the cards sit directly on the page background. */
 function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>['data']> }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -687,29 +722,12 @@ function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>[
         <CardHeader>
           <h3 className="font-semibold">Tournament Info</h3>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          {event.tournament_name && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Tournament</span>
-              <span>{event.tournament_name}</span>
-            </div>
-          )}
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Type</span>
-            <span className="capitalize">{event.tournament_type.replace(/_/g, ' ')}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Draft</span>
-            <span className="capitalize">{event.draft_type}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Teams</span>
-            <span>{event.number_of_teams} x {event.people_per_team}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Game</span>
-            <span>{event.game_type === 1 ? 'Dota 2' : 'Deadlock'}</span>
-          </div>
+        <CardContent className="space-y-0">
+          {event.tournament_name && <Stat label="Tournament" value={event.tournament_name} />}
+          <Stat label="Type" value={<span className="capitalize">{event.tournament_type.replace(/_/g, ' ')}</span>} />
+          <Stat label="Draft" value={<span className="capitalize">{event.draft_type}</span>} />
+          <Stat label="Teams" value={`${event.number_of_teams} × ${event.people_per_team}`} />
+          <Stat label="Game" value={event.game_type === 1 ? 'Dota 2' : 'Deadlock'} />
         </CardContent>
       </Card>
 
@@ -717,25 +735,17 @@ function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>[
         <CardHeader>
           <h3 className="font-semibold">Signup Rules</h3>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Players</span>
-            <span>
-              {event.min_players ?? '?'} - {event.max_players ?? '?'}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Auto Approve</span>
-            <span>{event.auto_approve ? 'Yes' : 'No'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Auto Confirm</span>
-            <span>{event.auto_confirm ? 'Yes' : 'No'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Roll Call</span>
-            <span>{event.roll_call_enabled ? event.roll_call_mode : 'Disabled'}</span>
-          </div>
+        <CardContent className="space-y-0">
+          <Stat
+            label="Players"
+            value={`${event.min_players ?? '?'} – ${event.max_players ?? '?'}`}
+          />
+          <Stat label="Auto Approve" value={event.auto_approve ? 'Yes' : 'No'} />
+          <Stat label="Auto Confirm" value={event.auto_confirm ? 'Yes' : 'No'} />
+          <Stat
+            label="Roll Call"
+            value={event.roll_call_enabled ? event.roll_call_mode : 'Disabled'}
+          />
         </CardContent>
       </Card>
 
@@ -751,7 +761,6 @@ function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>[
           </CardContent>
         </Card>
       )}
-
     </div>
   );
 }
