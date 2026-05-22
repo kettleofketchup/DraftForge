@@ -14,6 +14,7 @@ import {
   brandDepthColors,
   brandErrorBg,
   brandGradient,
+  brandLabelOnGradient,
   brandSecondary,
   button3DBase,
   button3DDisabled,
@@ -67,7 +68,7 @@ const variantStyles = {
 // action groups. Without the 3D classes the Reseed trigger went flat
 // against the otherwise depthful toolbar.
 const triggerVariants = {
-  primary: `${button3DBase} ${button3DDisabled} ${brandGradient} ${brandDepthColors} border-0`,
+  primary: `${button3DBase} ${button3DDisabled} ${brandGradient} ${brandDepthColors} ${brandLabelOnGradient} border-0`,
   secondary: `${button3DBase} ${button3DDisabled} ${brandSecondary} border-b-violet-700/50`,
   admin: `${button3DBase} ${button3DDisabled} ${brandErrorBg} text-foreground hover:brightness-110 border-b-red-900/60 shadow-red-950/40`,
 } as const;

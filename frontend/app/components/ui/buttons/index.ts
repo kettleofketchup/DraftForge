@@ -1,5 +1,5 @@
 // Shared styles
-export { brandBg, brandDepthColors, brandDialogPanel, brandErrorBg, brandErrorCard, brandErrorPrimary, brandGlow, brandGradient, brandHighlight, brandHighlightText, brandReadableDestructive, brandReadableSuccess, brandReadableWarning, brandSecondary, brandSecondary3D, brandSecondaryOpaque, brandSecondaryOpaque3D, brandSuccessBg, button3DBase, button3DDisabled, button3DVariants } from './styles';
+export { brandBg, brandDepthColors, brandDialogPanel, brandErrorBg, brandErrorCard, brandErrorPrimary, brandGlow, brandGradient, brandHighlight, brandHighlightText, brandLabelOnGradient, brandReadableDestructive, brandReadableSuccess, brandReadableWarning, brandSecondary, brandSecondary3D, brandSecondaryOpaque, brandSecondaryOpaque3D, brandSuccessBg, button3DBase, button3DDisabled, button3DVariants } from './styles';
 export type { Button3DVariant } from './styles';
 
 // Shared affordances
