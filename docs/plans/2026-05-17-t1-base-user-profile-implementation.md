@@ -2410,6 +2410,12 @@ Captured during PR #250 review iterations. T2 and T3 should inherit these by des
 12. **3-generic `useForm<z.input<typeof S>, unknown, OutputType>` for any zod schema with `.default()` / `.transform()`.**
     Project convention from main's `2e41cf80` `fix(types): align useForm generics with zodResolver input/output split`. T1's `BaseTab` got away with single-generic because the schema is pure-shape, but T2's Dota/Deadlock tabs and T3's org tabs will almost certainly have position-default `.default(3)` style fields — use the 3-generic form from day one. Examples: `MmrApprovalModal.tsx:75`, `EditOrgDefaultsModal.tsx:72`.
 
+13. **Sweep N+1 outside the `app/` boundary, not just inside it.**
+    The first review pass caught `select_related("base_profile")` gaps in `backend/app/`. A *second* sweep was needed for cross-app serializers that read `user.nickname` / `user.avatar` through the `@property`: `backend/events/views.py` (`subscribers`, `EventSignupViewSet.get_queryset`), `backend/steam/views.py` (`LeaderboardView.get_queryset`). T2/T3 must do the same cross-app sweep when their new fields ship — grep all `source="user.<field>"` in `*/serializers.py`, then grep the queryset that feeds each serializer.
+
+14. **Cacheops integration tests need `TransactionTestCase`, not `TestCase`.**
+    `invalidate_after_commit` schedules eviction via `transaction.on_commit`. Plain `TestCase` wraps each test in a transaction that's rolled back at teardown — the on_commit hook never fires mid-test, the cache is never evicted between warm and re-fetch, and the test passes for the wrong reason (cache evicted at teardown, not by the PATCH). Use `TransactionTestCase` for any live-Redis behavioral test that exercises `on_commit`-scheduled invalidation. Pattern: `backend/app/tests/test_league_serializer.py:136`. T2/T3's equivalent integration tests (`DotaUserProfile`, `OrgUserProfile`) must inherit this rule.
+
 ---
 
 ## Self-review notes

@@ -235,9 +235,12 @@ class EventRepeaterViewSet(viewsets.ModelViewSet):
     def subscribers(self, request, pk=None):
         """List all subscribers for this repeater."""
         repeater = self.get_object()
+        # RepeaterSubscriptionSerializer reads user.nickname + user.avatar,
+        # which go through the @property on CustomUser → base_profile (T1
+        # epic). Without this prefetch the list view is N+1 cold-cache.
         subs = RepeaterSubscription.objects.filter(
             event_repeater=repeater
-        ).select_related("user")
+        ).select_related("user", "user__base_profile")
         from events.serializers import RepeaterSubscriptionSerializer
 
         return Response(RepeaterSubscriptionSerializer(subs, many=True).data)
@@ -730,7 +733,13 @@ class EventSignupViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        qs = EventSignup.objects.select_related("user", "event", "event_team")
+        # EventSignupSerializer ships user.nickname (as `username`) +
+        # user.avatar — both resolve through the CustomUser @property to
+        # base_profile (T1 epic). Without user__base_profile this is N+1
+        # cold-cache on busy events.
+        qs = EventSignup.objects.select_related(
+            "user", "user__base_profile", "event", "event_team"
+        )
         event_id = self.request.query_params.get("event")
         if event_id:
             qs = qs.filter(event_id=event_id)

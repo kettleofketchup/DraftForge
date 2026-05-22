@@ -415,6 +415,10 @@ These were validated through PR #250 review iterations. Inherit them by design �
 
 13. **Pin exact expected values in compat tests.** `assert data["nickname"] in (None, "")` is a smell — both could be wrong-but-different outcomes. Pick one canonical "absent" representation and assert it.
 
+14. **Sweep N+1 across ALL apps, not just the one owning the new model.** T1's first review pass only caught `select_related` gaps inside `backend/app/`. A second sweep was needed for `backend/events/views.py` (`RepeaterSubscription` subscribers, `EventSignupViewSet`), `backend/steam/views.py` (`LeaderboardView`), where serializers read `source="user.<field>"` through the `@property`. T2/T3 acceptance must include: `grep -rn 'source="user\.<new-field>' backend/*/serializers.py` then verify each consuming view's queryset has the prefetch. Cross-app paths fail review otherwise.
+
+15. **Cacheops integration tests need `TransactionTestCase`.** `invalidate_after_commit` schedules via `transaction.on_commit`. Plain `TestCase` wraps each test in a never-committed transaction, so the on_commit hook never fires mid-test — the cache appears never to be evicted by the PATCH, but in fact it's just deferred to teardown. The test passes for the wrong reason. Use `TransactionTestCase`. Pattern: `backend/app/tests/test_league_serializer.py:136` and `backend/user/tests/test_cacheops_integration.py`. T2/T3 cacheops behavioral tests inherit this rule.
+
 ---
 
 ## Ticket breakdown

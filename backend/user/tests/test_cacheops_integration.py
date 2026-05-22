@@ -14,7 +14,7 @@ declarations could silently drift to wrong models and CI wouldn't catch it.
 
 import redis
 from django.conf import settings
-from django.test import TestCase
+from django.test import TransactionTestCase
 from rest_framework.test import APIClient
 
 from app.models import CustomUser
@@ -42,8 +42,17 @@ def _redis_reachable() -> bool:
         return False
 
 
-class CacheopsInvalidationOnBaseProfilePatchTests(TestCase):
-    """Verify PATCH /users/me/profile/base/ evicts cached user payloads."""
+class CacheopsInvalidationOnBaseProfilePatchTests(TransactionTestCase):
+    """Verify PATCH /users/me/profile/base/ evicts cached user payloads.
+
+    Inherits from TransactionTestCase (not plain TestCase) because cacheops
+    eviction is scheduled via `transaction.on_commit`. Plain TestCase wraps
+    each test in a transaction that's rolled back at teardown — on_commit
+    hooks would never fire mid-test, and the cache would never be evicted
+    between the warm and the re-fetch. This class needs real commits in the
+    middle of the test, which TransactionTestCase provides. Pattern mirrors
+    backend/app/tests/test_league_serializer.py:136.
+    """
 
     @classmethod
     def setUpClass(cls):

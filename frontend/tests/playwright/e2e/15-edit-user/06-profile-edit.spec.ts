@@ -125,7 +125,6 @@ test.describe('Edit Profile — Base tab (new layered modal)', () => {
     await page.unroute('**/api/users/me/profile/base/');
 
     // Cancel — no restore needed since the failed PATCH didn't persist.
-    await page.locator('[data-testid="edit-user-btn"]').first().scrollIntoViewIfNeeded();
     await page.getByRole('dialog').getByRole('button', { name: /cancel/i }).click();
     await expect(page.getByRole('dialog')).toBeHidden({ timeout: 5_000 });
   });
