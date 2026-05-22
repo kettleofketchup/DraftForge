@@ -208,12 +208,20 @@ export const UserStrip = memo(
             <span
               className={cn(
                 'text-sm font-medium cursor-pointer hover:text-primary transition-colors leading-tight inline-block truncate',
-                // If a custom cap is set we let the cell collapse so the action
-                // column (e.g. captain toggle + draft order) has room. Without
-                // a cap we keep the original min-widths so non-compact strips
-                // still look right elsewhere in the app.
-                nameMaxLength == null && 'min-w-[15ch] sm:min-w-[20ch]',
+                // With a custom cap, pin the name column to a fixed width so
+                // the next column (MMR badges) starts at the same x across
+                // every row — names that don't fill the cap leave whitespace
+                // instead of collapsing. Without a cap we keep the original
+                // mobile-15 / desktop-20 min-widths.
+                nameMaxLength == null
+                  ? 'min-w-[15ch] sm:min-w-[20ch]'
+                  : 'w-[var(--name-width)]',
               )}
+              style={
+                nameMaxLength == null
+                  ? undefined
+                  : ({ '--name-width': `${nameMaxLength}ch` } as React.CSSProperties)
+              }
               title={fullName.length > 12 ? fullName : undefined}
             >
               <span className="hidden sm:inline">{displayedName}</span>

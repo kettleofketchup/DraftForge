@@ -32,6 +32,7 @@ test.beforeAll(async ({ browser }) => {
     { path: '/leagues' },
     { path: '/user/1003' },
     { path: '/leagues/1' },
+    { path: `/tournament/${tournament.pk}/bracket` },
   ];
 });
 
@@ -40,7 +41,7 @@ test.describe('mobile horizontal overflow audit (@cicd)', () => {
     await loginAdmin(context);
   });
 
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 10; i++) {
     test(`route ${i} has no horizontal overflow`, async ({ page }) => {
       const route = ROUTES[i];
       await visitAndWaitForHydration(page, route.path);
@@ -58,7 +59,7 @@ test.describe('mobile hydration mismatch audit (@cicd)', () => {
     await loginAdmin(context);
   });
 
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 10; i++) {
     test(`route ${i} renders without SSR/client divergence`, async ({ page }) => {
       const errors: string[] = [];
       page.on('pageerror', (e) => errors.push(e.message));

@@ -14,6 +14,7 @@ import { UserAvatar } from '~/components/user/UserAvatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
 import { UserStrip } from '~/components/user/UserStrip';
+import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import type { TeamType } from '~/index';
 import { DraftOrderButton } from './draftOrder';
@@ -143,7 +144,15 @@ const CaptainStripRow: React.FC<CaptainStripRowProps> = ({ user, isCaptain }) =>
         // Order label (~12) + gap (2) + sm trigger (32) = 86px so the
         // picker never overflows the strip; non-captain rows reserve the
         // same height so base MMR badges align horizontally across rows.
-        <div className="flex flex-col items-end gap-1 h-[88px] justify-start">
+        // justify-center when alone (no draft order) so the button doesn't
+        // float at the top of the column; justify-start when the draft
+        // order is present so the two items stack from the top.
+        <div
+          className={cn(
+            'flex flex-col items-end gap-1 h-[88px]',
+            isCaptain ? 'justify-start' : 'justify-center',
+          )}
+        >
           <UpdateCaptainButton user={user} compact hideDraftOrder />
           {isCaptain && (
             <DraftOrderButton
