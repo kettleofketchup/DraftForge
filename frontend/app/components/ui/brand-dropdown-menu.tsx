@@ -37,15 +37,19 @@ interface BrandDropdownMenuProps {
   'data-testid'?: string;
 }
 
+// Per-variant text + icon tone. Hover/focus background is brand-aligned per
+// row so Edit / Delete don't fall back to shadcn's cyan `bg-accent` (which
+// fights both the violet/emerald edit text and the red destructive text).
 const variantStyles = {
-  default: 'text-foreground',
-  primary: 'text-primary font-medium [&_svg]:text-primary',
-  // edit: brand-toxic gradient text (violet → emerald) — matches the
-  // <EditButton> visual language so the dropdown Edit reads as a brand
-  // action instead of a generic shadcn green.
-  edit: 'font-medium bg-gradient-to-br from-violet-400 via-emerald-300 to-emerald-400 bg-clip-text text-transparent [&_svg]:text-emerald-300',
-  success: 'text-success font-medium [&_svg]:text-success',
-  destructive: 'text-error font-medium [&_svg]:text-error',
+  default: 'text-foreground focus:bg-violet-500/20',
+  primary: 'text-primary font-medium [&_svg]:text-primary focus:bg-violet-500/20',
+  // edit: brand-toxic gradient text (violet → emerald) matching <EditButton>.
+  // bg-clip-text means the text needs a gradient bg; the focus state overlays
+  // a subtle emerald/violet wash so the row still feels selected without
+  // recoloring the gradient text.
+  edit: 'font-medium bg-gradient-to-br from-violet-400 via-emerald-300 to-emerald-400 bg-clip-text text-transparent [&_svg]:text-emerald-300 focus:bg-gradient-to-r focus:from-violet-500/25 focus:to-emerald-500/20',
+  success: 'text-success font-medium [&_svg]:text-success focus:bg-emerald-500/20',
+  destructive: 'text-error font-medium [&_svg]:text-error focus:bg-red-500/20',
 } as const;
 
 const triggerVariants = {
