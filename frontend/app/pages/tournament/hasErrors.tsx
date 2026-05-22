@@ -137,17 +137,17 @@ export const hasErrors = () => {
       data-testid="incomplete-profiles-banner"
     >
       <CollapsibleTrigger
-        className="flex items-center justify-between gap-3 w-full p-3 sm:p-4 text-red-500 font-bold text-left cursor-pointer min-h-11"
+        className="grid grid-cols-[auto_1fr_auto] items-center gap-3 w-full p-3 sm:p-4 text-red-500 font-bold cursor-pointer min-h-11"
         data-testid="incomplete-profiles-toggle"
         aria-label={open ? `Hide ${label}` : `Show ${label}`}
       >
-        <span className="flex items-center gap-2 min-w-0">
-          <span className="text-lg shrink-0" aria-hidden>⚠️</span>
-          <span className="truncate">{label}</span>
-        </span>
+        {/* Left rail: warning glyph keeps the chevron's mirror weight on
+            the right so the title can truly center between them. */}
+        <span className="text-lg" aria-hidden>⚠️</span>
+        <span className="truncate text-center">{label}</span>
         <ChevronDown
           className={cn(
-            'size-5 shrink-0 transition-transform duration-200',
+            'size-5 transition-transform duration-200',
             open && 'rotate-180',
           )}
           aria-hidden
@@ -159,7 +159,10 @@ export const hasErrors = () => {
       >
         <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 p-3 sm:p-4 pt-0 sm:pt-0">
           {usersWithIssues.map(({ user, issues }) => (
-            <div className={cn('p-3 rounded-lg', brandErrorCard)} key={user.pk}>
+            <div
+              className={cn('flex flex-col p-3 rounded-lg h-full', brandErrorCard)}
+              key={user.pk}
+            >
               <div className="text-white text-center underline underline-offset-2 font-bold mb-2 break-words">
                 {user.nickname || user.username}
               </div>
@@ -168,7 +171,10 @@ export const hasErrors = () => {
                   <span key={issue}>{issue}</span>
                 ))}
               </div>
-              <div className="flex justify-center mt-3">
+              {/* mt-auto pins the edit button to the bottom of the card so
+                  every card in the grid row terminates at the same y, no
+                  matter how many issues the user has. */}
+              <div className="flex justify-center mt-auto pt-3">
                 <UserEditModal
                   user={user}
                   scope={editScope}
