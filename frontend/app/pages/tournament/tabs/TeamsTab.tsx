@@ -39,7 +39,7 @@ export const TeamsTab: React.FC = memo(() => {
   const teamButtonsView = () => {
     return (
       <div
-        className="flex flex-row justify-center items-center gap-2 w-full sm:gap-4 sm:p-4 sm:pt-2 sm:pb-6"
+        className="flex flex-row justify-center items-center gap-2 w-full px-2 py-3 sm:gap-4 sm:p-4 sm:pt-2 sm:pb-6"
         data-testid="teams-tab-actions"
       >
         <RandomizeTeamsModal users={tournament?.users || []} teamSize={5} />

@@ -37,6 +37,14 @@ interface UserStripProps {
   /** Show position badges (default true) */
   showPositions?: boolean;
 
+  /**
+   * Cap the displayed nickname/username at N characters. When set, overrides
+   * the default mobile-15 / desktop-20 caps from `DisplayName` and also
+   * relaxes the span's min-width so the strip can collapse into tighter
+   * action columns (e.g. captain selection on iPhone-SE).
+   */
+  nameMaxLength?: number;
+
   /** Additional CSS classes */
   className?: string;
 
@@ -63,6 +71,7 @@ const userStripPropsAreEqual = (
   if (prev.compact !== next.compact) return false;
   if (prev.showBorder !== next.showBorder) return false;
   if (prev.showPositions !== next.showPositions) return false;
+  if (prev.nameMaxLength !== next.nameMaxLength) return false;
 
   // Styling
   if (prev.className !== next.className) return false;
@@ -80,6 +89,7 @@ export const UserStrip = memo(
     compact = false,
     showBorder = true,
     showPositions = true,
+    nameMaxLength,
     className,
     'data-testid': testId,
   }: UserStripProps) => {
@@ -87,10 +97,10 @@ export const UserStrip = memo(
     const { fullName, displayedName, displayedNameMobile } = useMemo(
       () => ({
         fullName: DisplayName(user),
-        displayedName: DisplayName(user, 20),
-        displayedNameMobile: DisplayName(user, 15),
+        displayedName: DisplayName(user, nameMaxLength ?? 20),
+        displayedNameMobile: DisplayName(user, nameMaxLength ?? 15),
       }),
-      [user?.username, user?.nickname],
+      [user?.username, user?.nickname, nameMaxLength],
     );
 
     // Memoize MMR values to prevent badge re-renders
@@ -196,7 +206,14 @@ export const UserStrip = memo(
           {/* Row 1: Name */}
           <PlayerPopover player={user}>
             <span
-              className="text-sm font-medium cursor-pointer hover:text-primary transition-colors leading-tight inline-block min-w-[15ch] sm:min-w-[20ch]"
+              className={cn(
+                'text-sm font-medium cursor-pointer hover:text-primary transition-colors leading-tight inline-block truncate',
+                // If a custom cap is set we let the cell collapse so the action
+                // column (e.g. captain toggle + draft order) has room. Without
+                // a cap we keep the original min-widths so non-compact strips
+                // still look right elsewhere in the app.
+                nameMaxLength == null && 'min-w-[15ch] sm:min-w-[20ch]',
+              )}
               title={fullName.length > 12 ? fullName : undefined}
             >
               <span className="hidden sm:inline">{displayedName}</span>
