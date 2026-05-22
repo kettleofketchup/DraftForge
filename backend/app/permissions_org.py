@@ -20,7 +20,10 @@ def is_org_owner(user, obj):
 
 
 def has_org_admin_access(user, obj):
-    """Check if user is org owner, org admin, or superuser.
+    """Check if user is a site admin, org owner, or org admin.
+
+    Site admin = ``is_staff || is_superuser`` (matches the frontend
+    permission-hook convention so the gate is identical on both sides).
 
     Args:
         user: The user to check
@@ -33,7 +36,8 @@ def has_org_admin_access(user, obj):
     organization = getattr(obj, "organization", obj)
 
     return (
-        user.is_superuser
+        user.is_staff
+        or user.is_superuser
         or is_org_owner(user, organization)
         or organization.admins.filter(pk=user.pk).exists()
     )
@@ -59,12 +63,14 @@ def has_org_staff_access(user, obj):
 
 
 def has_league_admin_access(user, league):
-    """Check if user is league admin, admin of any linked org, or superuser."""
+    """Check if user is league admin, admin of any linked org, or site admin."""
     if not user.is_authenticated:
         return False
 
-    # Superuser has access
-    if user.is_superuser:
+    # Site admin (Django is_staff OR is_superuser) bypasses the cascade —
+    # matches the frontend permission-hook convention so the matrix
+    # contract holds end-to-end.
+    if user.is_staff or user.is_superuser:
         return True
 
     # Check if user is a league-specific admin

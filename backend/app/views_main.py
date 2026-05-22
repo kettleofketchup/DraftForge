@@ -175,7 +175,20 @@ from .serializers import UserSerializer
 @permission_classes((IsStaff,))
 class UserView(viewsets.ModelViewSet):
     serializer_class = UserSerializer
-    queryset = CustomUser.objects.select_related("positions").all()
+    # Prefetch the M2M reverse relations that UserSerializer exposes as
+    # role-membership lists. Without these the four SerializerMethodFields
+    # on the list endpoint fire 4·N extra queries on a cold cacheops key.
+    queryset = (
+        CustomUser.objects.select_related("positions")
+        .prefetch_related(
+            "owned_organizations",
+            "admin_organizations",
+            "staff_organizations",
+            "admin_leagues",
+            "staff_leagues",
+        )
+        .all()
+    )
     http_method_names = [
         "get",
         "post",

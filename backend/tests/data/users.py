@@ -92,6 +92,18 @@ ORG_STAFF_USER: TestUser = TestUser(
     org_id=1,  # Staff of org 1
 )
 
+# Plain org member — added to org 1's users but NOT to admins/staff. Tests
+# need this distinct from REGULAR_USER (bucketoffish55) so the auth-matrix
+# can separate the "member with no role" case from "unaffiliated user".
+ORG_MEMBER_USER: TestUser = TestUser(
+    pk=1022,
+    username="org_member_tester",
+    nickname="Org Member Tester",
+    discord_id="100000000000000011",
+    steam_id_64=76561198012345685,
+    org_id=1,  # Member of org 1
+)
+
 # =============================================================================
 # League Role Test Users
 # =============================================================================
@@ -122,6 +134,77 @@ EVENT_LEAGUE_STAFF_USER: TestUser = TestUser(
     steam_id_64=76561198012345684,
     league_id=7,  # Staff of Events Test League (league 7)
 )
+
+# =============================================================================
+# Auth Matrix Role Test Users (pk=1090-1094)
+# Dedicated to the role-context matrix at /tests/playwright/e2e/17-auth/.
+# Scoped to AUTH_MATRIX_ORG (pk=8) and AUTH_MATRIX_LEAGUE (pk=9) so the
+# matrix is fully isolated from DTX-using suites — neither side can flap
+# the other by mutating org/league memberships.
+# =============================================================================
+
+AUTH_MATRIX_ORG_OWNER_USER: TestUser = TestUser(
+    pk=1095,
+    username="auth_matrix_org_owner",
+    nickname="Auth Matrix Org Owner",
+    discord_id="100000000000000095",
+    steam_id_64=76561198012345695,
+    org_id=8,  # Owner FK of Auth Matrix Test Org, NOT in admins M2M
+)
+
+AUTH_MATRIX_ORG_ADMIN_USER: TestUser = TestUser(
+    pk=1090,
+    username="auth_matrix_org_admin",
+    nickname="Auth Matrix Org Admin",
+    discord_id="100000000000000090",
+    steam_id_64=76561198012345690,
+    org_id=8,  # Admin of Auth Matrix Test Org
+)
+
+AUTH_MATRIX_ORG_STAFF_USER: TestUser = TestUser(
+    pk=1091,
+    username="auth_matrix_org_staff",
+    nickname="Auth Matrix Org Staff",
+    discord_id="100000000000000091",
+    steam_id_64=76561198012345691,
+    org_id=8,
+)
+
+AUTH_MATRIX_ORG_MEMBER_USER: TestUser = TestUser(
+    pk=1092,
+    username="auth_matrix_org_member",
+    nickname="Auth Matrix Org Member",
+    discord_id="100000000000000092",
+    steam_id_64=76561198012345692,
+    org_id=8,
+)
+
+AUTH_MATRIX_LEAGUE_ADMIN_USER: TestUser = TestUser(
+    pk=1093,
+    username="auth_matrix_league_admin",
+    nickname="Auth Matrix League Admin",
+    discord_id="100000000000000093",
+    steam_id_64=76561198012345693,
+    league_id=9,  # Admin of Auth Matrix League
+)
+
+AUTH_MATRIX_LEAGUE_STAFF_USER: TestUser = TestUser(
+    pk=1094,
+    username="auth_matrix_league_staff",
+    nickname="Auth Matrix League Staff",
+    discord_id="100000000000000094",
+    steam_id_64=76561198012345694,
+    league_id=9,
+)
+
+AUTH_MATRIX_USERS: list[TestUser] = [
+    AUTH_MATRIX_ORG_OWNER_USER,
+    AUTH_MATRIX_ORG_ADMIN_USER,
+    AUTH_MATRIX_ORG_STAFF_USER,
+    AUTH_MATRIX_ORG_MEMBER_USER,
+    AUTH_MATRIX_LEAGUE_ADMIN_USER,
+    AUTH_MATRIX_LEAGUE_STAFF_USER,
+]
 
 # =============================================================================
 # Real Tournament 38 Users (pk=3000-3019, from production data)
@@ -726,9 +809,11 @@ AUTH_TEST_USERS: list[TestUser] = [
     USER_CLAIMER,
     ORG_ADMIN_USER,
     ORG_STAFF_USER,
+    ORG_MEMBER_USER,
     LEAGUE_ADMIN_USER,
     LEAGUE_STAFF_USER,
     EVENT_LEAGUE_STAFF_USER,
+    *AUTH_MATRIX_USERS,
 ]
 
 # Legacy alias

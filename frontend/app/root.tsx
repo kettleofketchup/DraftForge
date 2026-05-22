@@ -7,7 +7,11 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLoaderData,
 } from 'react-router';
+import type { LoaderFunctionArgs } from 'react-router';
+import { useChangeLanguage } from 'remix-i18next/react';
+import './i18n/types';
 import { ScrollArea } from '~/components/ui/scroll-area';
 import { Toaster } from '~/components/ui/sonner';
 import { SharedPopoverProvider } from '~/components/ui/shared-popover-context';
@@ -27,6 +31,15 @@ const log = getLogger('root');
 
 // ✅ All fonts and external styles live here
 export const links: Route.LinksFunction = () => [];
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  // Dynamic import keeps server-only code (`remix-i18next/server`, cookie
+  // wiring) out of the client bundle — matches the `~/lib/ssr.server`
+  // pattern used by other routes in this repo.
+  const { i18nServer } = await import('~/i18n/i18n.server');
+  const locale = await i18nServer.getLocale(request);
+  return { locale };
+}
 
 // ✅ Meta tags live here
 export const meta: Route.MetaFunction = () => [
@@ -80,8 +93,12 @@ export const queryClient = new QueryClient({
 });
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const data = useLoaderData<typeof loader>();
+  const locale = data?.locale ?? 'en';
+  useChangeLanguage(locale);
+
   return (
-    <html lang="en" className="dark" data-theme="dark">
+    <html lang={locale} className="dark" data-theme="dark">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />

@@ -46,7 +46,7 @@ export default defineConfig({
     ['html', { open: 'never' }],
     ['list'],
     ['./tests/playwright/reporters/health-probe-reporter.ts'],
-    ...(process.env.CI ? [['github' as const]] : []),
+    ...(process.env.CI ? [['github', {}] as ['github', Record<string, unknown>]] : []),
   ],
 
   use: {
@@ -63,6 +63,9 @@ export default defineConfig({
 
     // Default viewport
     viewport: { width: 1280, height: 720 },
+
+    // Pin locale to en-US for deterministic regression assertions (without it, Playwright inherits host OS locale)
+    locale: 'en-US',
 
     // Action timeout - 15s max for clicks/fills (faster failure than test timeout)
     actionTimeout: 15_000,

@@ -18,6 +18,19 @@ import type { OrganizationType } from '~/components/organization/schemas';
 import { useUserStore } from '~/store/userStore';
 
 /**
+ * Check if the current user is authenticated.
+ *
+ * Use this for gates that should be open to any signed-in account
+ * regardless of role — e.g. creating an organization. Centralises the
+ * "logged in" check so we have one place to evolve the definition
+ * (email-verified, MFA, etc.).
+ */
+export function useIsLoggedIn(): boolean {
+  const currentUser = useUserStore((state) => state.currentUser);
+  return !!currentUser?.pk;
+}
+
+/**
  * Check if the current user is a site-level admin.
  *
  * Django models two flags here:
@@ -315,6 +328,34 @@ export function useCanManageGames(
   organizations?: OrganizationType[] | OrganizationType | null
 ): boolean {
   return useIsLeagueStaff(league, organizations);
+}
+
+/**
+ * Check if the current user can create a tournament anywhere in the app.
+ *
+ * Used to gate the global Create Tournament entry point on
+ * ``/tournaments/`` where no specific league is in scope yet — the
+ * form's league picker and the backend's per-league check are the real
+ * authorisation. Mirrors the backend's ``has_league_admin_access``
+ * cascade: site admin OR admin of any organisation OR admin of any
+ * league.
+ */
+export function useCanCreateAnyTournament(): boolean {
+  const currentUser = useUserStore((state) => state.currentUser);
+
+  return useMemo(() => {
+    if (!currentUser?.pk) return false;
+    if (currentUser.is_staff || currentUser.is_superuser) return true;
+    if ((currentUser.admin_organization_ids?.length ?? 0) > 0) return true;
+    if ((currentUser.admin_league_ids?.length ?? 0) > 0) return true;
+    return false;
+  }, [
+    currentUser?.pk,
+    currentUser?.is_staff,
+    currentUser?.is_superuser,
+    currentUser?.admin_organization_ids,
+    currentUser?.admin_league_ids,
+  ]);
 }
 
 /**

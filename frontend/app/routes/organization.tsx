@@ -66,11 +66,15 @@ import { AddUserModal } from '~/components/user/AddUserModal';
 import { CSVImportModal } from '~/components/user/CSVImportModal';
 import type { UserType } from '~/components/user/types';
 import { useOrgUsers } from '~/hooks/useOrgUsers';
+import {
+  useIsOrganizationAdmin,
+  useIsOrganizationOwner,
+  useIsOrganizationStaff,
+} from '~/hooks/usePermissions';
 import { useOrgStore } from '~/store/orgStore';
 import { useUserCacheStore } from '~/store/userCacheStore';
 import { useUserStore } from '~/store/userStore';
 import { usePageNav } from '~/hooks/usePageNav';
-import { useIsOrganizationOwner } from '~/hooks/usePermissions';
 import { cn } from '~/lib/utils';
 import { toast } from 'sonner';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
@@ -250,23 +254,18 @@ export default function OrganizationDetailPage() {
     }
   }, [activeTab, pk, getOrgUsers]);
 
+  // Permission checks via the shared hooks (see ``hooks/usePermissions.ts``).
+  // They handle the site-admin bypass (is_staff || is_superuser), owner
+  // and admins/staff lookups, and short-circuit safely when ``organization``
+  // hasn't loaded yet. ``canEditEvents`` and ``canAddMembers`` were
+  // historically separate inline expressions but reduce to ``isOrgStaff``.
+  // ``isOwner`` (strictly the org owner, no site-admin bypass) gates the
+  // Danger Zone — see ``DeleteOrganizationDangerZone`` mount below.
   const isOwner = useIsOrganizationOwner(organization);
-
-  const isOrgAdmin =
-    currentUser?.is_superuser ||
-    organization?.owner?.pk === currentUser?.pk ||
-    organization?.admins?.some((a) => a.pk === currentUser?.pk);
-
-  const isOrgStaff =
-    isOrgAdmin ||
-    organization?.staff?.some((s) => s.pk === currentUser?.pk);
-
-  const canEditEvents = isOrgStaff || currentUser?.is_staff;
-
-  // Staff can add members but not edit org settings
-  const canAddMembers =
-    isOrgAdmin ||
-    organization?.staff?.some((s) => s.pk === currentUser?.pk);
+  const isOrgAdmin = useIsOrganizationAdmin(organization);
+  const isOrgStaff = useIsOrganizationStaff(organization);
+  const canEditEvents = isOrgStaff;
+  const canAddMembers = isOrgStaff;
 
   // AddUserModal callbacks
   const handleAddMember = useCallback(
@@ -445,7 +444,10 @@ export default function OrganizationDetailPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">Leagues</h2>
               {isOrgStaff && (
-                <PrimaryButton onClick={() => setCreateLeagueOpen(true)}>
+                <PrimaryButton
+                  onClick={() => setCreateLeagueOpen(true)}
+                  data-testid="create-league-button"
+                >
                   <Plus className="w-4 h-4 mr-2" />
                   Create League
                 </PrimaryButton>
@@ -472,7 +474,7 @@ export default function OrganizationDetailPage() {
           {/* Events Tab */}
           <TabsContent value="events">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Events</h2>
+              <h2 className="text-xl font-semibold" data-testid="org-events-heading">Events</h2>
               <div className="flex items-center gap-2">
                 {canEditEvents && (
                   <Tooltip>

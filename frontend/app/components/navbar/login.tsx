@@ -1,6 +1,7 @@
 import { useClickAway } from '@uidotdev/usehooks';
 import { LogOutIcon, UserPenIcon } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { DraftNotificationBadge } from '~/components/teamdraft/DraftNotificationBadge';
 import {
@@ -53,6 +54,7 @@ const getCachedUser = (): UserType | null => {
 };
 
 export const ProfileButton: React.FC = () => {
+  const { t } = useTranslation('navbar');
   const currentUser = useUserStore((state) => state.currentUser); // Zustand user state
   const navigate = useNavigate();
   const [showPopover, setShowPopover] = useState(false);
@@ -95,17 +97,17 @@ export const ProfileButton: React.FC = () => {
         <DropdownMenuContent>
           <DropdownMenuLabel>
             <Link to="/profile">
-              <Button>
+              <Button data-testid="navbarProfileButton">
                 <UserPenIcon />
-                Profile
+                {t('profile')}
               </Button>
             </Link>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem>
-            <DestructiveButton onClick={logoutClick}>
+            <DestructiveButton data-testid="navbarLogoutButton" onClick={logoutClick}>
               <LogOutIcon />
-              Logout
+              {t('logout')}
             </DestructiveButton>
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -125,13 +127,14 @@ export const buildDiscordLoginUrl = (returnTo?: string | null): string => {
 };
 
 export const LoginButton: React.FC = () => {
+  const { t } = useTranslation('navbar');
   const location = useLocation();
   const loginUrl = buildDiscordLoginUrl(`${location.pathname}${location.search}`);
   return (
     <PrimaryButton asChild data-testid="navbarLoginButton">
       <a href={loginUrl}>
         <DiscordIcon className="h-5 w-5" />
-        <span>Login with Discord</span>
+        <span>{t('login')}</span>
       </a>
     </PrimaryButton>
   );

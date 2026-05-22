@@ -17,6 +17,7 @@ import {
 import type { OrganizationType } from '~/components/organization/schemas';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
+import { useIsLoggedIn } from '~/hooks/usePermissions';
 import { useUserStore } from '~/store/userStore';
 
 /** Skeleton loader for organization cards */
@@ -79,8 +80,8 @@ const getCachedOrganizations = (): OrganizationType[] => {
 
 export default function OrganizationsPage() {
   const { organizations: storeOrganizations, isLoading } = useOrganizations();
-  const currentUser = useUserStore((state) => state.currentUser);
   const hasHydrated = useUserStore((state) => state.hasHydrated);
+  const isLoggedIn = useIsLoggedIn();
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   // Read cached organizations after mount to avoid hydration mismatch
@@ -126,8 +127,12 @@ export default function OrganizationsPage() {
             <Building2 className="h-7 w-7 sm:h-8 sm:w-8 text-primary shrink-0" />
             <h1 className="text-xl! sm:text-2xl! font-bold truncate">Organizations</h1>
           </div>
-          {currentUser?.is_superuser && (
-            <PrimaryButton onClick={() => setCreateModalOpen(true)} className="w-full sm:w-auto">
+          {isLoggedIn && (
+            <PrimaryButton
+              onClick={() => setCreateModalOpen(true)}
+              className="w-full sm:w-auto"
+              data-testid="create-organization-button"
+            >
               <Plus className="w-4 h-4 mr-2" />
               Create Organization
             </PrimaryButton>

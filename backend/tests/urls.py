@@ -13,10 +13,17 @@ from .test_auth import (
     login_admin,
     login_as_discord_id,
     login_as_user,
+    login_auth_matrix_league_admin,
+    login_auth_matrix_league_staff,
+    login_auth_matrix_org_admin,
+    login_auth_matrix_org_member,
+    login_auth_matrix_org_owner,
+    login_auth_matrix_org_staff,
     login_event_league_staff,
     login_league_admin,
     login_league_staff,
     login_org_admin,
+    login_org_member,
     login_org_staff,
     login_staff,
     login_user,
@@ -42,6 +49,7 @@ from .test_herodraft import (
     force_herodraft_timeout,
     get_herodraft_by_key,
     reset_herodraft,
+    warp_herodraft_round,
 )
 from .test_steam import create_test_match
 
@@ -79,6 +87,12 @@ urlpatterns = [
         login_org_staff,
         name="login-org-staff",
     ),
+    # Org Member (in org.users, no admin/staff role)
+    path(
+        "login-org-member/",
+        login_org_member,
+        name="login-org-member",
+    ),
     # League Admin
     path(
         "login-league-admin/",
@@ -96,6 +110,38 @@ urlpatterns = [
         "login-event-league-staff/",
         login_event_league_staff,
         name="login-event-league-staff",
+    ),
+    # Auth-matrix role logins — isolated org/league for the role-context
+    # matrix in frontend/tests/playwright/e2e/17-auth/.
+    path(
+        "login-auth-matrix-org-owner/",
+        login_auth_matrix_org_owner,
+        name="login-auth-matrix-org-owner",
+    ),
+    path(
+        "login-auth-matrix-org-admin/",
+        login_auth_matrix_org_admin,
+        name="login-auth-matrix-org-admin",
+    ),
+    path(
+        "login-auth-matrix-org-staff/",
+        login_auth_matrix_org_staff,
+        name="login-auth-matrix-org-staff",
+    ),
+    path(
+        "login-auth-matrix-org-member/",
+        login_auth_matrix_org_member,
+        name="login-auth-matrix-org-member",
+    ),
+    path(
+        "login-auth-matrix-league-admin/",
+        login_auth_matrix_league_admin,
+        name="login-auth-matrix-league-admin",
+    ),
+    path(
+        "login-auth-matrix-league-staff/",
+        login_auth_matrix_league_staff,
+        name="login-auth-matrix-league-staff",
     ),
     path(
         "login-as/",
@@ -156,6 +202,11 @@ urlpatterns = [
         "herodraft/<int:draft_pk>/reset/",
         reset_herodraft,
         name="test-herodraft-reset",
+    ),
+    path(
+        "herodraft/<int:draft_pk>/warp/",
+        warp_herodraft_round,
+        name="test-herodraft-warp",
     ),
     path(
         "herodraft-by-key/<str:key>/",

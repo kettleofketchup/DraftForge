@@ -1,10 +1,12 @@
 """Functions for Captain's Mode hero draft."""
 
-import logging
 import random
 
 from django.db import transaction
 from django.utils import timezone
+from opentelemetry import trace
+
+from telemetry.logging import get_logger
 
 from app.models import (
     DraftTeam,
@@ -14,7 +16,8 @@ from app.models import (
     HeroDraftState,
 )
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
+tracer = trace.get_tracer(__name__)
 
 
 # Updated Captain's Mode sequence (2024 patch)
@@ -164,13 +167,96 @@ def submit_choice(draft: HeroDraft, team: DraftTeam, choice_type: str, value: st
             first_round.save()
 
 
-def submit_pick(draft: HeroDraft, team: DraftTeam, hero_id: int) -> HeroDraftRound:
+CLIENT_PICK_TIME_MAX_AGE_S = 2.0
+
+
+def _evaluate_client_pick_time(server_now, client_picked_at, draft_id):
+    """Decide whether to trust the client's pick time + log any weirdness.
+
+    Returns (effective_time, source, age_ms) where:
+        effective_time: datetime to compute elapsed from
+        source: "client" if we trusted it, "server_now" otherwise
+        age_ms: client→server delta in ms (or None when no client_picked_at)
+    """
+    if not client_picked_at:
+        return server_now, "server_now", None
+
+    # Subtracting a naive datetime from a tz-aware one raises TypeError.
+    # The view layer also filters these out; this is a defense-in-depth
+    # guard for tests or future direct callers.
+    if client_picked_at.tzinfo is None:
+        log.warning(
+            "pick_time_naive_datetime",
+            system="herodraft",
+            subsystem="timing",
+            draft_id=draft_id,
+        )
+        return server_now, "server_now", None
+
+    age_s = (server_now - client_picked_at).total_seconds()
+    age_ms = int(age_s * 1000)
+
+    if age_s < 0:
+        # Client clock is in the future relative to server. Most often
+        # clock skew (laptop with bad NTP), occasionally a hostile client
+        # trying to win back time. Falls through to server time.
+        log.warning(
+            "pick_time_in_future",
+            system="herodraft",
+            subsystem="timing",
+            draft_id=draft_id,
+            future_by_ms=-age_ms,
+        )
+        return server_now, "server_now", age_ms
+
+    if age_s > CLIENT_PICK_TIME_MAX_AGE_S:
+        # Pick payload arrived more than the sanity window after the
+        # client sent it. Network was slow or the client buffered the
+        # request. We discard the client timestamp to prevent abuse;
+        # this means the captain eats the network latency on this pick.
+        log.warning(
+            "pick_time_too_old",
+            system="herodraft",
+            subsystem="timing",
+            draft_id=draft_id,
+            age_ms=age_ms,
+            max_age_ms=int(CLIENT_PICK_TIME_MAX_AGE_S * 1000),
+        )
+        return server_now, "server_now", age_ms
+
+    return client_picked_at, "client", age_ms
+
+
+def submit_pick(
+    draft: HeroDraft,
+    team: DraftTeam,
+    hero_id: int,
+    client_picked_at=None,
+) -> HeroDraftRound:
     """
     Submit a hero pick or ban for the current round.
 
+    Args:
+        client_picked_at: Optional datetime from the client (browser
+            `Date.now()` at confirm, in SERVER-clock reference via the
+            offset learned from tick.server_time). Trusted when within
+            2s of server now; otherwise we fall back to server-receive
+            time and log a `pick_time_*` warning.
+
     Returns the completed round.
     """
-    with transaction.atomic():
+    span = tracer.start_as_current_span(
+        "herodraft.submit_pick",
+        attributes={
+            "ws.draft_id": draft.id,
+            "draft.team_id": team.id,
+            "draft.hero_id": hero_id,
+            "draft.client_picked_at": (
+                client_picked_at.isoformat() if client_picked_at else "none"
+            ),
+        },
+    )
+    with span as active_span, transaction.atomic():
         draft = HeroDraft.objects.select_for_update().get(id=draft.id)
         team = DraftTeam.objects.select_for_update().get(id=team.id)
         current_round = draft.rounds.select_for_update().filter(state="active").first()
@@ -188,14 +274,95 @@ def submit_pick(draft: HeroDraft, team: DraftTeam, hero_id: int) -> HeroDraftRou
         if hero_id in used_heroes:
             raise ValueError("Hero already picked or banned")
 
-        # Calculate time spent and update reserve time
+        # Determine effective pick time + emit telemetry for any anomaly
         now = timezone.now()
-        elapsed_ms = int((now - current_round.started_at).total_seconds() * 1000)
-        grace_used = min(elapsed_ms, current_round.grace_time_ms)
-        reserve_used = max(0, elapsed_ms - current_round.grace_time_ms)
+        effective_pick_time, pick_time_source, pick_time_age_ms = (
+            _evaluate_client_pick_time(now, client_picked_at, draft.id)
+        )
 
-        team.reserve_time_remaining = max(0, team.reserve_time_remaining - reserve_used)
+        elapsed_ms = int(
+            (effective_pick_time - current_round.started_at).total_seconds() * 1000
+        )
+
+        if elapsed_ms < 0:
+            # `started_at` is in the future relative to our pick time.
+            # Possible causes: server clock jump backwards, manual DB
+            # tampering, or a race where the pick lands before the round
+            # was marked active. Clamp to 0 to keep the math sane.
+            log.error(
+                "pick_elapsed_negative",
+                system="herodraft",
+                subsystem="timing",
+                draft_id=draft.id,
+                round_started_at=current_round.started_at.isoformat(),
+                pick_time=effective_pick_time.isoformat(),
+                elapsed_ms=elapsed_ms,
+            )
+            elapsed_ms = 0
+
+        grace_used = min(elapsed_ms, current_round.grace_time_ms)
+        # Floor reserve consumption to whole seconds so sub-second
+        # over-grace (typically network jitter) doesn't nibble reserve.
+        over_grace_ms = max(0, elapsed_ms - current_round.grace_time_ms)
+        reserve_used = (over_grace_ms // 1000) * 1000
+
+        reserve_before = team.reserve_time_remaining
+
+        if reserve_used > reserve_before:
+            # Captain ran out of reserve mid-round; auto-pick should
+            # have fired but didn't. Almost always means the tick
+            # broadcaster wasn't running for this draft (no captains
+            # connected, lock contention, crashed loop).
+            log.warning(
+                "pick_reserve_exhausted",
+                system="herodraft",
+                subsystem="timing",
+                draft_id=draft.id,
+                team_id=team.id,
+                reserve_used_ms=reserve_used,
+                reserve_before_ms=reserve_before,
+                elapsed_ms=elapsed_ms,
+            )
+
+        team.reserve_time_remaining = max(0, reserve_before - reserve_used)
         team.save()
+
+        # Annotate the span so Tempo shows all the key values at a glance
+        active_span.set_attribute("draft.round_number", current_round.round_number)
+        active_span.set_attribute("draft.action_type", current_round.action_type)
+        active_span.set_attribute("draft.elapsed_ms", elapsed_ms)
+        active_span.set_attribute("draft.grace_used_ms", grace_used)
+        active_span.set_attribute("draft.reserve_used_ms", reserve_used)
+        active_span.set_attribute("draft.reserve_before_ms", reserve_before)
+        active_span.set_attribute("draft.reserve_after_ms", team.reserve_time_remaining)
+        active_span.set_attribute("draft.pick_time_source", pick_time_source)
+        if pick_time_age_ms is not None:
+            active_span.set_attribute("draft.pick_time_age_ms", pick_time_age_ms)
+
+        # Central diagnostic log — every pick emits one of these with
+        # the full timing context. Query by event=pick_submitted in
+        # Loki to walk the entire draft's pick history with one filter.
+        log.info(
+            "pick_submitted",
+            system="herodraft",
+            subsystem="pick",
+            draft_id=draft.id,
+            round_number=current_round.round_number,
+            action_type=current_round.action_type,
+            team_id=team.id,
+            hero_id=hero_id,
+            round_started_at=current_round.started_at.isoformat(),
+            server_now=now.isoformat(),
+            effective_pick_time=effective_pick_time.isoformat(),
+            elapsed_ms=elapsed_ms,
+            grace_time_ms=current_round.grace_time_ms,
+            grace_used_ms=grace_used,
+            reserve_used_ms=reserve_used,
+            reserve_before_ms=reserve_before,
+            reserve_after_ms=team.reserve_time_remaining,
+            pick_time_source=pick_time_source,
+            pick_time_age_ms=pick_time_age_ms,
+        )
 
         # Complete the round
         current_round.hero_id = hero_id
@@ -213,6 +380,13 @@ def submit_pick(draft: HeroDraft, team: DraftTeam, hero_id: int) -> HeroDraftRou
                 "action_type": current_round.action_type,
                 "time_elapsed_ms": elapsed_ms,
                 "reserve_used_ms": reserve_used,
+                # Per-pick timing provenance — supports replay/debug of
+                # any specific pick. `pick_time_source` is "client" when
+                # we trusted client_picked_at, "server_now" otherwise.
+                # `pick_time_age_ms` is the client→server delta (or null
+                # when no client timestamp was supplied).
+                "pick_time_source": pick_time_source,
+                "pick_time_age_ms": pick_time_age_ms,
             },
         )
 
@@ -232,6 +406,17 @@ def submit_pick(draft: HeroDraft, team: DraftTeam, hero_id: int) -> HeroDraftRou
                     "action_type": next_round.action_type,
                 },
             )
+            log.info(
+                "round_started",
+                system="herodraft",
+                subsystem="round",
+                draft_id=draft.id,
+                round_number=next_round.round_number,
+                action_type=next_round.action_type,
+                team_id=next_round.draft_team_id,
+                started_at=next_round.started_at.isoformat(),
+            )
+            active_span.set_attribute("draft.next_round_number", next_round.round_number)
         else:
             draft.state = HeroDraftState.COMPLETED
             draft.save()
@@ -239,6 +424,14 @@ def submit_pick(draft: HeroDraft, team: DraftTeam, hero_id: int) -> HeroDraftRou
             HeroDraftEvent.objects.create(
                 draft=draft, event_type="draft_completed", metadata={}
             )
+            log.info(
+                "draft_completed",
+                system="herodraft",
+                subsystem="state",
+                draft_id=draft.id,
+                total_rounds=draft.rounds.count(),
+            )
+            active_span.set_attribute("draft.completed", True)
 
         return current_round
 

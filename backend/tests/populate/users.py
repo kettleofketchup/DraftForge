@@ -93,11 +93,18 @@ def populate_test_auth_users(force=False):
     from app.models import League, Organization
     from tests.data.users import (
         ADMIN_USER,
+        AUTH_MATRIX_LEAGUE_ADMIN_USER,
+        AUTH_MATRIX_LEAGUE_STAFF_USER,
+        AUTH_MATRIX_ORG_ADMIN_USER,
+        AUTH_MATRIX_ORG_MEMBER_USER,
+        AUTH_MATRIX_ORG_OWNER_USER,
+        AUTH_MATRIX_ORG_STAFF_USER,
         CLAIMABLE_USER,
         EVENT_LEAGUE_STAFF_USER,
         LEAGUE_ADMIN_USER,
         LEAGUE_STAFF_USER,
         ORG_ADMIN_USER,
+        ORG_MEMBER_USER,
         ORG_STAFF_USER,
         REGULAR_USER,
         STAFF_USER,
@@ -184,6 +191,7 @@ def populate_test_auth_users(force=False):
     # Create org role users
     org_admin = create_user_with_pk(ORG_ADMIN_USER)
     org_staff = create_user_with_pk(ORG_STAFF_USER)
+    org_member = create_user_with_pk(ORG_MEMBER_USER)
 
     # Create league role users
     league_admin = create_user_with_pk(LEAGUE_ADMIN_USER)
@@ -200,6 +208,13 @@ def populate_test_auth_users(force=False):
         if org_staff not in org.staff.all():
             org.staff.add(org_staff)
             print(f"  Added {org_staff.username} as staff of {org.name}")
+        # Plain member: has an OrgUser row but NOT in admins/staff. The
+        # permission matrix needs this to distinguish "member, no role"
+        # from "unaffiliated user".
+        from tests.populate.utils import ensure_org_user
+
+        ensure_org_user(org_member, org)
+        print(f"  Ensured {org_member.username} OrgUser of {org.name}")
 
     # League roles
     league = League.objects.filter(pk=LEAGUE_ADMIN_USER.league_id or 1).first()
@@ -217,5 +232,17 @@ def populate_test_auth_users(force=False):
         if event_league_staff not in events_league.staff.all():
             events_league.staff.add(event_league_staff)
             print(f"  Added {event_league_staff.username} as staff of {events_league.name}")
+
+    # Auth matrix users — create the CustomUser rows here (so social auth
+    # is wired alongside everyone else) but defer the org/league role
+    # assignments to populate_auth_matrix_data. That step runs after
+    # every other isolated-org populate so the AUTH_MATRIX_ORG pk lands
+    # on 8 (matching tests/data/organizations.py).
+    create_user_with_pk(AUTH_MATRIX_ORG_OWNER_USER)
+    create_user_with_pk(AUTH_MATRIX_ORG_ADMIN_USER)
+    create_user_with_pk(AUTH_MATRIX_ORG_STAFF_USER)
+    create_user_with_pk(AUTH_MATRIX_ORG_MEMBER_USER)
+    create_user_with_pk(AUTH_MATRIX_LEAGUE_ADMIN_USER)
+    create_user_with_pk(AUTH_MATRIX_LEAGUE_STAFF_USER)
 
     print(f"Test auth users created/updated successfully!")

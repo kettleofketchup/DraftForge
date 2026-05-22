@@ -64,7 +64,10 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
   const [isSubmitting, setIsSubmitting] = useState(false);
   const mutation = useUpdateEventRepeaterMutation(repeater?.id ?? 0);
 
-  const form = useForm<EditRepeaterInput>({
+  // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
+  // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
+  // See https://github.com/react-hook-form/resolvers/issues/792.
+  const form = useForm<z.input<typeof editRepeaterSchema>, unknown, EditRepeaterInput>({
     resolver: zodResolver(editRepeaterSchema),
     defaultValues: {
       name: '',
@@ -135,6 +138,10 @@ export function EditRepeaterModal({ repeater, open, onOpenChange }: EditRepeater
         allow_active_mmr: repeater.allow_active_mmr ?? true,
         allow_previous_rank: repeater.allow_previous_rank ?? true,
         allow_battlecup_rating: repeater.allow_battlecup_rating ?? true,
+        // Approval rule flags — see CreateEventModal for the regression note.
+        require_steam_id: repeater.require_steam_id ?? false,
+        require_mmr_verified: repeater.require_mmr_verified ?? false,
+        require_profile_complete: repeater.require_profile_complete ?? false,
       });
     }
   }, [repeater, open]);

@@ -270,17 +270,29 @@ class HeroDraftConsumer(BaseDraftConsumer):
     # --- Receive ---
 
     async def receive(self, text_data):
-        """Handle incoming WebSocket messages from clients."""
+        """Handle incoming WebSocket messages from clients.
+
+        Wrapped in a `ws.message` span via `traced_message` so each
+        incoming WS message appears as its own trace in Tempo with
+        `ws.message_type` set. Handler spans (e.g. `ws.heartbeat`)
+        become children of this span — Tempo shows the full waterfall
+        of "message dispatch overhead → handler work" without needing
+        to instrument every handler separately.
+        """
         if not self._is_captain:
             return  # Only process messages from captains
 
         try:
             data = json.loads(text_data)
-            msg_type = data.get("type")
+            msg_type = data.get("type", "unknown")
 
-            if msg_type == "heartbeat":
-                await self.handle_heartbeat()
+            async with self.traced_message(msg_type):
+                if msg_type == "heartbeat":
+                    await self.handle_heartbeat()
         except json.JSONDecodeError:
+            # Span deliberately NOT opened — there's no message type to
+            # tag the span with, and a `ws.message[type=unknown]` span on
+            # every byte of garbage would just pollute Tempo. Log only.
             log.warning(
                 "ws_malformed_message",
                 system="herodraft",
@@ -504,19 +516,30 @@ class HeroDraftConsumer(BaseDraftConsumer):
         await self.send(text_data=json.dumps(message))
 
     async def herodraft_tick(self, event):
-        """Handle tick updates during active drafting."""
+        """Forward tick anchors from the channel layer to this WS client.
+
+        Anchor fields (server_time + round_started_at + round_grace_time_ms
+        + raw team reserves + resuming_until) drive the client-side rAF
+        countdown. See `backend/app/tasks/herodraft_tick.py::broadcast_tick`
+        for the producer side.
+        """
         await self.send(
             text_data=json.dumps(
                 {
                     "type": "herodraft_tick",
+                    "draft_state": event.get("draft_state"),
+                    "server_time": event.get("server_time"),
+                    # DRAFTING anchors
                     "current_round": event.get("current_round"),
                     "active_team_id": event.get("active_team_id"),
-                    "grace_time_remaining_ms": event.get("grace_time_remaining_ms"),
+                    "round_started_at": event.get("round_started_at"),
+                    "round_grace_time_ms": event.get("round_grace_time_ms"),
                     "team_a_id": event.get("team_a_id"),
                     "team_a_reserve_ms": event.get("team_a_reserve_ms"),
                     "team_b_id": event.get("team_b_id"),
                     "team_b_reserve_ms": event.get("team_b_reserve_ms"),
-                    "draft_state": event.get("draft_state"),
+                    # RESUMING anchor
+                    "resuming_until": event.get("resuming_until"),
                 }
             )
         )

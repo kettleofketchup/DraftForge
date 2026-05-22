@@ -280,6 +280,14 @@ export const discordConfigSchema = z.object({
   allow_active_mmr: z.boolean(),
   allow_previous_rank: z.boolean(),
   allow_battlecup_rating: z.boolean(),
+  // Generic approval requirements rendered by ApprovalConfigSection. These
+  // were referenced by name in the UI but missing from the input schema, so
+  // checkbox state was silently dropped from create/edit submissions. The
+  // backend already accepts these fields (see eventsAPI.ts EventType:168-170
+  // and the `evaluateSignupGap` consumers).
+  require_steam_id: z.boolean(),
+  require_mmr_verified: z.boolean(),
+  require_profile_complete: z.boolean(),
 });
 
 export const DISCORD_CONFIG_DEFAULTS = {
@@ -308,6 +316,11 @@ export const DISCORD_CONFIG_DEFAULTS = {
   allow_active_mmr: true,
   allow_previous_rank: true,
   allow_battlecup_rating: true,
+  // See discordConfigSchema for why these moved into the canonical config —
+  // the UI used them before they were schema-tracked.
+  require_steam_id: false,
+  require_mmr_verified: false,
+  require_profile_complete: false,
 } as const;
 
 export const createEventInputSchema = z.object({

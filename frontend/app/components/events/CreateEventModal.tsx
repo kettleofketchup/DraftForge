@@ -28,6 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { ApprovalConfigSection } from './ApprovalConfigSection';
 import { DiscordConfigSection, DiscordIcon } from './DiscordConfigSection';
 import { LobbyConfigSection } from './LobbyConfigSection';
+import { z } from 'zod';
 import { createEventInputSchema, GameMode, Frequency, FREQUENCY_LABELS, DAY_LABELS, DISCORD_CONFIG_DEFAULTS, COMMON_TIMEZONES, localToUTC, type CreateEventInput } from './schemas';
 import { GAME_TYPE } from '~/components/game/constants';
 import { LeagueCombobox } from '~/components/league/LeagueCombobox';
@@ -59,7 +60,14 @@ export function CreateEventModal({
   // hardcoded useForm values and we show the form anyway after isLoading clears.
   const formReady = !orgDefaultsLoading && (orgDefaults == null || defaultsApplied);
 
-  const form = useForm<CreateEventInput>({
+  // RHF 7.55+ split the form's internal field-values type from the
+  // transformed-on-submit type. @hookform/resolvers v5 + zod 4 always returns
+  // Resolver<z.input<T>, _, z.output<T>>, so we need both generics aligned:
+  // TFieldValues = z.input<S> (matches resolver's first arg)
+  // TTransformedValues = z.output<S> (what onSubmit receives after parse)
+  // For schemas without transforms these are structurally identical but
+  // TypeScript still treats them as distinct due to zod 4 type branding.
+  const form = useForm<z.input<typeof createEventInputSchema>, unknown, CreateEventInput>({
     resolver: zodResolver(createEventInputSchema),
     defaultValues: {
       name: '',
@@ -132,6 +140,13 @@ export function CreateEventModal({
         allow_active_mmr: orgDefaults.allow_active_mmr ?? true,
         allow_previous_rank: orgDefaults.allow_previous_rank ?? true,
         allow_battlecup_rating: orgDefaults.allow_battlecup_rating ?? true,
+        // Approval rule flags added to discordConfigSchema in 46de0503. Without
+        // these in the reset payload, form state would be `undefined` after
+        // orgDefaults loads and zod's z.boolean() would silently fail validation
+        // on submit — the modal would stay open with no visible error.
+        require_steam_id: orgDefaults.require_steam_id ?? false,
+        require_mmr_verified: orgDefaults.require_mmr_verified ?? false,
+        require_profile_complete: orgDefaults.require_profile_complete ?? false,
         is_recurring: false,
         frequency: Frequency.WEEKLY,
         generate_days_ahead: 7,

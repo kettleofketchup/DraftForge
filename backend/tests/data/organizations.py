@@ -73,6 +73,18 @@ EVENTS_ORG: TestOrganization = TestOrganization(
     discord_server_id="1467168401805017142",
 )
 
+# Auth-matrix E2E tests — isolated org used by the role-context matrix
+# in frontend/tests/playwright/e2e/17-auth/. Keeping it separate from
+# DTX means other suites can mutate DTX admins/staff without flapping
+# the auth matrix.
+AUTH_MATRIX_ORG: TestOrganization = TestOrganization(
+    pk=8,
+    name="Auth Matrix Test Org",
+    description="Isolated organization for auth-permission matrix E2E tests.",
+    rules_template="Auth matrix test rules.",
+    timezone="America/New_York",
+)
+
 # =============================================================================
 # Constants for easy access
 # =============================================================================
@@ -84,6 +96,7 @@ DEMO_CSV_ORG_NAME = DEMO_CSV_ORG.name
 USER_EDIT_ORG_NAME = USER_EDIT_ORG.name
 SHUFFLE_TIE_ORG_NAME = SHUFFLE_TIE_ORG.name
 EVENTS_ORG_NAME = EVENTS_ORG.name
+AUTH_MATRIX_ORG_NAME = AUTH_MATRIX_ORG.name
 
 # =============================================================================
 # All Organizations (for iteration)
@@ -97,4 +110,5 @@ ALL_ORGANIZATIONS: list[TestOrganization] = [
     USER_EDIT_ORG,
     SHUFFLE_TIE_ORG,
     EVENTS_ORG,
+    AUTH_MATRIX_ORG,
 ]

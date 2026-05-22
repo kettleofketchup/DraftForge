@@ -1,4 +1,4 @@
-import type { Control, UseFormWatch } from 'react-hook-form';
+import type { Control, FieldValues, UseFormWatch } from 'react-hook-form';
 import {
   FormControl,
   FormField,
@@ -17,11 +17,21 @@ import {
 import { GameMode } from './schemas';
 import { GAME_TYPE } from '~/components/game/constants';
 
-interface LobbyConfigSectionProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  control: Control<any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  watch: UseFormWatch<any>;
+/** Field set this section renders. Not extracted as a zod sub-schema (yet) —
+ *  these keys are inline on createEventInputSchema, editEventSchema,
+ *  editRepeaterSchema. The constraint catches field-name typos in this file
+ *  without forcing a schema refactor across all four parent forms. */
+interface LobbyFields {
+  game_type: number;
+  game_mode: string;
+  lobby_steam_league_id: number | null;
+  captains_draft_time: number;
+  custom_game_name: string;
+}
+
+interface LobbyConfigSectionProps<T extends FieldValues & LobbyFields> {
+  control: Control<T>;
+  watch: UseFormWatch<T>;
 }
 
 const GAME_MODE_LABELS: Record<string, string> = {
@@ -33,7 +43,15 @@ const GAME_MODE_LABELS: Record<string, string> = {
 
 const DOTA_ONLY_MODES: Set<string> = new Set([GameMode.CAPTAINS_MODE, GameMode.TURBO]);
 
-export function LobbyConfigSection({ control, watch }: LobbyConfigSectionProps) {
+export function LobbyConfigSection<T extends FieldValues & LobbyFields>({
+  control: parentControl,
+  watch: parentWatch,
+}: LobbyConfigSectionProps<T>) {
+  // Narrow once: T extends LobbyFields, so all this section's field references
+  // are sound. Catches typo'd `name=`s in the JSX below.
+  const control = parentControl as unknown as Control<LobbyFields>;
+  const watch = parentWatch as unknown as UseFormWatch<LobbyFields>;
+
   const gameType = watch('game_type');
   const gameMode = watch('game_mode');
   const isDota = gameType === GAME_TYPE.DOTA2;

@@ -32,6 +32,10 @@ interface HeroDraftState {
   // Domain state
   draft: HeroDraft | null;
   tick: HeroDraftTick | null;
+  // Computed from `tick.server_time - Date.now()` at receive — lets
+  // outbound calls (e.g. submitPick) send timestamps in server-clock
+  // reference. Defaults to 0 until the first tick arrives.
+  serverClockOffsetMs: number;
   selectedHeroId: number | null;
   searchQuery: string;
   lastEvent: HeroDraftEvent | null;
@@ -41,6 +45,11 @@ interface HeroDraftState {
   _unsubscribe: Unsubscribe | null;
   _currentDraftId: number | null;
   _heartbeatInterval: ReturnType<typeof setInterval> | null;
+  // Receive-side tick gap detection. Server logs `tick_loop_stalled`
+  // when the broadcaster itself stalls; this catches the COMPLEMENTARY
+  // case where the broadcast happened but didn't reach this client
+  // (WS hiccup, browser tab throttled, channel-layer queue saturated).
+  _lastTickReceivedAtMs: number | null;
 
   // Actions
   connect: (draftId: number) => void;
@@ -66,6 +75,7 @@ const initialState = {
   wasKicked: false,
   draft: null,
   tick: null,
+  serverClockOffsetMs: 0,
   selectedHeroId: null,
   searchQuery: '',
   lastEvent: null,
@@ -73,6 +83,7 @@ const initialState = {
   _unsubscribe: null,
   _currentDraftId: null,
   _heartbeatInterval: null,
+  _lastTickReceivedAtMs: null,
 };
 
 export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
@@ -164,11 +175,54 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             set({ draft: message.draft_state });
           }
 
-          // Clear selected hero when a pick/ban is made (including random picks due to timeout)
-          // This fixes the bug where the selection overlay persists after a random pick
+          // On hero_selected, patch the tick with the NEW round's anchors
+          // immediately. The next 1Hz server tick would otherwise arrive up
+          // to a second later, so without this patch the grace timer keeps
+          // running against the previous round's `round_started_at` until
+          // the new tick lands — the user sees the timer linger on the
+          // previous team.
           if (message.event_type === 'hero_selected') {
-            debugLog('Clearing selectedHeroId after hero_selected event');
-            set({ selectedHeroId: null });
+            const prevTick = get().tick;
+            const newDraft = message.draft_state;
+            const newRoundIdx = newDraft?.current_round ?? null;
+            const newRound =
+              newRoundIdx !== null && newDraft?.rounds
+                ? newDraft.rounds[newRoundIdx] ?? null
+                : null;
+
+            if (prevTick && newRound && newDraft) {
+              // Match teams by ID order (matches server-side tick ordering).
+              const teamsById = [...newDraft.draft_teams].sort(
+                (a, b) => a.id - b.id,
+              );
+              const teamA = teamsById[0] ?? null;
+              const teamB = teamsById[1] ?? null;
+              set({
+                selectedHeroId: null,
+                tick: {
+                  ...prevTick,
+                  current_round: newRoundIdx,
+                  active_team_id: newRound.draft_team,
+                  round_started_at: newRound.started_at,
+                  round_grace_time_ms: newRound.grace_time_ms,
+                  team_a_id: teamA?.id ?? prevTick.team_a_id,
+                  team_a_reserve_ms:
+                    teamA?.reserve_time_remaining ?? prevTick.team_a_reserve_ms,
+                  team_b_id: teamB?.id ?? prevTick.team_b_id,
+                  team_b_reserve_ms:
+                    teamB?.reserve_time_remaining ?? prevTick.team_b_reserve_ms,
+                },
+              });
+            } else {
+              // No new round (draft complete) — clear active team so the
+              // previous picker's reserve stops burning.
+              set({
+                selectedHeroId: null,
+                tick: prevTick
+                  ? { ...prevTick, active_team_id: null }
+                  : prevTick,
+              });
+            }
           }
 
           set({ lastEvent: message as HeroDraftEvent });
@@ -179,22 +233,54 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
             draft_state: message.draft_state,
             current_round: message.current_round,
             active_team_id: message.active_team_id,
-            grace_time_remaining_ms: message.grace_time_remaining_ms,
-            countdown_remaining_ms: message.countdown_remaining_ms,
+            server_time: message.server_time,
+            round_started_at: message.round_started_at,
           });
 
+          // Re-anchor clock offset on every tick. Includes one-way
+          // network latency in the offset, which means submitPick's
+          // outbound timestamp will be ~RTT/2 in the past relative to
+          // server-receive — that's the desired behaviour (the server's
+          // 2s sanity window absorbs it cleanly).
+          const tickReceivedAtMs = Date.now();
+          const serverTimeMs = new Date(message.server_time).getTime();
+          const serverClockOffsetMs = Number.isFinite(serverTimeMs)
+            ? serverTimeMs - tickReceivedAtMs
+            : 0;
+
+          // Gap detection — expected cadence is 1Hz. If we go >2s without
+          // a tick, log it. This catches client-side delivery problems
+          // the server can't see (WS hiccup, throttled tab, queue
+          // saturation) and complements server's `tick_loop_stalled`.
+          const lastTickAt = get()._lastTickReceivedAtMs;
+          if (lastTickAt !== null) {
+            const gapMs = tickReceivedAtMs - lastTickAt;
+            if (gapMs > 2000) {
+              log.warn('client_tick_gap', {
+                draft_id: get()._currentDraftId,
+                expected_gap_ms: 1000,
+                actual_gap_ms: gapMs,
+                stall_ms: gapMs - 1000,
+              });
+            }
+          }
+
           set({
+            _lastTickReceivedAtMs: tickReceivedAtMs,
+            serverClockOffsetMs,
             tick: {
               type: 'herodraft_tick',
               draft_state: message.draft_state,
+              server_time: message.server_time,
               current_round: message.current_round,
               active_team_id: message.active_team_id,
-              grace_time_remaining_ms: message.grace_time_remaining_ms,
+              round_started_at: message.round_started_at,
+              round_grace_time_ms: message.round_grace_time_ms,
               team_a_id: message.team_a_id,
               team_a_reserve_ms: message.team_a_reserve_ms,
               team_b_id: message.team_b_id,
               team_b_reserve_ms: message.team_b_reserve_ms,
-              countdown_remaining_ms: message.countdown_remaining_ms,
+              resuming_until: message.resuming_until,
             },
           });
           break;
@@ -210,13 +296,15 @@ export const useHeroDraftStore = create<HeroDraftState>((set, get) => ({
           if (kickedConnId) {
             manager.disconnect(kickedConnId, 'Kicked by server');
           }
-          // Clear connection state but preserve wasKicked flag
+          // Clear connection state but preserve wasKicked flag.
+          // `isConnected` is a derived selector (line 353), not state — the
+          // canonical disconnected signal is `status: 'disconnected'`.
           set({
             _connectionId: null,
             _unsubscribe: null,
             wasKicked: true,
             error: 'Connection replaced by new tab',
-            isConnected: false,
+            status: 'disconnected',
           });
           break;
         }
@@ -396,3 +484,16 @@ export const heroDraftSelectors = {
     return s.draft.rounds[s.draft.current_round]?.action_type ?? null;
   },
 };
+
+/**
+ * Returns the current server time as an ISO string, derived from the
+ * latest tick's server_time plus elapsed local time. Use this instead of
+ * `new Date().toISOString()` for any timestamp the server will compare
+ * against its own clock (e.g. `client_picked_at` on pick submission).
+ * Falls back to local clock when no tick has arrived yet — the server's
+ * 2s sanity window then degrades cleanly to receive-time.
+ */
+export function getServerNowISO(): string {
+  const { serverClockOffsetMs } = useHeroDraftStore.getState();
+  return new Date(Date.now() + serverClockOffsetMs).toISOString();
+}

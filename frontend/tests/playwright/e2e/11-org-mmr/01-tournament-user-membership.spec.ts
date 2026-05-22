@@ -107,12 +107,15 @@ test.describe('Organization-Scoped MMR - Tournament User Membership', () => {
     expect(tournament!.league).not.toBeNull();
 
     const league = tournament!.league!;
-    const org = league.organization;
-    expect(org).not.toBeNull();
+    expect(league.organization).not.toBeNull();
+    const org = league.organization!;
 
     // Find a user not in this tournament
     // users is now an array of PKs (not full objects)
-    const tournamentUserPks = tournament!.users as number[];
+    const tournamentUsersRaw = tournament!.users as unknown as Array<number | { pk: number }>;
+    const tournamentUserPks: number[] = tournamentUsersRaw.map((u) =>
+      typeof u === 'number' ? u : u.pk
+    );
     const userToAdd = await findUserNotInTournament(context, tournamentUserPks);
     expect(userToAdd).not.toBeNull();
 

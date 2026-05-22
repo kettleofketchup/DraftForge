@@ -1,9 +1,18 @@
 /**
  * Approval Requirements config section for event create/edit modals.
  * Controls which rank types are allowed, screenshot requirements, and min MMR.
+ *
+ * Shared across CreateEventModal, EditEventModal, EditOrgDefaultsModal, and
+ * EditRepeaterModal — all four schemas `.merge(discordConfigSchema)`, so any
+ * generic T extending z.input<typeof discordConfigSchema> is accepted.
+ *
+ * One narrowing cast at the top (`as unknown as Control<ApprovalFields>`) lets
+ * the body reference `name="allow_active_mmr"` etc. with full type checking —
+ * a typo'd name is a compile error rather than silent dead UI.
  */
 
-import type { Control, UseFormWatch } from 'react-hook-form';
+import type { Control, FieldValues, UseFormWatch } from 'react-hook-form';
+import type { z } from 'zod';
 import {
   FormControl,
   FormDescription,
@@ -12,16 +21,24 @@ import {
   FormLabel,
 } from '~/components/ui/form';
 import { Input } from '~/components/ui/input';
+import type { discordConfigSchema } from './schemas';
 
-interface ApprovalConfigSectionProps {
-  control: Control<any>;
-  watch: UseFormWatch<any>;
+type ApprovalFields = z.input<typeof discordConfigSchema>;
+
+interface ApprovalConfigSectionProps<T extends FieldValues & ApprovalFields> {
+  control: Control<T>;
+  watch: UseFormWatch<T>;
 }
 
-/** Reusable checkbox field matching DiscordConfigSection pattern */
-function CheckboxField({ control, name, label, description }: {
-  control: Control<any>;
-  name: string;
+/** Reusable checkbox field bound to a known approval field name. */
+function CheckboxField({
+  control,
+  name,
+  label,
+  description,
+}: {
+  control: Control<ApprovalFields>;
+  name: Extract<keyof ApprovalFields, string>;
   label: string;
   description: string;
 }) {
@@ -34,7 +51,7 @@ function CheckboxField({ control, name, label, description }: {
           <FormControl>
             <input
               type="checkbox"
-              checked={field.value}
+              checked={!!field.value}
               onChange={field.onChange}
               className="h-4 w-4 rounded border-border accent-primary"
             />
@@ -49,7 +66,16 @@ function CheckboxField({ control, name, label, description }: {
   );
 }
 
-export function ApprovalConfigSection({ control, watch }: ApprovalConfigSectionProps) {
+export function ApprovalConfigSection<T extends FieldValues & ApprovalFields>({
+  control: parentControl,
+  watch: parentWatch,
+}: ApprovalConfigSectionProps<T>) {
+  // T extends ApprovalFields by the generic constraint, so narrowing to
+  // Control<ApprovalFields> is sound: we touch only the discord-config slice
+  // of the parent form, never the parent's extra keys.
+  const control = parentControl as unknown as Control<ApprovalFields>;
+  const watch = parentWatch as unknown as UseFormWatch<ApprovalFields>;
+
   const allowActiveMmr = watch('allow_active_mmr');
   const allowPreviousRank = watch('allow_previous_rank');
   const allowBattlecupRating = watch('allow_battlecup_rating');

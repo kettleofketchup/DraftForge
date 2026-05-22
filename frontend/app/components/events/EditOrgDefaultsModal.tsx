@@ -66,7 +66,10 @@ export function EditOrgDefaultsModal({
     enabled: open && !!organizationId,
   });
 
-  const form = useForm<OrgDefaultsInput>({
+  // 3-generic useForm to align TFieldValues=z.input and TTransformedValues=z.output
+  // — zodResolver returns Resolver<z.input<S>, _, z.output<S>> under zod 4.
+  // See https://github.com/react-hook-form/resolvers/issues/792.
+  const form = useForm<z.input<typeof orgDefaultsSchema>, unknown, OrgDefaultsInput>({
     resolver: zodResolver(orgDefaultsSchema),
     defaultValues: {
       tournament_name: '',
@@ -121,6 +124,10 @@ export function EditOrgDefaultsModal({
         allow_active_mmr: defaults.allow_active_mmr ?? true,
         allow_previous_rank: defaults.allow_previous_rank ?? true,
         allow_battlecup_rating: defaults.allow_battlecup_rating ?? true,
+        // Approval rule flags — see CreateEventModal for the regression note.
+        require_steam_id: defaults.require_steam_id ?? false,
+        require_mmr_verified: defaults.require_mmr_verified ?? false,
+        require_profile_complete: defaults.require_profile_complete ?? false,
       });
     }
   }, [defaults, open]);

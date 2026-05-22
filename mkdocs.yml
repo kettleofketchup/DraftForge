@@ -124,6 +124,8 @@ nav:
         - Context Guide: dev/telemetry/context.md
         - Local Observability: dev/telemetry/local-observability.md
         - Reference: dev/telemetry/reference.md
+      - Auth:
+        - "Roles & Permission Matrix": dev/auth/roles.md
       - Testing Reference:
         - Cypress Tests (Legacy): dev/testing/cypress-tests.md
         - Playwright: testing/playwright.md

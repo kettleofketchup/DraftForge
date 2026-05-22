@@ -9,16 +9,24 @@ import { createReadableStreamFromReadable } from '@react-router/node';
 import type { EntryContext } from 'react-router';
 import { ServerRouter } from 'react-router';
 import { renderToPipeableStream } from 'react-dom/server';
+import { I18nextProvider } from 'react-i18next';
+import { createI18nInstance } from './i18n/config';
+import { i18nServer } from './i18n/i18n.server';
 
-export default function handleRequest(
+export default async function handleRequest(
   request: Request,
   responseStatusCode: number,
   responseHeaders: Headers,
   routerContext: EntryContext,
 ) {
+  const locale = await i18nServer.getLocale(request);
+  const i18n = createI18nInstance(locale);
+
   return new Promise((resolve, reject) => {
     const { pipe, abort } = renderToPipeableStream(
-      <ServerRouter context={routerContext} url={request.url} />,
+      <I18nextProvider i18n={i18n}>
+        <ServerRouter context={routerContext} url={request.url} />
+      </I18nextProvider>,
       {
         onShellReady() {
           responseHeaders.set('Content-Type', 'text/html');

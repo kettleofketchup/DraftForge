@@ -1,11 +1,13 @@
-import { test as base, expect, BrowserContext, Page } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 import {
   loginAsUser,
   waitForHydration,
   DOCKER_HOST,
   API_URL,
 } from '../fixtures/auth';
-import { getHeroDraftByKey, resetHeroDraft, HeroDraftInfo } from '../fixtures/herodraft';
+import { getHeroDraftByKey, resetHeroDraft } from '../fixtures/herodraft';
+import type { HeroDraftInfo } from '../fixtures/herodraft';
 
 /**
  * Test captain connection management for HeroDraft.

@@ -1,5 +1,9 @@
 import api from '~/components/api/axios';
+import { getLogger } from '~/lib/logger';
+import { getServerNowISO } from '~/store/heroDraftStore';
 import type { HeroDraft } from './types';
+
+const log = getLogger('herodraft:api');
 
 export interface CreateHeroDraftOptions {
   radiantTeamId?: number;
@@ -48,10 +52,38 @@ export async function submitPick(
   draftId: number,
   heroId: number
 ): Promise<HeroDraft> {
-  const response = await api.post(`/herodraft/${draftId}/submit-pick/`, {
+  // `client_picked_at` is in SERVER-clock reference (via offset learned
+  // from tick.server_time), not raw browser time. This way a client
+  // with a skewed local clock still sends a timestamp the server can
+  // trust. Server's 2s sanity window absorbs the residual one-way
+  // network latency.
+  const clientPickedAt = getServerNowISO();
+  const startedAtMs = performance.now();
+  log.info('pick_submit_started', {
+    draft_id: draftId,
     hero_id: heroId,
+    client_picked_at: clientPickedAt,
   });
-  return response.data;
+  try {
+    const response = await api.post(`/herodraft/${draftId}/submit-pick/`, {
+      hero_id: heroId,
+      client_picked_at: clientPickedAt,
+    });
+    log.info('pick_submit_succeeded', {
+      draft_id: draftId,
+      hero_id: heroId,
+      duration_ms: Math.round(performance.now() - startedAtMs),
+    });
+    return response.data;
+  } catch (err) {
+    log.error('pick_submit_failed', {
+      draft_id: draftId,
+      hero_id: heroId,
+      duration_ms: Math.round(performance.now() - startedAtMs),
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
+  }
 }
 
 export interface HeroDraftEventResponse {

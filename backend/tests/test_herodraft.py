@@ -4,7 +4,10 @@ Test endpoints for HeroDraft E2E testing (TEST ONLY).
 These endpoints are only available when TEST_ENDPOINTS=true in settings.
 """
 
+from datetime import timedelta
+
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.decorators import (
@@ -18,6 +21,9 @@ from rest_framework.response import Response
 from app.models import DraftTeam, Game, HeroDraft, HeroDraftEvent
 from app.serializers import HeroDraftSerializer
 from common.utils import isTestEnvironment
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 # Test key to tournament/game mapping for herodraft scenarios
 # Uses existing bracket games from Real Tournament 38:
@@ -183,8 +189,8 @@ def reset_herodraft(request, draft_pk):
                     f"herodraft:{draft.pk}:captain:{captain.pk}:heartbeat",
                 ]:
                     r.delete(key_pattern)
-    except Exception:
-        pass  # Redis may not be available in some test environments
+    except Exception as e:
+        log.debug("reset_herodraft_redis_cleanup_failed", draft_id=draft.pk, error=str(e))
 
     # Log reset event
     HeroDraftEvent.objects.create(
@@ -193,6 +199,63 @@ def reset_herodraft(request, draft_pk):
         metadata={"reset_by": "test_endpoint"},
     )
 
+    return Response(HeroDraftSerializer(draft).data)
+
+
+@api_view(["POST"])
+@authentication_classes([])
+@permission_classes([AllowAny])
+def warp_herodraft_round(request, draft_pk):
+    """TEST ONLY. Warp active round timing to exercise urgency-state UI.
+
+    Body:
+        elapsed_ms (int, required): sets active_round.started_at = now() - elapsed_ms
+        active_reserve_ms (int, optional): overrides active team's reserve_time_remaining
+
+    Leaves grace_time_ms and the non-active team alone. Next 1Hz tick
+    broadcast carries the new anchors so the client re-derives elapsed
+    against them. Does NOT trigger auto-pick — caller is responsible
+    for keeping elapsed_ms < (grace + reserve) if they don't want one.
+    """
+    draft = get_object_or_404(HeroDraft, pk=draft_pk)
+
+    if draft.state != "drafting":
+        return Response(
+            {"error": f"Cannot warp round in state '{draft.state}'"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    current_round = draft.rounds.filter(state="active").first()
+    if not current_round:
+        return Response(
+            {"error": "No active round to warp"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        elapsed_ms = int(request.data.get("elapsed_ms"))
+    except (TypeError, ValueError):
+        return Response(
+            {"error": "elapsed_ms (int) is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    current_round.started_at = timezone.now() - timedelta(milliseconds=elapsed_ms)
+    current_round.save(update_fields=["started_at"])
+
+    active_reserve_ms = request.data.get("active_reserve_ms")
+    if active_reserve_ms is not None:
+        try:
+            active_team = DraftTeam.objects.get(pk=current_round.draft_team_id)
+            active_team.reserve_time_remaining = int(active_reserve_ms)
+            active_team.save(update_fields=["reserve_time_remaining"])
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "active_reserve_ms must be int when provided"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    draft.refresh_from_db()
     return Response(HeroDraftSerializer(draft).data)
 
 

@@ -7,7 +7,8 @@
  * Ports the Cypress login commands to Playwright.
  */
 
-import { test as base, expect, BrowserContext, Page } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
+import type { BrowserContext, Page } from '@playwright/test';
 
 // Use localhost by default (matches playwright.config.ts baseURL)
 // Can be overridden with DOCKER_HOST for running inside Docker containers
@@ -153,6 +154,12 @@ export async function loginAdmin(context: BrowserContext): Promise<void> {
   console.log(`[auth] loginAdmin response: ${status} ${statusText}`);
 
   if (!response.ok()) {
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
     console.error(`[auth] loginAdmin FAILED: ${status} ${statusText}`);
     console.error(`[auth] This usually means:`);
     console.error(`[auth]   - 403: TEST=true not set or IP not whitelisted`);
@@ -342,6 +349,37 @@ export async function loginOrgStaff(context: BrowserContext): Promise<void> {
 }
 
 /**
+ * Login as plain organization member (in DTX as OrgUser, no admin/staff role).
+ * Use this to separate "member with no role" from "unaffiliated user" in
+ * permission-matrix tests.
+ */
+export async function loginOrgMember(context: BrowserContext): Promise<void> {
+  const url = `${API_URL}/tests/login-org-member/`;
+  console.log(`[auth] loginOrgMember: POST ${url}`);
+
+  const response = await context.request.post(url);
+
+  if (!response.ok()) {
+    const status = response.status();
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    console.error(`[auth] loginOrgMember FAILED: ${status} - ${body}`);
+    throw new Error(`loginOrgMember failed: ${status} - ${body.slice(0, 500)}`);
+  }
+
+  console.log(`[auth] loginOrgMember: OK (${response.status()})`);
+
+  const cookies = response.headers()['set-cookie'];
+  if (cookies) {
+    await setSessionCookies(context, cookies);
+  }
+}
+
+/**
  * Login as league admin.
  */
 export async function loginLeagueAdmin(context: BrowserContext): Promise<void> {
@@ -397,6 +435,68 @@ export async function loginLeagueStaff(context: BrowserContext): Promise<void> {
   if (cookies) {
     await setSessionCookies(context, cookies);
   }
+}
+
+/**
+ * Login helpers for the auth-permission matrix.
+ *
+ * These target AUTH_MATRIX_ORG (pk=8) and AUTH_MATRIX_LEAGUE (pk=9),
+ * which are isolated from DTX so other suites can't mutate the matrix.
+ * The actual login endpoints make the user's org/league memberships
+ * idempotent — calling them twice is safe.
+ */
+async function _postAuthMatrixLogin(
+  context: BrowserContext,
+  endpoint: string,
+  label: string,
+): Promise<void> {
+  const url = `${API_URL}/tests/${endpoint}/`;
+  console.log(`[auth] ${label}: POST ${url}`);
+
+  const response = await context.request.post(url);
+
+  if (!response.ok()) {
+    const status = response.status();
+    let body = '';
+    try {
+      body = await response.text();
+    } catch {
+      body = '[could not read body]';
+    }
+    console.error(`[auth] ${label} FAILED: ${status} - ${body}`);
+    throw new Error(`${label} failed: ${status} - ${body.slice(0, 500)}`);
+  }
+
+  console.log(`[auth] ${label}: OK (${response.status()})`);
+
+  const cookies = response.headers()['set-cookie'];
+  if (cookies) {
+    await setSessionCookies(context, cookies);
+  }
+}
+
+export function loginAuthMatrixOrgOwner(context: BrowserContext): Promise<void> {
+  return _postAuthMatrixLogin(context, 'login-auth-matrix-org-owner', 'loginAuthMatrixOrgOwner');
+}
+
+export function loginAuthMatrixOrgAdmin(context: BrowserContext): Promise<void> {
+  return _postAuthMatrixLogin(context, 'login-auth-matrix-org-admin', 'loginAuthMatrixOrgAdmin');
+}
+
+export function loginAuthMatrixOrgStaff(context: BrowserContext): Promise<void> {
+  return _postAuthMatrixLogin(context, 'login-auth-matrix-org-staff', 'loginAuthMatrixOrgStaff');
+}
+
+export function loginAuthMatrixOrgMember(context: BrowserContext): Promise<void> {
+  return _postAuthMatrixLogin(context, 'login-auth-matrix-org-member', 'loginAuthMatrixOrgMember');
+}
+
+export function loginAuthMatrixLeagueAdmin(context: BrowserContext): Promise<void> {
+  return _postAuthMatrixLogin(context, 'login-auth-matrix-league-admin', 'loginAuthMatrixLeagueAdmin');
+}
+
+export function loginAuthMatrixLeagueStaff(context: BrowserContext): Promise<void> {
+  return _postAuthMatrixLogin(context, 'login-auth-matrix-league-staff', 'loginAuthMatrixLeagueStaff');
 }
 
 /**
@@ -499,6 +599,7 @@ export const test = base.extend<{
   loginUserClaimer: () => Promise<void>;
   loginOrgAdmin: () => Promise<void>;
   loginOrgStaff: () => Promise<void>;
+  loginOrgMember: () => Promise<void>;
   loginLeagueAdmin: () => Promise<void>;
   loginLeagueStaff: () => Promise<void>;
   waitForHydration: () => Promise<void>;
@@ -536,6 +637,9 @@ export const test = base.extend<{
   },
   loginOrgStaff: async ({ context }, use) => {
     await use(() => loginOrgStaff(context));
+  },
+  loginOrgMember: async ({ context }, use) => {
+    await use(() => loginOrgMember(context));
   },
   loginLeagueAdmin: async ({ context }, use) => {
     await use(() => loginLeagueAdmin(context));

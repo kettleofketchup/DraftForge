@@ -15,7 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { EventStateBadge } from '~/components/events';
 import type { EventType } from '~/components/events/schemas';
 import { RepeaterCard } from '~/components/events/RepeaterCard';
-import { useOrganizations } from '~/components/organization';
+import { useOrganization, useOrganizations } from '~/components/organization';
 import { PrimaryButton } from '~/components/ui/buttons';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
@@ -32,7 +32,7 @@ import { Badge } from '~/components/ui/badge';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
 import { Switch } from '~/components/ui/switch';
 import { useEvents } from '~/hooks/useEvent';
-import { useIsOrganizationAdmin } from '~/hooks/usePermissions';
+import { useIsOrganizationStaff } from '~/hooks/usePermissions';
 import api from '~/components/api/axios';
 import { useDebouncedValue } from '~/hooks/useDebouncedValue';
 
@@ -304,13 +304,15 @@ export default function EventsPage() {
     ordering: SORT_TO_ORDERING[sortBy] || 'closest',
   });
 
-  // Get selected organization for permission checks
-  const selectedOrg = useMemo(
-    () => organizations.find((o) => o.pk === selectedOrgIdNum) || null,
-    [organizations, selectedOrgIdNum],
-  );
-  const isOrgAdmin = useIsOrganizationAdmin(selectedOrg);
-  const canCreate = isOrgAdmin && selectedOrgIdNum;
+  // Get selected organization for permission checks. The ``organizations``
+  // list from useOrganizations() returns a stripped payload (no admins /
+  // staff arrays), so the permission hook would never resolve true for
+  // org admins/staff. Fetch the full org detail when one is selected.
+  // Events are operational (not governance), so org staff get the gate
+  // — same contract as the org-detail Events tab.
+  const { organization: selectedOrgFull } = useOrganization(selectedOrgIdNum);
+  const isOrgStaff = useIsOrganizationStaff(selectedOrgFull);
+  const canCreate = isOrgStaff && selectedOrgIdNum;
 
   function setOrgFilter(value: string | null) {
     const newParams = new URLSearchParams(searchParams);
