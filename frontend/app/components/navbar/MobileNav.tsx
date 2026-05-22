@@ -185,7 +185,7 @@ export function MobileNav() {
   // Return placeholder with same dimensions to prevent layout shift
   if (!mounted) {
     return (
-      <div className="lg:hidden mr-1 h-10 w-10" aria-hidden="true" />
+      <div className="md:hidden mr-1 h-10 w-10" aria-hidden="true" />
     );
   }
 
@@ -195,7 +195,7 @@ export function MobileNav() {
         <Button
           variant="ghost"
           size="icon"
-          className="lg:hidden mr-1"
+          className="md:hidden mr-1"
           aria-label={t('aria.open_menu')}
           data-testid="mobileNavToggle"
         >

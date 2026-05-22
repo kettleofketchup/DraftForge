@@ -22,12 +22,12 @@ test.describe('Mobile navbar', () => {
     expect(overflow, 'horizontal overflow on home').toBe(false);
   });
 
-  test('desktop NavLinks stay hidden below lg', async ({ page }) => {
+  test('desktop NavLinks stay hidden below md', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator(MOBILE_TOGGLE)).toBeVisible();
 
     // Any nav link with data-testid="nav-link-*" is the desktop NavLinks row.
-    // It is `hidden lg:flex` so should not be visible at mobile widths.
+    // It is `hidden md:flex` so should not be visible at mobile widths.
     const desktopLink = page.locator('[data-testid^="nav-link-"]').first();
     await expect(desktopLink).toBeHidden();
   });

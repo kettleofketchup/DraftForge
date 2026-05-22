@@ -460,7 +460,7 @@ const ExternalLinks = ({ className }: { className?: string }) => {
   return (
     <div
       className={cn(
-        'flex items-center gap-0.5 lg:gap-1 mr-1 lg:mr-2',
+        'flex items-center gap-0.5 md:gap-1 mr-1 md:mr-2',
         className,
       )}
     >
@@ -511,7 +511,7 @@ const NavLinks = ({ className }: { className?: string }) => {
   const currentUser = useUserStore((state) => state.currentUser);
 
   return (
-    <div className={cn('flex items-center gap-0.5 lg:gap-1', className)}>
+    <div className={cn('flex items-center gap-0.5 md:gap-1', className)}>
       <NavItem
         to="/about"
         icon={<AboutIcon />}
@@ -601,7 +601,7 @@ const SiteLogo = () => {
     <Tooltip>
       <TooltipTrigger asChild>
         <Link
-          className="p-2 flex-shrink-0 hidden lg:flex items-center"
+          className="p-2 flex-shrink-0 hidden md:flex items-center"
           to="/"
           aria-label={t('home')}
         >
@@ -620,7 +620,7 @@ const MobileHomeLink = () => {
     <Tooltip>
       <TooltipTrigger asChild>
         <Link
-          className="p-2 flex-shrink-0 lg:hidden flex items-center"
+          className="p-2 flex-shrink-0 md:hidden flex items-center"
           to="/"
           aria-label={t('home')}
         >
@@ -644,16 +644,16 @@ export const ResponsiveAppBar: React.FC = memo(() => {
         <div className="navbar-start flex-1">
           <MobileNav />
           <SiteLogo />
-          <NavLinks className="hidden lg:flex" />
+          <NavLinks className="hidden md:flex" />
         </div>
         {/* Centered page nav dropdown below lg (mobile + tablet). The desktop
             nav appears at lg+ — keeping md/tablet on the drawer side avoids
             the squish where icons + login + logo had to share ~768px (#252). */}
-        <div className="absolute left-1/2 -translate-x-1/2 lg:hidden z-10">
+        <div className="absolute left-1/2 -translate-x-1/2 md:hidden z-10">
           <PageNavBar />
         </div>
         <div className="navbar-end">
-          <ExternalLinks className="hidden lg:flex" />
+          <ExternalLinks className="hidden md:flex" />
           <LoginWithDiscordButton />
         </div>
       </nav>
