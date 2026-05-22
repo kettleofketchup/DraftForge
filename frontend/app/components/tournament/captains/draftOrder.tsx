@@ -81,12 +81,16 @@ export const DraftOrderButton: React.FC<{
   if (compact) {
     return (
       <div className="flex flex-col items-stretch gap-0.5 w-9" data-testid={`draft-order-${user.pk}`}>
-        <span
-          className="text-[9px] uppercase tracking-wider text-muted-foreground leading-none text-center"
-          aria-hidden
+        {/* shadcn <Label htmlFor> wires up screen-reader association +
+            click-to-focus on the select trigger. Micro-styling overrides
+            keep the 9px uppercase visual treatment that matches the
+            captain action column's Pick/Remove subtitle. */}
+        <Label
+          htmlFor={id}
+          className="text-[9px] uppercase tracking-wider text-muted-foreground leading-none justify-center font-normal"
         >
           Order
-        </span>
+        </Label>
         <BrandSelect onValueChange={handleChange} value={draft_order}>
           <BrandSelectTrigger
             id={id}
