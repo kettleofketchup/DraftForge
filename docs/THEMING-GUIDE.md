@@ -344,6 +344,35 @@ Renders as a hierarchical breadcrumb with type labels (e.g., "ORGANIZATION" abov
 // Reserve for structural uses: dropdown triggers, combobox triggers, etc.
 ```
 
+### Brand Select
+
+User-facing value pickers (draft order, roles, MMR bracket, sort key) use the brand-styled Select family from `~/components/ui/brand-select`, not the bare shadcn `<Select>` primitive. The brand version maps the trigger onto `bg-base-300` with a violet hairline, renders the popover content on the brand violet-glow surface, and highlights items with the `brandSecondary` gradient on focus / hover.
+
+```tsx
+import {
+  BrandSelect,
+  BrandSelectContent,
+  BrandSelectItem,
+  BrandSelectTrigger,
+  SelectValue,
+} from '~/components/ui/brand-select';
+
+<BrandSelect value={order} onValueChange={setOrder}>
+  <BrandSelectTrigger size="sm" className="w-9 justify-center">
+    <SelectValue placeholder="—" />
+  </BrandSelectTrigger>
+  <BrandSelectContent>
+    {options.map((o) => (
+      <BrandSelectItem key={o.value} value={o.value}>{o.label}</BrandSelectItem>
+    ))}
+  </BrandSelectContent>
+</BrandSelect>
+```
+
+Sizes: `size="default"` (h-9, matches `PrimaryButton`), `size="sm"` (h-8, for tight columns like the UserStrip actionSlot). `SelectValue`, `SelectGroup`, `SelectLabel`, `SelectSeparator`, `SelectScrollUpButton`, `SelectScrollDownButton` are re-exported unchanged.
+
+When to use the bare shadcn primitive: only when the surrounding surface already paints its own treatment that the brand select would clash with (rare — and document the exception inline next to the call site).
+
 ### Links & Tabs
 
 ```tsx

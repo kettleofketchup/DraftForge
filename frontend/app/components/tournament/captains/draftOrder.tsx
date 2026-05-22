@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { updateTeam } from '~/components/api/api';
-import { Label } from '~/components/ui/label';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
+  BrandSelect,
+  BrandSelectContent,
+  BrandSelectItem,
+  BrandSelectTrigger,
   SelectValue,
-} from '~/components/ui/select';
+} from '~/components/ui/brand-select';
+import { Label } from '~/components/ui/label';
 import type { UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { useUserStore } from '~/store/userStore';
@@ -87,23 +87,24 @@ export const DraftOrderButton: React.FC<{
         >
           Order
         </span>
-        <Select onValueChange={handleChange} value={draft_order}>
-          <SelectTrigger
+        <BrandSelect onValueChange={handleChange} value={draft_order}>
+          <BrandSelectTrigger
             id={id}
-            className="h-7 w-9 px-1 py-0 text-xs [&>svg]:size-3"
+            size="sm"
+            className="w-9 px-1 py-0 text-xs justify-center [&>svg]:size-3"
             aria-label={`Draft order for ${user.username ?? ''}`.trim()}
             data-testid={`draft-order-trigger-${user.pk}`}
           >
             <SelectValue placeholder={draft_order} />
-          </SelectTrigger>
-          <SelectContent>
+          </BrandSelectTrigger>
+          <BrandSelectContent>
             {Array.from({ length: getRange() }, (_, i) => (
-              <SelectItem key={i + 1} value={String(i + 1)}>
+              <BrandSelectItem key={i + 1} value={String(i + 1)}>
                 {i + 1}
-              </SelectItem>
+              </BrandSelectItem>
             ))}
-          </SelectContent>
-        </Select>
+          </BrandSelectContent>
+        </BrandSelect>
       </div>
     );
   }
@@ -112,19 +113,19 @@ export const DraftOrderButton: React.FC<{
     <div className="flex flex-col items-center gap-2 md:flex-row">
       <Label htmlFor={id}>Draft Order</Label>
 
-      <Select onValueChange={handleChange} value={draft_order}>
-        <SelectTrigger className="w-[80px]" id={id}>
+      <BrandSelect onValueChange={handleChange} value={draft_order}>
+        <BrandSelectTrigger className="w-[80px]" id={id}>
           <SelectValue placeholder={draft_order} />
-        </SelectTrigger>
+        </BrandSelectTrigger>
 
-        <SelectContent>
+        <BrandSelectContent>
           {Array.from({ length: getRange() }, (_, i) => (
-            <SelectItem key={i + 1} value={String(i + 1)}>
+            <BrandSelectItem key={i + 1} value={String(i + 1)}>
               {i + 1}
-            </SelectItem>
+            </BrandSelectItem>
           ))}
-        </SelectContent>
-      </Select>
+        </BrandSelectContent>
+      </BrandSelect>
       {isLoading && <span className="loading loading-spinner loading-xs" />}
     </div>
   );

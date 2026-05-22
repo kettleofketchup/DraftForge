@@ -70,6 +70,17 @@ Required breadcrumb pages: `/organizations/:id`, `/leagues/:id`, `/events/:id`, 
 | `<ConfirmDialog>` confirm/cancel buttons rendered with inline keyboard hints | The dialog already wires `hotkey="↵"` / `hotkey="⌫"` for you | Use `<ConfirmDialog>` directly — never re-implement Enter/Backspace + corner badges by hand. |
 | `<FormLabel>` with a hand-rolled `<Kbd>` keycap next to the label text | Pass the `hotkey` prop on `<FormLabel>` | `<FormLabel hotkey="N">Nickname</FormLabel>` renders the Kbd inline for you and applies the right flex layout. Wire the actual focus handler in the parent (e.g. modal `useEffect` listening for the matching `keydown`). |
 
+## Selects (Dropdowns)
+
+| Anti-pattern | Replace with | Notes |
+|---|---|---|
+| Bare shadcn `<Select>` / `<SelectTrigger>` / `<SelectContent>` / `<SelectItem>` in a user-facing picker (role, draft order, MMR bracket, etc.) | `<BrandSelect>` + `<BrandSelectTrigger>` + `<BrandSelectContent>` + `<BrandSelectItem>` from `~/components/ui/brand-select` | Renders the neon-cyber surface: `bg-base-300` trigger with violet hairline + brand-violet ring on focus/open, popover content with brand glow shadow + violet border, items highlight with the `brandSecondary` gradient on focus and persist `data-[state=checked]`. Default `size="default"` (h-9); pass `size="sm"` (h-8) for tight action columns (e.g. UserStrip actionSlot). |
+| `<SelectTrigger className="bg-white text-black ...">` color overrides | Drop the override — use `<BrandSelectTrigger>` | The brand trigger already maps to the dark `bg-base-300` family. Hand-rolled light triggers fight the theme on hover. |
+| Hand-styled chevron icon inside the trigger | Don't render one — `<BrandSelectTrigger>` injects the `ChevronDownIcon` for you | Same as shadcn `SelectTrigger`, but the brand version themes the chevron color (`text-violet-300`) so it matches the ring. |
+| Bare shadcn `Select` for non-form widgets that pick a discrete value (per-row order, sort key, etc.) | `<BrandSelect>` | Reserve the bare shadcn primitive for cases that genuinely need neutral styling (e.g. inside dialogs with their own surface treatment that the brand select would clash with — rare). Document the exception inline. |
+
+`SelectValue`, `SelectGroup`, `SelectLabel`, `SelectScrollUpButton`, `SelectScrollDownButton`, and `SelectSeparator` are re-exported from `brand-select.tsx` unchanged — they don't need a brand layer.
+
 ## Status / Win-Loss Indicators
 
 | Anti-pattern | Replace with | Notes |
