@@ -16,7 +16,7 @@ import TournamentTabs from './tabs/TournamentTabs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import { PageHeader } from '~/components/ui/page-header';
 import { TournamentSettingsModal } from '~/components/tournament/settings/TournamentSettingsModal';
-import { SecondaryButton, DestructiveButton } from '~/components/ui/buttons';
+import { DestructiveButton, EditButton } from '~/components/ui/buttons';
 import { BrandDropdownMenu, type BrandDropdownAction } from '~/components/ui/brand-dropdown-menu';
 import { toast } from 'sonner';
 
@@ -198,7 +198,7 @@ export const TournamentDetailPage: React.FC = () => {
         icon: <Pencil className="h-4 w-4 mr-1.5" />,
         label: 'Edit',
         onClick: () => setSettingsOpen(true),
-        variant: 'success',
+        variant: 'edit',
         'data-testid': 'tournament-edit-btn',
       },
       {
@@ -262,12 +262,10 @@ export const TournamentDetailPage: React.FC = () => {
     if (!tournament.name) return null;
     const adminActionsNode = isAdmin && hydratedTournament && (
       <div className="flex items-center gap-2 mb-3">
-        {/* Desktop: button group — fixed min-width on both pills so the
-            shorter "Edit" label doesn't render a visibly narrower button
-            next to "Delete". */}
+        {/* Desktop: brand Edit + Delete pair, equal min-width so the
+            shorter label doesn't render a visibly narrower pill. */}
         <div className="hidden md:flex items-center gap-2">
-          <SecondaryButton
-            color="emerald"
+          <EditButton
             size="sm"
             className="min-w-24 justify-center"
             onClick={() => setSettingsOpen(true)}
@@ -275,7 +273,7 @@ export const TournamentDetailPage: React.FC = () => {
           >
             <Pencil className="h-4 w-4 mr-1.5" />
             Edit
-          </SecondaryButton>
+          </EditButton>
           <DestructiveButton
             size="sm"
             className="min-w-24 justify-center"

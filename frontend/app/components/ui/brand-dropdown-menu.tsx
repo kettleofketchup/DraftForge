@@ -1,4 +1,5 @@
 import { ChevronDown } from 'lucide-react';
+import { Fragment } from 'react';
 import { Button } from '~/components/ui/button';
 import {
   DropdownMenu,
@@ -16,7 +17,7 @@ export interface BrandDropdownAction {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
-  variant?: 'default' | 'primary' | 'success' | 'destructive';
+  variant?: 'default' | 'primary' | 'edit' | 'success' | 'destructive';
   disabled?: boolean;
   'data-testid'?: string;
 }
@@ -38,9 +39,13 @@ interface BrandDropdownMenuProps {
 
 const variantStyles = {
   default: 'text-foreground',
-  primary: 'text-primary font-medium',
-  success: 'text-success font-medium',
-  destructive: 'text-error font-medium',
+  primary: 'text-primary font-medium [&_svg]:text-primary',
+  // edit: brand-toxic gradient text (violet → emerald) — matches the
+  // <EditButton> visual language so the dropdown Edit reads as a brand
+  // action instead of a generic shadcn green.
+  edit: 'font-medium bg-gradient-to-br from-violet-400 via-emerald-300 to-emerald-400 bg-clip-text text-transparent [&_svg]:text-emerald-300',
+  success: 'text-success font-medium [&_svg]:text-success',
+  destructive: 'text-error font-medium [&_svg]:text-error',
 } as const;
 
 const triggerVariants = {
@@ -87,7 +92,7 @@ export function BrandDropdownMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className={cn(brandBg, 'border-primary/30 min-w-[200px] p-1.5')}
+        className={cn(brandBg, 'border-primary/30 min-w-[200px] p-1.5 space-y-0.5')}
       >
         {menuLabel && (
           <>
@@ -97,20 +102,24 @@ export function BrandDropdownMenu({
             <DropdownMenuSeparator className="bg-border/50" />
           </>
         )}
-        {actions.map((action) => (
-          <DropdownMenuItem
-            key={action.key}
-            onClick={action.onClick}
-            disabled={action.disabled}
-            data-testid={action['data-testid']}
-            className={cn(
-              'min-h-[36px] flex items-center gap-2.5 px-3 py-2 text-sm cursor-pointer rounded-md',
-              variantStyles[action.variant ?? 'default'],
+        {actions.map((action, idx) => (
+          <Fragment key={action.key}>
+            {idx > 0 && (
+              <DropdownMenuSeparator className="!my-0 bg-border/40" />
             )}
-          >
-            {action.icon}
-            {action.label}
-          </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={action.onClick}
+              disabled={action.disabled}
+              data-testid={action['data-testid']}
+              className={cn(
+                'min-h-[36px] flex items-center gap-2.5 px-3 py-2 text-sm cursor-pointer rounded-md',
+                variantStyles[action.variant ?? 'default'],
+              )}
+            >
+              {action.icon}
+              {action.label}
+            </DropdownMenuItem>
+          </Fragment>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

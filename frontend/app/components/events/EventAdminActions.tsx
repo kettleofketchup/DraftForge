@@ -49,7 +49,7 @@ export function EventAdminActions({
       icon: <Pencil className="h-4 w-4 mr-1.5" />,
       label: 'Edit',
       onClick: onEditClick,
-      variant: 'success',
+      variant: 'edit',
     },
   ];
 

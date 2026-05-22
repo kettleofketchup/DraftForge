@@ -70,6 +70,37 @@ Required breadcrumb pages: `/organizations/:id`, `/leagues/:id`, `/events/:id`, 
 | `<ConfirmDialog>` confirm/cancel buttons rendered with inline keyboard hints | The dialog already wires `hotkey="↵"` / `hotkey="⌫"` for you | Use `<ConfirmDialog>` directly — never re-implement Enter/Backspace + corner badges by hand. |
 | `<FormLabel>` with a hand-rolled `<Kbd>` keycap next to the label text | Pass the `hotkey` prop on `<FormLabel>` | `<FormLabel hotkey="N">Nickname</FormLabel>` renders the Kbd inline for you and applies the right flex layout. Wire the actual focus handler in the parent (e.g. modal `useEffect` listening for the matching `keydown`). |
 
+## Action Dropdowns (Menu of Actions)
+
+For a grouped set of related actions behind a single labeled trigger (admin actions, share targets, etc.) use `<BrandDropdownMenu>` from `~/components/ui/brand-dropdown-menu`, not a hand-built `<DropdownMenu>` from `~/components/ui/dropdown-menu` (the latter is the bare shadcn primitive).
+
+```tsx
+import { BrandDropdownMenu, type BrandDropdownAction } from '~/components/ui/brand-dropdown-menu';
+
+const actions: BrandDropdownAction[] = [
+  { key: 'edit',   icon: <Pencil className="size-4" />, label: 'Edit',   variant: 'edit',       onClick: ... },
+  { key: 'delete', icon: <Trash2 className="size-4" />, label: 'Delete', variant: 'destructive', onClick: ... },
+];
+
+<BrandDropdownMenu label="Admin" variant="admin" actions={actions} />
+```
+
+| Anti-pattern | Replace with | Notes |
+|---|---|---|
+| `<DropdownMenu><DropdownMenuTrigger asChild><Button>Admin</Button></DropdownMenuTrigger><DropdownMenuContent>…items…</DropdownMenuContent></DropdownMenu>` hand-built | `<BrandDropdownMenu>` | Ships the brand `bg-base-300` trigger + brand glow content surface + violet-tinted hairline separators between every item. Items keyed off `actions` array. |
+| Edit action rendered as `variant="success"` | `variant="edit"` | The `edit` variant uses the brand-toxic violet→emerald gradient text matching `<EditButton>`; `success` is a flat emerald token used for true confirmation rows. |
+| Destructive action rendered as `variant="primary"` or `variant="default"` | `variant="destructive"` | Maps to `text-error` so the row reads as a danger affordance. |
+| Stacked items without separators | Pass items normally — `<BrandDropdownMenu>` auto-inserts a hairline `<DropdownMenuSeparator>` between every entry | A `gap` between items reads as "no relation"; the hairline reads as "ordered list of options", which is what action menus communicate. |
+| Trigger styled with custom `bg-violet-…` | `variant="primary"` / `"secondary"` / `"admin"` | The component owns the trigger surface; pass `variant` to pick a brand-aligned skin. |
+
+Variants on `BrandDropdownAction`:
+
+- `default` → foreground text. Neutral.
+- `primary` → violet text + violet icon. Main CTA inside the menu.
+- `edit` → toxic gradient text (violet→emerald) + emerald icon. Brand edit affordance.
+- `success` → emerald text + emerald icon. Confirm / approve.
+- `destructive` → red text + red icon. Delete / cancel.
+
 ## Selects (Dropdowns)
 
 | Anti-pattern | Replace with | Notes |
