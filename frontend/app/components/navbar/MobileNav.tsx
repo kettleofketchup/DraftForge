@@ -10,6 +10,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '~/components/ui/sheet';
+import { ScrollArea } from '~/components/ui/scroll-area';
 import { cn } from '~/lib/utils';
 import { useUserStore } from '../../store/userStore';
 
@@ -184,7 +185,7 @@ export function MobileNav() {
   // Return placeholder with same dimensions to prevent layout shift
   if (!mounted) {
     return (
-      <div className="md:hidden mr-1 h-10 w-10" aria-hidden="true" />
+      <div className="lg:hidden mr-1 h-10 w-10" aria-hidden="true" />
     );
   }
 
@@ -194,14 +195,14 @@ export function MobileNav() {
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden mr-1"
+          className="lg:hidden mr-1"
           aria-label={t('aria.open_menu')}
           data-testid="mobileNavToggle"
         >
           <Menu className="h-5 w-5" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-72 bg-base-600">
+      <SheetContent side="left" className="w-72 bg-base-600 flex flex-col">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <img src="/logo512.png" alt="DraftForge" className="h-8 w-8 rounded-full" />
@@ -209,7 +210,8 @@ export function MobileNav() {
             <span>DraftForge</span>
           </SheetTitle>
         </SheetHeader>
-        <nav className="flex flex-col gap-1 mt-6">
+        <ScrollArea className="flex-1 -mr-6 pr-6">
+          <nav className="flex flex-col gap-1 mt-6 pb-6">
           {/* Main Navigation */}
           <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-3 py-2">
             {t('section.navigation')}
@@ -308,6 +310,7 @@ export function MobileNav() {
             external
           />
         </nav>
+        </ScrollArea>
       </SheetContent>
     </Sheet>
   );

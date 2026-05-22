@@ -103,10 +103,12 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
           className={cn(
             // Base: horizontal layout
             'flex min-w-0 items-center',
-            // LARGE (xl+): switch to vertical/stacked layout
-            'xl:flex-col xl:items-center',
+            // 2XL+ (1536px+): switch to vertical/stacked layout so the
+            // subtitle can sit under the title. At lg-xl the stacked layout
+            // crowded 9 nav items + login into 1280-1535px (#252 follow-up).
+            '2xl:flex-col 2xl:items-center',
             // hideTextOnSmall: hidden below 1100px, visible at 1100px+
-            // This creates: icons-only (md-1099px) → icons+text (1100px+)
+            // This creates: icons-only (lg-1099px) → icons+title (1100px+)
             hideTextOnSmall && 'hidden min-[1100px]:flex',
           )}
         >
@@ -118,9 +120,11 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
             {badge}
           </div>
 
-          {/* Subtitle - only visible at xl+ */}
+          {/* Subtitle - only visible at 2xl+ (kept off below 1536px so 9
+              nav items + login don't crowd the row). Smaller screens get the
+              subtitle via the optional showSubtitleTooltip wrapper below. */}
           {subtitle && (
-            <span className="text-[10px] text-text-muted leading-normal truncate hidden xl:block text-center">
+            <span className="text-[10px] text-text-muted leading-normal truncate hidden 2xl:block text-center">
               {subtitle}
             </span>
           )}
@@ -150,12 +154,13 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
       );
     }
 
-    // Wrap with tooltip for small screens if enabled
+    // Wrap with tooltip for small screens if enabled. Tooltip is hidden at
+    // 2xl+ because the inline subtitle takes over above 1536px.
     if (showSubtitleTooltip && subtitle) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>{navContent}</TooltipTrigger>
-          <TooltipContent className="xl:hidden">
+          <TooltipContent className="2xl:hidden">
             <p className="font-medium">{title}</p>
             <p className="text-xs opacity-80">{subtitle}</p>
           </TooltipContent>
@@ -596,7 +601,7 @@ const SiteLogo = () => {
     <Tooltip>
       <TooltipTrigger asChild>
         <Link
-          className="p-2 flex-shrink-0 hidden md:flex items-center"
+          className="p-2 flex-shrink-0 hidden lg:flex items-center"
           to="/"
           aria-label={t('home')}
         >
@@ -615,7 +620,7 @@ const MobileHomeLink = () => {
     <Tooltip>
       <TooltipTrigger asChild>
         <Link
-          className="p-2 flex-shrink-0 md:hidden flex items-center"
+          className="p-2 flex-shrink-0 lg:hidden flex items-center"
           to="/"
           aria-label={t('home')}
         >
@@ -632,21 +637,23 @@ export const ResponsiveAppBar: React.FC = memo(() => {
   return (
     <header>
       <nav
-        className="sticky z-50 top-0 navbar bg-base-600 shadow-elevated border-b border-border p-0"
+        className="sticky z-50 top-0 navbar bg-base-600 shadow-elevated border-b border-border px-3 sm:px-4 lg:px-6 py-0"
         role="navigation"
         aria-label={t('aria.main_nav')}
       >
         <div className="navbar-start flex-1">
           <MobileNav />
           <SiteLogo />
-          <NavLinks className="hidden md:flex" />
+          <NavLinks className="hidden lg:flex" />
         </div>
-        {/* Centered page nav dropdown on mobile */}
-        <div className="absolute left-1/2 -translate-x-1/2 md:hidden z-10">
+        {/* Centered page nav dropdown below lg (mobile + tablet). The desktop
+            nav appears at lg+ — keeping md/tablet on the drawer side avoids
+            the squish where icons + login + logo had to share ~768px (#252). */}
+        <div className="absolute left-1/2 -translate-x-1/2 lg:hidden z-10">
           <PageNavBar />
         </div>
         <div className="navbar-end">
-          <ExternalLinks className="hidden md:flex" />
+          <ExternalLinks className="hidden lg:flex" />
           <LoginWithDiscordButton />
         </div>
       </nav>
