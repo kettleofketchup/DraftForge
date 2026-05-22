@@ -254,13 +254,6 @@ export default function OrganizationDetailPage() {
     }
   }, [activeTab, pk, getOrgUsers]);
 
-  // Permission checks via the shared hooks (see ``hooks/usePermissions.ts``).
-  // They handle the site-admin bypass (is_staff || is_superuser), owner
-  // and admins/staff lookups, and short-circuit safely when ``organization``
-  // hasn't loaded yet. ``canEditEvents`` and ``canAddMembers`` were
-  // historically separate inline expressions but reduce to ``isOrgStaff``.
-  // ``isOwner`` (strictly the org owner, no site-admin bypass) gates the
-  // Danger Zone — see ``DeleteOrganizationDangerZone`` mount below.
   const isOwner = useIsOrganizationOwner(organization);
   const isOrgAdmin = useIsOrganizationAdmin(organization);
   const isOrgStaff = useIsOrganizationStaff(organization);

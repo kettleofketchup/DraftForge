@@ -6,7 +6,7 @@ import {
   rejectClaimRequest,
   type ProfileClaimRequest,
 } from '~/components/api/api';
-import { ConfirmDialog } from '~/components/ui/dialogs/ConfirmDialog';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';

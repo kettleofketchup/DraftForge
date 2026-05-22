@@ -122,8 +122,11 @@ export const ConfirmDialog = React.forwardRef<HTMLDivElement, ConfirmDialogProps
   ) => {
     const handleConfirm = async () => {
       if (isLoading || confirmDisabled) return;
-      await onConfirm();
-      onOpenChange(false);
+      try {
+        await onConfirm();
+      } finally {
+        onOpenChange(false);
+      }
     };
 
     const handleCancel = () => {

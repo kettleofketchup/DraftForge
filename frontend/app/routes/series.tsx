@@ -402,12 +402,8 @@ export default function SeriesPage() {
         onConfirm={async () => {
           try {
             await deleteMutation.mutateAsync();
-            setShowDeleteSeries(false);
           } catch {
-            // Error toast already fired by useDeleteEventRepeaterMutation's onError;
-            // swallowing here prevents an unhandled rejection. ConfirmDialog will still
-            // call onOpenChange(false) so the dialog closes (matching the prior
-            // window.confirm UX of close-then-toast on error).
+            // toast handled by mutation onError
           }
         }}
         contentTestId="delete-series-dialog"

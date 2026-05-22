@@ -220,7 +220,7 @@ export function DotaProfileCard({ orgId, userPk, isStaff }: DotaProfileCardProps
           try {
             await deleteMutation.mutateAsync();
           } catch {
-            // Error toast handled by useDeleteDotaProfileMutation's onError
+            // toast handled by mutation onError
           }
         }}
         contentTestId="delete-dota-profile-dialog"

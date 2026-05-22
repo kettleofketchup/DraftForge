@@ -35,7 +35,8 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
 
   useEffect(() => {
     setIsCaptain(determineIsCaptain());
-  }, [tournament.captains, tournament.teams, isCaptain, draft_order]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournament?.captains, user.pk]);
 
   const handleChange = async () => {
     log.debug('handleChange');

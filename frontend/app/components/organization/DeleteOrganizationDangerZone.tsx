@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import { toast } from 'sonner';
 
 import { deleteOrganization } from '~/components/api/orgAPI';
-import { ConfirmButton } from '~/components/ui/buttons';
+import { DestructiveButton } from '~/components/ui/buttons';
 import { DeleteDialog } from '~/components/ui/dialogs';
 import { extractApiError } from '~/lib/apiError';
 import type { OrganizationType } from './schemas';
@@ -46,13 +46,12 @@ export function DeleteOrganizationDangerZone({ organization }: DeleteOrganizatio
         and historical data. Only the organization owner can perform this action.
       </p>
       <div className="mt-4">
-        <ConfirmButton
-          variant="destructive"
+        <DestructiveButton
           onClick={() => setShowDelete(true)}
           data-testid="org-danger-zone-trigger"
         >
           Delete Organization
-        </ConfirmButton>
+        </DestructiveButton>
       </div>
 
       <DeleteDialog

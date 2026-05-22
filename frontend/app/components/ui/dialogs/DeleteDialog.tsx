@@ -17,7 +17,6 @@ export interface DeleteDialogProps {
   description?: React.ReactNode;
   isLoading?: boolean;
   onConfirm: () => void | Promise<void>;
-  ref?: React.Ref<HTMLDivElement>;
   contentTestId?: string;
   inputTestId?: string;
   confirmTestId?: string;
@@ -34,7 +33,6 @@ export function DeleteDialog({
   description,
   isLoading = false,
   onConfirm,
-  ref,
   contentTestId,
   inputTestId,
   confirmTestId,
@@ -59,7 +57,7 @@ export function DeleteDialog({
   const nameMatches = value === entityName;
 
   const bodyContent = (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <Label htmlFor={inputId}>
         Type <strong>{entityName}</strong> to confirm
       </Label>
@@ -78,7 +76,6 @@ export function DeleteDialog({
 
   return (
     <ConfirmDialog
-      ref={ref}
       open={open}
       onOpenChange={onOpenChange}
       title={`Delete this ${entityKind}?`}

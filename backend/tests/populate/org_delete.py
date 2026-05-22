@@ -15,8 +15,7 @@ Used by frontend/tests/playwright/e2e/17-org-delete/ to verify the
 permission matrix on the Danger Zone UI.
 """
 
-from cacheops import invalidate_obj
-
+from app.cache_utils import invalidate_obj
 from app.models import CustomUser, Organization, PositionsModel
 
 from tests.data.org_delete import (
@@ -54,8 +53,9 @@ def populate_org_delete(force=False):
     print("Populating org delete test data...")
 
     org, created = Organization.objects.update_or_create(
-        name=ORG_DELETE_ORG.name,
+        pk=ORG_DELETE_ORG.pk,
         defaults={
+            "name": ORG_DELETE_ORG.name,
             "description": ORG_DELETE_ORG.description,
             "logo": "",
             "timezone": ORG_DELETE_ORG.timezone,
