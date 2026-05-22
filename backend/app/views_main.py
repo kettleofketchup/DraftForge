@@ -184,8 +184,10 @@ class UserView(viewsets.ModelViewSet):
     # Prefetch the M2M reverse relations that UserSerializer exposes as
     # role-membership lists. Without these the four SerializerMethodFields
     # on the list endpoint fire 4·N extra queries on a cold cacheops key.
+    # base_profile is required because nickname/avatar now resolve via the
+    # @property on CustomUser, which reads self.base_profile.* (T1 epic).
     queryset = (
-        CustomUser.objects.select_related("positions")
+        CustomUser.objects.select_related("positions", "base_profile")
         .prefetch_related(
             "owned_organizations",
             "admin_organizations",
@@ -1137,7 +1139,7 @@ class OrganizationView(viewsets.ModelViewSet):
         @cached_as(OrgUser, CustomUser, BaseUserProfile, extra=cache_key, timeout=60 * 10)
         def get_data():
             org_users = OrgUser.objects.filter(organization=org).select_related(
-                "user", "user__positions"
+                "user", "user__positions", "user__base_profile"
             )
             serializer = OrgUserSerializer(org_users, many=True)
             return serializer.data
@@ -1284,7 +1286,7 @@ class LeagueView(viewsets.ModelViewSet):
         @cached_as(LeagueUser, CustomUser, BaseUserProfile, extra=cache_key, timeout=60 * 10)
         def get_data():
             league_users = LeagueUser.objects.filter(league=league).select_related(
-                "user", "user__positions"
+                "user", "user__positions", "user__base_profile"
             )
             serializer = LeagueUserSerializer(league_users, many=True)
             return serializer.data

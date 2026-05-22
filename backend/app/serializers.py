@@ -124,7 +124,7 @@ def _serialize_users_with_mmr(users_qs, tournament):
 
     org_users = (
         OrgUser.objects.filter(user__in=users_qs, organization=org)
-        .select_related("user", "user__positions")
+        .select_related("user", "user__positions", "user__base_profile")
         .prefetch_related(
             Prefetch(
                 "league_memberships",
@@ -173,7 +173,9 @@ def _collect_tournament_user_pks(tournament):
 def _build_users_dict(tournament):
     """Build a deduplicated {pk: serialized_user} dict for a tournament."""
     seen_pks = _collect_tournament_user_pks(tournament)
-    user_qs = CustomUser.objects.filter(pk__in=seen_pks).select_related("positions")
+    user_qs = CustomUser.objects.filter(pk__in=seen_pks).select_related(
+        "positions", "base_profile"
+    )
     return {u["pk"]: u for u in _serialize_users_with_mmr(user_qs, tournament)}
 
 

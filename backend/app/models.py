@@ -331,21 +331,25 @@ class CustomUser(AbstractUser):
 
         # 5. Flush pending nickname/avatar values buffered by the property
         #    setters before the user had a pk (and therefore a base_profile).
+        #    Hold the `del` until bp.save() succeeds so a retry after a
+        #    transient DB error still has the buffered value to flush.
         pending_nickname = getattr(self, "_pending_nickname", None)
         pending_avatar = getattr(self, "_pending_avatar", None)
         fields_to_update = []
         if pending_nickname is not None:
             bp.nickname = pending_nickname
             fields_to_update.append("nickname")
-            del self._pending_nickname
         if pending_avatar is not None:
             bp.avatar = pending_avatar
             fields_to_update.append("avatar")
-            del self._pending_avatar
         if fields_to_update:
             from app.cache_utils import invalidate_after_commit
             bp.save(update_fields=fields_to_update)
             invalidate_after_commit(bp)
+            if pending_nickname is not None:
+                del self._pending_nickname
+            if pending_avatar is not None:
+                del self._pending_avatar
 
     @property
     def avatarUrl(self):
