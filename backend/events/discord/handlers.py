@@ -109,8 +109,14 @@ def _get_org_user(event, discord_user_id, discord_username=None):
         candidate = CustomUser.objects.filter(username=discord_username).first()
         if candidate is not None and not candidate.discordId:
             candidate.discordId = discord_id_str
-            candidate.save(update_fields=["discordId"])
-            user = candidate
+            try:
+                with transaction.atomic():
+                    candidate.save(update_fields=["discordId"])
+                user = candidate
+            except IntegrityError:
+                # A concurrent click/login claimed this discordId first —
+                # adopt that row instead of propagating a 500.
+                user = CustomUser.objects.filter(discordId=discord_id_str).first()
 
     # 3) Otherwise create a fresh account keyed by the unique Discord handle.
     if user is None:

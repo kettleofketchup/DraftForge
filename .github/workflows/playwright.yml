@@ -177,7 +177,12 @@ jobs:
     - name: Run backend tests
       run: |
         docker compose --project-directory . -f docker/docker-compose.ci.yaml exec -T backend \
-          python manage.py test app.tests.test_bracket -v 2
+          python manage.py test \
+            app.tests.test_bracket \
+            app.tests.test_discord_reclaim \
+            events.discord.tests \
+            events.tests.test_signup_interactions \
+            -v 2
       env:
         CI: true
 

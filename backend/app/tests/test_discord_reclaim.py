@@ -104,6 +104,37 @@ class MergeDiscordAccountsTest(TestCase):
         keep.refresh_from_db()
         self.assertEqual(keep.avatar, "newavatar")
 
+    def test_merge_handles_reverse_one_to_one(self):
+        """Reverse O2O relations (e.g. Joke) move across without crashing."""
+        from app.models import Joke
+
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        drop = CustomUser.objects.create(username="loginrow")
+        _social(drop)
+        Joke.objects.create(user=drop, tangoes_purchased=7)
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        self.assertFalse(CustomUser.objects.filter(pk=drop.pk).exists())
+        keep.refresh_from_db()
+        self.assertEqual(keep.joke.tangoes_purchased, 7)
+
+    def test_merge_reverse_one_to_one_conflict_keeps_existing(self):
+        """When both rows have the O2O, keep's wins and drop's is discarded."""
+        from app.models import Joke
+
+        keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
+        Joke.objects.create(user=keep, tangoes_purchased=3)
+        drop = CustomUser.objects.create(username="loginrow")
+        Joke.objects.create(user=drop, tangoes_purchased=9)
+        _social(drop)
+
+        merge_discord_accounts(keep=keep, drop=drop)
+
+        keep.refresh_from_db()
+        self.assertEqual(keep.joke.tangoes_purchased, 3)
+        self.assertEqual(Joke.objects.count(), 1)
+
     def test_find_split_accounts(self):
         keep = CustomUser.objects.create(username="ph", discordId=DISCORD_ID)
         drop = CustomUser.objects.create(username="loginrow")

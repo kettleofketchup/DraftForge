@@ -68,7 +68,7 @@ def save_discord(
 
 
 def associate_by_discord_id(
-    uid=None, user=None, response=None, details=None, *args, **kwargs
+    backend=None, uid=None, user=None, response=None, details=None, *args, **kwargs
 ):
     """Reclaim an existing CustomUser that already holds this Discord ID.
 

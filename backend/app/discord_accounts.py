@@ -44,49 +44,71 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
     if keep.pk == drop.pk:
         return keep
 
-    for rel in drop._meta.related_objects:
-        accessor = rel.get_accessor_name()
-        manager = getattr(drop, accessor, None)
-        if manager is None:
-            continue
-        field_name = rel.field.name
+    from django.core.exceptions import ObjectDoesNotExist
 
-        if rel.many_to_many:
+    def _repoint(obj, field_name):
+        """Move one related row to ``keep``; drop it if ``keep`` already has it."""
+        setattr(obj, field_name, keep)
+        try:
+            with transaction.atomic():
+                obj.save(update_fields=[field_name])
+        except IntegrityError:
+            # ``keep`` already has an equivalent row; the duplicate is junk.
+            obj.delete()
+
+    # All-or-nothing: a failure mid-loop must not leave a half-merged state
+    # (some relations moved, both accounts still alive). (select_for_update is
+    # a no-op on this project's SQLite, so atomicity is what guards us here.)
+    with transaction.atomic():
+        for rel in drop._meta.related_objects:
+            accessor = rel.get_accessor_name()
+            field_name = rel.field.name
+
+            if rel.one_to_one:
+                # Reverse O2O accessor yields a single object (or raises if
+                # absent), not a manager — handle it on its own.
+                try:
+                    obj = getattr(drop, accessor)
+                except ObjectDoesNotExist:
+                    continue
+                if obj is not None:
+                    _repoint(obj, field_name)
+                continue
+
+            manager = getattr(drop, accessor, None)
+            if manager is None:
+                continue
+
+            if rel.many_to_many:
+                for obj in list(manager.all()):
+                    related_manager = getattr(obj, field_name)
+                    related_manager.add(keep)
+                    related_manager.remove(drop)
+                    invalidate_obj(obj)
+                continue
+
+            # Reverse FK (one-to-many): repoint each row at ``keep``.
             for obj in list(manager.all()):
-                related_manager = getattr(obj, field_name)
-                related_manager.add(keep)
-                related_manager.remove(drop)
-                invalidate_obj(obj)
-            continue
+                _repoint(obj, field_name)
 
-        # Reverse FK (one-to-many / one-to-one): repoint each row at ``keep``.
-        for obj in list(manager.all()):
-            setattr(obj, field_name, keep)
-            try:
-                with transaction.atomic():
-                    obj.save(update_fields=[field_name])
-            except IntegrityError:
-                # ``keep`` already has an equivalent row; the duplicate is junk.
-                obj.delete()
+        # Carry over Discord profile fields the kept account is missing.
+        changed = []
+        for field in _CARRYOVER_FIELDS:
+            if not getattr(keep, field, None) and getattr(drop, field, None):
+                setattr(keep, field, getattr(drop, field))
+                changed.append(field)
+        if changed:
+            keep.save(update_fields=changed)
 
-    # Carry over Discord profile fields the kept account is missing.
-    changed = []
-    for field in _CARRYOVER_FIELDS:
-        if not getattr(keep, field, None) and getattr(drop, field, None):
-            setattr(keep, field, getattr(drop, field))
-            changed.append(field)
-    if changed:
-        keep.save(update_fields=changed)
-
-    logger.info(
-        "Merged Discord account #%s (%s) into #%s (%s) discordId=%s",
-        drop.pk,
-        drop.username,
-        keep.pk,
-        keep.username,
-        keep.discordId,
-    )
-    drop.delete()
+        logger.info(
+            "Merged Discord account #%s (%s) into #%s (%s) discordId=%s",
+            drop.pk,
+            drop.username,
+            keep.pk,
+            keep.username,
+            keep.discordId,
+        )
+        drop.delete()
     invalidate_obj(keep)
     return keep
 
@@ -101,10 +123,18 @@ def find_split_discord_accounts():
     """
     from social_django.models import UserSocialAuth
 
+    socials = list(
+        UserSocialAuth.objects.filter(provider="discord").select_related("user")
+    )
+    # Single query for all candidate owners instead of one per social row (N+1).
+    uids = {str(sa.uid) for sa in socials}
+    owners = {
+        u.discordId: u for u in CustomUser.objects.filter(discordId__in=uids)
+    }
+
     pairs = []
-    socials = UserSocialAuth.objects.filter(provider="discord").select_related("user")
     for sa in socials:
-        owner = CustomUser.objects.filter(discordId=str(sa.uid)).first()
+        owner = owners.get(str(sa.uid))
         if owner and owner.pk != sa.user_id:
             pairs.append((owner, sa.user))
     return pairs
