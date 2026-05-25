@@ -1,9 +1,11 @@
 name: Setup Playwright Stack
 description: >
   Pull cached Docker images, populate or restore the test database, start the
-  docker-compose.ci.yaml stack, and wait for services to respond. Used by every
-  Playwright job so the setup is defined once and the per-shard runs only diff
-  in the project + --shard flag they pass to Playwright.
+  test compose stack (docker-compose.test.yaml + docker-compose.ci.override.yaml),
+  and wait for services to respond. Used by every Playwright job so the setup
+  is defined once and the per-shard runs only diff in the project + --shard
+  flag they pass to Playwright. The override file disables discord-bot and
+  swaps frontend mounts so the image's node_modules survive.
 
 inputs:
   registry-token:
@@ -136,7 +138,7 @@ runs:
       shell: bash
       env:
         COMPOSE_IGNORE_ORPHANS: 'true'
-      run: docker compose --project-directory . -f docker/docker-compose.ci.yaml up -d --no-build
+      run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml up -d --no-build
 
     - name: Wait for services to be ready
       shell: bash
@@ -149,6 +151,6 @@ runs:
           sleep 2
         done
         echo "WARNING: services not ready after 120s"
-        docker compose --project-directory . -f docker/docker-compose.ci.yaml ps
-        docker compose --project-directory . -f docker/docker-compose.ci.yaml logs --tail=40
+        docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml ps
+        docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml logs --tail=40
         exit 1

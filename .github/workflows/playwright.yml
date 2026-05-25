@@ -65,7 +65,7 @@ jobs:
 
       - name: Clean up
         if: always()
-        run: docker compose --project-directory . -f docker/docker-compose.ci.yaml down -v || true
+        run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   mobile:
     name: Playwright mobile (shard ${{ matrix.shard }}/2)
@@ -112,7 +112,7 @@ jobs:
 
       - name: Clean up
         if: always()
-        run: docker compose --project-directory . -f docker/docker-compose.ci.yaml down -v || true
+        run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   herodraft:
     name: Playwright herodraft (sequential)
@@ -154,7 +154,7 @@ jobs:
 
       - name: Clean up
         if: always()
-        run: docker compose --project-directory . -f docker/docker-compose.ci.yaml down -v || true
+        run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
   backend:
     name: Backend tests (test_bracket)
@@ -176,7 +176,7 @@ jobs:
         env:
           CI: 'true'
         run: |
-          docker compose --project-directory . -f docker/docker-compose.ci.yaml exec -T backend \
+          docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml exec -T backend \
             python manage.py test \
               app.tests.test_bracket \
               app.tests.test_discord_reclaim \
@@ -191,4 +191,4 @@ jobs:
 
       - name: Clean up
         if: always()
-        run: docker compose --project-directory . -f docker/docker-compose.ci.yaml down -v || true
+        run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true

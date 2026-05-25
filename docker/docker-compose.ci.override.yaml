@@ -1,0 +1,23 @@
+# CI-only deltas on top of docker-compose.test.yaml.
+# Load with: docker compose -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml ...
+name: df
+services:
+  frontend:
+    # Mount source + configs only; keep the image's /app/node_modules. Replacing
+    # the base list (./frontend:/app) with !override so it doesn't merge.
+    volumes: !override
+      - ./frontend/app:/app/app
+      - ./frontend/public:/app/public
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+      - ./frontend/react-router.config.ts:/app/react-router.config.ts
+      - ./frontend/tsconfig.json:/app/tsconfig.json
+
+  backend:
+    # CI runs the backend as 1000:1000 to match the chmod the workflow applies
+    # to the test SQLite file. Locally the default (root) is fine.
+    user: "1000:1000"
+
+  discord-bot:
+    # Discord bot connects to Discord's gateway — useless in CI. Gating it under
+    # a profile no caller activates effectively disables the service.
+    profiles: ["_disabled-in-ci"]
