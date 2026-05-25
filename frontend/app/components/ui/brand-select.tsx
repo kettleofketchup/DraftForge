@@ -14,20 +14,7 @@ import {
 } from '~/components/ui/select';
 import { cn } from '~/lib/utils';
 
-/**
- * Brand-styled Select trigger and popover content.
- *
- * Maps the shadcn Select primitive to DraftForge's neon-cyber palette:
- * - Trigger sits on `bg-base-300` with a violet hairline that lights up
- *   to brand-violet on hover/focus, matching the PrimaryButton ring.
- * - Content (popover) uses the brand background gradient with a violet
- *   ring so the menu reads as part of the same surface family as
- *   PrimaryButton / Dialog content.
- * - Items use a brand-secondary gradient highlight on hover/focus.
- *
- * Use everywhere a value-picker would otherwise use the neutral shadcn
- * SelectTrigger — Captain Draft Order, role pickers, MMR brackets, etc.
- */
+/** Brand-styled wrapper over shadcn Select — violet/blue gradient on trigger + popover. */
 
 export const BrandSelect = Select;
 export { SelectGroup, SelectLabel, SelectScrollDownButton, SelectScrollUpButton, SelectSeparator, SelectValue };
@@ -47,25 +34,15 @@ export const BrandSelectTrigger = React.forwardRef<
     data-slot="select-trigger"
     data-size={size}
     className={cn(
-      // Base layout
       'inline-flex w-fit items-center justify-between gap-2 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-[box-shadow,background-color,border-color] outline-none',
       'data-[size=default]:h-9 data-[size=sm]:h-8',
-      // Brand surface — `brandSecondary` violet→blue translucent gradient
-      // with a visible violet hairline ring so the trigger reads as a brand
-      // affordance at rest, not a neutral input. Bumped from the original
-      // `bg-base-300 / border-violet-400/30` which was too subtle to
-      // identify as brand on the captain table.
       'bg-gradient-to-r from-violet-500/20 to-blue-500/10 ring-1 ring-violet-400/60',
       'text-violet-50',
       'hover:from-violet-500/30 hover:to-blue-500/20 hover:ring-violet-400/80',
-      // Focus / open state — stronger brand-violet ring
       'focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-200',
       'data-[state=open]:ring-2 data-[state=open]:ring-violet-400 data-[state=open]:from-violet-500/35 data-[state=open]:to-blue-500/25',
-      // Placeholder + value tone
       'data-[placeholder]:text-muted-foreground',
-      // Disabled
       'disabled:cursor-not-allowed disabled:opacity-50',
-      // Icon defaults
       '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4 [&_svg:not([class*="text-"])]:text-violet-300',
       '*:data-[slot=select-value]:line-clamp-1',
       className,
@@ -90,10 +67,7 @@ export const BrandSelectContent = React.forwardRef<
       data-slot="select-content"
       position={position}
       className={cn(
-        // Neon-cyber popover surface — solid `bg-popover` base under the
-        // brand gradient overlay. Without the solid base the underlying
-        // page bleeds through (brandBg is background-IMAGE only). Same
-        // recipe BrandDropdownMenu uses on its content surface.
+        // brandBg is background-image only; bg-popover supplies the solid base or page bleeds through.
         'bg-popover',
         brandBg,
         'text-popover-foreground border border-primary/30 shadow-[0_8px_30px_-8px_var(--glow-violet,rgba(124,58,237,0.45))]',
@@ -132,7 +106,6 @@ export const BrandSelectItem = React.forwardRef<
     className={cn(
       'relative flex w-full cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm text-foreground select-none outline-hidden',
       'focus:outline-none',
-      // Active / focused row — brand secondary gradient (violet→blue/30)
       'focus:bg-gradient-to-r focus:from-violet-500/30 focus:to-blue-500/20 focus:text-violet-100',
       'data-[state=checked]:bg-gradient-to-r data-[state=checked]:from-violet-500/40 data-[state=checked]:to-blue-500/30 data-[state=checked]:text-white',
       'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',

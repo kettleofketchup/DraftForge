@@ -26,11 +26,6 @@ const colorClasses: Record<PrimaryButtonColor, string> = {
 const primaryTextStroke =
   '[text-shadow:_0_1px_0_rgba(0,0,0,0.85),_0_2px_3px_rgba(0,0,0,0.5)]';
 
-// Brand variant composes `brandDepthColors` (indigo floor + violet glow)
-// with `brandLabelOnGradient` (hard stroke + soft halo + cyan glow on the
-// label, dark hairline on icons). Both pieces are exported from `styles.ts`
-// so `<BrandDropdownMenu variant="primary">` can share the same label
-// effect when its trigger sits on the brand gradient.
 const brandExtras = `${brandDepthColors} ${brandLabelOnGradient}`;
 
 const PrimaryButton = React.forwardRef<HTMLButtonElement, PrimaryButtonProps>(

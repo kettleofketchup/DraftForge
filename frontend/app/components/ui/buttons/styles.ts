@@ -5,12 +5,7 @@
 // Brand gradient - single source of truth for primary action buttons
 export const brandGradient = 'bg-gradient-to-r from-violet-500 to-blue-500 hover:from-violet-400 hover:to-blue-400 text-white';
 
-// Three-layer text effect used under every label that sits on the brand
-// gradient: a hard 1px stroke for glyph edges, a soft 3px halo to lift the
-// text off the colored fill, and a cyan accent glow keyed to the brand's
-// --glow-cyan token. Companion `[&_svg]:` styles give icons a matching dark
-// hairline so they read crisp against the gradient too. Used by
-// `<PrimaryButton>` and by the `primary` variant of `<BrandDropdownMenu>`.
+// Stroke + halo + cyan glow for labels sitting on brand-gradient surfaces.
 export const brandLabelOnGradient =
   '[text-shadow:_0_1px_0_rgba(0,0,0,0.85),_0_2px_3px_rgba(0,0,0,0.5),_0_0_10px_var(--glow-cyan)] [&_svg]:text-white [&_svg]:drop-shadow-[0_1px_0_rgba(0,0,0,0.65)]';
 

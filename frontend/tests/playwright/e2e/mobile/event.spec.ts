@@ -1,9 +1,4 @@
-/**
- * Event detail page on mobile (#233).
- *
- * Asserts: breadcrumb hidden below sm:, no horizontal overflow with 6 tabs,
- * desktop TabsList hidden in favor of the page-nav dropdown.
- */
+/** Event detail mobile (#233): breadcrumb hidden, no h-overflow, TabsList → page-nav dropdown. */
 
 import { test, expect, getEventsTestData } from '../../fixtures';
 
@@ -35,8 +30,7 @@ test.describe('Event detail on mobile', () => {
   });
 
   test('desktop TabsList is hidden, page-nav dropdown drives tabs', async ({ page }) => {
-    // The event page registers tabs via usePageNav, so the centered navbar
-    // dropdown picks them up. The inline TabsList stays hidden md:inline-flex.
+    // Event page registers tabs via usePageNav; inline TabsList stays hidden below md.
     await expect(page.locator('[data-testid="event-tab-details"]')).toBeHidden();
     await expect(page.locator('[data-testid="page-nav-trigger"]')).toBeVisible();
   });

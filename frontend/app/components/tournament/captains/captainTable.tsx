@@ -20,20 +20,7 @@ import type { TeamType } from '~/index';
 import { DraftOrderButton } from './draftOrder';
 import { UpdateCaptainButton } from './UpdateCaptainButton';
 
-/**
- * Captain selection — responsive container.
- *
- * Desktop (md+): the original Table layout (Member | MMR | Positions |
- * Captain). Plenty of horizontal room, captain action lives in its own
- * column.
- *
- * Mobile (<md): a vertical UserStrip list. The action column stacks the
- * captain toggle and (when applicable) the draft-order picker so the
- * modal stays inside iPhone-SE width.
- *
- * Component is still exported as `CaptainTable` so the import site in
- * `captainSelectionModal.tsx` doesn't need to move.
- */
+/** Responsive: Table layout at md+, stacked UserStrip list below. */
 export const CaptainTable: React.FC = () => {
   const tournament = useUserStore((state) => state.tournament);
 

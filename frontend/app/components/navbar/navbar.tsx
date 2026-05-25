@@ -103,9 +103,7 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
           className={cn(
             // Base: horizontal layout
             'flex min-w-0 items-center',
-            // 2XL+ (1536px+): switch to vertical/stacked layout so the
-            // subtitle can sit under the title. At lg-xl the stacked layout
-            // crowded 9 nav items + login into 1280-1535px (#252 follow-up).
+            // 2xl+ stacks subtitle under title; below 2xl keep horizontal so 9 items fit (#252).
             '2xl:flex-col 2xl:items-center',
             // hideTextOnSmall: hidden below 1100px, visible at 1100px+
             // This creates: icons-only (lg-1099px) → icons+title (1100px+)
@@ -120,9 +118,7 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
             {badge}
           </div>
 
-          {/* Subtitle - only visible at 2xl+ (kept off below 1536px so 9
-              nav items + login don't crowd the row). Smaller screens get the
-              subtitle via the optional showSubtitleTooltip wrapper below. */}
+          {/* Subtitle at 2xl+ only; below 2xl it falls through to the tooltip wrapper. */}
           {subtitle && (
             <span className="text-[10px] text-text-muted leading-normal truncate hidden 2xl:block text-center">
               {subtitle}
@@ -154,8 +150,7 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
       );
     }
 
-    // Wrap with tooltip for small screens if enabled. Tooltip is hidden at
-    // 2xl+ because the inline subtitle takes over above 1536px.
+    // Tooltip hidden at 2xl+ because the inline subtitle takes over there.
     if (showSubtitleTooltip && subtitle) {
       return (
         <Tooltip>
@@ -646,9 +641,7 @@ export const ResponsiveAppBar: React.FC = memo(() => {
           <SiteLogo />
           <NavLinks className="hidden md:flex" />
         </div>
-        {/* Centered page nav dropdown below lg (mobile + tablet). The desktop
-            nav appears at lg+ — keeping md/tablet on the drawer side avoids
-            the squish where icons + login + logo had to share ~768px (#252). */}
+        {/* Centered page-nav dropdown below md; desktop nav takes over at md+ (#252). */}
         <div className="absolute left-1/2 -translate-x-1/2 md:hidden z-10">
           <PageNavBar />
         </div>

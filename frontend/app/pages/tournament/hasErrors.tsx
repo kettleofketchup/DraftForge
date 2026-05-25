@@ -69,9 +69,7 @@ export const hasErrors = () => {
   const tournament = useUserStore((state) => state.tournament);
   const entities = useUserCacheStore((state) => state.entities);
   const league = useLeagueStore((state) => state.currentLeague);
-  // Default closed for SSR (mobile-first) so hydration matches; expand once
-  // on mount when the viewport is md+ so desktop admins see the issues
-  // immediately. After that the user controls open/close manually.
+  // SSR-safe default closed; md+ viewports auto-expand on mount to avoid hydration mismatch.
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches) {
@@ -141,8 +139,6 @@ export const hasErrors = () => {
         data-testid="incomplete-profiles-toggle"
         aria-label={open ? `Hide ${label}` : `Show ${label}`}
       >
-        {/* Left rail: warning glyph keeps the chevron's mirror weight on
-            the right so the title can truly center between them. */}
         <span className="text-lg" aria-hidden>⚠️</span>
         <span className="truncate text-center">{label}</span>
         <ChevronDown
@@ -171,9 +167,6 @@ export const hasErrors = () => {
                   <span key={issue}>{issue}</span>
                 ))}
               </div>
-              {/* mt-auto pins the edit button to the bottom of the card so
-                  every card in the grid row terminates at the same y, no
-                  matter how many issues the user has. */}
               <div className="flex justify-center mt-auto pt-3">
                 <UserEditModal
                   user={user}

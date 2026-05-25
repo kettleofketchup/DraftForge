@@ -106,8 +106,6 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
     compact ? 'h-9 w-9 p-0 [&_svg]:size-4' : 'w-40',
   );
 
-  // Compact mode: stack a small "Pick" / "Remove" label above the icon
-  // button to match the "Order" subtitle on the DraftOrder picker below.
   const compactLabel = isCaptain ? 'Remove' : 'Pick';
 
   return (

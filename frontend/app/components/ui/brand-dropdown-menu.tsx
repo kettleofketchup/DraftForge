@@ -46,12 +46,7 @@ interface BrandDropdownMenuProps {
   'data-testid'?: string;
 }
 
-// Per-variant text + icon tone. Hover wash is brand-aligned per row so the
-// highlight matches the row's tone (Edit → emerald, Delete → red, etc.)
-// instead of shadcn's default cyan `bg-accent`. Both `hover:` and `focus:`
-// states are set — Radix moves focus on hover for mouse users, but the
-// shadcn item base also carries `focus:bg-accent` which can race the
-// merge; specifying `hover:` directly is the belt to that braces.
+// hover: + focus: both set — shadcn item base carries focus:bg-accent that races merge order.
 const variantStyles = {
   default: 'text-foreground hover:bg-violet-500/20 focus:bg-violet-500/20',
   primary: 'text-primary font-medium [&_svg]:text-primary hover:bg-violet-500/20 focus:bg-violet-500/20',
@@ -60,13 +55,7 @@ const variantStyles = {
   destructive: 'text-error font-medium [&_svg]:text-error hover:bg-red-500/20 focus:bg-red-500/20',
 } as const;
 
-// Triggers reuse the same brand pill recipes the standalone buttons use, so
-// a `<BrandDropdownMenu variant="primary">` looks identical to a
-// `<PrimaryButton>` (3D depth, indigo bottom-edge, brand-violet glow), a
-// `secondary` variant matches `<SecondaryButton>` (violet ring outline),
-// and `admin` matches the wine/violet error surface used for destructive
-// action groups. Without the 3D classes the Reseed trigger went flat
-// against the otherwise depthful toolbar.
+// Reuse shared button3D recipes so trigger matches its sibling standalone button at rest.
 const triggerVariants = {
   primary: `${button3DBase} ${button3DDisabled} ${brandGradient} ${brandDepthColors} ${brandLabelOnGradient} border-0`,
   secondary: `${button3DBase} ${button3DDisabled} ${brandSecondary} border-b-violet-700/50`,

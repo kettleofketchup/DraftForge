@@ -208,11 +208,7 @@ export const UserStrip = memo(
             <span
               className={cn(
                 'text-sm font-medium cursor-pointer hover:text-primary transition-colors leading-tight inline-block truncate',
-                // With a custom cap, pin the name column to a fixed width so
-                // the next column (MMR badges) starts at the same x across
-                // every row — names that don't fill the cap leave whitespace
-                // instead of collapsing. Without a cap we keep the original
-                // mobile-15 / desktop-20 min-widths.
+                // Fixed width when capped so MMR column lines up across rows.
                 nameMaxLength == null
                   ? 'min-w-[15ch] sm:min-w-[20ch]'
                   : 'w-[var(--name-width)]',

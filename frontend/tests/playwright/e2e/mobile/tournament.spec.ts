@@ -1,10 +1,4 @@
-/**
- * Tournament detail page on mobile (#232).
- *
- * Asserts: breadcrumb hidden below sm:, no horizontal overflow on the players
- * tab (Import CSV + Add Player no longer overflow), page-nav dropdown drives
- * tab switching.
- */
+/** Tournament detail mobile (#232): breadcrumb hidden, no h-overflow, page-nav drives tabs. */
 
 import { test, expect, getTournamentByKey } from '../../fixtures';
 
@@ -61,9 +55,7 @@ test.describe('Tournament detail on mobile', () => {
   });
 
   test('?modal=captains deep-link opens the Choose Captains dialog', async ({ page }) => {
-    // The captain-selection modal is URL-addressable so it can be bookmarked
-    // and shared. Visiting the teams tab with ?modal=captains opens the
-    // dialog directly without clicking the in-page trigger.
+    // ?modal=captains is bookmarkable — opens the dialog without clicking the in-page trigger.
     await page.goto(`/tournament/${tournamentPk}/teams?modal=captains`);
     const dialog = page.locator('[role="dialog"]', { hasText: 'Choose Captains' });
     await expect(dialog).toBeVisible({ timeout: 15_000 });

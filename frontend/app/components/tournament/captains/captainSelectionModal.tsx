@@ -24,11 +24,7 @@ import {
 import { useUserStore } from '~/store/userStore';
 import { CaptainTable } from './captainTable';
 
-/**
- * `?modal=captains` opens this dialog, so the URL is bookmarkable and the
- * mobile suite can deep-link straight into it instead of clicking the
- * Teams-tab trigger.
- */
+// `?modal=captains` opens this dialog so it's bookmarkable / deep-linkable.
 const MODAL_PARAM = 'modal';
 const MODAL_VALUE = 'captains';
 

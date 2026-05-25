@@ -1,11 +1,4 @@
-/**
- * Mobile navbar — no squish (#252).
- *
- * Runs in mobile-pixel5 + mobile-iphone13 projects. The project's `use.device`
- * sets the viewport, user-agent, and touch flag; we don't call setViewportSize
- * here. The desktop navbar now switches in at lg (1024px); below lg, only the
- * hamburger drawer is visible.
- */
+/** Mobile navbar (#252): runs in mobile-pixel5/iphone13 projects. */
 
 import { test, expect } from '../../fixtures';
 
@@ -26,8 +19,7 @@ test.describe('Mobile navbar', () => {
     await page.goto('/');
     await expect(page.locator(MOBILE_TOGGLE)).toBeVisible();
 
-    // Any nav link with data-testid="nav-link-*" is the desktop NavLinks row.
-    // It is `hidden md:flex` so should not be visible at mobile widths.
+    // nav-link-* belongs to the desktop NavLinks row (hidden md:flex).
     const desktopLink = page.locator('[data-testid^="nav-link-"]').first();
     await expect(desktopLink).toBeHidden();
   });

@@ -296,8 +296,7 @@ export default function EventPage() {
     [eventId, navigate],
   );
 
-  // Mobile tab navigation goes through the centered navbar dropdown
-  // (PageNavBar) — register page-level tabs here so it renders.
+  // Mobile tab nav goes through usePageNav → centered navbar dropdown.
   const pageNavOptions = useMemo(
     () => [
       { value: 'details', label: 'Details' },
@@ -341,8 +340,7 @@ export default function EventPage() {
     minute: '2-digit',
     timeZoneName: 'short',
   });
-  // Compact format for mobile so the date pill can sit next to the state
-  // badge on a single row at iPhone-SE width (375px).
+  // Compact format so the date pill fits next to the state badge at 375px.
   const shortDate = scheduledDate.toLocaleDateString(undefined, {
     weekday: 'short',
     month: 'short',
@@ -534,15 +532,9 @@ export default function EventPage() {
         )}
       </div>
 
-      {/* Tabs + content sit flush against the page now — the prior
-          rounded/bg-base-200 wrapper added card-on-card chrome that read as
-          visual noise at every breakpoint. */}
       <div>
         <Tabs value={activeTab} onValueChange={handleTabChange}>
-          {/* TabsList hidden on mobile — the centered PageNavBar dropdown in
-              the global navbar drives tab switching at narrow widths (six
-              tabs fit cleanly in the dropdown). At md+ the inline pill
-              TabsList takes over. */}
+          {/* Below md the PageNavBar dropdown drives tab switching. */}
           <TabsList className="hidden md:inline-flex flex-wrap">
             <TabsTrigger value="details" data-testid="event-tab-details">
               Details
@@ -711,10 +703,7 @@ function Stat({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
-/** Details tab — two cards (Tournament Info + Signup Rules) plus an
- *  optional Description card, restored after the flat-grid experiment.
- *  The outer tab content no longer carries its own bg/border wrapper, so
- *  the cards sit directly on the page background. */
+/** Details tab — Tournament Info + Signup Rules + optional Description cards. */
 function DetailsTab({ event }: { event: NonNullable<ReturnType<typeof useEvent>['data']> }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
