@@ -579,28 +579,32 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
 
     // Determine button styling and label based on draft state and user role
     let buttonLabel: string;
+    let buttonLabelMobile: string;
     let buttonIcon: React.ReactNode;
     let tooltipText: string;
     let testId: string;
 
     if (isDraftCompleted) {
-      // Draft is complete - show view completed for everyone
       buttonLabel = 'View Completed Team Draft';
+      buttonLabelMobile = 'Draft';
       buttonIcon = <EyeIcon />;
       tooltipText = 'View the completed team draft results';
       testId = 'viewCompletedTeamDraftButton';
     } else if (isStaff()) {
       buttonLabel = 'Start Team Draft';
+      buttonLabelMobile = 'Draft';
       buttonIcon = <ClipboardPen />;
       tooltipText = 'Administer the Team Draft';
       testId = 'startTeamDraftButton';
     } else if (isCaptain) {
       buttonLabel = 'Live Team Draft';
+      buttonLabelMobile = 'Draft';
       buttonIcon = <EyeIcon />;
       tooltipText = 'Watch the live team draft in progress';
       testId = 'liveTeamDraftButton';
     } else {
       buttonLabel = 'View Team Draft';
+      buttonLabelMobile = 'Draft';
       buttonIcon = <EyeIcon />;
       tooltipText = 'View the team draft (read-only)';
       testId = 'viewTeamDraftButton';
@@ -611,11 +615,12 @@ export const DraftModal: React.FC<DraftModalParams> = ({}) => {
         <TooltipTrigger asChild>
           <DialogTrigger asChild>
             <PrimaryButton
-              className={cn(`w-[${TEAMS_BUTTONS_WIDTH}]`)}
+              className={cn(`flex-1 sm:flex-none sm:w-[${TEAMS_BUTTONS_WIDTH}]`)}
               data-testid={testId}
             >
               {buttonIcon}
-              {buttonLabel}
+              <span className="sm:hidden">{buttonLabelMobile}</span>
+              <span className="hidden sm:inline">{buttonLabel}</span>
             </PrimaryButton>
           </DialogTrigger>
         </TooltipTrigger>

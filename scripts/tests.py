@@ -319,10 +319,10 @@ def playwright_all(c, args=""):
 
 @task
 def playwright_cicd(c, args=""):
-    """Run only @cicd tagged Playwright tests (fast smoke tests).
+    """Run all @cicd tagged Playwright tests (chromium + mobile + herodraft).
 
-    These are quick sanity tests that verify core features work.
-    Use for CI/CD pipelines where speed matters.
+    Local convenience entrypoint — runs every project in one shot. CI uses the
+    per-project tasks below so it can shard them onto separate runners.
 
     Args:
         args: Additional arguments to pass to Playwright
@@ -331,7 +331,46 @@ def playwright_cicd(c, args=""):
     docker_host = get_docker_host()
     with c.cd(paths.FRONTEND_PATH):
         c.run(
-            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" --project=chromium --project=herodraft --no-deps {args}'.strip()
+            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" '
+            f"--project=chromium --project=mobile-pixel5 --project=mobile-iphone13 "
+            f"--project=mobile-iphone-se --project=herodraft --no-deps {args}".strip()
+        )
+
+
+@task
+def playwright_cicd_chromium(c, args=""):
+    """Run @cicd tagged tests for the chromium project only."""
+    flush_test_redis(c)
+    docker_host = get_docker_host()
+    with c.cd(paths.FRONTEND_PATH):
+        c.run(
+            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" '
+            f"--project=chromium --no-deps {args}".strip()
+        )
+
+
+@task
+def playwright_cicd_mobile(c, args=""):
+    """Run @cicd tagged tests for the mobile projects (Pixel 5, iPhone 13, iPhone SE)."""
+    flush_test_redis(c)
+    docker_host = get_docker_host()
+    with c.cd(paths.FRONTEND_PATH):
+        c.run(
+            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" '
+            f"--project=mobile-pixel5 --project=mobile-iphone13 "
+            f"--project=mobile-iphone-se --no-deps {args}".strip()
+        )
+
+
+@task
+def playwright_cicd_herodraft(c, args=""):
+    """Run @cicd tagged tests for the herodraft project only (sequential)."""
+    flush_test_redis(c)
+    docker_host = get_docker_host()
+    with c.cd(paths.FRONTEND_PATH):
+        c.run(
+            f'DOCKER_HOST={docker_host} npx playwright test --grep "@cicd" '
+            f"--project=herodraft --no-deps {args}".strip()
         )
 
 
@@ -350,6 +389,9 @@ ns_playwright.add_task(playwright_league, "league")
 ns_playwright.add_task(playwright_herodraft, "herodraft")
 ns_playwright.add_task(playwright_all, "all")
 ns_playwright.add_task(playwright_cicd, "cicd")
+ns_playwright.add_task(playwright_cicd_chromium, "cicd-chromium")
+ns_playwright.add_task(playwright_cicd_mobile, "cicd-mobile")
+ns_playwright.add_task(playwright_cicd_herodraft, "cicd-herodraft")
 
 ns_test.add_collection(ns_playwright, "playwright")
 

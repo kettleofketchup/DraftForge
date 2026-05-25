@@ -131,10 +131,12 @@ export const LoginButton: React.FC = () => {
   const location = useLocation();
   const loginUrl = buildDiscordLoginUrl(`${location.pathname}${location.search}`);
   return (
-    <PrimaryButton asChild data-testid="navbarLoginButton">
+    <PrimaryButton asChild data-testid="navbarLoginButton" aria-label={t('login')}>
       <a href={loginUrl}>
         <DiscordIcon className="h-5 w-5" />
-        <span>{t('login')}</span>
+        {/* Text collapses below sm: so the icon-only button doesn't fight the
+            centered PageNav dropdown for horizontal space on mobile. */}
+        <span className="hidden sm:inline">{t('login')}</span>
       </a>
     </PrimaryButton>
   );

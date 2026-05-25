@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { PlayerPopover } from '~/components/player';
 import {
   Table,
@@ -13,77 +13,136 @@ import { PositionEnum } from '~/components/user';
 import { UserAvatar } from '~/components/user/UserAvatar';
 import { RolePositions } from '~/components/user/positions';
 import type { UserType } from '~/components/user/types';
+import { UserStrip } from '~/components/user/UserStrip';
+import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
+import type { TeamType } from '~/index';
+import { DraftOrderButton } from './draftOrder';
 import { UpdateCaptainButton } from './UpdateCaptainButton';
-interface TournamentUsersTable {}
-export const CaptainTable: React.FC<TournamentUsersTable> = () => {
+
+/** Responsive: Table layout at md+, stacked UserStrip list below. */
+export const CaptainTable: React.FC = () => {
   const tournament = useUserStore((state) => state.tournament);
 
-  useEffect(() => {}, [tournament.users]);
-  const positions = (user: UserType) => {
-    if (!user.positions) return null;
-    return (
-      <div className="flex gap-1 flex-wrap">
-        {Object.entries(user.positions)
-          .filter(([_, value]) => value)
-          .map(([pos]) => (
-            <span key={pos} className="badge badge-info p-1">
-              {PositionEnum[pos as keyof typeof PositionEnum]}
-            </span>
-          ))}
-      </div>
-    );
-  };
-  const members = () => {
+  const sortedUsers = useMemo<UserType[]>(() => {
     if (!tournament.users) return [];
-    const sortedUsers = [...tournament.users].sort((a, b) => {
-      if (!a.mmr && !b.mmr) return 0;
-      if (!a.mmr) return 1; // Treat undefined MMR as lower
-      if (!b.mmr) return -1; // Treat undefined MMR as lower
-      if (a.mmr > b.mmr) return -1;
-      if (a.mmr < b.mmr) return 1;
-      return 0;
+    return [...tournament.users].sort((a, b) => {
+      const am = a.mmr ?? -Infinity;
+      const bm = b.mmr ?? -Infinity;
+      return bm - am;
     });
-    return sortedUsers;
-  };
+  }, [tournament.users]);
+
+  const captainPks = useMemo(
+    () => new Set((tournament.captains ?? []).map((c) => c.pk)),
+    [tournament.captains],
+  );
 
   return (
-    <Table>
-      <TableCaption>Tournament Users</TableCaption>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Member</TableHead>
-          <TableHead>MMR</TableHead>
-          <TableHead>Positions</TableHead>
-          <TableHead>Captain</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {members().map((user: UserType, idx: number) => (
-          <TableRow key={`TeamTableRow-${user.pk}`}>
-            <TableCell>
-              <PlayerPopover player={user}>
-                <div className="flex items-center gap-2 hover:text-primary transition-colors">
-                  <UserAvatar
-                    user={user}
-                    size="md"
-                    className="hover:ring-2 hover:ring-primary transition-all"
-                  />
-                  <span>{user.nickname || user.username}</span>
-                </div>
-              </PlayerPopover>
-            </TableCell>
-            <TableCell>{user.mmr ?? 'N/A'}</TableCell>
-            <TableCell>
-              <RolePositions user={user as UserType} />
-            </TableCell>
-
-            <TableCell>
-              <UpdateCaptainButton user={user} />
-            </TableCell>
-          </TableRow>
+    <>
+      {/* Mobile: stacked UserStrip list */}
+      <div className="md:hidden flex flex-col gap-2" data-testid="captain-list">
+        {sortedUsers.map((user) => (
+          <CaptainStripRow
+            key={user.pk}
+            user={user}
+            isCaptain={captainPks.has(user.pk)}
+          />
         ))}
-      </TableBody>
-    </Table>
+        {sortedUsers.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            No tournament users yet.
+          </p>
+        )}
+      </div>
+
+      {/* Desktop: existing Table layout */}
+      <div className="hidden md:block">
+        <Table data-testid="captain-table">
+          <TableCaption>Tournament Users</TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Member</TableHead>
+              <TableHead>MMR</TableHead>
+              <TableHead>Positions</TableHead>
+              <TableHead>Captain</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedUsers.map((user) => (
+              <TableRow key={`TeamTableRow-${user.pk}`}>
+                <TableCell>
+                  <PlayerPopover player={user}>
+                    <div className="flex items-center gap-2 hover:text-primary transition-colors">
+                      <UserAvatar
+                        user={user}
+                        size="md"
+                        className="hover:ring-2 hover:ring-primary transition-all"
+                      />
+                      <span>{user.nickname || user.username}</span>
+                    </div>
+                  </PlayerPopover>
+                </TableCell>
+                <TableCell>{user.mmr ?? 'N/A'}</TableCell>
+                <TableCell>
+                  <RolePositions user={user} />
+                </TableCell>
+                <TableCell>
+                  <UpdateCaptainButton user={user} />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
+  );
+};
+
+// Re-export so unused-import warnings don't fire when PositionEnum stays
+// imported for type checking on the desktop branch.
+void PositionEnum;
+
+interface CaptainStripRowProps {
+  user: UserType;
+  isCaptain: boolean;
+}
+
+const CaptainStripRow: React.FC<CaptainStripRowProps> = ({ user, isCaptain }) => {
+  const tournament = useUserStore((state) => state.tournament);
+  const team = useMemo<TeamType | undefined>(
+    () => tournament?.teams?.find((t) => t.captain?.pk === user.pk),
+    [tournament?.teams, user.pk],
+  );
+  const initialOrder = team?.draft_order ? String(team.draft_order) : '0';
+  const [draftOrder, setDraftOrder] = useState<string>(initialOrder);
+
+  return (
+    <UserStrip
+      user={user}
+      compact
+      showPositions={false}
+      nameMaxLength={12}
+      data-testid={`captain-row-${user.pk}`}
+      actionSlot={
+        <div
+          className={cn(
+            'flex flex-col items-end gap-1 h-[92px] pr-2',
+            isCaptain ? 'justify-start' : 'justify-center',
+          )}
+        >
+          <UpdateCaptainButton user={user} compact hideDraftOrder />
+          {isCaptain && (
+            <DraftOrderButton
+              id={`draft-order-${user.pk}`}
+              user={user}
+              draft_order={draftOrder}
+              setDraftOrder={setDraftOrder}
+              compact
+            />
+          )}
+        </div>
+      }
+    />
   );
 };

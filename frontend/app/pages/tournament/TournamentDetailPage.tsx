@@ -14,8 +14,9 @@ import { deleteTournament } from '~/components/api/api';
 import type { TournamentType } from '~/components/tournament/types';
 import TournamentTabs from './tabs/TournamentTabs';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
+import { PageHeader } from '~/components/ui/page-header';
 import { TournamentSettingsModal } from '~/components/tournament/settings/TournamentSettingsModal';
-import { SecondaryButton, DestructiveButton } from '~/components/ui/buttons';
+import { DestructiveButton, EditButton } from '~/components/ui/buttons';
 import { BrandDropdownMenu, type BrandDropdownAction } from '~/components/ui/brand-dropdown-menu';
 import { toast } from 'sonner';
 
@@ -197,7 +198,7 @@ export const TournamentDetailPage: React.FC = () => {
         icon: <Pencil className="h-4 w-4 mr-1.5" />,
         label: 'Edit',
         onClick: () => setSettingsOpen(true),
-        variant: 'success',
+        variant: 'edit',
         'data-testid': 'tournament-edit-btn',
       },
       {
@@ -251,83 +252,75 @@ export const TournamentDetailPage: React.FC = () => {
   }
 
   const getDate = () => {
-    let date = tournament.date_played
-      ? (() => {
-          const [year, month, day] = tournament.date_played.split('-');
-          return `${month}-${day}`;
-        })()
-      : '';
-    return `${date || ''}`;
-  };
-
-  const tournamentName = () => {
-    if (!tournament.name) {
-      return <></>;
-    }
-    return (
-      <h1 className="text-3xl font-bold mb-4" data-testid="tournamentTitle">
-        {tournament.name}
-      </h1>
-    );
+    if (!tournament.date_played) return '';
+    const d = new Date(tournament.date_played);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const title = () => {
-    return (
-      <>
-        <div className="flex flex-col sm:flex-row sm:items-center mb-2 gap-1">
-          {tournamentName()}
-          <span className="sm:ml-4 text-base text-base-content/50 font-normal">
-            played on {getDate()}
-          </span>
+    if (!tournament.name) return null;
+    const adminActionsNode = isAdmin && hydratedTournament && (
+      <div className="flex items-center gap-2 mb-3">
+        {/* Desktop: brand Edit + Delete pair, equal min-width so the
+            shorter label doesn't render a visibly narrower pill. */}
+        <div className="hidden md:flex items-center gap-2">
+          <EditButton
+            size="sm"
+            className="min-w-24 justify-center"
+            onClick={() => setSettingsOpen(true)}
+            data-testid="tournament-edit-btn"
+          >
+            <Pencil className="h-4 w-4 mr-1.5" />
+            Edit
+          </EditButton>
+          <DestructiveButton
+            size="sm"
+            className="min-w-24 justify-center"
+            onClick={handleDelete}
+            data-testid="tournament-delete-btn"
+          >
+            <Trash2 className="h-4 w-4 mr-1.5" />
+            Delete
+          </DestructiveButton>
         </div>
-        {isAdmin && hydratedTournament && (
-          <div className="flex items-center gap-2 mb-3">
-            {/* Desktop: button group */}
-            <div className="hidden md:flex items-center gap-2">
-              <SecondaryButton
-                color="emerald"
-                size="sm"
-                onClick={() => setSettingsOpen(true)}
-                data-testid="tournament-edit-btn"
-              >
-                <Pencil className="h-4 w-4 mr-1.5" />
-                Edit
-              </SecondaryButton>
-              <DestructiveButton
-                size="sm"
-                onClick={handleDelete}
-                data-testid="tournament-delete-btn"
-              >
-                <Trash2 className="h-4 w-4 mr-1.5" />
-                Delete
-              </DestructiveButton>
-            </div>
-
-            {/* Mobile: dropdown */}
-            <div className="md:hidden">
-              <BrandDropdownMenu
-                label="Admin"
-                icon={<ShieldAlert className="h-4 w-4 mr-1.5" />}
-                actions={adminActions}
-                variant="admin"
-                data-testid="tournament-admin-actions-mobile"
-              />
-            </div>
-
-            <TournamentSettingsModal
-              tournament={hydratedTournament}
-              open={settingsOpen}
-              onOpenChange={setSettingsOpen}
-            />
-          </div>
-        )}
-      </>
+        {/* Mobile: dropdown */}
+        <div className="md:hidden">
+          <BrandDropdownMenu
+            label="Admin"
+            icon={<ShieldAlert className="h-4 w-4 mr-1.5" />}
+            actions={adminActions}
+            variant="admin"
+            data-testid="tournament-admin-actions-mobile"
+          />
+        </div>
+        <TournamentSettingsModal
+          tournament={hydratedTournament}
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+        />
+      </div>
+    );
+    const playedOn = getDate();
+    return (
+      <PageHeader
+        title={tournament.name}
+        subtitle={
+          playedOn ? (
+            <span className="text-sm sm:text-base text-muted-foreground">
+              played on {playedOn}
+            </span>
+          ) : undefined
+        }
+        actions={adminActionsNode || undefined}
+        data-testid="tournamentTitle"
+      />
     );
   };
 
   return (
     <div
-      className="max-w-full overflow-x-hidden px-2 sm:container sm:mx-auto sm:p-4"
+      className="max-w-full overflow-x-hidden px-3 py-3 sm:container sm:mx-auto sm:p-4"
       data-testid="tournamentDetailPage"
     >
       {breadcrumbSegments.length > 1 && <EntityBreadcrumb segments={breadcrumbSegments} />}

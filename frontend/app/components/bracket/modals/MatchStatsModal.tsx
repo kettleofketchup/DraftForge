@@ -166,35 +166,41 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Teams display */}
-          <div className="grid grid-cols-3 gap-4 items-center py-4">
-            {/* Radiant team */}
+          {/* Teams display — auto-sized middle column so the VS / Final badge
+              doesn't eat 1/3 of the iPhone-SE-width modal and squeeze the
+              team names into overlap. */}
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-2 items-center py-3 sm:gap-4 sm:py-4">
+            {/* Team 1 (stored as "radiant" but the side label is misleading
+                — captains pick sides at draft time, so "Radiant"/"Dire" was
+                rotating per match. Use neutral Team 1 / Team 2 labels.) */}
             <TeamCard
               team={match.radiantTeam}
               score={match.radiantScore}
               isWinner={match.winner === 'radiant'}
-              label="Radiant"
+              label="Team 1"
             />
 
             {/* VS divider */}
-            <div className="text-center">
-              <span className="text-2xl font-bold text-muted-foreground">VS</span>
+            <div className="flex flex-col items-center gap-1 text-center shrink-0">
+              <span className="text-lg sm:text-2xl font-bold text-muted-foreground">VS</span>
               {match.status === 'completed' && (
-                <Badge className="block mt-2" variant="outline">
+                <Badge variant="outline" data-testid="match-status-final">
                   Final
                 </Badge>
               )}
               {match.status === 'live' && (
-                <Badge className="block mt-2 bg-red-500">LIVE</Badge>
+                <Badge className="bg-red-500" data-testid="match-status-live">
+                  LIVE
+                </Badge>
               )}
             </div>
 
-            {/* Dire team */}
+            {/* Team 2 (stored as "dire") */}
             <TeamCard
               team={match.direTeam}
               score={match.direScore}
               isWinner={match.winner === 'dire'}
-              label="Dire"
+              label="Team 2"
             />
           </div>
 
@@ -415,22 +421,27 @@ function TeamCard({ team, score, isWinner, label }: TeamCardProps) {
   return (
     <div
       className={cn(
-        'text-center p-4 rounded-lg',
-        isWinner ? 'bg-green-500/10 ring-2 ring-green-500' : 'bg-muted/50'
+        'text-center p-3 sm:p-4 rounded-lg min-w-0',
+        isWinner ? 'bg-green-500/10 ring-2 ring-green-500' : 'bg-muted/50',
       )}
     >
-      <Avatar className="h-12 w-12 mx-auto mb-2">
+      <Avatar className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-2">
         <AvatarImage src={team.captain?.avatarUrl} />
         <AvatarFallback>{initials}</AvatarFallback>
       </Avatar>
-      <p className={cn('font-medium', isWinner && 'text-green-500')}>{displayName}</p>
+      <p
+        className={cn('font-medium text-sm sm:text-base truncate', isWinner && 'text-green-500')}
+        title={displayName}
+      >
+        {displayName}
+      </p>
       <p className="text-xs text-muted-foreground">{label}</p>
       {score !== undefined && (
         <p className={cn('text-2xl font-bold mt-1', isWinner && 'text-green-500')}>
           {score}
         </p>
       )}
-      {isWinner && <span className="text-green-500">Winner</span>}
+      {isWinner && <span className="text-xs sm:text-sm text-green-500">Winner</span>}
     </div>
   );
 }

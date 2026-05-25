@@ -106,17 +106,22 @@ export function DiscordLogSection({ eventId, isAdmin, eventTimezone }: DiscordLo
         </div>
       </div>
 
-      {/* Sub-tabs for different views */}
+      {/* Sub-tabs for different views — flex-wrap + short labels at <sm
+          so all three tabs fit at iPhone-SE (320px) without horizontal
+          overflow. Full labels return at sm+. */}
       <Tabs defaultValue="schedule">
-        <TabsList>
+        <TabsList className="flex-wrap w-full sm:w-fit">
           <TabsTrigger value="schedule" data-testid="discord-subtab-schedule">
-            Task Schedule
+            <span className="sm:hidden">Tasks</span>
+            <span className="hidden sm:inline">Task Schedule</span>
           </TabsTrigger>
           <TabsTrigger value="activity" data-testid="discord-subtab-activity">
-            Activity Log ({allLogs.length})
+            <span className="sm:hidden">Logs ({allLogs.length})</span>
+            <span className="hidden sm:inline">Activity Log ({allLogs.length})</span>
           </TabsTrigger>
           <TabsTrigger value="dms" data-testid="discord-subtab-dms">
-            DM History ({discordState.dms.length})
+            <span className="sm:hidden">DMs ({discordState.dms.length})</span>
+            <span className="hidden sm:inline">DM History ({discordState.dms.length})</span>
           </TabsTrigger>
         </TabsList>
 
@@ -222,7 +227,7 @@ export function DiscordLogSection({ eventId, isAdmin, eventTimezone }: DiscordLo
                 compact
                 showPositions={false}
                 contextSlot={
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center justify-end gap-1">
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">{dm.dm_type_display}</Badge>
                     {dm.delivered ? (
                       <Badge className="bg-success/20 text-success border-success/30 text-[10px] px-1.5 py-0">Delivered</Badge>

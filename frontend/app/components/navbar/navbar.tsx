@@ -15,30 +15,11 @@ const DOCS_URL = 'https://kettleofketchup.github.io/DraftForge/';
 const BUG_REPORT_URL = `${GITHUB_REPO_URL}/issues/new?template=bug_report.md`;
 
 /**
- * NavItem - Navigation item with responsive display states
- *
- * BREAKPOINT LAYOUT (for non-mobile nav, visible at md/768px+):
- * ┌─────────────────────────────────────────────────────────────────────────┐
- * │ SMALL (md to 1099px: 768px - 1099px)                                    │
- * │ - Icons only                                                            │
- * │ - Tooltip on hover shows title + subtitle (if showSubtitleTooltip)      │
- * │ - Controlled by: hideTextOnSmall && 'hidden min-[1100px]:flex'          │
- * ├─────────────────────────────────────────────────────────────────────────┤
- * │ MEDIUM (1100px to xl: 1100px - 1279px)                                  │
- * │ - Icons + title text (horizontal layout)                                │
- * │ - Subtitle still hidden                                                 │
- * │ - Controlled by: min-[1100px]:flex shows text                           │
- * ├─────────────────────────────────────────────────────────────────────────┤
- * │ LARGE (xl+: 1280px+)                                                    │
- * │ - Icons + title + subtitle (vertical/stacked layout)                    │
- * │ - Full content display                                                  │
- * │ - Controlled by: xl:flex-col xl:items-center, subtitle xl:block         │
- * └─────────────────────────────────────────────────────────────────────────┘
- *
- * BREAKPOINTS USED:
- * - md: 768px  (NavLinks becomes visible, MobileNav hamburger hidden)
- * - 1100px: Custom breakpoint (Text appears if hideTextOnSmall=true)
- * - xl: 1280px (Subtitle appears, layout becomes vertical)
+ * NavItem layout tiers (above md/768px — below is the MobileNav drawer):
+ *   - md → <1100px: icon only; subtitle in tooltip (showSubtitleTooltip).
+ *   - 1100px → <2xl: icon + title inline, subtitle still tooltip-only.
+ *   - 2xl+ (1536px): icon + title + inline subtitle stacked vertically.
+ * Nine nav items fit horizontally below 2xl; stacking earlier overflows (#252).
  */
 interface NavItemProps
   extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
@@ -80,10 +61,8 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
     },
     ref,
   ) => {
-    // Auto-generate testId from route if not provided
     const testId = dataTestId || (to ? `nav-link-${to.replace(/^\//, '')}` : undefined);
     const baseClassName = cn(
-      // Base layout with responsive gap: tight at medium (1100px+), expanded at xl
       'flex items-center gap-1 xl:gap-2 rounded-md px-1.5 xl:px-2 py-1.5 h-9',
       'text-sm font-medium',
       'text-text-primary',
@@ -95,32 +74,21 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
 
     const content = (
       <>
-        {/* Icon - always visible */}
         {icon && <span className="shrink-0">{icon}</span>}
-
-        {/* Text container - visibility controlled by hideTextOnSmall */}
         <div
           className={cn(
-            // Base: horizontal layout
-            'flex min-w-0 items-center',
-            // LARGE (xl+): switch to vertical/stacked layout
-            'xl:flex-col xl:items-center',
-            // hideTextOnSmall: hidden below 1100px, visible at 1100px+
-            // This creates: icons-only (md-1099px) → icons+text (1100px+)
+            'flex min-w-0 items-center 2xl:flex-col 2xl:items-center',
             hideTextOnSmall && 'hidden min-[1100px]:flex',
           )}
         >
-          {/* Title + badge row */}
           <div className="flex items-center justify-center gap-1">
             <span className={cn("text-xs font-bold leading-normal truncate text-center text-outline-sm text-[#646cff]", titleClassName)}>
               {title}
             </span>
             {badge}
           </div>
-
-          {/* Subtitle - only visible at xl+ */}
           {subtitle && (
-            <span className="text-[10px] text-text-muted leading-normal truncate hidden xl:block text-center">
+            <span className="text-[10px] text-text-muted leading-normal truncate hidden 2xl:block text-center">
               {subtitle}
             </span>
           )}
@@ -128,7 +96,6 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
       </>
     );
 
-    // Render the appropriate component based on props
     let navContent: React.ReactElement;
     if (asChild) {
       navContent = (
@@ -150,12 +117,11 @@ const NavItem = React.forwardRef<HTMLAnchorElement, NavItemProps>(
       );
     }
 
-    // Wrap with tooltip for small screens if enabled
     if (showSubtitleTooltip && subtitle) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>{navContent}</TooltipTrigger>
-          <TooltipContent className="xl:hidden">
+          <TooltipContent className="2xl:hidden">
             <p className="font-medium">{title}</p>
             <p className="text-xs opacity-80">{subtitle}</p>
           </TooltipContent>
@@ -455,7 +421,7 @@ const ExternalLinks = ({ className }: { className?: string }) => {
   return (
     <div
       className={cn(
-        'flex items-center gap-0.5 lg:gap-1 mr-1 lg:mr-2',
+        'flex items-center gap-0.5 md:gap-1 mr-1 md:mr-2',
         className,
       )}
     >
@@ -506,7 +472,7 @@ const NavLinks = ({ className }: { className?: string }) => {
   const currentUser = useUserStore((state) => state.currentUser);
 
   return (
-    <div className={cn('flex items-center gap-0.5 lg:gap-1', className)}>
+    <div className={cn('flex items-center gap-0.5 md:gap-1', className)}>
       <NavItem
         to="/about"
         icon={<AboutIcon />}
@@ -632,7 +598,7 @@ export const ResponsiveAppBar: React.FC = memo(() => {
   return (
     <header>
       <nav
-        className="sticky z-50 top-0 navbar bg-base-600 shadow-elevated border-b border-border p-0"
+        className="sticky z-50 top-0 navbar bg-base-600 shadow-elevated border-b border-border px-3 sm:px-4 lg:px-6 py-0"
         role="navigation"
         aria-label={t('aria.main_nav')}
       >
@@ -641,7 +607,7 @@ export const ResponsiveAppBar: React.FC = memo(() => {
           <SiteLogo />
           <NavLinks className="hidden md:flex" />
         </div>
-        {/* Centered page nav dropdown on mobile */}
+        {/* Centered page-nav dropdown below md; desktop nav takes over at md+ (#252). */}
         <div className="absolute left-1/2 -translate-x-1/2 md:hidden z-10">
           <PageNavBar />
         </div>

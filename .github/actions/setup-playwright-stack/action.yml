@@ -1,0 +1,126 @@
+name: Setup Playwright Stack
+description: >
+  Pull cached Docker images, populate or restore the test database, start the
+  test compose stack (docker-compose.test.yaml + docker-compose.ci.override.yaml),
+  and wait for services to respond. Used by every Playwright job so the setup
+  is defined once and the per-shard runs only diff in the project + --shard
+  flag they pass to Playwright. The override file disables discord-bot and
+  swaps frontend mounts so the image's node_modules survive.
+
+inputs:
+  registry-token:
+    description: GHCR token (pass secrets.GITHUB_TOKEN)
+    required: true
+  github-actor:
+    description: GitHub actor for GHCR login
+    required: true
+  image-prefix:
+    description: GHCR image prefix
+    required: false
+    default: ghcr.io/kettleofketchup/draftforge
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-toolchain
+      with:
+        registry-token: ${{ inputs.registry-token }}
+        github-actor: ${{ inputs.github-actor }}
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install frontend dependencies
+      shell: bash
+      working-directory: frontend
+      run: npm ci
+
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      id: playwright-cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+    - name: Install Playwright browsers
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: frontend
+      run: npx playwright install --with-deps chromium
+
+    - name: Install Playwright system deps (if cached)
+      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      shell: bash
+      working-directory: frontend
+      run: npx playwright install-deps chromium
+
+    - name: Pull or Build Docker images
+      shell: bash
+      run: |
+        if just docker::all-pull; then
+          echo "Images pulled successfully"
+        else
+          echo "Pull failed, building with buildx + registry cache..."
+          poetry run inv docker.test-build
+        fi
+
+    - name: Rebuild frontend-dev image if pulled :latest is stale
+      shell: bash
+      env:
+        IMAGE_PREFIX: ${{ inputs.image-prefix }}
+      run: |
+        FRONTEND_HASH=$(just docker::hash frontend)
+        FRONTEND_IMAGE="${IMAGE_PREFIX}/frontend-dev:${FRONTEND_HASH}"
+        if docker image inspect "$FRONTEND_IMAGE" >/dev/null 2>&1; then
+          echo "frontend-dev:${FRONTEND_HASH:0:12} present (deps in sync)"
+        else
+          echo "frontend-dev image lacks current package-lock hash; rebuilding"
+          poetry run inv docker.frontend.build-dev
+        fi
+
+    - name: Get test database
+      shell: bash
+      run: |
+        if just docker::db::pull; then
+          HASH=$(just docker::db::hash)
+          EXISTING=$(docker inspect --format='{{index .Config.Labels "org.draftforge.test-db.content-hash"}}' draftforge/test-db:latest 2>/dev/null || echo "")
+          if [[ "$HASH" == "$EXISTING" ]]; then
+            just db::reset-test
+            echo "Exact hash match - using cached database"
+            exit 0
+          fi
+          echo "Hash mismatch (expected ${HASH:0:12}, got ${EXISTING:0:12}); falling back to populate"
+        fi
+        echo "Populating test database from scratch..."
+        just db::populate::fresh
+
+    - name: Fix database permissions
+      shell: bash
+      run: |
+        chmod 777 backend
+        chmod 666 backend/test.db.sqlite3
+
+    - name: Start test services
+      shell: bash
+      env:
+        COMPOSE_IGNORE_ORPHANS: 'true'
+      run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml up -d --no-build
+
+    - name: Wait for services to be ready
+      shell: bash
+      run: |
+        for i in $(seq 1 60); do
+          if curl -ks https://localhost/api/ -o /dev/null 2>&1; then
+            echo "Services ready"
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "WARNING: services not ready after 120s"
+        docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml ps
+        docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml logs --tail=40
+        exit 1

@@ -3,6 +3,31 @@
 @import "@fontsource-variable/inter/index.css";
 
 @custom-variant dark (&:is(.dark *));
+
+/* Tailwind v4 dropped the v3 `container` auto-width/max-width behavior; pages
+   that say `<div class="container mx-auto px-4">` were getting no width rule,
+   which let mobile content overflow. Restore the v3 semantics globally so we
+   don't have to churn every existing route. */
+.container {
+  width: 100%;
+}
+@media (min-width: 640px)  { .container { max-width: 640px; } }
+@media (min-width: 768px)  { .container { max-width: 768px; } }
+@media (min-width: 1024px) { .container { max-width: 1024px; } }
+@media (min-width: 1280px) { .container { max-width: 1280px; } }
+@media (min-width: 1536px) { .container { max-width: 1536px; } }
+
+/* Radix ScrollArea's Viewport renders an inner wrapper with
+   `min-width:100%; display:table`. Inside `display:table`, child `width:100%`
+   resolves against the table's auto-fit content width, so a long line of text
+   or a wide element makes the *whole* page table-wider than the viewport and
+   nothing inside it (including `.container`, `w-full`, etc.) can clamp back
+   to viewport width. Force the inner wrapper to behave like a normal block
+   so child widths resolve against the viewport, not the content. */
+[data-slot="scroll-area-viewport"] > div {
+  display: block !important;
+  max-width: 100%;
+}
 [data-scroll-locked][data-scroll-locked] {
   overflow: scroll !important;
 }
@@ -83,27 +108,31 @@ body {
   min-height: 100vh;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+@layer base {
+  h1 {
+    font-size: 3.2em;
+    line-height: 1.1;
+  }
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+@layer base {
+  button {
+    border-radius: 8px;
+    border: 1px solid transparent;
+    padding: 0.6em 1.2em;
+    font-size: 1em;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.25s;
+  }
+  button:hover {
+    border-color: #646cff;
+  }
+  button:focus,
+  button:focus-visible {
+    outline: 4px auto -webkit-focus-ring-color;
+  }
 }
 
 @theme inline {

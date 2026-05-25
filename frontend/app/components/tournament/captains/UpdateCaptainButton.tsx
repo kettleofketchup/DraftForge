@@ -1,3 +1,4 @@
+import { Crown, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
 import {
@@ -14,11 +15,33 @@ import {
 import { CancelButton, ConfirmButton, DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
 import type { TeamType, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
+import { cn } from '~/lib/utils';
 import { useUserStore } from '~/store/userStore';
 import { createTeamFromCaptainHook } from './createTeamFromCaptainHook';
 import { DraftOrderButton } from './draftOrder';
 const log = getLogger('updateCaptainButton');
-export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
+
+interface UpdateCaptainButtonProps {
+  user: UserType;
+  /**
+   * `compact=true` renders an icon-only action sized for a UserStrip's
+   * actionSlot (32x32 touch target with a Crown / X glyph). Default mode
+   * keeps the original wide `w-40` "Add Captain" / "Remove Captain" pill
+   * used by the legacy table layout.
+   */
+  compact?: boolean;
+  /**
+   * Hide the draft-order picker. Useful when the strip puts draft order in
+   * a separate contextSlot.
+   */
+  hideDraftOrder?: boolean;
+}
+
+export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
+  user,
+  compact = false,
+  hideDraftOrder = false,
+}) => {
   const tournament = useUserStore((state) => state.tournament);
   const isStaff = useUserStore((state) => state.isStaff);
 
@@ -58,19 +81,67 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
     });
   };
   const dialogBG = () => (isCaptain ? 'bg-red-900' : 'bg-green-900');
-  if (!isStaff()) return <AdminOnlyButton buttonTxt="Change Captain" />;
+  if (!isStaff()) {
+    return compact ? (
+      <div className="flex flex-col items-stretch gap-0.5 w-9">
+        <span
+          className="text-[9px] uppercase tracking-wider text-muted-foreground leading-none text-center"
+          aria-hidden
+        >
+          {isCaptain ? 'Remove' : 'Pick'}
+        </span>
+        <AdminOnlyButton
+          buttonTxt=""
+          className="h-9 w-9 p-0 [&_svg]:size-4 [&_svg]:mr-0"
+          iconClassName=""
+          data-testid={`captain-action-locked-${user.pk}`}
+        />
+      </div>
+    ) : (
+      <AdminOnlyButton buttonTxt="Change Captain" />
+    );
+  }
+
+  const triggerClass = cn(
+    compact ? 'h-9 w-9 p-0 [&_svg]:size-4' : 'w-40',
+  );
+
+  const compactLabel = isCaptain ? 'Remove' : 'Pick';
 
   return (
     <div
-      className="flex flex-col gap-y-2 justify-between
-    justify-between items-center align-middle w-full md:flex-row md:gap-x-2 md:py-1"
+      className={cn(
+        compact
+          ? 'flex flex-col items-stretch gap-0.5 w-9'
+          : 'flex flex-col gap-y-2 justify-between items-center align-middle w-full md:flex-row md:gap-x-2 md:py-1',
+      )}
     >
+      {compact && (
+        <span
+          className="text-[9px] uppercase tracking-wider text-muted-foreground leading-none text-center"
+          aria-hidden
+        >
+          {compactLabel}
+        </span>
+      )}
       <AlertDialog>
         <AlertDialogTrigger asChild>
           {isCaptain ? (
-            <DestructiveButton className="w-40">{msg()} Captain</DestructiveButton>
+            <DestructiveButton
+              className={triggerClass}
+              aria-label={compact ? `${msg()} captain ${user.username ?? ''}`.trim() : undefined}
+              data-testid={`captain-action-${user.pk}`}
+            >
+              {compact ? <X /> : `${msg()} Captain`}
+            </DestructiveButton>
           ) : (
-            <PrimaryButton className="w-40">{msg()} Captain</PrimaryButton>
+            <PrimaryButton
+              className={triggerClass}
+              aria-label={compact ? `${msg()} captain ${user.username ?? ''}`.trim() : undefined}
+              data-testid={`captain-action-${user.pk}`}
+            >
+              {compact ? <Crown /> : `${msg()} Captain`}
+            </PrimaryButton>
           )}
         </AlertDialogTrigger>
         <AlertDialogContent className={dialogBG()}>
@@ -101,7 +172,7 @@ export const UpdateCaptainButton: React.FC<{ user: UserType }> = ({ user }) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {isCaptain && (
+      {isCaptain && !hideDraftOrder && (
         <DraftOrderButton
           id={`draft-order-${user.pk}`}
           user={user}
