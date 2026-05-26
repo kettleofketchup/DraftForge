@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '~/components/ui/dialog';
+import { ScrollArea } from '~/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { getUserProfile } from '~/components/api/userProfileApi';
 import { useUserProfileStore } from '~/store/userProfileStore';
@@ -33,21 +34,31 @@ export function EditProfileModal({
 }: EditProfileModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col">
+      {/* ScrollArea contract for dialog body — DialogContent needs
+          overflow-hidden (NOT overflow-y-auto) so Radix Viewport can
+          drive its themed scrollbar inside <ScrollArea>. T1 body is
+          short today (one nickname field) but the contract is in place
+          now so T2/T3's Dota/Org tabs don't break it later. Ref:
+          docs/theming-guide/ai/references/scrollbars-dialogs.md */}
+      <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Edit Profile</DialogTitle>
           <DialogDescription>Update your profile information</DialogDescription>
         </DialogHeader>
 
-        <ErrorBoundary FallbackComponent={ProfileErrorFallback}>
-          <Suspense fallback={<ProfileSkeleton />}>
-            <EditProfileModalBody
-              userPk={userPk}
-              onSave={onSave}
-              onClose={() => onOpenChange(false)}
-            />
-          </Suspense>
-        </ErrorBoundary>
+        <ScrollArea className="-mx-6 min-h-0 flex-1 px-6">
+          <div className="pb-4">
+            <ErrorBoundary FallbackComponent={ProfileErrorFallback}>
+              <Suspense fallback={<ProfileSkeleton />}>
+                <EditProfileModalBody
+                  userPk={userPk}
+                  onSave={onSave}
+                  onClose={() => onOpenChange(false)}
+                />
+              </Suspense>
+            </ErrorBoundary>
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );

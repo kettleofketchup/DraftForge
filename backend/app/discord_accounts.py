@@ -24,9 +24,14 @@ from app.models import CustomUser
 logger = logging.getLogger(__name__)
 
 # Discord identity / profile fields copied from the duplicate onto the kept
-# account when the kept account is missing them.
-_CARRYOVER_FIELDS = (
-    "avatar",
+# account when the kept account is missing them. Split into two groups because
+# after T1 (BaseUserProfile epic) `avatar` is a `@property` on CustomUser that
+# proxies to base_profile.avatar — its setter persists immediately via
+# `bp.save(update_fields=["avatar"])`, so it MUST NOT appear in the column-
+# level `keep.save(update_fields=...)` call below (Django would raise
+# ValueError: 'The following fields do not exist in this model... avatar').
+_CARRYOVER_PROPERTY_FIELDS = ("avatar",)  # persisted by property setter
+_CARRYOVER_COLUMN_FIELDS = (
     "discordUsername",
     "discordNickname",
     "guildNickname",
@@ -55,6 +60,18 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
         except IntegrityError:
             # ``keep`` already has an equivalent row; the duplicate is junk.
             obj.delete()
+
+    # Snapshot carryover values BEFORE the related-objects loop. After T1
+    # the loop walks the reverse-O2O to BaseUserProfile, hits an IntegrityError
+    # (keep already has one), and deletes drop.base_profile. The
+    # `drop.avatar` getter reads drop.base_profile.avatar, so after that
+    # delete the carryover would silently read None and the kept account
+    # never inherits the avatar. Capture the values here while drop is
+    # still whole.
+    carryover_snapshot = {
+        field: getattr(drop, field, None)
+        for field in (*_CARRYOVER_PROPERTY_FIELDS, *_CARRYOVER_COLUMN_FIELDS)
+    }
 
     # All-or-nothing: a failure mid-loop must not leave a half-merged state
     # (some relations moved, both accounts still alive). (select_for_update is
@@ -92,10 +109,22 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
                 _repoint(obj, field_name)
 
         # Carry over Discord profile fields the kept account is missing.
+        # Read from carryover_snapshot (captured pre-loop) rather than
+        # drop.<field>, because the related-objects loop above destroyed
+        # drop.base_profile via IntegrityError → delete, so a fresh read
+        # of drop.avatar would return None.
+        # Property fields persist via their setters (no CustomUser.save needed);
+        # column fields collect into `changed` for one batched save.
+        for field in _CARRYOVER_PROPERTY_FIELDS:
+            value = carryover_snapshot.get(field)
+            if not getattr(keep, field, None) and value:
+                setattr(keep, field, value)
+
         changed = []
-        for field in _CARRYOVER_FIELDS:
-            if not getattr(keep, field, None) and getattr(drop, field, None):
-                setattr(keep, field, getattr(drop, field))
+        for field in _CARRYOVER_COLUMN_FIELDS:
+            value = carryover_snapshot.get(field)
+            if not getattr(keep, field, None) and value:
+                setattr(keep, field, value)
                 changed.append(field)
         if changed:
             keep.save(update_fields=changed)

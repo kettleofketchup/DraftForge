@@ -2416,6 +2416,18 @@ Captured during PR #250 review iterations. T2 and T3 should inherit these by des
 14. **Cacheops integration tests need `TransactionTestCase`, not `TestCase`.**
     `invalidate_after_commit` schedules eviction via `transaction.on_commit`. Plain `TestCase` wraps each test in a transaction that's rolled back at teardown — the on_commit hook never fires mid-test, the cache is never evicted between warm and re-fetch, and the test passes for the wrong reason (cache evicted at teardown, not by the PATCH). Use `TransactionTestCase` for any live-Redis behavioral test that exercises `on_commit`-scheduled invalidation. Pattern: `backend/app/tests/test_league_serializer.py:136`. T2/T3's equivalent integration tests (`DotaUserProfile`, `OrgUserProfile`) must inherit this rule.
 
+15. **Carryover/merge helpers must split property-backed fields from concrete columns.**
+    Surfaced by post-rebase review on PR #250. Main's `backend/app/discord_accounts.py` (Discord phantom-account reclaim) had a single `_CARRYOVER_FIELDS = ("avatar", "discordUsername", ...)` tuple feeding `keep.save(update_fields=changed)`. Once T1 made `avatar` a `@property`, that call raised `ValueError: 'The following fields do not exist in this model... avatar'`. Fix: split into `_CARRYOVER_PROPERTY_FIELDS` (persisted by their setters, no `save()` needed) and `_CARRYOVER_COLUMN_FIELDS` (collected into the batched `update_fields`). Plus: snapshot drop's values BEFORE the related-objects-repoint loop runs, because that loop deletes drop's child row via `IntegrityError` and a fresh property read returns `None`.
+
+16. **Dialog modals must use `<ScrollArea>` inside `DialogContent`.**
+    New brand contract on main (`docs/theming-guide/ai/references/scrollbars-dialogs.md`). Raw `overflow-y-auto` on `DialogContent` gives an OS scrollbar that drifts visually from the dialog theme. Pattern: `<DialogContent className="flex max-h-[90vh] flex-col overflow-hidden ...">` + `<ScrollArea className="-mx-6 min-h-0 flex-1 px-6">` wrapping the body. T1's EditProfileModal lands this; T2/T3 modals inherit.
+
+17. **Backend tests under `backend/<app>/tests/` aren't auto-discovered by CI.**
+    `backend/pytest.ini` sets `testpaths = tests` (collects only `backend/tests/`). `.github/workflows/playwright.yml`'s backend job has an explicit `manage.py test` module list. T1 had to add `user.tests` to that list, otherwise `test_cacheops_integration.py` + the new migration tests passed only when run manually via `just test::run`. T2/T3 must add their app's test directory to the same workflow.
+
+18. **Frontend Vitest is now in CI (T1 wired it).**
+    `frontend/package.json` got `"test": "vitest"`; `playwright.yml` got a "Run frontend Vitest" step. New `*.test.ts` files anywhere under `frontend/app/` are now auto-discovered. T2/T3 should add Vitest coverage for new stores/hooks and rely on CI.
+
 ---
 
 ## Self-review notes

@@ -182,7 +182,15 @@ jobs:
               app.tests.test_discord_reclaim \
               events.discord.tests \
               events.tests.test_signup_interactions \
+              user.tests \
               -v 2
+
+      - name: Run frontend Vitest
+        env:
+          CI: 'true'
+        run: |
+          docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml exec -T frontend \
+            npm test -- --run
 
       - name: Dump container logs on failure
         if: failure()
