@@ -196,3 +196,40 @@ class DiscordLogContextTests(IsolatedAsyncioTestCase):
         self.assertIsNone(ctx_vars["guild_id"])
         self.assertIsNone(ctx_vars["channel_id"])
         # And the bookend log lines should still emit without crashing
+
+    async def test_logs_interaction_failed_on_exception_and_reraises(self):
+        from discordbot.log_context import discord_log_context
+
+        with capture_logs() as logs:
+            with self.assertRaises(ValueError):
+                async with discord_log_context(_mock_interaction(), custom_id="event_signup:42") as ctx:
+                    ctx.add(signup_id=99)
+                    raise ValueError("boom")
+
+        failed = [log for log in logs if log["event"] == "interaction_failed"]
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(failed[0]["error"], "boom")
+        self.assertEqual(failed[0]["error_type"], "ValueError")
+        self.assertEqual(failed[0]["log_level"], "error")
+        self.assertEqual(failed[0]["signup_id"], 99)
+        self.assertEqual(failed[0]["interaction_id"], "12345")
+
+    async def test_does_not_emit_interaction_finished_on_exception(self):
+        from discordbot.log_context import discord_log_context
+
+        with capture_logs() as logs:
+            with self.assertRaises(ValueError):
+                async with discord_log_context(_mock_interaction(), custom_id="event_signup:42"):
+                    raise ValueError("boom")
+
+        finished = [log for log in logs if log["event"] == "interaction_finished"]
+        self.assertEqual(finished, [])
+
+    async def test_clears_contextvars_even_on_exception(self):
+        from discordbot.log_context import discord_log_context
+
+        with self.assertRaises(ValueError):
+            async with discord_log_context(_mock_interaction(), custom_id="event_signup:42"):
+                raise ValueError("boom")
+
+        self.assertEqual(get_contextvars(), {})
