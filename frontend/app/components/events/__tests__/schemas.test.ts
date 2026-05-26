@@ -30,6 +30,11 @@ const baseDiscordConfig = {
   allow_active_mmr: true,
   allow_previous_rank: true,
   allow_battlecup_rating: true,
+  // Approval requirements added on main `b95a0b37` (the schema was updated
+  // but this fixture wasn't — surfaced when T1 wired vitest into CI).
+  require_steam_id: false,
+  require_mmr_verified: false,
+  require_profile_complete: false,
 }
 
 describe('discord_subscriber_dm tolerance', () => {
