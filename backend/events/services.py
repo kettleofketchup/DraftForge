@@ -267,12 +267,16 @@ def process_rsvp(event, user, event_team=None):
     if event.state != EventState.SIGNUPS_OPEN:
         raise ValueError("Event is not accepting signups.")
     signup = _create_signup(event, user, event_team=event_team)
-    log.info(
-        "signup_created",
-        signup_id=signup.pk,
-        status=signup.status,
-        event_id=event.pk,
-        user_id=user.pk,
+    # Defer signup_created log until the outermost atomic commits — otherwise
+    # rollback paths produce a log claiming a signup that doesn't persist.
+    transaction.on_commit(
+        lambda: log.info(
+            "signup_created",
+            signup_id=signup.pk,
+            status=signup.status,
+            event_id=event.pk,
+            user_id=user.pk,
+        )
     )
     return signup
 
