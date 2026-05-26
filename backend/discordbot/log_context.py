@@ -13,7 +13,14 @@ The CM:
 
 from __future__ import annotations
 
-from typing import Any
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator
+
+from structlog.contextvars import bind_contextvars, clear_contextvars
+
+from telemetry.logging import get_logger
+
+log = get_logger(__name__)
 
 
 class InteractionContext:
@@ -69,3 +76,66 @@ def parse_event_id(custom_id: str | None) -> int | None:
 def span_name(custom_id: str | None) -> str:
     """Strip the `:event_id` suffix and prefix with `discord.interaction.`."""
     return f"discord.interaction.{_prefix(custom_id) or 'unknown'}"
+
+
+def _interaction_type_name(interaction) -> str:
+    """Map discord.InteractionType to a stable string for our logs."""
+    try:
+        return interaction.type.name
+    except AttributeError:
+        return "unknown"
+
+
+def _identity_fields(interaction, *, custom_id, event_id, tags) -> dict:
+    """The set of identity fields bound to contextvars AND passed to bookend logs."""
+    return {
+        "system": "discord",
+        "subsystem": "interaction",
+        "tags": tags,
+        "tags_csv": tags_csv(tags),
+        "interaction_id": str(interaction.id),
+        "discord_user_id": str(interaction.user.id),
+        "discord_username": interaction.user.name,
+        "channel_id": str(interaction.channel_id) if interaction.channel_id else None,
+        "guild_id": str(interaction.guild_id) if getattr(interaction, "guild_id", None) else None,
+        "interaction_type": _interaction_type_name(interaction),
+        "custom_id": custom_id,
+        "event_id": event_id,
+    }
+
+
+@asynccontextmanager
+async def discord_log_context(
+    interaction,
+    *,
+    custom_id: str | None = None,
+    event_id: int | None = None,
+    tags: list[str] | None = None,
+) -> AsyncIterator[InteractionContext]:
+    """Bind interaction identity to logs + emit bookend events."""
+    resolved_custom_id = custom_id or (
+        interaction.data.get("custom_id") if getattr(interaction, "data", None) else None
+    )
+    resolved_event_id = event_id if event_id is not None else parse_event_id(resolved_custom_id)
+    resolved_tags = tags if tags is not None else resolve_tags(resolved_custom_id)
+
+    fields = _identity_fields(
+        interaction,
+        custom_id=resolved_custom_id,
+        event_id=resolved_event_id,
+        tags=resolved_tags,
+    )
+    bind_contextvars(**fields)
+    log.info("interaction_started", **fields)
+
+    ctx = InteractionContext()
+    try:
+        yield ctx
+    finally:
+        log.info(
+            "interaction_finished",
+            outcome=ctx.outcome or "ok",
+            **fields,
+            **ctx.extra,
+        )
+        clear_contextvars()
