@@ -375,6 +375,7 @@ class RollbackPathTests(TransactionTestCase):
         self.assertIn("process_rsvp_started", events)
         self.assertIn("signup_post_commit_hooks_scheduled", events)
         self.assertNotIn("embed_update_queued", events)
+        self.assertNotIn("signup_created", events)  # New: deferred to on_commit, suppressed on rollback
         mock_delay.assert_not_called()
         self.assertEqual(EventSignup.objects.filter(event=self.event, user=self.user).count(), 0)
 
