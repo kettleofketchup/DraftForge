@@ -6,13 +6,14 @@ These are synchronous functions — the caller wraps them with sync_to_async.
 Return dicts with 'action' key so the caller knows how to respond.
 """
 
-import logging
+from structlog.contextvars import bind_contextvars
 
 from discordbot.models import DiscordEventLog
 from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
+from telemetry.logging import get_logger
 
-logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 def _log_interaction(
@@ -154,6 +155,7 @@ def _get_org_user(event, discord_user_id, discord_username=None):
 
 def handle_signup_button(event_id, discord_user_id, discord_username=None):
     """Handle Sign Up button click. Returns action dict."""
+    log.info("handler_invoked", handler="signup_button")
     from app.models import GameType
 
     try:
@@ -674,7 +676,7 @@ def handle_tentative_button(event_id, discord_user_id, discord_username=None):
 
     notify_signup_changed(event)
 
-    logger.info(
+    log.info(
         "Discord tentative: user=%s event=%s",
         user.pk,
         event.pk,
