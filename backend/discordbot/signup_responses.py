@@ -62,8 +62,10 @@ async def respond_to_signup_user(
         await interaction.response.defer(ephemeral=True, thinking=True)
         log.info(
             "signup_interaction_deferred",
-            system="events",
-            subsystem="discord",
+            system="discord",
+            subsystem="interaction",
+            tags=["events", "signup"],
+            tags_csv="events,signup",
             user_id=user_id,
             event_id=event_id,
             channel_id=channel_id,
@@ -77,8 +79,10 @@ async def respond_to_signup_user(
             await interaction.delete_original_response()
             log.info(
                 "signup_interaction_placeholder_deleted",
-                system="events",
-                subsystem="discord",
+                system="discord",
+                subsystem="interaction",
+                tags=["events", "signup"],
+                tags_csv="events,signup",
                 user_id=user_id,
                 event_id=event_id,
             )
@@ -96,8 +100,10 @@ async def respond_to_signup_user(
         else:
             log.error(
                 "signup_response_failed",
-                system="events",
-                subsystem="discord",
+                system="discord",
+                subsystem="interaction",
+                tags=["events", "signup"],
+                tags_csv="events,signup",
                 user_id=user_id,
                 event_id=event_id,
                 channel_id=channel_id,
@@ -108,8 +114,10 @@ async def respond_to_signup_user(
 
     log.info(
         "signup_response_sent",
-        system="events",
-        subsystem="discord",
+        system="discord",
+        subsystem="interaction",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
         channel=channel.value,
         fallback_to_ephemeral=(channel == ResponseChannel.EPHEMERAL),
         user_id=user_id,
