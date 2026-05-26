@@ -75,6 +75,7 @@ See [references/backend-test-endpoints.md](references/backend-test-endpoints.md)
 | [backend-test-endpoints.md](references/backend-test-endpoints.md) | Adding new test API endpoints, understanding backend-frontend test bridge |
 | [feature-isolation.md](references/feature-isolation.md) | Creating dedicated test data for a new feature's E2E tests |
 | [playwright-config.md](references/playwright-config.md) | Test runner config, projects, workers, sharding, timeouts |
+| [mobile-iteration-workflow.md](references/mobile-iteration-workflow.md) | Iterating on mobile overflow / hydration regressions across the `brand`, `ui-styling`, `i18n-react`, `playwright` skills |
 
 ## Quick Reference: Current Test Data
 
