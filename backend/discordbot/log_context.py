@@ -131,7 +131,18 @@ async def discord_log_context(
     ctx = InteractionContext()
     try:
         yield ctx
-    finally:
+    except Exception as exc:
+        log.error(
+            "interaction_failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+            exc_info=True,
+            **fields,
+            **ctx.extra,
+        )
+        clear_contextvars()
+        raise
+    else:
         log.info(
             "interaction_finished",
             outcome=ctx.outcome or "ok",
