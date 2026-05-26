@@ -452,6 +452,32 @@ def cache_invalidation_panels() -> dict[str, v2.Panel]:
     }
 
 
+def signup_pipeline_panel() -> v2.Panel:
+    """Cross-cutting tail of every log line tagged with the signup pipeline."""
+    return _logs_panel(
+        "Signup pipeline — recent logs (any system)",
+        f'{SERVICE_FILTER} {SAFE_JSON} | tags_csv=~".*signup.*"',
+        description=(
+            "Live tail of all logs tagged with signup, regardless of system. "
+            "Useful when tracing a single user click across discord/interaction → "
+            "events/services → discord/dispatch → discord/celery. Filter by "
+            "`interaction_id` to follow one click."
+        ),
+        show_labels=True,
+    )
+
+
+def tag_rate_panel() -> v2.Panel:
+    """Log rate broken down by the tags_csv cross-cutting axis."""
+    return _ts_panel(
+        "Log rate by tags_csv",
+        f'sum by (tags_csv) (rate({SERVICE_FILTER} {SAFE_JSON} '
+        f'| tags_csv!="" [$__interval]))',
+        legend="{{tags_csv}}",
+        description="Cross-system view of which tag-clusters are active.",
+    )
+
+
 def system_layout(system: str) -> v2.Rows:
     """Per-system layout: logs panel visible, rate breakdown collapsed.
 
@@ -638,6 +664,8 @@ def build_dashboard():
     # register them with .element() and reference them from grid items.
     elements: dict[str, v2.Panel] = {}
     elements.update(overview_panels())
+    elements["overview-signup-pipeline"] = signup_pipeline_panel()
+    elements["overview-tag-rate"] = tag_rate_panel()
     for system in SYSTEMS:
         elements.update(system_panels(system))
     elements.update(cache_invalidation_panels())
@@ -648,6 +676,17 @@ def build_dashboard():
     rows = v2.Rows()
     rows = rows.row(
         v2.Row().title("Overview — all systems").collapse(False).layout(overview_grid({}))
+    )
+    # Signup pipeline cross-cutting row — collapsed by default.
+    rows = rows.row(
+        v2.Row()
+        .title("Signup pipeline (cross-cutting)")
+        .collapse(True)
+        .layout(
+            v2.Grid()
+            .item(_grid_item("overview-signup-pipeline", x=0, y=0,  w=24, h=12))
+            .item(_grid_item("overview-tag-rate",        x=0, y=12, w=24, h=8))
+        )
     )
     for system in SYSTEMS:
         rows = rows.row(

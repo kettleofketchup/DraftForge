@@ -326,10 +326,149 @@
           }
         }
       },
-      "avatars-log-rate": {
+      "overview-signup-pipeline": {
         "kind": "Panel",
         "spec": {
           "id": 5,
+          "title": "Signup pipeline \u2014 recent logs (any system)",
+          "description": "Live tail of all logs tagged with signup, regardless of system. Useful when tracing a single user click across discord/interaction \u2192 events/services \u2192 discord/dispatch \u2192 discord/celery. Filter by `interaction_id` to follow one click.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "loki",
+                      "version": "v1",
+                      "spec": {
+                        "expr": "{service_name=~\"$service\", deployment_environment=~\"$env\"} | json | __error__=\"\" | tags_csv=~\".*signup.*\"",
+                        "editorMode": "code",
+                        "refId": "A"
+                      },
+                      "datasource": {
+                        "name": "$ds_loki"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "logs",
+            "version": "",
+            "spec": {
+              "options": {
+                "showLabels": true,
+                "showCommonLabels": true,
+                "showTime": true,
+                "showLogContextToggle": true,
+                "wrapLogMessage": false,
+                "prettifyLogMessage": false,
+                "enableLogDetails": true,
+                "sortOrder": "Descending",
+                "dedupStrategy": "signature",
+                "enableInfiniteScrolling": true,
+                "showControls": true,
+                "showFieldSelector": true,
+                "syntaxHighlighting": true
+              },
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "overview-tag-rate": {
+        "kind": "Panel",
+        "spec": {
+          "id": 6,
+          "title": "Log rate by tags_csv",
+          "description": "Cross-system view of which tag-clusters are active.",
+          "links": [],
+          "data": {
+            "kind": "QueryGroup",
+            "spec": {
+              "queries": [
+                {
+                  "kind": "PanelQuery",
+                  "spec": {
+                    "query": {
+                      "kind": "DataQuery",
+                      "group": "loki",
+                      "version": "v1",
+                      "spec": {
+                        "expr": "sum by (tags_csv) (rate({service_name=~\"$service\", deployment_environment=~\"$env\"} | json | __error__=\"\" | tags_csv!=\"\" [$__interval]))",
+                        "editorMode": "code",
+                        "refId": "A",
+                        "legendFormat": "{{tags_csv}}"
+                      },
+                      "datasource": {
+                        "name": "$ds_loki"
+                      }
+                    },
+                    "refId": "A",
+                    "hidden": false
+                  }
+                }
+              ],
+              "transformations": [],
+              "queryOptions": {}
+            }
+          },
+          "vizConfig": {
+            "kind": "VizConfig",
+            "group": "timeseries",
+            "version": "",
+            "spec": {
+              "options": {
+                "legend": {
+                  "displayMode": "table",
+                  "placement": "right",
+                  "showLegend": true,
+                  "calcs": [
+                    "lastNotNull",
+                    "max"
+                  ]
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "unit": "logs/s",
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "stacking": {
+                      "mode": "normal",
+                      "group": "A"
+                    }
+                  }
+                },
+                "overrides": []
+              }
+            }
+          }
+        }
+      },
+      "avatars-log-rate": {
+        "kind": "Panel",
+        "spec": {
+          "id": 7,
           "title": "avatars \u2014 log rate by subsystem",
           "description": "Log rate within avatars, grouped by subsystem.",
           "links": [],
@@ -404,7 +543,7 @@
       "avatars-err-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 6,
+          "id": 8,
           "title": "avatars \u2014 warn + error rate by subsystem",
           "description": "Warn + error rate within avatars, grouped by subsystem.",
           "links": [],
@@ -479,7 +618,7 @@
       "avatars-logs": {
         "kind": "Panel",
         "spec": {
-          "id": 7,
+          "id": 9,
           "title": "avatars \u2014 recent logs",
           "description": "Live tail filtered to system=avatars. Respects the global subsystem and level filters.",
           "links": [],
@@ -543,7 +682,7 @@
       "bracket-log-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 8,
+          "id": 10,
           "title": "bracket \u2014 log rate by subsystem",
           "description": "Log rate within bracket, grouped by subsystem.",
           "links": [],
@@ -618,7 +757,7 @@
       "bracket-err-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 9,
+          "id": 11,
           "title": "bracket \u2014 warn + error rate by subsystem",
           "description": "Warn + error rate within bracket, grouped by subsystem.",
           "links": [],
@@ -693,7 +832,7 @@
       "bracket-logs": {
         "kind": "Panel",
         "spec": {
-          "id": 10,
+          "id": 12,
           "title": "bracket \u2014 recent logs",
           "description": "Live tail filtered to system=bracket. Respects the global subsystem and level filters.",
           "links": [],
@@ -757,7 +896,7 @@
       "cache-log-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 11,
+          "id": 13,
           "title": "cache \u2014 log rate by subsystem",
           "description": "Log rate within cache, grouped by subsystem.",
           "links": [],
@@ -832,7 +971,7 @@
       "cache-err-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 12,
+          "id": 14,
           "title": "cache \u2014 warn + error rate by subsystem",
           "description": "Warn + error rate within cache, grouped by subsystem.",
           "links": [],
@@ -907,7 +1046,7 @@
       "cache-logs": {
         "kind": "Panel",
         "spec": {
-          "id": 13,
+          "id": 15,
           "title": "cache \u2014 recent logs",
           "description": "Live tail filtered to system=cache. Respects the global subsystem and level filters.",
           "links": [],
@@ -971,7 +1110,7 @@
       "discord-log-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 14,
+          "id": 16,
           "title": "discord \u2014 log rate by subsystem",
           "description": "Log rate within discord, grouped by subsystem.",
           "links": [],
@@ -1046,7 +1185,7 @@
       "discord-err-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 15,
+          "id": 17,
           "title": "discord \u2014 warn + error rate by subsystem",
           "description": "Warn + error rate within discord, grouped by subsystem.",
           "links": [],
@@ -1121,7 +1260,7 @@
       "discord-logs": {
         "kind": "Panel",
         "spec": {
-          "id": 16,
+          "id": 18,
           "title": "discord \u2014 recent logs",
           "description": "Live tail filtered to system=discord. Respects the global subsystem and level filters.",
           "links": [],
@@ -1185,7 +1324,7 @@
       "events-log-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 17,
+          "id": 19,
           "title": "events \u2014 log rate by subsystem",
           "description": "Log rate within events, grouped by subsystem.",
           "links": [],
@@ -1260,7 +1399,7 @@
       "events-err-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 18,
+          "id": 20,
           "title": "events \u2014 warn + error rate by subsystem",
           "description": "Warn + error rate within events, grouped by subsystem.",
           "links": [],
@@ -1335,7 +1474,7 @@
       "events-logs": {
         "kind": "Panel",
         "spec": {
-          "id": 19,
+          "id": 21,
           "title": "events \u2014 recent logs",
           "description": "Live tail filtered to system=events. Respects the global subsystem and level filters.",
           "links": [],
@@ -1399,7 +1538,7 @@
       "herodraft-log-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 20,
+          "id": 22,
           "title": "herodraft \u2014 log rate by subsystem",
           "description": "Log rate within herodraft, grouped by subsystem.",
           "links": [],
@@ -1474,7 +1613,7 @@
       "herodraft-err-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 21,
+          "id": 23,
           "title": "herodraft \u2014 warn + error rate by subsystem",
           "description": "Warn + error rate within herodraft, grouped by subsystem.",
           "links": [],
@@ -1549,7 +1688,7 @@
       "herodraft-logs": {
         "kind": "Panel",
         "spec": {
-          "id": 22,
+          "id": 24,
           "title": "herodraft \u2014 recent logs",
           "description": "Live tail filtered to system=herodraft. Respects the global subsystem and level filters.",
           "links": [],
@@ -1613,7 +1752,7 @@
       "steam-log-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 23,
+          "id": 25,
           "title": "steam \u2014 log rate by subsystem",
           "description": "Log rate within steam, grouped by subsystem.",
           "links": [],
@@ -1688,7 +1827,7 @@
       "steam-err-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 24,
+          "id": 26,
           "title": "steam \u2014 warn + error rate by subsystem",
           "description": "Warn + error rate within steam, grouped by subsystem.",
           "links": [],
@@ -1763,7 +1902,7 @@
       "steam-logs": {
         "kind": "Panel",
         "spec": {
-          "id": 25,
+          "id": 27,
           "title": "steam \u2014 recent logs",
           "description": "Live tail filtered to system=steam. Respects the global subsystem and level filters.",
           "links": [],
@@ -1827,7 +1966,7 @@
       "telemetry-log-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 26,
+          "id": 28,
           "title": "telemetry \u2014 log rate by subsystem",
           "description": "Log rate within telemetry, grouped by subsystem.",
           "links": [],
@@ -1902,7 +2041,7 @@
       "telemetry-err-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 27,
+          "id": 29,
           "title": "telemetry \u2014 warn + error rate by subsystem",
           "description": "Warn + error rate within telemetry, grouped by subsystem.",
           "links": [],
@@ -1977,7 +2116,7 @@
       "telemetry-logs": {
         "kind": "Panel",
         "spec": {
-          "id": 28,
+          "id": 30,
           "title": "telemetry \u2014 recent logs",
           "description": "Live tail filtered to system=telemetry. Respects the global subsystem and level filters.",
           "links": [],
@@ -2041,7 +2180,7 @@
       "tournament-log-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 29,
+          "id": 31,
           "title": "tournament \u2014 log rate by subsystem",
           "description": "Log rate within tournament, grouped by subsystem.",
           "links": [],
@@ -2116,7 +2255,7 @@
       "tournament-err-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 30,
+          "id": 32,
           "title": "tournament \u2014 warn + error rate by subsystem",
           "description": "Warn + error rate within tournament, grouped by subsystem.",
           "links": [],
@@ -2191,7 +2330,7 @@
       "tournament-logs": {
         "kind": "Panel",
         "spec": {
-          "id": 31,
+          "id": 33,
           "title": "tournament \u2014 recent logs",
           "description": "Live tail filtered to system=tournament. Respects the global subsystem and level filters.",
           "links": [],
@@ -2255,7 +2394,7 @@
       "websocket-log-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 32,
+          "id": 34,
           "title": "websocket \u2014 log rate by subsystem",
           "description": "Log rate within websocket, grouped by subsystem.",
           "links": [],
@@ -2330,7 +2469,7 @@
       "websocket-err-rate": {
         "kind": "Panel",
         "spec": {
-          "id": 33,
+          "id": 35,
           "title": "websocket \u2014 warn + error rate by subsystem",
           "description": "Warn + error rate within websocket, grouped by subsystem.",
           "links": [],
@@ -2405,7 +2544,7 @@
       "websocket-logs": {
         "kind": "Panel",
         "spec": {
-          "id": 34,
+          "id": 36,
           "title": "websocket \u2014 recent logs",
           "description": "Live tail filtered to system=websocket. Respects the global subsystem and level filters.",
           "links": [],
@@ -2469,7 +2608,7 @@
       "cache-top-classes": {
         "kind": "Panel",
         "spec": {
-          "id": 35,
+          "id": 37,
           "title": "Top invalidated classes",
           "description": "Which models are evicted most over the selected window. Sudden spike on a single class usually means a write path started cascading too widely.",
           "links": [],
@@ -2553,7 +2692,7 @@
       "cache-rate-by-class": {
         "kind": "Panel",
         "spec": {
-          "id": 36,
+          "id": 38,
           "title": "Per-row invalidation rate by class",
           "description": "`invalidate_obj` rate split by model. Steady-state should track write rate per model; outliers point to N+1 invalidate patterns or accidental cascades.",
           "links": [],
@@ -2628,7 +2767,7 @@
       "cache-model-wide": {
         "kind": "Panel",
         "spec": {
-          "id": 37,
+          "id": 39,
           "title": "Model-wide invalidations (cache_invalidate_model)",
           "description": "Full-model eviction events. Should be rare \u2014 migrations and the daily avatar bulk path are the only known sources. Spikes here are worth chasing: they cold-start every cached entry for the model, and any hot-read endpoint will hit the DB until the cache warms back up.",
           "links": [],
@@ -2703,7 +2842,7 @@
       "json-errors-logs": {
         "kind": "Panel",
         "spec": {
-          "id": 38,
+          "id": 40,
           "title": "Lines that broke `| json` (jsonparsererr)",
           "description": "Log lines that Loki's `| json` parser rejects. Source labels (code_file_path, code_function_name, code_line_number) tell you which Python file is emitting broken JSON \u2014 usually an f-string containing a stray `{` like a dict literal or repr() output. Fix at source by switching the call to structlog kwargs.",
           "links": [],
@@ -2767,7 +2906,7 @@
       "json-errors-sources": {
         "kind": "Panel",
         "spec": {
-          "id": 39,
+          "id": 41,
           "title": "Top sources of broken JSON",
           "description": "Which source files are emitting broken JSON, ranked by count. Fix the top entries at source.",
           "links": [],
@@ -2917,6 +3056,46 @@
               },
               "title": "Overview \u2014 all systems",
               "collapse": false
+            }
+          },
+          {
+            "kind": "RowsLayoutRow",
+            "spec": {
+              "layout": {
+                "kind": "GridLayout",
+                "spec": {
+                  "items": [
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 0,
+                        "width": 24,
+                        "height": 12,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "overview-signup-pipeline"
+                        }
+                      }
+                    },
+                    {
+                      "kind": "GridLayoutItem",
+                      "spec": {
+                        "x": 0,
+                        "y": 12,
+                        "width": 24,
+                        "height": 8,
+                        "element": {
+                          "kind": "ElementReference",
+                          "name": "overview-tag-rate"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              "title": "Signup pipeline (cross-cutting)",
+              "collapse": true
             }
           },
           {
