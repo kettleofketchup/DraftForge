@@ -3,7 +3,6 @@
 from unittest import IsolatedAsyncioTestCase, TestCase
 from unittest.mock import MagicMock
 
-import structlog
 from structlog.contextvars import clear_contextvars, get_contextvars
 from structlog.testing import capture_logs
 
