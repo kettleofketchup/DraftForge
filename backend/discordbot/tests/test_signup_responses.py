@@ -145,8 +145,10 @@ class RespondToSignupUserLoggingTest(SimpleTestCase):
             if c.args[0] == "signup_response_sent"
         )
         kwargs = sent_call.kwargs
-        self.assertEqual(kwargs["system"], "events")
-        self.assertEqual(kwargs["subsystem"], "discord")
+        self.assertEqual(kwargs["system"], "discord")
+        self.assertEqual(kwargs["subsystem"], "interaction")
+        self.assertEqual(kwargs["tags"], ["events", "signup"])
+        self.assertEqual(kwargs["tags_csv"], "events,signup")
         self.assertEqual(kwargs["channel"], "dm")
         self.assertFalse(kwargs["fallback_to_ephemeral"])
         self.assertEqual(kwargs["user_id"], 12345)
@@ -163,6 +165,8 @@ class RespondToSignupUserLoggingTest(SimpleTestCase):
 
         mock_log.error.assert_called_once()
         kwargs = mock_log.error.call_args.kwargs
-        self.assertEqual(kwargs["system"], "events")
-        self.assertEqual(kwargs["subsystem"], "discord")
+        self.assertEqual(kwargs["system"], "discord")
+        self.assertEqual(kwargs["subsystem"], "interaction")
+        self.assertEqual(kwargs["tags"], ["events", "signup"])
+        self.assertEqual(kwargs["tags_csv"], "events,signup")
         self.assertIn("error", kwargs)
