@@ -1,6 +1,17 @@
 import importlib
+import unittest
 
-from django_test_migrations.contrib.unittest_case import MigratorTestCase
+# django-test-migrations is a dev dep added by T1.4. The CI backend-dev image
+# is pulled from GHCR and may pre-date this dep until the image-build workflow
+# republishes. Skip the whole module cleanly rather than failing with
+# ModuleNotFoundError when the image is stale.
+try:
+    from django_test_migrations.contrib.unittest_case import MigratorTestCase
+except ImportError as _import_error:  # pragma: no cover
+    raise unittest.SkipTest(
+        "django-test-migrations not installed — rebuild backend-dev image "
+        "to pick up the new dev dep from pyproject.toml."
+    ) from _import_error
 
 
 class BackfillBaseProfilesMigrationTest(MigratorTestCase):

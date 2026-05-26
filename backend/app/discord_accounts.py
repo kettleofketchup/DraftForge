@@ -52,7 +52,20 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
     from django.core.exceptions import ObjectDoesNotExist
 
     def _repoint(obj, field_name):
-        """Move one related row to ``keep``; drop it if ``keep`` already has it."""
+        """Move one related row to ``keep``; drop it if ``keep`` already has it.
+
+        IMPORTANT: ``setattr(obj, field_name, keep)`` triggers Django's
+        bidirectional O2O descriptor — it ALSO sets ``keep.<reverse_accessor> =
+        obj`` in keep's in-memory cache. If the save() below raises IntegrityError
+        and we call ``obj.delete()`` to discard the duplicate, the deleted (pk=None)
+        ``obj`` is STILL cached on ``keep`` via that reverse accessor. Any
+        subsequent ``keep.<field>`` access that proxies through that reverse-O2O
+        (e.g. ``keep.avatar`` proxying through ``keep.base_profile.avatar``) reads
+        from a dead reference and writes to a pk-less row, raising
+        ``ValueError: Cannot force an update in save() with no primary key.``
+        The merge loop calls ``keep.refresh_from_db()`` AFTER all repoints to
+        purge those stale caches.
+        """
         setattr(obj, field_name, keep)
         try:
             with transaction.atomic():
@@ -107,6 +120,12 @@ def merge_discord_accounts(keep: CustomUser, drop: CustomUser) -> CustomUser:
             # Reverse FK (one-to-many): repoint each row at ``keep``.
             for obj in list(manager.all()):
                 _repoint(obj, field_name)
+
+        # Purge keep's reverse-relation caches before reading/writing through
+        # them in the carryover loop. The related-objects loop above poisoned
+        # some of those caches with deleted (pk=None) references via the
+        # bidirectional O2O descriptor — see _repoint docstring.
+        keep.refresh_from_db()
 
         # Carry over Discord profile fields the kept account is missing.
         # Read from carryover_snapshot (captured pre-loop) rather than
