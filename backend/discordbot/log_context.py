@@ -28,3 +28,44 @@ class InteractionContext:
 
     def add(self, **kwargs: Any) -> None:
         self.extra.update(kwargs)
+
+
+_SIGNUP_TAG_PREFIXES = {
+    "event_signup", "event_notify", "event_tentative", "event_decline",
+    "signup_friend_id", "signup_rank_status", "signup_deadlock_rank", "signup_deadlock_date",
+    "pos_select_1", "pos_select_2", "pos_select_3", "pos_confirm",
+    "rank_medal", "rank_star", "rank_status",
+    "bcup_tier",
+    "screenshot_upload", "screenshot_file", "screenshot_url",
+}
+
+
+def _prefix(custom_id: str | None) -> str | None:
+    if not custom_id:
+        return None
+    return custom_id.split(":", 1)[0]
+
+
+def resolve_tags(custom_id: str | None) -> list[str]:
+    """Map a custom_id prefix to its cross-cutting tags. Unknown → []."""
+    return ["events", "signup"] if _prefix(custom_id) in _SIGNUP_TAG_PREFIXES else []
+
+
+def tags_csv(tags: list[str]) -> str:
+    """Join tags with a comma for clean LogQL filtering (avoids array-flattening)."""
+    return ",".join(tags)
+
+
+def parse_event_id(custom_id: str | None) -> int | None:
+    """Pull the event_id out of `prefix:event_id[:extra]`. Non-int → None."""
+    if not custom_id or ":" not in custom_id:
+        return None
+    try:
+        return int(custom_id.split(":")[1])
+    except (ValueError, IndexError):
+        return None
+
+
+def span_name(custom_id: str | None) -> str:
+    """Strip the `:event_id` suffix and prefix with `discord.interaction.`."""
+    return f"discord.interaction.{_prefix(custom_id) or 'unknown'}"
