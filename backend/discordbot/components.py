@@ -201,21 +201,23 @@ class NotifyButton(ui.Button):
 
         from events.discord import handle_notify_button
 
-        result = await sync_to_async(handle_notify_button)(
-            event_id=self.event_id,
-            discord_user_id=str(interaction.user.id),
-        )
+        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+            result = await sync_to_async(handle_notify_button)(
+                event_id=self.event_id,
+                discord_user_id=str(interaction.user.id),
+            )
+            ctx.set_outcome("subscribed" if result["subscribed"] else "unsubscribed")
 
-        if result["subscribed"]:
-            await interaction.response.send_message(
-                "\U0001f514 You'll be notified about future events in this series!",
-                ephemeral=True,
-            )
-        else:
-            await interaction.response.send_message(
-                "\U0001f515 Notifications turned off for this series.",
-                ephemeral=True,
-            )
+            if result["subscribed"]:
+                await interaction.response.send_message(
+                    "\U0001f514 You'll be notified about future events in this series!",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.response.send_message(
+                    "\U0001f515 Notifications turned off for this series.",
+                    ephemeral=True,
+                )
 
 
 class TentativeButton(ui.Button):
@@ -235,21 +237,20 @@ class TentativeButton(ui.Button):
 
         from events.discord import handle_tentative_button
 
-        result = await sync_to_async(handle_tentative_button)(
-            event_id=self.event_id,
-            discord_user_id=str(interaction.user.id),
-        )
+        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+            result = await sync_to_async(handle_tentative_button)(
+                event_id=self.event_id,
+                discord_user_id=str(interaction.user.id),
+            )
+            ctx.set_outcome(result["action"])
 
-        if result["action"] == "tentative":
-            await respond_to_signup_user(
-                interaction,
-                content="\u2753 Marked as tentative. We'll count you as interested!",
-            )
-        elif result["action"] == "error":
-            await interaction.response.send_message(
-                result.get("message", "Something went wrong."),
-                ephemeral=True,
-            )
+            if result["action"] == "tentative":
+                await respond_to_signup_user(interaction, content="\u2753 Marked as tentative.")
+            elif result["action"] == "error":
+                await interaction.response.send_message(
+                    result.get("message", "Something went wrong."),
+                    ephemeral=True,
+                )
 
 
 class DeclineButton(ui.Button):
@@ -268,26 +269,21 @@ class DeclineButton(ui.Button):
 
         from events.discord import handle_decline_button
 
-        result = await sync_to_async(handle_decline_button)(
-            event_id=self.event_id,
-            discord_user_id=str(interaction.user.id),
-        )
+        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+            result = await sync_to_async(handle_decline_button)(
+                event_id=self.event_id,
+                discord_user_id=str(interaction.user.id),
+            )
+            ctx.set_outcome(result["action"])
 
-        if result["action"] == "declined":
-            await respond_to_signup_user(
-                interaction,
-                content="You've declined the event.",
-            )
-        elif result["action"] == "not_signed_up":
-            await interaction.response.send_message(
-                "You weren't signed up for this event.",
-                ephemeral=True,
-            )
-        else:
-            await interaction.response.send_message(
-                result.get("message", "Something went wrong."),
-                ephemeral=True,
-            )
+            if result["action"] == "declined":
+                await respond_to_signup_user(interaction, content="You've declined the event.")
+            elif result["action"] == "not_signed_up":
+                await interaction.response.send_message("You weren't signed up for this event.", ephemeral=True)
+            else:
+                await interaction.response.send_message(
+                    result.get("message", "Something went wrong."), ephemeral=True
+                )
 
 
 class EventSignupModal(ui.Modal):
@@ -417,79 +413,90 @@ class EventSignupModal(ui.Modal):
 
         from events.discord import handle_signup_modal_submit
 
-        # Collect values from fields
-        values = {}
-        if self.friend_id_input:
-            values["unverified_friend_id"] = self.friend_id_input.value
-
-        if self.game_type == 1:  # Dota 2
-            # Positions collected in follow-up ephemeral, not in modal
-            values["positions"] = []
-            values["rank_status"] = (
-                self.rank_status_input.values[0]
-                if self.rank_status_input and self.rank_status_input.values
-                else None
-            )
-        elif self.game_type == 2:  # Deadlock
-            values["deadlock_rank"] = self.rank_input.value
-            values["deadlock_date"] = self.rank_date_input.value
-
-        result = await sync_to_async(handle_signup_modal_submit)(
+        async with discord_log_context(
+            interaction,
+            custom_id=f"signup_modal:{self.event_id}",
             event_id=self.event_id,
-            discord_user_id=str(interaction.user.id),
-            game_type=self.game_type,
-            values=values,
-        )
+            tags=["events", "signup"],
+        ) as ctx:
+            values = {}
+            if self.friend_id_input:
+                values["unverified_friend_id"] = self.friend_id_input.value
 
-        if result["action"] == "needs_rank_details":
-            # Show position selection first, then rank details after
-            rank_status = values.get("rank_status", "never")
-            require_screenshot = (
-                self.event_config.get("require_rank_screenshot", False)
-                if rank_status == "active"
-                else (
-                    self.event_config.get("require_battlecup_screenshot", False)
-                    if rank_status == "never"
-                    else False
+            if self.game_type == 1:  # Dota 2
+                values["positions"] = []
+                values["rank_status"] = (
+                    self.rank_status_input.values[0]
+                    if self.rank_status_input and self.rank_status_input.values
+                    else None
                 )
+            elif self.game_type == 2:  # Deadlock
+                values["deadlock_rank"] = self.rank_input.value
+                values["deadlock_date"] = self.rank_date_input.value
+
+            result = await sync_to_async(handle_signup_modal_submit)(
+                event_id=self.event_id,
+                discord_user_id=str(interaction.user.id),
+                game_type=self.game_type,
+                values=values,
             )
-            view = PositionSelectView(
-                self.event_id,
-                rank_status,
-                require_screenshot=require_screenshot,
-                min_mmr=self.event_config.get("min_mmr"),
-            )
-            await interaction.response.send_message(
-                "\U0001f3ae **Select your preferred positions:**\n"
-                "Choose your 1st, 2nd, and 3rd choice, then press Confirm",
-                view=view,
-                ephemeral=True,
-            )
-        elif result["action"] == "needs_rank_status":
-            # Fallback if rank_status wasn't captured
-            view = RankStatusSelectView(event_id=self.event_id)
-            await interaction.response.send_message(
-                "\U0001f3ae **What's your Dota 2 ranked status?**",
-                view=view,
-                ephemeral=True,
-            )
-        elif result["action"] == "signed_up":
-            await respond_to_signup_user(
-                interaction,
-                content=f"\u2705 You're signed up! Status: **{result['status']}**",
-            )
-        elif result["action"] == "error":
-            await interaction.response.send_message(
-                f"\u274c {result['message']}",
-                ephemeral=True,
-            )
+            ctx.set_outcome(result["action"])
+
+            if result["action"] == "needs_rank_details":
+                rank_status = values.get("rank_status", "never")
+                require_screenshot = (
+                    self.event_config.get("require_rank_screenshot", False)
+                    if rank_status == "active"
+                    else (
+                        self.event_config.get("require_battlecup_screenshot", False)
+                        if rank_status == "never"
+                        else False
+                    )
+                )
+                view = PositionSelectView(
+                    self.event_id,
+                    rank_status,
+                    require_screenshot=require_screenshot,
+                    min_mmr=self.event_config.get("min_mmr"),
+                )
+                await interaction.response.send_message(
+                    "\U0001f3ae **Select your preferred positions:**\n"
+                    "Choose your 1st, 2nd, and 3rd choice, then press Confirm",
+                    view=view,
+                    ephemeral=True,
+                )
+            elif result["action"] == "needs_rank_status":
+                view = RankStatusSelectView(event_id=self.event_id)
+                await interaction.response.send_message(
+                    "\U0001f3ae **What's your Dota 2 ranked status?**",
+                    view=view,
+                    ephemeral=True,
+                )
+            elif result["action"] == "signed_up":
+                await respond_to_signup_user(
+                    interaction,
+                    content=f"\u2705 You're signed up! Status: **{result['status']}**",
+                )
+            elif result["action"] == "error":
+                await interaction.response.send_message(
+                    f"\u274c {result['message']}",
+                    ephemeral=True,
+                )
 
     async def on_error(self, interaction: discord.Interaction, error: Exception):
-        log.exception("EventSignupModal error: %s", error)
-        await interaction.response.send_message(
-            "\u274c Something went wrong. Please try again.",
-            ephemeral=True,
-        )
+        async with discord_log_context(
+            interaction,
+            custom_id=f"signup_modal:{self.event_id}",
+            event_id=self.event_id,
+            tags=["events", "signup"],
+        ):
+            try:
+                await interaction.response.send_message(
+                    "\u274c Something went wrong. Please try again.",
+                    ephemeral=True,
+                )
+            finally:
+                raise error
 
 
 class RankStatusSelectView(ui.View):
@@ -544,25 +551,26 @@ class RankStatusSelect(ui.Select):
 
         from events.discord import handle_rank_status_select
 
-        rank_status = self.values[0]
+        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+            rank_status = self.values[0]
+            await sync_to_async(handle_rank_status_select)(
+                event_id=self.event_id,
+                discord_user_id=str(interaction.user.id),
+                rank_status=rank_status,
+            )
+            ctx.set_outcome("rank_status_selected")
+            ctx.add(rank_status=rank_status)
 
-        # Save rank_status to profile
-        await sync_to_async(handle_rank_status_select)(
-            event_id=self.event_id,
-            discord_user_id=str(interaction.user.id),
-            rank_status=rank_status,
-        )
-
-        view = RankDetailsView(self.event_id, rank_status)
-        labels = {
-            "active": "\U0001f3c5 **Select your current medal and star:**",
-            "previous": "\U0001f3c5 **Select your previous medal and star:**",
-            "never": "\U0001f4dd **Select your Battle Cup tier:**",
-        }
-        await interaction.response.edit_message(
-            content=labels.get(rank_status, labels["never"]),
-            view=view,
-        )
+            view = RankDetailsView(self.event_id, rank_status)
+            labels = {
+                "active": "\U0001f3c5 **Select your current medal and star:**",
+                "previous": "\U0001f3c5 **Select your previous medal and star:**",
+                "never": "\U0001f4dd **Select your Battle Cup tier:**",
+            }
+            await interaction.response.edit_message(
+                content=labels.get(rank_status, labels["never"]),
+                view=view,
+            )
 
 
 class PositionSelectView(ui.View):
@@ -640,52 +648,52 @@ class PositionConfirmButton(ui.Button):
         from events.schemas import SignupInputPatch
         from events.services import apply_signup_input
 
-        # Collect positions from sibling selects
-        positions = []
-        for item in self.view.children:
-            if isinstance(item, ui.Select) and item.values:
-                positions.extend(item.values)
+        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+            positions = []
+            for item in self.view.children:
+                if isinstance(item, ui.Select) and item.values:
+                    positions.extend(item.values)
 
-        # Resolve event + org_user, then route the positions write through
-        # apply_signup_input so all signup-input writes share one code path.
-        event = await sync_to_async(Event.objects.select_related("organization").get)(
-            pk=self.event_id
-        )
-        org_user, _ = await sync_to_async(_get_org_user)(
-            event, str(interaction.user.id)
-        )
+            event = await sync_to_async(Event.objects.select_related("organization").get)(
+                pk=self.event_id
+            )
+            org_user, _ = await sync_to_async(_get_org_user)(
+                event, str(interaction.user.id)
+            )
 
-        if org_user:
-            positions_int = [int(v) for v in positions]
-            try:
-                await sync_to_async(apply_signup_input)(
-                    org_user=org_user,
-                    event=event,
-                    patch=SignupInputPatch(positions=positions_int),
-                )
-            except DjangoValidationError as exc:
-                msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-                await interaction.response.edit_message(
-                    content=f"❌ {msg}", view=None
-                )
-                return
+            if org_user:
+                positions_int = [int(v) for v in positions]
+                try:
+                    await sync_to_async(apply_signup_input)(
+                        org_user=org_user,
+                        event=event,
+                        patch=SignupInputPatch(positions=positions_int),
+                    )
+                except DjangoValidationError as exc:
+                    msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+                    ctx.set_outcome("error")
+                    ctx.add(reason=msg)
+                    await interaction.response.edit_message(content=f"❌ {msg}", view=None)
+                    return
 
-        # Now show rank details
-        view = RankDetailsView(
-            self.event_id,
-            self.rank_status,
-            require_screenshot=self.require_screenshot,
-            min_mmr=self.min_mmr,
-        )
-        labels = {
-            "active": "\U0001f3c5 **Now select your rank:**\nChoose your medal and star",
-            "previous": "\U0001f3c5 **Now select your previous rank:**\nChoose your medal and star",
-            "never": "\U0001f3c6 **Select your Battle Cup tier:**",
-        }
-        await interaction.response.edit_message(
-            content=labels.get(self.rank_status, labels["never"]),
-            view=view,
-        )
+            ctx.set_outcome("positions_saved")
+            ctx.add(positions=positions)
+
+            view = RankDetailsView(
+                self.event_id,
+                self.rank_status,
+                require_screenshot=self.require_screenshot,
+                min_mmr=self.min_mmr,
+            )
+            labels = {
+                "active": "\U0001f3c5 **Now select your rank:**\nChoose your medal and star",
+                "previous": "\U0001f3c5 **Now select your previous rank:**\nChoose your medal and star",
+                "never": "\U0001f3c6 **Select your Battle Cup tier:**",
+            }
+            await interaction.response.edit_message(
+                content=labels.get(self.rank_status, labels["never"]),
+                view=view,
+            )
 
 
 class RankDetailsView(ui.View):
@@ -748,25 +756,22 @@ class MedalSelect(ui.Select):
         self.require_screenshot = require_screenshot
 
     async def callback(self, interaction: discord.Interaction):
-        """Rebuild RankDetailsView so StarSelect.custom_id encodes the picked medal.
+        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+            medal = self.values[0] if self.values else "Herald"
+            ctx.set_outcome("medal_selected")
+            ctx.add(medal=medal)
 
-        Without this, the bug at b/discordbot/bot.py:268-285 (rank_medal: handler)
-        races with this callback — defer() wins, bot.py never gets to edit_message,
-        and StarSelect keeps custom_id=rank_star:{event_id}:Herald. Doing the rebuild
-        here removes the race.
-        """
-        medal = self.values[0] if self.values else "Herald"
-        view = RankDetailsView(
-            self.event_id,
-            rank_status=self.rank_status,
-            require_screenshot=self.require_screenshot,
-            selected_medal=medal,
-        )
-        label = "Rank" if self.rank_status == "active" else "Previous rank"
-        await interaction.response.edit_message(
-            content=f"\U0001f3c5 {label}: **{medal}** — now pick your star:",
-            view=view,
-        )
+            view = RankDetailsView(
+                self.event_id,
+                rank_status=self.rank_status,
+                require_screenshot=self.require_screenshot,
+                selected_medal=medal,
+            )
+            label = "Rank" if self.rank_status == "active" else "Previous rank"
+            await interaction.response.edit_message(
+                content=f"\U0001f3c5 {label}: **{medal}** — now pick your star:",
+                view=view,
+            )
 
 
 class StarSelect(ui.Select):
@@ -800,49 +805,50 @@ class StarSelect(ui.Select):
 
         from events.discord import handle_rank_medal_select
 
-        # Read medal from custom_id (rank_star:{event_id}:{medal})
-        parts = self.custom_id.split(":")
-        medal = parts[2] if len(parts) > 2 and parts[2] != "Herald" else None
+        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+            parts = self.custom_id.split(":")
+            medal = parts[2] if len(parts) > 2 and parts[2] != "Herald" else None
 
-        # Fallback: try reading from MedalSelect values
-        if not medal:
-            for item in self.view.children:
-                if isinstance(item, MedalSelect) and item.values:
-                    medal = item.values[0]
-                    break
-        medal = medal or "Herald"
+            if not medal:
+                for item in self.view.children:
+                    if isinstance(item, MedalSelect) and item.values:
+                        medal = item.values[0]
+                        break
+            medal = medal or "Herald"
 
-        star = self.values[0]
-        medal_with_star = f"{medal} {star}" if medal != "Immortal" else "Immortal"
+            star = self.values[0]
+            medal_with_star = f"{medal} {star}" if medal != "Immortal" else "Immortal"
 
-        result = await sync_to_async(handle_rank_medal_select)(
-            event_id=self.event_id,
-            discord_user_id=str(interaction.user.id),
-            medal=medal_with_star,
-        )
-
-        label = "Rank" if self.rank_status == "active" else "Previous rank"
-
-        if result.get("action") == "needs_screenshot":
-            view = ScreenshotUploadPromptView(self.event_id, result["screenshot_type"])
-            await interaction.response.edit_message(
-                content=(
-                    f"\U0001f3c5 {label} set to **{medal_with_star}**\n\n"
-                    "\U0001f4f7 **Upload your screenshot to complete your signup.**\n"
-                    "Press the button below to upload \u2192"
-                ),
-                view=view,
+            result = await sync_to_async(handle_rank_medal_select)(
+                event_id=self.event_id,
+                discord_user_id=str(interaction.user.id),
+                medal=medal_with_star,
             )
-        elif result.get("action") == "error":
-            await interaction.response.edit_message(
-                content=f"\u274c {result['message']}",
-                view=None,
-            )
-        else:
-            await interaction.response.edit_message(
-                content=f"\u2705 {label} set to **{medal_with_star}**. You're signed up! Status: **{result['status']}**",
-                view=None,
-            )
+            ctx.set_outcome(result.get("action", "unknown"))
+            ctx.add(medal=medal_with_star)
+
+            label = "Rank" if self.rank_status == "active" else "Previous rank"
+
+            if result.get("action") == "needs_screenshot":
+                view = ScreenshotUploadPromptView(self.event_id, result["screenshot_type"])
+                await interaction.response.edit_message(
+                    content=(
+                        f"\U0001f3c5 {label} set to **{medal_with_star}**\n\n"
+                        "\U0001f4f7 **Upload your screenshot to complete your signup.**\n"
+                        "Press the button below to upload \u2192"
+                    ),
+                    view=view,
+                )
+            elif result.get("action") == "error":
+                await interaction.response.edit_message(
+                    content=f"\u274c {result['message']}",
+                    view=None,
+                )
+            else:
+                await interaction.response.edit_message(
+                    content=f"\u2705 {label} set to **{medal_with_star}**. You're signed up! Status: **{result['status']}**",
+                    view=None,
+                )
 
 
 class BattleCupTierSelect(ui.Select):
@@ -867,34 +873,36 @@ class BattleCupTierSelect(ui.Select):
 
         from events.discord import handle_battle_cup_submit
 
-        tier = self.values[0]
+        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+            tier = self.values[0]
+            result = await sync_to_async(handle_battle_cup_submit)(
+                event_id=self.event_id,
+                discord_user_id=str(interaction.user.id),
+                tier=tier,
+            )
+            ctx.set_outcome(result.get("action", "unknown"))
+            ctx.add(tier=tier)
 
-        result = await sync_to_async(handle_battle_cup_submit)(
-            event_id=self.event_id,
-            discord_user_id=str(interaction.user.id),
-            tier=tier,
-        )
-
-        if result.get("action") == "needs_screenshot":
-            view = ScreenshotUploadPromptView(self.event_id, result["screenshot_type"])
-            await interaction.response.edit_message(
-                content=(
-                    f"\U0001f3c6 Battle Cup tier {tier} saved\n\n"
-                    "\U0001f4f7 **Upload your ticket screenshot to complete your signup.**\n"
-                    "Press the button below to upload \u2192"
-                ),
-                view=view,
-            )
-        elif result.get("action") == "error":
-            await interaction.response.edit_message(
-                content=f"\u274c {result['message']}",
-                view=None,
-            )
-        else:
-            await interaction.response.edit_message(
-                content=f"\u2705 Battle Cup tier {tier} saved. You're signed up! Status: **{result['status']}**",
-                view=None,
-            )
+            if result.get("action") == "needs_screenshot":
+                view = ScreenshotUploadPromptView(self.event_id, result["screenshot_type"])
+                await interaction.response.edit_message(
+                    content=(
+                        f"\U0001f3c6 Battle Cup tier {tier} saved\n\n"
+                        "\U0001f4f7 **Upload your ticket screenshot to complete your signup.**\n"
+                        "Press the button below to upload \u2192"
+                    ),
+                    view=view,
+                )
+            elif result.get("action") == "error":
+                await interaction.response.edit_message(
+                    content=f"\u274c {result['message']}",
+                    view=None,
+                )
+            else:
+                await interaction.response.edit_message(
+                    content=f"\u2705 Battle Cup tier {tier} saved. You're signed up! Status: **{result['status']}**",
+                    view=None,
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -937,11 +945,15 @@ class ScreenshotUploadButton(ui.Button):
         self.screenshot_type = screenshot_type
 
     async def callback(self, interaction: discord.Interaction):
-        if interaction.response.is_done():
-            log.warning("Screenshot upload interaction already acknowledged")
-            return
-        modal = ScreenshotUploadModal(self.event_id, self.screenshot_type)
-        await send_modal_v2(interaction, modal)
+        async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
+            if interaction.response.is_done():
+                log.warning("screenshot_upload_already_acknowledged")
+                ctx.set_outcome("already_acknowledged")
+                return
+            modal = ScreenshotUploadModal(self.event_id, self.screenshot_type)
+            ctx.set_outcome("modal_sent")
+            ctx.add(screenshot_type=self.screenshot_type)
+            await send_modal_v2(interaction, modal)
 
 
 class ScreenshotUploadModal(ui.Modal):
@@ -994,42 +1006,57 @@ class ScreenshotUploadModal(ui.Modal):
 
         from events.discord import handle_screenshot_upload
 
-        # Get URL from file upload or text input
-        if self.file_upload and interaction.data.get("resolved", {}).get("files"):
-            files = interaction.data["resolved"]["files"]
-            attachment_url = list(files.values())[0].get("url", "") if files else ""
-        elif self.url_input:
-            attachment_url = self.url_input.value
-        else:
-            attachment_url = ""
-
-        result = await sync_to_async(handle_screenshot_upload)(
+        async with discord_log_context(
+            interaction,
+            custom_id=f"screenshot_upload:{self.event_id}:{self.screenshot_type}",
             event_id=self.event_id,
-            discord_user_id=str(interaction.user.id),
-            screenshot_type=self.screenshot_type,
-            attachment_url=attachment_url,
-        )
-
-        if result.get("success"):
-            if result.get("signed_up"):
-                await respond_to_signup_user(
-                    interaction,
-                    content=f"\u2705 {result.get('message', 'Screenshot uploaded! You are signed up.')}",
-                )
+            tags=["events", "signup"],
+        ) as ctx:
+            if self.file_upload and interaction.data.get("resolved", {}).get("files"):
+                files = interaction.data["resolved"]["files"]
+                attachment_url = list(files.values())[0].get("url", "") if files else ""
+            elif self.url_input:
+                attachment_url = self.url_input.value
             else:
-                await respond_to_signup_user(
-                    interaction,
-                    content=f"\u2705 {result.get('message', 'Screenshot saved.')}",
-                )
-        else:
-            await interaction.response.send_message(
-                f"\u274c {result.get('message', 'Upload failed.')}",
-                ephemeral=True,
+                attachment_url = ""
+
+            result = await sync_to_async(handle_screenshot_upload)(
+                event_id=self.event_id,
+                discord_user_id=str(interaction.user.id),
+                screenshot_type=self.screenshot_type,
+                attachment_url=attachment_url,
             )
+            ctx.set_outcome("signed_up" if result.get("signed_up") else "screenshot_saved" if result.get("success") else "error")
+            ctx.add(screenshot_type=self.screenshot_type)
+
+            if result.get("success"):
+                if result.get("signed_up"):
+                    await respond_to_signup_user(
+                        interaction,
+                        content=f"\u2705 {result.get('message', 'Screenshot uploaded! You are signed up.')}",
+                    )
+                else:
+                    await respond_to_signup_user(
+                        interaction,
+                        content=f"\u2705 {result.get('message', 'Screenshot saved.')}",
+                    )
+            else:
+                await interaction.response.send_message(
+                    f"\u274c {result.get('message', 'Upload failed.')}",
+                    ephemeral=True,
+                )
 
     async def on_error(self, interaction: discord.Interaction, error: Exception):
-        log.exception("ScreenshotUploadModal error: %s", error)
-        await interaction.response.send_message(
-            "\u274c Something went wrong.",
-            ephemeral=True,
-        )
+        async with discord_log_context(
+            interaction,
+            custom_id=f"screenshot_upload:{self.event_id}:{self.screenshot_type}",
+            event_id=self.event_id,
+            tags=["events", "signup"],
+        ):
+            try:
+                await interaction.response.send_message(
+                    "\u274c Something went wrong.",
+                    ephemeral=True,
+                )
+            finally:
+                raise error
