@@ -38,6 +38,14 @@ interface UserStripProps {
   showPositions?: boolean;
 
   /**
+   * Show MMR badges (default true). Set false in contexts where MMR is
+   * irrelevant (e.g. Discord DM history, claim approval lists). When true,
+   * the Base MMR badge still auto-hides when the value is 0/undefined and
+   * the League MMR badge auto-hides when the value is 0/undefined.
+   */
+  showMmr?: boolean;
+
+  /**
    * Cap the displayed nickname/username at N characters. When set, overrides
    * the default mobile-15 / desktop-20 caps from `DisplayName` and also
    * relaxes the span's min-width so the strip can collapse into tighter
@@ -71,6 +79,7 @@ const userStripPropsAreEqual = (
   if (prev.compact !== next.compact) return false;
   if (prev.showBorder !== next.showBorder) return false;
   if (prev.showPositions !== next.showPositions) return false;
+  if (prev.showMmr !== next.showMmr) return false;
   if (prev.nameMaxLength !== next.nameMaxLength) return false;
 
   // Styling
@@ -89,6 +98,7 @@ export const UserStrip = memo(
     compact = false,
     showBorder = true,
     showPositions = true,
+    showMmr = true,
     nameMaxLength,
     className,
     'data-testid': testId,
@@ -229,10 +239,12 @@ export const UserStrip = memo(
         </div>
 
         {/* Column 3: MMR (stacked vertically - Base on top, League below) */}
-        <div className="flex flex-col justify-center gap-0.5 shrink-0">
-          {baseMmrBadge}
-          {leagueMmrValue ? leagueMmrBadge : null}
-        </div>
+        {showMmr && (orgMmr || leagueMmrValue) ? (
+          <div className="flex flex-col justify-center gap-0.5 shrink-0">
+            {orgMmr ? baseMmrBadge : null}
+            {leagueMmrValue ? leagueMmrBadge : null}
+          </div>
+        ) : null}
 
         {/* Column 4: Context Slot (flex-1 to push action to end) */}
         {contextSlot && (

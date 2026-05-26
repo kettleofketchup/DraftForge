@@ -226,6 +226,7 @@ export function DiscordLogSection({ eventId, isAdmin, eventTimezone }: DiscordLo
                 }}
                 compact
                 showPositions={false}
+                showMmr={false}
                 contextSlot={
                   <div className="flex flex-wrap items-center justify-end gap-1">
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">{dm.dm_type_display}</Badge>
