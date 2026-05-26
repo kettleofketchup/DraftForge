@@ -4,15 +4,15 @@ These classes handle the Discord UI plumbing. Business logic lives in
 events/discord.py (handle_signup_button, handle_modal_submit, etc.).
 """
 
-import logging
-
 import discord
 from discord import ui
 from django.conf import settings
 
+from discordbot.log_context import discord_log_context
 from discordbot.signup_responses import respond_to_signup_user
+from telemetry.logging import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 SITE_URL = getattr(settings, "SITE_URL", "")
 IS_COMPONENTS_V2 = 1 << 15  # 32768
@@ -136,44 +136,52 @@ class SignupButton(ui.Button):
 
         from events.discord import handle_signup_button
 
-        result = await sync_to_async(handle_signup_button)(
+        async with discord_log_context(
+            interaction,
+            custom_id=self.custom_id,
             event_id=self.event_id,
-            discord_user_id=str(interaction.user.id),
-            discord_username=interaction.user.name,
-        )
-
-        if result["action"] == "signed_up":
-            await respond_to_signup_user(
-                interaction,
-                content=f"\u2705 You're signed up! Status: **{result['status']}**",
-            )
-        elif result["action"] == "needs_modal":
-            modal = EventSignupModal(
+        ) as ctx:
+            result = await sync_to_async(handle_signup_button)(
                 event_id=self.event_id,
-                game_type=result["game_type"],
-                prefill=result.get("prefill", {}),
-                event_config={
-                    "require_steam_id": result.get("require_steam_id", True),
-                    "require_rank_screenshot": result.get(
-                        "require_rank_screenshot", False
-                    ),
-                    "require_battlecup_screenshot": result.get(
-                        "require_battlecup_screenshot", False
-                    ),
-                    "min_mmr": result.get("min_mmr"),
-                    "allow_active_mmr": result.get("allow_active_mmr", True),
-                    "allow_previous_rank": result.get("allow_previous_rank", True),
-                    "allow_battlecup_rating": result.get(
-                        "allow_battlecup_rating", True
-                    ),
-                },
+                discord_user_id=str(interaction.user.id),
+                discord_username=interaction.user.name,
             )
-            await send_modal_v2(interaction, modal)
-        elif result["action"] == "error":
-            await interaction.response.send_message(
-                f"\u274c {result['message']}",
-                ephemeral=True,
-            )
+            ctx.set_outcome(result["action"])
+
+            if result["action"] == "signed_up":
+                await respond_to_signup_user(
+                    interaction,
+                    content=f"\u2705 You're signed up! Status: **{result['status']}**",
+                )
+            elif result["action"] == "needs_modal":
+                modal = EventSignupModal(
+                    event_id=self.event_id,
+                    game_type=result["game_type"],
+                    prefill=result.get("prefill", {}),
+                    event_config={
+                        "require_steam_id": result.get("require_steam_id", True),
+                        "require_rank_screenshot": result.get(
+                            "require_rank_screenshot", False
+                        ),
+                        "require_battlecup_screenshot": result.get(
+                            "require_battlecup_screenshot", False
+                        ),
+                        "min_mmr": result.get("min_mmr"),
+                        "allow_active_mmr": result.get("allow_active_mmr", True),
+                        "allow_previous_rank": result.get(
+                            "allow_previous_rank", True
+                        ),
+                        "allow_battlecup_rating": result.get(
+                            "allow_battlecup_rating", True
+                        ),
+                    },
+                )
+                await send_modal_v2(interaction, modal)
+            elif result["action"] == "error":
+                await interaction.response.send_message(
+                    f"\u274c {result['message']}",
+                    ephemeral=True,
+                )
 
 
 class NotifyButton(ui.Button):
