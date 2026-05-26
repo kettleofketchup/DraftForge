@@ -23,8 +23,10 @@ from events.models import (
     EventSignup,
     TournamentTemplateMixin,
 )
+from telemetry.logging import get_logger
 
 logger = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 RANK_STATUS_DISALLOWED_MESSAGES = {
@@ -218,6 +220,11 @@ def _create_signup(event, user, event_team=None):
         )
         apply_signup_writethrough(signup)
         invalidate_after_commit(event)
+        log.info(
+            "signup_post_commit_hooks_scheduled",
+            signup_id=signup.pk,
+            event_id=event.pk,
+        )
         transaction.on_commit(lambda: notify_signup_changed(event))
         return signup
 
@@ -243,6 +250,11 @@ def _create_signup(event, user, event_team=None):
     elif status == SignupStatus.APPROVED and not event.roll_call_enabled:
         add_user_to_tournament(event, user)
     invalidate_after_commit(event)
+    log.info(
+        "signup_post_commit_hooks_scheduled",
+        signup_id=signup.pk,
+        event_id=event.pk,
+    )
     transaction.on_commit(lambda: notify_signup_changed(event))
     if status in (SignupStatus.CONFIRMED, SignupStatus.APPROVED):
         transaction.on_commit(lambda: notify_mark_interested(event, user.pk))
@@ -251,9 +263,18 @@ def _create_signup(event, user, event_team=None):
 
 def process_rsvp(event, user, event_team=None):
     """Public-path signup. Locked to SIGNUPS_OPEN."""
+    log.info("process_rsvp_started", event_id=event.pk, user_id=user.pk)
     if event.state != EventState.SIGNUPS_OPEN:
         raise ValueError("Event is not accepting signups.")
-    return _create_signup(event, user, event_team=event_team)
+    signup = _create_signup(event, user, event_team=event_team)
+    log.info(
+        "signup_created",
+        signup_id=signup.pk,
+        status=signup.status,
+        event_id=event.pk,
+        user_id=user.pk,
+    )
+    return signup
 
 
 def create_tentative_signup(event, user):
@@ -442,6 +463,12 @@ def apply_signup_input(*, org_user, event, patch):
 
     profile.save()
     invalidate_after_commit(profile, org_user, event)
+    log.info(
+        "signup_input_applied",
+        set_fields=list(set_fields.keys()),
+        profile_id=profile.pk,
+        org_user_id=org_user.pk,
+    )
     return profile
 
 
@@ -529,12 +556,20 @@ def cancel_signup(signup):
     """Cancel a signup."""
     if signup.status in [SignupStatus.CANCELLED, SignupStatus.REJECTED]:
         raise ValueError(f"Cannot cancel signup in '{signup.status}' status.")
+    prior_status = signup.status
     signup.status = SignupStatus.CANCELLED
     signup.save(update_fields=["status", "updated_at"])
     remove_user_from_tournament(signup.event, signup.user)
     _promote_from_waitlist(signup.event)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
+    log.info(
+        "signup_cancelled",
+        signup_id=signup.pk,
+        prior_status=prior_status,
+        event_id=signup.event_id,
+        user_id=signup.user_id,
+    )
     return signup
 
 
