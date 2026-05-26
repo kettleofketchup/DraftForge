@@ -6,7 +6,7 @@ bug:
   - setUp creates a CustomUser + OrgUser + complete PlayerDotaProfile so the
     handler takes the direct-signup path (not needs_modal)
   - Assert on DB row existence, not just log presence
-  - Assert ordered log sequence (not just "all present")
+  - Assert required log events present (Task 12 adds ordering invariants)
 """
 
 import asyncio
@@ -19,7 +19,7 @@ from structlog.testing import capture_logs
 
 from app.models import CustomUser, GameType, Organization
 from discordbot.components import SignupButton
-from events.constants import EventState
+from events.constants import EventState, SignupStatus
 from events.models import Event, EventSignup
 from events.services import resolve_or_create_org_user
 from org.models_profiles import PlayerDotaProfile
@@ -80,6 +80,8 @@ class SignupButtonHappyPathTests(TransactionTestCase):
             EventSignup.objects.filter(event=self.event, user=self.user).count(), 1,
             "Expected exactly one EventSignup row after direct signup",
         )
+        signup = EventSignup.objects.get(event=self.event, user=self.user)
+        self.assertIn(signup.status, [SignupStatus.RSVP, SignupStatus.APPROVED, SignupStatus.CONFIRMED, SignupStatus.PENDING_APPROVAL])
 
         # 2. Log-chain assertion - required events present, with correlation
         events = [log["event"] for log in logs]
