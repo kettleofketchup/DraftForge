@@ -1,4 +1,5 @@
 import { ChevronDown } from 'lucide-react';
+import { Fragment } from 'react';
 import { Button } from '~/components/ui/button';
 import {
   DropdownMenu,
@@ -8,7 +9,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu';
-import { brandBg, brandErrorBg } from '~/components/ui/buttons';
+import {
+  brandBg,
+  brandDepthColors,
+  brandErrorBg,
+  brandGradient,
+  brandLabelOnGradient,
+  brandSecondary,
+  button3DBase,
+  button3DDisabled,
+} from '~/components/ui/buttons';
 import { cn } from '~/lib/utils';
 
 export interface BrandDropdownAction {
@@ -16,7 +26,7 @@ export interface BrandDropdownAction {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
-  variant?: 'default' | 'primary' | 'success' | 'destructive';
+  variant?: 'default' | 'primary' | 'edit' | 'success' | 'destructive';
   disabled?: boolean;
   'data-testid'?: string;
 }
@@ -36,17 +46,20 @@ interface BrandDropdownMenuProps {
   'data-testid'?: string;
 }
 
+// hover: + focus: both set — shadcn item base carries focus:bg-accent that races merge order.
 const variantStyles = {
-  default: 'text-foreground',
-  primary: 'text-primary font-medium',
-  success: 'text-success font-medium',
-  destructive: 'text-error font-medium',
+  default: 'text-foreground hover:bg-violet-500/20 focus:bg-violet-500/20',
+  primary: 'text-primary font-medium [&_svg]:text-primary hover:bg-violet-500/20 focus:bg-violet-500/20',
+  edit: 'text-emerald-300 font-medium [&_svg]:text-emerald-300 hover:bg-emerald-500/20 focus:bg-emerald-500/20',
+  success: 'text-success font-medium [&_svg]:text-success hover:bg-emerald-500/20 focus:bg-emerald-500/20',
+  destructive: 'text-error font-medium [&_svg]:text-error hover:bg-red-500/20 focus:bg-red-500/20',
 } as const;
 
+// Reuse shared button3D recipes so trigger matches its sibling standalone button at rest.
 const triggerVariants = {
-  primary: 'bg-gradient-to-r from-violet-500 to-blue-500 hover:from-violet-400 hover:to-blue-400 text-white border-0',
-  secondary: 'bg-transparent border border-border text-foreground hover:bg-accent',
-  admin: `${brandErrorBg} text-foreground hover:brightness-110`,
+  primary: `${button3DBase} ${button3DDisabled} ${brandGradient} ${brandDepthColors} ${brandLabelOnGradient} border-0`,
+  secondary: `${button3DBase} ${button3DDisabled} ${brandSecondary} border-b-violet-700/50`,
+  admin: `${button3DBase} ${button3DDisabled} ${brandErrorBg} text-foreground hover:brightness-110 border-b-red-900/60 shadow-red-950/40`,
 } as const;
 
 /**
@@ -87,7 +100,7 @@ export function BrandDropdownMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        className={cn(brandBg, 'border-primary/30 min-w-[200px] p-1.5')}
+        className={cn(brandBg, 'border-primary/30 min-w-[200px] p-1.5 space-y-0.5')}
       >
         {menuLabel && (
           <>
@@ -97,20 +110,24 @@ export function BrandDropdownMenu({
             <DropdownMenuSeparator className="bg-border/50" />
           </>
         )}
-        {actions.map((action) => (
-          <DropdownMenuItem
-            key={action.key}
-            onClick={action.onClick}
-            disabled={action.disabled}
-            data-testid={action['data-testid']}
-            className={cn(
-              'min-h-[36px] flex items-center gap-2.5 px-3 py-2 text-sm cursor-pointer rounded-md',
-              variantStyles[action.variant ?? 'default'],
+        {actions.map((action, idx) => (
+          <Fragment key={action.key}>
+            {idx > 0 && (
+              <DropdownMenuSeparator className="!my-0 bg-border/40" />
             )}
-          >
-            {action.icon}
-            {action.label}
-          </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={action.onClick}
+              disabled={action.disabled}
+              data-testid={action['data-testid']}
+              className={cn(
+                'min-h-[36px] flex items-center gap-2.5 px-3 py-2 text-sm cursor-pointer rounded-md',
+                variantStyles[action.variant ?? 'default'],
+              )}
+            >
+              {action.icon}
+              {action.label}
+            </DropdownMenuItem>
+          </Fragment>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

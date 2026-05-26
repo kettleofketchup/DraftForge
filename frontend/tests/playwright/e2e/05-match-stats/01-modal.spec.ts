@@ -129,22 +129,18 @@ test.describe('Match Stats Modal - UI Integration', () => {
     await expect(page.getByText('Completed Bracket Test').first()).toBeVisible();
   });
 
-  test('should display Games tab in tournament detail', async ({ page }) => {
+  test('should display Bracket tab in tournament detail', async ({ page }) => {
     await visitAndWaitForHydration(page, '/tournament/1');
     await expect(page.locator('body')).toBeVisible();
 
     // Click on Bracket tab (renamed from Games)
     await page.getByRole('tab', { name: /Bracket/i }).click();
 
-    // Bracket tab defaults to Bracket View - verify it's visible
-    await expect(page.getByText('Bracket View')).toBeVisible();
-
-    // Switch to List View to see games
-    await page.getByText('List View').click();
-
-    // Games tab content should be visible - Tournament 1 has games from populate
-    // Either we see game cards or the "No games" message (depending on data)
-    await expect(page.locator('body')).toBeVisible();
+    // Bracket view is the only mode (List View was removed) — assert the
+    // bracket container instead of the prior toggle pill text.
+    await expect(page.locator('[data-testid="bracketContainer"]')).toBeVisible({
+      timeout: 15_000,
+    });
   });
 });
 

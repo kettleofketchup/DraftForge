@@ -5,6 +5,10 @@
 // Brand gradient - single source of truth for primary action buttons
 export const brandGradient = 'bg-gradient-to-r from-violet-500 to-blue-500 hover:from-violet-400 hover:to-blue-400 text-white';
 
+// Stroke + halo + cyan glow for labels sitting on brand-gradient surfaces.
+export const brandLabelOnGradient =
+  '[text-shadow:_0_1px_0_rgba(0,0,0,0.85),_0_2px_3px_rgba(0,0,0,0.5),_0_0_10px_var(--glow-cyan)] [&_svg]:text-white [&_svg]:drop-shadow-[0_1px_0_rgba(0,0,0,0.65)]';
+
 // Brand secondary - supporting/contextual actions (subtle gradient + visible ring)
 export const brandSecondary = 'bg-gradient-to-r from-violet-500/30 to-blue-500/20 ring-1 ring-violet-300/60 text-violet-100 hover:from-violet-500/40 hover:to-blue-500/30';
 

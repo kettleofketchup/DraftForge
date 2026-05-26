@@ -64,6 +64,20 @@ all *args:
 cicd *args:
     {{inv}} test.playwright.cicd {{ if args != "" { "--args='" + args + "'" } else { "" } }}
 
+# CI/CD per-project runners — used by the matrix shards in
+# .github/workflows/playwright.yml. Local devs typically just use `cicd`.
+[group('test::pw')]
+cicd-chromium *args:
+    {{inv}} test.playwright.cicd-chromium {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+
+[group('test::pw')]
+cicd-mobile *args:
+    {{inv}} test.playwright.cicd-mobile {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+
+[group('test::pw')]
+cicd-herodraft *args:
+    {{inv}} test.playwright.cicd-herodraft {{ if args != "" { "--args='" + args + "'" } else { "" } }}
+
 # Run the headless suite while streaming backend logs + health probes to
 # frontend/test-results/run-logs/ for diagnosing transient first-attempt
 # timeouts. Combine with playwright's `trace: 'retain-on-failure'` and the

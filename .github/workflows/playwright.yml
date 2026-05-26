@@ -17,199 +17,178 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  # Force lowercase for GHCR compatibility
   IMAGE_PREFIX: ghcr.io/kettleofketchup/draftforge
 
 jobs:
-  playwright:
+  chromium:
+    name: Playwright chromium (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: read
-
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Login to GitHub Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ./.github/actions/setup-playwright-stack
+        with:
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+          github-actor: ${{ github.actor }}
+          image-prefix: ${{ env.IMAGE_PREFIX }}
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
+      - name: Run Playwright (chromium shard ${{ matrix.shard }}/4)
+        env:
+          CI: 'true'
+          PLAYWRIGHT_WORKERS: '2'
+        run: just test::pw::cicd-chromium --shard=${{ matrix.shard }}/4
 
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: '2.2.0'
-        virtualenvs-create: true
-        virtualenvs-in-project: true
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker logs frontend 2>&1 | tail -200 || true
+          docker logs backend 2>&1 | tail -200 || true
+          docker logs nginx 2>&1 | tail -100 || true
 
-    - name: Cache Poetry dependencies
-      uses: actions/cache@v4
-      with:
-        path: .venv
-        key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-chromium-shard-${{ matrix.shard }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
 
-    - name: Install Python dependencies
-      run: poetry install --no-interaction --no-ansi
+      - name: Clean up
+        if: always()
+        run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
-    - name: Set up Just
-      uses: extractions/setup-just@v2
+  mobile:
+    name: Playwright mobile (shard ${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+      - uses: ./.github/actions/setup-playwright-stack
+        with:
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+          github-actor: ${{ github.actor }}
+          image-prefix: ${{ env.IMAGE_PREFIX }}
 
-    - name: Install frontend dependencies
-      run: npm ci
-      working-directory: frontend
+      - name: Run Playwright (mobile shard ${{ matrix.shard }}/2)
+        env:
+          CI: 'true'
+          PLAYWRIGHT_WORKERS: '2'
+        run: just test::pw::cicd-mobile --shard=${{ matrix.shard }}/2
 
-    - name: Cache Playwright browsers
-      uses: actions/cache@v4
-      id: playwright-cache
-      with:
-        path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker logs frontend 2>&1 | tail -200 || true
+          docker logs backend 2>&1 | tail -200 || true
+          docker logs nginx 2>&1 | tail -100 || true
 
-    - name: Install Playwright browsers
-      if: steps.playwright-cache.outputs.cache-hit != 'true'
-      run: npx playwright install --with-deps chromium
-      working-directory: frontend
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-mobile-shard-${{ matrix.shard }}
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
 
-    - name: Install Playwright system deps (if cached)
-      if: steps.playwright-cache.outputs.cache-hit == 'true'
-      run: npx playwright install-deps chromium
-      working-directory: frontend
+      - name: Clean up
+        if: always()
+        run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+  herodraft:
+    name: Playwright herodraft (sequential)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: Pull or Build Docker images
-      run: |
-        echo "Pulling images (hash-aware: tries exact dependency match first)..."
-        if just docker::all-pull; then
-          echo "✓ Images pulled successfully"
-        else
-          echo "✗ Pull failed, building with buildx + registry cache..."
-          poetry run inv docker.test-build
-        fi
+      - uses: ./.github/actions/setup-playwright-stack
+        with:
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+          github-actor: ${{ github.actor }}
+          image-prefix: ${{ env.IMAGE_PREFIX }}
 
-    - name: Rebuild frontend-dev image if pulled :latest is stale
-      run: |
-        # docker::all-pull returns success even when it falls back to :latest
-        # (e.g. when build-docker-images.yml hasn't pushed a hash-tagged image
-        # for this PR's package-lock yet — that workflow runs on main only).
-        # If the hash-tagged frontend-dev image isn't present locally after pull,
-        # the running container would have stale node_modules and vite would
-        # fail to resolve newly-added packages (issue: PR #217).
-        # Detect the mismatch and rebuild frontend-dev only.
-        FRONTEND_HASH=$(just docker::hash frontend)
-        FRONTEND_IMAGE="${IMAGE_PREFIX}/frontend-dev:${FRONTEND_HASH}"
-        if docker image inspect "$FRONTEND_IMAGE" >/dev/null 2>&1; then
-          echo "✓ frontend-dev:${FRONTEND_HASH:0:12}... already present (deps in sync)"
-        else
-          echo "✗ frontend-dev image lacks current package-lock hash (${FRONTEND_HASH:0:12}...)"
-          echo "  Rebuilding frontend-dev so vite can resolve current deps..."
-          poetry run inv docker.frontend.build-dev
-        fi
+      - name: Run Playwright (herodraft, workers=1)
+        env:
+          CI: 'true'
+        run: just test::pw::cicd-herodraft --workers=1
 
-    - name: Get test database
-      run: |
-        # Strategy 1: Try to pull from GHCR (hash first, then latest)
-        if just docker::db::pull; then
-          # Check if we got exact hash match
-          HASH=$(just docker::db::hash)
-          EXISTING=$(docker inspect --format='{{index .Config.Labels "org.draftforge.test-db.content-hash"}}' draftforge/test-db:latest 2>/dev/null || echo "")
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker logs frontend 2>&1 | tail -200 || true
+          docker logs backend 2>&1 | tail -200 || true
+          docker logs nginx 2>&1 | tail -100 || true
 
-          if [[ "$HASH" == "$EXISTING" ]]; then
-            just db::reset-test
-            echo "✓ Exact hash match - using cached database"
-            exit 0
-          fi
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-herodraft
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
 
-          # Hash mismatch - test data may have changed, need full repopulate
-          echo "Hash mismatch (expected: ${HASH:0:12}..., got: ${EXISTING:0:12}...)"
-          echo "Test data may have changed, falling back to full populate..."
-        fi
+      - name: Clean up
+        if: always()
+        run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true
 
-        # Strategy 2: Fallback - populate from scratch
-        echo "Populating test database from scratch..."
-        just db::populate::fresh
+  backend:
+    name: Backend tests (test_bracket)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: Fix database permissions
-      run: |
-        # Ensure SQLite DB and directory are writable by container (uid 1000)
-        # SQLite needs write access to directory for journal/WAL files
-        chmod 777 backend
-        chmod 666 backend/test.db.sqlite3
-        ls -la backend/test.db.sqlite3
-        ls -la backend | head -5
+      - uses: ./.github/actions/setup-playwright-stack
+        with:
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+          github-actor: ${{ github.actor }}
+          image-prefix: ${{ env.IMAGE_PREFIX }}
 
-    - name: Start test services
-      run: |
-        docker compose --project-directory . -f docker/docker-compose.ci.yaml up -d --no-build
-      env:
-        COMPOSE_IGNORE_ORPHANS: true
+      - name: Run backend tests
+        env:
+          CI: 'true'
+        run: |
+          docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml exec -T backend \
+            python manage.py test \
+              app.tests.test_bracket \
+              app.tests.test_discord_reclaim \
+              events.discord.tests \
+              events.tests.test_signup_interactions \
+              -v 2
 
-    - name: Wait for services to be ready
-      run: |
-        echo "Waiting for services..."
-        for i in $(seq 1 60); do
-          if curl -ks https://localhost/api/ -o /dev/null 2>&1; then
-            echo "Services ready!"
-            exit 0
-          fi
-          sleep 2
-        done
-        echo "WARNING: Services may not be ready"
-        docker compose --project-directory . -f docker/docker-compose.ci.yaml ps
-        docker compose --project-directory . -f docker/docker-compose.ci.yaml logs --tail=20
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker logs backend 2>&1 | tail -200 || true
 
-    - name: Run backend tests
-      run: |
-        docker compose --project-directory . -f docker/docker-compose.ci.yaml exec -T backend \
-          python manage.py test app.tests.test_bracket -v 2
-      env:
-        CI: true
-
-    - name: Run Playwright tests (@cicd tagged smoke tests)
-      run: just test::pw::cicd --workers=1 -x
-      env:
-        CI: true
-
-    - name: Dump container logs on failure
-      if: failure()
-      run: |
-        echo "=== Frontend container logs ==="
-        docker logs frontend 2>&1 || echo "No frontend logs"
-        echo ""
-        echo "=== Backend container logs ==="
-        docker logs backend 2>&1 || echo "No backend logs"
-        echo ""
-        echo "=== Nginx container logs ==="
-        docker logs nginx 2>&1 || echo "No nginx logs"
-
-    - name: Upload test results
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: playwright-results
-        path: |
-          frontend/playwright-report/
-          frontend/test-results/
-        retention-days: 7
-
-    - name: Clean up
-      if: always()
-      run: |
-        docker compose --project-directory . -f docker/docker-compose.ci.yaml down -v || true
-        docker container prune -f || true
+      - name: Clean up
+        if: always()
+        run: docker compose --project-directory . -f docker/docker-compose.test.yaml -f docker/docker-compose.ci.override.yaml down -v || true

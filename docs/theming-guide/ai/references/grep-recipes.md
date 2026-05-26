@@ -35,6 +35,18 @@ rg -nB0 -A2 '<nav[^>]*>' "$SCOPE/routes/(organizations|leagues|events|event-seri
 rg -n '<Breadcrumb\b' "$SCOPE/routes/(organizations|leagues|events|event-series|tournament|rollcall)/"
 ```
 
+## Selects
+
+```bash
+# Bare shadcn Select primitive in a user-facing picker (should use BrandSelect family)
+rg -n "from '~/components/ui/select'" "$SCOPE" \
+  --glob '!**/components/ui/select.tsx' \
+  --glob '!**/components/ui/brand-select.tsx'
+
+# Hand-rolled color override on a SelectTrigger
+rg -n '<SelectTrigger[^>]*className="[^"]*\b(bg-(slate|gray|zinc|neutral|stone)-|text-(black|white)\b)' "$SCOPE"
+```
+
 ## Tokens vs Literals
 
 ```bash

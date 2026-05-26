@@ -50,7 +50,7 @@ export function EntityBreadcrumb({ segments, currentLabel, className }: EntityBr
   const treatLastAsCurrent = !currentLabel;
 
   return (
-    <Breadcrumb className={cn('mb-2', className)}>
+    <Breadcrumb className={cn('mb-2 hidden sm:block', className)}>
       <BreadcrumbList>
         {segments.map((segment, index) => {
           const isLastSegment = index === segments.length - 1;

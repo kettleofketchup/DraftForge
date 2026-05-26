@@ -83,11 +83,11 @@ export const PlayersTab: React.FC = memo(() => {
           />
         </div>
         {canEdit && (
-          <div className="flex md:px-5 gap-2 shrink-0">
+          <div className="flex flex-col sm:flex-row md:px-5 gap-2 shrink-0">
             <PrimaryButton
               onClick={() => setShowCSVImport(true)}
               data-testid="tournament-csv-import-btn"
-              className="w-full md:w-auto"
+              className="w-full sm:flex-1 md:flex-none md:w-auto"
             >
               <Upload className="w-4 h-4 mr-2" />
               Import CSV
@@ -95,7 +95,7 @@ export const PlayersTab: React.FC = memo(() => {
             <PrimaryButton
               onClick={() => setShowAddUser(true)}
               data-testid="tournamentAddPlayerBtn"
-              className="w-full md:w-auto"
+              className="w-full sm:flex-1 md:flex-none md:w-auto"
             >
               <Plus className="w-4 h-4 mr-2" />
               Add Player

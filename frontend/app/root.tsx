@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import {
+  data,
   isRouteErrorResponse,
   Links,
   Meta,
@@ -34,11 +35,15 @@ export const links: Route.LinksFunction = () => [];
 
 export async function loader({ request }: LoaderFunctionArgs) {
   // Dynamic import keeps server-only code (`remix-i18next/server`, cookie
-  // wiring) out of the client bundle — matches the `~/lib/ssr.server`
-  // pattern used by other routes in this repo.
-  const { i18nServer } = await import('~/i18n/i18n.server');
+  // wiring) out of the client bundle.
+  const { i18nServer, localeCookie } = await import('~/i18n/i18n.server');
   const locale = await i18nServer.getLocale(request);
-  return { locale };
+  const existing = await localeCookie.parse(request.headers.get('Cookie'));
+  if (existing === locale) return { locale };
+  return data(
+    { locale },
+    { headers: { 'Set-Cookie': await localeCookie.serialize(locale) } },
+  );
 }
 
 // ✅ Meta tags live here
@@ -93,8 +98,8 @@ export const queryClient = new QueryClient({
 });
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const data = useLoaderData<typeof loader>();
-  const locale = data?.locale ?? 'en';
+  const loaderData = useLoaderData<typeof loader>();
+  const locale = loaderData?.locale ?? 'en';
   useChangeLanguage(locale);
 
   return (

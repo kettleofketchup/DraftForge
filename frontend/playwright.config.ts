@@ -12,6 +12,9 @@ import { defineConfig, devices } from '@playwright/test';
  * Projects:
  * - chromium: General E2E tests with parallel execution
  * - herodraft: Sequential execution for multi-browser draft scenarios (depends on chromium)
+ * - mobile-pixel5 / mobile-iphone13: Mobile-viewport specs under e2e/mobile/.
+ *   iPhone 13 forces browserName: 'chromium' so it runs in the same Docker
+ *   image as the rest of the suite (no webkit install required).
  */
 export default defineConfig({
   globalSetup: './tests/playwright/global-setup.ts',
@@ -74,8 +77,9 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      // Exclude herodraft tests (run in herodraft project)
-      testIgnore: /herodraft/i,
+      // Exclude herodraft tests (run in herodraft project) and mobile specs
+      // (which live under e2e/mobile/ and run in the mobile-* projects).
+      testIgnore: [/herodraft/i, /e2e\/mobile\//],
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
@@ -141,6 +145,60 @@ export default defineConfig({
       fullyParallel: false,
       // Longer timeout for demo recordings
       timeout: 300_000,
+    },
+    {
+      name: 'mobile-pixel5',
+      testMatch: /e2e\/mobile\/.*\.spec\.ts$/,
+      use: {
+        ...devices['Pixel 5'],
+        launchOptions: {
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          args: [
+            '--no-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+          ],
+        },
+      },
+    },
+    {
+      name: 'mobile-iphone13',
+      testMatch: /e2e\/mobile\/.*\.spec\.ts$/,
+      use: {
+        ...devices['iPhone 13'],
+        // Force chromium so this runs in the same image as the rest of CI
+        // (no separate webkit install). The iPhone 13 viewport, user-agent
+        // string, deviceScaleFactor, and hasTouch flag still apply.
+        browserName: 'chromium',
+        launchOptions: {
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          args: [
+            '--no-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+          ],
+        },
+      },
+    },
+    {
+      name: 'mobile-iphone-se',
+      testMatch: /e2e\/mobile\/.*\.spec\.ts$/,
+      use: {
+        // iPhone SE 375x667 — the actual width the user reported overflow at.
+        ...devices['iPhone SE'],
+        browserName: 'chromium',
+        launchOptions: {
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          args: [
+            '--no-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-setuid-sandbox',
+          ],
+        },
+      },
     },
   ],
 

@@ -70,6 +70,48 @@ Required breadcrumb pages: `/organizations/:id`, `/leagues/:id`, `/events/:id`, 
 | `<ConfirmDialog>` confirm/cancel buttons rendered with inline keyboard hints | The dialog already wires `hotkey="↵"` / `hotkey="⌫"` for you | Use `<ConfirmDialog>` directly — never re-implement Enter/Backspace + corner badges by hand. |
 | `<FormLabel>` with a hand-rolled `<Kbd>` keycap next to the label text | Pass the `hotkey` prop on `<FormLabel>` | `<FormLabel hotkey="N">Nickname</FormLabel>` renders the Kbd inline for you and applies the right flex layout. Wire the actual focus handler in the parent (e.g. modal `useEffect` listening for the matching `keydown`). |
 
+## Action Dropdowns (Menu of Actions)
+
+For a grouped set of related actions behind a single labeled trigger (admin actions, share targets, etc.) use `<BrandDropdownMenu>` from `~/components/ui/brand-dropdown-menu`, not a hand-built `<DropdownMenu>` from `~/components/ui/dropdown-menu` (the latter is the bare shadcn primitive).
+
+```tsx
+import { BrandDropdownMenu, type BrandDropdownAction } from '~/components/ui/brand-dropdown-menu';
+
+const actions: BrandDropdownAction[] = [
+  { key: 'edit',   icon: <Pencil className="size-4" />, label: 'Edit',   variant: 'edit',       onClick: ... },
+  { key: 'delete', icon: <Trash2 className="size-4" />, label: 'Delete', variant: 'destructive', onClick: ... },
+];
+
+<BrandDropdownMenu label="Admin" variant="admin" actions={actions} />
+```
+
+| Anti-pattern | Replace with | Notes |
+|---|---|---|
+| `<DropdownMenu><DropdownMenuTrigger asChild><Button>Admin</Button></DropdownMenuTrigger><DropdownMenuContent>…items…</DropdownMenuContent></DropdownMenu>` hand-built | `<BrandDropdownMenu>` | Ships the brand `bg-base-300` trigger + brand glow content surface + violet-tinted hairline separators between every item. Items keyed off `actions` array. |
+| Edit action rendered as `variant="success"` | `variant="edit"` | The `edit` variant uses the brand-toxic violet→emerald gradient text matching `<EditButton>`; `success` is a flat emerald token used for true confirmation rows. |
+| Destructive action rendered as `variant="primary"` or `variant="default"` | `variant="destructive"` | Maps to `text-error` so the row reads as a danger affordance. |
+| Stacked items without separators | Pass items normally — `<BrandDropdownMenu>` auto-inserts a hairline `<DropdownMenuSeparator>` between every entry | A `gap` between items reads as "no relation"; the hairline reads as "ordered list of options", which is what action menus communicate. |
+| Trigger styled with custom `bg-violet-…` | `variant="primary"` / `"secondary"` / `"admin"` | The component owns the trigger surface; pass `variant` to pick a brand-aligned skin. |
+
+Variants on `BrandDropdownAction`:
+
+- `default` → foreground text. Neutral.
+- `primary` → violet text + violet icon. Main CTA inside the menu.
+- `edit` → toxic gradient text (violet→emerald) + emerald icon. Brand edit affordance.
+- `success` → emerald text + emerald icon. Confirm / approve.
+- `destructive` → red text + red icon. Delete / cancel.
+
+## Selects (Dropdowns)
+
+| Anti-pattern | Replace with | Notes |
+|---|---|---|
+| Bare shadcn `<Select>` / `<SelectTrigger>` / `<SelectContent>` / `<SelectItem>` in a user-facing picker (role, draft order, MMR bracket, etc.) | `<BrandSelect>` + `<BrandSelectTrigger>` + `<BrandSelectContent>` + `<BrandSelectItem>` from `~/components/ui/brand-select` | Renders the neon-cyber surface: `bg-base-300` trigger with violet hairline + brand-violet ring on focus/open, popover content with brand glow shadow + violet border, items highlight with the `brandSecondary` gradient on focus and persist `data-[state=checked]`. Default `size="default"` (h-9); pass `size="sm"` (h-8) for tight action columns (e.g. UserStrip actionSlot). |
+| `<SelectTrigger className="bg-white text-black ...">` color overrides | Drop the override — use `<BrandSelectTrigger>` | The brand trigger already maps to the dark `bg-base-300` family. Hand-rolled light triggers fight the theme on hover. |
+| Hand-styled chevron icon inside the trigger | Don't render one — `<BrandSelectTrigger>` injects the `ChevronDownIcon` for you | Same as shadcn `SelectTrigger`, but the brand version themes the chevron color (`text-violet-300`) so it matches the ring. |
+| Bare shadcn `Select` for non-form widgets that pick a discrete value (per-row order, sort key, etc.) | `<BrandSelect>` | Reserve the bare shadcn primitive for cases that genuinely need neutral styling (e.g. inside dialogs with their own surface treatment that the brand select would clash with — rare). Document the exception inline. |
+
+`SelectValue`, `SelectGroup`, `SelectLabel`, `SelectScrollUpButton`, `SelectScrollDownButton`, and `SelectSeparator` are re-exported from `brand-select.tsx` unchanged — they don't need a brand layer.
+
 ## Status / Win-Loss Indicators
 
 | Anti-pattern | Replace with | Notes |

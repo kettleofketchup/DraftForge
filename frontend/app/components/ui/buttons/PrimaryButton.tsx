@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { Button } from '~/components/ui/button';
 import { cn } from '~/lib/utils';
-import { brandDepthColors, brandGradient, button3DBase, button3DDisabled } from './styles';
+import { brandDepthColors, brandGradient, brandLabelOnGradient, button3DBase, button3DDisabled } from './styles';
 
 export type PrimaryButtonColor = 'green' | 'blue' | 'yellow';
 
@@ -26,14 +26,7 @@ const colorClasses: Record<PrimaryButtonColor, string> = {
 const primaryTextStroke =
   '[text-shadow:_0_1px_0_rgba(0,0,0,0.85),_0_2px_3px_rgba(0,0,0,0.5)]';
 
-// Brand variant adds, on top of the two-layer dark stroke, a soft cyan
-// accent glow (using the brand --glow-cyan token) so the label feels
-// illuminated rather than printed flat. Kept brand-only so the green /
-// blue / yellow variants don't muddy their hue with an unrelated accent.
-// SVG icons get a matching dark hairline so the Discord glyph etc. stays
-// crisp on the gradient.
-const brandExtras =
-  `${brandDepthColors} [text-shadow:_0_1px_0_rgba(0,0,0,0.85),_0_2px_3px_rgba(0,0,0,0.5),_0_0_10px_var(--glow-cyan)] [&_svg]:text-white [&_svg]:drop-shadow-[0_1px_0_rgba(0,0,0,0.65)]`;
+const brandExtras = `${brandDepthColors} ${brandLabelOnGradient}`;
 
 const PrimaryButton = React.forwardRef<HTMLButtonElement, PrimaryButtonProps>(
   ({ color, className, children, depth = true, ...props }, ref) => {

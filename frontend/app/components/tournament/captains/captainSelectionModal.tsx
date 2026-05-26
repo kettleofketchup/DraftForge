@@ -1,5 +1,6 @@
 import { Crown } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useCallback } from 'react';
+import { useSearchParams } from 'react-router';
 import { TEAMS_BUTTONS_WIDTH } from '~/components/constants';
 import { DIALOG_CSS, SCROLLAREA_CSS } from '~/components/reusable/modal';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
@@ -23,11 +24,30 @@ import {
 import { useUserStore } from '~/store/userStore';
 import { CaptainTable } from './captainTable';
 
+// `?modal=captains` opens this dialog so it's bookmarkable / deep-linkable.
+const MODAL_PARAM = 'modal';
+const MODAL_VALUE = 'captains';
+
 export const CaptainSelectionModal: React.FC = () => {
   const tournament = useUserStore((state) => state.tournament);
   const isStaff = useUserStore((state) => state.isStaff());
   const TriggerButton = isStaff ? PrimaryButton : SecondaryButton;
-  const [open, setOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const open = searchParams.get(MODAL_PARAM) === MODAL_VALUE;
+  const setOpen = useCallback(
+    (next: boolean) => {
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (next) params.set(MODAL_PARAM, MODAL_VALUE);
+          else if (params.get(MODAL_PARAM) === MODAL_VALUE) params.delete(MODAL_PARAM);
+          return params;
+        },
+        { replace: true, preventScrollReset: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const dialogButton = () => {
     return (
@@ -36,10 +56,12 @@ export const CaptainSelectionModal: React.FC = () => {
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
               <TriggerButton
-                className={`w-[${TEAMS_BUTTONS_WIDTH}]`}
+                className={`flex-1 sm:flex-none sm:w-[${TEAMS_BUTTONS_WIDTH}]`}
+                data-testid="captain-modal-trigger"
               >
-                <Crown className="mr-2" />
-                Pick Captains
+                <Crown className="mr-1.5 sm:mr-2" />
+                <span className="sm:hidden">Captains</span>
+                <span className="hidden sm:inline">Pick Captains</span>
               </TriggerButton>
             </DialogTrigger>
           </TooltipTrigger>
