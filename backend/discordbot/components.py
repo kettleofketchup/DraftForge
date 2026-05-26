@@ -245,7 +245,10 @@ class TentativeButton(ui.Button):
             ctx.set_outcome(result["action"])
 
             if result["action"] == "tentative":
-                await respond_to_signup_user(interaction, content="\u2753 Marked as tentative.")
+                await respond_to_signup_user(
+                    interaction,
+                    content="\u2753 Marked as tentative. We'll count you as interested!",
+                )
             elif result["action"] == "error":
                 await interaction.response.send_message(
                     result.get("message", "Something went wrong."),
@@ -756,6 +759,13 @@ class MedalSelect(ui.Select):
         self.require_screenshot = require_screenshot
 
     async def callback(self, interaction: discord.Interaction):
+        """Rebuild RankDetailsView so StarSelect.custom_id encodes the picked medal.
+
+        Without this, the bug at b/discordbot/bot.py:268-285 (rank_medal: handler)
+        races with this callback — defer() wins, bot.py never gets to edit_message,
+        and StarSelect keeps custom_id=rank_star:{event_id}:Herald. Doing the rebuild
+        here removes the race.
+        """
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             medal = self.values[0] if self.values else "Herald"
             ctx.set_outcome("medal_selected")
