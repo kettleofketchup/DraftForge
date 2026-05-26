@@ -233,3 +233,79 @@ class DiscordLogContextTests(IsolatedAsyncioTestCase):
                 raise ValueError("boom")
 
         self.assertEqual(get_contextvars(), {})
+
+
+class DiscordLogContextSpanTests(IsolatedAsyncioTestCase):
+    """Span attribute tests using a SimpleSpanProcessor on the existing TracerProvider.
+
+    We do NOT call set_tracer_provider — that's set-once and would fail in CI.
+    We attach a SimpleSpanProcessor to whatever provider already exists.
+    """
+
+    async def asyncSetUp(self):
+        from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+        clear_contextvars()
+        self.exporter = InMemorySpanExporter()
+        provider = trace.get_tracer_provider()
+        # If the existing provider is a NoOp (tests run without OTel init),
+        # install a real SDK provider once.
+        if not isinstance(provider, TracerProvider):
+            try:
+                trace.set_tracer_provider(TracerProvider())
+                provider = trace.get_tracer_provider()
+            except Exception:
+                pass  # set_tracer_provider is set-once; ignore subsequent attempts
+        provider = trace.get_tracer_provider()
+        self.processor = SimpleSpanProcessor(self.exporter)
+        if hasattr(provider, "add_span_processor"):
+            provider.add_span_processor(self.processor)
+            self._installed = True
+        else:
+            self.skipTest("No SDK TracerProvider available for span capture")
+
+    async def asyncTearDown(self):
+        clear_contextvars()
+        self.exporter.clear()
+        # SimpleSpanProcessor doesn't expose a "remove" — leave it; subsequent tests
+        # clear the exporter in asyncSetUp.
+
+    async def test_opens_span_with_all_attributes(self):
+        from discordbot.log_context import discord_log_context
+
+        async with discord_log_context(_mock_interaction(), custom_id="event_signup:42"):
+            pass
+
+        spans = self.exporter.get_finished_spans()
+        # There may be other spans in the test session; filter by name
+        ours = [s for s in spans if s.name == "discord.interaction.event_signup"]
+        self.assertEqual(len(ours), 1)
+        span = ours[0]
+        attrs = dict(span.attributes)
+        self.assertEqual(attrs["interaction_id"], "12345")
+        self.assertEqual(attrs["discord.user_id"], "67890")
+        self.assertEqual(attrs["discord.username"], "testuser")
+        self.assertEqual(attrs["event_id"], 42)
+        self.assertEqual(attrs["custom_id"], "event_signup:42")
+        self.assertEqual(attrs["channel_id"], "111")
+        self.assertEqual(attrs["guild_id"], "222")
+        self.assertEqual(attrs["interaction_type"], "component")
+        self.assertEqual(attrs["system"], "discord")
+        self.assertEqual(attrs["subsystem"], "interaction")
+        self.assertEqual(attrs["tags_csv"], "events,signup")
+
+    async def test_marks_span_error_on_exception(self):
+        from opentelemetry.trace import StatusCode
+
+        from discordbot.log_context import discord_log_context
+
+        with self.assertRaises(ValueError):
+            async with discord_log_context(_mock_interaction(), custom_id="event_signup:42"):
+                raise ValueError("boom")
+
+        ours = [s for s in self.exporter.get_finished_spans() if s.name == "discord.interaction.event_signup"]
+        self.assertEqual(len(ours), 1)
+        self.assertEqual(ours[0].status.status_code, StatusCode.ERROR)

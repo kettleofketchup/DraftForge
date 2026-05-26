@@ -16,6 +16,8 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
 from telemetry.logging import get_logger
@@ -125,28 +127,46 @@ async def discord_log_context(
         event_id=resolved_event_id,
         tags=resolved_tags,
     )
-    bind_contextvars(**fields)
-    log.info("interaction_started", **fields)
 
-    ctx = InteractionContext()
-    try:
-        yield ctx
-    except Exception as exc:
-        log.error(
-            "interaction_failed",
-            error=str(exc),
-            error_type=type(exc).__name__,
-            exc_info=True,
-            **fields,
-            **ctx.extra,
-        )
-        clear_contextvars()
-        raise
-    else:
-        log.info(
-            "interaction_finished",
-            outcome=ctx.outcome or "ok",
-            **fields,
-            **ctx.extra,
-        )
-        clear_contextvars()
+    tracer = trace.get_tracer(__name__)  # Lazy — test fixtures install processors AFTER import
+    with tracer.start_as_current_span(span_name(resolved_custom_id)) as span:
+        # Span attributes mirror the bound contextvars
+        for key, val in fields.items():
+            if val is None:
+                continue
+            if key == "discord_user_id":
+                span.set_attribute("discord.user_id", val)
+            elif key == "discord_username":
+                span.set_attribute("discord.username", val)
+            elif key == "tags":
+                continue  # Lists aren't valid OTel attributes; tags_csv carries the same data
+            else:
+                span.set_attribute(key, val)
+
+        bind_contextvars(**fields)
+        log.info("interaction_started", **fields)
+
+        ctx = InteractionContext()
+        try:
+            yield ctx
+        except Exception as exc:
+            span.set_status(Status(StatusCode.ERROR, str(exc)))
+            span.record_exception(exc)
+            log.error(
+                "interaction_failed",
+                error=str(exc),
+                error_type=type(exc).__name__,
+                exc_info=True,
+                **fields,
+                **ctx.extra,
+            )
+            clear_contextvars()
+            raise
+        else:
+            log.info(
+                "interaction_finished",
+                outcome=ctx.outcome or "ok",
+                **fields,
+                **ctx.extra,
+            )
+            clear_contextvars()
