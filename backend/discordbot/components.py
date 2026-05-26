@@ -494,10 +494,16 @@ class EventSignupModal(ui.Modal):
             tags=["events", "signup"],
         ):
             try:
-                await interaction.response.send_message(
-                    "\u274c Something went wrong. Please try again.",
-                    ephemeral=True,
-                )
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "\u274c Something went wrong. Please try again.",
+                        ephemeral=True,
+                    )
+                else:
+                    await interaction.followup.send(
+                        "\u274c Something went wrong. Please try again.",
+                        ephemeral=True,
+                    )
             finally:
                 raise error
 
@@ -1064,9 +1070,15 @@ class ScreenshotUploadModal(ui.Modal):
             tags=["events", "signup"],
         ):
             try:
-                await interaction.response.send_message(
-                    "\u274c Something went wrong.",
-                    ephemeral=True,
-                )
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "\u274c Something went wrong.",
+                        ephemeral=True,
+                    )
+                else:
+                    await interaction.followup.send(
+                        "\u274c Something went wrong.",
+                        ephemeral=True,
+                    )
             finally:
                 raise error
