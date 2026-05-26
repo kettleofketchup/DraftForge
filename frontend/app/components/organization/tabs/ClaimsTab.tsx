@@ -12,7 +12,10 @@ import { Label } from '~/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Badge } from '~/components/ui/badge';
 import { MobileNavDropdown } from '~/components/ui/mobile-nav-dropdown';
+import { getLogger } from '~/lib/logger';
 import { ClaimCard } from './ClaimCard';
+
+const log = getLogger('ClaimsTab');
 
 interface Props {
   organizationId: number;
@@ -46,7 +49,7 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
       setClaims(data);
     } catch (err) {
       setError('Failed to load claim requests');
-      console.error('Error fetching claims:', err);
+      log.error('fetch claims failed', { err });
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +67,7 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
       await approveClaimRequest(approvingClaim.id);
       fetchClaims();
     } catch (err) {
-      console.error('Error approving claim:', err);
+      log.error('approve claim failed', { err });
       setError('Failed to approve claim request');
     } finally {
       setIsApproving(false);
@@ -80,7 +83,7 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
       await rejectClaimRequest(rejectingClaim.id, rejectionReason);
       fetchClaims();
     } catch (err) {
-      console.error('Error rejecting claim:', err);
+      log.error('reject claim failed', { err });
       setError('Failed to reject claim request');
     } finally {
       setIsRejecting(false);

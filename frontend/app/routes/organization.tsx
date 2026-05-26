@@ -57,8 +57,7 @@ import { Repeat, CalendarDays } from 'lucide-react';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
 import { ClaimsTab, DeleteOrganizationDangerZone, EditOrganizationModal, useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
-import { Button } from '~/components/ui/button';
-import { AddDiscordBotButton, PrimaryButton } from '~/components/ui/buttons';
+import { AddDiscordBotButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
 import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
 import { UserList } from '~/components/user';
@@ -178,11 +177,11 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
               {currentUser && r.discord_notify_new_events && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
+                    <SecondaryButton
                       size="icon"
-                      className={cn("h-8 w-8", r.is_subscribed && "text-interactive")}
+                      className={cn("h-9 w-9", r.is_subscribed && "text-interactive")}
                       disabled={isPending}
+                      aria-label={r.is_subscribed ? 'Unsubscribe' : 'Subscribe'}
                       onClick={(e) => {
                         e.preventDefault(); e.stopPropagation();
                         if (r.is_subscribed) {
@@ -193,7 +192,7 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
                       }}
                     >
                       {r.is_subscribed ? <MailCheck className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
-                    </Button>
+                    </SecondaryButton>
                   </TooltipTrigger>
                   <TooltipContent>{r.is_subscribed ? 'Unsubscribe' : 'Subscribe'}</TooltipContent>
                 </Tooltip>
@@ -201,11 +200,14 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
               {onEdit && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8"
+                    <SecondaryButton
+                      size="icon"
+                      className="h-9 w-9"
+                      aria-label="Edit series"
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(r); }}
                     >
                       <Pencil className="h-3.5 w-3.5" />
-                    </Button>
+                    </SecondaryButton>
                   </TooltipTrigger>
                   <TooltipContent>Edit series</TooltipContent>
                 </Tooltip>
@@ -472,14 +474,14 @@ export default function OrganizationDetailPage() {
                 {canEditEvents && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
+                      <SecondaryButton
                         size="icon"
                         className="h-9 w-9"
+                        aria-label="Edit org event defaults"
                         onClick={() => setEditDefaultsOpen(true)}
                       >
                         <Settings className="h-4 w-4" />
-                      </Button>
+                      </SecondaryButton>
                     </TooltipTrigger>
                     <TooltipContent>Edit event defaults</TooltipContent>
                   </Tooltip>
