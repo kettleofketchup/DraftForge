@@ -86,7 +86,7 @@ def _interaction_type_name(interaction) -> str:
         return "unknown"
 
 
-def _identity_fields(interaction, *, custom_id, event_id, tags) -> dict:
+def _identity_fields(interaction, *, custom_id, event_id, tags) -> dict[str, Any]:
     """The set of identity fields bound to contextvars AND passed to bookend logs."""
     return {
         "system": "discord",
