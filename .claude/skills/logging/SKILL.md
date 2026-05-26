@@ -23,23 +23,56 @@ log.info("order_created", system="tournament", subsystem="registration", draft_i
 
 Every log MUST include `system` and `subsystem` kwargs. These are the primary Grafana filter dimensions.
 
-| system | subsystem | Where | What |
-|--------|-----------|-------|------|
-| `herodraft` | `connection` | `consumers.py` | WS connect/disconnect, captain state, kicks |
-| `herodraft` | `heartbeat` | `herodraft_tick.py` | Heartbeat staleness checks, heartbeat-triggered pauses |
-| `herodraft` | `timer` | `herodraft_tick.py` | Tick loop lifecycle, tick broadcast, timeout auto-pick, resume |
-| `websocket` | `heartbeat` | `consumers_base.py` | Heartbeat receive, captain register/unregister (generic WS infra) |
-| `events` | `discord` | `events/tasks.py` | Discord event sync, announcements, reminders |
-| `events` | `scheduling` | `events/tasks.py` | Event generation, signup opening, repeaters |
-| `tournament` | `discord` | `discordbot/tasks.py` | Tournament DMs, bracket notifications |
-| `avatars` | `endpoint` | `user/internal/avatar.py` | Internal endpoints: list-linked-users, list-guild-ids, bulk-update + invalidate |
-| `avatars` | `refresh` | `app/tasks/avatar_refresh.py::refresh_avatars_batched` | Daily Celery beat: read guild-member cache, diff against DB, POST bulk-update |
-| `avatars` | `single` | `app/tasks/avatar_refresh.py::refresh_single_user_avatar` + helpers | Single-user refresh: Discord API fetch + per-user `update_user_avatar` |
-| `avatars` | `legacy` | `app/tasks/avatar_refresh.py::refresh_discord_avatars` / `refresh_all_discord_data` | Older per-user fanout tasks (predates the batched path) |
-| `discord` | `lease` | `discordbot/tasks.py`, `app/views/internal.py` | DiscordMessageLog stale-lease sweep (pending NULL >5min, failed >1h) |
-| `cache` | `invalidate` | `app/cache_utils.py` | Per-object cacheops invalidation fired from `transaction.on_commit` |
+> **Two-axis taxonomy:** `system` / `subsystem` answer *where the code lives* (single value, label-friendly). `tags: list[str]` is an optional secondary axis answering *what domains this log concerns* (multi-value, for cross-cutting queries like "show me everything related to signups"). When tags are set, also set `tags_csv` (comma-joined string) for clean LogQL `=~` filtering (Loki's `| json` flattens lists as `tags_0`, `tags_1` which is awkward to filter). Bind tags via `discord_log_context` for interaction-flow logs, or pass explicitly for one-off cross-cutting logs.
+
+| system | subsystem | tags | Where | What |
+|--------|-----------|------|-------|------|
+| `herodraft` | `connection` | — | `consumers.py` | WS connect/disconnect, captain state, kicks |
+| `herodraft` | `heartbeat` | — | `herodraft_tick.py` | Heartbeat staleness checks, heartbeat-triggered pauses |
+| `herodraft` | `timer` | — | `herodraft_tick.py` | Tick loop lifecycle, tick broadcast, timeout auto-pick, resume |
+| `websocket` | `heartbeat` | — | `consumers_base.py` | Heartbeat receive, captain register/unregister (generic WS infra) |
+| `events` | `discord` | — | `events/tasks.py` (cron sync, non-interaction tasks like `sync_discord_events`) | Cron-driven event sync to Discord that isn't triggered by an interaction |
+| `events` | `scheduling` | — | `events/tasks.py` | Event generation, signup opening, repeaters |
+| `tournament` | `discord` | — | `discordbot/tasks.py` | Tournament DMs, bracket notifications |
+| `avatars` | `endpoint` | — | `user/internal/avatar.py` | Internal endpoints: list-linked-users, list-guild-ids, bulk-update + invalidate |
+| `avatars` | `refresh` | — | `app/tasks/avatar_refresh.py::refresh_avatars_batched` | Daily Celery beat: read guild-member cache, diff against DB, POST bulk-update |
+| `avatars` | `single` | — | `app/tasks/avatar_refresh.py::refresh_single_user_avatar` + helpers | Single-user refresh: Discord API fetch + per-user `update_user_avatar` |
+| `avatars` | `legacy` | — | `app/tasks/avatar_refresh.py::refresh_discord_avatars` / `refresh_all_discord_data` | Older per-user fanout tasks (predates the batched path) |
+| `discord` | `lease` | — | `discordbot/tasks.py`, `app/views/internal.py` | DiscordMessageLog stale-lease sweep (pending NULL >5min, failed >1h) |
+| `discord` | `interaction` | `["events","signup"]` | `discordbot/components.py`, `discordbot/signup_responses.py`, `discordbot/log_context.py` | Discord-bot UI plumbing + response delivery: button/modal/select callbacks |
+| `discord` | `dispatch` | `["events","signup"]` | `events/discord/dispatch.py` | `notify_*` dispatch visibility (queued vs skipped); threads `interaction_id` to Celery |
+| `discord` | `celery` | `["events","signup"]` | `events/tasks.py` (Discord-dispatching tasks) | `celery_task_started/finished/failed` bookend logs |
+| `cache` | `invalidate` | — | `app/cache_utils.py` | Per-object cacheops invalidation fired from `transaction.on_commit` |
 
 Add new systems/subsystems as features grow. Keep systems coarse (feature area), subsystems functional (what role the code plays).
+
+## Cross-System Correlation
+
+Logs that span multiple systems carry an `interaction_id` (Discord interaction) or `request_id` (web request) so a single user action can be traced across processes.
+
+For Discord interactions, the `discord_log_context` async CM in `discordbot/log_context.py` binds:
+- `interaction_id` — primary correlation key (Discord-generated, unique per click)
+- `discord_user_id`, `discord_username`, `channel_id`, `guild_id`
+- `custom_id`, `event_id`, `interaction_type`
+- `tags=["events","signup"]` (or other prefix-derived tags)
+- `tags_csv="events,signup"` (flat string for clean LogQL filtering)
+
+These propagate via `structlog.contextvars.merge_contextvars` through `await` and `sync_to_async`. They also propagate across Celery `.delay()` calls when the dispatch site passes `interaction_id` as a kwarg and the task calls `bind_contextvars(interaction_id=...)` at entry.
+
+OTel `trace_id` and `span_id` are injected automatically by the `_add_otel_trace_context` processor in `telemetry/logging.py`. At a 10% sample rate, the `trace_id` is in every log line for that 10%; for the other 90%, rely on `interaction_id` for log-side correlation.
+
+### Grafana query patterns
+
+```logql
+# Single user click
+{service_name="backend"} | json | interaction_id="<id>"
+
+# Cross-cutting: anything signup-related
+{service_name="backend"} | json | tags_csv=~".*signup.*"
+
+# Discord code that touches events
+{service_name="backend"} | json | system="discord" | tags_csv=~".*events.*"
+```
 
 ## Log Levels
 
