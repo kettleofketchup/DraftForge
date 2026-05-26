@@ -342,8 +342,10 @@ def handle_signup_modal_submit(event_id, discord_user_id, game_type, values):
 
         try:
             signup = process_rsvp(event, user)
+            log.info("signup_persisted", signup_id=signup.pk, signup_status=signup.status)
             return {"action": "signed_up", "status": signup.status}
         except ValueError as e:
+            log.warning("signup_rejected", reason=str(e))
             return {"action": "error", "message": str(e)}
 
     return {"action": "error", "message": "Unknown game type."}
