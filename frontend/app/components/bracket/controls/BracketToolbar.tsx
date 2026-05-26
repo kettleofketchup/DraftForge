@@ -224,6 +224,7 @@ export function BracketToolbar({
         confirmLabel="Reset"
         variant="destructive"
         onConfirm={handleReset}
+        confirmTestId="resetBracketConfirmButton"
       />
     </div>
   );

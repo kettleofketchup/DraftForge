@@ -87,7 +87,7 @@ const ConfirmButton = React.forwardRef<HTMLButtonElement, ConfirmButtonProps>(
       <Button
         ref={ref}
         disabled={disabled || loading}
-        className={cn(variantStyles[variant], hotkey && 'relative', className)}
+        className={cn('min-h-11', variantStyles[variant], hotkey && 'relative', className)}
         {...props}
       >
         {hotkey ? (

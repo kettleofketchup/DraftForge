@@ -15,7 +15,7 @@ interface UpdateCaptainButtonProps {
   user: UserType;
   /**
    * `compact=true` renders an icon-only action sized for a UserStrip's
-   * actionSlot (32x32 touch target with a Crown / X glyph). Default mode
+   * actionSlot (36×36 touch target with a Crown / X glyph). Default mode
    * keeps the original wide `w-40` "Add Captain" / "Remove Captain" pill
    * used by the legacy table layout.
    */

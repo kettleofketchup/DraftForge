@@ -23,7 +23,6 @@ export function DeleteOrganizationDangerZone({ organization }: DeleteOrganizatio
     try {
       await deleteOrganization(organization.pk);
       toast.success(`Organization "${organization.name}" deleted`);
-      setShowDelete(false);
       navigate('/organizations');
     } catch (err) {
       const message =
