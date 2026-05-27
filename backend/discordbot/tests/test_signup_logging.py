@@ -198,8 +198,6 @@ class CeleryHopTests(TransactionTestCase):
     def test_celery_task_rebinds_interaction_id_from_kwargs(self):
         from events.tasks import send_signup_update
 
-        # Patch get_event_for_task to return None - task short-circuits at "event not found"
-        # which still emits bookend logs without making a Discord HTTP call.
         with capture_logs() as logs, \
              patch("app.internal_client.get_event_for_task", return_value=None):
             send_signup_update.apply(args=[self.event.pk], kwargs={"interaction_id": "abc123"})
@@ -210,11 +208,10 @@ class CeleryHopTests(TransactionTestCase):
         self.assertEqual(started[0]["task"], "send_signup_update")
         self.assertEqual(started[0]["event_id"], self.event.pk)
 
-        # The "event not found" short-circuits via `return` inside try:, which
-        # skips the `else:` block where celery_task_finished is emitted. The
-        # finally: still runs (clear_contextvars). This is acceptable because
-        # the test's primary purpose is proving kwargs-rebind on the
-        # celery_task_started log.
+        # After I2 fix, celery_task_finished now fires on early-return paths too
+        finished = [log for log in logs if log["event"] == "celery_task_finished"]
+        self.assertEqual(len(finished), 1)
+        self.assertEqual(finished[0]["interaction_id"], "abc123")
 
     def test_celery_task_body_failure_emits_celery_task_failed(self):
         from events.tasks import send_signup_update

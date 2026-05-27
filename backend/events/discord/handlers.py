@@ -696,15 +696,12 @@ def handle_decline_button(event_id, discord_user_id):
 
 
 def handle_tentative_button(event_id, discord_user_id, discord_username=None):
-    """Handle Tentative button click. Creates a TENTATIVE signup (doesn't take a spot)."""
+    """Handle Tentative button click. Routes through create_tentative_signup service."""
     log.info("handler_invoked", handler="tentative_button")
     try:
         event = Event.objects.select_related("organization").get(pk=event_id)
     except Event.DoesNotExist:
         return {"action": "error", "message": "Event not found."}
-
-    if event.state != EventState.SIGNUPS_OPEN:
-        return {"action": "error", "message": "Event is not accepting signups."}
 
     org_user, user = _get_org_user(
         event, discord_user_id, discord_username=discord_username
@@ -716,32 +713,23 @@ def handle_tentative_button(event_id, discord_user_id, discord_username=None):
     if not user:
         return {"action": "error", "message": "Could not create your account."}
 
-    # Check for existing signup
-    existing = EventSignup.objects.filter(event=event, user=user).first()
-    if existing:
-        if existing.status == SignupStatus.TENTATIVE:
-            return {
-                "action": "already_tentative",
-                "message": "You're already marked as tentative.",
-            }
-        if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
-            # Switch from active signup to tentative
-            from events.services import cancel_signup
+    from events.services import create_tentative_signup
 
-            cancel_signup(existing)
-        # Remove cancelled/rejected signup to create fresh tentative
-        existing.delete()
+    try:
+        signup = create_tentative_signup(event, user)
+    except ValueError as e:
+        log.warning("signup_rejected", reason=str(e))
+        if "already marked as tentative" in str(e).lower():
+            return {"action": "already_tentative", "message": str(e)}
+        return {"action": "error", "message": str(e)}
 
-    EventSignup.objects.create(
-        event=event,
-        user=user,
-        status=SignupStatus.TENTATIVE,
-    )
     _log_signup(event_id, "tentative", discord_user_id, discord_username)
-    # Trigger embed update
-    from events.discord.dispatch import notify_signup_changed
-
-    notify_signup_changed(event)
-
-    log.info("tentative_created", user_id=user.pk, event_id=event.pk)
+    log.info(
+        "tentative_created",
+        user_id=user.pk,
+        event_id=event.pk,
+        signup_id=signup.pk,
+    )
+    # notify_signup_changed is dispatched by create_tentative_signup's on_commit hook
+    # (services.py) — do NOT call directly.
     return {"action": "tentative", "message": "Marked as tentative."}

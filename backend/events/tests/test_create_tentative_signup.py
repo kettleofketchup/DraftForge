@@ -25,12 +25,17 @@ class CreateTentativeSignupTests(TestCase):
         self.assertEqual(signup.status, SignupStatus.TENTATIVE)
         self.assertEqual(signup.user, self.user)
 
-    def test_rejects_duplicate_active_signup(self):
+    def test_upgrades_active_signup_to_tentative(self):
+        # Active signups (RSVP/APPROVED/CONFIRMED/etc.) are cancelled and
+        # replaced with a fresh TENTATIVE row. Only one row remains.
         EventSignup.objects.create(
             event=self.event, user=self.user, status=SignupStatus.RSVP
         )
-        with self.assertRaises(ValueError):
-            create_tentative_signup(self.event, self.user)
+        signup = create_tentative_signup(self.event, self.user)
+        self.assertEqual(signup.status, SignupStatus.TENTATIVE)
+        self.assertEqual(
+            EventSignup.objects.filter(event=self.event, user=self.user).count(), 1
+        )
 
     def test_rejects_duplicate_tentative(self):
         EventSignup.objects.create(
