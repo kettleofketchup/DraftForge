@@ -294,6 +294,7 @@ def send_event_announcement(event_id, interaction_id=None):
     fields = _celery_bookend_fields("send_event_announcement", event_id, interaction_id)
     log.info("celery_task_started", **fields)
     started = time.monotonic()
+    failed = False
     try:
         from app.internal_client import (
             create_event_log,
@@ -441,19 +442,20 @@ def send_event_announcement(event_id, interaction_id=None):
 
         return f"Announced event {event.pk} (signup: {signup_message_link})"
     except Exception as exc:
+        failed = True
         log.error(
             "celery_task_failed",
             error=str(exc), error_type=type(exc).__name__, exc_info=True,
             **fields,
         )
         raise
-    else:
-        log.info(
-            "celery_task_finished",
-            duration_ms=round((time.monotonic() - started) * 1000),
-            **fields,
-        )
     finally:
+        if not failed:
+            log.info(
+                "celery_task_finished",
+                duration_ms=round((time.monotonic() - started) * 1000),
+                **fields,
+            )
         clear_contextvars()
 
 
@@ -568,6 +570,7 @@ def send_signup_update(event_id, interaction_id=None):
     fields = _celery_bookend_fields("send_signup_update", event_id, interaction_id)
     log.info("celery_task_started", **fields)
     started = time.monotonic()
+    failed = False
     try:
         from app.internal_client import (
             clear_event_signup_state,
@@ -681,19 +684,20 @@ def send_signup_update(event_id, interaction_id=None):
 
         return f"Updated announcement for event {event.pk}"
     except Exception as exc:
+        failed = True
         log.error(
             "celery_task_failed",
             error=str(exc), error_type=type(exc).__name__, exc_info=True,
             **fields,
         )
         raise
-    else:
-        log.info(
-            "celery_task_finished",
-            duration_ms=round((time.monotonic() - started) * 1000),
-            **fields,
-        )
     finally:
+        if not failed:
+            log.info(
+                "celery_task_finished",
+                duration_ms=round((time.monotonic() - started) * 1000),
+                **fields,
+            )
         clear_contextvars()
 
 
@@ -704,6 +708,7 @@ def send_new_event_notification(event_id, interaction_id=None):
     fields = _celery_bookend_fields("send_new_event_notification", event_id, interaction_id)
     log.info("celery_task_started", **fields)
     started = time.monotonic()
+    failed = False
     try:
         from app.internal_client import get_event_for_task
         from events.discord import build_new_event_embed
@@ -727,19 +732,20 @@ def send_new_event_notification(event_id, interaction_id=None):
         )
         return f"Notified new event {event.pk}"
     except Exception as exc:
+        failed = True
         log.error(
             "celery_task_failed",
             error=str(exc), error_type=type(exc).__name__, exc_info=True,
             **fields,
         )
         raise
-    else:
-        log.info(
-            "celery_task_finished",
-            duration_ms=round((time.monotonic() - started) * 1000),
-            **fields,
-        )
     finally:
+        if not failed:
+            log.info(
+                "celery_task_finished",
+                duration_ms=round((time.monotonic() - started) * 1000),
+                **fields,
+            )
         clear_contextvars()
 
 
@@ -754,6 +760,7 @@ def create_discord_scheduled_event(event_id, interaction_id=None):
     fields = _celery_bookend_fields("create_discord_scheduled_event", event_id, interaction_id)
     log.info("celery_task_started", **fields)
     started = time.monotonic()
+    failed = False
     try:
         from datetime import timedelta
 
@@ -883,19 +890,20 @@ def create_discord_scheduled_event(event_id, interaction_id=None):
             )
             return f"Failed: {e}"
     except Exception as exc:
+        failed = True
         log.error(
             "celery_task_failed",
             error=str(exc), error_type=type(exc).__name__, exc_info=True,
             **fields,
         )
         raise
-    else:
-        log.info(
-            "celery_task_finished",
-            duration_ms=round((time.monotonic() - started) * 1000),
-            **fields,
-        )
     finally:
+        if not failed:
+            log.info(
+                "celery_task_finished",
+                duration_ms=round((time.monotonic() - started) * 1000),
+                **fields,
+            )
         clear_contextvars()
 
 
@@ -906,6 +914,7 @@ def sync_discord_event_signups(event_id, interaction_id=None):
     fields = _celery_bookend_fields("sync_discord_event_signups", event_id, interaction_id)
     log.info("celery_task_started", **fields)
     started = time.monotonic()
+    failed = False
     try:
         from app.internal_client import get_event_for_task, get_first_message_log
 
@@ -950,19 +959,20 @@ def sync_discord_event_signups(event_id, interaction_id=None):
             logger.exception("Failed to sync Discord event signups for event %s", event.pk)
             return f"Failed: {e}"
     except Exception as exc:
+        failed = True
         log.error(
             "celery_task_failed",
             error=str(exc), error_type=type(exc).__name__, exc_info=True,
             **fields,
         )
         raise
-    else:
-        log.info(
-            "celery_task_finished",
-            duration_ms=round((time.monotonic() - started) * 1000),
-            **fields,
-        )
     finally:
+        if not failed:
+            log.info(
+                "celery_task_finished",
+                duration_ms=round((time.monotonic() - started) * 1000),
+                **fields,
+            )
         clear_contextvars()
 
 
@@ -975,6 +985,7 @@ def mark_interested_discord_event(event_id, user_id, interaction_id=None):
     )
     log.info("celery_task_started", **fields)
     started = time.monotonic()
+    failed = False
     try:
         from app.internal_client import get_event_for_task, get_first_message_log
 
@@ -1017,19 +1028,20 @@ def mark_interested_discord_event(event_id, user_id, interaction_id=None):
             )
             return f"Failed: {e}"
     except Exception as exc:
+        failed = True
         log.error(
             "celery_task_failed",
             error=str(exc), error_type=type(exc).__name__, exc_info=True,
             **fields,
         )
         raise
-    else:
-        log.info(
-            "celery_task_finished",
-            duration_ms=round((time.monotonic() - started) * 1000),
-            **fields,
-        )
     finally:
+        if not failed:
+            log.info(
+                "celery_task_finished",
+                duration_ms=round((time.monotonic() - started) * 1000),
+                **fields,
+            )
         clear_contextvars()
 
 

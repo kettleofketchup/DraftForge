@@ -281,39 +281,43 @@ def process_rsvp(event, user, event_team=None):
     return signup
 
 
+@transaction.atomic
 def create_tentative_signup(event, user):
-    """Create a TENTATIVE EventSignup.
+    """Create a TENTATIVE EventSignup, upgrading any active signup to tentative.
 
-    Mirrors the inline logic previously in EventViewSet.tentative
-    (views.py:486-525). Both the existing DRF action and the upcoming
-    /signup/ endpoint funnel through this service.
+    Funnel point for both the DRF action and the Discord tentative button.
+
+    Behavior:
+      - Event must be SIGNUPS_OPEN.
+      - If existing TENTATIVE signup -> raise ValueError (already tentative).
+      - If existing active signup (RSVP/APPROVED/CONFIRMED/PENDING/WAITLISTED)
+        -> cancel it, delete the row, then create a fresh TENTATIVE.
+      - If existing CANCELLED/REJECTED row -> delete it, create fresh TENTATIVE.
+      - notify_signup_changed is dispatched once via on_commit
+        (cancel_signup also schedules one when invoked; we skip registering
+        a duplicate in that case).
     """
     if event.state != EventState.SIGNUPS_OPEN:
         raise ValueError("Event is not accepting signups")
 
-    existing = (
-        EventSignup.objects.filter(event=event, user=user)
-        .exclude(status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED])
-        .first()
-    )
+    existing = EventSignup.objects.filter(event=event, user=user).first()
+    notify_scheduled_by_cancel = False
     if existing:
         if existing.status == SignupStatus.TENTATIVE:
             raise ValueError("Already marked as tentative")
-        raise ValueError(f"Already signed up (status: {existing.status})")
-
-    EventSignup.objects.filter(
-        event=event,
-        user=user,
-        status__in=[SignupStatus.CANCELLED, SignupStatus.REJECTED],
-    ).delete()
+        if existing.status not in (SignupStatus.CANCELLED, SignupStatus.REJECTED):
+            cancel_signup(existing)
+            notify_scheduled_by_cancel = True
+        EventSignup.objects.filter(pk=existing.pk).delete()
 
     signup = EventSignup.objects.create(
         event=event, user=user, status=SignupStatus.TENTATIVE
     )
     # invalidate_after_commit is on_commit-aware internally; do NOT wrap.
     invalidate_after_commit(signup, event)
-    # notify_signup_changed is NOT on_commit-aware; wrap explicitly.
-    transaction.on_commit(lambda: notify_signup_changed(event))
+    if not notify_scheduled_by_cancel:
+        # notify_signup_changed is NOT on_commit-aware; wrap explicitly.
+        transaction.on_commit(lambda: notify_signup_changed(event))
     return signup
 
 
