@@ -10,6 +10,7 @@ import { SubscriberList } from '~/components/events/SubscriberList';
 import type { EventType } from '~/components/events/schemas';
 import { Badge } from '~/components/ui/badge';
 import { DestructiveButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
+import { DeleteDialog } from '~/components/ui/dialogs';
 import { Card, CardContent, CardHeader } from '~/components/ui/card';
 import { EntityBreadcrumb, type BreadcrumbSegment } from '~/components/ui/entity-breadcrumb';
 import { useOrganization } from '~/components/organization';
@@ -123,6 +124,7 @@ export default function SeriesPage() {
   const { data: repeater, isLoading } = useRepeater(id);
   const { data: events } = useRepeaterEvents(id);
   const [editOpen, setEditOpen] = useState(false);
+  const [showDeleteSeries, setShowDeleteSeries] = useState(false);
   const currentUser = useUserStore((state) => state.currentUser);
 
   const { organization } = useOrganization(repeater?.organization);
@@ -250,11 +252,7 @@ export default function SeriesPage() {
               </SecondaryButton>
               <DestructiveButton
                 size="sm"
-                onClick={() => {
-                  if (window.confirm(`Delete "${repeater.name}"? This will not delete existing events.`)) {
-                    deleteMutation.mutate();
-                  }
-                }}
+                onClick={() => setShowDeleteSeries(true)}
                 loading={deleteMutation.isPending}
                 data-testid="delete-series-btn"
               >
@@ -388,6 +386,31 @@ export default function SeriesPage() {
           }}
         />
       )}
+
+      <DeleteDialog
+        open={showDeleteSeries}
+        onOpenChange={setShowDeleteSeries}
+        entityKind="Event Series"
+        entityName={repeater.name}
+        description={
+          <>
+            This will delete the series <strong>{repeater.name}</strong>.
+            Existing events that have already been generated are preserved.
+          </>
+        }
+        isLoading={deleteMutation.isPending}
+        onConfirm={async () => {
+          try {
+            await deleteMutation.mutateAsync();
+          } catch {
+            // toast handled by mutation onError
+          }
+        }}
+        contentTestId="delete-series-dialog"
+        inputTestId="delete-series-confirm-input"
+        confirmTestId="delete-series-confirm"
+        cancelTestId="delete-series-cancel"
+      />
     </div>
   );
 }

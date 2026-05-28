@@ -19,6 +19,10 @@ Examples:
 - Hand-rolled brand gradient (`from-violet-500 to-blue-500`) — must import `brandGradient` or use `<PrimaryButton>`.
 - New shadcn primitive added outside `frontend/app/components/ui/`.
 - Color-only status indicator (no text content alongside the colored class).
+- Hand-rolled `<AlertDialog>` for a confirm flow (yes/no, positive or negative) outside `components/ui/dialogs/`.
+- `window.confirm()` called from any `.tsx`/`.ts` file under `frontend/app/`.
+- Hand-rolled `<AlertDialogAction>` / `<AlertDialogCancel>` outside `components/ui/`.
+- Hand-rolled name-match destructive input gating a delete (use `<DeleteDialog>` instead).
 
 ### `warn` — Should fix, but won't block
 

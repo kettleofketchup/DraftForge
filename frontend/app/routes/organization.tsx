@@ -55,10 +55,9 @@ import type { EventRepeaterType } from '~/components/api/api';
 import { useEvents, useEventRepeaters, useRepeaterSubscriptionMutation } from '~/hooks/useEvent';
 import { Repeat, CalendarDays } from 'lucide-react';
 import { CreateLeagueModal, LeagueCard, useLeagues } from '~/components/league';
-import { ClaimsTab, EditOrganizationModal, useOrganization } from '~/components/organization';
+import { ClaimsTab, DeleteOrganizationDangerZone, EditOrganizationModal, useOrganization } from '~/components/organization';
 import { Badge } from '~/components/ui/badge';
-import { Button } from '~/components/ui/button';
-import { AddDiscordBotButton, PrimaryButton } from '~/components/ui/buttons';
+import { AddDiscordBotButton, PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/tooltip';
 import { Tabs, TabsContent, TabsList, TabsTrigger, useUrlTabs } from '~/components/ui/tabs';
 import { UserList } from '~/components/user';
@@ -68,6 +67,7 @@ import type { UserType } from '~/components/user/types';
 import { useOrgUsers } from '~/hooks/useOrgUsers';
 import {
   useIsOrganizationAdmin,
+  useIsOrganizationOwner,
   useIsOrganizationStaff,
 } from '~/hooks/usePermissions';
 import { useOrgStore } from '~/store/orgStore';
@@ -177,11 +177,11 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
               {currentUser && r.discord_notify_new_events && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
+                    <SecondaryButton
                       size="icon"
-                      className={cn("h-8 w-8", r.is_subscribed && "text-interactive")}
+                      className={cn("size-9", r.is_subscribed && "text-interactive")}
                       disabled={isPending}
+                      aria-label={r.is_subscribed ? 'Unsubscribe' : 'Subscribe'}
                       onClick={(e) => {
                         e.preventDefault(); e.stopPropagation();
                         if (r.is_subscribed) {
@@ -192,7 +192,7 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
                       }}
                     >
                       {r.is_subscribed ? <MailCheck className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
-                    </Button>
+                    </SecondaryButton>
                   </TooltipTrigger>
                   <TooltipContent>{r.is_subscribed ? 'Unsubscribe' : 'Subscribe'}</TooltipContent>
                 </Tooltip>
@@ -200,11 +200,14 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
               {onEdit && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8"
+                    <SecondaryButton
+                      size="icon"
+                      className="size-9"
+                      aria-label="Edit series"
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(r); }}
                     >
                       <Pencil className="h-3.5 w-3.5" />
-                    </Button>
+                    </SecondaryButton>
                   </TooltipTrigger>
                   <TooltipContent>Edit series</TooltipContent>
                 </Tooltip>
@@ -253,11 +256,7 @@ export default function OrganizationDetailPage() {
     }
   }, [activeTab, pk, getOrgUsers]);
 
-  // Permission checks via the shared hooks (see ``hooks/usePermissions.ts``).
-  // They handle the site-admin bypass (is_staff || is_superuser), owner
-  // and admins/staff lookups, and short-circuit safely when ``organization``
-  // hasn't loaded yet. ``canEditEvents`` and ``canAddMembers`` were
-  // historically separate inline expressions but reduce to ``isOrgStaff``.
+  const isOwner = useIsOrganizationOwner(organization);
   const isOrgAdmin = useIsOrganizationAdmin(organization);
   const isOrgStaff = useIsOrganizationStaff(organization);
   const canEditEvents = isOrgStaff;
@@ -475,14 +474,14 @@ export default function OrganizationDetailPage() {
                 {canEditEvents && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
+                      <SecondaryButton
                         size="icon"
-                        className="h-9 w-9"
+                        className="size-9"
+                        aria-label="Edit org event defaults"
                         onClick={() => setEditDefaultsOpen(true)}
                       >
                         <Settings className="h-4 w-4" />
-                      </Button>
+                      </SecondaryButton>
                     </TooltipTrigger>
                     <TooltipContent>Edit event defaults</TooltipContent>
                   </Tooltip>
@@ -574,6 +573,10 @@ export default function OrganizationDetailPage() {
           )}
         </Tabs>
         </div>
+
+        {organization && isOwner && (
+          <DeleteOrganizationDangerZone organization={organization} />
+        )}
 
         {pk && (
           <CreateLeagueModal
