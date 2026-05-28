@@ -208,35 +208,34 @@ def setUpModule():
     if not HAS_TOKEN:
         return  # tests below are all skipped; no patching needed
 
-    for target, replacement in (
-        ("app.internal_client.create_message_log", _orm_create_message_log),
-        (
-            "app.internal_client.claim_discord_message_log",
-            _orm_claim_discord_message_log,
-        ),
-        (
-            "app.internal_client.finalize_discord_message_log",
-            _orm_finalize_discord_message_log,
-        ),
-        ("app.internal_client.get_event_for_task", _orm_get_event_for_task),
-        (
-            "app.internal_client.get_or_create_discord_event",
-            _orm_get_or_create_discord_event,
-        ),
-        (
-            "app.internal_client.create_or_update_signup_message",
-            _orm_create_or_update_signup_message,
-        ),
-        (
-            "app.internal_client.create_or_update_announcement",
-            _orm_create_or_update_announcement,
-        ),
-        ("app.internal_client.update_discord_event", _orm_update_discord_event),
-        ("app.internal_client.create_event_log", _orm_create_event_log),
-    ):
-        p = mock.patch(target, side_effect=replacement)
-        p.start()
-        _patchers.append(p)
+    # Patch both the source module AND call-site name bindings. Modules that
+    # ``from app.internal_client import X`` at module top hold their own
+    # reference, so patching only ``app.internal_client.X`` is not enough.
+    _PATCH_SPECS = (
+        ("create_message_log", _orm_create_message_log),
+        ("claim_discord_message_log", _orm_claim_discord_message_log),
+        ("finalize_discord_message_log", _orm_finalize_discord_message_log),
+        ("get_event_for_task", _orm_get_event_for_task),
+        ("get_or_create_discord_event", _orm_get_or_create_discord_event),
+        ("create_or_update_signup_message", _orm_create_or_update_signup_message),
+        ("create_or_update_announcement", _orm_create_or_update_announcement),
+        ("update_discord_event", _orm_update_discord_event),
+        ("create_event_log", _orm_create_event_log),
+    )
+    _PATCH_MODULES = ("app.internal_client", "events.tasks", "discordbot.utils")
+
+    import importlib
+
+    for module_path in _PATCH_MODULES:
+        try:
+            module = importlib.import_module(module_path)
+        except ImportError:
+            continue
+        for name, replacement in _PATCH_SPECS:
+            if hasattr(module, name):
+                p = mock.patch.object(module, name, side_effect=replacement)
+                p.start()
+                _patchers.append(p)
 
 
 def tearDownModule():

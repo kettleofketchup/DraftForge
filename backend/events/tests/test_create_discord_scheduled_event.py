@@ -35,12 +35,12 @@ class CreateDiscordScheduledEventTest(TestCase):
         event.scheduled_at = datetime(2026, 5, 17, 23, 0, tzinfo=timezone.utc)
         return event
 
-    @patch("events.tasks.req.post" if False else "requests.post")
-    @patch("app.internal_client.create_event_log")
-    @patch("app.internal_client.create_message_log")
-    @patch("app.internal_client.update_discord_event")
-    @patch("app.internal_client.get_or_create_discord_event")
-    @patch("app.internal_client.get_event_for_task")
+    @patch("events.tasks.req.post")
+    @patch("events.tasks.create_event_log")
+    @patch("events.tasks.create_message_log")
+    @patch("events.tasks.update_discord_event")
+    @patch("events.tasks.get_or_create_discord_event")
+    @patch("events.tasks.get_event_for_task")
     def test_raises_on_discord_403_missing_permissions(
         self,
         mock_get_event,
@@ -76,12 +76,12 @@ class CreateDiscordScheduledEventTest(TestCase):
         # scheduled_event_id must NOT be persisted on failure.
         mock_update.assert_not_called()
 
-    @patch("requests.post")
-    @patch("app.internal_client.create_event_log")
-    @patch("app.internal_client.create_message_log")
-    @patch("app.internal_client.update_discord_event")
-    @patch("app.internal_client.get_or_create_discord_event")
-    @patch("app.internal_client.get_event_for_task")
+    @patch("events.tasks.req.post")
+    @patch("events.tasks.create_event_log")
+    @patch("events.tasks.create_message_log")
+    @patch("events.tasks.update_discord_event")
+    @patch("events.tasks.get_or_create_discord_event")
+    @patch("events.tasks.get_event_for_task")
     def test_writes_error_message_to_event_log_on_failure(
         self,
         mock_get_event,
@@ -116,12 +116,12 @@ class CreateDiscordScheduledEventTest(TestCase):
         self.assertFalse(kwargs["success"])
         self.assertIn("Missing Permissions", kwargs.get("error_message", ""))
 
-    @patch("requests.post")
-    @patch("app.internal_client.create_event_log")
-    @patch("app.internal_client.create_message_log")
-    @patch("app.internal_client.update_discord_event")
-    @patch("app.internal_client.get_or_create_discord_event")
-    @patch("app.internal_client.get_event_for_task")
+    @patch("events.tasks.req.post")
+    @patch("events.tasks.create_event_log")
+    @patch("events.tasks.create_message_log")
+    @patch("events.tasks.update_discord_event")
+    @patch("events.tasks.get_or_create_discord_event")
+    @patch("events.tasks.get_event_for_task")
     def test_success_path_persists_scheduled_event_id(
         self,
         mock_get_event,
