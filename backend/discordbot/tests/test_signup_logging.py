@@ -199,7 +199,7 @@ class CeleryHopTests(TransactionTestCase):
         from events.tasks import send_signup_update
 
         with capture_logs() as logs, \
-             patch("app.internal_client.get_event_for_task", return_value=None):
+             patch("events.tasks.get_event_for_task", return_value=None):
             send_signup_update.apply(args=[self.event.pk], kwargs={"interaction_id": "abc123"})
 
         started = [log for log in logs if log["event"] == "celery_task_started"]
@@ -217,7 +217,7 @@ class CeleryHopTests(TransactionTestCase):
         from events.tasks import send_signup_update
 
         with capture_logs() as logs, \
-             patch("app.internal_client.get_event_for_task", side_effect=RuntimeError("discord 500")), \
+             patch("events.tasks.get_event_for_task", side_effect=RuntimeError("discord 500")), \
              self.assertRaises(RuntimeError):
             send_signup_update.apply(
                 args=[self.event.pk],
