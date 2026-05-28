@@ -571,12 +571,17 @@ def cancel_signup(signup):
     _promote_from_waitlist(signup.event)
     invalidate_after_commit(signup, signup.event)
     transaction.on_commit(lambda: notify_signup_changed(signup.event))
-    log.info(
-        "signup_cancelled",
-        signup_id=signup.pk,
-        prior_status=prior_status,
-        event_id=signup.event_id,
-        user_id=signup.user_id,
+    # Log on commit, not on entry — same reason as signup_created in process_rsvp:
+    # callers may roll back the outer transaction, in which case the cancellation
+    # never persisted.
+    transaction.on_commit(
+        lambda: log.info(
+            "signup_cancelled",
+            signup_id=signup.pk,
+            prior_status=prior_status,
+            event_id=signup.event_id,
+            user_id=signup.user_id,
+        )
     )
     return signup
 
