@@ -26,7 +26,11 @@ const API_URL = 'https://localhost/api';
 
 let eventInfo: EventInfo;
 
-test.describe('Roll Call Flow (@cicd)', () => {
+// Tests in this file share a single `eventInfo` and mutate event state
+// (signups_open → roll_call → finished). With CI's `fullyParallel: true`
+// + `--workers=2`, parallel tests would race on the same event PK and
+// flake the "Start Roll Call" button visibility. Force serial execution.
+test.describe.serial('Roll Call Flow (@cicd)', () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({ ignoreHTTPSErrors: true });
     eventInfo = await getEventsTestData(context);
