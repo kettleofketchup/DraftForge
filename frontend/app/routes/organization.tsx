@@ -179,7 +179,7 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
                   <TooltipTrigger asChild>
                     <SecondaryButton
                       size="icon"
-                      className={cn("h-9 w-9", r.is_subscribed && "text-interactive")}
+                      className={cn("size-9", r.is_subscribed && "text-interactive")}
                       disabled={isPending}
                       aria-label={r.is_subscribed ? 'Unsubscribe' : 'Subscribe'}
                       onClick={(e) => {
@@ -202,7 +202,7 @@ function RepeatersList({ repeaters, loading, onEdit, onDelete }: { repeaters: Ev
                   <TooltipTrigger asChild>
                     <SecondaryButton
                       size="icon"
-                      className="h-9 w-9"
+                      className="size-9"
                       aria-label="Edit series"
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(r); }}
                     >
@@ -476,7 +476,7 @@ export default function OrganizationDetailPage() {
                     <TooltipTrigger asChild>
                       <SecondaryButton
                         size="icon"
-                        className="h-9 w-9"
+                        className="size-9"
                         aria-label="Edit org event defaults"
                         onClick={() => setEditDefaultsOpen(true)}
                       >

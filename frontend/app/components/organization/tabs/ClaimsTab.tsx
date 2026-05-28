@@ -203,7 +203,7 @@ export const ClaimsTab: React.FC<Props> = ({ organizationId }) => {
         onConfirm={handleReject}
         confirmTestId="confirm-reject-claim"
         bodyContent={
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             <Label htmlFor="rejection-reason">Reason (optional)</Label>
             <Input
               id="rejection-reason"
