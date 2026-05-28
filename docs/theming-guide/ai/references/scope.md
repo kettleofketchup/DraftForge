@@ -50,7 +50,7 @@ A raw `<Button>` with `onClick` that performs a user-facing action is a `block`.
 | Dialog kind | `DialogContent` width | Examples |
 |---|---|---|
 | Form-heavy (edit/signup/create with multiple sections) | `sm:max-w-2xl` | `EditProfileModal`, `EventSignupModal`, `CreateEventModal` |
-| Decision (single question, two buttons) | *default* (`sm:max-w-lg`) — no override | `ConfirmDialog`, `AlertDialog` |
+| Decision (single question, two buttons; or destructive with typed-name gate) | *default* (`sm:max-w-md`) — no override | `ConfirmDialog`, `DeleteDialog`. `DeleteDialog` composes `ConfirmDialog` and inherits the width. |
 | Wide picker / table / chart (rare) | `sm:max-w-3xl` or larger, only with a justification comment | bracket pickers, large team rosters |
 
 A form-heavy `DialogContent` that ships with no `sm:max-w-*` override defaults to the shadcn `sm:max-w-lg` — too narrow for multi-field forms. The content then wraps awkwardly or spawns a horizontal scrollbar inside the modal. Reviewers should flag this as `warn`.

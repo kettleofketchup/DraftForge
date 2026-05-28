@@ -8,16 +8,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '~/components/ui/dialog';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '~/components/ui/alert-dialog';
+import { ConfirmDialog } from '~/components/ui/dialogs';
 import { PrimaryButton, SecondaryButton } from '~/components/ui/buttons';
 import { Badge } from '~/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
@@ -373,26 +364,15 @@ export function MatchStatsModal({ match: matchProp, isOpen, onClose, initialDraf
         />
 
         {/* Reset Draft Confirmation Dialog */}
-        <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Reset Hero Draft?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will reset the draft to its initial state. All picks, bans, and roll results
-                will be cleared. Both captains will need to ready up again.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleResetDraft}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                Reset Draft
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <ConfirmDialog
+          open={showResetConfirm}
+          onOpenChange={setShowResetConfirm}
+          title="Reset Hero Draft?"
+          description="This will reset the draft to its initial state. All picks, bans, and roll results will be cleared. Both captains will need to ready up again."
+          confirmLabel="Reset Draft"
+          variant="destructive"
+          onConfirm={handleResetDraft}
+        />
       </DialogContent>
     </Dialog>
   );

@@ -1,18 +1,8 @@
 import { Crown, X } from 'lucide-react';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { AdminOnlyButton } from '~/components/reusable/adminButton';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '~/components/ui/alert-dialog';
-import { CancelButton, ConfirmButton, DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
+import { ConfirmDialog } from '~/components/ui/dialogs';
+import { DestructiveButton, PrimaryButton } from '~/components/ui/buttons';
 import type { TeamType, UserType } from '~/index';
 import { getLogger } from '~/lib/logger';
 import { cn } from '~/lib/utils';
@@ -25,7 +15,7 @@ interface UpdateCaptainButtonProps {
   user: UserType;
   /**
    * `compact=true` renders an icon-only action sized for a UserStrip's
-   * actionSlot (32x32 touch target with a Crown / X glyph). Default mode
+   * actionSlot (36×36 touch target with a Crown / X glyph). Default mode
    * keeps the original wide `w-40` "Add Captain" / "Remove Captain" pill
    * used by the legacy table layout.
    */
@@ -52,6 +42,7 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
     return tournament?.teams?.find((t: TeamType) => t.captain?.pk === user.pk);
   };
   const [isCaptain, setIsCaptain] = useState<boolean>(determineIsCaptain());
+  const [showConfirm, setShowConfirm] = useState(false);
   const setTournament = useUserStore((state) => state.setTournament);
 
   const getDraftOrder = () => {
@@ -67,10 +58,11 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
 
   useEffect(() => {
     setIsCaptain(determineIsCaptain());
-  }, [tournament.captains, tournament.teams, isCaptain, draft_order]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tournament?.captains, user.pk]);
 
-  const handleChange = async (e: FormEvent) => {
-    log.debug('handleChange', e);
+  const handleChange = async () => {
+    log.debug('handleChange');
     await createTeamFromCaptainHook({
       tournament,
       captain: user,
@@ -80,7 +72,7 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
       setIsCaptain: setIsCaptain,
     });
   };
-  const dialogBG = () => (isCaptain ? 'bg-red-900' : 'bg-green-900');
+
   if (!isStaff()) {
     return compact ? (
       <div className="flex flex-col items-stretch gap-0.5 w-9">
@@ -124,54 +116,34 @@ export const UpdateCaptainButton: React.FC<UpdateCaptainButtonProps> = ({
           {compactLabel}
         </span>
       )}
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          {isCaptain ? (
-            <DestructiveButton
-              className={triggerClass}
-              aria-label={compact ? `${msg()} captain ${user.username ?? ''}`.trim() : undefined}
-              data-testid={`captain-action-${user.pk}`}
-            >
-              {compact ? <X /> : `${msg()} Captain`}
-            </DestructiveButton>
-          ) : (
-            <PrimaryButton
-              className={triggerClass}
-              aria-label={compact ? `${msg()} captain ${user.username ?? ''}`.trim() : undefined}
-              data-testid={`captain-action-${user.pk}`}
-            >
-              {compact ? <Crown /> : `${msg()} Captain`}
-            </PrimaryButton>
-          )}
-        </AlertDialogTrigger>
-        <AlertDialogContent className={dialogBG()}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {' '}
-              {msg()} Captain? Are You Sure? This will affect already created
-              teams and drafts
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-200">
-              This action cannot be undone. Drafts started must be deleted and
-              recreated.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel asChild>
-              <CancelButton variant={isCaptain ? 'default' : 'destructive'} depth={false}>Cancel</CancelButton>
-            </AlertDialogCancel>
-            <AlertDialogAction asChild>
-              <ConfirmButton
-                onClick={handleChange}
-                variant={isCaptain ? 'destructive' : 'default'}
-                depth={false}
-              >
-                {msg()} Captain
-              </ConfirmButton>
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {isCaptain ? (
+        <DestructiveButton
+          className={triggerClass}
+          onClick={() => setShowConfirm(true)}
+          aria-label={compact ? `${msg()} captain ${user.username ?? ''}`.trim() : undefined}
+          data-testid={`captain-action-${user.pk}`}
+        >
+          {compact ? <X /> : `${msg()} Captain`}
+        </DestructiveButton>
+      ) : (
+        <PrimaryButton
+          className={triggerClass}
+          onClick={() => setShowConfirm(true)}
+          aria-label={compact ? `${msg()} captain ${user.username ?? ''}`.trim() : undefined}
+          data-testid={`captain-action-${user.pk}`}
+        >
+          {compact ? <Crown /> : `${msg()} Captain`}
+        </PrimaryButton>
+      )}
+      <ConfirmDialog
+        open={showConfirm}
+        onOpenChange={setShowConfirm}
+        title={`${msg()} Captain? Are You Sure? This will affect already created teams and drafts`}
+        description="This action cannot be undone. Drafts started must be deleted and recreated."
+        confirmLabel={`${msg()} Captain`}
+        variant={isCaptain ? 'destructive' : 'default'}
+        onConfirm={handleChange}
+      />
       {isCaptain && !hideDraftOrder && (
         <DraftOrderButton
           id={`draft-order-${user.pk}`}

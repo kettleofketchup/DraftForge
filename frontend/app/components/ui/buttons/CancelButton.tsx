@@ -51,7 +51,7 @@ const CancelButton = React.forwardRef<HTMLButtonElement, CancelButtonProps>(
         ref={ref}
         // No variant prop — brand styles fully control appearance via className.
         // Passing variant="outline" introduces dark: prefixed classes that override brand bg.
-        className={cn(variantStyles[variant], hotkey && 'relative', className)}
+        className={cn('min-h-11', variantStyles[variant], hotkey && 'relative', className)}
         {...props}
       >
         {hotkey ? (
