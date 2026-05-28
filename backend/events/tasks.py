@@ -26,14 +26,14 @@ def _bind_celery_context(task_name: str, event_id: int, interaction_id: str | No
 
 
 def _celery_bookend_fields(task_name: str, event_id: int, interaction_id: str | None, **extra) -> dict:
-    """Build kwargs dict for bookend log lines, dropping None values."""
+    """Build kwargs dict for bookend log lines, dropping None values from interaction_id and extras."""
     fields = {
         "system": "discord", "subsystem": "celery", "tags_csv": "events,signup",
         "task": task_name, "event_id": event_id,
     }
     if interaction_id is not None:
         fields["interaction_id"] = interaction_id
-    fields.update(extra)
+    fields.update({k: v for k, v in extra.items() if v is not None})
     return fields
 
 
@@ -585,9 +585,7 @@ def send_signup_update(event_id, interaction_id=None):
         if not event:
             log.warning(
                 "signup_update_event_not_found",
-                system="events",
-                subsystem="discord",
-                event_id=event_id,
+                **fields,
             )
             return f"Failed: event {event_id} not found"
 
@@ -656,12 +654,10 @@ def send_signup_update(event_id, interaction_id=None):
             clear_event_signup_state(event_id=event.pk)
             log.warning(
                 "signup_message_orphaned_recovered",
-                system="events",
-                subsystem="discord",
-                event_id=event.pk,
                 channel_id=str(edit_channel_id),
                 message_id=str(message_id),
                 reason="discord_404_unknown_message",
+                **fields,
             )
             return f"Recovered: cleared dedup for event {event.pk} (orphaned message)"
 

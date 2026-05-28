@@ -1,4 +1,5 @@
 from django.test import TestCase
+from structlog.contextvars import clear_contextvars
 
 from app.models import CustomUser, GameType, Organization, PositionsModel
 from discordbot.models import DiscordMessageLog
@@ -12,6 +13,7 @@ from org.models_profiles import PlayerDotaProfile
 class HandleSignupButtonTest(EventTestCase):
     def setUp(self):
         super().setUp()
+        clear_contextvars()
         self.event.state = EventState.SIGNUPS_OPEN
         self.event.game_type = GameType.DOTA2
         self.event.auto_approve = True
@@ -23,6 +25,10 @@ class HandleSignupButtonTest(EventTestCase):
             user=self.user,
             organization=self.event.organization,
         )
+
+    def tearDown(self):
+        clear_contextvars()
+        super().tearDown()
 
     def test_complete_profile_signs_up_directly(self):
         """User with complete Dota profile skips modal."""
@@ -89,6 +95,7 @@ class HandleSignupButtonTest(EventTestCase):
 class HandleSignupModalSubmitTest(EventTestCase):
     def setUp(self):
         super().setUp()
+        clear_contextvars()
         self.event.state = EventState.SIGNUPS_OPEN
         self.event.game_type = GameType.DOTA2
         self.event.auto_approve = True
@@ -99,6 +106,10 @@ class HandleSignupModalSubmitTest(EventTestCase):
             user=self.user,
             organization=self.event.organization,
         )
+
+    def tearDown(self):
+        clear_contextvars()
+        super().tearDown()
 
     def test_dota_modal_writes_rank_status_and_returns_needs_rank_details(self):
         """Dota modal submit persists rank_status and friend ID, returns needs_rank_details.
@@ -210,6 +221,7 @@ class HandleSignupModalSubmitTest(EventTestCase):
 class HandleRankMedalSelectTest(EventTestCase):
     def setUp(self):
         super().setUp()
+        clear_contextvars()
         self.event.state = EventState.SIGNUPS_OPEN
         self.event.auto_approve = True
         self.event.save()
@@ -226,6 +238,10 @@ class HandleRankMedalSelectTest(EventTestCase):
             rank_status="active",
             pos_1=True,
         )
+
+    def tearDown(self):
+        clear_contextvars()
+        super().tearDown()
 
     def test_saves_medal_and_signs_up(self):
         from events.discord import handle_rank_medal_select
@@ -264,6 +280,7 @@ class HandleRankMedalSelectTest(EventTestCase):
 class HandleRankStatusSelectTest(EventTestCase):
     def setUp(self):
         super().setUp()
+        clear_contextvars()
         self.event.state = EventState.SIGNUPS_OPEN
         self.event.auto_approve = True
         self.event.save()
@@ -273,6 +290,10 @@ class HandleRankStatusSelectTest(EventTestCase):
             user=self.user,
             organization=self.event.organization,
         )
+
+    def tearDown(self):
+        clear_contextvars()
+        super().tearDown()
 
     def test_handle_rank_status_select_calls_apply_signup_input(self):
         """rank_status write flows through apply_signup_input via SignupInputPatch."""
@@ -296,6 +317,7 @@ class HandleRankStatusSelectTest(EventTestCase):
 class HandlePreviousRankSubmitTest(EventTestCase):
     def setUp(self):
         super().setUp()
+        clear_contextvars()
         self.event.state = EventState.SIGNUPS_OPEN
         self.event.auto_approve = True
         self.event.save()
@@ -305,6 +327,10 @@ class HandlePreviousRankSubmitTest(EventTestCase):
             user=self.user,
             organization=self.event.organization,
         )
+
+    def tearDown(self):
+        clear_contextvars()
+        super().tearDown()
 
     def test_handle_previous_rank_submit_calls_apply_signup_input(self):
         """rank_medal write (previous rank flow) flows through apply_signup_input."""
@@ -329,6 +355,7 @@ class HandlePreviousRankSubmitTest(EventTestCase):
 class HandleBattleCupSubmitTest(EventTestCase):
     def setUp(self):
         super().setUp()
+        clear_contextvars()
         self.event.state = EventState.SIGNUPS_OPEN
         self.event.auto_approve = True
         self.event.save()
@@ -338,6 +365,10 @@ class HandleBattleCupSubmitTest(EventTestCase):
             user=self.user,
             organization=self.event.organization,
         )
+
+    def tearDown(self):
+        clear_contextvars()
+        super().tearDown()
 
     def test_handle_battle_cup_submit_calls_apply_signup_input(self):
         """battle_cup_tier write flows through apply_signup_input via SignupInputPatch."""
@@ -361,6 +392,7 @@ class HandleBattleCupSubmitTest(EventTestCase):
 class HandleScreenshotUploadTest(EventTestCase):
     def setUp(self):
         super().setUp()
+        clear_contextvars()
         self.event.state = EventState.SIGNUPS_OPEN
         self.event.game_type = GameType.DOTA2
         self.event.save()
@@ -371,6 +403,10 @@ class HandleScreenshotUploadTest(EventTestCase):
             organization=self.event.organization,
         )
         self.profile = PlayerDotaProfile.objects.create(org_user=self.org_user)
+
+    def tearDown(self):
+        clear_contextvars()
+        super().tearDown()
 
     def test_screenshot_upload_saves_url(self):
         """Screenshot upload handler saves URL to profile."""
