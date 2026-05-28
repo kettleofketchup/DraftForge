@@ -70,6 +70,7 @@ export default function RollCallPage() {
   const [approvalSignup, setApprovalSignup] = useState<EventSignupType | null>(null);
   const [confirmSignup, setConfirmSignup] = useState<EventSignupType | null>(null);
   const [rejectSignup, setRejectSignup] = useState<EventSignupType | null>(null);
+  const [cancelSignup, setCancelSignup] = useState<EventSignupType | null>(null);
 
   // Resolve all signup users from cache
   const userPks = useMemo(() => signups.map((s) => s.user), [signups]);
@@ -105,7 +106,7 @@ export default function RollCallPage() {
       const tag = target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
       // Ignore while another dialog is open — those have their own Enter/Backspace bindings.
-      if (approvalSignup || confirmSignup || rejectSignup || showStartConfirm) return;
+      if (approvalSignup || confirmSignup || rejectSignup || cancelSignup || showStartConfirm) return;
       if (!firstAwaiting) return;
       if (e.key === '1') {
         e.preventDefault();
@@ -117,7 +118,7 @@ export default function RollCallPage() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isAdmin, firstAwaiting, approvalSignup, confirmSignup, rejectSignup, showStartConfirm]);
+  }, [isAdmin, firstAwaiting, approvalSignup, confirmSignup, rejectSignup, cancelSignup, showStartConfirm]);
 
   if (isLoading) {
     return (
@@ -237,6 +238,7 @@ export default function RollCallPage() {
                   onRequestApproval={setApprovalSignup}
                   onRequestConfirm={setConfirmSignup}
                   onRequestReject={setRejectSignup}
+                  onRequestCancel={setCancelSignup}
                   onRequestRestore={handleRestore}
                 />
               ))}
@@ -262,6 +264,7 @@ export default function RollCallPage() {
                   onRequestApproval={setApprovalSignup}
                   onRequestConfirm={setConfirmSignup}
                   onRequestReject={setRejectSignup}
+                  onRequestCancel={setCancelSignup}
                   onRequestRestore={handleRestore}
                   showAwaitingHotkeys={idx === 0 && isAdmin}
                 />
@@ -288,6 +291,7 @@ export default function RollCallPage() {
                   onRequestApproval={setApprovalSignup}
                   onRequestConfirm={setConfirmSignup}
                   onRequestReject={setRejectSignup}
+                  onRequestCancel={setCancelSignup}
                   onRequestRestore={handleRestore}
                 />
               ))}
@@ -399,6 +403,48 @@ export default function RollCallPage() {
         cancelTestId="rollcall-reject-dialog-cancel"
       />
 
+      {/* Per-row Cancel (confirmed → cancelled) */}
+      <ConfirmDialog
+        open={!!cancelSignup}
+        onOpenChange={(open) => { if (!open) setCancelSignup(null); }}
+        title="Remove confirmed player"
+        description={
+          cancelSignup ? (
+            <div className="flex flex-col gap-3">
+              {(() => {
+                const stripUser = userMap.get(cancelSignup.user);
+                return stripUser ? (
+                  <UserStrip
+                    user={stripUser}
+                    showBorder={false}
+                    organizationId={event?.organization ?? undefined}
+                    className={brandDialogPanel}
+                    data-testid="rollcall-cancel-user-strip"
+                  />
+                ) : null;
+              })()}
+              <p data-testid="rollcall-cancel-summary">
+                Remove this player from the confirmed roster? You can restore them from
+                the Other section without leaving this screen.
+              </p>
+            </div>
+          ) : ''
+        }
+        confirmLabel="Remove"
+        cancelLabel="Cancel"
+        variant="destructive"
+        isLoading={signupActions.cancel.isPending}
+        onConfirm={() => {
+          if (!cancelSignup) return;
+          signupActions.cancel.mutate(cancelSignup.id, {
+            onSuccess: () => setCancelSignup(null),
+            onError: () => toast.error('Failed to remove player'),
+          });
+        }}
+        confirmTestId="rollcall-cancel-dialog-confirm"
+        cancelTestId="rollcall-cancel-dialog-cancel"
+      />
+
       {/* Start Tournament Confirmation */}
       <ConfirmDialog
         open={showStartConfirm}
@@ -438,6 +484,7 @@ function SignupStrip({
   onRequestApproval,
   onRequestConfirm,
   onRequestReject,
+  onRequestCancel,
   onRequestRestore,
   showAwaitingHotkeys = false,
 }: {
@@ -449,6 +496,7 @@ function SignupStrip({
   onRequestApproval: (signup: EventSignupType) => void;
   onRequestConfirm: (signup: EventSignupType) => void;
   onRequestReject: (signup: EventSignupType) => void;
+  onRequestCancel: (signup: EventSignupType) => void;
   onRequestRestore: (signup: EventSignupType) => void;
   showAwaitingHotkeys?: boolean;
 }) {
@@ -499,8 +547,9 @@ function SignupStrip({
       {signup.status === 'confirmed' && (
         <DestructiveButton
           size="sm"
-          onClick={() => signupActions.cancel.mutate(signup.id)}
-          loading={signupActions.cancel.isPending}
+          data-testid="rollcall-cancel-btn"
+          onClick={() => onRequestCancel(signup)}
+          disabled={signupActions.cancel.isPending}
         >
           <XCircle className="h-3.5 w-3.5" />
           <span className="hidden sm:inline ml-1">Remove</span>
