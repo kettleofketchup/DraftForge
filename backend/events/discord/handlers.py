@@ -733,3 +733,39 @@ def handle_tentative_button(event_id, discord_user_id, discord_username=None):
     # notify_signup_changed is dispatched by create_tentative_signup's on_commit hook
     # (services.py) — do NOT call directly.
     return {"action": "tentative", "message": "Marked as tentative."}
+
+
+def handle_save_positions(event_id, discord_user_id, positions: list[int]) -> dict:
+    """Save positions for the user's signup on this event.
+
+    Used by the PositionConfirmButton flow. Returns {"action": "positions_saved"} on
+    success or {"action": "error", "message": str} on validation failure.
+    """
+    log.info("handler_invoked", handler="save_positions")
+    try:
+        event = Event.objects.select_related("organization").get(pk=event_id)
+    except Event.DoesNotExist:
+        return {"action": "error", "message": "Event not found."}
+
+    org_user, _ = _get_org_user(event, discord_user_id)
+    if org_user is not None:
+        bind_contextvars(org_user_id=org_user.pk)
+    if not org_user:
+        return {"action": "error", "message": "Could not find your account."}
+
+    from django.core.exceptions import ValidationError as DjangoValidationError
+    from events.schemas import SignupInputPatch
+    from events.services import apply_signup_input
+
+    try:
+        apply_signup_input(
+            org_user=org_user,
+            event=event,
+            patch=SignupInputPatch(positions=positions),
+        )
+    except DjangoValidationError as exc:
+        msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
+        log.warning("signup_rejected", reason=msg)
+        return {"action": "error", "message": msg}
+
+    return {"action": "positions_saved"}
