@@ -8,39 +8,45 @@ in-process now POSTs here so the backend is the sole writer.
 Each function mirrors the handler's keyword signature and returns the
 handler's dict (or an empty dict where the handler returns None / on network
 failure). Callers must remain dict-result tolerant.
+
+Responses are validated with ``SignupActionResponse`` — a single pydantic
+envelope that covers every action variant — and re-emitted as a plain dict so
+existing consumers (which key off ``result["action"]``, ``result.get("subscribed")``,
+etc.) are unaffected.
 """
 
 from app.internal_client import _post
+from discordbot.schemas import SignupActionResponse
 
 
-def _result(resp, default=None):
-    """Best-effort JSON-decode of an internal-API response.
+def _validated(resp, default):
+    """Coerce an internal-API response through ``SignupActionResponse``.
 
-    Returns ``default or {}`` when the request failed at the network layer
-    (``_post`` already logged) or when the body isn't JSON. The bot UI code
-    keys off ``result["action"]`` / ``result.get("subscribed")`` etc., so a
-    safe empty dict keeps the callback's error branch reachable.
+    Returns ``default`` (a dict) when the HTTP layer failed or the body isn't
+    JSON. On success the validated payload is serialised back to a plain dict
+    so callers see no behavioural change.
     """
     if resp is None or not resp.ok:
-        return default if default is not None else {}
+        return default
     try:
-        return resp.json()
+        payload = resp.json()
     except ValueError:
-        return default if default is not None else {}
+        return default
+    return SignupActionResponse.model_validate(payload).model_dump()
 
 
 def signup_button(*, event_id, discord_user_id, discord_username=None):
     payload = {"event_id": event_id, "discord_user_id": discord_user_id}
     if discord_username is not None:
         payload["discord_username"] = discord_username
-    return _result(
+    return _validated(
         _post("/discord/signup-button/", payload),
         default={"action": "error", "message": "Signup service unavailable."},
     )
 
 
 def signup_modal_submit(*, event_id, discord_user_id, game_type, values):
-    return _result(
+    return _validated(
         _post(
             "/discord/signup-modal-submit/",
             {
@@ -68,7 +74,7 @@ def rank_status_select(*, event_id, discord_user_id, rank_status):
 
 
 def rank_medal_select(*, event_id, discord_user_id, medal):
-    return _result(
+    return _validated(
         _post(
             "/discord/rank-medal-select/",
             {
@@ -82,7 +88,7 @@ def rank_medal_select(*, event_id, discord_user_id, medal):
 
 
 def previous_rank_submit(*, event_id, discord_user_id, medal, date_text=""):
-    return _result(
+    return _validated(
         _post(
             "/discord/previous-rank-submit/",
             {
@@ -97,7 +103,7 @@ def previous_rank_submit(*, event_id, discord_user_id, medal, date_text=""):
 
 
 def battle_cup_submit(*, event_id, discord_user_id, tier):
-    return _result(
+    return _validated(
         _post(
             "/discord/battle-cup-submit/",
             {
@@ -111,7 +117,7 @@ def battle_cup_submit(*, event_id, discord_user_id, tier):
 
 
 def screenshot_upload(*, event_id, discord_user_id, screenshot_type, attachment_url):
-    return _result(
+    return _validated(
         _post(
             "/discord/screenshot-upload/",
             {
@@ -126,7 +132,7 @@ def screenshot_upload(*, event_id, discord_user_id, screenshot_type, attachment_
 
 
 def notify_button(*, event_id, discord_user_id):
-    return _result(
+    return _validated(
         _post(
             "/discord/notify-button/",
             {"event_id": event_id, "discord_user_id": discord_user_id},
@@ -136,7 +142,7 @@ def notify_button(*, event_id, discord_user_id):
 
 
 def decline_button(*, event_id, discord_user_id):
-    return _result(
+    return _validated(
         _post(
             "/discord/decline-button/",
             {"event_id": event_id, "discord_user_id": discord_user_id},
@@ -149,7 +155,7 @@ def tentative_button(*, event_id, discord_user_id, discord_username=None):
     payload = {"event_id": event_id, "discord_user_id": discord_user_id}
     if discord_username is not None:
         payload["discord_username"] = discord_username
-    return _result(
+    return _validated(
         _post("/discord/tentative-button/", payload),
         default={"action": "error", "message": "Tentative service unavailable."},
     )
@@ -157,7 +163,7 @@ def tentative_button(*, event_id, discord_user_id, discord_username=None):
 
 def save_positions(*, event_id, discord_user_id, positions):
     """Persist Dota position picks. ``positions``: list[int]."""
-    return _result(
+    return _validated(
         _post(
             "/discord/save-positions/",
             {
