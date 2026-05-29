@@ -495,6 +495,67 @@ urlpatterns += [
     ),
 ]
 
+# Internal API — Discord bot signup-flow callbacks (bot → backend HTTP wrappers)
+from discordbot import internal_signup_views as _signup_views
+
+urlpatterns += [
+    path(
+        "api/internal/discord/signup-button/",
+        _signup_views.signup_button,
+        name="internal_discord_signup_button",
+    ),
+    path(
+        "api/internal/discord/signup-modal-submit/",
+        _signup_views.signup_modal_submit,
+        name="internal_discord_signup_modal_submit",
+    ),
+    path(
+        "api/internal/discord/rank-status-select/",
+        _signup_views.rank_status_select,
+        name="internal_discord_rank_status_select",
+    ),
+    path(
+        "api/internal/discord/rank-medal-select/",
+        _signup_views.rank_medal_select,
+        name="internal_discord_rank_medal_select",
+    ),
+    path(
+        "api/internal/discord/previous-rank-submit/",
+        _signup_views.previous_rank_submit,
+        name="internal_discord_previous_rank_submit",
+    ),
+    path(
+        "api/internal/discord/battle-cup-submit/",
+        _signup_views.battle_cup_submit,
+        name="internal_discord_battle_cup_submit",
+    ),
+    path(
+        "api/internal/discord/screenshot-upload/",
+        _signup_views.screenshot_upload,
+        name="internal_discord_screenshot_upload",
+    ),
+    path(
+        "api/internal/discord/notify-button/",
+        _signup_views.notify_button,
+        name="internal_discord_notify_button",
+    ),
+    path(
+        "api/internal/discord/decline-button/",
+        _signup_views.decline_button,
+        name="internal_discord_decline_button",
+    ),
+    path(
+        "api/internal/discord/tentative-button/",
+        _signup_views.tentative_button,
+        name="internal_discord_tentative_button",
+    ),
+    path(
+        "api/internal/discord/save-positions/",
+        _signup_views.save_positions,
+        name="internal_discord_save_positions",
+    ),
+]
+
 # Internal API — Steam sync endpoints
 from steam.views_internal import (
     recalculate_mmr,

@@ -7,9 +7,17 @@ bug:
     handler takes the direct-signup path (not needs_modal)
   - Assert on DB row existence, not just log presence
   - Assert required log events present (Task 12 adds ordering invariants)
+
+After the bot-via-internal-API migration (PR #fix/bot-signup-via-internal-api)
+the components callback no longer calls ``handle_signup_button`` in-process —
+it hits ``/api/internal/discord/signup-button/`` over HTTP. In tests we patch
+``app.internal_client.signup_actions.signup_button`` with a shim that runs the
+canonical handler synchronously so log capture + DB assertions still observe
+the same in-process chain the production code now sees across processes.
 """
 
 import asyncio
+from contextlib import ExitStack
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from django.test import TransactionTestCase
@@ -20,9 +28,28 @@ from structlog.testing import capture_logs
 from app.models import CustomUser, GameType, Organization
 from discordbot.components import SignupButton
 from events.constants import EventState, SignupStatus
+from events.discord.handlers import handle_signup_button
 from events.models import Event, EventSignup
 from events.services import resolve_or_create_org_user
 from org.models_profiles import PlayerDotaProfile
+
+
+def _patch_signup_button_inproc():
+    """Replace the internal-API HTTP wrapper with a direct handler call.
+
+    Returns an ExitStack so callers can register additional patches and exit
+    them together with ``with stack:``. Patching the source module
+    (`app.internal_client.signup_actions`) covers every component file that
+    re-imports the symbol inside its callback.
+    """
+    stack = ExitStack()
+    stack.enter_context(
+        patch(
+            "app.internal_client.signup_actions.signup_button",
+            side_effect=lambda **kwargs: handle_signup_button(**kwargs),
+        )
+    )
+    return stack
 
 
 def _mock_interaction(event_id, *, interaction_id=12345, user_id=67890):
@@ -71,7 +98,8 @@ class SignupButtonHappyPathTests(TransactionTestCase):
         button = SignupButton(self.event.pk)
         interaction = _mock_interaction(self.event.pk)
 
-        with capture_logs() as logs, \
+        with _patch_signup_button_inproc(), \
+             capture_logs() as logs, \
              patch("discordbot.components.respond_to_signup_user", new=AsyncMock()):
             asyncio.run(button.callback(interaction))
 
@@ -129,7 +157,8 @@ class FullSignupPipelineTests(TransactionTestCase):
         button = SignupButton(self.event.pk)
         interaction = _mock_interaction(self.event.pk)
 
-        with capture_logs() as logs, \
+        with _patch_signup_button_inproc(), \
+             capture_logs() as logs, \
              patch("events.tasks.send_signup_update.delay") as mock_delay, \
              patch("discordbot.components.respond_to_signup_user", new=AsyncMock()):
             asyncio.run(button.callback(interaction))
@@ -290,7 +319,8 @@ class SignupsClosedFailurePathTests(TransactionTestCase):
         button = SignupButton(self.event.pk)
         interaction = _mock_interaction(self.event.pk)
 
-        with capture_logs() as logs, \
+        with _patch_signup_button_inproc(), \
+             capture_logs() as logs, \
              patch("discordbot.components.respond_to_signup_user", new=AsyncMock()):
             asyncio.run(button.callback(interaction))
 
@@ -321,7 +351,8 @@ class GetOrgUserNullPathTests(TransactionTestCase):
         button = SignupButton(self.event.pk)
         interaction = _mock_interaction(self.event.pk)
 
-        with capture_logs() as logs, \
+        with _patch_signup_button_inproc(), \
+             capture_logs() as logs, \
              patch("events.discord.handlers._get_org_user", return_value=(None, None)), \
              patch("discordbot.components.respond_to_signup_user", new=AsyncMock()):
             asyncio.run(button.callback(interaction))
@@ -446,7 +477,8 @@ class DMContextEdgeCaseTests(TransactionTestCase):
         interaction.guild_id = None
         interaction.channel_id = None
 
-        with capture_logs() as logs, \
+        with _patch_signup_button_inproc(), \
+             capture_logs() as logs, \
              patch("discordbot.components.respond_to_signup_user", new=AsyncMock()):
             asyncio.run(button.callback(interaction))
 

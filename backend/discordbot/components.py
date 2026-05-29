@@ -134,14 +134,14 @@ class SignupButton(ui.Button):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from events.discord import handle_signup_button
+        from app.internal_client.signup_actions import signup_button
 
         async with discord_log_context(
             interaction,
             custom_id=self.custom_id,
             event_id=self.event_id,
         ) as ctx:
-            result = await sync_to_async(handle_signup_button)(
+            result = await sync_to_async(signup_button)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 discord_username=interaction.user.name,
@@ -199,10 +199,10 @@ class NotifyButton(ui.Button):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from events.discord import handle_notify_button
+        from app.internal_client.signup_actions import notify_button
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
-            result = await sync_to_async(handle_notify_button)(
+            result = await sync_to_async(notify_button)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
             )
@@ -235,12 +235,13 @@ class TentativeButton(ui.Button):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from events.discord import handle_tentative_button
+        from app.internal_client.signup_actions import tentative_button
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
-            result = await sync_to_async(handle_tentative_button)(
+            result = await sync_to_async(tentative_button)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
+                discord_username=interaction.user.name,
             )
             ctx.set_outcome(result["action"])
 
@@ -270,10 +271,10 @@ class DeclineButton(ui.Button):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from events.discord import handle_decline_button
+        from app.internal_client.signup_actions import decline_button
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
-            result = await sync_to_async(handle_decline_button)(
+            result = await sync_to_async(decline_button)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
             )
@@ -414,7 +415,7 @@ class EventSignupModal(ui.Modal):
     async def on_submit(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from events.discord import handle_signup_modal_submit
+        from app.internal_client.signup_actions import signup_modal_submit
 
         async with discord_log_context(
             interaction,
@@ -437,7 +438,7 @@ class EventSignupModal(ui.Modal):
                 values["deadlock_rank"] = self.rank_input.value
                 values["deadlock_date"] = self.rank_date_input.value
 
-            result = await sync_to_async(handle_signup_modal_submit)(
+            result = await sync_to_async(signup_modal_submit)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 game_type=self.game_type,
@@ -558,11 +559,11 @@ class RankStatusSelect(ui.Select):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from events.discord import handle_rank_status_select
+        from app.internal_client.signup_actions import rank_status_select
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             rank_status = self.values[0]
-            await sync_to_async(handle_rank_status_select)(
+            await sync_to_async(rank_status_select)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 rank_status=rank_status,
@@ -650,12 +651,8 @@ class PositionConfirmButton(ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
-        from django.core.exceptions import ValidationError as DjangoValidationError
 
-        from events.discord import _get_org_user
-        from events.models import Event
-        from events.schemas import SignupInputPatch
-        from events.services import apply_signup_input
+        from app.internal_client.signup_actions import save_positions
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             positions = []
@@ -663,27 +660,25 @@ class PositionConfirmButton(ui.Button):
                 if isinstance(item, ui.Select) and item.values:
                     positions.extend(item.values)
 
-            event = await sync_to_async(Event.objects.select_related("organization").get)(
-                pk=self.event_id
-            )
-            org_user, _ = await sync_to_async(_get_org_user)(
-                event, str(interaction.user.id)
-            )
-
-            if org_user:
+            try:
                 positions_int = [int(v) for v in positions]
-                try:
-                    await sync_to_async(apply_signup_input)(
-                        org_user=org_user,
-                        event=event,
-                        patch=SignupInputPatch(positions=positions_int),
-                    )
-                except DjangoValidationError as exc:
-                    msg = exc.messages[0] if hasattr(exc, "messages") else str(exc)
-                    ctx.set_outcome("error")
-                    ctx.add(reason=msg)
-                    await interaction.response.edit_message(content=f"❌ {msg}", view=None)
-                    return
+            except (TypeError, ValueError):
+                ctx.set_outcome("error")
+                ctx.add(reason="invalid_positions")
+                await interaction.response.edit_message(content="❌ Invalid positions.", view=None)
+                return
+
+            result = await sync_to_async(save_positions)(
+                event_id=self.event_id,
+                discord_user_id=str(interaction.user.id),
+                positions=positions_int,
+            )
+            if result.get("action") == "error":
+                msg = result.get("message", "Could not save positions.")
+                ctx.set_outcome("error")
+                ctx.add(reason=msg)
+                await interaction.response.edit_message(content=f"❌ {msg}", view=None)
+                return
 
             ctx.set_outcome("positions_saved")
             ctx.add(positions=positions)
@@ -819,7 +814,7 @@ class StarSelect(ui.Select):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from events.discord import handle_rank_medal_select
+        from app.internal_client.signup_actions import rank_medal_select
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             parts = self.custom_id.split(":")
@@ -835,7 +830,7 @@ class StarSelect(ui.Select):
             star = self.values[0]
             medal_with_star = f"{medal} {star}" if medal != "Immortal" else "Immortal"
 
-            result = await sync_to_async(handle_rank_medal_select)(
+            result = await sync_to_async(rank_medal_select)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 medal=medal_with_star,
@@ -887,11 +882,11 @@ class BattleCupTierSelect(ui.Select):
     async def callback(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from events.discord import handle_battle_cup_submit
+        from app.internal_client.signup_actions import battle_cup_submit
 
         async with discord_log_context(interaction, custom_id=self.custom_id, event_id=self.event_id) as ctx:
             tier = self.values[0]
-            result = await sync_to_async(handle_battle_cup_submit)(
+            result = await sync_to_async(battle_cup_submit)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 tier=tier,
@@ -1020,7 +1015,7 @@ class ScreenshotUploadModal(ui.Modal):
     async def on_submit(self, interaction: discord.Interaction):
         from asgiref.sync import sync_to_async
 
-        from events.discord import handle_screenshot_upload
+        from app.internal_client.signup_actions import screenshot_upload
 
         async with discord_log_context(
             interaction,
@@ -1036,7 +1031,7 @@ class ScreenshotUploadModal(ui.Modal):
             else:
                 attachment_url = ""
 
-            result = await sync_to_async(handle_screenshot_upload)(
+            result = await sync_to_async(screenshot_upload)(
                 event_id=self.event_id,
                 discord_user_id=str(interaction.user.id),
                 screenshot_type=self.screenshot_type,
