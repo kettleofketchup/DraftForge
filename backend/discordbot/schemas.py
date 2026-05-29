@@ -139,6 +139,19 @@ class SavePositionsRequest(BaseModel):
     model_config = {"extra": "ignore"}
 
 
+class SetPositionRequest(BaseModel):
+    event_id: int
+    discord_user_id: str
+    position: int  # 1..5
+    model_config = {"extra": "ignore"}
+
+
+class RankFlowStateRequest(BaseModel):
+    event_id: int
+    discord_user_id: str
+    model_config = {"extra": "ignore"}
+
+
 # ---------------------------------------------------------------------------
 # Internal signup-API response schema (validated client-side in
 # app/internal_client/signup_actions.py).
@@ -156,7 +169,8 @@ class SignupActionResponse(BaseModel):
     # Common fields
     action: Optional[str] = None  # signed_up | needs_modal | needs_screenshot |
     # needs_rank_details | needs_rank_status | error | tentative | declined |
-    # not_signed_up | already_declined | already_tentative | positions_saved
+    # not_signed_up | already_declined | already_tentative | positions_saved |
+    # position_set
     status: Optional[str] = None  # SignupStatus value when action == "signed_up"
     message: Optional[str] = None  # human-readable for error / not_signed_up / etc.
 
@@ -186,4 +200,20 @@ class SignupActionResponse(BaseModel):
     # save_positions
     positions: Optional[list[int]] = None
 
+    model_config = {"extra": "ignore"}
+
+
+class RankFlowStateResponse(BaseModel):
+    """Response of /api/internal/discord/rank-flow-state/.
+
+    Used by the legacy pos_confirm flow in bot.py to construct the next
+    RankDetailsView. ``error``/``message`` populated only on lookup failure;
+    otherwise the rank_status + require_screenshot + min_mmr fields drive UI.
+    """
+
+    rank_status: Optional[str] = None  # "active" | "previous" | "never"
+    require_screenshot: bool = False
+    min_mmr: Optional[int] = None
+    error: Optional[str] = None  # set when the lookup fails (e.g. event_not_found / no_org_user)
+    message: Optional[str] = None
     model_config = {"extra": "ignore"}

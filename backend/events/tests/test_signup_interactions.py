@@ -459,3 +459,88 @@ class HandleScreenshotUploadTest(EventTestCase):
         patch_arg = spy.call_args.kwargs["patch"]
         self.assertIsInstance(patch_arg, SignupInputPatch)
         self.assertEqual(patch_arg.rank_screenshot, "https://example.com/a.png")
+
+
+class HandleSetPositionTest(EventTestCase):
+    """Smoke coverage for handle_set_position (legacy pos_select_* flow)."""
+
+    def setUp(self):
+        super().setUp()
+        clear_contextvars()
+        self.event.state = EventState.SIGNUPS_OPEN
+        self.event.game_type = GameType.DOTA2
+        self.event.save()
+        self.user.discordId = "100000000000000001"
+        self.user.save()
+        self.org_user = OrgUser.objects.create(
+            user=self.user,
+            organization=self.event.organization,
+        )
+
+    def tearDown(self):
+        clear_contextvars()
+        super().tearDown()
+
+    def test_handle_set_position_writes_pos_n(self):
+        """Calling handle_set_position(position=2) sets pos_2=True on the profile."""
+        from events.discord.handlers import handle_set_position
+
+        result = handle_set_position(
+            self.event.pk, "100000000000000001", position=2
+        )
+        self.assertEqual(result["action"], "position_set")
+        profile = PlayerDotaProfile.objects.get(org_user=self.org_user)
+        self.assertTrue(profile.pos_2)
+        # Other positions should remain at their default (False).
+        self.assertFalse(profile.pos_1)
+        self.assertFalse(profile.pos_3)
+
+    def test_handle_set_position_rejects_out_of_range(self):
+        from events.discord.handlers import handle_set_position
+
+        result = handle_set_position(
+            self.event.pk, "100000000000000001", position=99
+        )
+        self.assertEqual(result["action"], "error")
+
+
+class HandleGetRankFlowStateTest(EventTestCase):
+    """Smoke coverage for handle_get_rank_flow_state (legacy pos_confirm flow)."""
+
+    def setUp(self):
+        super().setUp()
+        clear_contextvars()
+        self.event.state = EventState.SIGNUPS_OPEN
+        self.event.game_type = GameType.DOTA2
+        self.event.discord_require_rank_screenshot = True
+        self.event.min_mmr = 3500
+        self.event.save()
+        self.user.discordId = "100000000000000001"
+        self.user.save()
+        self.org_user = OrgUser.objects.create(
+            user=self.user,
+            organization=self.event.organization,
+        )
+        PlayerDotaProfile.objects.create(
+            org_user=self.org_user,
+            rank_status="active",
+        )
+
+    def tearDown(self):
+        clear_contextvars()
+        super().tearDown()
+
+    def test_handle_get_rank_flow_state_returns_event_config(self):
+        from events.discord.handlers import handle_get_rank_flow_state
+
+        result = handle_get_rank_flow_state(self.event.pk, "100000000000000001")
+        self.assertEqual(result["rank_status"], "active")
+        self.assertTrue(result["require_screenshot"])
+        self.assertEqual(result["min_mmr"], 3500)
+        self.assertNotIn("error", {k for k, v in result.items() if v is not None})
+
+    def test_handle_get_rank_flow_state_event_not_found(self):
+        from events.discord.handlers import handle_get_rank_flow_state
+
+        result = handle_get_rank_flow_state(999999, "100000000000000001")
+        self.assertEqual(result.get("error"), "event_not_found")

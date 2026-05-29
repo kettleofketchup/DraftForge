@@ -33,10 +33,12 @@ from discordbot.schemas import (
     DeclineButtonRequest,
     NotifyButtonRequest,
     PreviousRankSubmitRequest,
+    RankFlowStateRequest,
     RankMedalSelectRequest,
     RankStatusSelectRequest,
     SavePositionsRequest,
     ScreenshotUploadRequest,
+    SetPositionRequest,
     SignupButtonRequest,
     SignupModalSubmitRequest,
     TentativeButtonRequest,
@@ -329,5 +331,60 @@ def save_positions(request):
         discord_user_id=body.discord_user_id,
         positions=body.positions,
         action=result.get("action"),
+    )
+    return Response(result)
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def set_position(request):
+    """Wrap handle_set_position. Body: event_id, discord_user_id, position (1..5)."""
+    from events.discord.handlers import handle_set_position
+
+    try:
+        body = SetPositionRequest.model_validate(request.data)
+    except ValidationError as exc:
+        return _bad_request(exc)
+    result = handle_set_position(**body.model_dump())
+    log.info(
+        "internal_set_position_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        event_id=body.event_id,
+        discord_user_id=body.discord_user_id,
+        position=body.position,
+        action=result.get("action"),
+    )
+    return Response(result)
+
+
+@api_view(["POST"])
+@authentication_classes(_auth)
+@permission_classes(_perm)
+def rank_flow_state(request):
+    """Wrap handle_get_rank_flow_state. Body: event_id, discord_user_id.
+
+    Returns rank_status / require_screenshot / min_mmr for the pos_confirm
+    flow to render the next RankDetailsView.
+    """
+    from events.discord.handlers import handle_get_rank_flow_state
+
+    try:
+        body = RankFlowStateRequest.model_validate(request.data)
+    except ValidationError as exc:
+        return _bad_request(exc)
+    result = handle_get_rank_flow_state(**body.model_dump())
+    log.info(
+        "internal_rank_flow_state_processed",
+        system="discord",
+        subsystem="dispatch",
+        tags=["events", "signup"],
+        tags_csv="events,signup",
+        event_id=body.event_id,
+        discord_user_id=body.discord_user_id,
+        action=result.get("error") or "ok",
     )
     return Response(result)

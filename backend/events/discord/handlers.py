@@ -735,6 +735,75 @@ def handle_tentative_button(event_id, discord_user_id, discord_username=None):
     return {"action": "tentative", "message": "Marked as tentative."}
 
 
+def handle_set_position(event_id, discord_user_id, position: int) -> dict:
+    """Set a single position flag (pos_N=True) on the user's PlayerDotaProfile.
+
+    Used by the legacy per-click position dropdown (``pos_select_*``). Only
+    sets the chosen flag True — doesn't reset others. Multiple clicks
+    accumulate positions, matching the pre-migration behavior.
+    """
+    log.info("handler_invoked", handler="set_position")
+    if position not in (1, 2, 3, 4, 5):
+        return {"action": "error", "message": "Position must be 1-5."}
+
+    try:
+        event = Event.objects.select_related("organization").get(pk=event_id)
+    except Event.DoesNotExist:
+        return {"action": "error", "message": "Event not found."}
+
+    org_user, _ = _get_org_user(event, discord_user_id)
+    if org_user is None:
+        return {"action": "error", "message": "Could not find your account."}
+    bind_contextvars(org_user_id=org_user.pk)
+
+    from app.cache_utils import invalidate_obj
+
+    from org.models_profiles import PlayerDotaProfile
+
+    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
+    setattr(profile, f"pos_{position}", True)
+    profile.save(update_fields=[f"pos_{position}"])
+    invalidate_obj(profile)
+    return {"action": "position_set"}
+
+
+def handle_get_rank_flow_state(event_id, discord_user_id) -> dict:
+    """Read the state the pos_confirm flow needs to render the next view.
+
+    Returns dict with rank_status / require_screenshot / min_mmr, or
+    error/message on lookup failure.
+    """
+    log.info("handler_invoked", handler="get_rank_flow_state")
+    try:
+        event = Event.objects.select_related("organization").get(pk=event_id)
+    except Event.DoesNotExist:
+        return {"error": "event_not_found", "message": "Event not found."}
+
+    org_user, _ = _get_org_user(event, discord_user_id)
+    if org_user is None:
+        return {"error": "no_org_user", "message": "Could not find your account."}
+    bind_contextvars(org_user_id=org_user.pk)
+
+    from org.models_profiles import PlayerDotaProfile
+
+    profile, _ = PlayerDotaProfile.objects.get_or_create(org_user=org_user)
+    rank_status = profile.rank_status or "never"
+    require_screenshot = (
+        bool(event.discord_require_rank_screenshot)
+        if rank_status == "active"
+        else (
+            bool(event.discord_require_battlecup_screenshot)
+            if rank_status == "never"
+            else False
+        )
+    )
+    return {
+        "rank_status": rank_status,
+        "require_screenshot": require_screenshot,
+        "min_mmr": event.min_mmr,
+    }
+
+
 def handle_save_positions(event_id, discord_user_id, positions: list[int]) -> dict:
     """Save positions for the user's signup on this event.
 

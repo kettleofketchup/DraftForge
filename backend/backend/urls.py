@@ -554,6 +554,16 @@ urlpatterns += [
         _signup_views.save_positions,
         name="internal_discord_save_positions",
     ),
+    path(
+        "api/internal/discord/set-position/",
+        _signup_views.set_position,
+        name="internal_discord_set_position",
+    ),
+    path(
+        "api/internal/discord/rank-flow-state/",
+        _signup_views.rank_flow_state,
+        name="internal_discord_rank_flow_state",
+    ),
 ]
 
 # Internal API — Steam sync endpoints
